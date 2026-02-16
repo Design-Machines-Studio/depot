@@ -1,0 +1,53 @@
+{
+  "name": "depot",
+  "owner": {
+    "name": "Design Machines",
+    "email": "hello@designmachines.studio"
+  },
+  "metadata": {
+    "description": "Design Machines' AI plugin marketplace",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ned",
+      "source": "./plugins/ned",
+      "description": "Personal knowledge graph and session capture"
+    },
+    {
+      "name": "craft-developer",
+      "source": "./plugins/craft-developer",
+      "description": "Craft CMS development expertise for Craft 4 and 5"
+    },
+    {
+      "name": "project-manager",
+      "source": "./plugins/project-manager",
+      "description": "Project management methodology based on Louder Than Ten principles"
+    },
+    {
+      "name": "council",
+      "source": "./plugins/council",
+      "description": "Worker cooperative governance and decolonial content strategy"
+    },
+    {
+      "name": "design-machines",
+      "source": "./plugins/design-machines",
+      "description": "Design Machines business strategy and product intelligence"
+    },
+    {
+      "name": "assembly",
+      "source": "./plugins/assembly",
+      "description": "Assembly governance application prototyping"
+    },
+    {
+      "name": "live-wires",
+      "source": "./plugins/live-wires",
+      "description": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm"
+    },
+    {
+      "name": "ghostwriter",
+      "source": "./plugins/ghostwriter",
+      "description": "Travis Gertz's personal writing voice and editorial style engine"
+    }
+  ]
+}

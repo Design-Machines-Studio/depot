@@ -1,0 +1,8 @@
+{
+  "name": "project-manager",
+  "description": "Project management: LT10 methodology, Notion-integrated planning, time tracking, and sprint management",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines"
+  }
+}

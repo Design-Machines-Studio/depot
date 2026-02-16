@@ -1,0 +1,8 @@
+{
+  "name": "assembly",
+  "description": "Assembly governance application prototyping with Go, Templ, and Datastar",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines"
+  }
+}
