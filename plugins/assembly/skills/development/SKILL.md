@@ -1,11 +1,11 @@
 ---
-name: prototyping
-description: Rapid prototyping for Assembly governance application. Use when building pages, components, handlers, or database features. Covers Docker-based Go development, Templ templates, Datastar reactivity, and the page-type workflow.
+name: development
+description: Assembly governance application development with Go, Templ, and Datastar. Covers pages, components, handlers, database patterns, setup, and deployment across all project phases.
 ---
 
-# Assembly Prototyping Skill
+# Assembly Development Skill
 
-Rapid prototyping for cooperative governance applications. Build pages fast, review often, commit frequently.
+Build cooperative governance applications with Go, Templ, and Datastar. Build pages fast, review often, commit frequently.
 
 ## Philosophy
 
@@ -310,6 +310,8 @@ For detailed reference:
 - [components.md](components.md) - Available components and usage
 - [workflows.md](workflows.md) - Governance workflows and state machines
 - [data.md](data.md) - Database schema and query patterns
+- [setup.md](setup.md) - Development environment setup
+- [deploy.md](deploy.md) - Production deployment pipeline
 
 ---
 
