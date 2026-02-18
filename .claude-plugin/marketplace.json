@@ -48,6 +48,11 @@
       "name": "ghostwriter",
       "source": "./plugins/ghostwriter",
       "description": "Travis Gertz's personal writing voice and editorial style engine"
+    },
+    {
+      "name": "design-practice",
+      "source": "./plugins/design-practice",
+      "description": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters"
     }
   ]
 }

@@ -158,6 +158,12 @@ For detailed reference, see these files in the same directory:
 
 ---
 
+## Typographic Foundations
+
+Live Wires' typography system implements principles from the Design Machines `typography` skill -- fluid scaling, modular scales, progressive line-height, and vertical rhythm rooted in Müller-Brockmann, Bringhurst, Brown, and Latin. For the **why** behind these decisions (measure rules, typeface selection, evaluation frameworks), load the `typography` skill from the `design-practice` plugin.
+
+---
+
 ## The Sacred Baseline System
 
 All spacing derives from `--line`. Use `--line-*` tokens for spacing:

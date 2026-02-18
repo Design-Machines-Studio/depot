@@ -1,6 +1,6 @@
 ---
 name: voice
-description: "Travis Gertz's personal writing voice and editorial style engine. Use when writing articles, essays, blog posts, marketing copy, emails, product descriptions, social media, documentation, or any content that should sound like Travis. Also use when reviewing or editing existing content to match his voice. Covers tone, sentence rhythm, argumentation structure, vocabulary, cultural references, and anti-AI-writing patterns."
+description: Travis Gertz's personal writing voice and editorial style engine. Use when writing articles, essays, blog posts, marketing copy, emails, product descriptions, social media, documentation, or any content that should sound like Travis. Also use when reviewing or editing existing content to match his voice. Covers tone, sentence rhythm, argumentation structure, vocabulary, cultural references, and anti-AI-writing patterns.
 ---
 
 # Travis Gertz — Voice Skill
