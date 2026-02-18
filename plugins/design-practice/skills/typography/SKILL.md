@@ -1,6 +1,6 @@
 ---
 name: typography
-description: "Design Machines typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice. Use when critiquing typographic decisions, advising on typeface selection, evaluating rhythm and hierarchy, or reviewing typography in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Draws on Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig."
+description: Design Machines typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice. Use when critiquing typographic decisions, advising on typeface selection, evaluating rhythm and hierarchy, or reviewing typography in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Draws on Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig.
 ---
 
 # Typography

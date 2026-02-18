@@ -1,6 +1,6 @@
 ---
 name: dataviz
-description: "Design Machines data visualization and information graphics philosophy rooted in graphical integrity, data-ink efficiency, and editorial integration. Use when critiquing charts and graphs, advising on visualization choices, evaluating information graphics, or reviewing data presentations. Draws primarily on Dona M. Wong, Edward Tufte, and Francesco Franchi. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity."
+description: Design Machines data visualization and information graphics philosophy rooted in graphical integrity, data-ink efficiency, and editorial integration. Use when critiquing charts and graphs, advising on visualization choices, evaluating information graphics, or reviewing data presentations. Draws primarily on Dona M. Wong, Edward Tufte, and Francesco Franchi. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity.
 ---
 
 # Data Visualization

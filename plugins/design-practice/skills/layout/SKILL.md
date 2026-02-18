@@ -1,6 +1,6 @@
 ---
 name: layout
-description: "Design Machines editorial layout and art direction philosophy rooted in grid systems, reader-centered design, and visual storytelling. Use when critiquing page layouts, advising on grid construction, evaluating editorial spreads, or reviewing art direction decisions. Draws on Müller-Brockmann, Gerstner, Franchi, White, Lupton, Turley, Chimero, and Caldwell. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity."
+description: Design Machines editorial layout and art direction philosophy rooted in grid systems, reader-centered design, and visual storytelling. Use when critiquing page layouts, advising on grid construction, evaluating editorial spreads, or reviewing art direction decisions. Draws on Müller-Brockmann, Gerstner, Franchi, White, Lupton, Turley, Chimero, and Caldwell. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity.
 ---
 
 # Layout and Art Direction

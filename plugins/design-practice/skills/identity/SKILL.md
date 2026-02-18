@@ -1,6 +1,6 @@
 ---
 name: identity
-description: "Design Machines identity and logo design philosophy rooted in bold simplicity, systematic thinking, and cultural resonance. Use when critiquing logos and identity systems, advising on mark development, evaluating brand applications, or reviewing identity decisions. Draws on Paul Rand, Saul Bass, Aaron Draplin, Lance Wyman, and Milton Glaser. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity."
+description: Design Machines identity and logo design philosophy rooted in bold simplicity, systematic thinking, and cultural resonance. Use when critiquing logos and identity systems, advising on mark development, evaluating brand applications, or reviewing identity decisions. Draws on Paul Rand, Saul Bass, Aaron Draplin, Lance Wyman, and Milton Glaser. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity.
 ---
 
 # Identity and Logo Design
