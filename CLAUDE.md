@@ -30,7 +30,7 @@ Each plugin under `plugins/` follows the same structure:
 - **`skills/`** — Each subdirectory is a skill. `SKILL.md` is the entry point; `references/` holds supplementary material that the skill can pull in.
 - **`agents/`** — Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
 
-## The Eight Plugins
+## The Nine Plugins
 
 | Plugin | Purpose |
 |---|---|
@@ -42,6 +42,7 @@ Each plugin under `plugins/` follows the same structure:
 | **assembly** | Go/Templ/Datastar governance app prototyping |
 | **live-wires** | CSS framework with layout primitives and baseline rhythm |
 | **ghostwriter** | Personal writing voice, editorial style engine, and voice editing |
+| **design-practice** | Typography, layout, data visualization, and identity design philosophy |
 
 ## Common Operations
 

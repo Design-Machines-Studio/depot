@@ -19,6 +19,7 @@ Then install individual plugins:
 /plugin install assembly@depot
 /plugin install live-wires@depot
 /plugin install ghostwriter@depot
+/plugin install design-practice@depot
 ```
 
 ## Plugins
@@ -73,3 +74,14 @@ Travis Gertz's personal writing voice and editorial style engine. Provides:
 
 - **voice** — Writing style profile covering tone, sentence rhythm, argumentation structure, vocabulary, cultural references, anti-AI-writing patterns, and context-aware register switching
 - **voice-editor** (agent) — Reviews and edits content to match Travis's voice, with diagnostics for AI patterns, rhythm problems, and tonal mismatches
+
+### design-practice
+
+Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters and editorial tradition. Provides four skills:
+
+- **typography** — Typographic principles from Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig. Measure rules, modular scales, vertical rhythm, typeface selection, and evaluation frameworks
+- **layout** — Editorial layout and art direction from Müller-Brockmann, Gerstner, Franchi, White, Lupton, Turley, Chimero, and Caldwell. Grid systems, visual hierarchy, pacing, and cross-media design
+- **dataviz** — Data visualization from Tufte, Wong, and Franchi. Chart type selection, data-ink ratio, graphical integrity, and editorial integration
+- **identity** — Identity and logo design from Rand, Bass, Draplin, Wyman, and Glaser. Bold simplicity, systematic extensibility, cultural resonance, and the ten-point evaluation framework
+- **design-critic** (agent) — Evaluates design work against the combined framework with structured critique and severity levels
+- **design-advisor** (agent) — Helps with design decisions, generates principled ideas, and provides strategic direction
