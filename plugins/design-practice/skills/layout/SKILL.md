@@ -52,6 +52,10 @@ Learn the grid thoroughly, then break it deliberately. Photography, illustration
 - Flexible enough for any content, consistent enough for every issue
 - The grid is a "proportional regulator for composition, tables, pictures"
 
+### The Fitted Baseline (Fitbaseline Method)
+
+The baseline grid must divide the **full page or viewport height** evenly -- not just the text block. Choose a whole number of rows that produces a baseline increment close to your target leading. Margins become whole baseline counts, and Gerstner's field divisions nest cleanly within the remaining text block rows. This is the foundation that makes everything else work. See `references/grid-systems.md` for the complete calculation method.
+
 ### Practical Grid Rules
 
 | Principle | Guidance |
@@ -59,7 +63,7 @@ Learn the grid thoroughly, then break it deliberately. Photography, illustration
 | **Margins** | Wider outside than gutter; bottom wider than top |
 | **Columns** | 2--6 for editorial; single column for long-form reading |
 | **Gutters** | Consistent; wide enough to prevent column bleed |
-| **Baseline grid** | Match your leading unit; all text snaps to it |
+| **Baseline grid** | Must divide the full page/viewport height evenly (fitbaseline method); all text snaps to it; margins are baseline multiples |
 | **Hanging elements** | Allow images, pull quotes, and display type to break the grid intentionally |
 
 ---
@@ -154,9 +158,10 @@ Digital is not degraded print; it is a different material with its own grain. Pr
 ### Adobe InDesign
 - Master pages define the grid programme
 - Use multiple master pages for different column configurations (Gerstner's mobile grid)
+- Baseline grid starts at 0mm, Relative To: Top of Page (not top margin) -- grid must tile the full page
+- Baseline increment is a fitted value: page height ÷ whole number of rows (see grid-systems.md)
 - Parent-child relationships for systematic section handling
 - Liquid layouts for multi-format adaptation
-- Set baseline grid in document preferences
 
 ### Adobe Illustrator
 - Use artboards as spread simulation
@@ -165,7 +170,8 @@ Digital is not degraded print; it is a different material with its own grain. Pr
 
 ### Affinity Publisher
 - Master pages with multiple column configurations
-- Baseline grid matching your leading unit
+- Baseline grid starting from page top, using fitted baseline increment
+- Margins as whole baseline multiples (not round millimeters)
 - Section-level master page assignment
 - Spread-based design view
 
