@@ -6,15 +6,18 @@ Templ components for Assembly. Located in `backend/internal/components/`.
 
 ### Avatar
 
-Member avatar with initials fallback.
+Member avatar circle. Image overrides initials. Name is rendered by the caller.
 
 ```templ
-@components.Avatar(name, size)
-// size: "small", "medium", "large"
+@components.Avatar(name, size, imageURL)
+// size: "small", "large", "xlarge", or "" for default
+// imageURL: "" for initials, or URL for image
 
-// Example
-@components.Avatar("Jane Smith", "medium")
-// Renders: <div class="avatar avatar--medium">JS</div>
+// Examples
+@components.Avatar("Jane Smith", "", "")
+@components.Avatar("Jane Smith", "small", "/uploads/avatars/jane.jpg")
+@components.AvatarSmall("Jane Smith", "")
+@components.AvatarLarge("Jane Smith", "")
 ```
 
 ### Badge

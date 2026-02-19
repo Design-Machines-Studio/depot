@@ -127,7 +127,7 @@ Check `backend/internal/components/` before creating anything new:
 
 | Component | Usage |
 |-----------|-------|
-| `components.Avatar(name, size)` | Member avatars |
+| `components.Avatar(name, size, imageURL)` | Member avatars (circle only, name rendered by caller) |
 | `components.Badge(text, variant)` | Status badges |
 | `components.StatusBadge(status)` | Governance status |
 | `components.ButtonLink(href, text, variant)` | Action buttons |
