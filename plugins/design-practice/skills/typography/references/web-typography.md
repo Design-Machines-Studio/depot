@@ -23,9 +23,9 @@ Font size, measure (line length), and line spacing all work together. Adjust in 
 3. **Measure** -- depends on both typeface and font size
 4. **Line spacing** -- depends on all three preceding factors
 
-### Modular Scales
+### Modular Scales and the Three-Property Framework
 
-A modular scale is a sequence of numbers that relate meaningfully, like a musical scale. Start with a relevant number (ideal font size), then multiply/divide by a ratio:
+Brown's modular scale concept was an important step: a sequence of numbers that relate meaningfully, like a musical scale. The named ratios below remain useful shorthand, but they are incomplete descriptions -- each is a two-property scale that conflates hierarchy impact with palette density. The three-property framework (Mortensen, LGC/Désiré) extends Brown's concept by adding notes-per-interval (n) as an independent control.
 
 | Ratio | Name | Use When |
 |---|---|---|
@@ -38,9 +38,11 @@ A modular scale is a sequence of numbers that relate meaningfully, like a musica
 | 1.500 | Perfect Fifth | Bold, opinionated design |
 | 1.618 | Golden Ratio | Classical proportions |
 
-**Body text as anchor.** Everything scales in relation to body text. Set body first, derive the system.
+These named ratios are actually n=1 cases of the three-property formula fᵢ = f₀ × r^(i/n). The Major Third (1.250), for instance, approximates a tritonic scale with r=2 and n=3 (actual step: ³√2 = 1.2599). The Augmented Fourth (1.414) is exactly a tetratonic r=2 scale (⁴√2). See the typography skill's Typographic Scale section for the full three-property framework, scale temperaments, and derivation method.
 
-**Mathematics balanced with instinct.** Brown reminds us that we ultimately read with our eyes and lead with our instincts. Ratios are starting points, not absolutes.
+**Body text as anchor.** Everything scales in relation to body text. Set body first, derive the system. In the three-property framework, body size = f₀.
+
+**Mathematics balanced with instinct.** Brown reminds us that we ultimately read with our eyes and lead with our instincts. The three-property framework gives better starting points, but you still use your eyes. Ratios are starting points, not absolutes.
 
 ---
 

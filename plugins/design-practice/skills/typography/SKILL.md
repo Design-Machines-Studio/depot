@@ -54,6 +54,8 @@ Font size relates to column width. If the measure is wrong, nothing else matters
 
 Line-height is the fundamental rhythmic unit. All vertical measurements should be multiples of the base line-height.
 
+**The baseline unit should be derived from page or viewport dimensions, not assumed.** In print, use the Fitbaseline method: divide the page height by a whole number of rows to produce a fitted baseline that becomes the body leading. In web, the body line-height establishes the baseline unit. Either way, the baseline generates the leading, which generates the body size, which generates the scale. See the Typographic Scale section below for the full derivation chain.
+
 | Property | Value | Source |
 |---|---|---|
 | **Body line-height** | 1.45--1.5 | Latin, Live Wires |
@@ -63,9 +65,9 @@ Line-height is the fundamental rhythmic unit. All vertical measurements should b
 | **Sans-serif needs** | More leading than serif | Bringhurst |
 | **Wider measures need** | More leading | Bringhurst |
 
-**Heading margins**: Larger top margin (2--3x base unit), smaller bottom margin (0--1x base unit). This visually binds headings to following content.
+**Heading margins as baseline multiples**: Space above a heading (2--3 baselines) must be larger than space below (0--1 baselines). This asymmetric spacing binds headings to their following content. Both values are whole multiples of the fitted baseline -- never arbitrary pixel or point values.
 
-**Spacing rule**: Add and delete vertical space in measured intervals. Never break the rhythm with arbitrary spacing.
+**Spacing rule**: Add and delete vertical space in measured intervals of the baseline unit. Never break the rhythm with arbitrary spacing.
 
 ---
 
@@ -83,22 +85,99 @@ Line-height is the fundamental rhythmic unit. All vertical measurements should b
 
 ## Typographic Scale
 
-Use a modular scale -- a sequence of numbers that relate to one another meaningfully. Start with body text size, multiply by a ratio:
+### The Three Properties
 
-| Ratio | Name | Character |
+The classical typographic scale is a musical scale. Spencer Mortensen proved this mathematically. Three properties define any typographic scale, directly analogous to music:
+
+| Property | Music | Typography | Symbol |
+|---|---|---|---|
+| **Fundamental frequency** | Stuttgart pitch (A4=440Hz) | Base font size (12pt print, 1em web) | f₀ |
+| **Interval ratio** | Octave = 2× frequency | Title/body relationship | r |
+| **Notes per interval** | 12 chromatic, 7 diatonic, 5 pentatonic | Number of sizes between doublings | n |
+
+**Formula:** fᵢ = f₀ × r^(i/n)
+
+### The Classical Scale Decoded
+
+Bringhurst's classical scale (6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 21, 24, 36, 48, 60, 72) is a pentatonic scale: f₀=12pt, r=2, n=5. The step ratio is ⁵√2 ≈ 1.1487.
+
+Mortensen identified historical errors in the traditional sequence:
+
+- 11pt doesn't belong (extra note in the first interval)
+- 42pt is missing (should complete the 10→21→42→84 progression)
+- 30pt and 60pt are semitones (halfway between proper notes)
+- 72pt has a rounding error (mathematically 73pt)
+
+**Corrected classical pentatonic sequence:** 6, 7, 8, 9, 10, 12, 14, 16, 18, 21, 24, 28, 32, 36, 42, 48, 55, 63, 73, 84, 96.
+
+### Why Three Properties, Not Two
+
+Two-property tools (modularscale.com, type-scale.com) use only f₀ and a step ratio. This conflates two independent concerns. The Golden Ratio (1.618) produces: 1em → 1.618em → 2.618em -- three sizes total before doubling, with huge jumps. A Minor Second (1.067) produces many sizes but they're too close together. You can't independently control hierarchy impact and palette density.
+
+Three properties separate these concerns:
+
+- **r** controls heading impact -- how dramatic the title/body contrast is
+- **n** controls palette density -- how many intermediate sizes you get
+- **f₀** adapts the entire scale to any medium
+
+### Scale Temperaments
+
+The number of notes (n) functions as a design vocabulary:
+
+| n | Name | Character | Use case |
+|---|---|---|---|
+| 2 | Ditonic | Stark, minimal | Posters, bold editorial |
+| 3 | Tritonic | Bold, decisive | Marketing, landing pages |
+| 4 | Tetratonic | Balanced | General editorial |
+| 5 | Pentatonic | Classical, rich | Long-form publishing, books |
+| 6+ | Hexatonic+ | Granular | Complex documents, data-heavy layouts |
+
+### Named Ratios as Incomplete Descriptions
+
+The familiar named ratios from two-property tools are actually specific three-property scales with n=1:
+
+| Named Ratio | Value | Three-Property Equivalent |
 |---|---|---|
-| 1.067 | Minor Second | Subtle |
-| 1.125 | Major Second | Restrained |
-| 1.200 | Minor Third | Balanced |
-| 1.250 | Major Third | Confident |
-| 1.333 | Perfect Fourth | Authoritative |
-| 1.414 | Augmented Fourth | Dramatic |
-| 1.500 | Perfect Fifth | Bold |
-| 1.618 | Golden Ratio | Classical |
+| Major Third | 1.250 | ≈ tritonic r=2 (actual: ³√2 = 1.2599) |
+| Augmented Fourth | 1.414 | = tetratonic r=2 (exact: ⁴√2 = 1.4142) |
+| Classical step | 1.1487 | = pentatonic r=2 (exact: ⁵√2) |
 
-**The classical typographic scale** (Bringhurst): 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 21, 24, 36, 48, 60, 72.
+These ratios remain useful shorthand. Brown's advice still applies: ratios are starting points, not absolutes. Use your eyes. But the three-property framework gives a more precise starting point and independent control over hierarchy and density.
 
-Vignelli's rule: No more than 2 type sizes on a page. Play off small with large (2x ratio).
+Vignelli's rule -- no more than 2 type sizes on a page, play off small with large (2x ratio) -- maps directly to r=2. Vignelli's doubling IS the interval ratio. The number of notes between doublings determines how many intermediate sizes you permit.
+
+### Deriving the Scale from the Grid
+
+The physical medium generates the system, not the other way around. Page dimensions produce the baseline. The baseline produces body leading. Body leading produces body size. Body size produces the entire type scale. Everything flows from one source.
+
+**Print (bottom-up derivation):**
+
+1. Page dimensions → fitted baseline (page height ÷ whole number of rows)
+2. Fitted baseline = body leading
+3. Body size = leading ÷ target line-height ratio (e.g., ÷1.4 for serif, ÷1.5 for sans)
+4. Body size = f₀
+5. Choose r and n, apply fᵢ = f₀ × r^(i/n)
+6. **Verify**: every size must produce a leading that's an exact baseline multiple
+
+**Web (fluid derivation):**
+
+1. Define viewport range (min/max)
+2. Choose body size range (clamp min/max)
+3. Body leading = size × line-height ratio
+4. Apply three-property scale at each end of the range
+5. Generate fluid scale via `clamp()` for each step
+
+**The verification step is critical.** A type scale that doesn't sit on the baseline grid is two independent systems fighting each other. Every heading size needs a leading value that's 1×, 2×, 3×, or 4× the baseline. If a scale step doesn't produce a clean baseline multiple for its leading, adjust the size or skip that step. The baseline is non-negotiable; the scale bends to serve the rhythm.
+
+For the full Fitbaseline calculation with worked examples and Gerstner field divisions, see the layout skill's `references/grid-systems.md`.
+
+### Sources
+
+- Spencer Mortensen, "The Typographic Scale" (spencermortensen.com)
+- Jean-lou Désiré, LGC Typographic Scale Calculator (layoutgridcalculator.com)
+- Robert Bringhurst, The Elements of Typographic Style
+- Tim Brown, modular scales concept (Flexible Typesetting)
+- Owen Gregory, "Composing the New Canon" (24ways.org)
 
 ---
 

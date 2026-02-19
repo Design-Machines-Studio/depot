@@ -14,7 +14,7 @@ Before evaluating any typography, read the content it presents. Discover the out
 
 Is there a visible programme? Can you identify the rules that generated these typographic decisions? Or do the choices appear arbitrary?
 
-**Signs of a programme:** Consistent scale relationships, predictable spacing, clear hierarchy rules, coherent typeface pairing logic.
+**Signs of a programme:** Consistent scale relationships (strongest: a three-property scale with identifiable f₀, r, and n), predictable spacing, clear hierarchy rules, coherent typeface pairing logic.
 
 **Signs of no programme:** Random size jumps, inconsistent spacing, mixed alignment without reason, typefaces that don't relate to each other.
 
@@ -29,7 +29,7 @@ Is there a visible programme? Can you identify the rules that generated these ty
 | **Vertical rhythm** | All spacing as multiples of base leading | Major -- visual coherence |
 | **Heading connection** | Top margin > bottom margin | Minor -- scannability |
 | **Letter-spacing** | No letterspacing of lowercase body | Major -- readability violation |
-| **Scale consistency** | Sizes from a defined scale or ratio | Major -- system integrity |
+| **Scale consistency** | Sizes from a three-property scale (f₀, r, n) or demonstrable mathematical relationship | Major -- system integrity |
 
 ### Step 4: Evaluate Typeface Selection
 

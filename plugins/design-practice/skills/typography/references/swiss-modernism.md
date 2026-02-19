@@ -76,6 +76,10 @@ Extended Max Bill's "functional" into "integral" typography: the message and its
 
 "The typographic grid is a proportional regulator for composition, tables, pictures, etc. It is a formal programme to accommodate x unknown items." The grid does not dictate outcomes; it establishes parameters within which creativity operates.
 
+### The Type Scale as Programme
+
+The three-property typographic scale formula (fᵢ = f₀ × r^(i/n)) is Gerstner's programme methodology made mathematically precise. Define your constraints -- base size (f₀), interval ratio (r), notes per interval (n) -- and the system generates all sizes in harmonic relationship. This is "maximum conformity with maximum freedom": the formula constrains every size to a coherent harmonic structure while r and n provide infinite variation.
+
 ---
 
 ## Massimo Vignelli (1931--2014)
