@@ -15,11 +15,13 @@ Before editing, determine the register:
 
 | Context | Register | Key Traits |
 |---|---|---|
-| Long-form essay | Full voice | All devices available — fragments, metaphors, profanity, cultural range, scene-setting |
+| Long-form essay / opinion piece | Full voice | All devices available — fragments, metaphors, profanity, cultural range, scene-setting. Confrontational energy. |
+| Positioning copy / company narrative | Warm conviction | Earnest, personal, invitational. Complete sentences, Hemingway rhythm. Political backbone stays but temperature drops. Vulnerability leads. Fragments nearly absent. |
+| LinkedIn / professional social | Invitational | Still opinionated ("we accept dictatorships at work") but assertion over accusation. Complete sentences. Opening a conversation, not delivering a verdict. |
+| Professional bio / introduction | Confident human | Direct, purposeful, no false modesty. Political identity framed as purpose, not grievance. |
 | Business/product copy | Warm professional | Direct, anti-bullshit, human. Less profanity, more utility. |
 | Email/casual | Conversational | Short, warm, genuine curiosity. No corporate speak. |
 | Documentation | Clear and sharp | Active voice, lead with why, trust the reader. Concise. |
-| Social media | Punchy | One idea, strong opinion, no hashtag nonsense. |
 
 ### Step 2: Run the Diagnostics
 
@@ -46,7 +48,7 @@ Scan for every item on this list. Flag each occurrence:
 
 **Rhythm kills**:
 - Uniform sentence length (all sentences roughly the same word count)
-- No fragments anywhere (Travis uses strategic fragments)
+- No fragments anywhere **in essay register** (Travis uses strategic fragments there — but in positioning copy, LinkedIn, and bios, absence of fragments is correct)
 - No register shifts (everything in the same gear)
 
 **Emotional kills**:
@@ -120,6 +122,15 @@ When asked to edit or rewrite, make the changes directly. For each significant c
 > But I say horse pocky.
 
 > How will you prove you're better than a machine?
+
+**YES — this is Travis (positioning/professional register):**
+> The single most important issue to me is workplace democracy. I believe true liberation starts at the workplace and ripples out from there.
+
+> We made hard decisions together. We knew the numbers because we'd built systems to show them. When it became clear we couldn't survive, we wound down with transparency and care.
+
+> It needs to be more attractive to start a co-op than a corporation. Easier to start. Easier to operate. The barrier shouldn't be governance that is hard to manage or understand.
+
+Note the difference: same conviction, warmer temperature. Complete sentences, no fragments except for rare dramatic beats. The reader is an ally being invited in, not an opponent being confronted.
 
 **NO — this is not Travis:**
 > In today's rapidly evolving digital landscape, it's important to navigate the complexities of design with a holistic approach that fosters meaningful connections.
