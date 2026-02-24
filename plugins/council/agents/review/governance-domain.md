@@ -84,7 +84,16 @@ When reviewing governance features, check:
 - Check `modules.enabled` and sub-feature flags before rendering UI
 - Handle absent-module cases gracefully (governance might not be installed)
 
-### 5. Values Alignment
+### 5. Pilot Scope Awareness
+The first pilot ships **governance Simple Mode only** (see `docs/PILOT-SCOPE.md` in Assembly repo):
+- Decisions created as meeting agenda items (no separate proposals entity)
+- Vote recording with aggregate counts (no individual vote records)
+- Resolution auto-generation for passed decisions
+- Meeting management with attendance and quorum
+- **NOT in pilot**: async voting, consent resolutions, consensus process, proxy voting, separate proposals workflow, individual vote records, ballot generation
+- When reviewing pilot features, don't suggest features that are explicitly deferred
+
+### 6. Values Alignment
 - UI language should follow the three-layer architecture: legal -> bridge -> cultural
 - Member-facing templates use cultural layer (solidarity economy language)
 - Generated compliance documents use legal layer (BC Act terminology)

@@ -318,3 +318,4 @@ When bylaws conflict with the BC Act:
 
 - **decolonial-language skill** (in this plugin): For values-aligned terminology, content strategy, and the three-layer architecture (legal → bridge → cultural) for member-facing communications. Use when naming UI elements, writing labels, or drafting member documents.
 - **assembly plugin**: Technical implementation — Docker-based Go development, Templ templates, Datastar reactivity.
+- **Assembly repo distribution docs**: `docs/DISTRIBUTION.md` (phased distribution — pilot → self-updating → platform), `docs/PILOT-SCOPE.md` (first client scope — governance Simple Mode, no proposals/async/proxy), `docs/UPDATE-FLOW.md` (update/rollback sequence).
