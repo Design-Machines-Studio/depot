@@ -345,13 +345,15 @@ Each module has configurable settings derived from bylaws:
 ### Phase 1: MVP (Pilot)
 Members + Basic Governance + Records + Calendar
 
+See `docs/PILOT-SCOPE.md` in the Assembly repo for the detailed pilot checklist and acceptance criteria. The pilot ships Baseplate + Governance (Simple Mode) only.
+
 ### Phase 2: Core
 Add Equity + Documentation + Governance+
 
 ### Phase 3: Advanced
 Add Compensation + Real-time + Integrations
 
-**Never deploy all at once.** Start simple, validate, expand.
+**Never deploy all at once.** Start simple, validate, expand. See `docs/DISTRIBUTION.md` for the phased distribution model.
 
 ---
 

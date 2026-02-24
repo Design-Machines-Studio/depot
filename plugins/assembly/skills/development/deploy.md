@@ -101,3 +101,13 @@ docker compose -f docker-compose.prod.yml pull  # pulls :latest
 # image: ghcr.io/design-machines-studio/assembly:abc1234
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+## Related Architecture Docs
+
+These docs in the Assembly repo define the broader distribution strategy:
+
+| Document | Purpose |
+|----------|---------|
+| `docs/DISTRIBUTION.md` | Three-phase distribution model, registry, config hierarchy |
+| `docs/PILOT-SCOPE.md` | What ships for the first pilot client, acceptance criteria |
+| `docs/UPDATE-FLOW.md` | Update check/apply/rollback sequence (Phase 1+) |

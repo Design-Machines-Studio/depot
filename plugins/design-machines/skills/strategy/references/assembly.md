@@ -116,3 +116,13 @@ Co-op governance isn't a dashboard you check occasionally. It's a rhythm.
 3. **Contextual education**: Learn through use, not upfront training
 4. **Inhabited interfaces**: Living rhythm, not archived snapshots
 5. **Decolonial language**: Solidarity economy terminology for members, legal compliance for regulators
+
+## Distribution Model
+
+Assembly follows the **ONCE model** (37signals) — clients buy and own their install. Three-phase rollout:
+
+1. **Phase 0 (Pilot)**: Manual Docker deploy. All fixtures compiled in, toggled at runtime. Design Machines deploys directly.
+2. **Phase 1 (Self-Updating)**: Static registry with signed binaries. One-click updates. Lightweight Mothership dashboard.
+3. **Phase 2 (Platform)**: Builder service compiles per-client binaries. Fixture marketplace. License management.
+
+Full specification: `docs/DISTRIBUTION.md`, `docs/PILOT-SCOPE.md`, `docs/UPDATE-FLOW.md` in the Assembly repo.

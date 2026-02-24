@@ -423,12 +423,15 @@ Assembly uses a **Baseplate + Fixtures** architecture.
 
 ### Distribution Phases
 
-1. **Now**: Single binary + runtime config toggles
-2. **Commercial**: Go build tags for compile-time exclusion (unpaid code not in binary)
-3. **If needed**: Builder tool (xcaddy pattern) for per-client binaries
+Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` for the full specification and `docs/PILOT-SCOPE.md` for what ships first.
+
+1. **Phase 0 (Pilot)**: Single binary + runtime config toggles. Manual Docker deploy. No update mechanism.
+2. **Phase 1 (Self-Updating)**: Registry + update client. One-click updates in Admin UI. Lightweight Mothership.
+3. **Phase 2 (Platform)**: Builder service + fixture marketplace. Per-client binaries. License management.
 
 ---
 
 ## Cross-References
 
 - **council plugin** (`decolonial-language` skill): For values-aligned terminology when naming components, writing UI labels, seeding mock data, and writing microcopy. Provides the three-layer architecture (legal → bridge → cultural) for mapping BC Act terms to solidarity economy language. Default to cultural layer in member-facing templates; use legal layer only in generated compliance documents.
+- **Distribution docs** (in Assembly repo): `docs/DISTRIBUTION.md` (deployment model), `docs/PILOT-SCOPE.md` (pilot checklist), `docs/UPDATE-FLOW.md` (update sequence)
