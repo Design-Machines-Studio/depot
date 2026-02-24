@@ -30,14 +30,12 @@ General-purpose badge with variants and size modifiers. All labels are auto-titl
 //          "general", "special", "board", "ordinary", "director",
 //          "success", "warning", "muted", "subtle", "accent", etc.
 
-// Size variants
+// Size variant
 @components.BadgeSmall(label, variant)  // Compact, for inline use in headings/tables
-@components.BadgeLarge(label, variant)  // Emphasized
 
 // Examples
 @components.Badge("Active", "active")
 @components.BadgeSmall("Board", "board")
-@components.BadgeLarge("Passed", "passed")
 ```
 
 CSS provides a grey fallback for unrecognized variants so badges always render visibly.
