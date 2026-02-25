@@ -1,5 +1,5 @@
 ---
-name: craft-cms
+name: craft-development
 description: Professional Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Covers Craft 4 and Craft 5 patterns including breaking changes between versions.
 ---
 
@@ -135,6 +135,13 @@ Prevent N+1 queries when accessing related content in loops.
 {% endfor %}
 ```
 
+**Lazy eager loading with count:**
+```twig
+{% for recipe in recipes %}
+  {{ recipe.steps.eagerly().count() }} Step(s)
+{% endfor %}
+```
+
 **Nested eager loading:**
 ```twig
 {% set entries = craft.entries()
@@ -144,6 +151,15 @@ Prevent N+1 queries when accessing related content in loops.
   ])
   .all() %}
 ```
+
+### Entry Type Sharing (Craft 5)
+
+Entry types exist in a global pool. The same entry type can be used in:
+- Multiple sections
+- Multiple Matrix fields
+- Both sections and Matrix fields simultaneously
+
+This eliminates duplication — define an entry type once, use it everywhere.
 
 ## GraphQL Patterns
 
@@ -250,6 +266,9 @@ Check what triggers invalidation:
   ...
 {% endcache %}
 ```
+
+### Conditional Field Layouts (Craft 5)
+Field tabs and individual fields can be shown/hidden based on conditions (entry type, status, user group, custom field values). If fields seem missing in the CP, check the field layout conditions before assuming a bug.
 
 ## Reference Files
 

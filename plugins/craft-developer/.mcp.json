@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "craft-cms": {
+      "command": "ddev",
+      "args": ["exec", "php", "vendor/stimmt/craft-mcp/bin/mcp-server"],
+      "disabled": false,
+      "description": "Craft CMS MCP server for direct access to content architecture, database schema, and configuration"
+    }
+  }
+}

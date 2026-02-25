@@ -211,6 +211,16 @@ Real-world query patterns for common scenarios.
   .all() %}
 ```
 
+### Lazy eager loading in loops (Craft 5+)
+
+```twig
+{% for recipe in recipes %}
+  <h2>{{ recipe.title }}</h2>
+  {{ recipe.steps.eagerly().count() }} Step(s)
+  {% set image = recipe.featureImage.eagerly().one() %}
+{% endfor %}
+```
+
 ## Performance Patterns
 
 ### Avoid N+1 with eager loading
