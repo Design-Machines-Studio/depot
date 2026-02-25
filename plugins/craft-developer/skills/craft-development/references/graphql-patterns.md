@@ -372,6 +372,44 @@ entries(relatedTo: [])
 # Solution: Don't pass empty arrays, use null
 ```
 
+## Singles Queries (5.8+)
+
+Singles get dedicated GraphQL queries:
+
+```graphql
+query {
+  homepageEntry {
+    ... on homepage_Entry {
+      heroTitle
+      heroImage {
+        url @transform(width: 1200, height: 600)
+      }
+    }
+  }
+}
+```
+
+No need for `entry(section: "homepage")` — use `<handle>Entry` directly.
+
+## Advanced Query Arguments (5.7+)
+
+```graphql
+# Search with options (5.7)
+query {
+  entries(section: "blog", search: "craft cms", searchTermOptions: { subLeft: true }) {
+    title
+  }
+}
+
+# Include provisional drafts (5.7)
+query {
+  entries(section: "blog", withProvisionalDrafts: true) {
+    title
+    isDraft
+  }
+}
+```
+
 ## Performance Tips
 
 1. **Request only needed fields** - Don't fetch entire entries if you only need title/url
@@ -379,3 +417,4 @@ entries(relatedTo: [])
 3. **Batch queries** - Combine multiple queries in one request
 4. **Use transforms** - Request specific image sizes, not full resolution
 5. **Cache responses** - GraphQL responses are highly cacheable
+6. **Preview tokens** (5.9) - Use `X-Craft-Preview-Token` header for preview API requests

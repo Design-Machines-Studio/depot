@@ -265,6 +265,35 @@ Real-world query patterns for common scenarios.
   .ids() %}
 ```
 
+## Advanced Query Params (5.6+)
+
+### Custom field handles in orderBy
+
+```twig
+{% set products = craft.entries()
+  .section('products')
+  .orderBy('price ASC')
+  .all() %}
+```
+
+### Custom field handles in where conditions
+
+```twig
+{% set expensive = craft.entries()
+  .section('products')
+  .andWhere(['>', 'price', 100])
+  .all() %}
+```
+
+### Only canonical entries (no drafts/revisions, 5.7)
+
+```twig
+{% set entries = craft.entries()
+  .section('blog')
+  .canonicalsOnly(true)
+  .all() %}
+```
+
 ## Debugging Queries
 
 ### Print the SQL

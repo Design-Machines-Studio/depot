@@ -1,11 +1,11 @@
 ---
 name: craft-5-migration
-description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, or updating code for Craft 5 patterns. Covers Matrix changes, empty array behavior, GraphQL updates, and entrification.
+description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, or updating code for Craft 5 patterns. Covers Matrix changes, empty array behavior, GraphQL updates, entrification, and new features through 5.9.
 ---
 
 # Craft 4 to 5 Migration Guide
 
-Key changes, breaking patterns, and migration strategies for Craft 5.
+Key changes, breaking patterns, and migration strategies for Craft 5. Current latest: **5.9** (January 2026).
 
 ## Major Conceptual Changes
 
@@ -222,6 +222,10 @@ Or check manually:
 2. Move field configurations
 3. Update templates: `globalSet.field` → `entry.field`
 
+**CLI entrify commands** (improved in 5.9):
+- `entrify/categories`, `entrify/tags`, `entrify/global-set` no longer require handles
+- Commands auto-assign new sections to "Categories" or "Tags" index pages
+
 ## MCP Migration Tools
 
 If Craft MCP is installed:
@@ -310,3 +314,13 @@ The Matrix field's "Add" button can organize entry types into groups:
 - Helps authors find the right block type quickly
 - Groups are configured in the Matrix field settings
 - Useful when a content builder has 10+ entry types
+
+## What's New Since 5.0 (Feature Timeline)
+
+Key features added after the initial Craft 5 release:
+
+**5.5** — Range field, card view attributes, element partial template fallbacks, `encodeUrl()` Twig function
+**5.6** — Link field advanced options (ARIA, target, rel), entry type name overrides per section/Matrix, `primarySite` Twig variable, custom field handles in `where`/`orderBy`/`select` params, `config/redirects.php`, `X-Craft-Site` header
+**5.7** — Button Group and JSON field types, editability conditions (read-only fields), `canonicalsOnly` query param, Matrix entry versioning, icons/colors for option fields, `searchTermOptions` GraphQL argument
+**5.8** — Content Block field, Generated Fields, Matrix entry type groups with search, `<handle>Entry` GraphQL queries for Singles, "Validate" element actions, entry type descriptions
+**5.9** — Multi-page index sources, `randomString()`/`uuid()` Twig functions, `hash` filter algorithm support, inline list/card grid view modes for relational fields, Matrix bulk selection actions, unpublished drafts via GraphQL, UI Label Format and line breaks in titles, field editability conditions based on element, XLSX/YAML export

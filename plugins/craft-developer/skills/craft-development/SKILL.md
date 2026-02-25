@@ -270,6 +270,97 @@ Check what triggers invalidation:
 ### Conditional Field Layouts (Craft 5)
 Field tabs and individual fields can be shown/hidden based on conditions (entry type, status, user group, custom field values). If fields seem missing in the CP, check the field layout conditions before assuming a bug.
 
+## Recent Features (5.5–5.9)
+
+### New Twig Functions and Filters
+
+```twig
+{# Generate random strings and UUIDs (5.9) #}
+{% set token = randomString(32) %}
+{% set id = uuid() %}
+
+{# Hash with specific algorithm (5.9) #}
+{{ 'data'|hash('sha256') }}
+
+{# Encode URLs with special characters (5.5) #}
+{{ encodeUrl('https://example.com/path with spaces') }}
+```
+
+### New Global Variables
+
+```twig
+{# Primary site object (5.6) #}
+{{ primarySite.name }}
+
+{# PHP_INT_MAX available (5.6) #}
+{% set maxInt = PHP_INT_MAX %}
+```
+
+### Element Query Enhancements
+
+```twig
+{# Custom field handles in orderBy (5.7) #}
+{% set entries = craft.entries()
+  .section('products')
+  .orderBy('price ASC')
+  .all() %}
+
+{# Custom field handles in where conditions (5.6) #}
+{% set entries = craft.entries()
+  .section('products')
+  .andWhere(['>', 'price', 100])
+  .all() %}
+
+{# Nested field values in orderBy (5.6) — e.g. date time zones #}
+{% set entries = craft.entries()
+  .orderBy('myDateField.tz ASC')
+  .all() %}
+
+{# Only canonical entries, no drafts/revisions (5.7) #}
+{% set entries = craft.entries()
+  .canonicalsOnly(true)
+  .all() %}
+```
+
+### Fallback Element Partial Templates (5.6)
+
+Craft now supports fallback templates for element rendering:
+- `_partials/entry/articleType.twig` — specific to entry type
+- `_partials/entry.twig` — fallback for any entry type
+
+### Redirects in Config (5.6)
+
+Define redirects in `config/redirects.php` instead of the CP:
+```php
+return [
+    'old-path' => 'new-path',
+    'blog/<slug>' => 'articles/<slug>',
+];
+```
+
+### Site Header for API Requests (5.6)
+
+Specify the current site via `X-Craft-Site` header (set to site ID or handle) instead of query params.
+
+### GraphQL Updates (5.7–5.9)
+
+```graphql
+# Singles get dedicated queries (5.8)
+query {
+  homepageEntry {
+    ... on homepage_Entry {
+      heroTitle
+    }
+  }
+}
+```
+
+- **Singles queries** (5.8) — `<handle>Entry` queries resolve directly (e.g. `homepageEntry`)
+- **Unpublished drafts** (5.9) — Can create unpublished drafts via GraphQL mutations
+- **Search options** (5.7) — `searchTermOptions` argument for fine-tuned search
+- **Provisional drafts** (5.7) — `withProvisionalDrafts` argument
+- **Preview tokens** (5.9) — `X-Craft-Preview-Token` header for preview requests
+
 ## Reference Files
 
 For detailed patterns, see:
