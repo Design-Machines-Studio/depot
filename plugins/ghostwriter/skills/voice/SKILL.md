@@ -179,57 +179,11 @@ The best jokes layer multiple filters. A pinch of irony with some character work
 
 ### The funny filters (via Scott Dikkers)
 
-These are the 11 fundamental building blocks of humor from Dikkers' *How to Write Funny*. Not all are equally useful for Travis's voice. The ones marked **PRIMARY** are the go-to tools. The ones marked **SECONDARY** work in specific situations. The ones marked **USE SPARINGLY** can undermine the voice if overused.
+Travis uses Scott Dikkers' 11 humor filters from *How to Write Funny* as a systematic joke-writing toolkit. **For the full filter reference with DM-specific examples, see `references/humor-filters.md`.**
 
-**PRIMARY FILTERS — the core toolkit:**
+The primary filters for DM: **Irony** (say the opposite to expose absurdity — the #1 tool), **Parody** (mimic corporate/VC/LinkedIn forms and twist), **Hyperbole** (push capitalist logic to its endpoint), **Misplaced focus** (fixate on trivial perks while ignoring power), **Analogy** (compare unlike things to reveal hidden truths). Secondary: Character archetypes, shared-experience Reference, Shock. Use sparingly: Wordplay, Madcap, Metahumor.
 
-**1. Irony** — Say the opposite of what you mean to expose the absurdity of the real thing. The intended meaning is the polar opposite of the literal meaning. This is the single most important filter for Design Machines humor. Capitalism provides endless material because the gap between what it claims and what it does is enormous.
-- DM territory: "Generous CEO allows workers to keep 12% of the value they create"
-- DM territory: "Company excited to announce new initiative where employees pretend to have autonomy"
-- The Onion model: state something absurd as though it's perfectly normal
-
-**2. Parody** — Mimic the form, language, and cadence of something familiar but twist the content. Travis explicitly uses this. Mimicking corporate announcements, VC pitch decks, LinkedIn hustle posts, motivational posters, HR communications, tech product launches — and making them obviously ridiculous by pushing the real logic to its honest conclusion. Parody works best when the form is instantly recognizable.
-- DM territory: A fake corporate memo announcing "We've decided to let workers vote on the color of the break room walls. Democracy achieved."
-- DM territory: A mock VC pitch for "a revolutionary platform that lets humans... own things together" (describing a co-op)
-- The key: the parody should be close enough to the real thing that it stings
-
-**3. Hyperbole** — Exaggerate to absurd extremes to expose the underlying truth. Push a real dynamic to its logical endpoint. Works especially well for political satire because capitalism's actual dynamics are already absurd — you just have to extend them slightly.
-- DM territory: "Your employer has more control over your daily life than any government in history, but sure, let's keep calling it freedom"
-- DM territory: "Productivity tip: have you tried generating all the value and keeping none of it?"
-
-**4. Misplaced focus** — Pretend to lack awareness of the obvious and fixate on a small, insignificant detail. The comedy comes from what's being ignored. Extremely effective for exposing how people talk about work and capitalism — focusing on perks while ignoring power, celebrating culture while ignoring compensation.
-- DM territory: "We know you haven't had a raise in four years but look at this new ping pong table"
-- DM territory: "Great news: the company that just laid off 10,000 people won a 'Best Places to Work' award"
-
-**5. Analogy** — Compare two unlike things to reveal a hidden truth about both. Travis already does this with metaphors. For humor, push the comparison further into absurdity while keeping the underlying logic sound.
-- DM territory: "Running a company without worker input is like building a house and never asking anyone who lives there what rooms they need"
-- DM territory: "Asking a CEO if workers should have ownership is like asking a landlord if tenants should own the building"
-
-**SECONDARY FILTERS — useful in the right moment:**
-
-**6. Character** — Create a comedic archetype with 1-3 clear traits and let them act on those traits. For DM, the useful archetypes are: the LinkedIn hustle bro, the clueless VC, the corporate HR rep who says "we're a family," the middle manager who confuses authority with leadership, the tech founder who thinks they invented sharing. Use these characters in parody, not as sustained bits.
-
-**7. Reference** — Tap into common shared experiences the audience recognizes. The comedy of "everyone's been through this." For DM's audience: the meaningless all-hands meeting, the annual review that changes nothing, the Slack message from the CEO that starts with "In these uncertain times...", being told you're "not a culture fit." These land because the audience has lived them.
-
-**8. Shock** — The unexpected turn. Strategic use of profanity, bluntness, or a sudden shift in register. For Travis this means the same thing as his profanity principle: deploy at inflection points for maximum impact, not as a constant setting. A single "bullshit" in an otherwise measured paragraph hits harder than profanity sprinkled throughout.
-
-**USE SPARINGLY — can undermine the voice:**
-
-**9. Wordplay** — Puns, double meanings, clever turns of phrase. Can be effective but risks sounding cheesy or dad-joke-ish, which is the opposite of the DM voice. Use only when the wordplay is sharp and the double meaning genuinely illuminates something. "Assembly" (factory + democracy) is good wordplay. Forced puns are not.
-
-**10. Madcap** — Random, chaotic, absurdist humor. Mostly too silly for the DM voice. The grown-up punk energy means the humor should feel controlled and pointed, not wacky. An occasional moment of absurdism can work, but it should surprise against a backdrop of sharp, directed humor — not be the default.
-
-**11. Metahumor** — Making humor itself the target. Commenting on the joke, the format, or the act of comedy. Can work once in a while for self-aware moments (acknowledging you're posting propaganda on Instagram, for instance), but overuse feels precious and deflates the conviction.
-
-### How to use the filters in practice
-
-**The Dikkers process, adapted for DM:**
-
-1. **Start with the opinion.** What do you actually think? State it plainly. "Nobody starts a co-op because they love governance." "Your boss has more power over your life than your government." "The tech industry invented cooperatives and called them DAOs."
-2. **Run the opinion through 2-3 filters.** Try irony first — it's almost always productive. Then try parody or hyperbole. See which combination produces something that makes you laugh AND makes a point.
-3. **Layer the filters.** The best jokes combine filters. Irony + parody: a fake corporate announcement that says the opposite of what companies actually do. Hyperbole + misplaced focus: exaggerating a trivial workplace perk while ignoring a massive structural injustice.
-4. **Cut ruthlessly.** If you can remove a word without losing the joke, remove it. Dikkers: proof it to make sure no words can be removed. The tighter the joke, the harder it hits.
-5. **Check the tone.** Does it punch up? Does it make the reader laugh AND think? Is it sharp without being cruel to workers? Would it make a co-op member smile and a CEO uncomfortable? Good.
+**The process:** Start with an opinion → run it through 2-3 filters (irony first) → layer filters for complexity → cut ruthlessly → check it punches up.
 
 ### What makes DM humor land
 
@@ -324,6 +278,8 @@ Tight. Hemingway-like. Personality, wit, and political sharpness are present but
 ---
 
 ## Platform-Specific Registers
+
+> **For format constraints, character limits, posting frequency, algorithmic mechanics, and hashtag strategy per platform, see the social-media skill (`skills/social-media/SKILL.md`).** This section covers only voice and tone per platform.
 
 ### LinkedIn
 
@@ -498,46 +454,9 @@ When reviewing or editing content to match Travis's voice, check:
 
 ## Influence Map
 
-Understanding the influences helps calibrate the voice. These aren't name-drops — they're the intellectual and stylistic DNA.
+**For the full influence map with commentary, see `references/influence-map.md`.**
 
-### Political theory and labor
-- **Mark Fisher** (*Capitalist Realism*) — the foundational frame. Alternatives exist; the work is making them visible.
-- **Michael Parenti** — direct, accessible Marxist analysis without academic gatekeeping
-- **Marx & Engels** — the material analysis underneath everything
-- **David Harvey** — political economy, the geography of capital
-- **Jane McAlevey** — organizing, power analysis, the difference between mobilizing and organizing
-- **Richard Wolff** (Democracy at Work) — cooperative economics made accessible
-- **Antonia Darder** (*Pedagogy of the Oppressed*) — education as liberation
-- **Nick Srnicek & Alex Williams** (*Inventing the Future*) — post-work politics, demanding more
-- **Peter Senge** (*The Fifth Discipline*) — systems thinking applied to organizations
-- **Bernie Sanders** — proof that left ideas are broadly popular when stated plainly
-- **The Black Panthers** — community self-determination, mutual aid as praxis
-- **John Abrams** (*Companies We Keep*, *From Founders to Future*) — cooperative business in practice, the book that started it all
-- **Marjorie Kelly** — ownership design, the architecture of economic democracy
-
-### Comedy and cultural tone
-- **Armando Iannucci** (The Thick of It, Veep) — political satire that's precise and merciless
-- **Steve Coogan** — character-driven comedy that exposes institutional absurdity
-- **Chapo Trap House** — dirtbag left humor, irreverence toward liberal pieties and capitalist logic
-- **Jake Flores / Pod Damn America** — sharp, funny, politically grounded
-- **Michael Brooks** — international solidarity with humor and warmth
-- **The Majority Report** — informed left analysis that doesn't take itself too seriously
-- **Gifted Hater** — cultural criticism with zero reverence and total commitment to the bit
-- **Nathan For You** — deadpan absurdism, pushing a premise to its logical extreme with a straight face
-- **Curb Your Enthusiasm** — social discomfort as revelation, saying the thing everyone's thinking
-- **Arrested Development** — layered jokes that reward attention, structural comedy
-- **George Carlin** — class consciousness through comedy
-- **Scott Dikkers** (*How to Write Funny*) — the 11 funny filters as a systematic joke-writing toolkit (see Humor section)
-
-### Writing craft
-- **Dan Nelken** (*A Self Help Guide for Copywriters*) — the internal game of writing
-- **April Dunford** (*Obviously Awesome*) — positioning and clarity
-- **Michael Masterson & John Forde** (*Great Leads*) — opening strategies, getting attention honestly
-- **Scott Dikkers** (*How to Write Funny*) — humor mechanics
-- **Edward de Bono** — lateral thinking, creative problem-solving approaches
-- **Luke Sullivan** (*Hey Whipple, Squeeze This*) — advertising writing that respects the audience
-- **Janice Redish** (*Letting Go of the Words*) — plain language, reader-first writing
-- **Natalie Goldberg** (*Writing Down The Bones*) — writing as practice, as life
+Key DNA: Mark Fisher (*Capitalist Realism*) is the foundational frame. Armando Iannucci (Veep, The Thick of It) sets the humor tone. Hemingway and Dan Nelken shape the prose craft. John Abrams (*Companies We Keep*) started the co-op journey. The mix of political theory (Marx, Parenti, Harvey), dirtbag left comedy (Chapo, Gifted Hater, Carlin), subculture (Thrasher, punk), and pop culture (Nathan For You, Arrested Development, Curb) is the point — it signals range and refuses to stay in one register.
 
 ---
 
