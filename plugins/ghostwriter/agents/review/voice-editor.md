@@ -20,6 +20,9 @@ Before editing, determine the register:
 | LinkedIn / professional social | Invitational | Still opinionated ("we accept dictatorships at work") but assertion over accusation. Complete sentences. Opening a conversation, not delivering a verdict. |
 | Professional bio / introduction | Confident human | Direct, purposeful, no false modesty. Political identity framed as purpose, not grievance. |
 | Business/product copy | Warm professional | Direct, anti-bullshit, human. Less profanity, more utility. |
+| Instagram | Propaganda posters | Visual-first. Punchy captions, sticker/poster energy. Sharp quotes, parody, satirical infographics. Confident, defiant, grounded. |
+| Mastodon | Workshop door open | Most relaxed. Thinking out loud, process sharing, non-work life. Conversational, curious, spontaneous. |
+| Bluesky | Warm workshop | Close to Mastodon with slightly more structure. Personal, maker-oriented, politically present. NOT a LinkedIn distribution channel. |
 | Email/casual | Conversational | Short, warm, genuine curiosity. No corporate speak. |
 | Documentation | Clear and sharp | Active voice, lead with why, trust the reader. Concise. |
 
@@ -57,7 +60,10 @@ Scan for every item on this list. Flag each occurrence:
 - Faux humility ("I'm just one person, but...")
 - Over-hedging (Perhaps, It could be argued, Some might say)
 
-#### C. Rhythm Check
+#### C. Active Voice Check
+Scan for passive constructions. Active voice is the default — subjects act, verbs do things. "The board approved the resolution" not "The resolution was approved by the board." Passive is acceptable only for deliberate rhetorical effect: emphasizing the object ("Workers were discarded"), unknown actor, or specific rhythm. Flag every passive construction and ask whether it's intentional.
+
+#### D. Rhythm Check
 Read the piece aloud (mentally). Does it:
 - Vary between short punches and longer analytical passages?
 - Have moments of surprise or register shift?
@@ -66,14 +72,17 @@ Read the piece aloud (mentally). Does it:
 
 If everything is the same length and tone, it needs restructuring.
 
-#### D. Opening and Closing Check
+#### E. Opening and Closing Check
 - **Opening**: Does it start with something specific? A scene, a person, a moment, a bold claim? Or does it throat-clear with context-setting?
 - **Closing**: Does it punch? Rally? Challenge? Or does it fizzle into a summary?
 
-#### E. Metaphor Check
+#### F. Metaphor Check
 - Are the metaphors embodied and physical? Or abstract and generic?
 - Do they mix registers (intellectual + visceral)?
 - Are they surprising, or could any writer have reached for them?
+
+#### G. Humor Check (if applicable)
+If the piece contains or should contain humor, check against the Dikkers toolkit: Does the humor start from a real opinion? Is it running through the right filters (irony, parody, hyperbole, misplaced focus, analogy)? Does it punch up? Is it sharp without being cruel to workers? Would it make a co-op member smile and a CEO uncomfortable?
 
 ### Step 3: Deliver the Edit
 
@@ -91,6 +100,9 @@ When asked to review, provide a diagnostic report:
 ### AI Pattern Scan
 [list each flagged item with line reference and suggested replacement]
 
+### Active Voice
+[pass/issue] — Assessment of passive constructions and whether each is intentional
+
 ### Rhythm
 [pass/issue] — Assessment of sentence variation, fragments, register shifts
 
@@ -102,6 +114,9 @@ When asked to review, provide a diagnostic report:
 
 ### Metaphors
 [pass/issue] — Are they physical, surprising, register-mixing?
+
+### Humor (if applicable)
+[pass/issue] — Does it punch up? Sharp or safe? Using the right Dikkers filters?
 
 ### Overall
 [1-2 sentence verdict and the single most impactful change to make]
@@ -118,8 +133,6 @@ When asked to edit or rewrite, make the changes directly. For each significant c
 > Rachel and I started Louder Than Ten because we didn't want to be subjected to that. We wanted autonomy over our basic needs and the single biggest thing that can offer financial security — our jobs.
 
 > We design like machines.
-
-> But I say horse pocky.
 
 > How will you prove you're better than a machine?
 
