@@ -1,0 +1,58 @@
+# Severity Mapping
+
+Rules for mapping each agent's native severity terminology to the unified P1/P2/P3 system.
+
+---
+
+## Unified Severity Levels
+
+| Level | Label | Meaning | Merge Impact |
+|-------|-------|---------|-------------|
+| **P1** | Blocks Merge | Must fix before merging | Review recommendation = BLOCKS MERGE |
+| **P2** | Should Fix | Fix soon, track if not immediate | Review recommendation = APPROVE WITH FIXES |
+| **P3** | Nice-to-Have | Improvement opportunity | No merge impact |
+
+---
+
+## Agent-Specific Mappings
+
+### dm-review Agents
+
+| Agent | Critical/P1 | Serious/P2 | Moderate/P3 |
+|-------|------------|------------|-------------|
+| **code-simplicity-reviewer** | God functions (100+ lines), keyboard traps, dead code hiding bugs | Unnecessary abstraction, redundant logic, unclear naming | Verbose but correct code, minor style preferences |
+| **security-auditor** | SQL injection, XSS, auth bypass, credential exposure | Missing CSRF token, permissive CORS, unvalidated input | Missing rate limiting, verbose error messages |
+| **pattern-recognition-specialist** | Circular dependencies, data races, resource leaks | Anti-patterns (God objects, feature envy), naming inconsistencies | Minor duplication, magic numbers in non-critical paths |
+| **architecture-reviewer** | Layer violations (templates calling DB), broken module boundaries | SOLID violations, excessive coupling, wrong package | Minor cohesion issues, suboptimal but functional structure |
+| **doc-sync-reviewer** | API docs contradict implementation, CLAUDE.md has wrong paths | README outdated, missing docs for new features | Minor formatting, stale examples |
+| **test-coverage-reviewer** | Existing tests now fail | Changed code has no tests (when project has test infrastructure) | Missing edge case tests |
+| **go-build-verifier** | Compilation failure | `go vet` warnings | — |
+| **craft-reviewer** | N+1 queries in loops, `\|raw` on user input | Missing eager loading, no null checks on relations | Suboptimal query patterns, minor template issues |
+
+### Depot-Native Agents (from other plugins)
+
+| Agent | Plugin | Critical/P1 | Serious/P2 | Moderate/P3 |
+|-------|--------|------------|------------|-------------|
+| **a11y-html-reviewer** | accessibility-compliance | Missing form labels, keyboard traps, no alt on functional images | Broken heading hierarchy, missing landmarks, generic link text | Missing aria-describedby, suboptimal ARIA |
+| **a11y-css-reviewer** | accessibility-compliance | `outline: none` without replacement, failing contrast on primary text | Animations without motion check, targets below 24px | Low contrast on secondary text, missing forced-colors |
+| **a11y-dynamic-content-reviewer** | accessibility-compliance | Click handlers on non-interactive elements, no live regions for state changes | Focus lost after morph, loading states silent | ARIA states not synced, suboptimal focus target |
+| **css-reviewer** | live-wires | — (errors) | Cascade layer violations, class invention, naming rule breaks | Token recommendations, container query suggestions |
+| **voice-editor** | ghostwriter | — | Spine failure (no point of view), AI pattern detected | Rhythm issues, minor register drift |
+| **governance-domain** | council | Legal compliance failure (wrong voting threshold) | Architecture violation (fixture boundaries) | Naming recommendations, values alignment |
+
+---
+
+## Escalation Rules
+
+1. **Any P1 from any agent** → merge recommendation = "BLOCKS MERGE"
+2. **P2 only (no P1)** → merge recommendation = "APPROVE WITH FIXES"
+3. **P3 only or clean** → merge recommendation = "CLEAN"
+4. **Security P1** always escalates — no exceptions, no "we'll fix it later"
+5. **Accessibility P1** always escalates — legal compliance (EAA, ADA)
+6. **Governance P1** always escalates — statutory requirements
+
+## De-escalation Rules
+
+1. P3 findings are shown in the report but don't affect merge recommendation
+2. Findings from agents that partially overlap (e.g., both a11y-css-reviewer and css-reviewer flag the same file) count as ONE finding at the higher severity
+3. If a finding is already tracked in a known issue / TODO, note it but don't block merge

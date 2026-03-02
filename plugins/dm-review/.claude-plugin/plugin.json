@@ -1,0 +1,18 @@
+{
+  "name": "dm-review",
+  "description": "Master code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.io"
+  },
+  "keywords": [
+    "review",
+    "code-review",
+    "accessibility",
+    "security",
+    "architecture",
+    "orchestrator",
+    "multi-agent"
+  ]
+}

@@ -63,6 +63,11 @@
       "name": "accessibility-compliance",
       "source": "./plugins/accessibility-compliance",
       "description": "WCAG 2.2 accessibility auditing and enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS"
+    },
+    {
+      "name": "dm-review",
+      "source": "./plugins/dm-review",
+      "description": "Master code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, and governance"
     }
   ]
 }

@@ -129,6 +129,12 @@ All templates use double-brace placeholders:
 
 Replace all placeholders before writing files. Remove any remaining placeholder lines that don't apply.
 
+## DM-Review Integration
+
+The `dm-review` depot plugin provides a full code review orchestrator that launches up to 15 parallel agents across accessibility, security, architecture, CSS, voice, and governance domains. It detects project type automatically from marker files (`go.mod`, `craft/`, `.ddev/`, `package.json`) and selects applicable agents — no per-project configuration needed.
+
+For projects with the depot installed, run `/dm-review` for a full review or `/dm-review quick` for core agents only.
+
 ## Hook Design Principles
 
 These principles are baked into every hook template:
