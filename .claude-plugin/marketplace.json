@@ -53,6 +53,11 @@
       "name": "design-practice",
       "source": "./plugins/design-practice",
       "description": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters"
+    },
+    {
+      "name": "project-scaffolder",
+      "source": "./plugins/project-scaffolder",
+      "description": "Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates"
     }
   ]
 }
