@@ -1,6 +1,6 @@
 ---
 name: livewires
-description: Live Wires CSS framework for editorial websites. Use when building HTML pages, writing CSS, or advising on layout and styling. Provides layout primitives (stack, grid, cluster, sidebar, center, section, cover, reel), utility classes, and design tokens based on a baseline rhythm system.
+description: Live Wires CSS framework for editorial websites. Use when building HTML pages, writing CSS, advising on layout and styling, choosing spacing tokens, setting up cascade layers, creating responsive layouts, theming with color schemes, reviewing CSS for compliance, or debugging layout issues. Also use when working with stack, grid, cluster, sidebar, center, section, cover, or reel primitives, baseline rhythm, fluid typography, container queries, or logical properties. Provides layout primitives, utility classes, and design tokens based on a baseline rhythm system.
 ---
 
 # Live Wires CSS Framework

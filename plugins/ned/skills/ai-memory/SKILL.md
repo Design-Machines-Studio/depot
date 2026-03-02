@@ -1,6 +1,6 @@
 ---
 name: ai-memory
-description: Access Travis Gertz's personal knowledge graph with 5,800+ entities tracking projects, people, finances, health, and relationships. Use when the user asks about their memory, wants to search for people/projects/companies, needs to add observations, or references remembering something.
+description: Access Travis Gertz's personal knowledge graph with 5,800+ entities tracking projects, people, finances, health, and relationships. Use when the user asks about their memory, wants to search for people/projects/companies, needs to add observations, references remembering something, asks "what do you know about...", wants to look up a client or contact, needs financial context, tracks health patterns, or manages relationship notes between entities.
 ---
 
 # AI Memory System

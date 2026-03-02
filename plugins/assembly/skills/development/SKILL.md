@@ -1,6 +1,6 @@
 ---
 name: development
-description: Assembly governance application development with Go, Templ, and Datastar. Covers pages, components, handlers, database patterns, setup, and deployment across all project phases.
+description: Assembly governance application development with Go, Templ, and Datastar. Use when building pages, adding handlers, creating Templ templates, writing database queries, scaffolding CRUD flows, configuring Docker, deploying to production, or working on any Assembly feature. Also use when asking about page types, DTO patterns, component library, Datastar integration, migration files, or module architecture. Covers pages, components, handlers, database patterns, setup, and deployment across all project phases.
 ---
 
 # Assembly Development Skill

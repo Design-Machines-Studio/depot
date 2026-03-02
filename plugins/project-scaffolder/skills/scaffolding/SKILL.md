@@ -1,6 +1,6 @@
 ---
 name: scaffolding
-description: Scaffold Claude Code project infrastructure — hooks, agents, settings.json, and CLAUDE.md — for any Design Machines project type.
+description: Scaffold Claude Code project infrastructure — hooks, agents, settings.json, and CLAUDE.md — for any Design Machines project type. Use when setting up a new project, configuring Claude Code hooks, creating a CLAUDE.md routing document, adding commit-push reminders, setting up Docker safety gates, configuring session-start workflows, or standardizing .claude/ directory structure. Covers go-templ-datastar, go-library, css-framework, and craft-cms project types.
 ---
 
 # Project Scaffolding
