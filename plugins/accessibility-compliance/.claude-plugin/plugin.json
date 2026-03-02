@@ -1,0 +1,19 @@
+{
+  "name": "accessibility-compliance",
+  "description": "WCAG 2.2 accessibility auditing, screen reader testing, and automated compliance enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS projects",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.io"
+  },
+  "keywords": [
+    "accessibility",
+    "wcag",
+    "a11y",
+    "aria",
+    "screen-reader",
+    "live-wires",
+    "templ",
+    "craft-cms"
+  ]
+}

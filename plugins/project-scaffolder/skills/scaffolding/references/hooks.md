@@ -373,9 +373,55 @@ exit 0
 
 **By project type:**
 
-- **go-templ-datastar**: All 4 default checks. Add governance/domain-specific checks as needed.
-- **go-library**: Keep go-builder and doc-sync. Remove css-reviewer.
-- **css-framework**: Keep css-reviewer and doc-sync. Remove go-builder and security-auditor.
-- **craft-cms**: Replace go-builder with a craft-builder check (`\.php$:craft-builder:PHP changed`). Keep doc-sync and security-auditor.
+- **go-templ-datastar**: All 4 default checks + a11y agents. Add governance/domain-specific checks as needed.
+- **go-library**: Keep go-builder and doc-sync. Remove css-reviewer and a11y agents.
+- **css-framework**: Keep css-reviewer, doc-sync, and a11y-css-reviewer. Remove go-builder and security-auditor.
+- **craft-cms**: Replace go-builder with a craft-builder check (`\.php$:craft-builder:PHP changed`). Keep doc-sync, security-auditor, and a11y agents.
 
-**Session end section**: Only fires if `session-start-gate.sh` is enabled (it checks for the session marker). Projects without the planner workflow won't see session end reminders.
+---
+
+## 6. a11y-check.sh
+
+**Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** Frontend projects (go-templ-datastar, css-framework, craft-cms)
+
+Triggers accessibility agent reminders after template, CSS, or JavaScript file modifications.
+
+```bash
+#!/bin/bash
+# a11y-check.sh — Remind about accessibility after frontend file changes
+#
+# Returns systemMessage JSON that reminds Claude to run a11y review agents.
+
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+
+if [ -z "$FILE_PATH" ]; then
+  exit 0
+fi
+
+# Template files → HTML accessibility review
+if printf '%s\n' "$FILE_PATH" | grep -qE '\.(templ|twig|html)$'; then
+  echo "{\"systemMessage\": \"Template modified: Run the a11y-html-reviewer agent to check WCAG 2.2 compliance (landmarks, headings, forms, ARIA, alt text).\"}"
+  exit 0
+fi
+
+# CSS files → Visual accessibility review
+if printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
+  echo "{\"systemMessage\": \"CSS modified: Run the a11y-css-reviewer agent to verify contrast, focus visibility, motion safety, and touch targets.\"}"
+  exit 0
+fi
+
+# JavaScript/Datastar files → Dynamic content review
+if printf '%s\n' "$FILE_PATH" | grep -qE '\.(js|ts)$'; then
+  echo "{\"systemMessage\": \"JavaScript modified: Run the a11y-dynamic-content-reviewer agent to check live regions, focus management, and keyboard operability.\"}"
+  exit 0
+fi
+
+exit 0
+```
+
+### Customization
+
+- No placeholders needed — this hook is universal for frontend projects
+- For go-library projects (no frontend): skip this hook entirely
+- For projects using Datastar heavily, the JS check will fire on Datastar signal files too

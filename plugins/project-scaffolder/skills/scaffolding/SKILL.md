@@ -13,10 +13,10 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 
 | Type | Stack | Docker | Hooks | Agents |
 |------|-------|--------|-------|--------|
-| `go-templ-datastar` | Go + Templ + Datastar + Live Wires | Yes | all 5 | go-builder, css-reviewer, doc-sync, security-auditor |
+| `go-templ-datastar` | Go + Templ + Datastar + Live Wires | Yes | all 5 + a11y-check | go-builder, css-reviewer, doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer, a11y-dynamic-content-reviewer |
 | `go-library` | Go module (no frontend) | Optional | commit-push, pre-stop, post-edit | doc-sync |
-| `css-framework` | CSS + npm build | No | commit-push, pre-stop, post-edit | css-reviewer, doc-sync |
-| `craft-cms` | Craft CMS + DDEV + Twig | DDEV | commit-push, pre-stop, post-edit, block-bare-craft | doc-sync, security-auditor |
+| `css-framework` | CSS + npm build | No | commit-push, pre-stop, post-edit, a11y-check | css-reviewer, doc-sync, a11y-css-reviewer |
+| `craft-cms` | Craft CMS + DDEV + Twig | DDEV | commit-push, pre-stop, post-edit, block-bare-craft, a11y-check | doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer |
 
 ### Hook Inventory
 
@@ -26,6 +26,7 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 | `session-start-gate.sh` | PreToolUse | Edit\|Write | Opt-in | Block changes until planner workflow completes |
 | `commit-push-reminder.sh` | PostToolUse | Edit\|Write | ALL | Nudge commits at 3+ files, push at 2+ commits |
 | `post-edit-context.sh` | PostToolUse | Edit\|Write | ALL | Agent reminders based on file type |
+| `a11y-check.sh` | PostToolUse | Edit\|Write | Frontend projects | A11y agent reminders after template/CSS/JS changes |
 | `pre-stop-check.sh` | Stop | — | ALL | Uncommitted work check + agent compliance |
 
 ### Agent Inventory
@@ -36,6 +37,9 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 | `css-reviewer.md` | Live Wires projects | CSS compliance (layers, naming, tokens) |
 | `doc-sync.md` | ALL projects | Documentation freshness after code changes |
 | `security-auditor.md` | Backend projects | OWASP review + project-specific concerns |
+| `a11y-html-reviewer.md` | Frontend projects | WCAG HTML/template compliance |
+| `a11y-css-reviewer.md` | Frontend projects | WCAG visual accessibility (contrast, focus, motion) |
+| `a11y-dynamic-content-reviewer.md` | Datastar projects | Live regions, focus management, keyboard |
 
 ## Scaffold Workflow
 
@@ -75,13 +79,21 @@ Create the following in the target project:
     session-start-gate.sh    ← if opted in (from hooks.md)
     commit-push-reminder.sh  ← always (from hooks.md)
     post-edit-context.sh     ← always, customized per type (from hooks.md)
+    a11y-check.sh            ← frontend projects (from hooks.md)
     pre-stop-check.sh        ← always (from hooks.md)
   agents/
     go-builder.md            ← Go projects only (from agents.md)
     css-reviewer.md          ← Live Wires projects (from agents.md)
     doc-sync.md              ← always (from agents.md)
     security-auditor.md      ← backend projects (from agents.md)
+    a11y-html-reviewer.md    ← frontend projects (from agents.md)
+    a11y-css-reviewer.md     ← frontend projects (from agents.md)
+    a11y-dynamic-content-reviewer.md ← Datastar projects (from agents.md)
 CLAUDE.md                    ← routing doc (from project-configs.md)
+.pa11yci.json                ← frontend projects (from project-configs.md)
+tests/
+  a11y/
+    pages.spec.js            ← frontend projects (from project-configs.md)
 tasks/
   todo.md                    ← empty task file
   lessons.md                 ← empty lessons file
