@@ -30,7 +30,17 @@ Each plugin under `plugins/` follows the same structure:
 - **`skills/`** — Each subdirectory is a skill. `SKILL.md` is the entry point; `references/` holds supplementary material that the skill can pull in.
 - **`agents/`** — Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
 
-## The Nine Plugins
+## Plugin Versioning
+
+When you modify a plugin's skills, agents, or references, **bump the version** in its `.claude-plugin/plugin.json` before committing. Follow semver:
+
+- **Patch** (1.0.0 → 1.0.1) — reference fixes, typo corrections, description enrichment
+- **Minor** (1.0.0 → 1.1.0) — new references, new agents, additional patterns, new skill content
+- **Major** (1.0.0 → 2.0.0) — skill renamed/restructured, breaking changes to how the plugin works
+
+Never commit plugin changes without also bumping the version.
+
+## The Plugins
 
 | Plugin | Purpose |
 |---|---|
@@ -43,6 +53,8 @@ Each plugin under `plugins/` follows the same structure:
 | **live-wires** | CSS framework with layout primitives and baseline rhythm |
 | **ghostwriter** | Personal writing voice, editorial style engine, and voice editing |
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
+| **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md |
+| **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
 
 ## Common Operations
 
