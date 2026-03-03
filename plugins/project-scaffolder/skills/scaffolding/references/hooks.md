@@ -74,8 +74,8 @@ fi
 echo "BLOCKED: Session workflow not completed." >&2
 echo "" >&2
 echo "Before making changes, complete the planner session start:" >&2
-echo "  1. Read the planner skill from depot:" >&2
-echo "     /Users/trav/Websites/design-machines/depot/plugins/project-manager/skills/planner/SKILL.md" >&2
+echo "  1. Invoke the planner skill:" >&2
+echo "     /planner (or read the project-manager planner skill from depot)" >&2
 echo "  2. Check memory/sessions.md for last session context" >&2
 echo "  3. Query Sprints DB for active sprint (Status = In progress)" >&2
 echo "  4. Query Todos DB for this project's open sprint todos" >&2
@@ -88,7 +88,7 @@ exit 2
 
 ### Customization
 - Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name
-- The planner skill path is fixed (it lives in the depot, not per-project)
+- The planner skill is invoked via `/planner` (installed from the depot's project-manager plugin)
 - For projects without Notion/planner integration, skip this hook
 
 ---
@@ -425,3 +425,4 @@ exit 0
 - No placeholders needed — this hook is universal for frontend projects
 - For go-library projects (no frontend): skip this hook entirely
 - For projects using Datastar heavily, the JS check will fire on Datastar signal files too
+- **Note:** This hook fires alongside `post-edit-context.sh` on `.css` and template files. That's intentional — post-edit-context reminds about build/CSS agents while this hook reminds about accessibility agents. Both systemMessages are useful.

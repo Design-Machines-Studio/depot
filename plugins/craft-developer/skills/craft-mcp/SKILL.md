@@ -268,7 +268,9 @@ get_last_error + read_logs = full error context
 Craft::$app->sections->getAllSections()
 ```
 
-Powerful but use carefully. Good for:
+Powerful but use carefully — executes arbitrary PHP in the Craft context. Only use in local DDEV environments, never in production.
+
+Good for:
 - Testing Craft API calls
 - Inspecting objects
 - Quick fixes

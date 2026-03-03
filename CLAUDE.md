@@ -29,6 +29,7 @@ Each plugin under `plugins/` follows the same structure:
 - **`.claude-plugin/plugin.json`** — Required. Contains `name`, `description`, `version`, and `author`.
 - **`skills/`** — Each subdirectory is a skill. `SKILL.md` is the entry point; `references/` holds supplementary material that the skill can pull in.
 - **`agents/`** — Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
+- **`commands/`** — Optional. Slash command definitions. Each `.md` file defines a command that can be invoked directly.
 
 ## Plugin Versioning
 
@@ -55,7 +56,7 @@ Never commit plugin changes without also bumping the version.
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
 | **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
-| **dm-review** | Master code review orchestrator with parallel agents across all DM stacks |
+| **dm-review** | Code review orchestrator with parallel agents across all DM stacks |
 
 ## Common Operations
 
@@ -77,7 +78,7 @@ Whenever you create or edit any file inside a plugin's `skills/` directory, you 
 1. **Delete the old zip first**, then `cd` into the skill folder and zip from there so `SKILL.md` is at the zip root. Claude Desktop requires exactly one `SKILL.md` — nested paths or duplicate entries will fail.
 
    ```shell
-   rm -f desktop-skills/memory.zip && cd plugins/ned/skills/memory && zip -r /absolute/path/to/desktop-skills/memory.zip .
+   rm -f desktop-skills/ai-memory.zip && cd plugins/ned/skills/ai-memory && zip -r /absolute/path/to/desktop-skills/ai-memory.zip .
    ```
 
 2. The zip name matches the skill folder name, not the plugin name. So `plugins/project-manager/skills/lt10/` becomes `desktop-skills/lt10.zip`.
@@ -92,5 +93,5 @@ If multiple skills are edited in one session, zip all of them.
 - Skills use `SKILL.md` as the canonical filename for the primary skill definition. The `name:` field in its YAML frontmatter must match the skill folder name exactly.
 - Reference files live in `references/` subdirectories and are named descriptively (e.g., `estimation.md`, `bc-cooperative-act.md`).
 - Agent files are categorized by purpose: `review/` for code review agents, `workflow/` for automation agents.
-- Plugin JSON is minimal — just `name`, `description`, `version`, and `author`.
+- Plugin JSON requires `name`, `description`, `version`, and `author`. Optional fields include `keywords`, `repository`, and `author.url`.
 - The marketplace manifest at `.claude-plugin/marketplace.json` must stay in sync with the actual plugin directories.

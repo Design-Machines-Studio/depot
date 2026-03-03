@@ -30,7 +30,7 @@ The British Columbia Cooperative Association Act (SBC 1999, Chapter 28) governs 
 
 | Requirement | Section | Status | Co-op OS |
 |-------------|---------|--------|----------|
-| Minimum 3 members at all times | s.39 | Mandatory | Member count alert |
+| Minimum 3 members at all times | s.10(2); liability s.39 | Mandatory | Member count alert |
 | One class of membership shares | s.48 | Mandatory | Share register |
 | Voluntary membership | s.40 | Principle | Application workflow |
 | Non-discriminatory admission | s.40 | Principle | Policy tracking |
@@ -201,16 +201,18 @@ Unlike business corporations:
 
 ## Audit Requirements (Part 8)
 
-### The Small Co-op Burden
+### Audit Requirement
 
-**BC requires mandatory audits** for most cooperatives.
+**Section 108:** Every association must appoint an auditor unless exempted under s.109.
 
-Exemptions only available for:
-- Community service cooperatives meeting non-profit criteria
+**Section 109 exemption:** The registrar may exempt an association (or class of associations) from audit if satisfied it serves members' interests. Requires:
+- Application to the registrar
+- Revenue below prescribed threshold
+- Members pass resolution dispensing with audit
 
-**Worker cooperatives cannot waive audit** regardless of size—creates disproportionate cost burden.
+**Model Rules alternative:** Smaller co-ops may appoint a "financial reviewer" instead of a full auditor.
 
-**Ministry of Finance is reviewing** this requirement as part of multi-year Act review.
+**Practical reality for worker co-ops:** The exemption pathway exists but is rarely used. The audit cost burden falls disproportionately on small co-ops (5-15 members). Ministry of Finance is reviewing this as part of a multi-year Act review.
 
 ---
 

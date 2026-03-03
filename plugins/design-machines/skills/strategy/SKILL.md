@@ -1,6 +1,6 @@
 ---
 name: strategy
-description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnership ecosystem, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when context about Travis Gertz's positioning, target market, or competitive landscape is needed.
+description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when context about Travis Gertz's positioning, target market, or competitive landscape is needed.
 ---
 
 # Design Machines Strategy Skill

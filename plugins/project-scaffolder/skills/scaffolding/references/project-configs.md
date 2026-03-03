@@ -255,8 +255,7 @@ At the **start of every session**, read the planner skill and follow its session
 
 **The `session-start-gate` hook BLOCKS all Edit/Write calls until this workflow completes.**
 
-Planner skill location:
-`/Users/trav/Websites/design-machines/depot/plugins/project-manager/skills/planner/SKILL.md`
+Planner skill: Invoke `/planner` (installed from the depot's project-manager plugin).
 
 Key files:
 - `memory/project-notion.md` — maps this repo to the Notion project

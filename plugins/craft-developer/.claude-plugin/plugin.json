@@ -1,7 +1,7 @@
 {
   "name": "craft-developer",
-  "description": "Professional Craft CMS development expertise including content modeling, template development, debugging, and AI-assisted workflows via MCP integration. Covers Craft 4 and 5 patterns.",
-  "version": "2.1.0",
+  "description": "Craft CMS development expertise including content modeling, template development, debugging, and AI-assisted workflows via MCP integration. Covers Craft 4 and 5 patterns.",
+  "version": "2.2.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"

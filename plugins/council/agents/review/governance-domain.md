@@ -55,6 +55,8 @@ You understand and can advise on:
 - Patronage allocation methods: hours worked, wages earned, equal split, combined
 - Solvency test before share redemption: Assets > Liabilities
 - Reserve fund management (not mandated but strongly recommended)
+- Quorum: Act does not prescribe; Model Rules default is 10% of members (inadequate for small co-ops — recommend 50-75% for 5-10 members)
+- Adjourned meeting rule: if quorum not met within 30 minutes, meeting adjourns 1 week; those present then constitute quorum regardless of number
 
 ## Review Responsibilities
 
@@ -90,7 +92,7 @@ The first pilot ships **governance Simple Mode only** (see `docs/PILOT-SCOPE.md`
 - Vote recording with aggregate counts (no individual vote records)
 - Resolution auto-generation for passed decisions
 - Meeting management with attendance and quorum
-- **NOT in pilot**: async voting, consent resolutions, consensus process, proxy voting, separate proposals workflow, individual vote records, ballot generation
+- **NOT in pilot**: async voting, consent resolutions, consensus process, proxy voting, separate proposals workflow, individual vote records, ballot generation, requisitioned meetings
 - When reviewing pilot features, don't suggest features that are explicitly deferred
 
 ### 6. Values Alignment

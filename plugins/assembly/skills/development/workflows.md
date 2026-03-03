@@ -109,6 +109,10 @@ func calculateQuorum(meetingID string) (required, present int, met bool)
 // - Count of attendance WHERE type IN ('present', 'proxy')
 ```
 
+### Quorum Not Met (Adjourned Meeting Rule)
+
+Per the BC Act: if quorum is not achieved within 30 minutes of the scheduled start time, the meeting adjourns for 1 week. At the adjourned meeting, those present constitute quorum regardless of number.
+
 ---
 
 ## Decision Workflow
@@ -125,29 +129,42 @@ DEFERRED
 
 | Type | Threshold | Use Case |
 |------|-----------|----------|
-| `ordinary` | >50% (simple majority) | Regular business |
-| `special` | ≥66% (two-thirds) | Bylaw amendments |
+| `ordinary` | >50% (50% + 1) | Regular business |
+| `special` | ≥2/3 of votes cast | Bylaw amendments |
 | `unanimous` | 100% | Fundamental changes |
 | `board` | >50% of directors | Board-level decisions |
 
 ### Threshold Calculation
 
+Uses integer arithmetic to avoid floating-point rounding errors at small meeting sizes.
+
 ```go
 func calculateOutcome(votesFor, votesAgainst int, thresholdType string) string {
     totalVotes := votesFor + votesAgainst  // abstentions don't count
-    percentFor := float64(votesFor) / float64(totalVotes) * 100
-
-    thresholds := map[string]float64{
-        "majority":       50,
-        "two_thirds":     66.67,
-        "three_quarters": 75,
-        "unanimous":      100,
+    if totalVotes == 0 {
+        return "failed"
     }
 
-    required := thresholds[thresholdType]
-
-    if percentFor > required {  // strictly greater for majority
-        return "passed"
+    switch thresholdType {
+    case "majority":
+        // 50% + 1 of votes cast (strictly greater than half)
+        if votesFor*2 > totalVotes {
+            return "passed"
+        }
+    case "two_thirds":
+        // ≥ 2/3 of votes cast (BC Act special resolution)
+        if votesFor*3 >= totalVotes*2 {
+            return "passed"
+        }
+    case "three_quarters":
+        // ≥ 3/4 of votes cast
+        if votesFor*4 >= totalVotes*3 {
+            return "passed"
+        }
+    case "unanimous":
+        if votesFor == totalVotes {
+            return "passed"
+        }
     }
     return "failed"
 }

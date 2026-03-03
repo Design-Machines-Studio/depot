@@ -275,7 +275,7 @@ When bylaws conflict with the BC Act:
 ### BC Act Financial Requirements
 - **Solvency test before share redemption**: Assets > Liabilities
 - **Reserve fund**: Not mandated but strongly recommended
-- **Audit**: Required for all worker co-ops (no small co-op exemption)
+- **Audit**: Required unless s.109 exemption applies (registrar order needed; high burden for small co-ops)
 - **Financial statements to members**: 10 days before AGM
 
 ---

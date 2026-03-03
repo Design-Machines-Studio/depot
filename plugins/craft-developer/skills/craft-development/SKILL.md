@@ -1,11 +1,11 @@
 ---
 name: craft-development
-description: Professional Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Covers Craft 4 and Craft 5 patterns including breaking changes between versions.
+description: Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Covers Craft 4 and Craft 5 patterns including breaking changes between versions.
 ---
 
 # Craft CMS Developer
 
-Professional patterns and solutions for Craft CMS development. Use this for building sites, debugging, or answering community questions.
+Patterns and solutions for Craft CMS development. Use this for building sites, debugging, or answering community questions.
 
 ## Core Concepts
 
@@ -217,7 +217,9 @@ mutation SaveRecipe {
 }
 ```
 
-## Craft 4 → 5 Breaking Changes
+## Craft 4 → 5 Breaking Changes (Quick Reference)
+
+> For the full migration guide with upgrade checklists, load the `craft-5-migration` skill.
 
 ### Empty Array Behavior
 **Craft 4:** Empty relatedTo arrays return all results

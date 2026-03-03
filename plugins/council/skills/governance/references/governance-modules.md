@@ -66,7 +66,7 @@ Member
 | Class assignment | Worker, community, investment shareholder | s.48, Rules |
 | Role management | Directors, officers, committee membership | s.72 |
 | Residency tracking | Canadian/BC for director requirements | s.99 |
-| Member count alert | Warning below 3 members | s.39 |
+| Member count alert | Warning below 3 members | s.10(2); liability s.39 |
 
 #### Workflows
 
@@ -130,7 +130,7 @@ Proposal → Discussion → Vote/Consent → Resolution → Minutes
 | Decision Type | Default Threshold | Override Source |
 |---------------|-------------------|-----------------|
 | Ordinary | 50% + 1 | — |
-| Special | 66.67% (2/3) | Rules may specify 75% |
+| Special | ≥ 2/3 of votes cast | Rules may specify 75% |
 | Director removal | 75% (3/4 of all directors) | Act |
 | Consent | 100% | — |
 

@@ -159,8 +159,8 @@ compliance_calendar:
 
 | Type | Frequency | Notice | Section |
 |------|-----------|--------|---------|
-| AGM | At least annually | 7-14 days | s.143, 146 |
-| Special general meeting | As needed | 7-14 days | s.145, 146 |
+| AGM | At least annually | 14 days (special resolutions typical) | s.143, 146 |
+| Special general meeting | As needed | 7 days (14 if special resolutions) | s.145, 146 |
 | Requisitioned meeting | When 10%+ members demand | Within 21 days | s.145(2) |
 
 ### Investment Shareholder Meetings

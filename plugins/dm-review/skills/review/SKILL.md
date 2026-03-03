@@ -1,6 +1,6 @@
 ---
 name: review
-description: Master code review orchestrator that launches parallel specialized agents across accessibility, security, architecture, CSS, voice, and governance domains. Use when reviewing code changes, PRs, branches, or files. Invoke with /dm-review for full review or /dm-review quick for core agents only. Also use when the user says "review this", "check my code", "run a code review", or "review before merging".
+description: Code review orchestrator that launches parallel specialized agents across accessibility, security, architecture, CSS, voice, and governance domains. Use when reviewing code changes, PRs, branches, or files. Invoke with /dm-review for full review or /dm-review quick for core agents only. Also use when the user says "review this", "check my code", "run a code review", or "review before merging".
 ---
 
 # DM Code Review
@@ -172,11 +172,78 @@ Output the full report to the user.
 
 ---
 
-### Phase 6: Memory Capture (Full mode only)
+### Phase 6: Issue Tracking (Full mode only)
 
 **Skip this phase in Quick mode.**
 
-After outputting the report, record the review in ai-memory:
+After outputting the report, ask the user how to track findings:
+
+```
+How should I track these findings?
+1. Text files (todos/ directory) — one file per P1/P2 finding
+2. GitHub Issues — one issue per P1/P2 finding
+3. Skip — report only, no tracking
+```
+
+**If text files:**
+
+Create `todos/` directory if it doesn't exist. For each P1 and P2 finding, create a file following the template in `references/issue-tracking.md`:
+
+```
+todos/{id}-pending-{priority}-{slug}.md
+```
+
+Examples:
+```
+todos/001-pending-p1-sql-injection-in-search.md
+todos/002-pending-p2-missing-csrf-protection.md
+```
+
+P3 findings are NOT tracked individually — they stay in the report only.
+
+After creating all files, summarize what was created:
+```
+Created N todo files in todos/:
+- 001-pending-p1-... (description)
+- 002-pending-p2-... (description)
+
+Resolve with: /dm-review-fix
+```
+
+**If GitHub Issues:**
+
+For each P1 and P2 finding, create a GitHub Issue using `gh issue create`:
+
+```bash
+gh issue create --title "[P1] Finding title" \
+  --body "$(cat <<'EOF'
+## Problem
+Description from the review finding.
+
+## Location
+`path/to/file.ext:line`
+
+## Fix
+Remediation steps.
+
+## Reference
+OWASP/WCAG/pattern reference.
+
+---
+*From dm-review ([Full] mode, DATE)*
+EOF
+)" --label "review,p1"
+```
+
+Use labels `review` + `p1`/`p2` for severity. Create the labels first if they don't exist.
+
+---
+
+### Phase 7: Memory Capture (Full mode only)
+
+**Skip this phase in Quick mode.**
+
+After issue tracking (or if skipped), record the review in ai-memory:
 
 1. Read the memory recorder instructions from `plugins/dm-review/agents/workflow/review-memory-recorder.md`
 2. Use the ai-memory MCP tools to:
@@ -196,40 +263,19 @@ These files are loaded on demand during the review process:
 - `references/severity-mapping.md` — P1/P2/P3 mapping rules per agent
 - `references/agent-registry.md` — Complete agent catalog with trigger conditions
 - `references/output-format.md` — Unified report template
+- `references/issue-tracking.md` — Todo file template and GitHub Issue conventions
 
 ## Agent Definition Paths
 
-### DM-Review agents (in this plugin)
-```
-plugins/dm-review/agents/review/code-simplicity-reviewer.md
-plugins/dm-review/agents/review/security-auditor.md
-plugins/dm-review/agents/review/pattern-recognition-specialist.md
-plugins/dm-review/agents/review/architecture-reviewer.md
-plugins/dm-review/agents/review/doc-sync-reviewer.md
-plugins/dm-review/agents/review/test-coverage-reviewer.md
-plugins/dm-review/agents/review/go-build-verifier.md
-plugins/dm-review/agents/review/craft-reviewer.md
-```
+See `references/agent-registry.md` for the complete agent catalog with trigger conditions, file matchers, and source plugins. Agent definition files are organized as:
 
-### Depot-native agents (from other plugins)
-```
-plugins/accessibility-compliance/agents/review/a11y-html-reviewer.md
-plugins/accessibility-compliance/agents/review/a11y-css-reviewer.md
-plugins/accessibility-compliance/agents/review/a11y-dynamic-content-reviewer.md
-plugins/live-wires/agents/review/css-reviewer.md
-plugins/ghostwriter/agents/review/voice-editor.md
-plugins/council/agents/review/governance-domain.md
-```
-
-### Workflow agents
-```
-plugins/dm-review/agents/workflow/review-consolidator.md
-plugins/dm-review/agents/workflow/review-memory-recorder.md
-```
+- **dm-review agents:** `plugins/dm-review/agents/review/*.md`
+- **Depot-native agents:** `plugins/{accessibility-compliance,live-wires,ghostwriter,council}/agents/review/*.md`
+- **Workflow agents:** `plugins/dm-review/agents/workflow/*.md`
 
 ## Notes
 
 - Agent definition files are read at runtime from the depot. If the exact path is not accessible (e.g., installed as a remote plugin), search for the file by name.
-- The maximum number of parallel agents is 15 (full mode, all triggers hit). The minimum is 5 (quick mode).
+- The maximum number of parallel agents is 14 (full mode, all triggers hit). The minimum is 5 (quick mode).
 - Each agent uses the `sonnet` model for speed and cost efficiency.
 - The consolidator and memory recorder run after all review agents complete — they are not launched in parallel with the review agents.
