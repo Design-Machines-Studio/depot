@@ -35,6 +35,8 @@ These agents launch based on which file types were changed.
 | 14 | craft-reviewer | dm-review | `.twig`, `.php` | Project has `craft/` or `.ddev/` |
 | 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running |
 
+**Trigger overlap note:** The visual-browser-tester shares trigger extensions with a11y-html-reviewer (`.templ`, `.twig`, `.html`) and a11y-css-reviewer/css-reviewer (`.css`). This is intentional — static agents analyze source code while the browser agent tests rendered output. Both perspectives are needed; the consolidator deduplicates any overlapping findings.
+
 ---
 
 ## File Extension to Agent Mapping

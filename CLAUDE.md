@@ -56,7 +56,7 @@ Never commit plugin changes without also bumping the version.
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
 | **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
-| **dm-review** | Code review orchestrator with parallel agents across all DM stacks |
+| **dm-review** | Code review orchestrator with parallel agents and visual browser testing across all DM stacks |
 
 ## Common Operations
 

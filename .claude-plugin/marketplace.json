@@ -67,7 +67,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "description": "Master code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, and governance"
+      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, and visual browser testing"
     }
   ]
 }

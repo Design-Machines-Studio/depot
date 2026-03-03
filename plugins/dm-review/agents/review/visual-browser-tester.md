@@ -83,7 +83,7 @@ Examine the screenshot and snapshot for obvious rendering problems:
 
 ### Phase B: Responsive Testing
 
-For each URL where CSS changes are involved (or layout-affecting template changes), resize and screenshot at each breakpoint:
+For each URL when CSS or layout-affecting templates changed, resize and screenshot at each viewport:
 
 | Breakpoint | Width | Height |
 |-----------|-------|--------|
@@ -201,7 +201,7 @@ Map axe-core impact to severity:
 1. `browser_press_key` Tab repeatedly (up to 50 times or until focus cycles)
 2. After each Tab, `browser_snapshot` to check which element has focus
 3. Verify focus order follows visual layout (left-to-right, top-to-bottom)
-4. Verify every focused element has a visible focus indicator — take `browser_take_screenshot` to confirm
+4. Verify every focused element has a visible focus indicator — screenshot for evidence
 5. If focus disappears (no element reports focus in snapshot), flag as P1: "Focus lost during Tab navigation"
 
 **Focus indicator visibility:**
@@ -249,6 +249,19 @@ return JSON.stringify(issues);
 ```
 
 Missing scheme tokens are P2 findings.
+
+**DOM class inventory:**
+
+```javascript
+// browser_evaluate — check for invented class names
+const allClasses = new Set();
+document.querySelectorAll('[class]').forEach(el => {
+  el.classList.forEach(c => allClasses.add(c));
+});
+return JSON.stringify([...allClasses].sort());
+```
+
+Compare the class list against Live Wires conventions. Classes that don't match documented utilities, layout primitives, or scheme names are P3 findings.
 
 ---
 
@@ -321,5 +334,5 @@ ToolSearch query: "+pw browser_navigate"
 7. Console errors are P2 unless they are uncaught exceptions (P1)
 8. Do not modify page content — this is a read-only testing agent
 9. If axe-core cannot be loaded via `browser_evaluate`, note it as P3 and continue with manual checks
-10. Reset the page between component tests to ensure clean state
+10. Reset the page between component tests — navigate back to the URL before testing a different component
 11. Take a screenshot for every state change — screenshots are your evidence

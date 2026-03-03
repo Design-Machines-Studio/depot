@@ -97,6 +97,24 @@ The canonical unified report format produced by the review-consolidator after al
 
 ---
 
+## Citation Formats
+
+Agents use different citation styles depending on whether they analyze code or rendered pages:
+
+- **Code agents:** `path/to/file.ext:line` — file path and line number
+- **Browser agents (visual-browser-tester):** `[url @ breakpoint]` — page URL and viewport width
+
+Browser agent citation examples:
+
+- `[/proposals @ 320px]` — issue at a specific viewport
+- `[/proposals @ all]` — issue at all viewports
+- `[/proposals > button.submit]` — issue with a specific element
+- `[/proposals > dialog#confirm]` — issue with a specific component
+
+The consolidator preserves the original citation format from each agent.
+
+---
+
 ## Rules
 
 1. **P1 findings get full detail blocks** — file, issue, fix, reference

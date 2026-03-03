@@ -38,40 +38,15 @@ Use the first URL that loads successfully. If none respond, ask the user for the
 
 ### Phase 2: Visual Testing
 
-Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` for the full testing protocol. Execute all five phases:
+Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full five-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires).
 
-**Phase A — Baseline Capture**
+Use `references/breakpoints.md` for viewport dimensions and `references/state-testing.md` for the interactive element state matrix.
 
-Navigate to each URL, take a full-page screenshot, check console for errors, capture the accessibility snapshot.
+**Flag handling:**
 
-**Phase B — Responsive Testing**
-
-Resize to each breakpoint and screenshot. Load the breakpoint definitions from `references/breakpoints.md`:
-
-| Width | Height | Name |
-|-------|--------|------|
-| 320 | 568 | Mobile |
-| 768 | 1024 | Tablet |
-| 1024 | 768 | Desktop (small) |
-| 1440 | 900 | Desktop (large) |
-
-Check for horizontal overflow, layout breaks, overlapping elements, and touch target sizes at each width.
-
-**Phase C — State Testing**
-
-For each interactive element discovered in the accessibility snapshot, test the states defined in `references/state-testing.md`. Covers buttons, links, forms, accordions, dialogs, tabs, dropdowns, and loading states.
-
-If `--states` flag was used, run only this phase (skip B, D, E).
-
-**Phase D — Accessibility Runtime**
-
-Inject axe-core and run WCAG 2.2 Level AA checks. Trace Tab focus order. Verify focus indicators are visible.
-
-If `--a11y` flag was used, run only this phase (skip B, C, E).
-
-**Phase E — Live Wires Checks**
-
-Only if the project uses Live Wires CSS. Check baseline rhythm alignment, scheme token inheritance, and DOM class inventory.
+- `--states` — run Phase C (State Testing) only
+- `--a11y` — run Phase D (Accessibility Runtime) only
+- No flag — run all five phases
 
 ### Phase 3: Report
 
@@ -93,13 +68,13 @@ Output findings using the standard P1/P2/P3 format:
 
 ---
 
-### P1 — Critical
+### Critical (P1)
 - [url @ breakpoint] Description — reference
 
-### P2 — Important
+### Serious (P2)
 - [url @ breakpoint] Description — reference
 
-### P3 — Nice-to-Have
+### Moderate (P3)
 - [url @ breakpoint] Description — reference
 
 ### Approved
