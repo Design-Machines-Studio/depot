@@ -84,6 +84,7 @@ Add these agents based on which file extensions appear in the changed files:
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `plugins/council/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `plugins/dm-review/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `plugins/dm-review/agents/review/craft-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `plugins/dm-review/agents/review/visual-browser-tester.md` |
 
 #### Report Selection
 
@@ -143,6 +144,10 @@ Changed files:
 Project type: Go+Templ+Datastar
 Project root: /path/to/project
 ```
+
+#### Browser-based agents
+
+The `visual-browser-tester` agent uses Playwright MCP tools (prefixed `mcp__plugin_compound-engineering_pw__browser_*`) instead of reading files. It launches in parallel with all other agents. If the dev server is not running, it reports "Skipped" and does not block the review.
 
 #### Parallelization rules
 
@@ -276,6 +281,6 @@ See `references/agent-registry.md` for the complete agent catalog with trigger c
 ## Notes
 
 - Agent definition files are read at runtime from the depot. If the exact path is not accessible (e.g., installed as a remote plugin), search for the file by name.
-- The maximum number of parallel agents is 14 (full mode, all triggers hit). The minimum is 5 (quick mode).
+- The maximum number of parallel agents is 15 (full mode, all triggers hit). The minimum is 5 (quick mode).
 - Each agent uses the `sonnet` model for speed and cost efficiency.
 - The consolidator and memory recorder run after all review agents complete — they are not launched in parallel with the review agents.

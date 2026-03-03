@@ -33,6 +33,7 @@ These agents launch based on which file types were changed.
 | 12 | governance-domain | council | Paths containing: `governance`, `proposal`, `voting`, `member`, `resolution`, `bylaw` | — |
 | 13 | go-build-verifier | dm-review | `.go`, `.templ` | Project has `go.mod` + `docker-compose.yml` |
 | 14 | craft-reviewer | dm-review | `.twig`, `.php` | Project has `craft/` or `.ddev/` |
+| 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running |
 
 ---
 
@@ -43,10 +44,10 @@ Quick reference for Phase 3 agent selection:
 | Extension | Always-run | Conditional agents added |
 |-----------|-----------|------------------------|
 | `.go` | All 5 | go-build-verifier, test-coverage-reviewer |
-| `.templ` | All 5 | a11y-html-reviewer, a11y-dynamic-content-reviewer, go-build-verifier, test-coverage-reviewer |
-| `.css` | All 5 | a11y-css-reviewer, css-reviewer |
-| `.twig` | All 5 | a11y-html-reviewer, craft-reviewer |
-| `.html` | All 5 | a11y-html-reviewer |
+| `.templ` | All 5 | a11y-html-reviewer, a11y-dynamic-content-reviewer, go-build-verifier, test-coverage-reviewer, visual-browser-tester |
+| `.css` | All 5 | a11y-css-reviewer, css-reviewer, visual-browser-tester |
+| `.twig` | All 5 | a11y-html-reviewer, craft-reviewer, visual-browser-tester |
+| `.html` | All 5 | a11y-html-reviewer, visual-browser-tester |
 | `.php` | All 5 | craft-reviewer, test-coverage-reviewer |
 | `.js`, `.ts` | All 5 | a11y-dynamic-content-reviewer (if Go project), test-coverage-reviewer |
 | `.md`, `.txt` | All 5 | voice-editor |
@@ -69,6 +70,14 @@ plugins/council/agents/review/governance-domain.md
 ```
 
 These paths are relative to the depot root. When the depot is installed as a plugin, the paths will be inside the plugin cache directory. Search for the file by name if the exact path is not accessible.
+
+### dm-review Browser Agent
+
+```
+plugins/dm-review/agents/review/visual-browser-tester.md
+```
+
+This agent uses Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) rather than reading files. It requires a running dev server.
 
 ---
 

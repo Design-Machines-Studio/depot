@@ -28,6 +28,7 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 | **test-coverage-reviewer** | Existing tests now fail | Changed code has no tests (when project has test infrastructure) | Missing edge case tests |
 | **go-build-verifier** | Compilation failure | `go vet` warnings | — |
 | **craft-reviewer** | N+1 queries in loops, `\|raw` on user input | Missing eager loading, no null checks on relations | Suboptimal query patterns, minor template issues |
+| **visual-browser-tester** | Layout completely broken at any breakpoint, keyboard trap in browser, axe-core critical violations, focus indicators missing entirely, JS exceptions preventing render | Layout degraded at mobile (content cut off, overlapping, horizontal scroll), interactive states not visually distinct, axe-core serious violations, console JS errors, contrast failures, missing scheme tokens | Minor spacing inconsistencies, axe-core moderate violations, responsive polish, baseline rhythm misalignment |
 
 ### Depot-Native Agents (from other plugins)
 
@@ -50,6 +51,7 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 4. **Security P1** always escalates — no exceptions, no "we'll fix it later"
 5. **Accessibility P1** always escalates — legal compliance (EAA, ADA)
 6. **Governance P1** always escalates — statutory requirements
+7. **Visual P1** always escalates — if layout is completely broken or keyboard traps exist in the rendered page
 
 ## De-escalation Rules
 
