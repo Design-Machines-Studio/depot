@@ -207,6 +207,31 @@ Check for:
 
 Only exception: `--line-1px` for borders and fine details.
 
+## The Typography Triplet
+
+When `font-size: var(--text-XX)` appears in CSS, the matching `line-height: var(--line-height-XX)` and `letter-spacing: var(--tracking-XX)` MUST also be present. The `.text-*` utility classes bundle all three automatically, but custom CSS rules often miss the line-height and tracking.
+
+Check for:
+- `font-size: var(--text-*)` without corresponding `line-height: var(--line-height-*)`
+- `font-size: var(--text-*)` without corresponding `letter-spacing: var(--tracking-*)`
+- Mismatched suffixes (e.g., `--text-2xl` paired with `--line-height-xl`)
+
+```css
+/* WRONG: missing line-height and tracking */
+.feature-title {
+  font-size: var(--text-4xl);
+}
+
+/* RIGHT: complete triplet */
+.feature-title {
+  font-size: var(--text-4xl);
+  line-height: var(--line-height-4xl);
+  letter-spacing: var(--tracking-4xl);
+}
+```
+
+**Suggestion:** If a rule only needs font-size, recommend using the utility class (`.text-4xl`) in HTML instead.
+
 ## Modern CSS Requirements
 
 **Logical properties:** `margin-block-start` not `margin-top`, `padding-inline` not `padding-left`/`padding-right`.
@@ -221,22 +246,49 @@ Only exception: `--line-1px` for borders and fine details.
 <h1 class="text-4xl text-6xl@md text-8xl@lg">Feature Title</h1>
 ```
 
-## Custom Properties for Theming
+## Custom Properties and Token Usage
 
-Components must use custom properties for theme-dependent values:
+Components must use token variables directly -- not unnecessary intermediary custom properties:
 
 ```css
-/* CORRECT: Themeable */
+/* PREFERRED: Use tokens directly */
 .card {
-  --card-bg: var(--color-subtle);
-  background: var(--card-bg);
+  background: var(--color-subtle);
+  color: var(--color-fg);
+  border: var(--line-1px) solid var(--color-border);
 }
 
-/* WRONG: Hardcoded */
+/* WRONG: Hardcoded values */
 .card {
   background: #f5f5f5;
+  color: #333;
+}
+
+/* WRONG: Unnecessary intermediary variables */
+.card {
+  --card-bg: var(--color-subtle);
+  --card-text: var(--color-fg);
+  background: var(--card-bg);
+  color: var(--card-text);
 }
 ```
+
+Only create component-level custom properties when there's a specific reason:
+- The value must change in different scheme contexts (e.g., `.scheme-dark .card`)
+- The component is designed for external theming (consumers override the variable)
+- Multiple internal rules need to share a computed value
+
+```css
+/* JUSTIFIED: Variable needed for scheme override */
+.card {
+  --card-accent: var(--color-accent);
+  border-left: 3px solid var(--card-accent);
+
+  & .card-link { color: var(--card-accent); }
+}
+```
+
+**Red flag:** A component with more than 2-3 custom properties is probably over-engineered. If every property is a variable, the component is fighting the token system instead of using it.
 
 ## HTML/Template Review Checklist
 
@@ -267,9 +319,10 @@ When reviewing Templ templates or HTML:
 3. **Check layer placement** — is each rule in the correct `@layer`?
 4. **Check naming** — single-dash layouts, double-dash components
 5. **Check tokens** — `--line-*` and `--text-*` used consistently, no hardcoded values
-6. **Check HTML** — trust defaults, minimal utility usage, correct primitives
-7. **Check modern CSS** — logical properties, container queries, nesting
-8. **Check theming** — custom properties for colors/spacing in components
+6. **Check typography triplets** — every `var(--text-XX)` has matching `var(--line-height-XX)` and `var(--tracking-XX)`
+7. **Check HTML** — trust defaults, minimal utility usage, correct primitives
+8. **Check modern CSS** — logical properties, container queries, nesting
+9. **Check theming** — tokens used directly, custom properties only when justified
 
 ## Output Format
 
@@ -285,6 +338,8 @@ When reviewing Templ templates or HTML:
 - [pass/issue] Layer placement correct
 - [pass/issue] Naming conventions followed
 - [pass/issue] Baseline tokens used
+- [pass/issue] Typography triplets complete
+- [pass/issue] Custom properties minimized
 - [pass/issue] Modern CSS patterns
 
 ### Suggestions

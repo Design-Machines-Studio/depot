@@ -162,6 +162,28 @@ For detailed reference, see these files in the same directory:
 
 Live Wires' typography system implements principles from the Design Machines `typography` skill -- fluid scaling, modular scales, progressive line-height, and vertical rhythm rooted in Müller-Brockmann, Bringhurst, Brown, and Latin. For the **why** behind these decisions (measure rules, typeface selection, evaluation frameworks), load the `typography` skill from the `design-practice` plugin.
 
+### The Typography Triplet
+
+When using `var(--text-XX)` directly in CSS, you MUST apply all three properties together. The `.text-*` utility classes do this automatically, but custom CSS often misses the line-height and tracking.
+
+```css
+/* WRONG: font-size alone */
+.component-title {
+  font-size: var(--text-2xl);
+}
+
+/* RIGHT: complete triplet */
+.component-title {
+  font-size: var(--text-2xl);
+  line-height: var(--line-height-2xl);
+  letter-spacing: var(--tracking-2xl);
+}
+```
+
+The scales share suffixes (`xs` through `9xl`). Line-heights use progressive ratios: 1.5 for body sizes (xs to base), 1.3 for heading sizes (lg to 2xl), and 1.0 for display sizes (3xl to 9xl). Tracking goes from slightly positive (small text) to negative (large display text).
+
+**When in doubt, use the utility class** (`.text-2xl`) instead of the variable. Only use the variable when you need to set font-size inside a component or element rule.
+
 ---
 
 ## The Sacred Baseline System
@@ -194,6 +216,7 @@ Live Wires uses native CSS only — no preprocessors. Key features: cascade laye
 4. Use `--line-*` tokens - never arbitrary pixel values
 5. Use container queries (`@md`, `@lg`) over viewport media queries
 6. Use HTML entities: `&mdash;`, `&middot;`, `&pound;`
+7. Use existing token variables (`--color-fg`, `--color-subtle`, `--line-*`) directly rather than creating component-specific custom properties (`--card-bg`, `--card-text-color`) unless you need scheme-context overrides or external theming hooks
 
 ---
 

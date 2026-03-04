@@ -226,12 +226,36 @@ Match source heading sizes using existing `text-*` variables.
 ### Edit `src/css/4_elements/typography.css`
 
 ```css
-h1 { font-size: var(--text-4xl); }  /* Was 5xl, source uses smaller */
-h2 { font-size: var(--text-2xl); }
-h3 { font-size: var(--text-xl); }
-h4 { font-size: var(--text-lg); }
-h5 { font-size: var(--text-base); }
-h6 { font-size: var(--text-sm); }
+h1 {
+  font-size: var(--text-4xl);
+  line-height: var(--line-height-4xl);
+  letter-spacing: var(--tracking-4xl);
+}
+h2 {
+  font-size: var(--text-2xl);
+  line-height: var(--line-height-2xl);
+  letter-spacing: var(--tracking-2xl);
+}
+h3 {
+  font-size: var(--text-xl);
+  line-height: var(--line-height-xl);
+  letter-spacing: var(--tracking-xl);
+}
+h4 {
+  font-size: var(--text-lg);
+  line-height: var(--line-height-lg);
+  letter-spacing: var(--tracking-lg);
+}
+h5 {
+  font-size: var(--text-base);
+  line-height: var(--line-height-base);
+  letter-spacing: var(--tracking-base);
+}
+h6 {
+  font-size: var(--text-sm);
+  line-height: var(--line-height-sm);
+  letter-spacing: var(--tracking-sm);
+}
 ```
 
 ### Available Size Variables

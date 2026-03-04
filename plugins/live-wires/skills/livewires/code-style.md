@@ -96,6 +96,42 @@ Use placehold.co for all placeholder images:
 
 Format: `https://placehold.co/{width}x{height}/{bg-color}/{text-color}?text={label}`
 
+## Typography Triplet
+
+When setting `font-size` with a `--text-*` token in CSS, always include the matching line-height and tracking:
+
+```css
+.component-title {
+  font-size: var(--text-2xl);
+  line-height: var(--line-height-2xl);
+  letter-spacing: var(--tracking-2xl);
+}
+```
+
+The suffixes match across all three scales (`xs` through `9xl`). If you only need to set font size in HTML, use the `.text-*` utility class instead -- it bundles all three properties.
+
+## Prefer Token Variables Over Custom Properties
+
+Use existing token variables directly in component CSS:
+
+```css
+/* BAD: unnecessary intermediary variables */
+.card {
+  --card-bg: var(--color-subtle);
+  --card-text: var(--color-fg);
+  background: var(--card-bg);
+  color: var(--card-text);
+}
+
+/* GOOD: use tokens directly */
+.card {
+  background: var(--color-subtle);
+  color: var(--color-fg);
+}
+```
+
+Create component custom properties only when needed for scheme overrides or external theming.
+
 ## Development Tools
 
 Body classes for prototyping and QA:
