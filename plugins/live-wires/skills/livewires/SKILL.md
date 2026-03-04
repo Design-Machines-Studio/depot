@@ -222,16 +222,33 @@ Live Wires uses native CSS only — no preprocessors. Key features: cascade laye
 
 ## Documentation Sync Requirement
 
-**CRITICAL:** When modifying Live Wires CSS or adding new features, you MUST update documentation to stay in sync.
+**CRITICAL:** When modifying Live Wires CSS or adding new features, you MUST update documentation across the full ecosystem.
+
+### Documentation Locations
+
+All paths are relative to the livewires repo root unless noted.
+
+| Location | What lives here |
+|----------|----------------|
+| `CLAUDE.md` | Primary technical reference for Claude Code |
+| `README.md` | User-facing project overview |
+| `public/manual/components/` | Visual component guides (22 HTML pages) |
+| `public/reference/components/` | Raw HTML examples -- canonical source for templ components |
+| `public/reference/layouts/` | Layout primitive HTML examples |
+| `public/reference/forms/` | Form reference HTML examples |
+| `public/docs/` | Framework documentation (getting started, theming, typography, etc.) |
+| This file (SKILL.md) | Plugin skill definition (depot repo) |
+| livewires-templ repo | Go/Templ component library -- must match reference HTML |
 
 ### After Any Code Change, Update:
 
 | Change Type | Files to Update |
 |-------------|-----------------|
-| Layout primitives/variants | This file (SKILL.md), CLAUDE.md, manual/components/layout.html |
-| Utility classes | This file (SKILL.md), CLAUDE.md |
-| Tokens (`--line-*`, `--text-*`) | This file (SKILL.md), CLAUDE.md, README.md |
-| Components | CLAUDE.md, relevant manual page |
+| Layout primitives/variants | CLAUDE.md, this file, `public/reference/layouts/`, `public/manual/components/layout.html`, `public/docs/` if applicable |
+| Utility classes | CLAUDE.md, this file |
+| Tokens (`--line-*`, `--text-*`) | CLAUDE.md, this file, README.md |
+| Components | CLAUDE.md, `public/manual/components/`, `public/reference/components/`, livewires-templ if component exists there |
+| Forms | CLAUDE.md, `public/reference/forms/`, livewires-templ `form/` package |
 | File structure | CLAUDE.md, README.md |
 
 ### Naming Conventions (MUST follow):
