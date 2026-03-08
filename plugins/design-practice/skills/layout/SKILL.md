@@ -54,7 +54,7 @@ Learn the grid thoroughly, then break it deliberately. Photography, illustration
 
 ### The Fitted Baseline (Fitbaseline Method)
 
-The baseline grid must divide the **full page or viewport height** evenly -- not just the text block. Choose a whole number of rows that produces a baseline increment close to your target leading. Margins become whole baseline counts, and Gerstner's field divisions nest cleanly within the remaining text block rows. This is the foundation that makes everything else work. See `references/grid-systems.md` for the complete calculation method.
+The baseline grid must divide the **full page or viewport height** evenly -- not just the text block. Choose a whole number of rows that produces a baseline increment close to your target leading. Margins become whole baseline counts, and Gerstner's field divisions nest cleanly within the remaining text block rows. This is the foundation that makes everything else work. See `${CLAUDE_SKILL_DIR}/references/grid-systems.md` for the complete calculation method.
 
 ### Practical Grid Rules
 
@@ -159,7 +159,7 @@ Digital is not degraded print; it is a different material with its own grain. Pr
 - Master pages define the grid programme
 - Use multiple master pages for different column configurations (Gerstner's mobile grid)
 - Baseline grid starts at 0mm, Relative To: Top of Page (not top margin) -- grid must tile the full page
-- Baseline increment is a fitted value: page height ÷ whole number of rows (see grid-systems.md)
+- Baseline increment is a fitted value: page height ÷ whole number of rows (see ${CLAUDE_SKILL_DIR}/references/grid-systems.md)
 - Parent-child relationships for systematic section handling
 - Liquid layouts for multi-format adaptation
 
@@ -196,6 +196,6 @@ When critiquing a layout, assess these eight dimensions:
 
 | Topic | File | When to Load |
 |---|---|---|
-| **Grid Systems** | `references/grid-systems.md` | Deep dive on Müller-Brockmann and Gerstner grid theory |
-| **Editorial Design** | `references/editorial-design.md` | White, Franchi, Turley, Caldwell editorial principles |
-| **Digital Editorial** | `references/digital-editorial.md` | Chimero's web-specific framework and responsive layout |
+| **Grid Systems** | `${CLAUDE_SKILL_DIR}/references/grid-systems.md` | Deep dive on Müller-Brockmann and Gerstner grid theory |
+| **Editorial Design** | `${CLAUDE_SKILL_DIR}/references/editorial-design.md` | White, Franchi, Turley, Caldwell editorial principles |
+| **Digital Editorial** | `${CLAUDE_SKILL_DIR}/references/digital-editorial.md` | Chimero's web-specific framework and responsive layout |

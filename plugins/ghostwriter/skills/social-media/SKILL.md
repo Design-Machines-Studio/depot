@@ -180,4 +180,4 @@ Account verification: add `rel="me"` link on your website pointing to your Masto
 5. **Include CTA signal** — end with something that prompts saves, shares, or substantive comments (not engagement bait).
 6. **Cross-post adaptation** — if content should go to multiple platforms, draft each version natively.
 
-For detailed media specs, suppression triggers, and extended platform data, read: `references/platform-specs.md`
+For detailed media specs, suppression triggers, and extended platform data, read: `${CLAUDE_SKILL_DIR}/references/platform-specs.md`

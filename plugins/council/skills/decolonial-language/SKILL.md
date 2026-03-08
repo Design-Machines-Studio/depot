@@ -1,6 +1,7 @@
 ---
 name: decolonial-language
 description: Decolonial and anti-capitalist content strategy for cooperative software, governance documents, and member-facing communications. Use when naming UI elements, writing labels, seeding database values, drafting member communications, generating legal documents, or making any content decision in Co-op OS, Live Wires, or Design Machines. Provides terminology mappings between legal/regulatory language and values-aligned alternatives, plus a three-layer compliance architecture for maintaining legal validity while centering solidarity economy language.
+user-invocable: false
 ---
 
 # Decolonial Language Skill
@@ -154,12 +155,12 @@ Load these for deeper context:
 
 | File | When to Load |
 |------|--------------|
-| `references/terminology-finance.md` | Writing financial UI, reports, patronage flows |
-| `references/terminology-governance.md` | Governance UI, meeting flows, decision tracking |
-| `references/terminology-membership.md` | Member profiles, onboarding, lifecycle |
-| `references/terminology-ux.md` | Interface copy, notifications, general UX writing |
-| `references/frameworks.md` | Content strategy planning, philosophical grounding |
-| `references/case-studies.md` | Precedent research, client conversations |
+| `${CLAUDE_SKILL_DIR}/references/terminology-finance.md` | Writing financial UI, reports, patronage flows |
+| `${CLAUDE_SKILL_DIR}/references/terminology-governance.md` | Governance UI, meeting flows, decision tracking |
+| `${CLAUDE_SKILL_DIR}/references/terminology-membership.md` | Member profiles, onboarding, lifecycle |
+| `${CLAUDE_SKILL_DIR}/references/terminology-ux.md` | Interface copy, notifications, general UX writing |
+| `${CLAUDE_SKILL_DIR}/references/frameworks.md` | Content strategy planning, philosophical grounding |
+| `${CLAUDE_SKILL_DIR}/references/case-studies.md` | Precedent research, client conversations |
 
 ---
 

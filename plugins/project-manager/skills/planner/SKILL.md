@@ -1,9 +1,21 @@
 ---
 name: planner
-description: Notion-integrated project planning, time tracking, and sprint management. Use at the start and end of every coding session, when working on assigned todos, when Travis asks for sprint planning help, or when logging time. Reads project config from memory/project-notion.md. Teaches Claude the Notion database schemas, read/write permissions, and session workflow conventions.
+description: Notion-integrated project planning, time tracking, and sprint management. Use at the START of every coding session to log time and check assigned todos. Use at the END of every session to update time entries and mark completed tasks. Also use when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, or asks for planning help. Reads project config from memory/project-notion.md.
+disable-model-invocation: true
+allowed-tools:
+  - mcp__claude_ai_Notion__notion-search
+  - mcp__claude_ai_Notion__notion-fetch
+  - mcp__claude_ai_Notion__notion-create-pages
+  - mcp__claude_ai_Notion__notion-update-page
+  - mcp__ai-memory__search_entities
+  - mcp__ai-memory__get_entity
 ---
 
 # Planner — Notion Workflow Integration
+
+## Current Git Context
+!`git branch --show-current 2>/dev/null || echo "not a git repo"`
+!`git log --oneline -3 2>/dev/null || echo "no recent commits"`
 
 Travis plans work in Notion (Projects, Todos, Sprints, Time Tracking). This skill gives Claude the knowledge to participate in that workflow — reading context, tracking time, updating task status, and assisting with sprint planning.
 
@@ -163,6 +175,6 @@ For detailed database schemas and API conventions:
 
 | File | Contents |
 |------|----------|
-| `references/databases.md` | Full property schemas for all four databases |
-| `references/conventions.md` | API quirks, error handling, formatting rules |
+| `${CLAUDE_SKILL_DIR}/references/databases.md` | Full property schemas for all four databases |
+| `${CLAUDE_SKILL_DIR}/references/conventions.md` | API quirks, error handling, formatting rules |
 

@@ -1,6 +1,7 @@
 ---
 name: craft-5-migration
 description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, or updating code for Craft 5 patterns. Covers Matrix changes, empty array behavior, GraphQL updates, entrification, and new features through 5.9.
+argument-hint: "[file or section to migrate]"
 ---
 
 # Craft 4 to 5 Migration Guide

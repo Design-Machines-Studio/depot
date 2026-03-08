@@ -1,6 +1,19 @@
 ---
 name: ai-memory
-description: Access Travis Gertz's personal knowledge graph with 5,800+ entities tracking projects, people, finances, health, and relationships. Use when the user asks about their memory, wants to search for people/projects/companies, needs to add observations, references remembering something, asks "what do you know about...", wants to look up a client or contact, needs financial context, tracks health patterns, or manages relationship notes between entities.
+description: Access Travis Gertz's personal knowledge graph with 5,800+ entities tracking projects, people, finances, health, and relationships. Use when the user asks about their memory, wants to search for people/projects/companies, needs to add observations, references remembering something, asks "what do you know about...", wants to look up a client or contact, needs financial context, tracks health patterns, or manages relationship notes between entities. Also use at session start to recall what was discussed last time, and before creating any new entity to check if it already exists.
+allowed-tools:
+  - mcp__ai-memory__search_entities
+  - mcp__ai-memory__get_entity
+  - mcp__ai-memory__add_observation
+  - mcp__ai-memory__delete_observation
+  - mcp__ai-memory__edit_observation
+  - mcp__ai-memory__add_entity
+  - mcp__ai-memory__add_relationship
+  - mcp__ai-memory__rename_entity
+  - mcp__ai-memory__get_relationships
+  - mcp__ai-memory__list_entity_types
+  - mcp__ai-memory__get_stats
+  - mcp__ai-memory__save
 ---
 
 # AI Memory System
@@ -39,7 +52,7 @@ These are excluded from search results (too large): Recent Updates, Current Prio
 
 **Core types**: Person, Company, Project, Location, Financial, Health, Document, Event, Recipe, Tool, Workflow, Strategy, Relationship
 
-**See**: [REFERENCE.md](REFERENCE.md) for complete type list and memory structure.
+**See**: [REFERENCE.md](${CLAUDE_SKILL_DIR}/REFERENCE.md) for complete type list and memory structure.
 
 ## Important Rules
 
@@ -50,9 +63,9 @@ These are excluded from search results (too large): Recent Updates, Current Prio
 
 ## Additional Documentation
 
-- **Reference**: [REFERENCE.md](REFERENCE.md) - Entity types, memory structure, error handling
-- **Relationships**: [RELATIONSHIPS.md](RELATIONSHIPS.md) - Relationship types and patterns
-- **Examples**: [EXAMPLES.md](EXAMPLES.md) - Common workflows
+- **Reference**: [REFERENCE.md](${CLAUDE_SKILL_DIR}/REFERENCE.md) - Entity types, memory structure, error handling
+- **Relationships**: [RELATIONSHIPS.md](${CLAUDE_SKILL_DIR}/RELATIONSHIPS.md) - Relationship types and patterns
+- **Examples**: [EXAMPLES.md](${CLAUDE_SKILL_DIR}/EXAMPLES.md) - Common workflows
 
 ## Troubleshooting
 

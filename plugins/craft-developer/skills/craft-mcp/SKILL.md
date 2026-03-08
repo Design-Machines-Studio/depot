@@ -1,6 +1,6 @@
 ---
 name: craft-mcp
-description: How to effectively use the Craft CMS MCP server tools. Use when working with a Craft project that has the craft-mcp plugin installed. Covers tool selection, common workflows, and interpreting results.
+description: Craft CMS MCP server tools for direct database and schema access. Use when querying Craft entries, inspecting field layouts, checking section configurations, listing assets, debugging content relationships, validating content model structure, creating or updating entries, browsing asset volumes, or diagnosing plugin issues through the MCP server. Also use when verifying that template code matches the actual content model, or when working with a Craft project that has the craft-mcp plugin installed.
 ---
 
 # Craft MCP Server Guide

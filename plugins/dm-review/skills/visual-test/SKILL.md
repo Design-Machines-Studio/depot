@@ -1,6 +1,17 @@
 ---
 name: visual-test
 description: Standalone visual browser testing for rendered web pages. Tests responsive layouts, interactive states, and runtime accessibility using Playwright MCP tools. Use with /dm-review-visual, /dm-review-visual <url>, or when the user says "test this visually", "check in the browser", "test responsive", "visual QA", or "check the page".
+disable-model-invocation: true
+argument-hint: "[url]"
+allowed-tools:
+  - mcp__plugin_compound-engineering_pw__browser_navigate
+  - mcp__plugin_compound-engineering_pw__browser_take_screenshot
+  - mcp__plugin_compound-engineering_pw__browser_snapshot
+  - mcp__plugin_compound-engineering_pw__browser_resize
+  - mcp__plugin_compound-engineering_pw__browser_click
+  - mcp__plugin_compound-engineering_pw__browser_evaluate
+  - mcp__plugin_compound-engineering_pw__browser_close
+  - mcp__plugin_compound-engineering_pw__browser_tabs
 ---
 
 # Visual Browser Testing
@@ -40,7 +51,7 @@ Use the first URL that loads successfully. If none respond, ask the user for the
 
 Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full five-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires).
 
-Use `references/breakpoints.md` for viewport dimensions and `references/state-testing.md` for the interactive element state matrix.
+Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` for viewport dimensions and `${CLAUDE_SKILL_DIR}/references/state-testing.md` for the interactive element state matrix.
 
 **Flag handling:**
 
@@ -91,8 +102,8 @@ After the report, suggest next steps:
 
 ## Reference Files
 
-- `references/breakpoints.md` — Responsive breakpoint definitions and testing rationale
-- `references/state-testing.md` — Interactive element state matrix by component type
+- `${CLAUDE_SKILL_DIR}/references/breakpoints.md` — Responsive breakpoint definitions and testing rationale
+- `${CLAUDE_SKILL_DIR}/references/state-testing.md` — Interactive element state matrix by component type
 
 ## Playwright MCP Tools
 

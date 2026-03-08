@@ -263,5 +263,5 @@ Working through layers reveals requirements:
 ## Reference Files
 
 For detailed patterns, see:
-- `references/matrix-patterns.md`
-- `references/ckeditor-patterns.md`
+- `${CLAUDE_SKILL_DIR}/references/matrix-patterns.md`
+- `${CLAUDE_SKILL_DIR}/references/ckeditor-patterns.md`

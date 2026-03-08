@@ -19,7 +19,6 @@ plugins/<name>/
   agents/<category>/
     <agent-name>.md              — Agent definitions (review, workflow categories)
 docs/                            — Design specs and architecture docs
-desktop-skills/                  — Zipped skills for Claude Desktop (auto-generated)
 ```
 
 ## Plugin Anatomy
@@ -70,22 +69,6 @@ Validate a plugin:
 ```shell
 claude plugin validate plugins/<name>
 ```
-
-## Desktop Skills Sync
-
-Whenever you create or edit any file inside a plugin's `skills/` directory, you MUST also update the corresponding zip in `desktop-skills/`:
-
-1. **Delete the old zip first**, then `cd` into the skill folder and zip from there so `SKILL.md` is at the zip root. Claude Desktop requires exactly one `SKILL.md` — nested paths or duplicate entries will fail.
-
-   ```shell
-   rm -f desktop-skills/ai-memory.zip && cd plugins/ned/skills/ai-memory && zip -r /absolute/path/to/desktop-skills/ai-memory.zip .
-   ```
-
-2. The zip name matches the skill folder name, not the plugin name. So `plugins/project-manager/skills/lt10/` becomes `desktop-skills/lt10.zip`.
-3. Always replace — `desktop-skills/` should contain the latest version of every affected skill.
-4. After zipping, tell the user which skill zips were updated so they can install them in Claude Desktop.
-
-If multiple skills are edited in one session, zip all of them.
 
 ## Conventions
 

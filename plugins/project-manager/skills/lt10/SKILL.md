@@ -77,17 +77,17 @@ Load specific reference files based on user needs:
 
 | Topic | Reference File | When to Load |
 |-------|----------------|--------------|
-| **Estimation** | `references/estimation.md` | 90th percentile, PERT, red flags formula, ranges |
-| **Scoping** | `references/scoping.md` | Product vs project scope, WBS, creep types |
-| **Pricing** | `references/pricing.md` | Burn rate, utilization, rate calculations |
-| **Scheduling** | `references/scheduling.md` | Gantt, buffers, capacity, timeboxing |
-| **Methodology** | `references/methodology.md` | Waterfall, Agile, Scrum, Kanban, Agifall |
-| **Stakeholders** | `references/stakeholders.md` | RACI, communication, alignment |
-| **Change Control** | `references/change-control.md` | Change requests, feedback processing |
-| **Risk** | `references/risk.md` | Red flags, mitigation, project health |
-| **Scripts** | `references/scripts.md` | Communication scripts for situations |
-| **Worked Examples** | `references/worked-examples.md` | Detailed examples with calculations |
-| **Vocabulary** | `references/vocabulary.md` | Term definitions |
+| **Estimation** | `${CLAUDE_SKILL_DIR}/references/estimation.md` | 90th percentile, PERT, red flags formula, ranges |
+| **Scoping** | `${CLAUDE_SKILL_DIR}/references/scoping.md` | Product vs project scope, WBS, creep types |
+| **Pricing** | `${CLAUDE_SKILL_DIR}/references/pricing.md` | Burn rate, utilization, rate calculations |
+| **Scheduling** | `${CLAUDE_SKILL_DIR}/references/scheduling.md` | Gantt, buffers, capacity, timeboxing |
+| **Methodology** | `${CLAUDE_SKILL_DIR}/references/methodology.md` | Waterfall, Agile, Scrum, Kanban, Agifall |
+| **Stakeholders** | `${CLAUDE_SKILL_DIR}/references/stakeholders.md` | RACI, communication, alignment |
+| **Change Control** | `${CLAUDE_SKILL_DIR}/references/change-control.md` | Change requests, feedback processing |
+| **Risk** | `${CLAUDE_SKILL_DIR}/references/risk.md` | Red flags, mitigation, project health |
+| **Scripts** | `${CLAUDE_SKILL_DIR}/references/scripts.md` | Communication scripts for situations |
+| **Worked Examples** | `${CLAUDE_SKILL_DIR}/references/worked-examples.md` | Detailed examples with calculations |
+| **Vocabulary** | `${CLAUDE_SKILL_DIR}/references/vocabulary.md` | Term definitions |
 
 ---
 
@@ -291,15 +291,15 @@ Top priority: Physical, mental, emotional health. **If you come last, you cannot
 
 ## Reference Files
 
-See `/references/` for detailed content:
-- `estimation.md` - Complete estimation framework
-- `scoping.md` - Scope management and creep prevention
-- `pricing.md` - Financial health and rate calculations
-- `scheduling.md` - Timeline and capacity planning
-- `methodology.md` - Methodology selection guide
-- `stakeholders.md` - Stakeholder management
-- `change-control.md` - Change request processing
-- `risk.md` - Risk identification and mitigation
-- `scripts.md` - Communication scripts
-- `worked-examples.md` - Detailed worked examples
-- `vocabulary.md` - PM terminology definitions
+See `${CLAUDE_SKILL_DIR}/references/` for detailed content:
+- `${CLAUDE_SKILL_DIR}/references/estimation.md` - Complete estimation framework
+- `${CLAUDE_SKILL_DIR}/references/scoping.md` - Scope management and creep prevention
+- `${CLAUDE_SKILL_DIR}/references/pricing.md` - Financial health and rate calculations
+- `${CLAUDE_SKILL_DIR}/references/scheduling.md` - Timeline and capacity planning
+- `${CLAUDE_SKILL_DIR}/references/methodology.md` - Methodology selection guide
+- `${CLAUDE_SKILL_DIR}/references/stakeholders.md` - Stakeholder management
+- `${CLAUDE_SKILL_DIR}/references/change-control.md` - Change request processing
+- `${CLAUDE_SKILL_DIR}/references/risk.md` - Risk identification and mitigation
+- `${CLAUDE_SKILL_DIR}/references/scripts.md` - Communication scripts
+- `${CLAUDE_SKILL_DIR}/references/worked-examples.md` - Detailed worked examples
+- `${CLAUDE_SKILL_DIR}/references/vocabulary.md` - PM terminology definitions

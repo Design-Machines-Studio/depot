@@ -1,6 +1,6 @@
 ---
 name: strategy
-description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when context about Travis Gertz's positioning, target market, or competitive landscape is needed.
+description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, or when context about Travis Gertz's positioning and target market is needed.
 ---
 
 # Design Machines Strategy Skill
@@ -130,7 +130,7 @@ Large established co-ops with own systems. Co-ops with no budget and no path to 
 
 ### Project-Based Engagements
 
-Assembly projects cover Discovery + Design, Implementation, and Training phases with optional maintenance retainers. Pricing details are stored in ai-memory — search for "Assembly" or check `references/revenue.md`.
+Assembly projects cover Discovery + Design, Implementation, and Training phases with optional maintenance retainers. Pricing details are stored in ai-memory — search for "Assembly" or check `${CLAUDE_SKILL_DIR}/references/revenue.md`.
 
 ### Funding Sources
 
@@ -155,11 +155,11 @@ Current financial targets, runway, and burn rate are stored in ai-memory — sea
 
 ### Key Partners
 
-Current partner details and pipeline status are stored in ai-memory. Search for partner names or "Design Machines" relationships. See `references/partnerships.md` for partner archetypes and ecosystem structure.
+Current partner details and pipeline status are stored in ai-memory. Search for partner names or "Design Machines" relationships. See `${CLAUDE_SKILL_DIR}/references/partnerships.md` for partner archetypes and ecosystem structure.
 
 ### Current Pipeline
 
-Active pipeline details (specific clients, meeting dates, status) are stored in ai-memory. See `references/pipeline.md` for distribution channels and pilot criteria.
+Active pipeline details (specific clients, meeting dates, status) are stored in ai-memory. See `${CLAUDE_SKILL_DIR}/references/pipeline.md` for distribution channels and pilot criteria.
 
 ---
 
@@ -227,9 +227,9 @@ Load specific reference files based on needs:
 
 | Topic | Reference File | When to Load |
 |-------|----------------|--------------|
-| DM Catalog system | `references/catalog.md` | Naming new products, catalog entries |
-| Assembly architecture | `references/assembly.md` | Technical discussions, scoping |
-| Partnerships | `references/partnerships.md` | Partner coordination, pipeline |
-| Revenue model | `references/revenue.md` | Pricing, proposals, financial planning |
-| Brand language | `references/brand-language.md` | Naming, copy, marketing |
-| Pipeline & pilots | `references/pipeline.md` | Client conversations, preparation |
+| DM Catalog system | `${CLAUDE_SKILL_DIR}/references/catalog.md` | Naming new products, catalog entries |
+| Assembly architecture | `${CLAUDE_SKILL_DIR}/references/assembly.md` | Technical discussions, scoping |
+| Partnerships | `${CLAUDE_SKILL_DIR}/references/partnerships.md` | Partner coordination, pipeline |
+| Revenue model | `${CLAUDE_SKILL_DIR}/references/revenue.md` | Pricing, proposals, financial planning |
+| Brand language | `${CLAUDE_SKILL_DIR}/references/brand-language.md` | Naming, copy, marketing |
+| Pipeline & pilots | `${CLAUDE_SKILL_DIR}/references/pipeline.md` | Client conversations, preparation |

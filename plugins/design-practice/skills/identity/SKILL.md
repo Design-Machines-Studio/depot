@@ -217,6 +217,6 @@ When critiquing identity and logo work, assess these ten dimensions:
 
 | Topic | File | When to Load |
 |---|---|---|
-| **Masters Philosophy** | `references/masters-philosophy.md` | Deep profiles of Rand, Bass, Draplin, Wyman, Glaser |
-| **Systems Thinking** | `references/systems-thinking.md` | How marks extend to identity systems across media |
-| **Evaluation Framework** | `references/evaluation-framework.md` | Detailed critique methodology with rubric |
+| **Masters Philosophy** | `${CLAUDE_SKILL_DIR}/references/masters-philosophy.md` | Deep profiles of Rand, Bass, Draplin, Wyman, Glaser |
+| **Systems Thinking** | `${CLAUDE_SKILL_DIR}/references/systems-thinking.md` | How marks extend to identity systems across media |
+| **Evaluation Framework** | `${CLAUDE_SKILL_DIR}/references/evaluation-framework.md` | Detailed critique methodology with rubric |

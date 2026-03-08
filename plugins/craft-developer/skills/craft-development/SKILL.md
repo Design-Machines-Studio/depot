@@ -366,8 +366,8 @@ query {
 ## Reference Files
 
 For detailed patterns, see:
-- `references/query-cookbook.md` - 30+ real-world query examples
-- `references/graphql-patterns.md` - Complete GraphQL reference
+- `${CLAUDE_SKILL_DIR}/references/query-cookbook.md` - 30+ real-world query examples
+- `${CLAUDE_SKILL_DIR}/references/graphql-patterns.md` - Complete GraphQL reference
 
 ## Community Support Tips
 

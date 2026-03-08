@@ -206,6 +206,6 @@ When critiquing a data visualization:
 
 | Topic | File | When to Load |
 |---|---|---|
-| **Chart Rules** | `references/chart-rules.md` | Wong's detailed dos and don'ts for every chart type |
-| **Tufte Principles** | `references/tufte-principles.md` | Full Tufte framework: data-ink, integrity, analytic design |
-| **Editorial Dataviz** | `references/editorial-dataviz.md` | Franchi's integration of data visualization in editorial context |
+| **Chart Rules** | `${CLAUDE_SKILL_DIR}/references/chart-rules.md` | Wong's detailed dos and don'ts for every chart type |
+| **Tufte Principles** | `${CLAUDE_SKILL_DIR}/references/tufte-principles.md` | Full Tufte framework: data-ink, integrity, analytic design |
+| **Editorial Dataviz** | `${CLAUDE_SKILL_DIR}/references/editorial-dataviz.md` | Franchi's integration of data visualization in editorial context |

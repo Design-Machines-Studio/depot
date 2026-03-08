@@ -1,6 +1,8 @@
 ---
 name: review
 description: Code review orchestrator that launches parallel specialized agents across accessibility, security, architecture, CSS, voice, and governance domains. Use when reviewing code changes, PRs, branches, or files. Invoke with /dm-review for full review or /dm-review quick for core agents only. Also use when the user says "review this", "check my code", "run a code review", or "review before merging".
+disable-model-invocation: true
+argument-hint: "[scope: PR number, branch, path, or blank]"
 ---
 
 # DM Code Review
@@ -166,12 +168,12 @@ Read the consolidation instructions from `plugins/dm-review/agents/workflow/revi
 
 1. **Collect** all findings from all agent outputs
 2. **Deduplicate** findings that reference the same file and line
-3. **Map severity** using the rules in `plugins/dm-review/skills/review/references/severity-mapping.md`
+3. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
 4. **Determine merge recommendation** using the logic:
    - Any P1 → "BLOCKS MERGE"
    - P2 only → "APPROVE WITH FIXES"
    - P3 only or clean → "CLEAN"
-5. **Generate the unified report** following the template in `plugins/dm-review/skills/review/references/output-format.md`
+5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
 
 Output the full report to the user.
 
@@ -192,7 +194,7 @@ How should I track these findings?
 
 **If text files:**
 
-Create `todos/` directory if it doesn't exist. For each P1 and P2 finding, create a file following the template in `references/issue-tracking.md`:
+Create `todos/` directory if it doesn't exist. For each P1 and P2 finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
 
 ```
 todos/{id}-pending-{priority}-{slug}.md
@@ -265,14 +267,14 @@ If ai-memory tools are not available, skip silently.
 
 These files are loaded on demand during the review process:
 
-- `references/severity-mapping.md` — P1/P2/P3 mapping rules per agent
-- `references/agent-registry.md` — Complete agent catalog with trigger conditions
-- `references/output-format.md` — Unified report template
-- `references/issue-tracking.md` — Todo file template and GitHub Issue conventions
+- `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` — P1/P2/P3 mapping rules per agent
+- `${CLAUDE_SKILL_DIR}/references/agent-registry.md` — Complete agent catalog with trigger conditions
+- `${CLAUDE_SKILL_DIR}/references/output-format.md` — Unified report template
+- `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` — Todo file template and GitHub Issue conventions
 
 ## Agent Definition Paths
 
-See `references/agent-registry.md` for the complete agent catalog with trigger conditions, file matchers, and source plugins. Agent definition files are organized as:
+See `${CLAUDE_SKILL_DIR}/references/agent-registry.md` for the complete agent catalog with trigger conditions, file matchers, and source plugins. Agent definition files are organized as:
 
 - **dm-review agents:** `plugins/dm-review/agents/review/*.md`
 - **Depot-native agents:** `plugins/{accessibility-compliance,live-wires,ghostwriter,council}/agents/review/*.md`

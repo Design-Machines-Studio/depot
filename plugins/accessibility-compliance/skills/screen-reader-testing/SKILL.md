@@ -1,6 +1,6 @@
 ---
 name: screen-reader-testing
-description: Test web applications with screen readers including VoiceOver, NVDA, and JAWS for accessibility compliance. Use when validating screen reader compatibility, debugging accessibility issues, ensuring assistive technology support, writing ARIA markup, verifying live region announcements, or testing keyboard navigation with screen readers. Also use when reviewing Templ components, Twig templates, or Datastar-enhanced pages for screen reader compatibility. Covers VoiceOver (macOS), NVDA (Windows), testing protocols, and common failure patterns.
+description: Test web applications with screen readers including VoiceOver, NVDA, and JAWS for accessibility compliance. Use when validating screen reader compatibility, debugging accessibility issues, ensuring assistive technology support, writing ARIA markup, verifying live region announcements, or testing keyboard navigation with screen readers. Also use when a new interactive component is built and needs manual verification, when automated a11y tools report no issues but you suspect screen reader problems, or when reviewing Templ components, Twig templates, or Datastar-enhanced pages for screen reader compatibility. Covers VoiceOver (macOS), NVDA (Windows), testing protocols, and common failure patterns.
 ---
 
 # Screen Reader Testing
@@ -224,5 +224,5 @@ Use this for each page audit:
 
 | File | Contents |
 |------|----------|
-| [references/voiceover-testing.md](references/voiceover-testing.md) | Detailed VoiceOver commands, Safari quirks, and macOS configuration |
-| [references/manual-testing-protocols.md](references/manual-testing-protocols.md) | Cross-browser testing protocols, NVDA reference, and regression testing |
+| [${CLAUDE_SKILL_DIR}/references/voiceover-testing.md](${CLAUDE_SKILL_DIR}/references/voiceover-testing.md) | Detailed VoiceOver commands, Safari quirks, and macOS configuration |
+| [${CLAUDE_SKILL_DIR}/references/manual-testing-protocols.md](${CLAUDE_SKILL_DIR}/references/manual-testing-protocols.md) | Cross-browser testing protocols, NVDA reference, and regression testing |

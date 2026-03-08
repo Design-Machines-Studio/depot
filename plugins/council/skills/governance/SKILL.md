@@ -62,15 +62,15 @@ Load specific reference files based on needs:
 
 | Topic | Reference File | When to Load |
 |-------|----------------|--------------|
-| **BC Act Requirements** | `references/bc-cooperative-act.md` | Statutory compliance questions |
-| **Co-op OS Modules** | `references/governance-modules.md` | System design, feature planning |
-| **Discovery Framework** | `references/discovery-framework.md` | New client onboarding |
-| **Bylaw Analysis** | `references/bylaw-analysis.md` | Interpreting co-op rules |
-| **Voting & Decisions** | `references/voting-decisions.md` | Decision types, thresholds |
-| **Financial Governance** | `references/financial-governance.md` | Equity, patronage, ICAs |
-| **Compliance Calendar** | `references/compliance-calendar.md` | Annual requirements |
-| **Red Flags & Risks** | `references/red-flags.md` | Warning signs, common issues |
-| **UX Testing** | `references/ux-testing.md` | Personas, test scenarios |
+| **BC Act Requirements** | `${CLAUDE_SKILL_DIR}/references/bc-cooperative-act.md` | Statutory compliance questions |
+| **Co-op OS Modules** | `${CLAUDE_SKILL_DIR}/references/governance-modules.md` | System design, feature planning |
+| **Discovery Framework** | `${CLAUDE_SKILL_DIR}/references/discovery-framework.md` | New client onboarding |
+| **Bylaw Analysis** | `${CLAUDE_SKILL_DIR}/references/bylaw-analysis.md` | Interpreting co-op rules |
+| **Voting & Decisions** | `${CLAUDE_SKILL_DIR}/references/voting-decisions.md` | Decision types, thresholds |
+| **Financial Governance** | `${CLAUDE_SKILL_DIR}/references/financial-governance.md` | Equity, patronage, ICAs |
+| **Compliance Calendar** | `${CLAUDE_SKILL_DIR}/references/compliance-calendar.md` | Annual requirements |
+| **Red Flags & Risks** | `${CLAUDE_SKILL_DIR}/references/red-flags.md` | Warning signs, common issues |
+| **UX Testing** | `${CLAUDE_SKILL_DIR}/references/ux-testing.md` | Personas, test scenarios |
 
 ---
 

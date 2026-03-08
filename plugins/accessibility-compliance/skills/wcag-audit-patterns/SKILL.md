@@ -1,6 +1,7 @@
 ---
 name: wcag-audit-patterns
 description: Conduct WCAG 2.2 accessibility audits with automated testing, manual verification, and remediation guidance for Live Wires, Go+Templ+Datastar, and Craft CMS projects. Use when auditing websites for accessibility, fixing WCAG violations, reviewing HTML templates for a11y compliance, checking color contrast, validating focus management, adding ARIA attributes, or preparing for EAA/ADA compliance. Also use when writing new Templ components, Twig templates, or Datastar-enhanced pages that need accessible markup patterns. Covers WCAG 2.2 Level AA, ARIA Authoring Practices, automated tooling, and stack-specific patterns.
+argument-hint: "[url or file path to audit]"
 ---
 
 # WCAG Audit Patterns
@@ -137,7 +138,7 @@ Live Wires has built-in accessibility support. The framework provides:
 - **44x44px touch targets** on form elements via `--touch-target-min`
 - **Logical properties** for RTL support
 
-See `references/live-wires-a11y.md` for the complete Live Wires accessibility reference.
+See `${CLAUDE_SKILL_DIR}/references/live-wires-a11y.md` for the complete Live Wires accessibility reference.
 
 **Common Live Wires mistakes:**
 - Using `.hidden` when `.visually-hidden` is needed (removes from AT)
@@ -147,7 +148,7 @@ See `references/live-wires-a11y.md` for the complete Live Wires accessibility re
 
 ### Go + Templ + Datastar
 
-See `references/templ-datastar-a11y.md` for patterns. Key concerns:
+See `${CLAUDE_SKILL_DIR}/references/templ-datastar-a11y.md` for patterns. Key concerns:
 
 - **Templ components** should enforce accessible props (require `alt` on image components, `label` on form components)
 - **Datastar partial updates** need `aria-live` regions for dynamic content
@@ -156,7 +157,7 @@ See `references/templ-datastar-a11y.md` for patterns. Key concerns:
 
 ### Craft CMS + Twig
 
-See `references/craft-cms-a11y.md` for patterns. Key concerns:
+See `${CLAUDE_SKILL_DIR}/references/craft-cms-a11y.md` for patterns. Key concerns:
 
 - **Twig templates** must not bypass auto-escaping with `|raw` without sanitization
 - **Rich text fields** output from Redactor/CKEditor needs heading hierarchy enforcement
@@ -165,7 +166,7 @@ See `references/craft-cms-a11y.md` for patterns. Key concerns:
 
 ## ARIA Patterns Quick Reference
 
-See `references/aria-patterns.md` for the full APG pattern library. Essential patterns:
+See `${CLAUDE_SKILL_DIR}/references/aria-patterns.md` for the full APG pattern library. Essential patterns:
 
 | Pattern | Key attributes | Keyboard |
 |---------|---------------|----------|
@@ -231,9 +232,9 @@ When an audit finds violations, fix in this order:
 
 | File | Contents |
 |------|----------|
-| [references/wcag-2.2-checklist.md](references/wcag-2.2-checklist.md) | Complete WCAG 2.2 AA success criteria checklist |
-| [references/aria-patterns.md](references/aria-patterns.md) | ARIA Authoring Practices pattern library |
-| [references/testing-tools.md](references/testing-tools.md) | Tool configuration and CI integration guides |
-| [references/live-wires-a11y.md](references/live-wires-a11y.md) | Live Wires framework accessibility reference |
-| [references/templ-datastar-a11y.md](references/templ-datastar-a11y.md) | Go + Templ + Datastar accessibility patterns |
-| [references/craft-cms-a11y.md](references/craft-cms-a11y.md) | Craft CMS + Twig accessibility patterns |
+| [${CLAUDE_SKILL_DIR}/references/wcag-2.2-checklist.md](${CLAUDE_SKILL_DIR}/references/wcag-2.2-checklist.md) | Complete WCAG 2.2 AA success criteria checklist |
+| [${CLAUDE_SKILL_DIR}/references/aria-patterns.md](${CLAUDE_SKILL_DIR}/references/aria-patterns.md) | ARIA Authoring Practices pattern library |
+| [${CLAUDE_SKILL_DIR}/references/testing-tools.md](${CLAUDE_SKILL_DIR}/references/testing-tools.md) | Tool configuration and CI integration guides |
+| [${CLAUDE_SKILL_DIR}/references/live-wires-a11y.md](${CLAUDE_SKILL_DIR}/references/live-wires-a11y.md) | Live Wires framework accessibility reference |
+| [${CLAUDE_SKILL_DIR}/references/templ-datastar-a11y.md](${CLAUDE_SKILL_DIR}/references/templ-datastar-a11y.md) | Go + Templ + Datastar accessibility patterns |
+| [${CLAUDE_SKILL_DIR}/references/craft-cms-a11y.md](${CLAUDE_SKILL_DIR}/references/craft-cms-a11y.md) | Craft CMS + Twig accessibility patterns |

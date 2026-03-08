@@ -1,6 +1,8 @@
 ---
 name: scaffolding
 description: Scaffold Claude Code project infrastructure — hooks, agents, settings.json, and CLAUDE.md — for any Design Machines project type. Use when setting up a new project, configuring Claude Code hooks, creating a CLAUDE.md routing document, adding commit-push reminders, setting up Docker safety gates, configuring session-start workflows, or standardizing .claude/ directory structure. Covers go-templ-datastar, go-library, css-framework, and craft-cms project types.
+disable-model-invocation: true
+argument-hint: "[project-type: go-templ-datastar|go-library|css-framework|craft-cms]"
 ---
 
 # Project Scaffolding
@@ -65,9 +67,9 @@ Set these variables from the user's answers:
 ### Step 3: Generate Files
 
 Read the reference files to get templates:
-- **`references/hooks.md`** — hook script templates
-- **`references/agents.md`** — agent definition templates
-- **`references/project-configs.md`** — settings.json and CLAUDE.md templates
+- **`${CLAUDE_SKILL_DIR}/references/hooks.md`** — hook script templates
+- **`${CLAUDE_SKILL_DIR}/references/agents.md`** — agent definition templates
+- **`${CLAUDE_SKILL_DIR}/references/project-configs.md`** — settings.json and CLAUDE.md templates
 
 Create the following in the target project:
 
@@ -152,6 +154,6 @@ These principles are baked into every hook template:
 
 | File | Contains |
 |------|----------|
-| [references/hooks.md](references/hooks.md) | All 5 hook script templates with full source and customization notes |
-| [references/agents.md](references/agents.md) | Agent definition templates (go-builder, css-reviewer, doc-sync, security-auditor) |
-| [references/project-configs.md](references/project-configs.md) | settings.json templates, CLAUDE.md routing doc templates, tasks file starters — organized by project type |
+| [${CLAUDE_SKILL_DIR}/references/hooks.md](${CLAUDE_SKILL_DIR}/references/hooks.md) | All 5 hook script templates with full source and customization notes |
+| [${CLAUDE_SKILL_DIR}/references/agents.md](${CLAUDE_SKILL_DIR}/references/agents.md) | Agent definition templates (go-builder, css-reviewer, doc-sync, security-auditor) |
+| [${CLAUDE_SKILL_DIR}/references/project-configs.md](${CLAUDE_SKILL_DIR}/references/project-configs.md) | settings.json templates, CLAUDE.md routing doc templates, tasks file starters — organized by project type |

@@ -323,6 +323,6 @@ When working in HTML/CSS, reference the Live Wires `livewires` skill for impleme
 
 | Topic | File | When to Load |
 |---|---|---|
-| **Swiss Modernism** | `references/swiss-modernism.md` | Deep dive on Müller-Brockmann, Gerstner, Vignelli |
-| **Web Typography** | `references/web-typography.md` | Web-specific rules from Brown, Rutter, Latin, Santa Maria |
-| **Evaluation Framework** | `references/evaluation-framework.md` | Detailed critique methodology with specific criteria |
+| **Swiss Modernism** | `${CLAUDE_SKILL_DIR}/references/swiss-modernism.md` | Deep dive on Müller-Brockmann, Gerstner, Vignelli |
+| **Web Typography** | `${CLAUDE_SKILL_DIR}/references/web-typography.md` | Web-specific rules from Brown, Rutter, Latin, Santa Maria |
+| **Evaluation Framework** | `${CLAUDE_SKILL_DIR}/references/evaluation-framework.md` | Detailed critique methodology with specific criteria |

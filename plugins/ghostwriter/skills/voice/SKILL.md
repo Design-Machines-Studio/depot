@@ -1,6 +1,7 @@
 ---
 name: voice
 description: Travis Gertz's personal writing voice and editorial style engine. Use when writing articles, essays, blog posts, marketing copy, emails, product descriptions, social media, documentation, or any content that should sound like Travis. Also use when reviewing or editing existing content to match his voice. Covers tone, sentence rhythm, argumentation structure, vocabulary, cultural references, platform-specific registers, and anti-AI-writing patterns.
+user-invocable: false
 ---
 
 # Travis Gertz — Voice Skill
@@ -179,7 +180,7 @@ The best jokes layer multiple filters. A pinch of irony with some character work
 
 ### The funny filters (via Scott Dikkers)
 
-Travis uses Scott Dikkers' 11 humor filters from *How to Write Funny* as a systematic joke-writing toolkit. **For the full filter reference with DM-specific examples, see `references/humor-filters.md`.**
+Travis uses Scott Dikkers' 11 humor filters from *How to Write Funny* as a systematic joke-writing toolkit. **For the full filter reference with DM-specific examples, see `${CLAUDE_SKILL_DIR}/references/humor-filters.md`.**
 
 The primary filters for DM: **Irony** (say the opposite to expose absurdity — the #1 tool), **Parody** (mimic corporate/VC/LinkedIn forms and twist), **Hyperbole** (push capitalist logic to its endpoint), **Misplaced focus** (fixate on trivial perks while ignoring power), **Analogy** (compare unlike things to reveal hidden truths). Secondary: Character archetypes, shared-experience Reference, Shock. Use sparingly: Wordplay, Madcap, Metahumor.
 
@@ -454,7 +455,7 @@ When reviewing or editing content to match Travis's voice, check:
 
 ## Influence Map
 
-**For the full influence map with commentary, see `references/influence-map.md`.**
+**For the full influence map with commentary, see `${CLAUDE_SKILL_DIR}/references/influence-map.md`.**
 
 Key DNA: Mark Fisher (*Capitalist Realism*) is the foundational frame. Armando Iannucci (Veep, The Thick of It) sets the humor tone. Hemingway and Dan Nelken shape the prose craft. John Abrams (*Companies We Keep*) started the co-op journey. The mix of political theory (Marx, Parenti, Harvey), dirtbag left comedy (Chapo, Gifted Hater, Carlin), subculture (Thrasher, punk), and pop culture (Nathan For You, Arrested Development, Curb) is the point — it signals range and refuses to stay in one register.
 

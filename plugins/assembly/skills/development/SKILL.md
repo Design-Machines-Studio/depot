@@ -5,6 +5,9 @@ description: Assembly governance application development with Go, Templ, and Dat
 
 # Assembly Development Skill
 
+## Docker Status
+!`docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "Docker not running"`
+
 Build cooperative governance applications with Go, Templ, and Datastar. Build pages fast, review often, commit frequently.
 
 ## Philosophy
