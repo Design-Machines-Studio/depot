@@ -2,6 +2,31 @@
 
 > **Related sections:** → Estimation (`estimation.md`) → Pricing (`pricing.md`) → Methodology (`methodology.md`)
 
+## Contents
+
+- [Why Schedules Matter](#why-schedules-matter) (line 28) -- schedule health and cost of delay
+- [Scheduling Methods](#scheduling-methods) (line 44) -- calendars, gantt, milestones, timeboxing, sprints
+- [Gantt Chart Types](#gantt-chart-types) (line 56) -- phase, resource, task, and sprint types
+- [Timeboxing](#timeboxing) (line 67) -- half-day chunks and planning formula
+- [Buffer Strategies](#buffer-strategies-build-these-in) (line 96) -- default buffers for every project phase
+- [Scheduling Considerations](#scheduling-considerations) (line 114) -- team and stakeholder factors to check
+- [Warning Signs](#warning-signs-project-drag) (line 132) -- detecting project drag early
+- [Adjusting Schedules](#adjusting-schedules) (line 141) -- red flags and timeline questions
+- [Scheduling Don'ts](#scheduling-donts) (line 162) -- common scheduling mistakes to avoid
+- [What Is Capacity Planning?](#what-is-capacity-planning) (line 172) -- measuring effort over time
+- [Optimal Capacity](#optimal-capacity) (line 182) -- realistic productive hours per day
+- [Why Capacity Planning Matters](#why-capacity-planning-matters) (line 193) -- benefits of tracking capacity
+- [Capacity Planning Impacts](#capacity-planning-impacts) (line 204) -- preventing overwork and budget burns
+- [Think in Threes](#think-in-threes) (line 215) -- limit simultaneous projects to three
+- [Building Buffer by Default](#building-buffer-by-default) (line 229) -- reserving blocks for non-billable work
+- [Capacity Formula](#capacity-formula) (line 242) -- calculating team member availability
+- [Don't Book at 100%](#dont-book-at-100) (line 254) -- why full utilization fails
+- [When to Plan Capacity](#when-to-plan-capacity) (line 260) -- before, during, and after projects
+- [Capacity Planning Considerations](#capacity-planning-considerations) (line 283) -- checklists for planning stages
+- [Managing Personal Capacity](#managing-personal-capacity) (line 310) -- protecting your own calendar
+- [Resourcing & Team Selection](#resourcing--team-selection) (line 329) -- selecting who works on projects
+- [Employees vs Contractors](#employees-vs-contractors) (line 357) -- when to hire versus contract
+
 ## Why Schedules Matter
 
 Schedules show you how healthy your company revenue is. Project drag = revenue loss.

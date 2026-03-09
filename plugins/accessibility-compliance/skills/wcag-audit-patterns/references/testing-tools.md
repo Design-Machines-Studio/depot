@@ -2,6 +2,16 @@
 
 Configuration guides and CI integration for automated accessibility testing.
 
+## Contents
+- [Tool Comparison](#tool-comparison) (line 17) -- Feature matrix of a11y testing tools
+- [axe-core (Recommended Engine)](#axe-core-recommended-engine) (line 31) -- Playwright integration and rule configuration
+- [Pa11y](#pa11y) (line 112) -- CLI scanning and CI configuration
+- [Lighthouse](#lighthouse) (line 178) -- Broad audit CLI and limitations
+- [CI Pipeline Integration](#ci-pipeline-integration) (line 195) -- GitHub Actions for Go and Craft stacks
+- [Browser DevTools](#browser-devtools) (line 284) -- Chrome and Firefox accessibility panels
+- [Manual Testing Tools](#manual-testing-tools) (line 302) -- Contrast checkers, extensions, and bookmarklets
+- [Reporting Templates](#reporting-templates) (line 337) -- Pa11y and Playwright report output
+
 ---
 
 ## Tool Comparison

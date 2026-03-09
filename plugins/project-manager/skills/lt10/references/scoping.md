@@ -2,6 +2,27 @@
 
 > **Related sections:** → Estimation (`estimation.md`) → Change Control (`change-control.md`) → Stakeholders (`stakeholders.md`)
 
+## Contents
+
+- [What Is Scope?](#what-is-scope) (line 26) -- noun and verb definitions of scope
+- [Product Scope vs Project Scope](#product-scope-vs-project-scope) (line 48) -- deliverables versus process distinction
+- [Cone of Uncertainty](#cone-of-uncertainty) (line 57) -- why early promises cause problems
+- [Scoping Is a Team Sport](#scoping-is-a-team-sport) (line 65) -- collaborative scope definition approach
+- [Requirements Types](#requirements-types) (line 77) -- functional, non-functional, and business requirements
+- [Requirements Gathering](#requirements-gathering) (line 87) -- discovery workshop steps for scope
+- [Work Breakdown Structure](#work-breakdown-structure-wbs) (line 101) -- traditional 100% scope definition method
+- [Backlog Approach](#backlog-approach-agile) (line 117) -- agile iterative scope refinement
+- [Tasks, Subtasks, Milestones](#tasks-subtasks-milestones) (line 128) -- writing tasks and user stories
+- [What Gets Missed During Scoping](#what-gets-missed-during-scoping) (line 163) -- common oversights by teams and stakeholders
+- [Acceptance Criteria Template](#acceptance-criteria-template) (line 182) -- given-when-then format for criteria
+- [Avoiding Scoping Pitfalls](#avoiding-scoping-pitfalls) (line 192) -- pre-mortems, assumptions, and bikeshedding
+- [Scope Protection Clauses](#scope-protection-clauses) (line 219) -- pause, mystery voices, and mimic clauses
+- [Scope Creep Management](#scope-creep-management) (line 235) -- causes, costs, and impact of creep
+- [Four Types of Scope Creep](#four-types-of-scope-creep) (line 268) -- business, effort, hope, and feature creep
+- [Triage Framework](#triage-framework) (line 301) -- dismiss, downgrade, defer, or prioritize
+- [Scope Creep Scripts](#scope-creep-scripts) (line 312) -- ready-made responses for scope changes
+- [Tips for Managing Change](#tips-for-managing-change) (line 334) -- practical advice for change situations
+
 ## What Is Scope?
 
 **As a noun (build the right thing):**

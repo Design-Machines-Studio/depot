@@ -2,6 +2,16 @@
 
 All hook scripts for Claude Code project scaffolding. Each template uses `{{PROJECT_PREFIX}}` as a placeholder — replace with the lowercase project directory name before writing.
 
+## Contents
+
+- [General Notes](#general-notes) (line 15) -- Exit codes, stdin format, permissions
+- [1. block-bare-go.sh](#1-block-bare-gosh) (line 26) -- Prevents Go commands outside Docker
+- [2. session-start-gate.sh](#2-session-start-gatesh) (line 62) -- Blocks edits until planner workflow runs
+- [3. commit-push-reminder.sh](#3-commit-push-remindersh) (line 106) -- Nudges frequent commits and pushes
+- [4. post-edit-context.sh](#4-post-edit-contextsh) (line 182) -- Context-aware agent reminders after edits
+- [5. pre-stop-check.sh](#5-pre-stop-checksh) (line 290) -- Verifies commits and agents before stopping
+- [6. a11y-check.sh](#6-a11y-checksh) (line 396) -- Accessibility agent reminders for frontend files
+
 ## General Notes
 
 - **Exit codes**: `0` = allow the tool call, `2` = block it

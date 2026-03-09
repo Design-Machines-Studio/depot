@@ -2,6 +2,16 @@
 
 Detailed examples demonstrating LT10 methodology application.
 
+## Contents
+
+- [Example 1: Website Redesign Estimate](#example-1-website-redesign-estimate) (line 22) -- red flag scoring and sprint conversion
+- [Example 2: Choosing a Methodology](#example-2-choosing-a-methodology) (line 98) -- agifall selection for e-commerce project
+- [Example 3: Capacity Planning](#example-3-capacity-planning) (line 136) -- solo contractor multi-project allocation
+- [Example 4: Handling Scope Creep](#example-4-handling-scope-creep) (line 189) -- responding to mid-project change requests
+- [Example 5: Red Flag Scoring for Complex Project](#example-5-red-flag-scoring-for-complex-project) (line 222) -- large rebuild with multiple risk factors
+- [Example 6: Project Health Assessment](#example-6-project-health-assessment) (line 301) -- mid-project metrics and course correction
+- [Key Principles from These Examples](#key-principles-from-these-examples) (line 352) -- seven takeaways from worked examples
+
 ---
 
 ## Example 1: Website Redesign Estimate

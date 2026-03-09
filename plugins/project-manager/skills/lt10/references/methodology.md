@@ -2,6 +2,19 @@
 
 > **Related sections:** → Scheduling (`scheduling.md`) → Estimation (`estimation.md`) → Scoping (`scoping.md`)
 
+## Contents
+
+- [Key Definitions](#key-definitions) (line 18) -- methodology, process, framework, workflow terms
+- [Waterfall Model](#waterfall-model) (line 29) -- linear phase-based project approach
+- [Lean Approach](#lean-approach) (line 76) -- removing waste and creating value
+- [Agile Approach](#agile-approach) (line 114) -- iterative improvement and adaptability
+- [Scrum Framework](#scrum-framework) (line 165) -- sprints, roles, and ceremony structure
+- [Kanban Approach](#kanban-approach) (line 195) -- visual flow with WIP limits
+- [Agifall (Hybrid) Method](#agifall-hybrid-method) (line 231) -- blending waterfall gates with agile sprints
+- [Decision Framework: Methodology Selection](#decision-framework-methodology-selection) (line 263) -- choosing methodology by project traits
+- [Common Methodology Pitfalls](#common-methodology-pitfalls) (line 284) -- frequent mistakes and their solutions
+- [How to Explain Methodology to Clients](#how-to-explain-methodology-to-clients) (line 298) -- client-facing scripts for each approach
+
 ## Key Definitions
 
 | Term | Definition |

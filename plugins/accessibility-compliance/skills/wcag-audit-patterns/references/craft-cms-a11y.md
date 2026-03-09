@@ -2,6 +2,12 @@
 
 Accessibility patterns specific to Craft CMS projects with Twig templates.
 
+## Contents
+- [Twig Template Accessibility](#twig-template-accessibility) (line 13) -- Headings, images, navigation, and rich text
+- [Craft CMS Configuration for Accessibility](#craft-cms-configuration-for-accessibility) (line 210) -- Asset fields, entry types, and templates
+- [Form Accessibility in Craft](#form-accessibility-in-craft) (line 247) -- Freeform, guest entries, and validation
+- [Twig Accessibility Checklist](#twig-accessibility-checklist) (line 293) -- Template-level a11y verification items
+
 ---
 
 ## Twig Template Accessibility

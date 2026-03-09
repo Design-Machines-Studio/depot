@@ -2,6 +2,16 @@
 
 Agent definitions for `.claude/agents/`. Copy the applicable agents and replace `{{PROJECT_NAME}}` placeholders.
 
+## Contents
+
+- [go-builder.md](#go-buildermd) (line 17) -- Docker-wrapped Go and Templ build agent
+- [css-reviewer.md](#css-reviewermd) (line 99) -- Live Wires CSS compliance review agent
+- [doc-sync.md](#doc-syncmd) (line 175) -- Documentation and code sync checker agent
+- [security-auditor.md](#security-auditormd) (line 248) -- Backend security vulnerability review agent
+- [a11y-html-reviewer.md](#a11y-html-reviewermd) (line 336) -- WCAG 2.2 HTML template accessibility agent
+- [a11y-css-reviewer.md](#a11y-css-reviewermd) (line 404) -- WCAG 2.2 visual CSS accessibility agent
+- [a11y-dynamic-content-reviewer.md](#a11y-dynamic-content-reviewermd) (line 461) -- Datastar SSE dynamic content accessibility agent
+
 ---
 
 ## go-builder.md

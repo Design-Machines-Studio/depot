@@ -2,6 +2,26 @@
 
 > **Related sections:** → Estimation (`estimation.md`) → Scheduling (`scheduling.md`) → Capacity Planning (`scheduling.md`)
 
+## Contents
+
+- [How Your Company Spends Money](#how-your-company-spends-money) (line 25) -- Expense types, burn rate, profit margins
+- [Burn Rate Calculation](#burn-rate-calculation) (line 46) -- Monthly and per-employee cost formulas
+- [How Your Company Makes Money](#how-your-company-makes-money) (line 59) -- Client services revenue model basics
+- [High Value vs High Quantity Clients](#high-value-vs-high-quantity-clients) (line 72) -- Fewer big clients beats many small
+- [David Baker's Revenue Distribution](#david-bakers-revenue-distribution) (line 92) -- Single client revenue cap guidelines
+- [Positioning for Bigger Projects](#positioning-for-bigger-projects) (line 102) -- Attracting the clients you want
+- [Annual Revenue Target Calculation](#annual-revenue-target-calculation) (line 112) -- Salary multiplier to revenue target formula
+- [Rate Calculations](#rate-calculations) (line 125) -- Monthly, sprint, day, and hourly rates
+- [Estimating Units vs Billing Units](#estimating-units-vs-billing-units-critical-distinction) (line 161) -- Why estimate in days, bill in sprints
+- [When to Use Each Rate Type](#when-to-use-each-rate-type) (line 190) -- Rate type selection by situation
+- [Project Management Overhead](#project-management-overhead) (line 206) -- PM budget minimums and billable ratios
+- [Assessing Client Size](#assessing-client-size) (line 215) -- Too small, too big, and just right
+- [How PMs Support Healthier Revenue](#how-pms-support-healthier-revenue) (line 239) -- Seven PM actions for revenue health
+- [Project Types](#project-types) (line 251) -- Value-based, fixed, flexible, RFP, non-billable
+- [Preventing Scope Creep from SOWs](#preventing-scope-creep-from-sows) (line 263) -- Contract language and discovery-first approach
+- [Flexible vs Vague Language](#flexible-vs-vague-language) (line 304) -- Clear criteria with negotiation room
+- [See Also](#see-also) (line 316) -- Related reference documents
+
 ## How Your Company Spends Money
 
 ### Expense Types

@@ -2,6 +2,13 @@
 
 Accessibility patterns specific to the Go + Templ + Datastar stack used in Assembly and similar projects.
 
+## Contents
+- [Templ Component Accessibility](#templ-component-accessibility) (line 14) -- Accessible props, headings, layouts, and forms
+- [Datastar Accessibility](#datastar-accessibility) (line 139) -- Focus loss, live regions, and loading states
+- [SSE Response Accessibility Patterns](#sse-response-accessibility-patterns) (line 249) -- Server-side feedback and error patterns
+- [Go Handler Accessibility Checklist](#go-handler-accessibility-checklist) (line 303) -- Handler-level a11y verification items
+- [Testing Datastar Interactions](#testing-datastar-interactions) (line 318) -- Manual and Playwright testing protocol
+
 ---
 
 ## Templ Component Accessibility
