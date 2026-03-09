@@ -40,6 +40,19 @@ When you modify a plugin's skills, agents, or references, **bump the version** i
 
 Never commit plugin changes without also bumping the version.
 
+## Notion Manual Sync
+
+The depot has a manual page in Notion that documents all plugins, versions, and capabilities:
+**Notion page ID:** `31ed8793880881749475c5c36dd252df`
+
+When a plugin update changes any of the following, update the Notion manual page using the Notion MCP:
+- Plugin version number
+- New or removed skills, agents, or reference files
+- Changes to key capabilities or ecosystem integration
+- Plugin count or total file counts
+
+To update, fetch the page with `notion-fetch`, then use `notion-update-page` with `update_content` to modify the relevant plugin section. Keep the format consistent with the existing entries.
+
 ## The Plugins
 
 | Plugin | Purpose |
