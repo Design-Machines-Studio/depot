@@ -1,0 +1,22 @@
+[
+  {"query": "TACO's AGM is coming up in March and they need to know the quorum requirements. They have 12 members right now. What's the minimum attendance for a valid meeting?", "should_trigger": true},
+  {"query": "We're designing the voting UI for Assembly and I need to know: what percentage is needed for a special resolution under the BC Act? And does it differ for removing a director vs amending bylaws?", "should_trigger": true},
+  {"query": "Solid State wants to set up a patronage allocation system. Can you walk me through how member equity accounts work under the BC Cooperative Association Act?", "should_trigger": true},
+  {"query": "I'm conducting discovery with a new co-op client. They're a 15-person worker cooperative that does web development. What questions should I ask about their current governance processes?", "should_trigger": true},
+  {"query": "are there any compliance deadlines coming up this quarter? I can never remember when the annual report is due to BC Registries", "should_trigger": true},
+  {"query": "the co-op wants to use consent-based decision making instead of majority voting. Is that allowed under the Act? How do we structure that in the bylaws?", "should_trigger": true},
+  {"query": "I need to check if our client's bylaws have a red flag. They say directors can serve unlimited consecutive terms with no cooling off period. Is that a problem?", "should_trigger": true},
+  {"query": "What's the member lifecycle look like for a worker co-op? From application to full membership, what are the stages and what does the Act require at each step?", "should_trigger": true},
+  {"query": "We need to design the board composition module for Assembly. How many directors does a BC co-op need at minimum? Can non-members serve on the board?", "should_trigger": true},
+  {"query": "help me understand the difference between a cooperative and a regular corporation. One of our leads asked and I want to give them a clear answer", "should_trigger": true},
+  {"query": "I need to add a new Templ template for the meetings page. It should show a table of past meetings with date, attendance count, and links to minutes", "should_trigger": false},
+  {"query": "Can you write a blog post about Design Machines' philosophy on technology and community?", "should_trigger": false},
+  {"query": "The CSS grid on the member directory page isn't responsive. How do I make it collapse to a single column on mobile using Live Wires?", "should_trigger": false},
+  {"query": "I want to price our governance SaaS at different tiers. What should the feature breakdown look like for $200/mo vs $500/mo vs enterprise?", "should_trigger": false},
+  {"query": "help me write a Go handler that validates email addresses before saving to the members table", "should_trigger": false},
+  {"query": "What's the best way to structure a Craft CMS site for a small nonprofit? They have about 50 pages and a blog", "should_trigger": false},
+  {"query": "I need to set up CI/CD for the Assembly repository. We're using GitHub Actions and want to run go test on every PR", "should_trigger": false},
+  {"query": "Can you review this pull request for security vulnerabilities? It adds a new authentication endpoint", "should_trigger": false},
+  {"query": "Write me social media copy about the launch of our new governance tool. I need posts for LinkedIn and Bluesky", "should_trigger": false},
+  {"query": "I want to implement OAuth2 for the Assembly admin panel. What Go libraries should I use and how do I set it up?", "should_trigger": false}
+]

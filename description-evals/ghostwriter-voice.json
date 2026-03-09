@@ -1,0 +1,22 @@
+[
+  {"query": "I just wrote this draft article about why cooperative governance tools are broken. Can you edit it to sound more like me? It feels too academic right now", "should_trigger": true},
+  {"query": "this product description for Live Wires sounds super generic and AI-ish. fix it please. it needs to actually sound like something id write", "should_trigger": true},
+  {"query": "I need to write an email to a potential co-op client (Solid State) explaining our discovery process. Should be warm but professional, not salesy", "should_trigger": true},
+  {"query": "Can you check this LinkedIn post for AI tells? I wrote it with Claude's help and I'm worried it sounds too polished. Here's the text...", "should_trigger": true},
+  {"query": "help me write the 'About' page copy for the new Design Machines website. Should capture my philosophy about technology serving communities, not the other way around", "should_trigger": true},
+  {"query": "I'm working on a short bio for a conference panel about cooperative technology. Needs to be 2-3 sentences, casual but credible", "should_trigger": true},
+  {"query": "make this sound more like me: 'At Design Machines, we leverage cutting-edge technology to empower organizations with transformative digital solutions that drive meaningful impact.'", "should_trigger": true},
+  {"query": "need to write a commit message for this PR that refactors the voting module. I know it's small but I want it to actually sound like a human wrote it", "should_trigger": true},
+  {"query": "Can you draft a newsletter intro about our recent work with TACO cooperative? I want it to feel like I'm talking to friends, not broadcasting", "should_trigger": true},
+  {"query": "this text feels off. can you clean up the voice? 'Our innovative platform seamlessly integrates governance workflows to facilitate democratic decision-making processes.'", "should_trigger": true},
+  {"query": "Write me a LinkedIn post about cooperative technology. Target it for maximum engagement with the tech audience", "should_trigger": false},
+  {"query": "I need to create social media content for Design Machines across LinkedIn, Instagram, Bluesky, and Mastodon. What's the best posting strategy?", "should_trigger": false},
+  {"query": "Can you write documentation for the Assembly API endpoints? I need OpenAPI-style docs with request/response examples", "should_trigger": false},
+  {"query": "Help me write a Craft CMS plugin description for the marketplace. It should follow their standard format", "should_trigger": false},
+  {"query": "I need to draft bylaws for a new worker cooperative in BC. Can you help with the governance sections?", "should_trigger": false},
+  {"query": "Write unit tests for the voice validation function in our Go application", "should_trigger": false},
+  {"query": "Can you help me write CSS custom properties for the typography scale? I need fluid type sizes from 14px to 48px", "should_trigger": false},
+  {"query": "I want to create a content strategy document for our blog. What topics should we cover and how often should we publish?", "should_trigger": false},
+  {"query": "Help me write a technical RFC for migrating our database from SQLite to PostgreSQL. Needs pros/cons analysis", "should_trigger": false},
+  {"query": "draft a cease and desist letter template for trademark infringement. Keep it formal and legally sound", "should_trigger": false}
+]

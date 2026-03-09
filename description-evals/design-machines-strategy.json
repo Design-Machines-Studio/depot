@@ -1,0 +1,22 @@
+[
+  {"query": "I have a call with Chris tomorrow about the Assembly partnership. What's our current arrangement and what should I push for in terms of revenue split?", "should_trigger": true},
+  {"query": "A small co-op in Ontario reached out asking about pricing. They have 8 members and want the basic governance package. What should I quote them?", "should_trigger": true},
+  {"query": "I need to update the DM catalog entry for Live Wires. What's the current positioning and how does it fit into the overall product lineup?", "should_trigger": true},
+  {"query": "We got a grant opportunity from the Canadian Worker Co-op Federation. They're funding cooperative tech tools. Should we apply? What's our pitch?", "should_trigger": true},
+  {"query": "how much runway do we have left? I'm trying to decide if we can afford to hire a part-time designer for the Assembly UI", "should_trigger": true},
+  {"query": "I need to write a proposal for Solid State. They want a full governance system buildout. What should I include in the scope and how do I frame the value prop?", "should_trigger": true},
+  {"query": "Mario wants to know if we can white-label Assembly for his clients. What's our position on white-labeling and how would that work with the pricing model?", "should_trigger": true},
+  {"query": "what's the conversion funnel between someone finding Live Wires and eventually becoming an Assembly customer? I want to tighten up that pipeline", "should_trigger": true},
+  {"query": "I'm presenting at a cooperative conference next month. Can you help me put together talking points about Design Machines' approach to cooperative technology?", "should_trigger": true},
+  {"query": "Ben suggested we should consider a freemium model for Assembly instead of subscription-only. What are the pros and cons given our target market?", "should_trigger": true},
+  {"query": "The Templ template for the proposals page has a rendering bug. The status badges aren't showing the right colors", "should_trigger": false},
+  {"query": "I need to write CSS for a new card component in Live Wires. It should have a subtle shadow and rounded corners", "should_trigger": false},
+  {"query": "Can you help me set up the Docker development environment for Assembly? The go.mod file needs updating", "should_trigger": false},
+  {"query": "What's the BC Co-op Act requirement for filing an annual report? Is there a deadline I should know about?", "should_trigger": false},
+  {"query": "I want to write an article about Swiss modernist typography and how it influences our design work", "should_trigger": false},
+  {"query": "help me debug this GraphQL query in Craft CMS. The eager loading on the entries query isn't working right", "should_trigger": false},
+  {"query": "Can you review the accessibility of our Assembly dashboard? I think the color contrast might fail WCAG AA", "should_trigger": false},
+  {"query": "I need to set up a Notion project board for tracking Assembly development tasks. What columns and properties should I use?", "should_trigger": false},
+  {"query": "Write me a Go function that calculates patronage dividends based on member hours worked", "should_trigger": false},
+  {"query": "Can you edit this blog post to match my writing voice? It sounds too corporate right now", "should_trigger": false}
+]

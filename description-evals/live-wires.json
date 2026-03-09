@@ -1,0 +1,22 @@
+[
+  {"query": "I need to set up the spacing tokens for a new project using Live Wires. What's the base unit and how do the scale steps work? Also what cascade layer does this go in?", "should_trigger": true},
+  {"query": "the sidebar layout isn't collapsing properly on mobile. I'm using the sidebar primitive but the content area isn't taking up the remaining space. Heres my HTML...", "should_trigger": true},
+  {"query": "Can you help me build a responsive card grid? I want 3 columns on desktop, 2 on tablet, 1 on mobile. Should I use the grid or cluster primitive?", "should_trigger": true},
+  {"query": "I'm trying to get the baseline rhythm right on this page. The headings and body text don't seem to align to the 4px grid. What am I doing wrong with the type scale?", "should_trigger": true},
+  {"query": "what's the difference between using a stack vs just putting margin-bottom on everything? When should I reach for each layout primitive?", "should_trigger": true},
+  {"query": "I need to add a dark color scheme to the site. How does Live Wires handle theming? Are there CSS custom properties I should override?", "should_trigger": true},
+  {"query": "my CSS isn't applying because of specificity issues. I think my component styles are fighting with the utility layer. How does the cascade layer order work in Live Wires?", "should_trigger": true},
+  {"query": "I want to compare Live Wires to Tailwind for this project. What are the key philosophical differences and when would I choose one over the other?", "should_trigger": true},
+  {"query": "Can you review this HTML markup? I'm not sure if I'm using the right Live Wires classes. The center and section primitives seem redundant here", "should_trigger": true},
+  {"query": "how do i set up fluid typography in live wires? i want the heading sizes to scale smoothly between mobile and desktop without media queries", "should_trigger": true},
+  {"query": "I need to write a Go handler for the Assembly proposals endpoint. It should accept POST requests with JSON body validation", "should_trigger": false},
+  {"query": "What's the voting threshold for a special resolution under the BC Cooperative Association Act?", "should_trigger": false},
+  {"query": "Can you help me draft a product positioning document for Design Machines? I want to clarify our target market", "should_trigger": false},
+  {"query": "this blog post sounds too AI-generated. Can you edit it to match my writing voice?", "should_trigger": false},
+  {"query": "I need to set up accessibility testing for the Assembly app. What tools should I use for WCAG 2.2 compliance?", "should_trigger": false},
+  {"query": "Help me write a database migration that adds an index on the votes table for the proposal_id column", "should_trigger": false},
+  {"query": "Can you create a Figma component library for our design system? I need buttons, inputs, and cards", "should_trigger": false},
+  {"query": "I want to set up GitHub Actions to run our Go tests on every pull request. What's the workflow YAML look like?", "should_trigger": false},
+  {"query": "Help me write a Twig template for the Craft CMS blog listing page. I need pagination and category filtering", "should_trigger": false},
+  {"query": "Can you explain how React server components work? I'm trying to decide if we should use Next.js for our marketing site", "should_trigger": false}
+]

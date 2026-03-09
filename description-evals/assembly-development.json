@@ -1,0 +1,22 @@
+[
+  {"query": "I need to add a new proposals page to Assembly. It should list all proposals with status filtering and link to a detail view. The handler needs to pull from the proposals table and the template should use our standard page layout.", "should_trigger": true},
+  {"query": "the docker container keeps crashing when I run templ generate inside it. Getting some error about missing go.sum entries for the datastar package", "should_trigger": true},
+  {"query": "Can you scaffold a new CRUD flow for member equity accounts? I need list, detail, create, and edit pages with the standard DTO pattern we use.", "should_trigger": true},
+  {"query": "I'm trying to figure out how the fixture system works in Assembly. Like, how do I add a new module that plugs into the baseplate? What files do I need to create?", "should_trigger": true},
+  {"query": "need to write a migration that adds a voted_at timestamp to the votes table and backfills it from the created_at column", "should_trigger": true},
+  {"query": "how do I set up the SSE endpoint for real-time vote count updates? I want the dashboard to show live results as members vote", "should_trigger": true},
+  {"query": "The member profile page isnt rendering the equity balance correctly. The template is showing $0.00 even though the database has values. Probably a DTO mapping issue", "should_trigger": true},
+  {"query": "lets deploy this to production. whats the docker compose setup for the prod server again? I think we need to update the env vars too", "should_trigger": true},
+  {"query": "I want to add a Datastar-powered modal for confirming vote submissions. When they click 'Submit Vote' it should show a confirmation dialog before posting to the handler", "should_trigger": true},
+  {"query": "Can you create a new handler that serves the compliance dashboard? It needs to aggregate data from meetings, votes, and filings tables and pass it to the template as a ComplianceSummaryDTO", "should_trigger": true},
+  {"query": "What voting threshold does the BC Co-op Act require for removing a director? Is it a special resolution or ordinary?", "should_trigger": false},
+  {"query": "I need to write a blog post about why we chose Go over Rails for our governance platform. Can you help me draft it?", "should_trigger": false},
+  {"query": "The baseline rhythm is off on the meetings page. The heading spacing doesn't align to the 4px grid. How do I fix the CSS?", "should_trigger": false},
+  {"query": "Can you review this Craft CMS template? The Twig loop isn't paginating correctly and I think the eager loading is wrong", "should_trigger": false},
+  {"query": "help me set up a new Nuxt project for the Design Machines marketing site. I need SSR with Tailwind", "should_trigger": false},
+  {"query": "I want to price Assembly at $500/month for small co-ops. Does that fit our revenue model? What would Chris think?", "should_trigger": false},
+  {"query": "Write me a Python script that generates fake member data for testing. 50 members with random names, emails, and join dates", "should_trigger": false},
+  {"query": "my .serena/project.yml is ignoring node_modules but the LSP is still indexing them. How do I fix the gopls config?", "should_trigger": false},
+  {"query": "I need to update the README for our open source CSS framework. Can you add a section about the new container query utilities?", "should_trigger": false},
+  {"query": "Can you help me write the acceptance criteria for the equity tracking feature? I need it formatted as user stories for the Notion board", "should_trigger": false}
+]
