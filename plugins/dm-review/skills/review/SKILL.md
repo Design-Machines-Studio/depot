@@ -271,6 +271,20 @@ Use labels `review` + `p1`/`p2` for severity. Create the labels first if they do
 
 ---
 
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **code-simplifier** | `/simplify` | Phase 5.5 simplification pass (can replace manual) |
+| **compound-engineering** | `/lint` | Supplement code-simplicity-reviewer findings |
+| **pr-review-toolkit** | `/review-pr` | PR-specific deep analysis (comments, error handling, types) |
+| **superpowers** | `/verify` | After applying review fixes, verify nothing broke |
+| **code-review** | `/code-review` | Alternative single-pass confidence-scored review |
+
+---
+
 ### Phase 7: Memory Capture (Full mode only)
 
 **Skip this phase in Quick mode.**

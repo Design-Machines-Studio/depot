@@ -200,6 +200,15 @@ When critiquing a layout, assess these eight dimensions:
 | **livewires** | live-wires | CSS layout primitives (stack, grid, sidebar, etc.) |
 | **dataviz** | design-practice | When layouts include charts or data displays |
 
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **figma** | Design context tools | Extract layout specs from Figma designs |
+| **frontend-design** | Frontend skills | Layout implementation guidance |
+
 ---
 
 ## Domain Reference Guide

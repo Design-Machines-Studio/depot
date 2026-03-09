@@ -150,6 +150,17 @@ These principles are baked into every hook template:
 7. **HEAD-keyed markers** — nudges that should reset after commits use `git rev-parse --short HEAD` in the marker name
 8. **Security** — use `printf '%s\n'` instead of `echo` to prevent flag injection; quote all variable expansions
 
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **hookify** | `/hookify` | Create custom hooks beyond scaffold templates |
+| **claude-md-management** | `/revise-claude-md` | Ongoing CLAUDE.md maintenance after scaffolding |
+| **plugin-dev** | `/create-plugin` | Develop project-specific plugins |
+| **superpowers** | `/plan` | Architecture planning before scaffolding |
+
 ## Reference Files
 
 | File | Contains |

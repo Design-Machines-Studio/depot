@@ -268,3 +268,14 @@ All paths are relative to the livewires repo root unless noted.
 | **layout** | design-practice | Grid and editorial layout philosophy |
 | **development** | assembly | When building Assembly pages using Live Wires |
 | **wcag-audit-patterns** | accessibility-compliance | Accessibility auditing for Live Wires markup |
+
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **compound-engineering** | `css-reviewer` agent | Automated CSS compliance and best practices checking |
+| **frontend-design** | Frontend skills | UI/UX implementation guidance |
+| **figma** | Design context tools | Extract design tokens and specs from Figma |
+| **playwright** | Browser tools | Visual regression testing of components |

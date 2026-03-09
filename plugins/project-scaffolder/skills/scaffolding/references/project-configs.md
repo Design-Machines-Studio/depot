@@ -347,6 +347,34 @@ After modifying code, check if updates are needed in:
 - [ ] Any skill files (flag changes for depot, don't edit directly)
 - [ ] API documentation
 - [ ] Manual/docs pages
+
+## Recommended Plugins
+
+Install these plugins from the Design Machines depot for enhanced development:
+
+| Plugin | Purpose |
+|--------|---------|
+| **superpowers** | TDD, debugging, verification workflows |
+| **compound-engineering** | go-build-verifier, css-reviewer, security-sentinel agents |
+| **context7** | Live documentation for Go, Templ, Datastar |
+| **live-wires** | CSS framework with layout primitives and baseline rhythm |
+| **hookify** | Create custom hooks for project-specific workflows |
+| **claude-md-management** | Keep CLAUDE.md current as the project evolves |
+
+## Serena Configuration
+
+Create `.serena/project.yml` for semantic code intelligence:
+
+```yaml
+# {{PROJECT_NAME}} - Go/Templ/Datastar
+ignored_paths:
+  - node_modules
+  - _dev
+  - "*.min.js"
+  - "*.min.css"
+```
+
+Add `.serena` to `.gitignore`. Register the project path in `~/.serena/serena_config.yml`.
 ```
 
 ### go-library
@@ -407,6 +435,29 @@ After modifying code, check if updates are needed in:
 - [ ] README.md
 - [ ] Go doc comments
 - [ ] Examples in _test.go files
+
+## Recommended Plugins
+
+| Plugin | Purpose |
+|--------|---------|
+| **superpowers** | TDD, debugging, verification workflows |
+| **context7** | Live documentation for Go standard library |
+| **live-wires** | CSS framework (if project includes web UI) |
+| **hookify** | Create custom hooks for project-specific workflows |
+| **claude-md-management** | Keep CLAUDE.md current as the project evolves |
+
+## Serena Configuration
+
+Create `.serena/project.yml` for semantic code intelligence:
+
+```yaml
+# {{PROJECT_NAME}} - Go Library
+ignored_paths:
+  - _dev
+  - vendor
+```
+
+Add `.serena` to `.gitignore`. Register the project path in `~/.serena/serena_config.yml`.
 ```
 
 ### css-framework
@@ -479,6 +530,32 @@ After modifying code, check if updates are needed in:
 - [ ] README.md
 - [ ] Documentation site pages
 - [ ] Component examples
+
+## Recommended Plugins
+
+| Plugin | Purpose |
+|--------|---------|
+| **superpowers** | TDD, debugging, verification workflows |
+| **compound-engineering** | css-reviewer for automated compliance checking |
+| **live-wires** | CSS framework with layout primitives and baseline rhythm |
+| **figma** | Extract design tokens and specs from Figma |
+| **frontend-design** | UI/UX implementation guidance |
+| **hookify** | Create custom hooks for project-specific workflows |
+
+## Serena Configuration
+
+Create `.serena/project.yml` for semantic code intelligence:
+
+```yaml
+# {{PROJECT_NAME}} - CSS Framework
+ignored_paths:
+  - node_modules
+  - _dev
+  - bower_components
+  - dist
+```
+
+Add `.serena` to `.gitignore`. Register the project path in `~/.serena/serena_config.yml`.
 ```
 
 ### craft-cms
@@ -558,6 +635,33 @@ After modifying code, check if updates are needed in:
 - [ ] README.md
 - [ ] Template documentation
 - [ ] Plugin/module documentation
+
+## Recommended Plugins
+
+| Plugin | Purpose |
+|--------|---------|
+| **superpowers** | TDD, debugging, verification workflows |
+| **context7** | Live documentation for Craft CMS, Twig, Yii2 |
+| **live-wires** | CSS framework with layout primitives and baseline rhythm |
+| **figma** | Extract design specs when building templates |
+| **hookify** | Create custom hooks for project-specific workflows |
+| **claude-md-management** | Keep CLAUDE.md current as the project evolves |
+
+## Serena Configuration
+
+Create `.serena/project.yml` for semantic code intelligence:
+
+```yaml
+# {{PROJECT_NAME}} - Craft CMS
+ignored_paths:
+  - vendor
+  - storage
+  - .ddev
+  - web/cpresources
+  - node_modules
+```
+
+Add `.serena` to `.gitignore`. Register the project path in `~/.serena/serena_config.yml`.
 ```
 
 ---

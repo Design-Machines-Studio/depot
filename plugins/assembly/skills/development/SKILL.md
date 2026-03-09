@@ -446,6 +446,18 @@ Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` fo
 | **strategy** | design-machines | Product positioning, pricing, client pipeline context |
 | **typography** | design-practice | Type scale, baseline rhythm, Live Wires alignment |
 
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **compound-engineering** | `go-build-verifier`, `css-reviewer`, `security-sentinel` agents | Go build verification, CSS compliance, security review |
+| **context7** | `/context7` | Live documentation lookup for Go stdlib, Templ, Datastar |
+| **playwright** | Browser tools | E2E visual testing beyond curl smoke tests |
+| **superpowers** | `/debug`, `/verify` | Debug tricky Go issues, verify builds |
+| **feature-dev** | `/feature-dev` | Structured feature development with architecture exploration |
+
 ## Cross-References
 
 - **council plugin** (`decolonial-language` skill): For values-aligned terminology when naming components, writing UI labels, seeding mock data, and writing microcopy. Provides the three-layer architecture (legal → bridge → cultural) for mapping BC Act terms to solidarity economy language. Default to cultural layer in member-facing templates; use legal layer only in generated compliance documents.

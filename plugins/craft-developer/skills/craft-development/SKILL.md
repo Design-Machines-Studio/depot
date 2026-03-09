@@ -378,6 +378,17 @@ For detailed patterns, see:
 | **craft-mcp** | craft-developer | Direct database/schema inspection via MCP |
 | **livewires** | live-wires | Frontend CSS when building Craft templates |
 
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **context7** | `/context7` | Live documentation for Craft CMS, Twig, Yii2 |
+| **playwright** | Browser tools | Visual testing of rendered Craft templates |
+| **superpowers** | `/debug` | Debug Craft template and query issues |
+| **figma** | Design context tools | Extract design specs when building Craft templates |
+
 ## Community Support Tips
 
 When helping in Discord/forums:

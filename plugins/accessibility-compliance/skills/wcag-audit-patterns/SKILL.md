@@ -238,3 +238,16 @@ When an audit finds violations, fix in this order:
 | [${CLAUDE_SKILL_DIR}/references/live-wires-a11y.md](${CLAUDE_SKILL_DIR}/references/live-wires-a11y.md) | Live Wires framework accessibility reference |
 | [${CLAUDE_SKILL_DIR}/references/templ-datastar-a11y.md](${CLAUDE_SKILL_DIR}/references/templ-datastar-a11y.md) | Go + Templ + Datastar accessibility patterns |
 | [${CLAUDE_SKILL_DIR}/references/craft-cms-a11y.md](${CLAUDE_SKILL_DIR}/references/craft-cms-a11y.md) | Craft CMS + Twig accessibility patterns |
+
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **accessibility-compliance (official)** | WCAG skills | General WCAG 2.2 rules and testing methodology |
+| **compound-engineering** | a11y review agents | Automated HTML, CSS, and dynamic content a11y checks |
+| **playwright** | Browser tools | Automated accessibility testing with axe-core |
+| **superpowers** | `/verify` | Verify remediation after fixing a11y issues |
+
+> **Note:** The official `accessibility-compliance` plugin provides general-purpose WCAG 2.2 auditing. This depot skill adds stack-specific patterns for Live Wires CSS, Go+Templ+Datastar, and Craft CMS. Use both together: the official plugin for rules, this skill for implementation patterns.

@@ -326,6 +326,15 @@ When working in HTML/CSS, reference the Live Wires `livewires` skill for impleme
 | **livewires** | live-wires | CSS implementation of type scales, fluid type, baseline rhythm |
 | **layout** | design-practice | Grid systems that typography sits within |
 
+## Ecosystem Integration
+
+Official and third-party Claude Code plugins that complement this skill:
+
+| Plugin | Tool | When to Use |
+|--------|------|-------------|
+| **figma** | Design context tools | Evaluate typography decisions in Figma designs |
+| **frontend-design** | Frontend skills | Implementation guidance for type systems |
+
 ---
 
 ## Domain Reference Guide
