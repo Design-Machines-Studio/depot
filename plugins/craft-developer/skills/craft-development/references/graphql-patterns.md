@@ -2,6 +2,21 @@
 
 Complete GraphQL reference for headless Craft CMS development.
 
+## Contents
+- [Query Fundamentals](#query-fundamentals) (line 5) — Section queries, generic entries, by slug
+- [Inline Fragments](#inline-fragments-type-specific-fields) (line 46) — Type-specific field access
+- [Relational Fields](#relational-fields) (line 70) — Assets, categories/tags, related entries
+- [Matrix Fields](#matrix-fields) (line 119) — Craft 5 patterns, field-specific and generic queries
+- [Directives](#directives) (line 163) — Dates, image transforms, markdown
+- [Filtering](#filtering) (line 199) — Custom fields, relations, dates, combined
+- [Mutations](#mutations) (line 255) — Save entries, Matrix mutations (Craft 5), delete
+- [Global Sets](#global-sets) (line 310)
+- [Aggregates](#aggregates) (line 327) — Count, grouped counts
+- [Craft 4 vs 5 Differences](#craft-4-vs-5-differences) (line 346) — Type naming, Matrix, empty arrays
+- [Singles Queries (5.8+)](#singles-queries-58) (line 375)
+- [Advanced Query Arguments (5.7+)](#advanced-query-arguments-57) (line 394)
+- [Performance Tips](#performance-tips) (line 413)
+
 ## Query Fundamentals
 
 ### Section-specific query

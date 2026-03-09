@@ -2,6 +2,13 @@
 
 settings.json, CLAUDE.md, and starter files for each project type. Replace all `{{PLACEHOLDER}}` values before writing.
 
+## Contents
+- [settings.json Templates](#settingsjson-templates) (line 7)
+  - go-templ-datastar (line 9), go-library (line 113), css-framework (line 148), craft-cms (line 183)
+- [CLAUDE.md Templates](#claudemd-templates) (line 234)
+  - go-templ-datastar (line 236), go-library (line 345), css-framework (line 405), craft-cms (line 477)
+- [Starter Files](#starter-files) (line 558) — todo.md, lessons.md, project-notion.md, sessions.md
+
 ---
 
 ## settings.json Templates

@@ -1,6 +1,6 @@
 ---
 name: craft-development
-description: Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Covers Craft 4 and Craft 5 patterns including breaking changes between versions.
+description: Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Trigger this skill for ANY Craft CMS question — entry queries, Matrix nesting, relatedTo directions, GraphQL mutations, template debugging, CP issues, `.all()` vs `.one()`, conditional field layouts, or "why does my query return nothing." Also trigger when helping in Craft Discord or Stack Exchange, when the user pastes Twig code with `craft.entries()`, or when debugging N+1 queries or cache invalidation. Covers Craft 4 and Craft 5 patterns including all breaking changes between versions and features through 5.9.
 ---
 
 # Craft CMS Developer
@@ -368,6 +368,15 @@ query {
 For detailed patterns, see:
 - `${CLAUDE_SKILL_DIR}/references/query-cookbook.md` - 30+ real-world query examples
 - `${CLAUDE_SKILL_DIR}/references/graphql-patterns.md` - Complete GraphQL reference
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **content-modeling** | craft-developer | Content architecture planning, Matrix strategy |
+| **craft-5-migration** | craft-developer | Breaking changes, upgrade patterns |
+| **craft-mcp** | craft-developer | Direct database/schema inspection via MCP |
+| **livewires** | live-wires | Frontend CSS when building Craft templates |
 
 ## Community Support Tips
 

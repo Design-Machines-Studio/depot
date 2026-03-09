@@ -1,6 +1,6 @@
 ---
 name: dataviz
-description: Design Machines data visualization and information graphics philosophy rooted in graphical integrity, data-ink efficiency, and editorial integration. Use when critiquing charts and graphs, advising on visualization choices, evaluating information graphics, or reviewing data presentations. Draws primarily on Dona M. Wong, Edward Tufte, and Francesco Franchi. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity.
+description: Design Machines data visualization and information graphics philosophy rooted in graphical integrity, data-ink efficiency, and editorial integration. Use when critiquing charts and graphs, choosing chart types, advising on visualization choices, evaluating information graphics, building dashboards, or reviewing any data presentation in HTML/CSS, SVG, D3.js, Figma, InDesign, Illustrator, or Affinity. Trigger this skill when the user asks about charts, graphs, infographics, data display, sparklines, pie charts, bar charts, line charts, dashboards, data-ink ratio, or how to present numbers visually — even casually like "should I use a pie chart here" or "this chart looks cluttered." Also trigger when building Assembly financial dashboards, equity visualizations, or any interface that displays quantitative data to co-op members. Draws primarily on Dona M. Wong, Edward Tufte, and Francesco Franchi.
 ---
 
 # Data Visualization

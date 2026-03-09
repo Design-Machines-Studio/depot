@@ -1,6 +1,6 @@
 ---
 name: identity
-description: Design Machines identity and logo design philosophy rooted in bold simplicity, systematic thinking, and cultural resonance. Use when critiquing logos and identity systems, advising on mark development, evaluating brand applications, or reviewing identity decisions. Draws on Paul Rand, Saul Bass, Aaron Draplin, Lance Wyman, and Milton Glaser. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity.
+description: Design Machines identity and logo design philosophy rooted in bold simplicity, systematic thinking, and cultural resonance. Use when critiquing logos and identity systems, advising on mark development, evaluating brand applications, designing visual identities, planning brand systems, or reviewing identity decisions in HTML/CSS, SVG, Figma, InDesign, Illustrator, or Affinity. Trigger this skill when the user asks about logos, marks, branding, brand identity, color palettes for brands, identity systems, brand guidelines, favicon design, or visual identity strategy — even casually like "does this logo work" or "what makes a good mark." Also trigger when working on Design Machines brand assets, client co-op branding, or any project where a mark needs to seed a systematic identity across applications. Draws on Paul Rand, Saul Bass, Aaron Draplin, Lance Wyman, and Milton Glaser.
 ---
 
 # Identity and Logo Design

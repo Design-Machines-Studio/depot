@@ -1,6 +1,6 @@
 ---
 name: strategy
-description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, or when context about Travis Gertz's positioning and target market is needed.
+description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, or when context about Travis Gertz's positioning and target market is needed. Trigger this skill even for casual mentions of DM pricing, naming decisions, the DM catalog, partner names (Chris, Mario, Ben, Rachel), specific co-op clients (TACO, Solid State), grant funding questions, or any reference to the conversion funnel between Live Wires and Assembly. If the user mentions anything about Design Machines as a business — finances, runway, positioning, partnerships, brand, go-to-market — this skill has the context.
 ---
 
 # Design Machines Strategy Skill
@@ -220,6 +220,24 @@ Lead with internal operations, not public-facing design.
 **The real competition:** Cobbled-together free tools plus hope.
 
 ---
+
+## Data Source Convention
+
+**Reference files** contain stable structural knowledge: pricing tiers, engagement phases, brand language rules, catalog architecture, partner archetypes. These rarely change.
+
+**ai-memory** contains dynamic state: current pipeline status, active financial runway, specific meeting dates, recent decisions, relationship updates. Search for entity names like "Design Machines OÜ", "Assembly", partner names, or client names.
+
+When in doubt: check the reference file first (faster, always available), then ai-memory for current state.
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **voice** | ghostwriter | Writing any DM content, copy, or communications |
+| **social-media** | ghostwriter | Platform-specific content distribution |
+| **governance** | council | Co-op domain knowledge for client conversations |
+| **development** | assembly | Technical Assembly architecture discussions |
+| **livewires** | live-wires | Live Wires framework positioning and technical details |
 
 ## Reference Files
 

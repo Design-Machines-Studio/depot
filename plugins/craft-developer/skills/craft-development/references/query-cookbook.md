@@ -2,6 +2,16 @@
 
 Real-world query patterns for common scenarios.
 
+## Contents
+- [Entry Queries](#entry-queries) (line 5) — Categories, lightswitches, search, pagination, siblings, dates
+- [Asset Queries](#asset-queries) (line 103) — Images, filename patterns, field usage
+- [Category/Tag Queries](#categorytag-queries) (line 131) — Categories with entries, entry counts
+- [User Queries](#user-queries) (line 154) — By group, with entries
+- [Matrix Field Queries](#matrix-field-queries) (line 173) — Type checking, specific types, eager loading, lazy eager loading
+- [Performance Patterns](#performance-patterns) (line 224) — N+1 avoidance, count, existence, IDs only
+- [Advanced Query Params (5.6+)](#advanced-query-params-56) (line 268) — Custom field orderBy/where, canonicals only
+- [Debugging Queries](#debugging-queries) (line 297) — Print SQL, dump, check params
+
 ## Entry Queries
 
 ### Get entries with ANY of multiple categories

@@ -1,6 +1,6 @@
 ---
 name: governance
-description: Worker cooperative governance expertise for BC Cooperative Association Act compliance, bylaw analysis, discovery processes, and Co-op OS system design. Use when working with cooperatives, analyzing bylaws, designing governance systems, conducting discovery for Co-op OS projects, interpreting voting thresholds, patronage allocation, member equity, compliance requirements, or any worker cooperative governance questions. Specializes in small worker cooperatives (5-50 members) in British Columbia, Canada. For values-aligned terminology and content strategy, also load the language skill in this plugin.
+description: Worker cooperative governance expertise for BC Cooperative Association Act compliance, bylaw analysis, discovery processes, and Assembly system design. Use when working with cooperatives, analyzing bylaws, designing governance systems, conducting discovery for Assembly projects, interpreting voting thresholds, patronage allocation, member equity, compliance requirements, or any worker cooperative governance questions. While it specializes in BC, Canada (5-50 member worker co-ops), the decision-making models, red flags, discovery framework, and governance module architecture apply to cooperatives in any jurisdiction. Trigger this skill for ANY cooperative governance question — voting mechanics, quorum rules, AGM prep, member lifecycle, equity structures, consent-based decisions, board composition — even if the user doesn't mention BC specifically. Also trigger when discussing TACO, Solid State, or any Assembly pilot, when the user asks about co-op compliance deadlines, or when designing governance UI flows.
 ---
 
 # Co-op Governance Skill
@@ -313,6 +313,14 @@ When bylaws conflict with the BC Act:
 | System design | → Module Architecture, → Journey Paradigm, → UX Principles |
 
 ---
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **decolonial-language** | council | Values-aligned terminology for UI labels, member communications, and content decisions |
+| **development** | assembly | Technical implementation — Docker-based Go development, Templ templates, Datastar reactivity |
+| **strategy** | design-machines | Business context, pricing, partnerships, pipeline status |
 
 ## Cross-References
 

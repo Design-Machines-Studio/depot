@@ -2,6 +2,17 @@
 
 *Personas and test scenarios for Co-op OS validation*
 
+## Contents
+- [Testing Philosophy](#testing-philosophy) (line 7)
+- [Primary Personas](#primary-personas) (line 18) — Maria (engaged worker), James (compliance officer), Aisha (new member)
+- [Secondary Personas](#secondary-personas) (line 199) — Chen (departing), David (administrator)
+- [Test Scenario Library](#test-scenario-library) (line 233) — 30+ scenarios across governance, members, equity, AGM, mobile
+- [Testing Protocol](#testing-protocol) (line 562) — How to run tests
+- [Scoring Framework](#scoring-framework) (line 591) — Rating criteria and thresholds
+- [Testing Cadence](#testing-cadence) (line 627) — When to test what
+- [Accessibility Requirements](#accessibility-requirements) (line 649) — WCAG compliance for governance UIs
+- [Quick Reference: What to Test When](#quick-reference-what-to-test-when) (line 662)
+
 ---
 
 ## Testing Philosophy

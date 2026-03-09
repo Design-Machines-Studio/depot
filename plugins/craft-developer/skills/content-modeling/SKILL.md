@@ -1,6 +1,6 @@
 ---
 name: content-modeling
-description: Content modeling methodology for Craft CMS projects. Use when designing content architecture, planning sections and fields, configuring Matrix fields, setting up CKEditor, or advising on content model decisions. Covers the three-layer approach (Foundation, Structure, Experience) and design system conventions.
+description: Content modeling methodology for Craft CMS projects. Use when designing content architecture, planning sections and fields, configuring Matrix fields, setting up CKEditor, advising on content model decisions, or structuring any CMS project. Trigger this skill when the user asks about sections vs channels vs structures, Matrix nesting strategy, entry type sharing, when to use CKEditor vs Matrix, field naming conventions, how to model relationships, color strategy for entry types, or any "how should I structure this content" question. Also trigger when planning new Craft projects from scratch, reviewing existing content models for improvements, onboarding a client to Craft CMS content architecture, or designing the content model for an Assembly pilot's public-facing site. Covers the three-layer approach (Foundation, Structure, Experience), design system conventions, and all Craft 5.5–5.9 field types and features.
 ---
 
 # Content Modeling for Craft CMS

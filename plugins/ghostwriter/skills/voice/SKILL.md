@@ -1,6 +1,6 @@
 ---
 name: voice
-description: Travis Gertz's personal writing voice and editorial style engine. Use when writing articles, essays, blog posts, marketing copy, emails, product descriptions, social media, documentation, or any content that should sound like Travis. Also use when reviewing or editing existing content to match his voice. Covers tone, sentence rhythm, argumentation structure, vocabulary, cultural references, platform-specific registers, and anti-AI-writing patterns.
+description: Travis Gertz's personal writing voice and editorial style engine. Use when writing articles, essays, blog posts, marketing copy, emails, product descriptions, social media, documentation, or any content that should sound like Travis. Also use when reviewing or editing existing content to match his voice. Covers tone, sentence rhythm, argumentation structure, vocabulary, cultural references, platform-specific registers, and anti-AI-writing patterns. Trigger this skill for ANY writing task where Travis is the author — even short Slack messages, commit messages, pull request descriptions, or one-line bios. If the output will have Travis's name on it or represent Design Machines, use this skill. Also trigger when the user asks to "make this sound more like me," "clean up the voice," "check for AI tells," or references any writing style concern.
 user-invocable: false
 ---
 
@@ -280,77 +280,22 @@ Tight. Hemingway-like. Personality, wit, and political sharpness are present but
 
 ## Platform-Specific Registers
 
-> **For format constraints, character limits, posting frequency, algorithmic mechanics, and hashtag strategy per platform, see the social-media skill (`skills/social-media/SKILL.md`).** This section covers only voice and tone per platform.
+> **For format constraints, character limits, posting frequency, algorithmic mechanics, and hashtag strategy per platform, see the social-media skill (`skills/social-media/SKILL.md`).**
 
-### LinkedIn
+### Social Platforms (LinkedIn, Instagram, Mastodon, Bluesky)
 
-The cornerstone-planting platform. Longer pieces that flesh out perspective, plant foundational ideas, and act as a beacon to people who are looking for something different. This is where you make the unobvious obvious.
+Each platform has a distinct voice register. **For the full per-platform voice guidance, see `${CLAUDE_SKILL_DIR}/references/platform-registers.md`.**
 
-**Purpose**: Show excitement and positivity about new frontiers. Connect with people's anxieties and lived experiences. Introduce what the co-op movement is and what the labor movement has already accomplished. Explain why workplace democracy is resisted. Explain why nobody knows about co-ops. Build the case that alternatives exist and work.
+Summary of the dial settings:
 
-**Voice specifics**:
-- Still opinionated. Still says things like "we accept dictatorships at work." The conviction is fully intact.
-- Posture is invitational — opening a conversation, not delivering a verdict. Assertion over accusation.
-- One strong idea per post, developed fully.
-- Complete sentences. Fragments are not the move here.
-- Warm and direct, occasionally personal. Not performatively vulnerable.
-- Political positions stated as clear beliefs, not as attacks on the reader.
-- No hashtag spam, engagement-bait, or LinkedIn-bro energy.
-- No product pitching. This is perspectives and ideas, not features and services.
-- The emotional register is genuine excitement about what's possible, grounded in real experience.
+| Platform | Temperature | Primary Mode | Fragments? |
+|----------|------------|-------------|------------|
+| **LinkedIn** | Warm, invitational | Cornerstone ideas, one strong idea per post | No |
+| **Instagram** | Confident, defiant | Propaganda posters, punchy captions | Sparingly |
+| **Mastodon** | Relaxed, curious | Workshop with door open, thinking out loud | Natural |
+| **Bluesky** | Warm, slightly polished | Like Mastodon with more structure | Natural |
 
-**What good LinkedIn looks like**: "Most people have never experienced workplace democracy. Not because it doesn't work — the global cooperative movement has 3 million organizations and 280 million workers proving it does. Because we've been taught not to look for it." Then develop that idea with specifics, history, personal experience.
-
-**What bad LinkedIn looks like**: "🚀 Excited to announce..." / "I was fired and it was the best thing that ever happened to me. Here's why." / "3 lessons I learned from [manufactured anecdote]" / Any post that could have been written by anyone about anything.
-
-### Instagram
-
-Propaganda for a democratic future. Poster-like content that acknowledges current events and anxieties while pointing toward something better. Designed visuals with punchy captions.
-
-**Purpose**: Visual-first platform. The images carry the weight. Captions reinforce, contextualize, or add a sharp observation. Content responds to the moment — current events, political developments, labor news, tech industry absurdity — and frames it through the cooperative/democratic lens.
-
-**Voice specifics**:
-- Quotes, short sayings, and snippets drawn from positioning and writing. The kind of thing you'd print on a sticker or screenprint on a poster.
-- Funny quotes and jokes that ridicule the capitalist order — sharp, not silly.
-- Captions are concise. A sentence or two of context, or a slightly longer observation that the visual sets up.
-- The tone is confident, occasionally defiant, always grounded.
-- Parody works well here — fake corporate announcements, satirical infographics, mock motivational posters.
-- Hashtags: minimal, intentional, never spammy.
-
-**Example copy register**:
-- "Your boss isn't smarter than you. They're just closer to the checkbook."
-- "Every co-op that runs well is propaganda for a better economy."
-- "The barrier to workplace democracy isn't complexity. It's the people who profit from your ignorance."
-- "Governance shouldn't feel like homework."
-
-### Mastodon
-
-The personal channel. The workshop with the door open.
-
-**Purpose**: The most relaxed register. A mix of light workplace democracy talk, product development updates, technology experiments, art direction thoughts, design process, building apps in novel ways, the business model, and non-work life. This is Travis the maker, the tinkerer, the person.
-
-**Voice specifics**:
-- Conversational, informal, thinking out loud.
-- Shares process and works-in-progress without polish.
-- Enthusiastic about tools, technologies, and creative approaches without being a hype machine.
-- Occasionally funny, often curious.
-- Non-work stuff is welcome — music, Bali life, food, whatever.
-- The political backbone is still there but it's relaxed. More "here's what I'm building and why it matters" than "here's what's wrong with the world."
-- Shorter posts, more frequent, more spontaneous.
-- Can engage with other people's posts and ideas freely.
-
-### Bluesky
-
-Very close to Mastodon, with slightly more structure. Somewhere between the workshop and the cornerstone planting, but leaning heavily toward the personal, conversational end.
-
-**Purpose**: Similar to Mastodon — personal, maker-oriented, politically grounded — but with slightly more polish and slightly broader audience awareness. Not marketing. Not cold. Not salesy. Just Travis thinking out loud to a somewhat larger room.
-
-**Voice specifics**:
-- Almost identical to Mastodon in warmth and informality.
-- Slightly more likely to develop an idea across a few posts or share a thread with more structure.
-- Still personal, still maker-oriented, still politically present without being preachy.
-- The current Mastodon guidelines apply here almost entirely. If it would sound right on Mastodon, it sounds right on Bluesky.
-- Should NOT feel like a distribution channel for LinkedIn content. If it starts feeling like marketing, pull it back.
+Key distinctions: LinkedIn is earnest and invitational (assertion over accusation). Instagram is visual-first propaganda (poster energy). Mastodon is the most personal and relaxed. Bluesky sits between Mastodon and LinkedIn, leaning personal. None should feel like marketing.
 
 ### Professional bios and introductions
 
@@ -460,6 +405,22 @@ When reviewing or editing content to match Travis's voice, check:
 Key DNA: Mark Fisher (*Capitalist Realism*) is the foundational frame. Armando Iannucci (Veep, The Thick of It) sets the humor tone. Hemingway and Dan Nelken shape the prose craft. John Abrams (*Companies We Keep*) started the co-op journey. The mix of political theory (Marx, Parenti, Harvey), dirtbag left comedy (Chapo, Gifted Hater, Carlin), subculture (Thrasher, punk), and pop culture (Nathan For You, Arrested Development, Curb) is the point — it signals range and refuses to stay in one register.
 
 ---
+
+## Domain Reference Guide
+
+| Topic | File | When to Load |
+|-------|------|--------------|
+| **Humor Filters** | `${CLAUDE_SKILL_DIR}/references/humor-filters.md` | Writing jokes, satire, or comedic content |
+| **Platform Voice Registers** | `${CLAUDE_SKILL_DIR}/references/platform-registers.md` | Writing for LinkedIn, Instagram, Mastodon, or Bluesky |
+| **Influence Map** | `${CLAUDE_SKILL_DIR}/references/influence-map.md` | Calibrating voice against intellectual and stylistic DNA |
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **social-media** | ghostwriter | Platform mechanics, format specs, posting cadence, hashtag strategy |
+| **strategy** | design-machines | DM positioning, brand language, product context for marketing copy |
+| **decolonial-language** | council | Co-op terminology for member-facing content |
 
 ## Source Material
 

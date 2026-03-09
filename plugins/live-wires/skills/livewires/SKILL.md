@@ -1,6 +1,6 @@
 ---
 name: livewires
-description: Live Wires CSS framework for editorial websites. Use when building HTML pages, writing CSS, advising on layout and styling, choosing spacing tokens, setting up cascade layers, creating responsive layouts, theming with color schemes, reviewing CSS for compliance, or debugging layout issues. Also use when working with stack, grid, cluster, sidebar, center, section, cover, or reel primitives, baseline rhythm, fluid typography, container queries, or logical properties. Provides layout primitives, utility classes, and design tokens based on a baseline rhythm system.
+description: Live Wires CSS framework for editorial websites. Use when building HTML pages, writing CSS, advising on layout and styling, choosing spacing tokens, setting up cascade layers, creating responsive layouts, theming with color schemes, reviewing CSS for compliance, or debugging layout issues. Trigger this skill whenever the user mentions Live Wires, CSS architecture, layout primitives (stack, grid, cluster, sidebar, center, section, cover, reel), baseline rhythm, fluid typography, container queries, logical properties, ITCSS, CUBE CSS, design tokens, or any CSS framework decision. Also trigger when building Assembly page layouts with CSS, reviewing HTML/CSS markup for any DM project, asking about spacing systems, or comparing Live Wires to Tailwind or other frameworks. If the user is writing CSS or HTML for any Design Machines project, this skill should be consulted.
 ---
 
 # Live Wires CSS Framework
@@ -257,3 +257,14 @@ All paths are relative to the livewires repo root unless noted.
 - Component modifiers: **double-dash** (`button--red`, `badge--success`)
 - Spacing tokens: `--line-*` pattern
 - Typography: Tailwind-style (`text-xs`, `text-sm`, `text-lg`, `text-2xl`, etc.)
+
+---
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **typography** | design-practice | Typographic theory behind Live Wires' type scale and rhythm |
+| **layout** | design-practice | Grid and editorial layout philosophy |
+| **development** | assembly | When building Assembly pages using Live Wires |
+| **wcag-audit-patterns** | accessibility-compliance | Accessibility auditing for Live Wires markup |

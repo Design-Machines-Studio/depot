@@ -1,6 +1,6 @@
 ---
 name: layout
-description: Design Machines editorial layout and art direction philosophy rooted in grid systems, reader-centered design, and visual storytelling. Use when critiquing page layouts, advising on grid construction, evaluating editorial spreads, or reviewing art direction decisions. Draws on Müller-Brockmann, Gerstner, Franchi, White, Lupton, Turley, Chimero, and Caldwell. Covers HTML/CSS, Figma, InDesign, Illustrator, and Affinity.
+description: Design Machines editorial layout and art direction philosophy rooted in grid systems, reader-centered design, and visual storytelling. Use when critiquing page layouts, advising on grid construction, evaluating editorial spreads, planning page structure, designing landing pages, building CSS Grid layouts, or reviewing art direction decisions in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Trigger this skill when the user asks about grids, columns, margins, gutters, whitespace, visual hierarchy, page structure, editorial design, magazine layouts, art direction, content pacing, or responsive layout strategy — even informally like "how should I lay this page out" or "the spacing feels wrong." Also trigger when designing Live Wires layout primitives, building Assembly page layouts, or any design review where spatial relationships and content organization matter. Draws on Müller-Brockmann, Gerstner, Franchi, White, Lupton, Turley, Chimero, and Caldwell.
 ---
 
 # Layout and Art Direction
@@ -189,6 +189,16 @@ When critiquing a layout, assess these eight dimensions:
 6. **Art Direction Courage** (Turley): Does the layout take creative risks? Is there energy and personality?
 7. **Purpose and Medium Fit** (Chimero): Has the designer asked Why before How? Does the layout work with the grain of its medium?
 8. **Cross-Media Viability** (Caldwell): Does the design system translate across print and digital?
+
+---
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **typography** | design-practice | Type hierarchy and rhythm that layouts contain |
+| **livewires** | live-wires | CSS layout primitives (stack, grid, sidebar, etc.) |
+| **dataviz** | design-practice | When layouts include charts or data displays |
 
 ---
 

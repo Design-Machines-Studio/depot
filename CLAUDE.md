@@ -49,7 +49,7 @@ Never commit plugin changes without also bumping the version.
 | **project-manager** | LT10 methodology, Notion-integrated planning, time tracking |
 | **council** | Worker cooperative governance (BC Co-op Act) and decolonial content strategy |
 | **design-machines** | DM business strategy, catalog, partnerships, revenue model |
-| **assembly** | Go/Templ/Datastar governance app prototyping |
+| **assembly** | Go/Templ/Datastar governance app development |
 | **live-wires** | CSS framework with layout primitives and baseline rhythm |
 | **ghostwriter** | Personal writing voice, editorial style engine, and voice editing |
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |

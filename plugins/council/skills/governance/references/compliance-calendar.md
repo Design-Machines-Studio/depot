@@ -2,6 +2,21 @@
 
 *BC Cooperative Association Act annual requirements for Co-op OS*
 
+## Contents
+- [The Co-op Year](#the-co-op-year-a-rhythm-of-democracy) (line 7)
+- [Critical Annual Deadlines](#critical-annual-deadlines) (line 13) — AGM anchor, financial statements, annual report
+- [Monthly Compliance Rhythm](#monthly-compliance-rhythm) (line 41) — Monthly and quarterly checklists
+- [Co-op OS Calendar Module](#co-op-os-calendar-module) (line 63) — Automated tracking, annual template
+- [Filing Requirements & Fees](#filing-requirements--fees) (line 125) — Registrar filings, consequences
+- [Meeting Cadence Requirements](#meeting-cadence-requirements) (line 148) — Board, general, investment shareholder
+- [Document Retention Schedule](#document-retention-schedule) (line 172) — Required records, archive management
+- [Director Term Management](#director-term-management) (line 204) — Tracking, staggered terms, transitions
+- [Auditor Calendar](#auditor-calendar) (line 257) — Audit requirements, appointment timeline
+- [Compliance Dashboard Concept](#compliance-dashboard-concept) (line 283) — Status board, alert levels
+- [Housing Cooperative Additional Items](#housing-cooperative-additional-calendar-items) (line 331)
+- [Integration Points](#integration-points) (line 353) — Financial, meeting, member management
+- [Quick Reference: Key Deadlines](#quick-reference-key-deadlines) (line 375)
+
 ---
 
 ## The Co-op Year: A Rhythm of Democracy

@@ -1,6 +1,6 @@
 ---
 name: craft-mcp
-description: Craft CMS MCP server tools for direct database and schema access. Use when querying Craft entries, inspecting field layouts, checking section configurations, listing assets, debugging content relationships, validating content model structure, creating or updating entries, browsing asset volumes, or diagnosing plugin issues through the MCP server. Also use when verifying that template code matches the actual content model, or when working with a Craft project that has the craft-mcp plugin installed.
+description: Craft CMS MCP server tools for direct database and schema access. Use when querying Craft entries, inspecting field layouts, checking section configurations, listing assets, debugging content relationships, validating content model structure, creating or updating entries, browsing asset volumes, or diagnosing plugin issues through the MCP server. Trigger this skill when the user has the craft-mcp plugin installed and wants to inspect their Craft installation programmatically — listing sections, checking entry types, running database queries, viewing deprecation warnings, debugging errors via logs, auditing content architecture, or testing GraphQL queries. Also trigger when verifying that template code matches the actual content model, when the user says "check my Craft setup" or "what sections do I have," or during any migration planning that needs schema inspection.
 ---
 
 # Craft MCP Server Guide

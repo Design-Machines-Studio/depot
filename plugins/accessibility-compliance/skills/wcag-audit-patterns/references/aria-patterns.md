@@ -2,6 +2,19 @@
 
 Accessible widget patterns following the WAI-ARIA Authoring Practices Guide (APG). Each pattern includes the required ARIA attributes, keyboard interactions, and implementation guidance for Live Wires + Templ projects.
 
+## Contents
+- [The First Rule of ARIA](#the-first-rule-of-aria) (line 7)
+- [Dialog (Modal)](#dialog-modal) (line 22) — Structure, Templ component, keyboard
+- [Tabs](#tabs) (line 71) — Structure, requirements, keyboard, activation modes
+- [Accordion](#accordion) (line 125) — Structure, requirements, keyboard
+- [Disclosure (Show/Hide)](#disclosure-showhide) (line 176)
+- [Menu Button](#menu-button) (line 195) — Structure, requirements, keyboard
+- [Combobox (Autocomplete)](#combobox-autocomplete) (line 234) — Structure, requirements, keyboard
+- [Alert and Status Messages](#alert-and-status-messages) (line 273) — Alert (assertive), Status (polite), rules
+- [Toast / Notification](#toast--notification) (line 314) — Requirements
+- [Tooltip](#tooltip) (line 343) — Requirements
+- [Loading / Progress](#loading--progress) (line 366) — Indeterminate, determinate, completion
+
 ---
 
 ## The First Rule of ARIA

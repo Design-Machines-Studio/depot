@@ -2,6 +2,23 @@
 
 *BC Cooperative Association Act compliance for Co-op OS*
 
+## Contents
+- [The Cooperative Financial Difference](#the-cooperative-financial-difference) (line 7)
+- [Share Capital Structure](#share-capital-structure) (line 19) — Membership, investment, and patronage shares
+- [Patronage Returns](#patronage-returns) (line 51) — Allocation methods, timing, taxation
+- [Dividend Limits](#dividend-limits) (line 92) — 8% default cap, investment share rules
+- [Solvency Requirements](#solvency-requirements) (line 110) — Tests before share redemption
+- [Reserve Requirements](#reserve-requirements) (line 151) — Reserve fund rules and recommendations
+- [Individual Capital Accounts (ICAs)](#individual-capital-accounts-icas) (line 184) — Structure, tracking, redemption
+- [Borrowing Powers](#borrowing-powers) (line 223)
+- [Financial Reporting Requirements](#financial-reporting-requirements) (line 250) — Statements, timing, member access
+- [Audit Requirements](#audit-requirements) (line 282) — When required, exemptions
+- [Annual Report Filing](#annual-report-filing) (line 313) — BC Registry requirements
+- [Co-op OS Financial Modules](#co-op-os-financial-modules) (line 330) — Equity dashboard, patronage calculator, ICA viewer
+- [Integration with Slate/Mario's Work](#integration-with-slatemarios-work) (line 386) — Data handoff points
+- [Red Flags: Financial Governance](#red-flags-financial-governance) (line 417)
+- [Quick Reference: Key Financial Limits](#quick-reference-key-financial-limits) (line 431)
+
 ---
 
 ## The Cooperative Financial Difference

@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Notion-integrated project planning, time tracking, and sprint management. Use at the START of every coding session to log time and check assigned todos. Use at the END of every session to update time entries and mark completed tasks. Also use when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, or asks for planning help. Reads project config from memory/project-notion.md.
+description: Notion-integrated project planning, time tracking, and sprint management. Use at the START of every coding session to log time and check assigned todos. Use at the END of every session to update time entries and mark completed tasks. Trigger when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, asks for planning help, says "what should I work on," "log my time," "create a task," "what's in this sprint," or any variation of checking project status or tracking work. Also trigger when Travis mentions sprints, todos, time tracking, Notion tasks, or asks about project capacity and prioritization. Reads project config from memory/project-notion.md.
 disable-model-invocation: true
 allowed-tools:
   - mcp__claude_ai_Notion__notion-search

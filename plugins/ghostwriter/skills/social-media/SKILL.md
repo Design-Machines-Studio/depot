@@ -1,6 +1,7 @@
 ---
 name: social-media
-description: "Platform-specific social media strategy for Design Machines. Use whenever drafting, scheduling, or advising on social media content for any platform — LinkedIn, Instagram, Bluesky, or Mastodon. Covers algorithm mechanics, format optimization, posting cadence, hashtag strategy, character limits, media specs, cross-posting adaptation, and content suppression triggers. Always pair with the voice skill for tone and register. Use this skill when the user mentions posting, social media, LinkedIn, Instagram, Mastodon, Bluesky, or asks about content format, timing, or platform strategy. Also use when adapting existing content for social distribution."
+description: "Platform-specific social media strategy for Design Machines. Use whenever drafting, scheduling, or advising on social media content for any platform — LinkedIn, Instagram, Bluesky, or Mastodon. Covers algorithm mechanics, format optimization, posting cadence, hashtag strategy, character limits, media specs, cross-posting adaptation, and content suppression triggers. Always pair with the voice skill for tone and register. Trigger this skill when the user mentions posting, social media, LinkedIn, Instagram, Mastodon, Bluesky, content calendar, hashtags, engagement, scheduling posts, or asks about content format, timing, or platform strategy. Also trigger when adapting existing content for social distribution, asking about optimal posting times from Bali, or discussing carousel/Reel/thread format decisions."
+user-invocable: false
 ---
 
 # Social Media Platform Intelligence

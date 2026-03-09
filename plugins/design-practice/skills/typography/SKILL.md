@@ -1,6 +1,6 @@
 ---
 name: typography
-description: Design Machines typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice. Use when critiquing typographic decisions, advising on typeface selection, evaluating rhythm and hierarchy, or reviewing typography in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Draws on Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig.
+description: Design Machines typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice. Use when critiquing typographic decisions, advising on typeface selection, evaluating rhythm and hierarchy, building type scales, choosing fonts for any project, setting up CSS typography, or reviewing typography in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Trigger this skill whenever the user asks about font sizes, line-height, leading, measure, type scales, modular scales, baseline grids, vertical rhythm, letter-spacing, font pairing, fluid type, clamp(), or any typographic system decision — even casually like "what size should my headings be" or "this text feels off." Also trigger when building or reviewing Live Wires type tokens, setting up Assembly page typography, or evaluating any design where type hierarchy matters. Draws on Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig.
 ---
 
 # Typography
@@ -316,6 +316,15 @@ This skill shares philosophy with the Live Wires CSS framework. Live Wires imple
 - `text-wrap: balance` and `text-wrap: pretty`
 
 When working in HTML/CSS, reference the Live Wires `livewires` skill for implementation specifics. This typography skill provides the *why*; Live Wires provides the *how*.
+
+---
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **livewires** | live-wires | CSS implementation of type scales, fluid type, baseline rhythm |
+| **layout** | design-practice | Grid systems that typography sits within |
 
 ---
 

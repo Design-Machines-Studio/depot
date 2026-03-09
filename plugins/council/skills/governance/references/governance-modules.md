@@ -2,6 +2,21 @@
 
 > **Related sections:** → BC Act Requirements (`bc-cooperative-act.md`) → Discovery Framework (`discovery-framework.md`) → UX Testing (`ux-testing.md`)
 
+## Contents
+- [Module Architecture Overview](#module-architecture-overview) (line 13)
+- [Tier Structure](#tier-structure) (line 19) — MVP, Core, Advanced tiers
+- [Module Specifications](#module-specifications) (line 48)
+  - [Members Module (MVP)](#members-module-mvp) (line 50)
+  - [Governance Module (MVP + Advanced)](#governance-module-mvp--advanced) (line 102)
+  - [Equity Module (Core)](#equity-module-core) (line 155)
+  - [Records & Compliance Module (MVP)](#records--compliance-module-mvp) (line 205)
+  - [Calendar Module (MVP)](#calendar-module-mvp) (line 229)
+  - [Documentation Module (Core)](#documentation-module-core) (line 255)
+  - [Compensation Module (Advanced)](#compensation-module-advanced) (line 279)
+- [Module Dependencies](#module-dependencies) (line 313)
+- [Configuration by Client](#configuration-by-client) (line 337)
+- [Implementation Approach](#implementation-approach) (line 349) — Phase 1 (MVP), Phase 2 (Core), Phase 3 (Advanced)
+
 ## Module Architecture Overview
 
 Co-op OS uses a tiered module architecture. Clients don't see "modules"—they get a bespoke system built from these building blocks.

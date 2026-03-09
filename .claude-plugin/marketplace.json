@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": [
     {
@@ -37,7 +37,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "description": "Assembly governance application prototyping"
+      "description": "Assembly governance application development with Go, Templ, and Datastar"
     },
     {
       "name": "live-wires",

@@ -261,7 +261,10 @@ func rowFilter(p dto.ProposalResponse) string {
    open http://assembly.coop.site/{your-route}
    ```
 
-3. **Commit and push:**
+3. **Simplify:**
+   Run `/simplify` on the files you just changed. This catches complexity creep, dead code, redundant abstractions, and over-engineering before they compound. If `/simplify` makes changes, rebuild and retest.
+
+4. **Commit and push:**
    ```bash
    git add -A
    git commit -m "feat: Add {feature} page"
@@ -433,6 +436,15 @@ Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` fo
 3. **Phase 2 (Platform)**: Builder service + fixture marketplace. Per-client binaries. License management.
 
 ---
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **governance** | council | Co-op domain knowledge, voting thresholds, compliance requirements |
+| **decolonial-language** | council | UI labels, member-facing copy, terminology mappings |
+| **strategy** | design-machines | Product positioning, pricing, client pipeline context |
+| **typography** | design-practice | Type scale, baseline rhythm, Live Wires alignment |
 
 ## Cross-References
 

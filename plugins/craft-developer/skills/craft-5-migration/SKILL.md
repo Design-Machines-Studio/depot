@@ -1,6 +1,6 @@
 ---
 name: craft-5-migration
-description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, or updating code for Craft 5 patterns. Covers Matrix changes, empty array behavior, GraphQL updates, entrification, and new features through 5.9.
+description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, updating code for Craft 5 patterns, or debugging migration problems. Trigger this skill when the user mentions upgrading Craft, when queries return empty results unexpectedly (the empty array breaking change), when GraphQL types aren't found (section prefix removal), when Matrix blocks aren't rendering (block.type → block.type.handle), or when planning an entrification strategy for categories/tags/globals. Also trigger when checking plugin compatibility for Craft 5 or asking about new features in 5.5–5.9. Covers Matrix changes, empty array behavior, GraphQL updates, entrification, conditional field layouts, and all features through 5.9.
 argument-hint: "[file or section to migrate]"
 ---
 

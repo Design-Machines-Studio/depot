@@ -179,6 +179,31 @@ Output the full report to the user.
 
 ---
 
+### Phase 5.5: Simplification Pass
+
+After outputting the review report, perform a simplification pass on the changed files. This catches complexity, redundancy, and over-engineering that the code-simplicity-reviewer identified — and applies fixes automatically rather than just reporting them.
+
+**Execution:**
+
+1. Review each changed file for simplification opportunities: dead code removal, redundant abstractions, overly complex logic, unused imports/variables, unnecessary indirection, functions that can be inlined, and patterns that can be consolidated. Focus on the specific findings from the code-simplicity-reviewer agent, but also look for anything it missed.
+2. Apply simplification edits directly — this is not a report, it's an active refactoring pass. Make the code simpler, clearer, and shorter while preserving behavior.
+3. After making changes, verify the build still passes:
+   - Go projects: `docker compose exec app templ generate && docker compose exec app go build ./cmd/api`
+   - CSS projects: `npm run build` (or equivalent)
+   - Craft projects: clear caches if needed
+4. If no simplification opportunities exist, note "Simplification pass: clean" and continue.
+
+**Commit simplification changes separately** from the reviewed code:
+
+```bash
+git add -A
+git commit -m "refactor: simplify per dm-review pass"
+```
+
+This phase mirrors Claude Code's built-in `/simplify` command. If `/simplify` is available, you can invoke it directly instead of performing the pass manually.
+
+---
+
 ### Phase 6: Issue Tracking (Full mode only)
 
 **Skip this phase in Quick mode.**

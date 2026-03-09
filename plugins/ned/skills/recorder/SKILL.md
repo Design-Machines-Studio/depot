@@ -1,6 +1,6 @@
 ---
 name: recorder
-description: Captures conversation sessions into structured summaries, pushes observations to ai-memory entities, and creates Notion notes. Use when Travis says "capture this session", "log this", "save this conversation", "capture this", or any variation requesting session documentation. Also use when a long strategic conversation naturally concludes and significant decisions were made.
+description: Captures conversation sessions into structured summaries, pushes observations to ai-memory entities, creates Notion todos, and creates Notion notes. Use when Travis says "capture this session", "log this", "save this conversation", "capture this", "remember this", or any variation requesting session documentation. Also trigger proactively when a long strategic conversation naturally concludes and significant decisions, new information, or action items emerged — offer to capture even if Travis hasn't explicitly asked. Trigger when the conversation produced naming decisions, pricing changes, partnership updates, architecture decisions, client insights, or any information that should persist beyond this session.
 disable-model-invocation: true
 allowed-tools:
   - mcp__ai-memory__search_entities

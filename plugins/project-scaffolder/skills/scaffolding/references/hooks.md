@@ -129,14 +129,14 @@ MSG=""
 
 # Strong nudge at 3+ files — fires every time
 if [ "$TOTAL" -ge 3 ]; then
-  MSG="You have $TOTAL uncommitted file changes. Stop and commit now with a focused message. Keep commits to 1-4 files."
+  MSG="You have $TOTAL uncommitted file changes. Run /simplify on the changed files, then stop and commit with a focused message. Keep commits to 1-4 files."
 
 # Gentle nudge at 2+ files — fires once per HEAD (resets after each commit)
 elif [ "$TOTAL" -ge 2 ]; then
   MARKER="/tmp/{{PROJECT_PREFIX}}-commit-nudge-${HEAD}"
   if [ ! -f "$MARKER" ]; then
     touch "$MARKER"
-    MSG="$TOTAL files changed since last commit. Commit before making more changes."
+    MSG="$TOTAL files changed since last commit. Consider running /simplify, then commit before making more changes."
   fi
 fi
 
@@ -346,6 +346,9 @@ MSG="STOP — ${FILE_COUNT} files changed this session. Before finishing:"
 if [ -n "$AGENT_REMINDERS" ]; then
   MSG="${MSG}\n\nAgents to run (if not already done):${AGENT_REMINDERS}"
 fi
+
+# Simplification reminder
+MSG="${MSG}\n\nRun /simplify on changed files before finishing to catch complexity creep."
 
 # Uncommitted changes warning
 if [ -n "$CHANGES" ]; then
