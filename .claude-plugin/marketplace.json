@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "plugins": [
     {
@@ -68,6 +68,11 @@
       "name": "dm-review",
       "source": "./plugins/dm-review",
       "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, and visual browser testing"
+    },
+    {
+      "name": "the-local",
+      "source": "./plugins/the-local",
+      "description": "Self-hosted Matrix network for the workplace democracy movement. Element Web branding, Synapse config, and server ops."
     }
   ]
 }
