@@ -457,6 +457,7 @@ Official and third-party Claude Code plugins that complement this skill:
 | **playwright** | Browser tools | E2E visual testing beyond curl smoke tests |
 | **superpowers** | `/debug`, `/verify` | Debug tricky Go issues, verify builds |
 | **feature-dev** | `/feature-dev` | Structured feature development with architecture exploration |
+| **userback** | Feedback tools (MCP) | Triage user feedback, read console/network logs, update status. HTTP endpoint: `https://mcp.userback.io/v1/mcp/` (OAuth) |
 
 ## Cross-References
 
