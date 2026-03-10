@@ -63,7 +63,7 @@ exit 0
 
 **Event:** PreToolUse | **Matcher:** Edit|Write | **Applies to:** Projects using the planner workflow (opt-in)
 
-Blocks file modifications until the planner session start workflow completes (sprint check, todos, time entry).
+Blocks file modifications until the planner session start workflow completes (sprint check, todos).
 
 ```bash
 #!/bin/bash
@@ -89,8 +89,7 @@ echo "     /planner (or read the project-manager planner skill from depot)" >&2
 echo "  2. Check memory/sessions.md for last session context" >&2
 echo "  3. Query Sprints DB for active sprint (Status = In progress)" >&2
 echo "  4. Query Todos DB for this project's open sprint todos" >&2
-echo "  5. Create a Notion time entry for today" >&2
-echo "  6. Brief the user on sprint status" >&2
+echo "  5. Brief the user on sprint status" >&2
 echo "" >&2
 echo "Then mark session started: touch ${MARKER}" >&2
 exit 2
@@ -326,7 +325,7 @@ if [ -z "$ALL_CHANGES" ]; then
   # No changes at all — just remind about session end
   TODAY_MARKER="/tmp/{{PROJECT_PREFIX}}-session-${TODAY}"
   if [ -f "$TODAY_MARKER" ]; then
-    echo "{\"systemMessage\": \"Session end: Update Notion time entry (Days + Entry description) and append to memory/sessions.md.\"}"
+    echo "{\"systemMessage\": \"Session end: Append session summary to memory/sessions.md.\"}"
   fi
   exit 0
 fi
@@ -370,7 +369,6 @@ fi
 TODAY_MARKER="/tmp/{{PROJECT_PREFIX}}-session-${TODAY}"
 if [ -f "$TODAY_MARKER" ]; then
   MSG="${MSG}\n\nSession end workflow:"
-  MSG="${MSG}\n- Update Notion time entry: set Days worked and Entry description"
   MSG="${MSG}\n- Append session summary to memory/sessions.md"
 fi
 

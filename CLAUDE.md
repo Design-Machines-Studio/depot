@@ -59,7 +59,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 |---|---|
 | **ned** | Personal knowledge graph (ai-memory MCP) and session recorder |
 | **craft-developer** | Craft CMS 4/5 development patterns and query cookbook |
-| **project-manager** | LT10 methodology, Notion-integrated planning, time tracking |
+| **project-manager** | LT10 methodology, Notion-integrated planning, and sprint management |
 | **council** | Worker cooperative governance (BC Co-op Act) and decolonial content strategy |
 | **design-machines** | DM business strategy, catalog, partnerships, revenue model |
 | **assembly** | Go/Templ/Datastar governance app development |

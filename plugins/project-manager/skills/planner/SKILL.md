@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Notion-integrated project planning, time tracking, and sprint management. Use at the START of every coding session to log time and check assigned todos. Use at the END of every session to update time entries and mark completed tasks. Trigger when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, asks for planning help, says "what should I work on," "log my time," "create a task," "what's in this sprint," or any variation of checking project status or tracking work. Also trigger when Travis mentions sprints, todos, time tracking, Notion tasks, or asks about project capacity and prioritization. Reads project config from memory/project-notion.md.
+description: Notion-integrated project planning and sprint management. Use at the START of every coding session to check assigned todos. Use at the END of every session to mark completed tasks. Trigger when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, asks for planning help, says "what should I work on," "create a task," "what's in this sprint," or any variation of checking project status or tracking work. Also trigger when Travis mentions sprints, todos, Notion tasks, or asks about project capacity and prioritization. Reads project config from memory/project-notion.md.
 disable-model-invocation: true
 allowed-tools:
   - mcp__claude_ai_Notion__notion-search
@@ -17,7 +17,7 @@ allowed-tools:
 !`git branch --show-current 2>/dev/null || echo "not a git repo"`
 !`git log --oneline -3 2>/dev/null || echo "no recent commits"`
 
-Travis plans work in Notion (Projects, Todos, Sprints, Time Tracking). This skill gives Claude the knowledge to participate in that workflow — reading context, tracking time, updating task status, and assisting with sprint planning.
+Travis plans work in Notion (Projects, Todos, Sprints). This skill gives Claude the knowledge to participate in that workflow — reading context, updating task status, and assisting with sprint planning.
 
 **Philosophy:** Travis plans, Claude executes. Read freely, write carefully.
 
@@ -25,15 +25,13 @@ Travis plans work in Notion (Projects, Todos, Sprints, Time Tracking). This skil
 
 ### Database IDs
 
-Look up all database data source IDs from the `DM Notion Workspace` entity in ai-memory. The entity stores IDs for Projects, Todos, Time Tracking, Sprints, and Notes databases.
+Look up all database data source IDs from the `DM Notion Workspace` entity in ai-memory. The entity stores IDs for Projects, Todos, Sprints, and Notes databases.
 
 ### Read/Write Permissions (CRITICAL)
 
 | Action | Permission | When |
 |--------|-----------|------|
 | Query any database | ✅ Always | Anytime context is needed |
-| Create time entry | ✅ Auto | Session start |
-| Update time entry (Days, Entry) | ✅ Auto | Session end |
 | Update todo → "In progress" | ✅ Auto | When starting an assigned todo |
 | Update todo → "Done" | ✅ Auto | When finishing an assigned todo |
 | Create new todo | ⚠️ Only when Travis asks | "Add a todo for X" |
@@ -52,34 +50,21 @@ Look up all database data source IDs from the `DM Notion Workspace` entity in ai
 
 3. **Load assigned todos:** Query Todos DB for todos linked to this project in the current sprint where Status is NOT "Done" or "Someday maybe". These are the candidates for this session.
 
-4. **Create time entry:** Use the `time-tracker` agent or create directly:
-   - Entry: "TBD" (updated at session end)
-   - Days: 0.25 (default, updated at session end)
-   - Date: today
-   - Role: from project config
-   - Link to Project and Sprint
+4. **Read previous session:** Check `memory/sessions.md` for the last entry. Note what was done, what's pending, and anything learned.
 
-5. **Read previous session:** Check `memory/sessions.md` for the last entry. Note what was done, what's pending, and anything learned.
-
-6. **Brief Travis:** Share a concise summary: "Sprint 3 ends Feb 13. You have 4 open todos. Last session you worked on X. What should we focus on?"
+5. **Brief Travis:** Share a concise summary: "Sprint 3 ends Feb 13. You have 4 open todos. Last session you worked on X. What should we focus on?"
 
 ### During Session
 
 - When starting work on an assigned todo, update its Status to "In progress"
 - When finishing a todo, update its Status to "Done"
-- Track what you're doing — you'll need it for the time entry description
+- Track what you're doing — you'll summarize it in sessions.md at session end
 
 ### At Session End
 
-1. **Update time entry:** Set the Entry description (concise but specific) and Days worked:
-   - 0.25 = ~2 hours
-   - 0.50 = ~4 hours (half day)
-   - 0.75 = ~6 hours
-   - 1.00 = full day
+1. **Update todo statuses:** Any todos that changed during the session
 
-2. **Update todo statuses:** Any todos that changed during the session
-
-3. **Append to sessions.md:** Write a brief session summary (see Session Memory Convention below)
+2. **Append to sessions.md:** Write a brief session summary (see Session Memory Convention below)
 
 
 ## Sprint Planning Support
@@ -124,7 +109,7 @@ Format:
 
 - **Project:** [Project Name](https://www.notion.so/{page-id})
 - **Default Role:** Production
-- **Notes:** Any project-specific context for time entry descriptions
+- **Notes:** Any project-specific context
 ```
 
 This file is:
@@ -142,7 +127,6 @@ Append-only log. Claude writes a brief summary at the end of each session:
 ```markdown
 ## 2026-02-13 — [Brief description]
 
-**Duration:** 0.25 days
 **Sprint:** Sprint 3
 
 **Done:**

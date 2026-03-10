@@ -719,7 +719,6 @@ Append-only log for continuity between sessions.
 
 <!-- Format:
 ## YYYY-MM-DD — Brief description
-**Duration:** Days worked
 **Sprint:** Sprint name
 **Done:** Bullets
 **Pending:** Bullets

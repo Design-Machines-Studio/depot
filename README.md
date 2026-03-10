@@ -49,7 +49,7 @@ Craft CMS development expertise covering Craft 4 and 5. Provides four skills:
 Project management based on Louder Than Ten (LT10) principles. Provides two skills:
 
 - **lt10** — Estimation (90th percentile), scoping, pricing, scheduling, risk management, stakeholder alignment, and communication scripts
-- **planner** — Notion-integrated sprint planning, time tracking, and session workflows
+- **planner** — Notion-integrated sprint planning and session workflows
 
 ### council
 
