@@ -196,6 +196,45 @@ Every CSS rule must be in the correct layer:
 
 **Why the difference?** Layouts are compositional primitives meant to be combined freely. Components are more opinionated UI patterns with specific variants.
 
+## BEM Child Element Selectors Are an Anti-Pattern
+
+**`__` double-underscore child selectors must not be used.** Live Wires uses CUBE CSS with native nesting — not full BEM.
+
+Double-dash modifiers (`--variant`) on block-level components are fine. But `__` child element selectors add class verbosity that CSS nesting eliminates.
+
+```css
+/* ERROR: BEM child selectors */
+.card__title { }
+.card__body { }
+.workspace-switcher__trigger { }
+.workspace-switcher__menu { }
+
+/* CORRECT: CSS nesting */
+.card {
+  & .title { }
+  & .body { }
+}
+.workspace-switcher {
+  & > summary { }   /* semantic selector where unambiguous */
+  & > .menu { }     /* short scoped name where a class is needed */
+}
+```
+
+**In HTML**, look for class attributes with `__` in them — these are always wrong:
+```html
+<!-- ERROR: BEM child classes in HTML -->
+<summary class="workspace-switcher__trigger">
+<div class="workspace-switcher__menu">
+<li class="workspace-switcher__item workspace-switcher__item--current">
+
+<!-- CORRECT: short names, parent scopes them via CSS nesting -->
+<summary class="cluster cluster-compact">
+<div class="menu box">
+<li class="item--current">
+```
+
+**When reviewing:** Search for `__` in any CSS or HTML file. Every instance is a violation. Report as `error`.
+
 ## The Sacred Baseline
 
 All spacing MUST derive from `--line`. The scale: `--line-0`, `--line-025`, `--line-05`, `--line-075`, `--line-1`, `--line-15`, `--line-2`, `--line-3`, `--line-4`, `--line-5`, `--line-6`, `--line-7`, `--line-8`, `--line-1px`.

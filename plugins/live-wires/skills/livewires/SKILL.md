@@ -208,15 +208,83 @@ Live Wires uses native CSS only — no preprocessors. Key features: cascade laye
 
 ---
 
+## CSS Nesting Over BEM Child Selectors
+
+**CRITICAL: BEM `__` child element selectors are an anti-pattern in Live Wires.** Native CSS nesting makes them unnecessary.
+
+```css
+/* WRONG: BEM child element selectors */
+.card__title { font-weight: bold; }
+.card__body { padding: var(--line-1); }
+.card__footer { border-top: var(--line-1px) solid var(--color-border); }
+
+/* RIGHT: CSS nesting inside the block */
+.card {
+  & .title { font-weight: bold; }
+  & .body { padding: var(--line-1); }
+  & footer { border-top: var(--line-1px) solid var(--color-border); }
+}
+```
+
+Double-dash modifiers (`--variant`) are still correct for component variants:
+```css
+.card--featured { border: 2px solid var(--color-accent); }  /* correct */
+.card__featured { }  /* wrong — this is a child selector, not a variant */
+```
+
+**In HTML templates:** Child elements don't need the parent class prefix. Short names scoped by CSS nesting are enough:
+
+```html
+<!-- WRONG: BEM in HTML -->
+<div class="workspace-switcher">
+  <summary class="workspace-switcher__trigger">
+  <div class="workspace-switcher__menu">
+    <li class="workspace-switcher__item workspace-switcher__item--current">
+
+<!-- RIGHT: Short names, styled via nesting in CSS -->
+<div class="workspace-switcher">
+  <summary class="cluster cluster-compact">
+  <div class="menu box">
+    <li class="item--current">
+```
+
+**Use semantic element selectors** where the element is unique in context (e.g., `summary` inside `details`, `caption` inside a table). Only add a class when the element selector is ambiguous.
+
+---
+
+## When to Write New Component CSS
+
+Before writing any CSS, work through this decision tree in order:
+
+1. **Layout/flow problem?** → Use a primitive (`.stack`, `.cluster`, `.grid`, `.sidebar`, `.box`)
+2. **Color/theme problem?** → Use a scheme (`.scheme-accent`, `.scheme-subtle`)
+3. **One-off override?** → Use a utility (`.text-sm`, `.font-semibold`, `.text-muted`)
+4. **State change?** → Use a data attribute (`data-state="active"`, `data-open`)
+5. **Truly unique structure that repeats 3+ times?** → Write a minimal CSS component
+
+```html
+<!-- WRONG: Writing custom CSS for what's already a primitive -->
+<style>
+  .co-op-list { display: flex; flex-direction: column; gap: var(--line-1); }
+</style>
+<div class="co-op-list">
+
+<!-- RIGHT: Use the primitive -->
+<div class="stack">
+```
+
+---
+
 ## Best Practices
 
 1. Start with semantic HTML - it looks good with zero classes
 2. Add layout primitives first: `.stack`, `.grid`, `.cluster`, `.center`
 3. Add utilities for art direction
-4. Use `--line-*` tokens - never arbitrary pixel values
-5. Use container queries (`@md`, `@lg`) over viewport media queries
-6. Use HTML entities: `&mdash;`, `&middot;`, `&pound;`
-7. Use existing token variables (`--color-fg`, `--color-subtle`, `--line-*`) directly rather than creating component-specific custom properties (`--card-bg`, `--card-text-color`) unless you need scheme-context overrides or external theming hooks
+4. **Use CSS nesting (`&`) for child elements -- never BEM `__` child selectors**
+5. Use `--line-*` tokens - never arbitrary pixel values
+6. Use container queries (`@md`, `@lg`) over viewport media queries
+7. Use HTML entities: `&mdash;`, `&middot;`, `&pound;`
+8. Use existing token variables (`--color-fg`, `--color-subtle`, `--line-*`) directly rather than creating component-specific custom properties (`--card-bg`, `--card-text-color`) unless you need scheme-context overrides or external theming hooks
 
 ---
 
