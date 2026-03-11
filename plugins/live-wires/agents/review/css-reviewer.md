@@ -137,7 +137,7 @@ Don't create layout CSS when these exist:
 | `.center` | (none) | Centered max-width content |
 | `.section` | `-snug` | Vertical section with padding |
 | `.cover` | (none) | Full-height vertical centering |
-| `.box` | `-tight` | Simple padding wrapper |
+| `.box` | `-tight`, `-loose` | Simple padding wrapper |
 | `.reel` | `-narrow`, `-medium`, `-wide`, `-compact`, `-spacious`, `-no-scrollbar`, `-padded` | Horizontal scroll |
 
 ## Components (Built-in)
@@ -234,6 +234,56 @@ Double-dash modifiers (`--variant`) on block-level components are fine. But `__`
 ```
 
 **When reviewing:** Search for `__` in any CSS or HTML file. Every instance is a violation. Report as `error`.
+
+## State Classes Are an Anti-Pattern
+
+**State must use `data-*` attributes, not CSS classes.** This is the Exception layer in CUBE CSS.
+
+Look for these patterns -- they are always wrong:
+
+```css
+/* ERROR: state as CSS classes */
+.nav-link.active { }
+.nav-link.is-active { }
+.button.disabled { }
+.panel.is-open { }
+.tab.selected { }
+.form-field.has-error { }
+
+/* CORRECT: data attribute selectors */
+.nav-link {
+  &[data-state="active"] { }
+}
+.button {
+  &[data-state="disabled"] { }
+}
+.panel {
+  &[data-open] { }
+}
+.tab {
+  &[data-state="active"] { }
+}
+.form-field {
+  &[data-state="error"] { }
+}
+```
+
+**In HTML**, look for state-like class names:
+```html
+<!-- ERROR: state as classes -->
+<a class="nav-link active">
+<a class="nav-link is-active">
+<button class="button disabled">
+
+<!-- CORRECT: data attributes -->
+<a class="nav-link" data-state="active">
+<button class="button" data-state="disabled">
+<nav class="offcanvas" data-open>
+```
+
+**Common state class patterns to flag:** `.active`, `.is-active`, `.is-open`, `.is-closed`, `.is-visible`, `.is-hidden`, `.disabled`, `.selected`, `.expanded`, `.collapsed`, `.has-error`, `.loading`
+
+**When reviewing:** Search for `.is-`, `.active`, `.disabled`, `.selected`, `.expanded`, `.collapsed`, `.has-` in CSS selectors and class attributes. Report as `warning` with suggestion to use `data-*` attributes.
 
 ## The Sacred Baseline
 
@@ -351,6 +401,18 @@ When reviewing Templ templates or HTML:
 
 5. **Scheme inheritance check**: Is `.scheme-*` applied to containers and inherited, or duplicated on individual elements?
 
+6. **Class ordering check**: Are classes ordered layout -> block -> variant -> utilities?
+   ```html
+   <!-- WRONG --> <section class="mt-4 callout stack scheme-warm callout--featured">
+   <!-- RIGHT --> <section class="stack callout callout--featured scheme-warm mt-4">
+   ```
+
+7. **State pattern check**: Are `data-*` attributes used for state, not CSS classes?
+   ```html
+   <!-- WRONG --> <a class="nav-link active">
+   <!-- RIGHT --> <a class="nav-link" data-state="active">
+   ```
+
 ## Review Workflow
 
 1. **Identify changes** from git diff or file list
@@ -362,6 +424,8 @@ When reviewing Templ templates or HTML:
 7. **Check HTML** — trust defaults, minimal utility usage, correct primitives
 8. **Check modern CSS** — logical properties, container queries, nesting
 9. **Check theming** — tokens used directly, custom properties only when justified
+10. **Check state patterns** — `data-*` attributes over `.is-*`, `.active`, `.disabled` classes
+11. **Check class ordering** — layout -> block -> variant -> utilities
 
 ## Output Format
 
@@ -380,6 +444,8 @@ When reviewing Templ templates or HTML:
 - [pass/issue] Typography triplets complete
 - [pass/issue] Custom properties minimized
 - [pass/issue] Modern CSS patterns
+- [pass/issue] State patterns (data-* over .is-*, .active, .disabled)
+- [pass/issue] Class ordering (layout -> block -> variant -> utilities)
 
 ### Suggestions
 - Improvements that aren't violations

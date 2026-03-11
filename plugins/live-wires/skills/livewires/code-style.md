@@ -1,5 +1,87 @@
 # Code Style Guidelines
 
+## CUBE CSS Layer Mapping
+
+Live Wires uses [CUBE CSS](https://cube.fyi/) by Andy Bell. Every class and rule belongs in a specific layer:
+
+| CUBE Layer | Live Wires Layer | Directory | Naming Pattern |
+|------------|-----------------|-----------|----------------|
+| -- | `tokens` | `1_tokens/` | CSS custom properties |
+| -- | `reset` | `3_generic/` | Browser normalization |
+| -- | `base` | `4_elements/` | Semantic element defaults |
+| Composition | `layouts` | `5_layouts/` | `.{layout}` / `.{layout}-{variant}` (single-dash) |
+| Block | `components` | `6_components/` | `.{component}` / `.{component}--{variant}` (double-dash) |
+| Utility | `utilities` | `7_utilities/` | `.{abbrev}-{value}` |
+| Exception | *(inline via `data-*`)* | -- | `[data-state="value"]` / `[data-attr]` |
+
+Most styling is handled by defaults and utilities. Components should be minimal.
+
+## State with Data Attributes
+
+State changes use `data-*` attributes, NOT CSS classes. This is the Exception layer in CUBE CSS.
+
+```css
+/* WRONG: state as CSS classes */
+.nav-link.active { }
+.nav-link.is-active { }
+.button.disabled { }
+
+/* RIGHT: data attributes with CSS nesting */
+.nav-link {
+  &[data-state="active"] {
+    color: var(--color-accent);
+  }
+}
+.button {
+  &[data-state="disabled"] {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+}
+```
+
+**Named states** (multi-value): `[data-state="active"]`, `[data-state="loading"]`, `[data-state="error"]`
+
+**Boolean states** (on/off): `[data-open]`, `[data-active]`, `[data-expanded]`
+
+```html
+<nav class="offcanvas" data-open>...</nav>
+<a href="/" class="nav-link" data-state="active">Home</a>
+```
+
+**JavaScript:** Use `element.dataset.state = 'active'` or `element.toggleAttribute('data-open')`.
+
+## Class Order
+
+Order classes from general to specific:
+
+1. Layout/composition classes
+2. Block/component classes
+3. Variant modifiers
+4. Utility classes
+
+```html
+<!-- Layout -> Block -> Variant -> Utilities -->
+<section class="stack box callout callout--featured scheme-warm mt-4">
+```
+
+## HTML Attribute Order
+
+For consistency, order attributes as:
+
+1. `class`
+2. `id`
+3. `data-*`
+4. `src`, `href`, `for`
+5. `type`, `name`, `value`
+6. `aria-*`, `role`
+
+```html
+<button class="button button--red" id="delete-btn" data-state="disabled" type="button" aria-label="Delete item">
+  Delete
+</button>
+```
+
 ## Avoid Inline Styles
 
 Always check if a utility class exists before adding inline styles. Live Wires has comprehensive utilities:

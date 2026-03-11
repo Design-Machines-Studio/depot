@@ -153,7 +153,7 @@ For detailed reference, see these files in the same directory:
 - **[utilities.md](utilities.md)** — Typography, Spacing, Color Schemes, Container Queries
 - **[patterns.md](patterns.md)** — Article Structure, Hero, Statistics Grid, Responsive Picture
 - **[theming.md](theming.md)** — Visual transformation workflow, color scales, typography, accessibility
-- **[code-style.md](code-style.md)** — Avoid inline styles, use schemes, placeholder images
+- **[code-style.md](code-style.md)** — CUBE CSS mapping, data-* state patterns, class/attribute ordering, inline styles, schemes, placeholders
 - **[qa-testing.md](qa-testing.md)** — QA testing system for prototypes
 
 ---
@@ -194,13 +194,21 @@ All spacing derives from `--line`. Use `--line-*` tokens for spacing:
 --line-0, --line-025, --line-05, --line-075, --line-1, --line-15, --line-2, --line-3, --line-4, --line-5, --line-6, --line-7, --line-8, --line-1px
 ```
 
+## CUBE CSS Methodology
+
+Live Wires uses **[CUBE CSS](https://cube.fyi/)** by Andy Bell — a methodology that embraces the cascade rather than fighting it.
+
+**CUBE** stands for **Composition, Utility, Block, Exception**. Compositions are layout primitives (single-dash variants). Blocks are components (double-dash variants). Utilities are single-purpose classes. Exceptions are state changes via `data-*` attributes. See [code-style.md](code-style.md) for the full layer mapping table.
+
+**The key insight:** Most styling is handled by global defaults and utilities. By the time you reach "blocks" (components), there's minimal work left. This is why inventing new component classes is almost always wrong — the answer is usually a layout primitive, a utility, or a scheme.
+
 ## CSS Cascade Layers
 
 ```css
 @layer tokens, reset, base, layouts, components, utilities;
 ```
 
-Utilities always win over components, components over layouts, etc.
+Utilities always win over components, components over layouts, etc. No `!important` needed — cascade layers handle specificity.
 
 ## Modern CSS Features
 
@@ -210,7 +218,7 @@ Live Wires uses native CSS only — no preprocessors. Key features: cascade laye
 
 ## CSS Nesting Over BEM Child Selectors
 
-**CRITICAL: BEM `__` child element selectors are an anti-pattern in Live Wires.** Native CSS nesting makes them unnecessary.
+**BEM `__` child element selectors are an anti-pattern in Live Wires.** Native CSS nesting makes them unnecessary.
 
 ```css
 /* WRONG: BEM child element selectors */
@@ -232,7 +240,7 @@ Double-dash modifiers (`--variant`) are still correct for component variants:
 .card__featured { }  /* wrong — this is a child selector, not a variant */
 ```
 
-**In HTML templates:** Child elements don't need the parent class prefix. Short names scoped by CSS nesting are enough:
+**In HTML templates:** Child elements don't need the parent class prefix. CSS nesting scopes them. Keep names short:
 
 ```html
 <!-- WRONG: BEM in HTML -->
@@ -275,16 +283,68 @@ Before writing any CSS, work through this decision tree in order:
 
 ---
 
+## State with Data Attributes (Exceptions)
+
+**State changes use `data-*` attributes, NOT CSS classes.** This is the Exception layer in CUBE CSS.
+
+```css
+/* WRONG: state as CSS classes */
+.nav-link.active { color: var(--color-accent); }
+.nav-link.is-active { color: var(--color-accent); }
+.button.disabled { opacity: 0.5; }
+
+/* RIGHT: state as data attributes */
+.nav-link {
+  &[data-state="active"] {
+    color: var(--color-accent);
+    font-weight: var(--font-semibold);
+  }
+}
+.button {
+  &[data-state="disabled"] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+}
+```
+
+**Named states** for multi-value state: `[data-state="active"]`, `[data-state="loading"]`, `[data-state="error"]`, `[data-state="disabled"]`
+
+**Boolean states** for simple on/off: `[data-open]`, `[data-active]`, `[data-expanded]`, `[data-hidden]`
+
+```html
+<!-- Boolean state -->
+<nav class="offcanvas" data-open>...</nav>
+
+<!-- Named state -->
+<a href="/" class="nav-link" data-state="active">Home</a>
+```
+
+**Why data attributes over classes:**
+- **Semantic:** State is data, not styling
+- **JS-friendly:** `element.dataset.state = 'active'` is cleaner than classList
+- **Queryable:** `document.querySelectorAll('[data-state="active"]')`
+- **Explicit:** Clear separation between structural classes and state
+
+---
+
 ## Best Practices
 
-1. Start with semantic HTML - it looks good with zero classes
+1. Start with semantic HTML -- it looks good with zero classes
 2. Add layout primitives first: `.stack`, `.grid`, `.cluster`, `.center`
 3. Add utilities for art direction
 4. **Use CSS nesting (`&`) for child elements -- never BEM `__` child selectors**
-5. Use `--line-*` tokens - never arbitrary pixel values
+5. Use `--line-*` tokens -- never arbitrary pixel values
 6. Use container queries (`@md`, `@lg`) over viewport media queries
 7. Use HTML entities: `&mdash;`, `&middot;`, `&pound;`
 8. Use existing token variables (`--color-fg`, `--color-subtle`, `--line-*`) directly rather than creating component-specific custom properties (`--card-bg`, `--card-text-color`) unless you need scheme-context overrides or external theming hooks
+9. **Use `data-*` attributes for state -- never `.is-active`, `.active`, or `.disabled` classes**
+10. **Order classes:** layout/composition, then block/component, then variant, then utilities
+    ```html
+    <section class="stack box callout callout--featured scheme-warm mt-4">
+    ```
+11. **Order HTML attributes:** class, id, data-*, src/href/for, type/name/value, aria-*/role
 
 ---
 
