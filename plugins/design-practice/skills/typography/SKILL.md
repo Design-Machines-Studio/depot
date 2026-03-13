@@ -319,6 +319,21 @@ When working in HTML/CSS, reference the Live Wires `livewires` skill for impleme
 
 ---
 
+## Design Machines Typeface
+
+All DM properties use **GT Standard** by Grilli Type (variable weight, WOFF2). GT Standard is a neo-grotesque sans-serif with warm humanist details -- systematic precision without corporate coldness.
+
+| Cut | Use | CSS Variable |
+|---|---|---|
+| **GT Standard VF** | Body, headings, UI, display | `--font-body` |
+| **GT Standard Mono VF** | Code, data tables, catalog codes | `--font-mono` |
+
+**No secondary typeface.** Weight contrast within GT Standard's full axis (Thin to Black) replaces typeface pairing -- a Vignelli-aligned decision. When working on any DM property (Design Machines, Assembly, Live Wires, The Local), do not introduce additional typefaces.
+
+For the full design system including color palette and token architecture, load the **strategy** skill from the **design-machines** plugin.
+
+---
+
 ## Companion Skills
 
 | Skill | Plugin | When to Load |

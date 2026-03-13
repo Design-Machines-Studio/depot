@@ -1,6 +1,6 @@
 ---
 name: strategy
-description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, and brand language. Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, or when context about Travis Gertz's positioning and target market is needed. Trigger this skill even for casual mentions of DM pricing, naming decisions, the DM catalog, partner names (Chris, Mario, Ben, Rachel), specific co-op clients (TACO, Solid State), grant funding questions, or any reference to the conversion funnel between Live Wires and Assembly. If the user mentions anything about Design Machines as a business — finances, runway, positioning, partnerships, brand, go-to-market — this skill has the context.
+description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, brand language, and design system (color palette, GT Standard typography, token architecture). Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, visual identity, color decisions, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, choosing colors or type for DM properties, or when context about Travis Gertz's positioning and target market is needed. Trigger this skill even for casual mentions of DM pricing, naming decisions, the DM catalog, partner names (Chris, Mario, Ben, Rachel), specific co-op clients (TACO, Solid State), grant funding questions, DM color palette, GT Standard font, purple-800, gold-400, scheme classes, or any reference to the conversion funnel between Live Wires and Assembly. If the user mentions anything about Design Machines as a business — finances, runway, positioning, partnerships, brand, design system, colors, go-to-market — this skill has the context.
 ---
 
 # Design Machines Strategy Skill
@@ -213,6 +213,32 @@ Lead with internal operations, not public-facing design.
 
 ---
 
+## Design System
+
+Design Machines uses a unified visual identity across all products. The system is built on **GT Standard** (variable, by Grilli Type) and a **7-family color palette** built in OKLCH and exported as sRGB hex.
+
+### Brand Colors
+
+| Role | Color | Value |
+|---|---|---|
+| **Brand primary** | Purple-800 | `#220d46` |
+| **Brand accent** | Gold-400 | `#ffcb09` |
+| **Bold accent** | Red-500 | `#ed1d26` (agitprop red) |
+| **Neutral base** | Iron-50 | `#fdf9f4` (warm white) |
+| **Body text** | Iron-900 | `#201d18` |
+
+### Token Architecture
+
+Three layers: **primitives** (raw color ramps, 7 families x 11 steps) → **semantic tokens** (functional roles like `--color-brand`, `--color-text-heading`) → **scheme classes** (self-applying utilities like `.scheme-purple`, `.scheme-bold`). Component CSS references semantic tokens. HTML uses scheme classes. Nobody touches primitives directly.
+
+### Typeface
+
+**GT Standard** (variable) for all text. **GT Standard Mono** (variable) for code, data, and catalog codes. No other typefaces across any DM property. Weight contrast within the family replaces typeface pairing.
+
+Full palette, token maps, scheme inventory, product assignments, and accessibility guidelines are in the design system reference.
+
+---
+
 ## Competitive Landscape
 
 **What co-ops actually use today:** Spreadsheets, Google Docs, Notion (if technical), generic tools (Monday, Asana), paper, nothing at all, expensive custom solutions ($50K+).
@@ -250,4 +276,5 @@ Load specific reference files based on needs:
 | Partnerships | `${CLAUDE_SKILL_DIR}/references/partnerships.md` | Partner coordination, pipeline |
 | Revenue model | `${CLAUDE_SKILL_DIR}/references/revenue.md` | Pricing, proposals, financial planning |
 | Brand language | `${CLAUDE_SKILL_DIR}/references/brand-language.md` | Naming, copy, marketing |
+| Design system | `${CLAUDE_SKILL_DIR}/references/design-system.md` | Colors, typography, tokens, schemes, product assignments |
 | Pipeline & pilots | `${CLAUDE_SKILL_DIR}/references/pipeline.md` | Client conversations, preparation |

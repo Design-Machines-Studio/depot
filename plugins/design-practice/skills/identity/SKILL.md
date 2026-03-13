@@ -213,6 +213,28 @@ When critiquing identity and logo work, assess these ten dimensions:
 
 ---
 
+## Design Machines Identity
+
+When working on any DM property (Design Machines, Assembly, Live Wires, The Local), these identity decisions are already made:
+
+| Decision | Choice | Rationale |
+|---|---|---|
+| **Typeface** | GT Standard (variable, Grilli Type) | Neo-grotesque with warm humanist details -- systematic without being cold |
+| **Monospace** | GT Standard Mono (variable) | Code, data, catalog codes (DM-003) |
+| **Brand primary** | Purple-800 `#220d46` | Deep violet -- authority, distinctiveness, not tech-purple |
+| **Brand accent** | Gold-400 `#ffcb09` | Bright gold -- energy, highlight, democratic optimism |
+| **Bold accent** | Red-500 `#ed1d26` | Warm red -- agitprop editorial, urgency |
+| **Neutral** | Iron ramp (warm gray) | `#fdf9f4` to `#14100c` -- warm undertone, compressed light end |
+| **Color system** | 7 families x 11 steps | Purple, Red, Orange, Gold, Green, Blue, Iron |
+
+**No typeface pairing.** Weight contrast within the GT Standard family replaces pairing. This is a Vignelli-aligned decision: one typeface, full weight axis, absolute discipline.
+
+**Product differentiation** happens through scheme classes (`.scheme-purple`, `.scheme-bold`, `.scheme-blue`), not separate palettes. Every product draws from the same 7 families.
+
+For the full color palette, token architecture, scheme inventory, accessibility guidelines, and product assignments, load the **strategy** skill from the **design-machines** plugin and its `references/design-system.md`.
+
+---
+
 ## Domain Reference Guide
 
 | Topic | File | When to Load |
