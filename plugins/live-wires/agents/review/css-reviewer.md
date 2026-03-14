@@ -58,104 +58,15 @@ The only legitimate reasons to create a new class:
 - A genuine UI component (repeats 3+ times, has internal structure) → goes in `6_components/`
 - A page-scoped body class for targeted styling (e.g., `pg-governance`) → set via `PageMeta.BodyClass`
 
-## Complete Utility Class Inventory
+## Class Inventory, Layout Primitives, and Components
 
-If a class isn't in this list (or a layout primitive/component), it's probably invented.
+Before reviewing, load the canonical inventories from the livewires skill:
 
-### Spacing (`7_utilities/spacing.css`)
-**Scale:** `0`, `025`, `05`, `075`, `1`, `15`, `2`, `3`, `4`, `5`, `6`, `1px`, `auto`
-- **Margin:** `.mt-{n}`, `.mb-{n}`, `.ml-{n}`, `.mr-{n}`, `.mx-{n}`, `.my-{n}`, `.m-{n}`
-- **Padding:** `.pt-{n}`, `.pb-{n}`, `.pl-{n}`, `.pr-{n}`, `.px-{n}`, `.py-{n}`, `.p-{n}`
-- **Negative margins:** `.-mt-{n}`, `.-mb-{n}`
+- Read `plugins/live-wires/skills/livewires/utilities.md` for the complete utility class inventory
+- Read `plugins/live-wires/skills/livewires/layouts.md` for all layout primitives and variants
+- Read `plugins/live-wires/skills/livewires/components.md` for built-in components
 
-### Typography (`7_utilities/typography.css`)
-- **Size:** `.text-xs`, `.text-sm`, `.text-base`, `.text-lg`, `.text-xl`, `.text-2xl` through `.text-9xl`
-- **Responsive size:** `.text-{size}@md` (40rem+), `.text-{size}@lg` (60rem+) — requires parent with `container-type`
-- **Weight:** `.font-thin` (100) through `.font-black` (900)
-- **Family:** `.font-sans`, `.font-serif`, `.font-mono`
-- **Alignment:** `.text-left`, `.text-center`, `.text-right`, `.text-justify`
-- **Leading:** `.leading-none` (1), `.leading-tight` (1.1), `.leading-snug` (1.25), `.leading-normal` (1.5), `.leading-relaxed` (1.625), `.leading-loose` (2)
-- **Tracking:** `.tracking-tighter`, `.tracking-tight`, `.tracking-normal`, `.tracking-wide`, `.tracking-wider`, `.tracking-widest`
-- **Transform:** `.uppercase`, `.lowercase`, `.capitalize`, `.normal-case`
-- **Measure:** `.measure` (65ch), `.measure-narrow` (45ch), `.measure-wide` (80ch)
-- **Wrap:** `.text-balance`, `.text-pretty`
-
-### Color (`7_utilities/color.css`)
-- **Adaptive schemes:** `.scheme-default`, `.scheme-subtle`
-- **Brand schemes:** `.scheme-accent`, `.scheme-orange`, `.scheme-orange-light`, `.scheme-red`, `.scheme-red-light`, `.scheme-blue`, `.scheme-blue-light`, `.scheme-yellow`, `.scheme-yellow-light`, `.scheme-green`, `.scheme-green-light`
-- **Greyscale schemes:** `.scheme-black`, `.scheme-grey-100` through `.scheme-grey-900`
-- **Text colors:** `.text-fg`, `.text-accent`, `.text-muted`, `.text-white`, `.text-black`, `.text-{color}`, `.text-{color}-{100-900}`
-- **Background:** `.bg-white`, `.bg-black`, `.bg-subtle`, `.bg-accent`, `.bg-transparent`, `.bg-{color}`, `.bg-{color}-{100-900}`
-
-### Sizing (`7_utilities/sizing.css`)
-- **Width:** `.w-auto`, `.w-full`, `.w-screen`, `.w-min`, `.w-max`, `.w-fit`, `.w-25`, `.w-33`, `.w-50`, `.w-66`, `.w-75`
-- **Height:** `.h-auto`, `.h-full`, `.h-screen`, `.h-min`, `.h-max`, `.h-fit`
-- **Max-width:** `.max-w-none`, `.max-w-xs`, `.max-w-sm`, `.max-w-md`, `.max-w-lg`, `.max-w-xl`, `.max-w-2xl`, `.max-w-full`, `.max-w-prose`
-
-### Display (`7_utilities/display.css`)
-- **Type:** `.block`, `.inline-block`, `.inline`, `.flex`, `.inline-flex`, `.grid`, `.inline-grid`, `.hidden`, `.contents`
-- **Visibility:** `.visible`, `.invisible`, `.sr-only`
-- **Overflow:** `.overflow-auto`, `.overflow-hidden`, `.overflow-visible`, `.overflow-scroll`, `.overflow-x-auto`, `.overflow-y-auto`
-- **Position:** `.static`, `.relative`, `.absolute`, `.fixed`, `.sticky`
-
-### Flexbox (`7_utilities/flexbox.css`)
-- **Direction:** `.flex-row`, `.flex-row-reverse`, `.flex-col`, `.flex-col-reverse`
-- **Wrap:** `.flex-wrap`, `.flex-nowrap`, `.flex-wrap-reverse`
-- **Justify:** `.justify-start`, `.justify-end`, `.justify-center`, `.justify-between`, `.justify-around`, `.justify-evenly`
-- **Align:** `.items-start`, `.items-end`, `.items-center`, `.items-baseline`, `.items-stretch`
-- **Self:** `.self-auto`, `.self-start`, `.self-end`, `.self-center`, `.self-stretch`
-- **Gap:** `.gap-0` through `.gap-6`
-
-### Grid (`7_utilities/grid.css`)
-- **Columns:** `.grid-cols-1` through `.grid-cols-6`, `.grid-cols-12`
-- **Span:** `.col-span-1` through `.col-span-6`, `.col-span-full`
-
-### Borders (`7_utilities/borders.css`)
-- **Radius:** `.rounded-none`, `.rounded-sm`, `.rounded`, `.rounded-md`, `.rounded-lg`, `.rounded-xl`, `.rounded-2xl`, `.rounded-full`
-- **Width:** `.border-0`, `.border`, `.border-2`, `.border-4`
-- **Sides:** `.border-t`, `.border-b`, `.border-l`, `.border-r`
-
-### Media (`7_utilities/media.css`)
-- **Object fit:** `.object-contain`, `.object-cover`, `.object-fill`, `.object-none`, `.object-scale-down`
-- **Object position:** `.object-center`, `.object-top`, `.object-bottom`, `.object-left`, `.object-right`
-- **Aspect ratio:** `.aspect-auto`, `.aspect-square`, `.aspect-video`, `.aspect-4-3`, `.aspect-3-2`
-
-### Tables (`7_utilities/tables.css`)
-- **Column widths:** `.col-1`, `.col-5`, `.col-10`, `.col-15`, `.col-20`, `.col-25`, `.col-30`, `.col-33`, `.col-40`, `.col-50`, `.col-60`, `.col-66`, `.col-70`, `.col-75`, `.col-80`
-
-## Layout Primitives (What's Already Available)
-
-Don't create layout CSS when these exist:
-
-| Primitive | Variants | Purpose |
-|-----------|----------|---------|
-| `.stack` | `-compact`, `-comfortable`, `-spacious` | Vertical spacing between children |
-| `.grid` | `-narrow`, `-columns-{n}` | Auto-responsive grid |
-| `.grid-span-{n}` | `@md`, `@lg` responsive | Column spanning |
-| `.cluster` | `-center`, `-space-between` | Horizontal grouping with wrap |
-| `.sidebar` | `-reverse` | Sidebar + main content |
-| `.center` | (none) | Centered max-width content |
-| `.section` | `-snug` | Vertical section with padding |
-| `.cover` | (none) | Full-height vertical centering |
-| `.box` | `-tight`, `-loose` | Simple padding wrapper |
-| `.reel` | `-narrow`, `-medium`, `-wide`, `-compact`, `-spacious`, `-no-scrollbar`, `-padded` | Horizontal scroll |
-
-## Components (Built-in)
-
-| Component | Variants | File |
-|-----------|----------|------|
-| `.button` | `--accent`, `--red`, `--blue`, `--danger`, `--small` | `buttons.css` |
-| `.breadcrumbs` | (none) | `breadcrumbs.css` |
-| `.pagination` | (none) | `pagination.css` |
-| `.table--bordered` | (none) | `tables.css` |
-| `.table--striped` | (none) | `tables.css` |
-| `.table--lined` | (none) | `tables.css` |
-| `.switch` | (none) | `switches.css` |
-| `.divider` | `--hairline` | `dividers.css` |
-| `.prose` | (none) | `prose.css` |
-| `.lead` | (none) | `typography.css` |
-| `.logo` | (none) | `logo.css` |
-| `.embed` | (none) | `embeds.css` |
+If a class isn't in those inventories, it's probably invented.
 
 ## Cascade Layer Compliance
 

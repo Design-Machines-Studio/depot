@@ -330,7 +330,7 @@ All DM properties use **GT Standard** by Grilli Type (variable weight, WOFF2). G
 
 **No secondary typeface.** Weight contrast within GT Standard's full axis (Thin to Black) replaces typeface pairing -- a Vignelli-aligned decision. When working on any DM property (Design Machines, Assembly, Live Wires, The Local), do not introduce additional typefaces.
 
-For the full design system including color palette and token architecture, load the **strategy** skill from the **design-machines** plugin.
+For the full design system including color palette and token architecture, see `design-machines` strategy skill > `references/design-system.md`.
 
 ---
 
@@ -338,6 +338,7 @@ For the full design system including color palette and token architecture, load 
 
 | Skill | Plugin | When to Load |
 |-------|--------|--------------|
+| **strategy** | design-machines | DM design system (GT Standard spec, color tokens, scheme classes) |
 | **livewires** | live-wires | CSS implementation of type scales, fluid type, baseline rhythm |
 | **layout** | design-practice | Grid systems that typography sits within |
 

@@ -1,0 +1,8 @@
+{
+  "name": "chef",
+  "description": "Science-driven cooking assistant for Travis and Lydia with dietary analysis, meal planning, Mela integration, and Bali sourcing aligned with nutritionist Eve Persak's framework",
+  "version": "1.0.1",
+  "author": {
+    "name": "Design Machines"
+  }
+}

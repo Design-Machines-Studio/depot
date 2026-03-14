@@ -1,6 +1,6 @@
 # Design Machines Design System
 
-The visual identity system for Design Machines and its product family. Catalog code DM-002/WORKS. Built in OKLCH, exported as sRGB hex.
+The visual identity system for Design Machines and its product family. Built in OKLCH, exported as sRGB hex.
 
 ---
 
@@ -41,7 +41,7 @@ The visual identity system for Design Machines and its product family. Catalog c
 
 ### Character
 
-GT Standard is a neo-grotesque sans-serif with warm, humanist details — it reads as systematic and precise without feeling cold or clinical. This aligns with the DM brand: opinionated tools built with care, not sterile corporate infrastructure.
+GT Standard is a neo-grotesque sans-serif with warm, humanist details — systematic and precise without feeling cold or clinical. Opinionated tools built with care, not sterile corporate infrastructure.
 
 **Do:** Use the full weight axis for typographic contrast. Pair light weights at display size with medium/bold at body size. Use the mono cut for all code, data tables, and catalog codes.
 

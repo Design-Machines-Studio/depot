@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mela": {
+      "command": "uvx",
+      "args": ["scuerda-mela-mcp"],
+      "env": {
+        "MELA_CALENDAR_NAME": "Family",
+        "MELA_GROCERY_LIST": "Groceries"
+      }
+    }
+  }
+}

@@ -215,27 +215,9 @@ Lead with internal operations, not public-facing design.
 
 ## Design System
 
-Design Machines uses a unified visual identity across all products. The system is built on **GT Standard** (variable, by Grilli Type) and a **7-family color palette** built in OKLCH and exported as sRGB hex.
+Design Machines uses a unified visual identity across all products: **GT Standard** typeface (variable, Grilli Type), a **7-family color palette** (Purple, Red, Orange, Gold, Green, Blue, Iron) built in OKLCH, and a three-layer token architecture (primitives > semantic tokens > scheme classes). Brand anchors: Purple-800 `#220d46`, Gold-400 `#ffcb09`, Red-500 `#ed1d26`.
 
-### Brand Colors
-
-| Role | Color | Value |
-|---|---|---|
-| **Brand primary** | Purple-800 | `#220d46` |
-| **Brand accent** | Gold-400 | `#ffcb09` |
-| **Bold accent** | Red-500 | `#ed1d26` (agitprop red) |
-| **Neutral base** | Iron-50 | `#fdf9f4` (warm white) |
-| **Body text** | Iron-900 | `#201d18` |
-
-### Token Architecture
-
-Three layers: **primitives** (raw color ramps, 7 families x 11 steps) → **semantic tokens** (functional roles like `--color-brand`, `--color-text-heading`) → **scheme classes** (self-applying utilities like `.scheme-purple`, `.scheme-bold`). Component CSS references semantic tokens. HTML uses scheme classes. Nobody touches primitives directly.
-
-### Typeface
-
-**GT Standard** (variable) for all text. **GT Standard Mono** (variable) for code, data, and catalog codes. No other typefaces across any DM property. Weight contrast within the family replaces typeface pairing.
-
-Full palette, token maps, scheme inventory, product assignments, and accessibility guidelines are in the design system reference.
+Full palette, token maps, scheme inventory, product assignments, and accessibility guidelines are in `references/design-system.md`.
 
 ---
 

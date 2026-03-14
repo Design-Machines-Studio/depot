@@ -217,23 +217,23 @@ When critiquing identity and logo work, assess these ten dimensions:
 
 When working on any DM property (Design Machines, Assembly, Live Wires, The Local), these identity decisions are already made:
 
-| Decision | Choice | Rationale |
-|---|---|---|
-| **Typeface** | GT Standard (variable, Grilli Type) | Neo-grotesque with warm humanist details -- systematic without being cold |
-| **Monospace** | GT Standard Mono (variable) | Code, data, catalog codes (DM-003) |
-| **Brand primary** | Purple-800 `#220d46` | Deep violet -- authority, distinctiveness, not tech-purple |
-| **Brand accent** | Gold-400 `#ffcb09` | Bright gold -- energy, highlight, democratic optimism |
-| **Bold accent** | Red-500 `#ed1d26` | Warm red -- agitprop editorial, urgency |
-| **Neutral** | Iron ramp (warm gray) | `#fdf9f4` to `#14100c` -- warm undertone, compressed light end |
-| **Color system** | 7 families x 11 steps | Purple, Red, Orange, Gold, Green, Blue, Iron |
+- **Typeface:** GT Standard (variable, Grilli Type) -- one family, full weight axis, no pairing (Vignelli-aligned)
+- **Brand primary:** Purple-800 `#220d46` -- deep violet, authority, distinctiveness
+- **Brand accent:** Gold-400 `#ffcb09` -- bright gold, energy, democratic optimism
+- **Bold accent:** Red-500 `#ed1d26` -- warm red, agitprop editorial
+- **Product differentiation:** Scheme classes (`.scheme-purple`, `.scheme-bold`, `.scheme-blue`), not separate palettes
 
-**No typeface pairing.** Weight contrast within the GT Standard family replaces pairing. This is a Vignelli-aligned decision: one typeface, full weight axis, absolute discipline.
-
-**Product differentiation** happens through scheme classes (`.scheme-purple`, `.scheme-bold`, `.scheme-blue`), not separate palettes. Every product draws from the same 7 families.
-
-For the full color palette, token architecture, scheme inventory, accessibility guidelines, and product assignments, load the **strategy** skill from the **design-machines** plugin and its `references/design-system.md`.
+For the full color palette, token architecture, scheme inventory, accessibility guidelines, and product assignments, see `design-machines` strategy skill > `references/design-system.md`.
 
 ---
+
+## Companion Skills
+
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| **strategy** | design-machines | DM design system (colors, tokens, schemes, product assignments) |
+| **typography** | design-practice | Type scale, rhythm, and GT Standard implementation |
+| **livewires** | live-wires | CSS implementation of identity tokens and scheme classes |
 
 ## Domain Reference Guide
 

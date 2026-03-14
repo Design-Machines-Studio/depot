@@ -18,6 +18,8 @@ plugins/<name>/
     *.md                         — Additional skill pages (components, patterns, etc.)
   agents/<category>/
     <agent-name>.md              — Agent definitions (review, workflow categories)
+  commands/
+    <command-name>.md            — Slash command definitions (user-invocable actions)
 docs/                            — Design specs and architecture docs
 ```
 
@@ -61,7 +63,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **craft-developer** | Craft CMS 4/5 development patterns and query cookbook |
 | **project-manager** | LT10 methodology, Notion-integrated planning, and sprint management |
 | **council** | Worker cooperative governance (BC Co-op Act) and decolonial content strategy |
-| **design-machines** | DM business strategy, catalog, partnerships, revenue model |
+| **design-machines** | DM business strategy, catalog, partnerships, revenue model, design system |
 | **assembly** | Go/Templ/Datastar governance app development |
 | **live-wires** | CSS framework with layout primitives and baseline rhythm |
 | **ghostwriter** | Personal writing voice, editorial style engine, and voice editing |
@@ -70,6 +72,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
 | **dm-review** | Code review orchestrator with parallel agents and visual browser testing across all DM stacks |
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
+| **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 
 ## Common Operations
 
