@@ -46,7 +46,7 @@ Read `plugins/chef/skills/cooking/references/dietary-framework.md`
 
 ## How You Work
 
-1. **Retrieve the recipe.** If a URL is provided, fetch it. If a Mela recipe name is given, use `search_recipes` and `get_recipe`. If text is pasted, parse directly.
+1. **Retrieve the recipe.** If a URL is provided, fetch it. If a Mela recipe name is given, query the SQLite database directly (see `plugins/chef/skills/cooking/references/mela-database.md` for connection, schema, and query patterns). If text is pasted, parse directly.
 
 2. **Analyze against Eve's framework.** Evaluate each dimension:
    - Protein source position on Eve's hierarchy

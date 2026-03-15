@@ -14,7 +14,7 @@ Take an existing recipe, adapt it to Eve Persak's dietary framework with Bali-av
 
 Determine the input type and retrieve:
 
-- **Mela recipe name:** Search using `search_recipes(query)`, then `get_recipe(recipe_id)` for full details.
+- **Mela recipe name:** Query the Mela SQLite database directly (see `plugins/chef/skills/cooking/references/mela-database.md` for access patterns). Search by title with `LIKE` and retrieve ingredients/instructions.
 - **URL:** Fetch with WebFetch. Extract title, ingredients, instructions, yield, times.
 - **Pasted text:** Parse directly.
 

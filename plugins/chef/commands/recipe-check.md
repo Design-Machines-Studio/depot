@@ -15,7 +15,7 @@ Quick recipe analysis against Eve's dietary framework. For full adapted recipes,
 Determine the input type and retrieve the recipe:
 
 - **URL:** Fetch the page using WebFetch. Extract the recipe content (title, ingredients, instructions).
-- **Mela recipe name:** Search Mela using `search_recipes(query)`, then `get_recipe(recipe_id)` to get full details.
+- **Mela recipe name:** Query the Mela SQLite database directly (see `plugins/chef/skills/cooking/references/mela-database.md`). Search by title with `LIKE` and retrieve ingredients/instructions.
 - **Pasted text:** Parse the recipe directly from the user's input.
 - **Described dish:** Ask the user for more detail if needed, or analyze the described version.
 

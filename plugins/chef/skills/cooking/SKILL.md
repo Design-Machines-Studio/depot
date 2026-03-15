@@ -93,13 +93,28 @@ Help organize Travis's recipe collection with tags:
 
 ### 4. Mela Integration
 
-Travis uses Mela for recipe management. The Mela MCP server provides read access to his recipe database.
+Travis uses Mela for recipe management. Access the recipe database directly via SQLite. See `${CLAUDE_SKILL_DIR}/references/mela-database.md` for complete schema, query patterns, and tagging instructions.
 
-- Use `search_recipes` and `get_recipe` to pull existing recipes for analysis or adaptation.
-- Use `list_recipes` to browse the collection (all/favorites/want-to-cook).
+**Reading recipes:**
+- The database is at `~/Library/Group Containers/66JC38RDUD.recipes.mela/Data/Curcuma.sqlite`
+- Use Cowork's `request_cowork_directory` tool to mount `~/Library/Group Containers` if not already mounted
+- Query via Python `sqlite3` module (the `sqlite3` CLI is not available in Cowork)
+- Key fields: `Z_PK`, `ZTITLE`, `ZINGREDIENTS`, `ZINSTRUCTIONS`, `ZCOOKTIME`, `ZPREPTIME`, `ZTOTALTIME`, `ZYIELD`, `ZFAVORITE`, `ZWANTTOCOOK`, `ZLINK`, `ZNUTRITION`
+
+**Tagging recipes:**
+- Tags live in `ZRECIPETAG`, linked to recipes via `Z_4TAGS` join table
+- To tag: `INSERT INTO Z_4TAGS (Z_4RECIPES, Z_5TAGS) VALUES (recipe_pk, tag_pk)`
+- Always deduplicate before inserting (unique constraint on the pair)
+- Current tags include "Eve approved" (Z_PK=21) for Gold Standard recipes
+
+**Creating/importing recipes:**
 - For new or adapted recipes, output as `.melarecipe` JSON files for import. See `${CLAUDE_SKILL_DIR}/references/mela-format.md` for the file format spec.
-- Use `schedule_meal` to add meals to Apple Calendar when doing meal planning.
-- Use `add_grocery_items` to push shopping lists to Apple Reminders.
+
+**Important notes:**
+- Always use Python `sqlite3` to query -- the CLI binary is not available in the Cowork VM
+- Commit after writes (`db.commit()`)
+- The database syncs via iCloud -- changes appear in Mela on all devices after sync
+- `Shared.sqlite` exists but is empty -- always use `Curcuma.sqlite`
 
 ### 5. Meal Planning
 
@@ -173,6 +188,7 @@ When helping plan meals:
 | Bali ingredient sourcing | `${CLAUDE_SKILL_DIR}/references/bali-sourcing.md` | When shopping, sourcing, or checking ingredient availability |
 | Eve's recipe collection | `${CLAUDE_SKILL_DIR}/references/eve-recipes.md` | When creating recipes, meal planning, or looking for inspiration |
 | Mela file format | `${CLAUDE_SKILL_DIR}/references/mela-format.md` | When generating .melarecipe files for import |
+| Mela database access | `${CLAUDE_SKILL_DIR}/references/mela-database.md` | When reading, searching, or tagging recipes in Mela's SQLite database |
 
 ## Companion Skills
 

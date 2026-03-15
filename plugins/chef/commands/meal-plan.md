@@ -28,10 +28,7 @@ Read these files:
 - `plugins/chef/skills/cooking/references/dietary-framework.md` -- Eve's meal timing and dietary rules
 - `plugins/chef/skills/cooking/references/eve-recipes.md` -- Eve's recipe patterns for inspiration
 
-Also check Mela for existing recipes:
-
-- Use `list_recipes` to see what recipes Travis already has
-- Use `search_recipes` to find relevant existing recipes
+Also check Mela for existing recipes by querying the SQLite database directly (see `plugins/chef/skills/cooking/references/mela-database.md`). Browse favorites, want-to-cook, or search by title/ingredients to reuse what Travis already has.
 
 ### Step 3: Build the Plan
 
@@ -97,6 +94,6 @@ Format as a table:
 
 Ask if Travis wants to schedule meals to Apple Calendar:
 
-- Use `schedule_meal(recipe_name, date, time)` for each meal
+- Use Google Calendar MCP tools (`gcal_create_event`) to create events for each meal
 - Default times: Morning 7:00, Lunch 12:00, Dinner 18:30
 - Only schedule if the user confirms
