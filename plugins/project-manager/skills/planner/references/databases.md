@@ -91,3 +91,30 @@ Full property reference for project management databases. These are personal dat
 - Only one sprint should be "In progress" at a time
 - Planning happens Monday morning of sprint start, in Claude Desktop
 - Review happens last day of sprint
+
+---
+
+## Content Development Database
+
+**Database ID:** `313d8793-8808-80d6-8f95-d741bf62c08e`
+**Data source:** `collection://313d8793-8808-80ac-aa16-000b113e478a`
+**Title property:** `Title`
+
+| Property | Type | Values / Notes |
+|----------|------|---------------|
+| Title | title | Content piece name |
+| Status | status | Idea, Draft, Ready, Scheduled, Rejected, Published |
+| Pillar | select | Power & Democracy, Co-op Reality, Lessons, System is Designed, What I'm Building, Influence Quotes, Making Things |
+| Platforms | multi_select | LinkedIn, Instagram, Bluesky, Mastodon |
+| Scheduled date | date (range) | Publication date |
+
+**Status workflow:** Idea -> Draft -> Ready -> Scheduled -> Published. Rejected is a terminal state.
+
+**Content pillars:**
+- **Power & Democracy** -- workplace democracy, governance, voting, decision-making
+- **Co-op Reality** -- real stories, challenges, and wins from cooperative work
+- **Lessons** -- practical learnings from building, managing, and running projects
+- **System is Designed** -- critiques of extractive systems, capitalism, labor exploitation
+- **What I'm Building** -- behind-the-scenes on Assembly, Live Wires, DM products
+- **Influence Quotes** -- quotes from thinkers who shape DM's worldview
+- **Making Things** -- craft, design, CSS, web development

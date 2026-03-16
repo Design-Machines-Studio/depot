@@ -1,23 +1,40 @@
 ---
 name: planner
-description: Notion-integrated project planning and sprint management. Use at the START of every coding session to check assigned todos. Use at the END of every session to mark completed tasks. Trigger when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, asks for planning help, says "what should I work on," "create a task," "what's in this sprint," or any variation of checking project status or tracking work. Also trigger when Travis mentions sprints, todos, Notion tasks, or asks about project capacity and prioritization. Reads project config from memory/project-notion.md.
+description: Notion-integrated project planning and sprint management. Use at the START of every coding session to check assigned todos. Use at the END of every session to mark completed tasks. Trigger when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, asks for planning help, says "what should I work on," "create a task," "what's in this sprint," or any variation of checking project status or tracking work. Also trigger when Travis mentions sprints, todos, Notion tasks, project capacity, prioritization, userback, feedback, bugs, calendar, meetings, meeting prep, content ideas, sprint stats, sprint review, or velocity. Reads project config from memory/project-notion.md.
 disable-model-invocation: true
 allowed-tools:
+  # Notion (claude.ai integration)
   - mcp__claude_ai_Notion__notion-search
   - mcp__claude_ai_Notion__notion-fetch
   - mcp__claude_ai_Notion__notion-create-pages
   - mcp__claude_ai_Notion__notion-update-page
+  # Notion (plugin integration -- adds query-database-view)
+  - mcp__plugin_Notion_notion__notion-search
+  - mcp__plugin_Notion_notion__notion-fetch
+  - mcp__plugin_Notion_notion__notion-create-pages
+  - mcp__plugin_Notion_notion__notion-update-page
+  - mcp__plugin_Notion_notion__notion-query-database-view
+  - mcp__plugin_Notion_notion__notion-query-meeting-notes
+  # ai-memory (read + write for sprint stats)
   - mcp__ai-memory__search_entities
   - mcp__ai-memory__get_entity
+  - mcp__ai-memory__add_observation
+  - mcp__ai-memory__add_entity
+  # Userback (feedback triage)
+  - mcp__Userback__list_projects
+  - mcp__Userback__search_feedback_filter
+  - mcp__Userback__search_feedback_semantic
+  - mcp__Userback__get_feedback
+  - mcp__Userback__get_feedback_logs
 ---
 
-# Planner — Notion Workflow Integration
+# Planner -- Notion Workflow Integration
 
 ## Current Git Context
 !`git branch --show-current 2>/dev/null || echo "not a git repo"`
 !`git log --oneline -3 2>/dev/null || echo "no recent commits"`
 
-Travis plans work in Notion (Projects, Todos, Sprints). This skill gives Claude the knowledge to participate in that workflow — reading context, updating task status, and assisting with sprint planning.
+Travis plans work in Notion (Projects, Todos, Sprints). This skill gives Claude the knowledge to participate in that workflow -- reading context, updating task status, and assisting with sprint planning.
 
 **Philosophy:** Travis plans, Claude executes. Read freely, write carefully.
 
@@ -25,19 +42,21 @@ Travis plans work in Notion (Projects, Todos, Sprints). This skill gives Claude 
 
 ### Database IDs
 
-Look up all database data source IDs from the `DM Notion Workspace` entity in ai-memory. The entity stores IDs for Projects, Todos, Sprints, and Notes databases.
+Look up all database data source IDs from the `DM Notion Workspace` entity in ai-memory. The entity stores IDs for Projects, Todos, Sprints, Notes, and Content Development databases.
 
 ### Read/Write Permissions (CRITICAL)
 
 | Action | Permission | When |
 |--------|-----------|------|
-| Query any database | ✅ Always | Anytime context is needed |
-| Update todo → "In progress" | ✅ Auto | When starting an assigned todo |
-| Update todo → "Done" | ✅ Auto | When finishing an assigned todo |
-| Create new todo | ⚠️ Only when Travis asks | "Add a todo for X" |
-| Update todo name/priority/sprint | ⚠️ Only when Travis asks | "Move this to Sprint 5" |
-| Modify project properties | ❌ Never | Travis-only |
-| Modify sprint properties | ❌ Never | Travis-only |
+| Query any database | Always | Anytime context is needed |
+| Update todo to "In progress" | Auto | When starting an assigned todo |
+| Update todo to "Done" | Auto | When finishing an assigned todo |
+| Create new todo | Only when Travis asks | "Add a todo for X" |
+| Update todo name/priority/sprint | Only when Travis asks | "Move this to Sprint 5" |
+| Modify project properties | Never | Travis-only |
+| Modify sprint properties | Never | Travis-only |
+| Write sprint stats to ai-memory | Auto | During sprint review (Phase 1) |
+| Read Userback feedback | Always | During Userback triage (Phase 4) |
 
 
 ## Session Workflow
@@ -58,7 +77,7 @@ Look up all database data source IDs from the `DM Notion Workspace` entity in ai
 
 - When starting work on an assigned todo, update its Status to "In progress"
 - When finishing a todo, update its Status to "Done"
-- Track what you're doing — you'll summarize it in sessions.md at session end
+- Track what you're doing -- you'll summarize it in sessions.md at session end
 
 ### At Session End
 
@@ -67,32 +86,43 @@ Look up all database data source IDs from the `DM Notion Workspace` entity in ai
 2. **Append to sessions.md:** Write a brief session summary (see Session Memory Convention below)
 
 
-## Sprint Planning Support
+## Sprint Planning Workflow
 
-Sprint planning happens **Monday mornings** in **Claude Desktop** (claude.ai), not in Claude Code. Sprints are biweekly.
+Sprint planning is a comprehensive 9-phase process. Use the `/sprint-plan` command to run the full workflow, or trigger individual phases as needed.
 
-When Travis asks for sprint planning help:
+**Cadence:** Biweekly sprints. Planning on Monday morning of sprint start. Review on last day of sprint. Quarter planning on first sprint of each quarter.
 
-1. **Query all active projects:** Search Projects DB for Status = "In progress". Show project names and codes.
+### Phase Overview
 
-2. **Review current sprint:** What's done? What's still open? What rolled over from last sprint?
+| Phase | What | Reference |
+|-------|------|-----------|
+| 1. Sprint Review | Close outgoing sprint, track completion stats | `sprint-stats.md` |
+| 2. Sprint Rollover | Present incomplete tasks: keep, defer, or drop | `sprint-planning.md` |
+| 3. Conversation Review | Mine ai-memory for decisions, next steps, backlog | `sprint-planning.md` |
+| 4. Userback Triage | Query feedback, group themes, validate against goals | `userback-triage.md` |
+| 5. Calendar & Meeting Prep | Scan Calendar.app for 2 weeks, research participants | `meeting-prep.md` |
+| 6. Mail Scan | Search Mail.app for action items and follow-ups | `mail-scan.md` |
+| 7. Content Scan | Research trends, generate ideas, connect to Buffer | `content-scan.md` |
+| 8. Sprint Loading | Review todos, apply velocity-based capacity, suggest | `sprint-planning.md` |
+| 9. Sprint Commitment | Assign chosen todos, create new ones, confirm load | `sprint-planning.md` |
 
-3. **Show open todos by project:** Query Todos DB for items with Status NOT in ("Done", "Someday maybe"), grouped by project. Include priority and blocking relationships.
+Phases 5 and 6 require shell access (AppleScript for Calendar.app and Mail.app). Skip gracefully in Claude Desktop.
 
-4. **Suggest candidates for next sprint** based on:
-   - Priority (High first)
-   - Blocking relationships (unblock before blocked)
-   - Sprint capacity (don't overfill — think in quarter-days)
-   - Balance across projects (not all eggs in one basket)
+Travis confirms between phases. Any phase can be skipped on request.
 
-5. **Travis decides.** Claude does not assign things to sprints. Present options, Travis picks.
+### Companion Skills
 
-### Sprint Cadence
+Load these skills when reaching their relevant phases:
 
-- Biweekly sprints
-- Sprint planning: Monday morning of sprint start
-- Sprint review: last day of sprint (check what got done)
-- Quarter planning: first sprint of each quarter
+| Skill | Plugin | When to Load |
+|-------|--------|--------------|
+| strategy | design-machines | Phase 5: participant/company research, pipeline context |
+| social-media | ghostwriter | Phase 7: platform strategy, format decisions |
+| voice | ghostwriter | Phase 7: writing direction for content drafts |
+| governance | council | Phase 7: co-op/labor framing for content ideas |
+| ai-memory | ned | Phases 1, 3: sprint stats storage, conversation review |
+| lt10 | project-manager | Phase 8: capacity rules, estimation principles |
+
 
 ## Per-Project Config
 
@@ -115,7 +145,7 @@ Format:
 This file is:
 - Created once per project (manually or with Claude's help)
 - NOT version-controlled (lives in Claude's memory directory)
-- Instance-specific — when Assembly becomes a template, each co-op maps to a different Notion project
+- Instance-specific -- when Assembly becomes a template, each co-op maps to a different Notion project
 
 
 ## Session Memory Convention
@@ -125,7 +155,7 @@ This file is:
 Append-only log. Claude writes a brief summary at the end of each session:
 
 ```markdown
-## 2026-02-13 — [Brief description]
+## 2026-02-13 -- [Brief description]
 
 **Sprint:** Sprint 3
 
@@ -149,16 +179,19 @@ When setting relations via Notion MCP `update-page`, use bare URL strings:
 "Project": "https://www.notion.so/{page-id}"
 ```
 
-Do NOT wrap in JSON arrays — the API rejects `["url"]` syntax.
+Do NOT wrap in JSON arrays -- the API rejects `["url"]` syntax.
 
 When creating pages via `create-pages`, relations cannot be set inline. **Create the page first, then update with relations in a second call.**
 
 ## Reference Files
 
-For detailed database schemas and API conventions:
-
 | File | Contents |
 |------|----------|
-| `${CLAUDE_SKILL_DIR}/references/databases.md` | Full property schemas for all four databases |
+| `${CLAUDE_SKILL_DIR}/references/databases.md` | Property schemas for Projects, Todos, Sprints, Time Tracking, and Content Development databases |
 | `${CLAUDE_SKILL_DIR}/references/conventions.md` | API quirks, error handling, formatting rules |
-
+| `${CLAUDE_SKILL_DIR}/references/sprint-planning.md` | Full sprint planning workflow (phases 1-3, 8-9) |
+| `${CLAUDE_SKILL_DIR}/references/sprint-stats.md` | Velocity tracking, rolling averages, capacity planning |
+| `${CLAUDE_SKILL_DIR}/references/userback-triage.md` | Userback feedback query, grouping, triage, and todo creation |
+| `${CLAUDE_SKILL_DIR}/references/meeting-prep.md` | Calendar.app review, participant research, meeting briefs |
+| `${CLAUDE_SKILL_DIR}/references/mail-scan.md` | Mail.app search for action items and follow-ups |
+| `${CLAUDE_SKILL_DIR}/references/content-scan.md` | Trend research, content ideation, Buffer workflow |
