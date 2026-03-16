@@ -55,6 +55,7 @@ Look up all database data source IDs from the `DM Notion Workspace` entity in ai
 | Update todo name/priority/sprint | Only when Travis asks | "Move this to Sprint 5" |
 | Modify project properties | Never | Travis-only |
 | Modify sprint properties | Never | Travis-only |
+| Update sprint status (Done/In progress) | After Travis confirms | During sprint commitment (Phase 9) |
 | Write sprint stats to ai-memory | Auto | During sprint review (Phase 1) |
 | Read Userback feedback | Always | During Userback triage (Phase 4) |
 

@@ -1,7 +1,7 @@
 {
   "name": "project-manager",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning with Userback triage, Calendar.app meeting prep, Mail.app scanning, content ideation, and velocity tracking",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "author": {
     "name": "Design Machines"
   }

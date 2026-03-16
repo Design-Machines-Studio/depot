@@ -96,8 +96,7 @@ Full property reference for project management databases. These are personal dat
 
 ## Content Development Database
 
-**Database ID:** `313d8793-8808-80d6-8f95-d741bf62c08e`
-**Data source:** `collection://313d8793-8808-80ac-aa16-000b113e478a`
+**Data source ID:** Look up "Content Development DB" in `DM Notion Workspace` ai-memory entity
 **Title property:** `Title`
 
 | Property | Type | Values / Notes |

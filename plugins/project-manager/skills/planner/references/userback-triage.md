@@ -6,7 +6,7 @@ Query user feedback from Userback during sprint planning, group it into actionab
 
 Phase 4 of the sprint planning workflow. Run after Sprint Review/Rollover and Conversation Review.
 
-## MCP Tools Used
+## Tools Used
 
 - `mcp__Userback__list_projects` -- discover Userback projects
 - `mcp__Userback__search_feedback_filter` -- query feedback by date, status, project
@@ -104,7 +104,7 @@ For each approved theme:
    - Priority: based on theme severity and volume
 2. **Update with relations** (second API call):
    - Project: linked to relevant Notion project
-   - Sprint: leave unset (Travis assigns during Sprint Loading phase)
+   - Sprint: do NOT assign yet -- that happens in Phase 8 (Sprint Loading)
 3. **Todo description** should include:
    - Brief theme summary (1-2 sentences)
    - Userback item IDs for reference (e.g., "Related Userback: UB-123, UB-456, UB-789")

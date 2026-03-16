@@ -60,6 +60,7 @@ Run phases in order, loading each reference file as needed. Pause between major 
 
 Load these companion skills when reaching their relevant phases:
 
+- **Phases 1, 3 (Review, Conversation):** Load `ai-memory` skill from ned plugin for sprint stats and conversation mining
 - **Phase 5 (Calendar):** Load `strategy` skill from design-machines plugin for participant research
 - **Phase 7 (Content):** Load `social-media` and `voice` skills from ghostwriter plugin, `governance` from council plugin
 - **Phase 8 (Loading):** Reference LT10 capacity rules from `lt10` skill

@@ -2,6 +2,10 @@
 
 Track sprint completion rates to inform capacity planning. Stats are stored in ai-memory and referenced during sprint loading.
 
+## When to Run
+
+Phase 1 (Sprint Review) for data collection. Phase 8 (Sprint Loading) for capacity application.
+
 ## ai-memory Entity
 
 **Entity name:** Sprint Stats

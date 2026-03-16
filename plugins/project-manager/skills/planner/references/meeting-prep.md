@@ -64,14 +64,14 @@ end tell
 ### Step 2: Filter for External Meetings
 
 From the event list, identify meetings with external participants:
-- Has attendees who are NOT Travis (travis@designmachines.ca or similar)
+- Has attendees who are NOT Travis (look up email from ai-memory or `memory/project-notion.md`)
 - Exclude personal calendar events (holidays, reminders, meal plans)
 - Exclude recurring internal events (unless they have external attendees)
 - Focus on: client calls, partner meetings, community calls, networking
 
 Categories:
 - **Client/prospect calls** -- related to DM pipeline
-- **Partner meetings** -- related to partnerships ecosystem
+- **Partner meetings** -- related to DM partnerships
 - **Community/industry** -- co-op events, design industry
 - **Personal/skip** -- medical, personal, not relevant to sprint planning
 

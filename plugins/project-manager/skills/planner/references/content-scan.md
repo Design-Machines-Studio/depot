@@ -20,17 +20,7 @@ Phase 7 of the sprint planning workflow. Run after Mail Scan.
 
 ## Content Development Database
 
-**Database ID:** `313d8793-8808-80d6-8f95-d741bf62c08e`
-**Data source:** `collection://313d8793-8808-80ac-aa16-000b113e478a`
-
-Properties:
-| Property | Type | Values |
-|----------|------|--------|
-| Title | title | Content piece name |
-| Status | status | Idea, Draft, Ready, Scheduled, Rejected, Published |
-| Pillar | select | Power & Democracy, Co-op Reality, Lessons, System is Designed, What I'm Building, Influence Quotes, Making Things |
-| Platforms | multi_select | LinkedIn, Instagram, Bluesky, Mastodon |
-| Scheduled date | date | Publication date (range supported) |
+Schema: see `databases.md` -- Content Development Database for full property reference, database IDs, status workflow, and content pillar descriptions.
 
 ## Procedure
 

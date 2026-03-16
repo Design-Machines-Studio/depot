@@ -131,7 +131,7 @@ For each approved item:
 - Name: actionable description derived from the email (not just the subject line)
 - Status: "Inbox"
 - Priority: Medium (High for financial or time-sensitive)
-- Do NOT assign to sprint yet -- that happens in Phase 8
+- Do NOT assign to sprint yet -- that happens in Phase 8 (Sprint Loading)
 
 ## Privacy Notes
 

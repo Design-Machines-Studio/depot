@@ -115,7 +115,7 @@ The core planning step. Review all available work and suggest what to load into 
    - Priority (High first)
    - Blocking relationships (unblock before blocked)
    - Sprint capacity (don't overfill)
-   - Balance across projects (not all eggs in one basket)
+   - Balance across projects (distribute load, don't stack one project)
    - Deadlines (approaching deadlines first)
 7. Present as a grouped list:
 
