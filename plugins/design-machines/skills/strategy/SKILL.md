@@ -229,6 +229,75 @@ Full palette, token maps, scheme inventory, product assignments, and accessibili
 
 ---
 
+## Systems Dynamics — Feedback Loop Map
+
+Design Machines operates as a system of interdependent feedback loops. When making strategic decisions — pricing, prioritization, partnerships, product scope, time allocation — check which loops a decision feeds or starves.
+
+### The Loop Map
+
+**Four reinforcing loops (compound growth — feed these):**
+
+| Loop | Name | Mechanism | Current State |
+|------|------|-----------|---------------|
+| R1 | Product-Adoption | Assembly improves → co-ops run better → success stories → more co-ops adopt → revenue + feedback → Assembly improves | **Not yet turning.** TACO prototype is the first turn of the crank. |
+| R2 | Solidarity Ecosystem | Solid State incubates → creates demand for governance tools → Assembly gets pilots → governance health validates incubation → pipeline grows | **Active but pre-revenue.** Relationships strong, no money flowing yet. |
+| R3 | Propaganda | Co-ops succeed using Assembly → visible proof co-ops work → more people consider conversion → larger sector → more demand | **Dormant.** Needs R1's first turn before it can start. |
+| R4 | Knowledge | Systems thinking library → informs governance design patterns → better loops encoded in Assembly → pilot data → deeper understanding | **Active.** RAG library indexed, research informing product design. |
+
+**Two balancing loops (constraints — manage these):**
+
+| Loop | Name | Mechanism | Current State |
+|------|------|-----------|---------------|
+| B1 | Investment Window | Personal savings depleting at ~$2-3K/mo. No external income since P&T terminated Jan 2026. ~8-12 months of runway. Window determines how many turns R1 gets. | **Amber.** Controlled investment, not crisis. Cooperators grant ($20K via Chris, timing TBD) could extend significantly. |
+| B2 | Complexity vs Adoption | Governance requirements demand features → complexity increases → adoption friction. Countered by design principles: compliance as byproduct, let formality emerge, be easier than the workaround. | **Managed.** Design principles are the lever. |
+
+### Archetype Warnings
+
+Three systems archetypes from the DM library (Senge, Meadows, Kelly) that apply directly. Flag these during strategic decisions:
+
+**Eroding Goals (Meadows):** Financial pressure gradually lowers ambition. The danger isn't stopping Assembly work — it's "just taking one freelance project" that becomes the new normal, and Assembly development slows to a crawl. The goal erodes so gradually you don't notice. **Test:** "Am I making this decision because it serves the mission, or because it reduces financial anxiety?"
+
+**Growth and Underinvestment (Senge):** Investing in infrastructure before the growth signal is real. Don't over-engineer the baseplate before TACO is live and giving real feedback. Extract abstractions from what you've learned, not from what you assume. **Test:** "Has a real pilot validated this need, or am I building for a future that doesn't exist yet?"
+
+**Shifting the Burden (Senge/Meadows):** The symptomatic solution (freelance income) undermines the fundamental solution (Assembly revenue). Every hour on freelance is an hour not shipping the prototype that generates its own revenue. **Test:** "Does this income source compete with or complement Assembly development time?"
+
+### Priority Sequencing (from systems analysis)
+
+All loops wait on R1's first complete turn. The sequencing:
+
+1. **TACO prototype ships** → proves the model
+2. **TACO pays something** (grant-sized $2-4K CAD) → first revenue
+3. **Second pilot** (Solid State or another co-op from pipeline) → doubles feedback + revenue
+4. **Cooperators grant lands** (timing unknown) → extends runway
+5. **R1 starts compounding** → feeds R2 (ecosystem), R3 (propaganda), R4 (knowledge)
+
+Sprint time allocation during this phase: **80% TACO prototype, 10% pipeline warmth, 10% build-process content.**
+
+### Leverage Points (Meadows' hierarchy, applied to DM)
+
+From highest to lowest leverage:
+
+1. **The goal of the system** (Level 3): "Make co-ops a no-brainer." This is set. Don't dilute it.
+2. **The structure of information flows** (Level 6): Assembly changes how governance information reaches members. This is the product thesis — inhabited interfaces, not archived snapshots.
+3. **The rules of the system** (Level 5): Grant-sized pricing makes co-op funding infrastructure subsidize R1's spin-up. The pricing structure is a systems intervention.
+4. **Feedback loops** (Level 7-8): The solidarity ecosystem (R2) is a reinforcing loop that capitalist competitors cannot replicate because their incentive structures fight against coordination. This is DM's structural moat.
+
+### Source Library (indexed in RAG)
+
+Key texts informing this analysis — searchable via `rag_search`:
+
+| Book | Author | Key Contribution |
+|------|--------|-----------------|
+| *Thinking in Systems* | Donella Meadows | Leverage points hierarchy, stocks and flows, archetype recognition |
+| *The Fifth Discipline* | Peter Senge | Systems archetypes (Growth and Underinvestment, Shifting the Burden, Eroding Goals), mental models, team learning |
+| *Owning Our Future* | Marjorie Kelly | Generative vs extractive ownership, feedback loops in cooperative design, Mission-Controlled Governance |
+| *Introduction to General Systems Thinking* | Gerald Weinberg | Foundational systems theory, observation and partitioning |
+| *Systems Thinking Tools* | Daniel Kim / Pegasus | Practical toolkit — causal loop diagrams, behavior over time, management flight simulators. Includes Forrester's "System Dynamics and the Lessons of 35 Years" |
+
+When making a strategic decision, search the RAG with the relevant archetype or concept name. The library has deep material on all of these.
+
+---
+
 ## Data Source Convention
 
 **Reference files** contain stable structural knowledge: pricing tiers, engagement phases, brand language rules, catalog architecture, partner archetypes. These rarely change.
