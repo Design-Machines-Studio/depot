@@ -70,3 +70,14 @@ Financial Entity
 1. **Use consistent relationship types** - Check existing relationships before creating new types
 2. **Bidirectional awareness** - Relationships are stored on one entity but queryable from both via `get_relationships()`
 3. **Check existing relationships first** - Use `get_relationships()` before adding duplicates
+
+## Deprecated Relationship Types
+
+| Type | Count | Context |
+|------|-------|---------|
+| `tracked_in` | 2,621 | Health data tracking (migrating to trav-os) |
+| `sleep_tracked_for` | 1,630 | Sleep data (migrating to trav-os) |
+| `performed_by` | 622 | Workout data (migrating to trav-os) |
+| `measured_for` | 369 | Health metrics (migrating to trav-os) |
+
+These relationship types exist in the data but should not be created for new entities. They'll be removed when health data is fully archived.

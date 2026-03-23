@@ -64,6 +64,8 @@ For each affected entity, add observations using the `add_observation` MCP tool.
 
 ### Phase 3: Create Todos in Notion
 
+> **If Notion MCP tools are not available in the current session, skip Phases 3 and 4.** Push observations to ai-memory (Phase 2) and report which Notion actions were skipped so Travis can handle them manually.
+
 For each confirmed todo, create a page in the Todos database.
 
 **Notion target:**
@@ -142,6 +144,8 @@ Create a page in the Notes database with the session summary.
 **Conversations across multiple chat sessions:** If Travis says "capture the last few sessions" or references work done in previous chats, use the conversation_search or recent_chats tools to pull context, then capture holistically.
 
 **Travis disagrees with analysis:** Adjust before pushing. Never push to ai-memory or Notion without approval on the summary.
+
+**Notion tools not resolving:** Notion tool names use dynamic UUIDs (e.g., `mcp__eb38ebed-d36a-41fb-a8b0-ad5bb24febc5__notion-create-pages`). The aliases in allowed-tools should resolve automatically, but if Notion tools fail to appear, check the current MCP tool names in the session.
 
 ## Quick Capture Mode
 

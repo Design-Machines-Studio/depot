@@ -112,17 +112,25 @@ search_entities("budget", 10)
 add_observation("Monthly Budget Tracking", "[Feb 2026] Reserve fund updated")
 ```
 
-## Health Tracking
+## Checking Types Before Creating
 
-### Query health data
+### Verify entity type exists
 ```
-search_entities("health", 10)
-# Finds health-related entities
+list_entity_types()
+# Check if the type you want to use already exists
+# Always prefer core types: Person, Company, Project, Product, Location, etc.
 ```
 
-### Add health observation
+### When unsure about type
 ```
-add_observation("Health Tracking", "[Feb 2026] Annual checkup complete, all results normal")
+# Wrong: inventing a type
+add_entity("Sprint Retrospective Notes", "MeetingNotes", [...])
+
+# Right: use existing core type
+add_entity("Sprint Retrospective Notes", "Document", [...])
+
+# Right: use existing core type with descriptive observations
+add_entity("Sprint Retrospective - March 2026", "Event", ["Sprint retro for Assembly pilot..."])
 ```
 
 ## System Management

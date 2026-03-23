@@ -8,11 +8,11 @@ Complete reference for the AI Memory system accessed via MCP tools.
 
 | Type | Count | Description |
 |------|-------|-------------|
-| Person | 54+ | Friends, family, professional contacts |
-| Company | 10+ | Organizations and businesses |
-| Project | 27+ | Personal, work, and creative projects |
-| Location | 98+ | Cities, countries, travel destinations |
-| Financial | 21+ | Financial tracking with temporal data |
+| Person | 63+ | Friends, family, professional contacts |
+| Company | 12+ | Organizations and businesses |
+| Project | 30+ | Personal, work, and creative projects |
+| Location | 100+ | Cities, countries, travel destinations |
+| Financial | 22+ | Financial tracking with temporal data |
 | Health | 8+ | Medical records and wellness data |
 
 ### Supporting Types
@@ -36,6 +36,17 @@ Complete reference for the AI Memory system accessed via MCP tools.
 | DomainIndex | Domain organization |
 | SemanticCluster | Semantic groupings |
 | IndexNode | Index structures |
+
+### Deprecated Types (Do Not Create)
+
+| Type | Count | Status |
+|------|-------|--------|
+| Sleep | 1,631 | Migrated to trav-os health dashboard |
+| Workout | 622 | Migrated to trav-os health dashboard |
+| HealthMetric | 372 | Migrated to trav-os health dashboard |
+| Media | 2,522 | Migrated to trav-os health dashboard |
+
+These entity types represent legacy automated imports. They will be archived in a future cleanup pass. Do not create new entities of these types.
 
 Use `list_entity_types()` for the current complete list with counts.
 
@@ -171,4 +182,4 @@ Access them directly with `get_entity("Recent Updates")`.
 | Type match | 0.1ms |
 | Observation search | 0.12ms |
 
-Index builds automatically on server startup (~200ms for 5,800+ entities).
+Index builds automatically on server startup (~200ms for ~5,850 entities).

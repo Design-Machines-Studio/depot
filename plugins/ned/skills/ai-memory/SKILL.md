@@ -1,6 +1,6 @@
 ---
 name: ai-memory
-description: Access Travis Gertz's personal knowledge graph with 5,800+ entities tracking projects, people, finances, health, and relationships. Use when the user asks about their memory, wants to search for people/projects/companies, needs to add observations, references remembering something, asks "what do you know about...", wants to look up a client or contact, needs financial context, tracks health patterns, or manages relationship notes between entities. Trigger this skill at session start to recall what was discussed last time, before creating any new entity to check if it already exists, and whenever the user mentions a person, company, or project by name and you need context about them. Also trigger when the user says "remember," "look up," "who is," "what's the status of," or any variation of recalling stored information. If the user asks a question about their own projects, contacts, decisions, or history and you don't have the answer in conversation context, search memory before answering.
+description: Access Travis Gertz's personal knowledge graph with ~5,850 entities tracking projects, people, finances, and relationships. Use when the user asks about their memory, wants to search for people/projects/companies, needs to add observations, references remembering something, asks "what do you know about...", wants to look up a client or contact, needs financial context, or manages relationship notes between entities. Trigger this skill at session start to recall what was discussed last time, before creating any new entity to check if it already exists, and whenever the user mentions a person, company, or project by name and you need context about them. Also trigger when the user says "remember," "look up," "who is," "what's the status of," or any variation of recalling stored information. If the user asks a question about their own projects, contacts, decisions, or history and you don't have the answer in conversation context, search memory before answering.
 allowed-tools:
   - mcp__ai-memory__search_entities
   - mcp__ai-memory__get_entity
@@ -18,7 +18,7 @@ allowed-tools:
 
 # AI Memory System
 
-Personal knowledge graph interface for Travis Gertz. Accessed via native MCP tools from the `ai-memory` server. Provides search, entity management, and relationship tracking across 5,800+ entities.
+Personal knowledge graph interface for Travis Gertz. Accessed via native MCP tools from the `ai-memory` server. Provides search, entity management, and relationship tracking across ~5,850 entities.
 
 ## MCP Tools
 
@@ -60,6 +60,19 @@ These are excluded from search results (too large): Recent Updates, Current Prio
 2. **Use exact names** - `get_entity` requires exact name match (case-insensitive)
 3. **Prefix observations with dates** - e.g., `[Feb 2026] New development...`
 4. **Never create new scripts** - Use MCP tools only. If something fails, report to user.
+5. **No health telemetry entities** - Do not create Sleep, Workout, HealthMetric, or Media entities. Health telemetry is tracked in a dedicated system (trav-os). Only store health-related decisions, diagnoses, or significant events as observations on the existing "Health Tracking" entity or relevant Person entities.
+
+## Entity Type Discipline
+
+**Core types** (use these first): Person, Company, Project, Product, Location, Financial, Health, Document, Event, Recipe, Tool, Workflow, Strategy, Framework
+
+**Supporting types** (use when core types don't fit): Relationship, Skill, Platform, Group, Book, Policy, Place
+
+**System types** (internal, don't create manually): StatusSummary, MaterializedView, DomainIndex, SemanticCluster, IndexNode, SearchKeywords
+
+Always use an existing type. Never invent a new entity type unless none of the above fit. If you must create a new type, confirm with Travis first.
+
+> The system currently has 162 entity types, 110 of which are used only once. This is technical debt from unconstrained type creation. Do not add to it.
 
 ## Additional Documentation
 
