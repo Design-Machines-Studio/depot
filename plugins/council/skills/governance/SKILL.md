@@ -302,6 +302,46 @@ When bylaws conflict with the BC Act:
 
 ---
 
+## Systems Thinking for Governance Design
+
+When designing or reviewing Assembly governance features, apply these lenses. The goal is to build governance structures that create healthy feedback loops — not just comply with the BC Act.
+
+### Every Governance Feature Creates a Feedback Loop
+
+Before building a feature, identify:
+
+1. **What behavior does this reinforce?** A voting UI that shows live position distribution reinforces participation (people see their input matters). A voting UI that only shows a final tally reinforces passivity (people check the result, not the process).
+
+2. **Is the loop reinforcing or balancing?** Reinforcing loops compound: participation → better decisions → trust → more participation. Balancing loops stabilize: complexity → member fatigue → low participation → poor decisions → more governance problems. Design for reinforcing loops. Watch for balancing loops that create governance debt.
+
+3. **Where are the delays?** Senge: delays between action and consequence are where systems thinking falls apart. If a member submits a proposal and gets no feedback for two weeks, the delay kills the reinforcing loop. Assembly's real-time features (Datastar SSE, live positions, presence indicators) are delay-reduction tools.
+
+### Archetype Risks in Governance Features
+
+**Shifting the Burden:** Assembly handles something members should learn to do themselves. If the software auto-generates every resolution, members never develop governance literacy. The co-op becomes dependent on the tool instead of capable through the tool. **Design response:** Assembly should scaffold governance capacity, not replace it. Progressive disclosure: simple first, complexity available when members are ready.
+
+**Fixes that Fail:** A feature solves an immediate governance pain but creates a new problem. Example: making voting frictionless might increase vote volume but decrease deliberation quality. **Design response:** Apply the design principle "comments are the democracy, vote is the conclusion." Don't optimize for vote throughput; optimize for decision quality.
+
+**Success to the Successful:** Features that amplify existing power dynamics. If the loudest or most active members dominate because the UI rewards volume over equity, quieter members disengage. **Design response:** Show distribution not sums. Design for the quietest member, not the most active.
+
+### The Kelly Test (from *Owning Our Future*)
+
+Marjorie Kelly's core insight: **system structure is the source of system behavior.** The governance rules encoded in Assembly will determine how co-ops behave — not their stated values, not their bylaws on paper, but the actual feedback loops the software creates.
+
+Ask: "If a co-op used Assembly exactly as designed, with no workarounds, would the resulting governance be healthy?" If the answer requires members to route around the tool (vote in Slack, discuss in DMs, track decisions in spreadsheets), the tool is failing.
+
+### RAG Resources
+
+Search the RAG for deeper material when designing governance features:
+
+- `"feedback loops governance"` → Kelly on generative vs extractive design
+- `"systems archetypes"` → Senge on Growth and Underinvestment, Shifting the Burden
+- `"leverage points"` → Meadows' 12-point hierarchy for system intervention
+- `"democratic workplace participation"` → Nightingale and Wolff on formal structure as prerequisite for real participation
+- `"feedback thought social science"` → Weinberg on general systems thinking applied to organizations
+
+---
+
 ## Cross-Reference Guide
 
 | Topic | Related Sections |
