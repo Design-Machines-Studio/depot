@@ -20,6 +20,17 @@ Before writing anything, clarify:
 - **What's the core idea?** One strong opinion or insight per post.
 - **What's the goal?** Plant a cornerstone idea? Share process? React to news? Build community?
 
+### Step 1.5: Check Strategic Alignment
+
+Before drafting, determine which loop this content feeds:
+
+- **R3 (Propaganda)**: Targets people outside the co-op world. Uses narrative insurgency — enters through problems the audience already has, reveals cooperative solutions. This is growth content.
+- **R2 (Ecosystem)**: Targets existing co-op community. Strengthens partnerships and solidarity network. This is maintenance content.
+
+Both are valuable. But know which one you're writing. If the goal is growth, read `skills/social-media/references/propaganda-strategy.md` for the narrative insurgency approach and topic guidance.
+
+**Key test (Smucker's Warning)**: "Would someone who's never heard of a co-op find this interesting?" If no, you're writing R2, not R3.
+
 ### Step 2: Match Voice Register to Platform
 
 **The voice skill's "Platform-Specific Registers" section is the authority on how Travis sounds per platform.** Read it for full register definitions. Quick working summary:
@@ -74,7 +85,8 @@ Before finalizing any post, verify:
 3. **Platform compliance**: Within character limit? Correct hashtag count? CW where needed? Link placement correct? Alt text included?
 4. **Value signal optimization**: Will people save this? Share it in DMs? Write substantive comments? If not, the content needs more depth or a sharper angle.
 5. **No engagement bait**: No "Comment if you agree." No manufactured questions. No rage-bait. The content earns engagement through substance.
-6. **Not selling**: Perspectives and ideas, not products and services. The work sells itself through the ideas.
+6. **Strategic alignment**: Is this R2 (ecosystem) or R3 (propaganda)? If R3, does it enter through the audience's problem, not DM's solution? Does it avoid co-op insider language that triggers the insularity trap?
+7. **Not selling**: Perspectives and ideas, not products and services. The work sells itself through the ideas.
 
 ## Output Format
 

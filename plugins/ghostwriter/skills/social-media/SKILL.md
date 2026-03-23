@@ -182,3 +182,5 @@ Account verification: add `rel="me"` link on your website pointing to your Masto
 6. **Cross-post adaptation** — if content should go to multiple platforms, draft each version natively.
 
 For detailed media specs, suppression triggers, and extended platform data, read: `${CLAUDE_SKILL_DIR}/references/platform-specs.md`
+
+For systems-informed propaganda strategy, narrative insurgency principles, and content topic guidance, read: `${CLAUDE_SKILL_DIR}/references/propaganda-strategy.md`
