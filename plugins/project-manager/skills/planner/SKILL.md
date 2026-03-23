@@ -123,6 +123,7 @@ Load these skills when reaching their relevant phases:
 | governance | council | Phase 7: co-op/labor framing for content ideas |
 | ai-memory | ned | Phases 1, 3: sprint stats storage, conversation review |
 | lt10 | project-manager | Phase 8: capacity rules, estimation principles |
+| strategy (systems dynamics) | design-machines | Phase 8-9: loop alignment check, archetype trap detection |
 
 
 ## Per-Project Config
