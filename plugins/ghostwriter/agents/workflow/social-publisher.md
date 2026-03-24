@@ -27,7 +27,7 @@ Before drafting, determine which loop this content feeds:
 - **R3 (Propaganda)**: Targets people outside the co-op world. Uses narrative insurgency — enters through problems the audience already has, reveals cooperative solutions. This is growth content.
 - **R2 (Ecosystem)**: Targets existing co-op community. Strengthens partnerships and solidarity network. This is maintenance content.
 
-Both are valuable. But know which one you're writing. If the goal is growth, read `skills/social-media/references/propaganda-strategy.md` for the narrative insurgency approach and topic guidance.
+Both are valuable. But know which one you're writing. If the goal is growth, load the **social-media skill** and read the propaganda strategy reference it points to for the narrative insurgency approach and topic guidance.
 
 **Key test (Smucker's Warning)**: "Would someone who's never heard of a co-op find this interesting?" If no, you're writing R2, not R3.
 

@@ -248,7 +248,7 @@ Design Machines operates as a system of interdependent feedback loops. When maki
 
 | Loop | Name | Mechanism | Current State |
 |------|------|-----------|---------------|
-| B1 | Investment Window | Personal savings depleting at ~$2-3K/mo. No external income since P&T terminated Jan 2026. ~8-12 months of runway. Window determines how many turns R1 gets. | **Amber.** Controlled investment, not crisis. Cooperators grant ($20K via Chris, timing TBD) could extend significantly. |
+| B1 | Investment Window | Personal savings depleting monthly. No external income. Window determines how many turns R1 gets. Check ai-memory entity "Design Machines OÜ" for current burn rate, runway, and grant status. | **Amber.** Controlled investment, not crisis. |
 | B2 | Complexity vs Adoption | Governance requirements demand features → complexity increases → adoption friction. Countered by design principles: compliance as byproduct, let formality emerge, be easier than the workaround. | **Managed.** Design principles are the lever. |
 
 ### Archetype Warnings

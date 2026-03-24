@@ -40,6 +40,6 @@ Until R1 completes its first turn (pilot ships → pilot pays → model proven),
 
 ### Runway Check
 
-Current investment window: ~$25K savings at $2-3K/mo = 8-12 months (check ai-memory "Design Machines" for latest). Cooperators grant ($20K via Chris) timing TBD. Every sprint that doesn't move toward first revenue consumes runway without advancing the flywheel. This isn't panic — it's awareness.
+Check ai-memory entity "Design Machines OÜ" for current savings, burn rate, runway estimate, and grant status. Every sprint that doesn't move toward first revenue consumes runway without advancing the flywheel. Awareness, not panic.
 
 At each sprint planning, note: **"X months of runway remaining. R1 status: [not turning / first turn in progress / turning]."**

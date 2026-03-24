@@ -117,13 +117,12 @@ Load these skills when reaching their relevant phases:
 
 | Skill | Plugin | When to Load |
 |-------|--------|--------------|
-| strategy | design-machines | Phase 5: participant/company research, pipeline context |
+| strategy | design-machines | Phase 5: pipeline/company research; Phase 8-9: loop alignment, archetype trap detection |
 | social-media | ghostwriter | Phase 7: platform strategy, format decisions |
 | voice | ghostwriter | Phase 7: writing direction for content drafts |
 | governance | council | Phase 7: co-op/labor framing for content ideas |
 | ai-memory | ned | Phases 1, 3: sprint stats storage, conversation review |
 | lt10 | project-manager | Phase 8: capacity rules, estimation principles |
-| strategy (systems dynamics) | design-machines | Phase 8-9: loop alignment check, archetype trap detection |
 
 
 ## Per-Project Config
@@ -197,3 +196,4 @@ When creating pages via `create-pages`, relations cannot be set inline. **Create
 | `${CLAUDE_SKILL_DIR}/references/meeting-prep.md` | Calendar.app review, participant research, meeting briefs |
 | `${CLAUDE_SKILL_DIR}/references/mail-scan.md` | Mail.app search for action items and follow-ups |
 | `${CLAUDE_SKILL_DIR}/references/content-scan.md` | Trend research, content ideation, Buffer workflow |
+| `${CLAUDE_SKILL_DIR}/references/strategic-guardrails.md` | Phase 8-9: loop alignment, archetype traps, runway check |
