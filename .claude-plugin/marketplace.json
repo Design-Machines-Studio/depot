@@ -16,8 +16,8 @@
       "capabilities_summary": {
         "skills": 2,
         "agents": 0,
-        "commands": 1,
-        "tags": ["memory", "knowledge-graph", "session-capture", "ai-memory", "notion", "entities", "relationships"]
+        "commands": 2,
+        "tags": ["memory", "knowledge-graph", "session-capture", "ai-memory", "notion", "entities", "relationships", "metrics"]
       }
     },
     {

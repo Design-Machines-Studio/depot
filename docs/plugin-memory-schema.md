@@ -1,12 +1,14 @@
 # Plugin Memory Schema
 
-Defines how depot plugin metrics are stored in ai-memory. These entities track skill invocations, user corrections, and review session data to feed back into description improvement.
+Defines how depot plugin metrics are stored in ai-memory. These entities track skill invocations, user corrections, and review session data to improve plugin descriptions.
 
 ## Entity Types
 
 ### `DepotMetrics` (type: System)
 
 Single entity tracking marketplace-wide events. One entity for the entire depot.
+
+Only receives non-correct invocations and review session summaries. Correct invocations are tracked per-plugin only.
 
 **Observation formats:**
 
@@ -16,17 +18,17 @@ Single entity tracking marketplace-wide events. One entity for the entire depot.
 [YYYY-MM-DD] Accuracy alert: <plugin>/<skill> false-positive rate >10%
 ```
 
-Outcomes: `correct`, `false-positive`, `false-negative`
+Outcomes recorded here: `false-positive`, `false-negative` (not `correct` — those go to `DepotPlugin:<name>` only).
 
 **Example observations:**
 
 ```
-[2026-03-25] Skill invocation: ghostwriter/voice — false-positive, query was about social media strategy
+[2026-03-25] Skill invocation: ghostwriter/voice — false-positive
 [2026-03-25] Review session: 9/11 agents completed, 2 skipped (visual-browser-tester: no dev server, craft-reviewer: no .twig files)
 [2026-03-25] Accuracy alert: ghostwriter/voice false-positive rate 15%
 ```
 
-### `DepotPlugin:<name>` (type: PluginMetrics)
+### `DepotPlugin:<name>` (type: Tool)
 
 Per-plugin entities. One entity per plugin that has been invoked (e.g. `DepotPlugin:ghostwriter`, `DepotPlugin:dm-review`).
 
@@ -35,21 +37,23 @@ Per-plugin entities. One entity per plugin that has been invoked (e.g. `DepotPlu
 ```
 [YYYY-MM-DD] Version: X.Y.Z
 [YYYY-MM-DD] Invocation: <skill> — <outcome>
-[YYYY-MM-DD] User correction: <skill> — false-positive, query was about <actual-domain>
+[YYYY-MM-DD] User correction: <skill> — false-positive, query was about <domain-label>
 ```
+
+`<domain-label>` must be a generic category (e.g. "social media scheduling"), not a paraphrase or excerpt of the user's actual query. Avoid capturing client names, project details, or sensitive context.
 
 **Example observations:**
 
 ```
 [2026-03-25] Version: 3.8.0
 [2026-03-25] Invocation: voice — correct
-[2026-03-25] User correction: voice — false-positive, query was about social media posting strategy
+[2026-03-25] User correction: voice — false-positive, query was about social media scheduling
 [2026-03-25] Invocation: review — correct
 ```
 
 ## Conventions
 
-All observations follow the ned plugin's ai-memory patterns:
+Observations follow these conventions:
 
 - **Search before create** -- check if entity exists before calling `add_entity`
 - **Date-prefix** all observations with `[YYYY-MM-DD]`

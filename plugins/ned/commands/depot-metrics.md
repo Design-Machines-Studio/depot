@@ -50,7 +50,7 @@ search_entities(query: "DepotPlugin:<plugin>")
 If not found, create it:
 
 ```
-add_entity(name: "DepotPlugin:<plugin>", entityType: "PluginMetrics", observations: ["[YYYY-MM-DD] Created for metrics tracking"])
+add_entity(name: "DepotPlugin:<plugin>", entityType: "Tool", observations: ["[YYYY-MM-DD] Created for metrics tracking"])
 ```
 
 ##### 3. Add Invocation Observation
