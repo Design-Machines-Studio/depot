@@ -10,7 +10,7 @@
       {
         "id": "ai-memory",
         "name": "AI Memory",
-        "description": "Personal knowledge graph with ~5,850 entities tracking projects, people, finances, and relationships",
+        "description": "Personal knowledge graph tracking projects, people, and decisions",
         "mcpDependencies": ["ai-memory"],
         "triggers": ["what do you know about", "who is", "look up", "remember this", "search memory", "add observation", "what's the status of", "find contact", "knowledge graph"],
         "tags": ["memory", "knowledge-graph", "entities", "relationships", "personal"]

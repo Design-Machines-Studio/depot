@@ -62,7 +62,7 @@
       {
         "id": "deploy",
         "name": "Deploy",
-        "description": "Deploy changed files to The Local server at 143.110.221.2",
+        "description": "Deploy changed files to The Local production server",
         "argumentHint": "[service|file]"
       },
       {

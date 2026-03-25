@@ -11,7 +11,7 @@ Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace — a co
 ```
 .claude-plugin/marketplace.json  — Marketplace manifest (lists all plugins)
 plugins/<name>/
-  .claude-plugin/plugin.json     — Plugin metadata (name, description, version)
+  .claude-plugin/plugin.json     — Plugin metadata and Agent Card capabilities
   skills/<skill-name>/
     SKILL.md                     — Primary skill definition (loaded on skill invocation)
     references/                  — Supporting reference docs (loaded on demand)
@@ -20,6 +20,7 @@ plugins/<name>/
     <agent-name>.md              — Agent definitions (review, workflow categories)
   commands/
     <command-name>.md            — Slash command definitions (user-invocable actions)
+description-evals/               — Trigger evaluation datasets (query + should_trigger pairs)
 docs/                            — Design specs and architecture docs
 ```
 
@@ -27,7 +28,7 @@ docs/                            — Design specs and architecture docs
 
 Each plugin under `plugins/` follows the same structure:
 
-- **`.claude-plugin/plugin.json`** — Required. Contains `name`, `description`, `version`, and `author`.
+- **`.claude-plugin/plugin.json`** — Required. Contains `name`, `description`, `version`, `author`, and `capabilities` (Agent Card metadata).
 - **`skills/`** — Each subdirectory is a skill. `SKILL.md` is the entry point; `references/` holds supplementary material that the skill can pull in.
 - **`agents/`** — Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
 - **`commands/`** — Optional. Slash command definitions. Each `.md` file defines a command that can be invoked directly.
@@ -65,10 +66,24 @@ Each `plugin.json` serves as an **Agent Card** — machine-readable metadata tha
 ```
 
 **Field conventions:**
-- `triggers` are short query fragments a user would actually type, not restated descriptions. Skills with `description-evals/` JSON files use evaluated trigger queries; others use generated natural-language fragments.
+- `triggers` are short query fragments a user would type, not restated descriptions. Skills with `description-evals/` JSON files use evaluated trigger queries; others use authored natural-language fragments.
 - `mcpDependencies` uses normalized service names (`ai-memory`, `notion`, `userback`, `playwright`), not raw tool prefixes. Only present when the skill declares `allowed-tools` in its SKILL.md frontmatter.
 - `argumentHint` is only present on commands that accept arguments.
-- The marketplace manifest (`.claude-plugin/marketplace.json`) includes `capabilities_summary` for each plugin with skill/agent/command counts and aggregated tags.
+- `skills`, `agents`, and `commands` arrays are always present in the `capabilities` object, even when empty.
+- The marketplace manifest (`.claude-plugin/marketplace.json`) includes `capabilities_summary` for each plugin -- counts and curated tags for quick search without loading full capabilities:
+
+```json
+{
+  "capabilities_summary": {
+    "skills": 2,
+    "agents": 1,
+    "commands": 1,
+    "tags": ["curated", "representative", "subset"]
+  }
+}
+```
+
+Tags in `capabilities_summary` are a curated representative subset, not a computed union of all skill/agent tags.
 
 ## Plugin Versioning
 
@@ -131,5 +146,5 @@ claude plugin validate plugins/<name>
 - Skills use `SKILL.md` as the canonical filename for the primary skill definition. The `name:` field in its YAML frontmatter must match the skill folder name exactly.
 - Reference files live in `references/` subdirectories and are named descriptively (e.g., `estimation.md`, `bc-cooperative-act.md`).
 - Agent files are categorized by purpose: `review/` for code review agents, `workflow/` for automation agents.
-- Plugin JSON requires `name`, `description`, `version`, and `author`. Optional fields include `keywords`, `repository`, and `author.url`.
+- Plugin JSON requires `name`, `description`, `version`, `author`, and `capabilities`. Optional fields include `keywords`, `repository`, and `author.url`.
 - The marketplace manifest at `.claude-plugin/marketplace.json` must stay in sync with the actual plugin directories.

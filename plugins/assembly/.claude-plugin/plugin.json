@@ -10,7 +10,7 @@
       {
         "id": "development",
         "name": "Assembly Development",
-        "description": "Assembly governance application development with Go, Templ, and Datastar",
+        "description": "Go, Templ, and Datastar patterns -- handlers, migrations, CRUD flows, SSE endpoints, and Docker ops",
         "triggers": [
           "add a new page to Assembly",
           "docker container crashing",
