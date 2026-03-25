@@ -1,10 +1,17 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
+  },
+  "dependencies": {
+    "accessibility-compliance": ">=1.2.0",
+    "live-wires": ">=1.5.1",
+    "ghostwriter": ">=3.7.0",
+    "council": ">=1.5.0",
+    "ned": ">=1.4.0"
   },
   "keywords": [
     "review",

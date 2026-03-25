@@ -86,6 +86,29 @@ Each `plugin.json` serves as an **Agent Card** — machine-readable metadata tha
 
 Tags in `capabilities_summary` are a hand-picked subset, not a union of all skill/agent tags.
 
+## Plugin Dependencies
+
+Plugins that reference skills or agents from other plugins declare those relationships in `plugin.json`:
+
+```json
+{
+  "dependencies": {
+    "ned": ">=1.4.0",
+    "ghostwriter": ">=3.7.0"
+  },
+  "optionalDependencies": {
+    "council": ">=1.5.0"
+  }
+}
+```
+
+- `dependencies` are hard requirements -- the plugin will not function without them.
+- `optionalDependencies` enrich behavior but the plugin works without them.
+- Version constraints use semver `>=X.Y.Z` syntax. Set the floor to the version where the specific referenced capability (agent, skill) was present and stable.
+- Most plugins are self-contained and need no dependencies field.
+
+Validate with `./tools/check-dependencies.sh`. This checks package existence, version constraints, and that every declared capability (skill, agent, command) has a corresponding file on disk. Generate the dependency graph with `./tools/check-dependencies.sh --graph > docs/dependency-graph.md`.
+
 ## Plugin Versioning
 
 When you modify a plugin's skills, agents, or references, **bump the version** in its `.claude-plugin/plugin.json` before committing. Follow semver:
