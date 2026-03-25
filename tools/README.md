@@ -34,7 +34,7 @@ For each JSON file in `description-evals/`:
 5. Compares prediction against the `should_trigger` value in the test case
 6. Reports accuracy per skill; fails if any skill drops below 70%
 
-This is a heuristic, not a classifier. It measures whether descriptions contain the right vocabulary to match real user queries. Accuracy in the 70-95% range is expected.
+This is a heuristic, not a classifier. It measures whether descriptions contain the right vocabulary to match real user queries. Expect 70-95% accuracy.
 
 ### Pre-commit hook
 

@@ -21,6 +21,7 @@ plugins/<name>/
   commands/
     <command-name>.md            — Slash command definitions (user-invocable actions)
 description-evals/               — Trigger evaluation datasets (query + should_trigger pairs)
+tools/                           — Eval runner and development utilities
 docs/                            — Design specs and architecture docs
 ```
 
@@ -83,7 +84,7 @@ Each `plugin.json` serves as an **Agent Card** — machine-readable metadata tha
 }
 ```
 
-Tags in `capabilities_summary` are a curated representative subset, not a computed union of all skill/agent tags.
+Tags in `capabilities_summary` are a hand-picked subset, not a union of all skill/agent tags.
 
 ## Plugin Versioning
 
@@ -132,12 +133,12 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 Every skill has a corresponding eval file in `description-evals/<plugin>-<skill>.json` containing test queries with expected trigger outcomes. The eval runner checks whether the SKILL.md `description:` field contains enough relevant vocabulary to match real user queries.
 
 ```shell
-./tools/eval-descriptions.sh          # run all 28 evals
+./tools/eval-descriptions.sh          # run all evals
 ./tools/eval-descriptions.sh -v       # verbose (show failures)
 ./tools/eval-descriptions.sh foo.json # run one eval
 ```
 
-When editing a SKILL.md `description:` field, run the eval for that skill to verify the change doesn't degrade trigger accuracy. Skills must stay above 70% accuracy. See `tools/README.md` for details on the heuristic, pre-commit hooks, and adding new eval cases.
+When editing a SKILL.md `description:` field, run the eval for that skill to confirm trigger accuracy holds. Skills must stay above 70% accuracy. See `tools/README.md` for details on the heuristic, pre-commit hooks, and adding new eval cases.
 
 ## Common Operations
 

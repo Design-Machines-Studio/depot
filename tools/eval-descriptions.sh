@@ -11,8 +11,8 @@
 #   ./tools/eval-descriptions.sh <name>.json  # run one eval file
 #
 # Exit codes:
-#   0 — all skills above 80% accuracy
-#   1 — one or more skills below 80% accuracy
+#   0 — all skills above accuracy threshold (default 70%)
+#   1 — one or more skills below accuracy threshold
 
 set -euo pipefail
 
@@ -20,7 +20,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 EVALS_DIR="$REPO_ROOT/description-evals"
 PLUGINS_DIR="$REPO_ROOT/plugins"
-THRESHOLD=70
+THRESHOLD=${EVAL_THRESHOLD:-70}
 MIN_OVERLAP=3
 
 # Colors (disable if not a terminal)
@@ -72,14 +72,23 @@ resolve_skill_path() {
     fi
   done
 
-  # Fallback: try the whole basename as plugin name with each skill dir
+  # Fallback: basename is the plugin name (single-skill plugins only)
   if [ -d "$PLUGINS_DIR/$basename/skills" ]; then
+    local skill_count=0
+    local found_path=""
     for skill_dir in "$PLUGINS_DIR/$basename/skills"/*/; do
       if [ -f "$skill_dir/SKILL.md" ]; then
-        echo "$skill_dir/SKILL.md"
-        return 0
+        skill_count=$((skill_count + 1))
+        found_path="$skill_dir/SKILL.md"
       fi
     done
+    if [ "$skill_count" -eq 1 ]; then
+      echo "$found_path"
+      return 0
+    elif [ "$skill_count" -gt 1 ]; then
+      echo "ERROR: $basename has $skill_count skills — use <plugin>-<skill>.json naming" >&2
+      return 1
+    fi
   fi
 
   return 1
@@ -224,19 +233,21 @@ eval_one() {
       fail=$((fail + 1))
       failures="$failures\n    $([ "$should_trigger" = "true" ] && echo "FALSE_NEG" || echo "FALSE_POS") overlap=$overlap: ${query:0:80}..."
     fi
-  done < <(python3 -c "
-import json, sys
-with open('$eval_file') as f:
+  done < <(EVAL_FILE="$eval_file" python3 << 'PYEOF'
+import json, os
+with open(os.environ['EVAL_FILE']) as f:
     cases = json.load(f)
 for c in cases:
     q = c['query'].replace('|', ' ')
     t = str(c['should_trigger']).lower()
     print(f'{q}|{t}')
-")
+PYEOF
+)
 
-  local accuracy=0
+  local accuracy="0.0"
   if [ "$total" -gt 0 ]; then
-    accuracy=$(python3 -c "print(f'{($pass / $total) * 100:.1f}')")
+    local pct_x10=$(( pass * 1000 / total ))  # percentage * 10 for one decimal
+    accuracy="$(( pct_x10 / 10 )).$(( pct_x10 % 10 ))"
   fi
 
   # Store results for summary table
@@ -244,12 +255,11 @@ for c in cases:
 
   # Print failures if any
   if [ "$fail" -gt 0 ] && [ "${VERBOSE:-0}" = "1" ]; then
-    printf "  ${YELLOW}DETAIL${RESET} %s:%b\n" "$basename" "$failures"
+    printf "  ${YELLOW}DETAIL${RESET} %s:%s\n" "$basename" "$failures"
   fi
 
-  # Check threshold
-  local acc_int
-  acc_int=$(python3 -c "print(int($accuracy))")
+  # Check threshold (compare integer part only)
+  local acc_int="${accuracy%%.*}"
   if [ "$acc_int" -lt "$THRESHOLD" ]; then
     return 1
   fi
@@ -319,8 +329,7 @@ main() {
   for result in "${RESULTS[@]}"; do
     IFS='|' read -r name total pass fail accuracy <<< "$result"
     local color="$GREEN"
-    local acc_int
-    acc_int=$(python3 -c "print(int($accuracy))")
+    local acc_int="${accuracy%%.*}"
     if [ "$acc_int" -lt "$THRESHOLD" ]; then
       color="$RED"
     elif [ "$acc_int" -lt 90 ]; then
