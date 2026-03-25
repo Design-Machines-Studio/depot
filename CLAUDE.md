@@ -109,6 +109,32 @@ Plugins that reference skills or agents from other plugins declare those relatio
 
 Validate with `./tools/check-dependencies.sh`. This checks package existence, version constraints, and that every declared capability (skill, agent, command) has a corresponding file on disk. Generate the dependency graph with `./tools/check-dependencies.sh --graph > docs/dependency-graph.md`.
 
+## Marketplace Search
+
+Every skill, agent, and command is indexed in `docs/search-index.md` -- a generated reference with three filterable tables plus a "Find by Need" section mapping common questions to the right plugin. Regenerate after editing plugin capabilities:
+
+```shell
+./tools/validate-composition.sh --generate-index
+```
+
+## Orchestration Patterns
+
+Plugins compose through three patterns documented in `docs/orchestration-patterns.md`:
+
+- **Companion Skill Loading** -- a command loads skills from other plugins at specific workflow phases (e.g. sprint-plan)
+- **Multi-Agent Dispatch** -- a skill launches agents in parallel and consolidates results (e.g. dm-review)
+- **Memory-Mediated Coordination** -- plugins write to ai-memory entities that other plugins read later (e.g. depot-metrics)
+
+## Composition Validation
+
+Validate all cross-plugin references, dependencies, eval accuracy, and search index freshness in one command:
+
+```shell
+./tools/validate-composition.sh --all
+```
+
+Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution), `validate-composition.sh` (composition references).
+
 ## Plugin Versioning
 
 When you modify a plugin's skills, agents, or references, **bump the version** in its `.claude-plugin/plugin.json` before committing. Follow semver:
