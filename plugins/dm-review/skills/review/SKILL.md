@@ -124,6 +124,25 @@ Skipping Y agents:
 
 ---
 
+### Phase 3.5: Input Guardrails
+
+Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
+
+1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt.
+2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
+3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
+
+If any agents were dropped or input was modified, report before proceeding:
+
+```
+Input guardrails applied:
+- Diff truncated from 8,200 to 5,000 lines (200 lines/file cap)
+- Stripped 2 sensitive files from non-security agents: .env, config/secrets.yml
+- Dropped 1 agent: visual-browser-tester (token budget)
+```
+
+---
+
 ### Phase 4: Parallel Agent Launch
 
 Launch ALL selected agents simultaneously using multiple Agent tool calls in a single message. This is critical for performance — agents must run in parallel, not sequentially.
@@ -186,7 +205,15 @@ The `visual-browser-tester` agent uses Playwright MCP tools (prefixed `mcp__plug
 - Launch ALL agents in a single message with multiple Agent tool calls
 - Do not wait for one agent to finish before launching the next
 - Each agent runs independently with its own copy of the diff
-- If an agent fails or times out, note it in the report but don't retry
+
+#### Failure handling
+
+Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
+
+- If an agent fails or times out (>120s), record the failure in the Agent Summary table and proceed
+- If a **core agent** (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails, flag the review as "REVIEW INCOMPLETE" in the merge recommendation
+- If all conditional agents fail but core agents succeed, the review is "Degraded" but still valid
+- See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full failure classification table
 
 ---
 
@@ -194,10 +221,21 @@ The `visual-browser-tester` agent uses Playwright MCP tools (prefixed `mcp__plug
 
 After all agents complete, synthesize their findings into the unified report.
 
+#### Output guardrails (apply first)
+
+Before merging findings, apply the output guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
+
+1. **Structure check:** Verify each agent output contains severity classifications (P0/P1/P2/P3 or Critical/Serious/Moderate) or a no-findings indicator. Flag malformed outputs.
+2. **Ghost file check:** Discard any finding referencing a file not in the changed files list.
+3. **Findings cap:** If any agent returned >25 findings, truncate to top 25 by severity.
+4. **Failure summary:** For agents that timed out, errored, or returned empty, record status in the Agent Summary table.
+
+#### Consolidation steps
+
 Read the consolidation instructions from `plugins/dm-review/agents/workflow/review-consolidator.md` and follow them exactly:
 
-1. **Collect** all findings from all agent outputs
-2. **Deduplicate** findings that reference the same file and line
+1. **Collect** all findings from all agent outputs (post-guardrail)
+2. **Deduplicate** findings using the precision rules in `${CLAUDE_SKILL_DIR}/references/guardrails.md` (same-line merge, adjacent-line merge, severity-disagreement escalation)
 3. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
 4. **Determine merge recommendation** using the logic:
    - Any P1 → "BLOCKS MERGE"
@@ -359,6 +397,8 @@ These files are loaded on demand during the review process:
 - `${CLAUDE_SKILL_DIR}/references/agent-registry.md` — Complete agent catalog with trigger conditions
 - `${CLAUDE_SKILL_DIR}/references/output-format.md` — Unified report template
 - `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` — Todo file template and GitHub Issue conventions
+- `${CLAUDE_SKILL_DIR}/references/guardrails.md` — Input/output validation rules, failure policies, deduplication precision
+- `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` — Failure classification, degradation priority, merge recommendation overrides
 
 ## Agent Definition Paths
 
