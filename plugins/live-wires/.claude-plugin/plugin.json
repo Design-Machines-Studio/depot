@@ -1,8 +1,40 @@
 {
   "name": "live-wires",
   "description": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "author": {
     "name": "Design Machines"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "livewires",
+        "name": "Live Wires",
+        "description": "CSS framework for editorial websites with layout primitives and baseline rhythm",
+        "triggers": [
+          "spacing tokens setup",
+          "sidebar not collapsing on mobile",
+          "responsive card grid",
+          "baseline rhythm alignment",
+          "stack vs margin-bottom",
+          "dark color scheme theming",
+          "cascade layer specificity",
+          "Live Wires vs Tailwind",
+          "right Live Wires classes",
+          "fluid typography setup"
+        ],
+        "tags": ["css", "layout-primitives", "baseline-rhythm", "tokens", "cascade-layers", "responsive"]
+      }
+    ],
+    "agents": [
+      {
+        "id": "css-reviewer",
+        "name": "CSS Reviewer",
+        "category": "review",
+        "description": "Reviews CSS and HTML template changes for Live Wires framework compliance",
+        "tags": ["css", "review", "compliance", "live-wires"]
+      }
+    ],
+    "commands": []
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "accessibility-compliance",
   "description": "WCAG 2.2 accessibility auditing, screen reader testing, and automated compliance enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS projects",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -15,5 +15,83 @@
     "live-wires",
     "templ",
     "craft-cms"
-  ]
+  ],
+  "capabilities": {
+    "skills": [
+      {
+        "id": "screen-reader-testing",
+        "name": "Screen Reader Testing",
+        "description": "Test web applications with screen readers including VoiceOver, NVDA, and JAWS",
+        "triggers": [
+          "test with VoiceOver",
+          "screen reader compatibility",
+          "ARIA markup check",
+          "live region announcement",
+          "keyboard navigation test",
+          "assistive technology"
+        ],
+        "tags": ["accessibility", "screen-reader", "voiceover", "nvda", "testing"]
+      },
+      {
+        "id": "wcag-audit-patterns",
+        "name": "WCAG Audit Patterns",
+        "description": "WCAG 2.2 accessibility audits with automated testing, manual verification, and remediation",
+        "triggers": [
+          "WCAG violations",
+          "color contrast check",
+          "focus management",
+          "ARIA attributes",
+          "EAA compliance",
+          "accessible markup patterns",
+          "heading hierarchy"
+        ],
+        "tags": ["accessibility", "wcag", "audit", "compliance", "remediation"]
+      }
+    ],
+    "agents": [
+      {
+        "id": "a11y-css-reviewer",
+        "name": "A11y CSS Reviewer",
+        "category": "review",
+        "description": "Reviews CSS changes for WCAG 2.2 visual accessibility compliance",
+        "tags": ["accessibility", "css", "contrast", "focus", "review"]
+      },
+      {
+        "id": "a11y-html-reviewer",
+        "name": "A11y HTML Reviewer",
+        "category": "review",
+        "description": "Reviews HTML, Templ, and Twig templates for WCAG 2.2 accessibility violations",
+        "tags": ["accessibility", "html", "semantic", "aria", "review"]
+      },
+      {
+        "id": "a11y-dynamic-content-reviewer",
+        "name": "A11y Dynamic Content Reviewer",
+        "category": "review",
+        "description": "Reviews Datastar interactions and DOM updates for accessibility compliance",
+        "tags": ["accessibility", "datastar", "dynamic", "live-regions", "review"]
+      },
+      {
+        "id": "a11y-audit-runner",
+        "name": "A11y Audit Runner",
+        "category": "workflow",
+        "description": "Runs automated accessibility audits using Pa11y, axe-core, and Playwright",
+        "tags": ["accessibility", "audit", "automation", "pa11y", "axe-core"]
+      },
+      {
+        "id": "a11y-project-setup",
+        "name": "A11y Project Setup",
+        "category": "workflow",
+        "description": "Sets up accessibility testing infrastructure in new or existing projects",
+        "tags": ["accessibility", "setup", "ci-cd", "testing-infrastructure"]
+      }
+    ],
+    "commands": [
+      {
+        "id": "a11y-audit",
+        "name": "A11y Audit",
+        "description": "Run automated accessibility audit on a page or template",
+        "argumentHint": "[URL, file path, or 'all' for full site scan]"
+      }
+    ]
+  }
 }

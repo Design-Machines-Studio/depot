@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -17,5 +17,143 @@
     "visual-testing",
     "browser-testing",
     "playwright"
-  ]
+  ],
+  "capabilities": {
+    "skills": [
+      {
+        "id": "review",
+        "name": "Code Review Orchestrator",
+        "description": "Launches parallel specialized review agents across accessibility, security, architecture, and CSS domains",
+        "triggers": [
+          "review this code",
+          "check my PR",
+          "run a code review",
+          "review before merging",
+          "full review",
+          "quick review"
+        ],
+        "tags": ["code-review", "orchestrator", "multi-agent", "parallel"]
+      },
+      {
+        "id": "visual-test",
+        "name": "Visual Browser Testing",
+        "description": "Standalone visual browser testing for rendered web pages using Playwright",
+        "mcpDependencies": ["playwright"],
+        "triggers": [
+          "test this visually",
+          "check in the browser",
+          "test responsive layout",
+          "visual QA",
+          "check the page",
+          "screenshot test"
+        ],
+        "tags": ["visual-testing", "browser", "playwright", "responsive", "screenshots"]
+      }
+    ],
+    "agents": [
+      {
+        "id": "architecture-reviewer",
+        "name": "Architecture Reviewer",
+        "category": "review",
+        "description": "Verifies component boundaries, SOLID principles, layering, and coupling",
+        "tags": ["architecture", "solid", "boundaries"]
+      },
+      {
+        "id": "code-simplicity-reviewer",
+        "name": "Code Simplicity Reviewer",
+        "category": "review",
+        "description": "Reviews code for unnecessary complexity, redundancy, and dead code",
+        "tags": ["simplicity", "complexity", "dead-code"]
+      },
+      {
+        "id": "craft-reviewer",
+        "name": "Craft Reviewer",
+        "category": "review",
+        "description": "Reviews Craft CMS Twig templates and PHP modules for Craft-specific patterns",
+        "tags": ["craft-cms", "twig", "php"]
+      },
+      {
+        "id": "doc-sync-reviewer",
+        "name": "Doc Sync Reviewer",
+        "category": "review",
+        "description": "Verifies that code changes are reflected in documentation",
+        "tags": ["documentation", "sync", "consistency"]
+      },
+      {
+        "id": "go-build-verifier",
+        "name": "Go Build Verifier",
+        "category": "review",
+        "description": "Verifies Go and Templ code compiles and passes go vet",
+        "tags": ["go", "build", "vet", "templ"]
+      },
+      {
+        "id": "pattern-recognition-specialist",
+        "name": "Pattern Recognition Specialist",
+        "category": "review",
+        "description": "Identifies anti-patterns, naming inconsistencies, and convention violations",
+        "tags": ["patterns", "anti-patterns", "conventions"]
+      },
+      {
+        "id": "security-auditor",
+        "name": "Security Auditor",
+        "category": "review",
+        "description": "Reviews code for OWASP Top 10 vulnerabilities and stack-specific attack vectors",
+        "tags": ["security", "owasp", "vulnerabilities"]
+      },
+      {
+        "id": "test-coverage-reviewer",
+        "name": "Test Coverage Reviewer",
+        "category": "review",
+        "description": "Verifies adequate test coverage for changed code",
+        "tags": ["testing", "coverage", "quality"]
+      },
+      {
+        "id": "visual-browser-tester",
+        "name": "Visual Browser Tester",
+        "category": "review",
+        "description": "Tests rendered pages for visual regressions, responsive layout, and runtime accessibility",
+        "tags": ["visual-testing", "browser", "responsive", "accessibility"]
+      },
+      {
+        "id": "review-consolidator",
+        "name": "Review Consolidator",
+        "category": "workflow",
+        "description": "Synthesizes findings from all review agents into a unified report with deduplication",
+        "tags": ["consolidation", "reporting", "deduplication"]
+      },
+      {
+        "id": "review-memory-recorder",
+        "name": "Review Memory Recorder",
+        "category": "workflow",
+        "description": "Records review summaries to ai-memory knowledge graph after consolidation",
+        "tags": ["memory", "recording", "ai-memory"]
+      }
+    ],
+    "commands": [
+      {
+        "id": "dm-review",
+        "name": "Full Review",
+        "description": "Full code review with all applicable agents including visual browser testing",
+        "argumentHint": "[optional: PR number, branch name, or file path]"
+      },
+      {
+        "id": "dm-review-fix",
+        "name": "Review Fix",
+        "description": "Resolve pending review findings from todos/ directory",
+        "argumentHint": "[optional: specific todo ID or priority like p1]"
+      },
+      {
+        "id": "dm-review-quick",
+        "name": "Quick Review",
+        "description": "Quick code review with 5 core agents only",
+        "argumentHint": "[optional: PR number, branch name, or file path]"
+      },
+      {
+        "id": "dm-review-visual",
+        "name": "Visual Review",
+        "description": "Run visual browser testing on rendered pages",
+        "argumentHint": "[optional: URL to test, --states, or --a11y]"
+      }
+    ]
+  }
 }

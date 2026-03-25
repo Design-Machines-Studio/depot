@@ -32,6 +32,44 @@ Each plugin under `plugins/` follows the same structure:
 - **`agents/`** — Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
 - **`commands/`** — Optional. Slash command definitions. Each `.md` file defines a command that can be invoked directly.
 
+## Plugin Discovery (Agent Cards)
+
+Each `plugin.json` serves as an **Agent Card** — machine-readable metadata that makes plugin discovery reliable instead of vibes-based. Inspired by the A2A protocol's Agent Card concept, the `capabilities` object declares what each plugin can do:
+
+```json
+{
+  "capabilities": {
+    "skills": [{
+      "id": "skill-folder-name",
+      "name": "Human-readable name",
+      "description": "One-line purpose",
+      "triggers": ["natural user query fragments that should activate this skill"],
+      "tags": ["searchable", "category", "tags"],
+      "mcpDependencies": ["normalized-service-name"]
+    }],
+    "agents": [{
+      "id": "agent-filename-without-md",
+      "name": "Human-readable name",
+      "category": "review|workflow",
+      "description": "One-line purpose",
+      "tags": ["searchable", "tags"]
+    }],
+    "commands": [{
+      "id": "command-name",
+      "name": "Human-readable name",
+      "description": "One-line purpose",
+      "argumentHint": "arg format if any"
+    }]
+  }
+}
+```
+
+**Field conventions:**
+- `triggers` are short query fragments a user would actually type, not restated descriptions. Skills with `description-evals/` JSON files use evaluated trigger queries; others use generated natural-language fragments.
+- `mcpDependencies` uses normalized service names (`ai-memory`, `notion`, `userback`, `playwright`), not raw tool prefixes. Only present when the skill declares `allowed-tools` in its SKILL.md frontmatter.
+- `argumentHint` is only present on commands that accept arguments.
+- The marketplace manifest (`.claude-plugin/marketplace.json`) includes `capabilities_summary` for each plugin with skill/agent/command counts and aggregated tags.
+
 ## Plugin Versioning
 
 When you modify a plugin's skills, agents, or references, **bump the version** in its `.claude-plugin/plugin.json` before committing. Follow semver:

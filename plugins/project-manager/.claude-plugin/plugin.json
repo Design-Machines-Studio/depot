@@ -1,8 +1,36 @@
 {
   "name": "project-manager",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning with Userback triage, Calendar.app meeting prep, Mail.app scanning, content ideation, and velocity tracking",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": {
     "name": "Design Machines"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "lt10",
+        "name": "LT10 Methodology",
+        "description": "Project management methodology based on Louder Than Ten principles for client services and creative agencies",
+        "triggers": ["how to estimate", "scope creep", "burn rate", "ROM estimate", "when to use agile", "how to price a project", "project buffer", "RACI matrix", "write a SOW"],
+        "tags": ["project-management", "estimation", "scoping", "pricing", "methodology"]
+      },
+      {
+        "id": "planner",
+        "name": "Sprint Planner",
+        "description": "Notion-integrated project planning and sprint management with Userback triage",
+        "mcpDependencies": ["notion", "ai-memory", "userback"],
+        "triggers": ["what should I work on", "sprint status", "create a task", "what's in this sprint", "check todos", "userback feedback", "meeting prep", "velocity"],
+        "tags": ["sprint-planning", "notion", "task-management", "userback", "velocity"]
+      }
+    ],
+    "agents": [],
+    "commands": [
+      {
+        "id": "sprint-plan",
+        "name": "Sprint Plan",
+        "description": "Run the full sprint planning workflow -- review, triage, calendar, content, and loading",
+        "argumentHint": "[skip phases: 'skip content', 'skip mail', 'just review and load']"
+      }
+    ]
   }
 }

@@ -6,78 +6,162 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "plugins": [
     {
       "name": "ned",
       "source": "./plugins/ned",
-      "description": "Personal knowledge graph and session capture"
+      "description": "Personal knowledge graph and session capture",
+      "capabilities_summary": {
+        "skills": 2,
+        "agents": 0,
+        "commands": 1,
+        "tags": ["memory", "knowledge-graph", "session-capture", "ai-memory", "notion", "entities", "relationships"]
+      }
     },
     {
       "name": "craft-developer",
       "source": "./plugins/craft-developer",
-      "description": "Craft CMS development expertise for Craft 4 and 5"
+      "description": "Craft CMS development expertise for Craft 4 and 5",
+      "capabilities_summary": {
+        "skills": 4,
+        "agents": 3,
+        "commands": 4,
+        "tags": ["craft-cms", "content-modeling", "twig", "graphql", "migration", "mcp", "debugging"]
+      }
     },
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "description": "Project management methodology based on Louder Than Ten principles"
+      "description": "Project management methodology based on Louder Than Ten principles",
+      "capabilities_summary": {
+        "skills": 2,
+        "agents": 0,
+        "commands": 1,
+        "tags": ["project-management", "estimation", "sprint-planning", "notion", "userback", "velocity"]
+      }
     },
     {
       "name": "council",
       "source": "./plugins/council",
-      "description": "Worker cooperative governance and decolonial content strategy"
+      "description": "Worker cooperative governance and decolonial content strategy",
+      "capabilities_summary": {
+        "skills": 2,
+        "agents": 1,
+        "commands": 1,
+        "tags": ["governance", "cooperative", "bc-act", "decolonial", "content-strategy", "bylaws"]
+      }
     },
     {
       "name": "design-machines",
       "source": "./plugins/design-machines",
-      "description": "Design Machines business strategy and product intelligence"
+      "description": "Design Machines business strategy and product intelligence",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 0,
+        "commands": 0,
+        "tags": ["strategy", "business", "pricing", "partnerships", "catalog", "revenue"]
+      }
     },
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "description": "Assembly governance application development with Go, Templ, and Datastar"
+      "description": "Assembly governance application development with Go, Templ, and Datastar",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 2,
+        "commands": 1,
+        "tags": ["go", "templ", "datastar", "assembly", "sse", "docker", "scaffolding"]
+      }
     },
     {
       "name": "live-wires",
       "source": "./plugins/live-wires",
-      "description": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm"
+      "description": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 1,
+        "commands": 0,
+        "tags": ["css", "layout-primitives", "baseline-rhythm", "tokens", "cascade-layers", "responsive"]
+      }
     },
     {
       "name": "ghostwriter",
       "source": "./plugins/ghostwriter",
-      "description": "Travis Gertz's personal writing voice and editorial style engine"
+      "description": "Travis Gertz's personal writing voice and editorial style engine",
+      "capabilities_summary": {
+        "skills": 2,
+        "agents": 2,
+        "commands": 1,
+        "tags": ["writing", "voice", "social-media", "anti-ai", "editing", "multi-platform"]
+      }
     },
     {
       "name": "design-practice",
       "source": "./plugins/design-practice",
-      "description": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters"
+      "description": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters",
+      "capabilities_summary": {
+        "skills": 4,
+        "agents": 2,
+        "commands": 0,
+        "tags": ["typography", "layout", "dataviz", "identity", "design", "swiss-modernism", "editorial"]
+      }
     },
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "description": "Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates"
+      "description": "Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 0,
+        "commands": 0,
+        "tags": ["scaffolding", "claude-code", "hooks", "settings", "project-setup"]
+      }
     },
     {
       "name": "accessibility-compliance",
       "source": "./plugins/accessibility-compliance",
-      "description": "WCAG 2.2 accessibility auditing and enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS"
+      "description": "WCAG 2.2 accessibility auditing and enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS",
+      "capabilities_summary": {
+        "skills": 2,
+        "agents": 5,
+        "commands": 1,
+        "tags": ["accessibility", "wcag", "screen-reader", "audit", "css", "html", "datastar", "pa11y"]
+      }
     },
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance"
+      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
+      "capabilities_summary": {
+        "skills": 2,
+        "agents": 11,
+        "commands": 4,
+        "tags": ["code-review", "orchestrator", "multi-agent", "security", "architecture", "visual-testing", "playwright"]
+      }
     },
     {
       "name": "the-local",
       "source": "./plugins/the-local",
-      "description": "Self-hosted Matrix network for the workplace democracy movement. Element Web branding, Synapse config, and server ops."
+      "description": "Self-hosted Matrix network for the workplace democracy movement. Element Web branding, Synapse config, and server ops.",
+      "capabilities_summary": {
+        "skills": 3,
+        "agents": 0,
+        "commands": 3,
+        "tags": ["matrix", "element-web", "synapse", "docker", "server-ops", "branding"]
+      }
     },
     {
       "name": "chef",
       "source": "./plugins/chef",
-      "description": "Science-driven cooking assistant for Travis and Lydia with dietary analysis, meal planning, Mela integration, and Bali sourcing aligned with nutritionist Eve Persak's framework"
+      "description": "Science-driven cooking assistant for Travis and Lydia with dietary analysis, meal planning, Mela integration, and Bali sourcing aligned with nutritionist Eve Persak's framework",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 1,
+        "commands": 4,
+        "tags": ["cooking", "recipes", "nutrition", "meal-planning", "bali", "mela", "dietary"]
+      }
     }
   ]
 }

@@ -1,8 +1,21 @@
 {
   "name": "design-machines",
   "description": "Design Machines business strategy and product intelligence",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": {
     "name": "Design Machines"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "strategy",
+        "name": "DM Strategy",
+        "description": "Design Machines business strategy, product positioning, catalog system, partnerships, and revenue model",
+        "triggers": ["call with Chris about partnership", "pricing for co-op client", "update catalog entry", "grant opportunity", "how much runway", "write a proposal", "white-label Assembly", "conversion funnel Live Wires to Assembly", "conference talking points", "freemium vs subscription"],
+        "tags": ["strategy", "business", "pricing", "partnerships", "catalog", "revenue"]
+      }
+    ],
+    "agents": [],
+    "commands": []
   }
 }

@@ -1,8 +1,29 @@
 {
   "name": "project-scaffolder",
   "description": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "author": {
     "name": "Design Machines"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "scaffolding",
+        "name": "Project Scaffolding",
+        "description": "Scaffold Claude Code project infrastructure — hooks, agents, settings.json, and CLAUDE.md",
+        "triggers": [
+          "set up new project",
+          "configure Claude Code hooks",
+          "create CLAUDE.md",
+          "scaffold .claude directory",
+          "commit-push reminder hook",
+          "Docker safety gate",
+          "session-start workflow"
+        ],
+        "tags": ["scaffolding", "claude-code", "hooks", "settings", "project-setup"]
+      }
+    ],
+    "agents": [],
+    "commands": []
   }
 }

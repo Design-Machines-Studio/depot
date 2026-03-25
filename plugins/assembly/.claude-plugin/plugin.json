@@ -1,8 +1,54 @@
 {
   "name": "assembly",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "author": {
     "name": "Design Machines"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "development",
+        "name": "Assembly Development",
+        "description": "Assembly governance application development with Go, Templ, and Datastar",
+        "triggers": [
+          "add a new page to Assembly",
+          "docker container crashing",
+          "scaffold CRUD flow",
+          "how does the fixture system work",
+          "write a migration",
+          "set up SSE endpoint",
+          "DTO mapping issue",
+          "deploy to production",
+          "Datastar modal",
+          "compliance dashboard handler"
+        ],
+        "tags": ["go", "templ", "datastar", "assembly", "sse", "docker", "handlers"]
+      }
+    ],
+    "agents": [
+      {
+        "id": "datastar-sse",
+        "name": "Datastar SSE",
+        "category": "workflow",
+        "description": "Specializes in Datastar reactivity and SSE endpoint patterns for Assembly",
+        "tags": ["datastar", "sse", "real-time", "signals"]
+      },
+      {
+        "id": "templ-scaffolder",
+        "name": "Templ Scaffolder",
+        "category": "workflow",
+        "description": "Scaffolds new Templ pages, handlers, routes, and SSE endpoints following Assembly patterns",
+        "tags": ["templ", "scaffolding", "handlers", "routes"]
+      }
+    ],
+    "commands": [
+      {
+        "id": "assembly-build",
+        "name": "Assembly Build",
+        "description": "Build and test Assembly via Docker",
+        "argumentHint": "[optional: test, generate, or full]"
+      }
+    ]
   }
 }
