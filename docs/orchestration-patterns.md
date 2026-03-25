@@ -1,6 +1,6 @@
 # Plugin Orchestration Patterns
 
-Three patterns for cross-plugin composition in the depot. Each tells you when to use it, how to declare it, and what to do when it fails.
+Plugins compose through three patterns. Each solves a different coordination problem -- when to load another plugin's expertise, how to run agents in parallel, and where to persist state across sessions.
 
 ---
 
@@ -10,7 +10,7 @@ One plugin's command loads skills from other plugins at specific phases of a wor
 
 ### When to use
 
-Your command has a multi-phase workflow where certain phases need domain expertise from a different plugin. The expertise is additive -- the command works without it but produces richer results with it.
+Your command has a multi-phase workflow where certain phases need domain expertise from a different plugin. The expertise is optional -- the command works without it, richer with it.
 
 ### How to declare
 
@@ -43,7 +43,7 @@ Load these skills when reaching their relevant phases:
 - `strategy` from design-machines (Phase 5)
 - `social-media` + `voice` from ghostwriter (Phase 7)
 - `governance` from council (Phase 7)
-- `lt10` from project-manager itself (Phase 8)
+- `lt10` from project-manager itself (Phase 8) -- self-reference, no `dependencies` declaration needed
 
 ### Failure modes
 
@@ -128,7 +128,7 @@ Plugins write observations to ai-memory entities. Other plugins (or the same plu
 
 ### When to use
 
-You need state that persists across sessions. One plugin produces information that another plugin consumes -- but they don't run at the same time, so they can't pass data directly. ai-memory acts as the shared state layer.
+You need state that persists across sessions. One plugin produces information that another plugin consumes -- but they don't run at the same time, so they can't pass data directly. ai-memory is the shared state layer.
 
 ### How to declare
 

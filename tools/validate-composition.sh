@@ -132,25 +132,16 @@ for name, cid, arg, desc in commands:
     print(f"| {name} | /{cid} | {arg} | {desc} |")
 PYEOF
 
-  printf "  ${GREEN}OK${RESET}    Generated docs/search-index.md (%d skills, %d agents, %d commands)\n" \
-    "$(grep -c '^|' "$output_file" | head -1)" "0" "0"
-
-  # Get actual counts for display
+  # Get actual counts for display (single python3 call)
+  local counts
+  counts=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
+import json, glob, os
+pjs = [json.load(open(p)).get('capabilities',{}) for p in sorted(glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json')))]
+print(sum(len(c.get('skills',[])) for c in pjs), sum(len(c.get('agents',[])) for c in pjs), sum(len(c.get('commands',[])) for c in pjs))")
   local skill_count agent_count cmd_count
-  skill_count=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
-import json, glob, os
-c = sum(len(json.load(open(p)).get('capabilities',{}).get('skills',[])) for p in sorted(glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json'))))
-print(c)")
-  agent_count=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
-import json, glob, os
-c = sum(len(json.load(open(p)).get('capabilities',{}).get('agents',[])) for p in sorted(glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json'))))
-print(c)")
-  cmd_count=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
-import json, glob, os
-c = sum(len(json.load(open(p)).get('capabilities',{}).get('commands',[])) for p in sorted(glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json'))))
-print(c)")
+  read -r skill_count agent_count cmd_count <<< "$counts"
 
-  printf "  ${GREEN}OK${RESET}    Search index: %s skills, %s agents, %s commands\n" "$skill_count" "$agent_count" "$cmd_count"
+  printf "  ${GREEN}OK${RESET}    Generated search index: %s skills, %s agents, %s commands\n" "$skill_count" "$agent_count" "$cmd_count"
 }
 
 # --------------------------------------------------------------------------
@@ -189,35 +180,39 @@ check_agent_references() {
 check_companion_skills() {
   local any_failed=0
 
-  # Search all command .md files for companion skill loading patterns
-  local refs
-  refs=$(grep -rn 'skill from.*plugin\|Load.*skill\|companion skill' "$PLUGINS_DIR"/*/commands/*.md 2>/dev/null || true)
+  # Find all command files with companion skill references
+  local files_with_refs
+  files_with_refs=$(grep -rl 'from.*plugin\|companion skill' "$PLUGINS_DIR"/*/commands/*.md 2>/dev/null || true)
 
-  if [ -z "$refs" ]; then
+  if [ -z "$files_with_refs" ]; then
     printf "  ${GREEN}OK${RESET}    No companion skill references found in commands\n"
     return 0
   fi
 
-  # Extract plugin references from sprint-plan.md (the primary user of this pattern)
-  local sprint_plan="$PLUGINS_DIR/project-manager/commands/sprint-plan.md"
-  if [ -f "$sprint_plan" ]; then
-    # Extract "from <plugin> plugin" patterns
+  # Check each command file that references companion plugins
+  while IFS= read -r cmd_file; do
+    [ -z "$cmd_file" ] && continue
+    local cmd_name
+    cmd_name=$(basename "$cmd_file" .md)
+
     local referenced_plugins
-    referenced_plugins=$(grep -oE 'from [a-z-]+ plugin' "$sprint_plan" | sed 's/from //;s/ plugin//' | sort -u)
+    referenced_plugins=$(grep -oE 'from [a-z-]+ plugin' "$cmd_file" | sed 's/from //;s/ plugin//' | sort -u)
 
     while IFS= read -r plugin_name; do
       [ -z "$plugin_name" ] && continue
       if [ -d "$PLUGINS_DIR/$plugin_name" ]; then
-        printf "  ${GREEN}OK${RESET}    sprint-plan companion: %s (installed)\n" "$plugin_name"
+        printf "  ${GREEN}OK${RESET}    %s companion: %s (installed)\n" "$cmd_name" "$plugin_name"
       else
-        printf "  ${RED}FAIL${RESET}  sprint-plan companion: %s (not installed)\n" "$plugin_name"
+        printf "  ${RED}FAIL${RESET}  %s companion: %s (not installed)\n" "$cmd_name" "$plugin_name"
         any_failed=1
       fi
     done <<< "$referenced_plugins"
-  fi
+  done <<< "$files_with_refs"
 
   return $any_failed
 }
+
+
 
 # --------------------------------------------------------------------------
 # Check search index freshness
@@ -253,20 +248,14 @@ PYEOF
   local index_skills index_agents index_commands
   read -r index_skills index_agents index_commands <<< "$counts"
 
-  # Count actual capabilities
+  # Count actual capabilities (single python3 call)
+  local actual_counts
+  actual_counts=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
+import json, glob, os
+pjs = [json.load(open(p)).get('capabilities',{}) for p in glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json'))]
+print(sum(len(c.get('skills',[])) for c in pjs), sum(len(c.get('agents',[])) for c in pjs), sum(len(c.get('commands',[])) for c in pjs))")
   local actual_skills actual_agents actual_commands
-  actual_skills=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
-import json, glob, os
-c = sum(len(json.load(open(p)).get('capabilities',{}).get('skills',[])) for p in glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json')))
-print(c)")
-  actual_agents=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
-import json, glob, os
-c = sum(len(json.load(open(p)).get('capabilities',{}).get('agents',[])) for p in glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json')))
-print(c)")
-  actual_commands=$(PLUGINS_DIR="$PLUGINS_DIR" python3 -c "
-import json, glob, os
-c = sum(len(json.load(open(p)).get('capabilities',{}).get('commands',[])) for p in glob.glob(os.path.join(os.environ['PLUGINS_DIR'],'*/.claude-plugin/plugin.json')))
-print(c)")
+  read -r actual_skills actual_agents actual_commands <<< "$actual_counts"
 
   local stale=0
   if [ "$index_skills" -ne "$actual_skills" ]; then
@@ -315,7 +304,7 @@ run_all() {
 
   printf "\n${BOLD}3/3: Composition Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-  if run_composition_checks; then
+  if run_composition_checks --no-header; then
     :
   else
     any_failed=1
@@ -335,9 +324,12 @@ run_all() {
 # --------------------------------------------------------------------------
 run_composition_checks() {
   local any_failed=0
+  local skip_header="${1:-}"
 
-  printf "${BOLD}Composition Validation${RESET}\n"
-  printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+  if [ "$skip_header" != "--no-header" ]; then
+    printf "${BOLD}Composition Validation${RESET}\n"
+    printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+  fi
 
   printf "${BOLD}Agent references (dm-review orchestration):${RESET}\n"
   if ! check_agent_references; then
