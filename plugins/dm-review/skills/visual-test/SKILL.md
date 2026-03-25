@@ -12,6 +12,11 @@ allowed-tools:
   - mcp__plugin_compound-engineering_pw__browser_evaluate
   - mcp__plugin_compound-engineering_pw__browser_close
   - mcp__plugin_compound-engineering_pw__browser_tabs
+  - mcp__plugin_compound-engineering_pw__browser_press_key
+  - mcp__plugin_compound-engineering_pw__browser_hover
+  - mcp__plugin_compound-engineering_pw__browser_console_messages
+  - mcp__plugin_compound-engineering_pw__browser_fill_form
+  - mcp__plugin_compound-engineering_pw__browser_wait_for
 ---
 
 # Visual Browser Testing
@@ -40,6 +45,8 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 
 Use the first URL that loads successfully. If none respond, ask the user for the URL.
 
+If Playwright tools fail, follow the Browser Fallback Chain defined in the `visual-browser-tester` agent definition. Never silently skip browser testing.
+
 **Page discovery:** After connecting to the dev server, discover testable pages:
 
 - Check for a sitemap at `/sitemap.xml`
@@ -49,7 +56,7 @@ Use the first URL that loads successfully. If none respond, ask the user for the
 
 ### Phase 2: Visual Testing
 
-Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full five-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires).
+Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full eight-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, UX Design, Visual Design Quality, Live Wires CSS Compliance).
 
 Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` for viewport dimensions and `${CLAUDE_SKILL_DIR}/references/state-testing.md` for the interactive element state matrix.
 
@@ -57,7 +64,7 @@ Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` for viewport dimensions and 
 
 - `--states` — run Phase C (State Testing) only
 - `--a11y` — run Phase D (Accessibility Runtime) only
-- No flag — run all five phases
+- No flag — run all eight phases
 
 ### Phase 3: Report
 

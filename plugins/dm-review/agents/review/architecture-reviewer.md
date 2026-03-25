@@ -120,3 +120,5 @@ Violations:
 5. Suggest where the code should live instead, not just "this is in the wrong place"
 6. If the project doesn't have clear layers yet, note it as P3 and suggest the target architecture
 7. Don't penalize Go projects for not having a service layer if handlers are simple CRUD
+8. Never recommend band-aid fixes — always recommend the proper architectural solution
+9. For prototypes, recommend new migrations and clean installs over patching around schema issues

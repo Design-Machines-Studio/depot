@@ -50,12 +50,15 @@ The canonical unified report format produced by the review-consolidator after al
 
 ---
 
-### P3 — Nice-to-Have
+### P3 — Fix This Session
 
-- **[agent-name]** path/to/file.ext:line — One-line description
-- **[agent-name]** path/to/file.ext:line — One-line description
+#### [Finding Title]
+- **Source:** [agent-name]
+- **File:** path/to/file.ext:line
+- **Issue:** Description
+- **Fix:** Remediation
 
-[P3 findings are abbreviated to one line each]
+[Repeat for each P3 finding — same detail format as P1/P2]
 
 ---
 
@@ -119,7 +122,7 @@ The consolidator preserves the original citation format from each agent.
 
 1. **P1 findings get full detail blocks** — file, issue, fix, reference
 2. **P2 findings get detail blocks** — same format as P1
-3. **P3 findings get one line each** — agent name, file, description
+3. **P3 findings get full detail blocks** — same format as P1/P2. P3 issues must be fixed, not glossed over.
 4. **Clean agents are noted** in the summary table but don't get detail sections
 5. **Skipped agents are listed** with the reason (file type not changed, project type mismatch)
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`

@@ -10,7 +10,7 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 |-------|-------|---------|-------------|
 | **P1** | Blocks Merge | Must fix before merging | Review recommendation = BLOCKS MERGE |
 | **P2** | Should Fix | Fix soon, track if not immediate | Review recommendation = APPROVE WITH FIXES |
-| **P3** | Nice-to-Have | Improvement opportunity | No merge impact |
+| **P3** | Fix This Session | Improvement required. Does not block merge but must be addressed before the session ends. | No merge impact — but must be fixed |
 
 ---
 
@@ -43,6 +43,16 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 
 ---
 
+### Design Review Phases (visual-browser-tester)
+
+| Agent Phase | Critical/P1 | Serious/P2 | Moderate/P3 |
+|-------------|------------|------------|-------------|
+| **UX Design** | No clear information hierarchy (page purpose unidentifiable), users cannot find primary actions | Inconsistent interaction patterns, measure exceeds 90 characters, missing empty states for key flows | Minor consistency issues, suboptimal but functional form layout |
+| **Visual Design Quality** | — | Broken typographic hierarchy (no visual differentiation between heading levels), arbitrary spacing (no system), color used decoratively without purpose | Minor alignment issues, inconsistent but non-breaking border-radii, minor rhythm misalignment |
+| **Live Wires CSS Compliance** | — | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, optional primitive alternatives |
+
+---
+
 ## Escalation Rules
 
 1. **Any P1 from any agent** → merge recommendation = "BLOCKS MERGE"
@@ -55,6 +65,6 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 
 ## De-escalation Rules
 
-1. P3 findings are shown in the report but don't affect merge recommendation
+1. P3 findings are shown in the report with full detail (same format as P1/P2) and must be fixed before the session ends, but don't affect merge recommendation
 2. Findings from agents that partially overlap (e.g., both a11y-css-reviewer and css-reviewer flag the same file) count as ONE finding at the higher severity
 3. If a finding is already tracked in a known issue / TODO, note it but don't block merge

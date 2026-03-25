@@ -67,7 +67,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, and visual browser testing"
+      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance"
     },
     {
       "name": "the-local",

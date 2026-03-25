@@ -18,9 +18,46 @@ A dev server must be running for this agent to work. Before any testing, attempt
 
 Use `browser_navigate` to try each URL. Use the first one that loads successfully.
 
-If none respond, report: "Skipped — no dev server detected. Start the application and re-run the review."
+If none respond, report: "No dev server detected. Start the application and re-run the review." and stop.
 
 If a specific URL was provided in the prompt context, use that directly and skip detection.
+
+## Browser Fallback Chain
+
+If Playwright MCP tools fail (connection refused, timeout, browser crash), do NOT skip testing. Follow this fallback chain:
+
+### Step 1: Retry Playwright
+Try the Playwright tools again — transient failures are common. If it works on retry, continue normally.
+
+### Step 2: Restart and Retry
+If Playwright still fails, try restarting the browser session:
+1. Call `browser_close` to close any existing session
+2. Wait 3 seconds
+3. Retry `browser_navigate` to the target URL
+
+### Step 3: Chrome for Claude (Vivaldi)
+If the compound-engineering Playwright MCP is unavailable, try the Chrome for Claude plugin tools instead. These are installed for both Chrome and Vivaldi browsers:
+- Use `mcp__plugin_playwright_playwright__browser_navigate` (the non-compound-engineering Playwright prefix)
+- Run the same testing protocol with these alternative tool names
+
+### Step 4: Stop and Report
+If ALL of the above fail, **stop the review and tell the user**:
+
+```
+BROWSER TESTING BLOCKED — Could not connect to any browser.
+
+Attempted:
+1. Playwright MCP tools (compound-engineering) — [error]
+2. Playwright retry after browser_close — [error]
+3. Chrome for Claude plugin tools — [error]
+
+Please:
+- Check that Playwright or Chrome for Claude is running
+- Try restarting the browser manually
+- Re-run the review after fixing browser connectivity
+```
+
+**Never silently skip browser testing.** The user must be informed so they can intervene.
 
 ## URL Discovery
 
@@ -62,7 +99,7 @@ If route mapping fails, test:
 
 ## Testing Protocol
 
-Execute these five phases sequentially for each discovered URL.
+Execute these eight phases sequentially for each discovered URL.
 
 ### Phase A: Baseline Capture
 
@@ -169,7 +206,7 @@ Take a screenshot after each major state change for visual evidence.
 // First check if axe is already loaded
 if (!window.axe) {
   const script = document.createElement('script');
-  script.src = 'https://cdn.jsdelivr.net/npm/axe-core@4/axe.min.js';
+  script.src = 'https://cdn.jsdelivr.net/npm/axe-core@4.10.2/axe.min.js';
   document.head.appendChild(script);
   await new Promise(r => setTimeout(r, 2000));
 }
@@ -263,6 +300,50 @@ return JSON.stringify([...allClasses].sort());
 
 Compare the class list against Live Wires conventions. Classes that don't match documented utilities, layout primitives, or scheme names are P3 findings.
 
+### Phase F: UX Design Review
+
+Use the severity thresholds in the "Design Review Phases" section of `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` to classify findings.
+
+Evaluate the user experience of each tested page:
+
+1. **Information hierarchy** — Is the most important content visually dominant? Can a user scan the page and understand its purpose in 3 seconds?
+2. **Navigation clarity** — Are calls to action obvious? Can the user tell where they are and where they can go?
+3. **Content readability** — Is the text readable at all breakpoints? Is the measure (line length) comfortable (45-75 characters)?
+4. **Form usability** — Are forms logically grouped? Do labels clearly describe inputs? Are required fields obvious?
+5. **Error prevention** — Are destructive actions clearly distinguished? Do confirmations exist where needed?
+6. **Consistency** — Do similar elements look and behave consistently across the page? Are interaction patterns predictable?
+7. **Empty states** — If lists or content areas could be empty, are empty states handled with helpful messaging?
+
+When uncertain about UX principles or best practices, search the RAG knowledge library via `mcp__rag__rag_search` for reference material on user experience design.
+
+### Phase G: Visual Design Quality Review
+
+Use the severity thresholds in the "Design Review Phases" section of `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` to classify findings.
+
+Evaluate the visual design quality against editorial design principles:
+
+1. **Typographic hierarchy** — Does the heading scale create clear visual steps? Is there sufficient contrast between heading levels? Is the type scale systematic (not arbitrary sizes)?
+2. **Spacing and rhythm** — Are spacing intervals consistent and systematic? Does the vertical rhythm feel intentional? Are gaps between sections proportional?
+3. **Color usage** — Are colors used purposefully (not decoratively)? Do color choices support the content hierarchy? Are scheme tokens applied correctly?
+4. **Visual weight and balance** — Is the layout balanced? Are heavy elements offset appropriately? Does the page have visual breathing room?
+5. **Alignment** — Are elements on a clear grid? Do edges align where they should? Is there accidental ragged alignment?
+6. **Polish** — Are border radii consistent? Are shadows consistent? Are icons sized and aligned consistently? Do images have consistent treatment?
+
+When uncertain about design principles, search the RAG knowledge library via `mcp__rag__rag_search` for reference material on editorial design, typography, and layout.
+
+### Phase H: Live Wires CSS Compliance
+
+When the project uses Live Wires, evaluate CSS quality beyond functional correctness:
+
+1. **Philosophy adherence** — Is CSS written in the Live Wires style (progressive refinement, no class invention, design token usage)?
+2. **Layout primitive usage** — Are stack, grid, cluster, sidebar, center, section, cover, reel primitives used correctly? Are custom layout solutions avoiding existing primitives?
+3. **Token usage** — Are spacing, color, and type tokens used instead of arbitrary values? Are `--line`, `--gutter`, and other system tokens respected?
+4. **Cascade layer compliance** — Is CSS in the correct cascade layer? Are component styles properly scoped?
+5. **Container queries** — Are responsive behaviors handled with container queries (not media queries) where appropriate?
+6. **Class proliferation** — Are HTML templates using minimal classes? Are developers inventing classes when existing utilities or primitives would work?
+
+Reference the `live-wires:livewires` skill and `live-wires:css-reviewer` agent conventions for specific rules.
+
 ---
 
 ## Output Format
@@ -325,7 +406,7 @@ ToolSearch query: "+pw browser_navigate"
 
 ## Rules
 
-1. Always verify the dev server is running before testing — skip gracefully if not available
+1. Always verify the dev server is running before testing — if not available, report and stop. If Playwright fails, follow the Browser Fallback Chain before giving up.
 2. Test every discovered URL, not just the homepage
 3. Take screenshots at all four breakpoints for every URL when CSS changes are involved
 4. Use the accessibility snapshot to find interactive elements — never hardcode CSS selectors

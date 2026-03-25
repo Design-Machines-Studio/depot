@@ -33,7 +33,7 @@ These agents launch based on which file types were changed.
 | 12 | governance-domain | council | Paths containing: `governance`, `proposal`, `voting`, `member`, `resolution`, `bylaw` | — |
 | 13 | go-build-verifier | dm-review | `.go`, `.templ` | Project has `go.mod` + `docker-compose.yml` |
 | 14 | craft-reviewer | dm-review | `.twig`, `.php` | Project has `craft/` or `.ddev/` |
-| 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running |
+| 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Eight phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), UX Design Review (F), Visual Design Quality (G), Live Wires CSS Compliance (H). Uses `mcp__rag__rag_search` for design reference material in Phases F/G. |
 
 **Trigger overlap note:** The visual-browser-tester shares trigger extensions with a11y-html-reviewer (`.templ`, `.twig`, `.html`) and a11y-css-reviewer/css-reviewer (`.css`). This is intentional — static agents analyze source code while the browser agent tests rendered output. Both perspectives are needed; the consolidator deduplicates any overlapping findings.
 
@@ -79,7 +79,7 @@ These paths are relative to the depot root. When the depot is installed as a plu
 plugins/dm-review/agents/review/visual-browser-tester.md
 ```
 
-This agent uses Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) rather than reading files. It requires a running dev server.
+This agent uses Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) and the RAG knowledge library (`mcp__rag__rag_search`) rather than reading files. It requires a running dev server. Runs eight phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), UX Design Review (F), Visual Design Quality (G), Live Wires CSS Compliance (H). If Playwright fails, follows a fallback chain (retry, restart, Chrome for Claude) before stopping.
 
 ---
 

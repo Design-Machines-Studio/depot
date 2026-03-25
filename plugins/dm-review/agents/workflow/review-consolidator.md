@@ -49,39 +49,11 @@ Example: Both `security-auditor` and `a11y-html-reviewer` flag an XSS issue on t
 
 ### Step 3: Apply Severity Mapping
 
-Map non-standard severity terms to P1/P2/P3:
-
-| Agent Term | Maps To |
-|-----------|---------|
-| Critical, Error, Blocks | P1 |
-| Serious, High, Warning, Major | P2 |
-| Moderate, Medium, Info, Minor, Low | P3 |
-
-Voice editor specific:
-| Voice Term | Maps To |
-|-----------|---------|
-| Spine failure, AI pattern detected | P2 |
-| Rhythm issues, register drift | P3 |
-
-CSS reviewer specific:
-| CSS Term | Maps To |
-|---------|---------|
-| Layer violations, class invention | P2 |
-| Token recommendations | P3 |
-
-Governance domain specific:
-| Governance Term | Maps To |
-|----------------|---------|
-| Legal compliance failure | P1 |
-| Architecture violation, fixture boundary | P2 |
-| Naming recommendations | P3 |
+Apply the severity mapping rules from `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`. This covers all agent-specific term mappings (voice editor, CSS reviewer, governance domain, design review phases, etc.).
 
 ### Step 4: Determine Merge Recommendation
 
-Apply the merge recommendation logic from `references/output-format.md`:
-- Any P1 → "BLOCKS MERGE"
-- P2 only → "APPROVE WITH FIXES"
-- P3 only or clean → "CLEAN"
+Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` — see the "Merge Recommendation Logic" section.
 
 ### Step 5: Generate Report
 
@@ -97,3 +69,5 @@ Follow the exact template in `references/output-format.md`. Include all required
 6. Include agents that found nothing in the summary table with "Clean" status
 7. Include skipped agents in the summary table with "Skipped" status and reason
 8. Count deduplicated findings, not raw findings (don't double-count)
+9. **P3 findings get full detail blocks** — same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
+10. **Flag band-aid recommendations** — if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended — replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.

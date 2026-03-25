@@ -61,8 +61,8 @@ Specific steps to remediate:
 | Field | Values |
 |-------|--------|
 | `id` | 3-digit sequential: `001`, `002`, `003` |
-| `status` | `pending`, `in-progress`, `done` |
-| `priority` | `p1`, `p2` |
+| `status` | `pending`, `done` |
+| `priority` | `p1`, `p2`, `p3` |
 | `slug` | Lowercase kebab-case summary (max 5 words) |
 
 Examples:
@@ -79,22 +79,28 @@ Examples:
 | Review Severity | Todo Priority | Tracked? |
 |----------------|---------------|----------|
 | P1 — Critical | `p1` | Yes — always |
-| P2 — Important | `p2` | Yes — always |
-| P3 — Nice-to-Have | — | No — stays in report only |
+| P2 — Should Fix | `p2` | Yes — always |
+| P3 — Fix This Session | `p3` | Yes — always |
 
 ---
 
 ## Status Lifecycle
 
 ```
-pending → in-progress → done
+pending → done → (deleted after commit)
 ```
 
-Rename the file when status changes:
+Rename the file when the fix is complete:
 ```bash
-mv todos/001-pending-p1-sql-injection.md todos/001-in-progress-p1-sql-injection.md
-mv todos/001-in-progress-p1-sql-injection.md todos/001-done-p1-sql-injection.md
+mv todos/001-pending-p1-sql-injection.md todos/001-done-p1-sql-injection.md
 ```
+
+After fixes are committed, delete completed todo files:
+```bash
+rm todos/*-done-*.md
+```
+
+Don't leave completed todo files accumulating. Clean up after every fix session.
 
 ---
 

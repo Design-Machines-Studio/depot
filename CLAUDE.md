@@ -70,7 +70,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
 | **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
-| **dm-review** | Code review orchestrator with parallel agents and visual browser testing across all DM stacks |
+| **dm-review** | Code review orchestrator with parallel agents, visual browser testing, UX design review, visual design quality review, and Live Wires CSS compliance across all DM stacks |
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 
