@@ -335,6 +335,20 @@ After issue tracking (or if skipped), record the review in ai-memory:
 
 If ai-memory tools are not available, skip silently.
 
+#### Phase 7b: Depot Agent Metrics
+
+After the project-level memory capture, record depot-level metrics. This tracks which agents fire across reviews, feeding back into marketplace analytics.
+
+1. Search for `DepotMetrics` entity — create if missing (type: System)
+2. Add ONE batched observation summarizing the agent dispatch:
+   `[YYYY-MM-DD] Review session: X/Y agents completed, Z skipped (<agent>: <reason>, ...)`
+   - Example: `[2026-03-25] Review session: 9/11 agents completed, 2 skipped (visual-browser-tester: no dev server, craft-reviewer: no .twig files)`
+3. Search for `DepotPlugin:dm-review` entity — create if missing (type: PluginMetrics)
+4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review — correct`
+5. Call `save` to persist
+
+If ai-memory tools are not available, skip silently. See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
+
 ---
 
 ## Reference Files

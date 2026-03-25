@@ -1,7 +1,7 @@
 {
   "name": "ned",
   "description": "Personal knowledge graph and session capture for Travis Gertz",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "author": {
     "name": "Design Machines"
   },
@@ -31,6 +31,12 @@
         "name": "Quick Capture",
         "description": "Quick capture an observation to ai-memory",
         "argumentHint": "<entity name> <observation text>"
+      },
+      {
+        "id": "depot-metrics",
+        "name": "Depot Metrics",
+        "description": "Track and report plugin usage metrics via ai-memory",
+        "argumentHint": "[record <skill> <outcome> | report | sync]"
       }
     ]
   }
