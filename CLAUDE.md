@@ -127,6 +127,18 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 
+## Description Evaluation
+
+Every skill has a corresponding eval file in `description-evals/<plugin>-<skill>.json` containing test queries with expected trigger outcomes. The eval runner checks whether the SKILL.md `description:` field contains enough relevant vocabulary to match real user queries.
+
+```shell
+./tools/eval-descriptions.sh          # run all 28 evals
+./tools/eval-descriptions.sh -v       # verbose (show failures)
+./tools/eval-descriptions.sh foo.json # run one eval
+```
+
+When editing a SKILL.md `description:` field, run the eval for that skill to verify the change doesn't degrade trigger accuracy. Skills must stay above 70% accuracy. See `tools/README.md` for details on the heuristic, pre-commit hooks, and adding new eval cases.
+
 ## Common Operations
 
 Install the marketplace and plugins:

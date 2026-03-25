@@ -1,0 +1,82 @@
+[
+  {
+    "query": "test this page visually in the browser",
+    "should_trigger": true
+  },
+  {
+    "query": "check the dashboard at mobile and desktop breakpoints",
+    "should_trigger": true
+  },
+  {
+    "query": "take screenshots of the login page and look for layout problems",
+    "should_trigger": true
+  },
+  {
+    "query": "run visual QA on localhost:8080",
+    "should_trigger": true
+  },
+  {
+    "query": "does the responsive layout break at 320px",
+    "should_trigger": true
+  },
+  {
+    "query": "check the page in a real browser and tell me how it looks",
+    "should_trigger": true
+  },
+  {
+    "query": "test the hover and focus states on the nav buttons visually",
+    "should_trigger": true
+  },
+  {
+    "query": "do a visual regression test on the member profile page",
+    "should_trigger": true
+  },
+  {
+    "query": "screenshot the form at all breakpoints and check alignment",
+    "should_trigger": true
+  },
+  {
+    "query": "visually verify the sidebar collapses correctly on tablet",
+    "should_trigger": true
+  },
+  {
+    "query": "review the code on this branch before merging",
+    "should_trigger": false
+  },
+  {
+    "query": "run a WCAG audit on the registration form",
+    "should_trigger": false
+  },
+  {
+    "query": "what CSS custom properties does Live Wires use for spacing",
+    "should_trigger": false
+  },
+  {
+    "query": "write a handler for the voting endpoint in Go",
+    "should_trigger": false
+  },
+  {
+    "query": "edit this blog post to match our editorial voice",
+    "should_trigger": false
+  },
+  {
+    "query": "check if the screen reader announces the error messages",
+    "should_trigger": false
+  },
+  {
+    "query": "set up a new Craft CMS project with scaffolding",
+    "should_trigger": false
+  },
+  {
+    "query": "does this mark work in monochrome",
+    "should_trigger": false
+  },
+  {
+    "query": "plan meals for the week using what's in season in Bali",
+    "should_trigger": false
+  },
+  {
+    "query": "check the security of our API authentication",
+    "should_trigger": false
+  }
+]

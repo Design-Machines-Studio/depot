@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Check my Craft setup and tell me what version I'm running",
+    "should_trigger": true
+  },
+  {
+    "query": "What sections do I have in my Craft installation?",
+    "should_trigger": true
+  },
+  {
+    "query": "List all the field types configured in my Craft site",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you inspect the entry types on my blog section?",
+    "should_trigger": true
+  },
+  {
+    "query": "Run a database query to check how many entries are in the products section",
+    "should_trigger": true
+  },
+  {
+    "query": "What does the last error in my Craft logs say?",
+    "should_trigger": true
+  },
+  {
+    "query": "Show me the deprecation warnings in my Craft install",
+    "should_trigger": true
+  },
+  {
+    "query": "Check if there are pending project config changes",
+    "should_trigger": true
+  },
+  {
+    "query": "What plugins are installed and are they up to date?",
+    "should_trigger": true
+  },
+  {
+    "query": "Debug why my queue jobs are failing by checking the logs",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I write a Twig template for my blog listing page?",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I use a Matrix field or CKEditor for my content builder?",
+    "should_trigger": false
+  },
+  {
+    "query": "The empty array behavior broke my queries after upgrading to Craft 5",
+    "should_trigger": false
+  },
+  {
+    "query": "What naming conventions should I use for field handles?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me plan the content architecture for a new Craft project",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Go route handler for the API endpoint",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I configure the stack primitive in Live Wires?",
+    "should_trigger": false
+  },
+  {
+    "query": "Search my memory for anything about the pilot program",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the typography choices on the homepage",
+    "should_trigger": false
+  },
+  {
+    "query": "Capture this session and save it to Notion",
+    "should_trigger": false
+  }
+]

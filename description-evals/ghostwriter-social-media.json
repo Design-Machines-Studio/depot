@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Draft a LinkedIn post about why worker cooperatives outperform traditional companies",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the best time to post on Bluesky from Bali?",
+    "should_trigger": true
+  },
+  {
+    "query": "Help me turn this blog post into an Instagram carousel and a Mastodon thread",
+    "should_trigger": true
+  },
+  {
+    "query": "What hashtags should I use for cooperative content on Mastodon?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to create a content calendar for the next two weeks across all platforms",
+    "should_trigger": true
+  },
+  {
+    "query": "How many slides should a LinkedIn PDF carousel have for best engagement?",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a Bluesky thread about our Assembly app launch with link cards",
+    "should_trigger": true
+  },
+  {
+    "query": "Should I cross-post the same thing to LinkedIn and Instagram or adapt it?",
+    "should_trigger": true
+  },
+  {
+    "query": "What are the image dimensions for Instagram Reels vs feed posts?",
+    "should_trigger": true
+  },
+  {
+    "query": "Do I need content warnings on Mastodon for political commentary about labor?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you edit this essay to match my writing voice and tone?",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Go middleware for authentication in Assembly",
+    "should_trigger": false
+  },
+  {
+    "query": "How does the BC Co-op Act define member voting rights?",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up a responsive grid using Live Wires layout primitives",
+    "should_trigger": false
+  },
+  {
+    "query": "What's a good low-carb dinner recipe for tonight?",
+    "should_trigger": false
+  },
+  {
+    "query": "Run the dm-review code review agent on this pull request",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I query entries in Craft CMS with related categories?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me plan the next sprint in Notion with story points",
+    "should_trigger": false
+  },
+  {
+    "query": "The Element Web auth page needs a new logo, how do I override it?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best way to structure a Templ component for a data table?",
+    "should_trigger": false
+  }
+]

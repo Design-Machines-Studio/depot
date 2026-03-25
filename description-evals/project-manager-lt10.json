@@ -1,0 +1,82 @@
+[
+  {
+    "query": "How should I estimate this new website project for a client?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the difference between agile and waterfall for a complex redesign?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I calculate our burn rate to figure out what to charge?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to write a statement of work for the co-op pilot engagement",
+    "should_trigger": true
+  },
+  {
+    "query": "The client keeps adding features mid-project, how do I handle scope creep?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's a ROM estimate and when should I use one?",
+    "should_trigger": true
+  },
+  {
+    "query": "How much buffer should I add to this timeline?",
+    "should_trigger": true
+  },
+  {
+    "query": "A new stakeholder just showed up and wants to change direction, what do I do?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should I price this project fixed-fee or time and materials?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I use red flags to adjust my estimate range?",
+    "should_trigger": true
+  },
+  {
+    "query": "What should I work on today?",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a todo for fixing the navigation component",
+    "should_trigger": false
+  },
+  {
+    "query": "Show me the current sprint status in Notion",
+    "should_trigger": false
+  },
+  {
+    "query": "Review my pull request for accessibility issues",
+    "should_trigger": false
+  },
+  {
+    "query": "How should I set up the baseline grid in CSS?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the proper way to run a consent decision in our co-op?",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you check the Userback feedback for new bugs?",
+    "should_trigger": false
+  },
+  {
+    "query": "What font pairing works well with GT Standard?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a blog post in my voice",
+    "should_trigger": false
+  },
+  {
+    "query": "What's a good recipe for chicken adobo?",
+    "should_trigger": false
+  }
+]

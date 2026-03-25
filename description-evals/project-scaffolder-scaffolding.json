@@ -1,0 +1,82 @@
+[
+  {
+    "query": "set up a new Go project with Claude Code hooks and agents",
+    "should_trigger": true
+  },
+  {
+    "query": "scaffold the .claude directory for a Craft CMS project",
+    "should_trigger": true
+  },
+  {
+    "query": "create a CLAUDE.md routing document for this project",
+    "should_trigger": true
+  },
+  {
+    "query": "I need commit-push reminder hooks and a pre-stop check",
+    "should_trigger": true
+  },
+  {
+    "query": "configure the session-start gate for our planner workflow",
+    "should_trigger": true
+  },
+  {
+    "query": "add the Docker safety gate hook so Go commands stay inside the container",
+    "should_trigger": true
+  },
+  {
+    "query": "generate a settings.json and hook scripts for a CSS framework project",
+    "should_trigger": true
+  },
+  {
+    "query": "set up the post-edit-context hook to remind me about agents",
+    "should_trigger": true
+  },
+  {
+    "query": "bootstrap Claude Code infrastructure for a new go-templ-datastar app",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm starting a new project, scaffold the standard DM setup",
+    "should_trigger": true
+  },
+  {
+    "query": "what CSS layers does Live Wires use for its architecture",
+    "should_trigger": false
+  },
+  {
+    "query": "write a Go handler for the member registration endpoint",
+    "should_trigger": false
+  },
+  {
+    "query": "how should we structure the cooperative governance bylaws",
+    "should_trigger": false
+  },
+  {
+    "query": "review this PR before merging",
+    "should_trigger": false
+  },
+  {
+    "query": "help me plan a Thai curry recipe for tonight",
+    "should_trigger": false
+  },
+  {
+    "query": "check the WCAG compliance of our login form",
+    "should_trigger": false
+  },
+  {
+    "query": "test the dashboard page visually at mobile breakpoints",
+    "should_trigger": false
+  },
+  {
+    "query": "does this logo concept work for a cooperative brand",
+    "should_trigger": false
+  },
+  {
+    "query": "edit the tone of our newsletter to be more conversational",
+    "should_trigger": false
+  },
+  {
+    "query": "what type scale should I use for body text at 18px base",
+    "should_trigger": false
+  }
+]

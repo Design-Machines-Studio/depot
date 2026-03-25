@@ -1,0 +1,82 @@
+[
+  {
+    "query": "does this logo work or should we simplify it",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to build a brand identity system for a new co-op project",
+    "should_trigger": true
+  },
+  {
+    "query": "help me evaluate this mark against Rand's seven criteria",
+    "should_trigger": true
+  },
+  {
+    "query": "what sizes do I need for favicon and touch icons",
+    "should_trigger": true
+  },
+  {
+    "query": "can you critique this logo concept I'm working on",
+    "should_trigger": true
+  },
+  {
+    "query": "we need brand guidelines for the Design Machines identity",
+    "should_trigger": true
+  },
+  {
+    "query": "should the mark work in monochrome or is color fine",
+    "should_trigger": true
+  },
+  {
+    "query": "how do I set up SVG logos with dark mode variants in CSS",
+    "should_trigger": true
+  },
+  {
+    "query": "what makes a good mark for a cooperative organization",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to create a visual identity that works from app icon to billboard",
+    "should_trigger": true
+  },
+  {
+    "query": "what type scale should I use for this project",
+    "should_trigger": false
+  },
+  {
+    "query": "how do I set up a baseline rhythm grid in CSS",
+    "should_trigger": false
+  },
+  {
+    "query": "can you review my layout for this dashboard page",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the best way to handle responsive columns with Live Wires",
+    "should_trigger": false
+  },
+  {
+    "query": "help me build a data visualization for our quarterly revenue",
+    "should_trigger": false
+  },
+  {
+    "query": "how should we structure the governance proposal voting flow",
+    "should_trigger": false
+  },
+  {
+    "query": "check the color contrast ratio on this button",
+    "should_trigger": false
+  },
+  {
+    "query": "write a blog post about our new product launch",
+    "should_trigger": false
+  },
+  {
+    "query": "scaffold a new Go project with Claude Code hooks",
+    "should_trigger": false
+  },
+  {
+    "query": "what CSS custom properties should I use for spacing tokens",
+    "should_trigger": false
+  }
+]

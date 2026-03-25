@@ -1,0 +1,82 @@
+[
+  {
+    "query": "audit this page for WCAG 2.2 compliance",
+    "should_trigger": true
+  },
+  {
+    "query": "the color contrast on our nav links looks too low",
+    "should_trigger": true
+  },
+  {
+    "query": "how do I add proper focus management to this modal",
+    "should_trigger": true
+  },
+  {
+    "query": "what ARIA attributes do I need for a custom combobox",
+    "should_trigger": true
+  },
+  {
+    "query": "our heading hierarchy is broken on the dashboard page",
+    "should_trigger": true
+  },
+  {
+    "query": "run pa11y against our staging site and fix violations",
+    "should_trigger": true
+  },
+  {
+    "query": "is this Templ component accessible for keyboard users",
+    "should_trigger": true
+  },
+  {
+    "query": "what are the new success criteria in WCAG 2.2 we need to cover",
+    "should_trigger": true
+  },
+  {
+    "query": "make sure our Twig templates have proper form labels and error associations",
+    "should_trigger": true
+  },
+  {
+    "query": "set up axe-core in our Playwright test suite for a11y checks",
+    "should_trigger": true
+  },
+  {
+    "query": "test this page with VoiceOver and tell me what it announces",
+    "should_trigger": false
+  },
+  {
+    "query": "what does NVDA read when I tab through the form",
+    "should_trigger": false
+  },
+  {
+    "query": "how should I structure the CSS layers in Live Wires",
+    "should_trigger": false
+  },
+  {
+    "query": "write a handler for the proposal submission endpoint in Go",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the best approach for cooperative bylaw amendments",
+    "should_trigger": false
+  },
+  {
+    "query": "help me plan a meal with the ingredients I have",
+    "should_trigger": false
+  },
+  {
+    "query": "review this PR before we merge it",
+    "should_trigger": false
+  },
+  {
+    "query": "does this logo work at small sizes",
+    "should_trigger": false
+  },
+  {
+    "query": "scaffold a new Craft CMS project with hooks and agents",
+    "should_trigger": false
+  },
+  {
+    "query": "can you edit this paragraph to match our writing voice",
+    "should_trigger": false
+  }
+]

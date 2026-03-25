@@ -1,0 +1,82 @@
+[
+  {
+    "query": "How should I construct a grid for this editorial magazine spread?",
+    "should_trigger": true
+  },
+  {
+    "query": "The spacing on this page feels wrong, can you help me diagnose it?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I lay out a long-form article page with images and pull quotes?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the right approach to visual hierarchy on a landing page?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should I use a 3-column or 4-column grid for this project?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I think about whitespace as an active design element?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to create a responsive layout that works across print and web",
+    "should_trigger": true
+  },
+  {
+    "query": "How should I pace content across a multi-page publication?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's Gerstner's mobile grid and when should I use it?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I set up margins and gutters for an InDesign document?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I use the Live Wires sidebar and switcher components in CSS?",
+    "should_trigger": false
+  },
+  {
+    "query": "What font size should my body text be?",
+    "should_trigger": false
+  },
+  {
+    "query": "How should I design the identity mark for a new brand?",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I use a line chart or area chart for this trend data?",
+    "should_trigger": false
+  },
+  {
+    "query": "Write the Go handler for the governance voting page",
+    "should_trigger": false
+  },
+  {
+    "query": "What type scale ratio gives me good heading contrast?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me set up a modular scale for the headings",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I estimate hours for the redesign project?",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I call this section 'Overview' or 'Dashboard'?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best way to display sparklines in a member equity table?",
+    "should_trigger": false
+  }
+]

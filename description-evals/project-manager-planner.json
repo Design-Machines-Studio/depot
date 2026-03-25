@@ -1,0 +1,82 @@
+[
+  {
+    "query": "What should I work on today?",
+    "should_trigger": true
+  },
+  {
+    "query": "Show me what's left in this sprint",
+    "should_trigger": true
+  },
+  {
+    "query": "Create a task for refactoring the member onboarding flow",
+    "should_trigger": true
+  },
+  {
+    "query": "What's my velocity looking like over the last few sprints?",
+    "should_trigger": true
+  },
+  {
+    "query": "Are there any new Userback submissions I should triage?",
+    "should_trigger": true
+  },
+  {
+    "query": "I have a meeting with the Catalyst folks tomorrow, can you prep me?",
+    "should_trigger": true
+  },
+  {
+    "query": "Mark that navigation todo as done",
+    "should_trigger": true
+  },
+  {
+    "query": "What's on my plate for Assembly this sprint?",
+    "should_trigger": true
+  },
+  {
+    "query": "Let's do sprint planning for the next two weeks",
+    "should_trigger": true
+  },
+  {
+    "query": "Move that task to the next sprint, I won't get to it",
+    "should_trigger": true
+  },
+  {
+    "query": "How should I estimate this project for the client?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the 90th percentile estimation method?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the CSS in my latest commit",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I call this profit or surplus in the UI?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I handle scope creep with a difficult client?",
+    "should_trigger": false
+  },
+  {
+    "query": "What heading sizes should I use for the marketing page?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a newsletter in my editorial voice",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I calculate burn rate for pricing?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the proper quorum for a special resolution?",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I use a bar chart or a line chart for this data?",
+    "should_trigger": false
+  }
+]

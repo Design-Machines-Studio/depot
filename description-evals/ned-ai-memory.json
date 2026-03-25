@@ -1,0 +1,82 @@
+[
+  {
+    "query": "What do you know about Louisa?",
+    "should_trigger": true
+  },
+  {
+    "query": "Who is the contact at Pixelcraft Studios?",
+    "should_trigger": true
+  },
+  {
+    "query": "Look up the status of the Assembly project",
+    "should_trigger": true
+  },
+  {
+    "query": "Do you remember what we decided about pricing last month?",
+    "should_trigger": true
+  },
+  {
+    "query": "Search for any entities related to the pilot program",
+    "should_trigger": true
+  },
+  {
+    "query": "Add an observation to the Live Wires entity that beta feedback was positive",
+    "should_trigger": true
+  },
+  {
+    "query": "What companies have I worked with this year?",
+    "should_trigger": true
+  },
+  {
+    "query": "Show me the relationship between Design Machines and Assembly",
+    "should_trigger": true
+  },
+  {
+    "query": "How many entities are in my knowledge graph?",
+    "should_trigger": true
+  },
+  {
+    "query": "Create a new entity for the partnership with Coastal Digital",
+    "should_trigger": true
+  },
+  {
+    "query": "Capture this session and save it to Notion",
+    "should_trigger": false
+  },
+  {
+    "query": "Log everything we discussed today",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a blog post in my voice",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the CSS in my Live Wires component",
+    "should_trigger": false
+  },
+  {
+    "query": "Run a code review on this pull request",
+    "should_trigger": false
+  },
+  {
+    "query": "What sections should I use for my Craft CMS project?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I set up a Matrix field in Craft?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me plan the next sprint in Notion",
+    "should_trigger": false
+  },
+  {
+    "query": "What does the BC Cooperative Act say about voting?",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Go handler for the membership page",
+    "should_trigger": false
+  }
+]

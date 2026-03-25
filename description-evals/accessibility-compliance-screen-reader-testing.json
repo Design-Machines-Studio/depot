@@ -1,0 +1,82 @@
+[
+  {
+    "query": "test this page with VoiceOver and report what it announces",
+    "should_trigger": true
+  },
+  {
+    "query": "what does NVDA read when navigating the form fields",
+    "should_trigger": true
+  },
+  {
+    "query": "our screen reader users say the dialog is confusing to navigate",
+    "should_trigger": true
+  },
+  {
+    "query": "check if the live region announces updates after a Datastar morph",
+    "should_trigger": true
+  },
+  {
+    "query": "verify the heading hierarchy reads correctly in VoiceOver rotor",
+    "should_trigger": true
+  },
+  {
+    "query": "the accordion component doesn't announce expanded or collapsed state",
+    "should_trigger": true
+  },
+  {
+    "query": "do our icon-only buttons have accessible names for assistive tech",
+    "should_trigger": true
+  },
+  {
+    "query": "run a screen reader audit on the login page using the testing checklist",
+    "should_trigger": true
+  },
+  {
+    "query": "after the SSE update, focus jumps to the body instead of staying put",
+    "should_trigger": true
+  },
+  {
+    "query": "does the landmark structure make sense when navigating with VoiceOver",
+    "should_trigger": true
+  },
+  {
+    "query": "run an automated WCAG audit with pa11y on our staging URL",
+    "should_trigger": false
+  },
+  {
+    "query": "check the color contrast ratio on the sidebar links",
+    "should_trigger": false
+  },
+  {
+    "query": "what ARIA attributes should I use for this custom dropdown",
+    "should_trigger": false
+  },
+  {
+    "query": "help me set up a Go handler for the members endpoint",
+    "should_trigger": false
+  },
+  {
+    "query": "how do I model content types in Craft CMS",
+    "should_trigger": false
+  },
+  {
+    "query": "can you adjust the tone of this newsletter draft",
+    "should_trigger": false
+  },
+  {
+    "query": "what's the correct layer order for Live Wires CSS",
+    "should_trigger": false
+  },
+  {
+    "query": "set up axe-core in our CI pipeline",
+    "should_trigger": false
+  },
+  {
+    "query": "review the security of our authentication flow",
+    "should_trigger": false
+  },
+  {
+    "query": "does this mark pass the blur test at small sizes",
+    "should_trigger": false
+  }
+]

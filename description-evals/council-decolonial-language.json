@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Should I call this profit or surplus in the co-op dashboard?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's a good label for the board of directors section in Assembly?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm writing button text for a voting feature, what terminology should I use?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I make the financial reports member-friendly without losing legal accuracy?",
+    "should_trigger": true
+  },
+  {
+    "query": "What should we call the employee onboarding section in a worker co-op app?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to seed some default role names for co-op governance, what sounds right?",
+    "should_trigger": true
+  },
+  {
+    "query": "The tooltip says 'shareholders' but these are co-op members, what's the right term?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should the nav say Dashboard or something less surveillance-y?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm writing an error message for when a member misses a consent round deadline",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the difference between the legal layer and the cultural layer for co-op language?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the quorum requirement for a special resolution under the BC Act?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I implement the voting handler in Go?",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up the CSS grid for the governance page layout",
+    "should_trigger": false
+  },
+  {
+    "query": "What's our current revenue model and pricing strategy?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a blog post about cooperative economics",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I run the annual general meeting procedurally?",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you review my pull request for the member profile page?",
+    "should_trigger": false
+  },
+  {
+    "query": "What type scale should I use for the Assembly app?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's a good recipe for tempeh rendang?",
+    "should_trigger": false
+  },
+  {
+    "query": "How should I estimate the Assembly pilot engagement?",
+    "should_trigger": false
+  }
+]

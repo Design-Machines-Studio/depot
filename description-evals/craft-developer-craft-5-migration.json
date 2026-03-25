@@ -1,0 +1,82 @@
+[
+  {
+    "query": "I need to upgrade our Craft 4 site to Craft 5",
+    "should_trigger": true
+  },
+  {
+    "query": "After upgrading Craft, my relatedTo queries return empty results",
+    "should_trigger": true
+  },
+  {
+    "query": "GraphQL says the type news_article_Entry doesn't exist anymore",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the entrification strategy for converting categories to entries?",
+    "should_trigger": true
+  },
+  {
+    "query": "block.type comparisons broke after the Craft 5 migration",
+    "should_trigger": true
+  },
+  {
+    "query": "Which plugins are compatible with Craft 5?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the migration checklist for going from Craft 4 to 5?",
+    "should_trigger": true
+  },
+  {
+    "query": "The empty array behavior changed and broke my filtering",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I convert my globals to Singles in Craft 5?",
+    "should_trigger": true
+  },
+  {
+    "query": "What new features were added in Craft 5.7 through 5.9?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I write an element query to fetch blog posts?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best content modeling approach for a new Craft project?",
+    "should_trigger": false
+  },
+  {
+    "query": "Show me how to eager load related entries in Twig",
+    "should_trigger": false
+  },
+  {
+    "query": "List all sections and fields via the Craft MCP",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I use a Channel or Structure for this section?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me build a Templ component for the member profile",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the baseline rhythm approach in Live Wires?",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a newsletter draft in my editorial voice",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I set up the BC co-op governance structure?",
+    "should_trigger": false
+  },
+  {
+    "query": "Run a design review on the product detail page",
+    "should_trigger": false
+  }
+]

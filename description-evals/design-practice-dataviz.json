@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Should I use a pie chart or a bar chart for showing member equity breakdown?",
+    "should_trigger": true
+  },
+  {
+    "query": "This chart looks cluttered, how do I clean it up?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the data-ink ratio and how do I improve it?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm building a financial dashboard for co-op members, what chart types make sense?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I add sparklines inline with the quarterly revenue numbers?",
+    "should_trigger": true
+  },
+  {
+    "query": "Is it okay to start the Y-axis at something other than zero?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to present patronage distribution data in an infographic",
+    "should_trigger": true
+  },
+  {
+    "query": "How many lines is too many on a single line chart?",
+    "should_trigger": true
+  },
+  {
+    "query": "What colors should I use for encoding categories in a chart?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I label chart data directly instead of using a legend?",
+    "should_trigger": true
+  },
+  {
+    "query": "How should I lay out this editorial spread with text and images?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the right line-height for body text on this page?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I implement the Live Wires grid component?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the proper quorum for a special resolution?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a blog post in my editorial voice",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I set up columns and gutters for an InDesign layout?",
+    "should_trigger": false
+  },
+  {
+    "query": "What font should I pair with GT Standard?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review my Go template for the governance page",
+    "should_trigger": false
+  },
+  {
+    "query": "How should I estimate this redesign project?",
+    "should_trigger": false
+  },
+  {
+    "query": "What should I work on in the current sprint?",
+    "should_trigger": false
+  }
+]

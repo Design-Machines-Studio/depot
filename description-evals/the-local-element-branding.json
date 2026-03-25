@@ -1,0 +1,82 @@
+[
+  {
+    "query": "The login button on thelocal.chat looks squished, can we fix the height?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to change the background color on the Element sign-in page",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I replace the Element logo with The Local's logo on the auth screen?",
+    "should_trigger": true
+  },
+  {
+    "query": "The welcome page styles are leaking into the rest of Element, everything looks broken",
+    "should_trigger": true
+  },
+  {
+    "query": "Can we update the custom.css for thelocal.chat with new brand colors?",
+    "should_trigger": true
+  },
+  {
+    "query": "The service worker is caching old styles and users see the stale version",
+    "should_trigger": true
+  },
+  {
+    "query": "How does the CSS injection work in our Element Web setup?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to customize the welcome page content that shows before login",
+    "should_trigger": true
+  },
+  {
+    "query": "The mx_AuthPage background override isn't working, it keeps reverting",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the cache-busting strategy for deploying Element style changes?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I set up SMTP email sending for Synapse through Resend?",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to create a new registration token for Matrix signups",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you SSH into the droplet and restart the synapse container?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I back up the Postgres database for Matrix?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the docker compose command to check service logs?",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to edit the Jinja2 password reset email template",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me set up a baseline grid with Live Wires CSS",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you review my Go handler for the Assembly governance app?",
+    "should_trigger": false
+  },
+  {
+    "query": "What does Eve Persak recommend for cholesterol management?",
+    "should_trigger": false
+  },
+  {
+    "query": "Draft a LinkedIn post about workplace democracy",
+    "should_trigger": false
+  }
+]

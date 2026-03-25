@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Should I use a Channel or a Structure for my portfolio section?",
+    "should_trigger": true
+  },
+  {
+    "query": "How deep should I nest Matrix blocks in my content builder?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the best naming convention for field handles in Craft?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can I share an entry type between a section and a Matrix field?",
+    "should_trigger": true
+  },
+  {
+    "query": "When should I use CKEditor vs Matrix for content?",
+    "should_trigger": true
+  },
+  {
+    "query": "How should I structure the content architecture for a new Craft site?",
+    "should_trigger": true
+  },
+  {
+    "query": "What color strategy should I use for entry types in the CP?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should categories be their own section or use the native category element?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do conditional field layouts reduce the need for multiple entry types?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm planning a content model for a client's recipe site, where do I start?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I write a Twig template to loop through Matrix blocks?",
+    "should_trigger": false
+  },
+  {
+    "query": "My relatedTo query returns nothing after the Craft 5 upgrade",
+    "should_trigger": false
+  },
+  {
+    "query": "What changed with GraphQL type names in Craft 5?",
+    "should_trigger": false
+  },
+  {
+    "query": "List all the sections in my Craft install",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me debug this N+1 query issue on the blog page",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Datastar component for the member dashboard",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I configure the Live Wires stack layout?",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you review the accessibility of my navigation component?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the entrification strategy for migrating globals to singles?",
+    "should_trigger": false
+  },
+  {
+    "query": "Capture this session and push observations to memory",
+    "should_trigger": false
+  }
+]

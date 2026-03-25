@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Capture this session",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you log what we talked about today?",
+    "should_trigger": true
+  },
+  {
+    "query": "Save this conversation to Notion and memory",
+    "should_trigger": true
+  },
+  {
+    "query": "Document what we decided in this chat",
+    "should_trigger": true
+  },
+  {
+    "query": "Quick capture the highlights from this session",
+    "should_trigger": true
+  },
+  {
+    "query": "We covered a lot today, can you save our decisions?",
+    "should_trigger": true
+  },
+  {
+    "query": "Log this so I can reference it later",
+    "should_trigger": true
+  },
+  {
+    "query": "Create a session summary with todos",
+    "should_trigger": true
+  },
+  {
+    "query": "Record what we discussed about the pilot pricing",
+    "should_trigger": true
+  },
+  {
+    "query": "Save the key takeaways from this conversation",
+    "should_trigger": true
+  },
+  {
+    "query": "What do you know about the Assembly project?",
+    "should_trigger": false
+  },
+  {
+    "query": "Who is Marcus from the co-op board?",
+    "should_trigger": false
+  },
+  {
+    "query": "Search memory for anything about Coastal Digital",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a newsletter in my voice",
+    "should_trigger": false
+  },
+  {
+    "query": "Run a design review on the homepage",
+    "should_trigger": false
+  },
+  {
+    "query": "What tasks are due this sprint?",
+    "should_trigger": false
+  },
+  {
+    "query": "Fix the eager loading in my Craft template",
+    "should_trigger": false
+  },
+  {
+    "query": "Add an observation to the Live Wires entity",
+    "should_trigger": false
+  },
+  {
+    "query": "How should I structure my CSS grid component?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the Go code in the membership handler",
+    "should_trigger": false
+  }
+]

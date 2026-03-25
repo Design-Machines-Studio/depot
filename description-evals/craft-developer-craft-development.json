@@ -1,0 +1,82 @@
+[
+  {
+    "query": "How do I eager load assets in a Craft CMS template?",
+    "should_trigger": true
+  },
+  {
+    "query": "My relatedTo query is returning nothing, what's wrong?",
+    "should_trigger": true
+  },
+  {
+    "query": "Show me how to query Matrix field entries in Twig",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the difference between .all() and .one() in Craft?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I write a GraphQL mutation to save a Craft entry?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm getting N+1 queries on my blog listing page",
+    "should_trigger": true
+  },
+  {
+    "query": "How does cache invalidation work in Craft CMS?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you help me debug why my Twig template shows a blank page?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the correct way to use sourceElement vs targetElement in relatedTo?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I use lazy eager loading with .eagerly() in Craft 5?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should I use a Channel or Structure section for my blog?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I plan the content model for a new Craft project?",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best Matrix nesting strategy for a page builder?",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to upgrade my site from Craft 4 to Craft 5",
+    "should_trigger": false
+  },
+  {
+    "query": "The GraphQL type names changed after upgrading Craft",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Go handler for user authentication",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I set up a CSS grid with Live Wires?",
+    "should_trigger": false
+  },
+  {
+    "query": "Check what sections exist in my Craft install via MCP",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write copy for the About page",
+    "should_trigger": false
+  },
+  {
+    "query": "What does the cooperative act say about member equity?",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,82 @@
+[
+  {
+    "query": "What should we eat tonight? I'm not feeling very inspired",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you analyze this pad thai recipe and flag anything that doesn't fit Eve's guidelines?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you convert this pasta recipe to a healthier Bali-friendly version?",
+    "should_trigger": true
+  },
+  {
+    "query": "Where can I source good ingredients for this recipe in Ubud? I need a shopping list",
+    "should_trigger": true
+  },
+  {
+    "query": "What ingredient substitutions work for this recipe based on Eve Persak's dietary guidelines?",
+    "should_trigger": true
+  },
+  {
+    "query": "Help me with meal planning for this week following the nutrition framework",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you save this salmon recipe to Mela with the right tags?",
+    "should_trigger": true
+  },
+  {
+    "query": "What can I cook tonight with the ingredients we have? Something quick and healthy",
+    "should_trigger": true
+  },
+  {
+    "query": "Tell me about the food science behind cooking techniques for this recipe",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you check this recipe against our dietary guidelines and suggest adjustments?",
+    "should_trigger": true
+  },
+  {
+    "query": "How should the BC Co-op Act board election process work?",
+    "should_trigger": false
+  },
+  {
+    "query": "I need a baseline grid setup for my CSS layout",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you write a Go handler that validates form input?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the accessibility of this Templ component for screen readers",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the optimal character count for a LinkedIn text post?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me edit this blog post to sound more like my writing voice",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up a new Craft CMS section for case studies",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best way to structure a Datastar signal in Templ?",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you triage the latest Userback tickets into the sprint?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I deploy CSS changes to thelocal.chat?",
+    "should_trigger": false
+  }
+]

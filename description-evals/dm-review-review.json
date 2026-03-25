@@ -1,0 +1,82 @@
+[
+  {
+    "query": "review this code before I merge",
+    "should_trigger": true
+  },
+  {
+    "query": "can you check my PR for any issues",
+    "should_trigger": true
+  },
+  {
+    "query": "run a full code review on the current branch",
+    "should_trigger": true
+  },
+  {
+    "query": "review the changes I made to the proposal handler",
+    "should_trigger": true
+  },
+  {
+    "query": "do a quick review of what I've got staged",
+    "should_trigger": true
+  },
+  {
+    "query": "check this diff for security and architecture problems",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm about to open a PR, can you review first",
+    "should_trigger": true
+  },
+  {
+    "query": "review the last three commits on this feature branch",
+    "should_trigger": true
+  },
+  {
+    "query": "run dm-review on PR 47",
+    "should_trigger": true
+  },
+  {
+    "query": "are there any issues with my uncommitted changes",
+    "should_trigger": true
+  },
+  {
+    "query": "test this page visually in the browser at different breakpoints",
+    "should_trigger": false
+  },
+  {
+    "query": "take a screenshot of the dashboard and check for layout issues",
+    "should_trigger": false
+  },
+  {
+    "query": "help me adjust the writing voice on our about page",
+    "should_trigger": false
+  },
+  {
+    "query": "how should we structure the governance vote for this resolution",
+    "should_trigger": false
+  },
+  {
+    "query": "what CSS layers should this component use in Live Wires",
+    "should_trigger": false
+  },
+  {
+    "query": "plan a dinner with what I have in the pantry",
+    "should_trigger": false
+  },
+  {
+    "query": "scaffold a new project with Claude Code hooks",
+    "should_trigger": false
+  },
+  {
+    "query": "check if VoiceOver reads the navigation landmarks correctly",
+    "should_trigger": false
+  },
+  {
+    "query": "does this logo work at favicon size",
+    "should_trigger": false
+  },
+  {
+    "query": "run a WCAG contrast check on the form inputs",
+    "should_trigger": false
+  }
+]

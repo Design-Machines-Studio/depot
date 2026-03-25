@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Can you SSH into the droplet and check the Synapse logs?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to restart all Docker containers on the Matrix server",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I create a new Matrix account for a co-op member?",
+    "should_trigger": true
+  },
+  {
+    "query": "Let's do a database backup before we make any more changes",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the scp command to deploy the updated CSS to the server?",
+    "should_trigger": true
+  },
+  {
+    "query": "The server seems slow, can we check docker stats and resource usage?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to pull the latest git changes on the droplet and force-recreate element",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I register an admin user on The Local?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can we check if the Caddy reverse proxy is routing correctly?",
+    "should_trigger": true
+  },
+  {
+    "query": "RAM is getting high on the droplet, should we resize to 4GB?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to change the auth page background to dark purple in custom.css",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I customize the Jinja2 email templates for password resets?",
+    "should_trigger": false
+  },
+  {
+    "query": "The homeserver.yaml needs the SMTP settings updated for Resend",
+    "should_trigger": false
+  },
+  {
+    "query": "Can we add a new registration token through the Synapse admin API?",
+    "should_trigger": false
+  },
+  {
+    "query": "The welcome page HTML is injecting styles that break Element",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the Live Wires class for a two-column layout?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me plan meals for the week that work for both Travis and Lydia",
+    "should_trigger": false
+  },
+  {
+    "query": "What tone should I use for a Bluesky thread about cooperatives?",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you review the Go error handling in my Assembly handler?",
+    "should_trigger": false
+  },
+  {
+    "query": "Draft a sprint plan for this week's Notion board",
+    "should_trigger": false
+  }
+]

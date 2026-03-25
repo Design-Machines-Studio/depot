@@ -1,0 +1,82 @@
+[
+  {
+    "query": "What font should I use for a co-op governance app?",
+    "should_trigger": true
+  },
+  {
+    "query": "How big should my headings be relative to the body text?",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm building a type scale, should I use the golden ratio or something else?",
+    "should_trigger": true
+  },
+  {
+    "query": "The line-height on this page feels too tight, what should I aim for?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you suggest a good font pairing for an editorial website?",
+    "should_trigger": true
+  },
+  {
+    "query": "How does fluid type with clamp() actually work?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should I use a baseline grid and how do I set one up?",
+    "should_trigger": true
+  },
+  {
+    "query": "This text feels off but I can't figure out why",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the ideal line length for comfortable reading?",
+    "should_trigger": true
+  },
+  {
+    "query": "Should I letterspace these uppercase headings?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I use the Live Wires stack and sidebar primitives?",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up a six-column CSS grid for this editorial layout",
+    "should_trigger": false
+  },
+  {
+    "query": "How should I design the logo for our new brand?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review my Go template for accessibility issues",
+    "should_trigger": false
+  },
+  {
+    "query": "What's a good recipe for sourdough bread?",
+    "should_trigger": false
+  },
+  {
+    "query": "Should I use a pie chart or a bar chart for this financial data?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I handle scope creep on a client project?",
+    "should_trigger": false
+  },
+  {
+    "query": "What should I work on in this sprint?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I set up the whitespace and margins for this page?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a newsletter introduction in my voice",
+    "should_trigger": false
+  }
+]

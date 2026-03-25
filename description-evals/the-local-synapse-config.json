@@ -1,0 +1,82 @@
+[
+  {
+    "query": "I need to update the homeserver.yaml to disable federation",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I set up Resend SMTP for Synapse email on port 2587?",
+    "should_trigger": true
+  },
+  {
+    "query": "Can we customize the password reset email template for The Local?",
+    "should_trigger": true
+  },
+  {
+    "query": "I want to create a new Jinja2 template for the registration confirmation page",
+    "should_trigger": true
+  },
+  {
+    "query": "How does the config template pattern work with the placeholder tokens?",
+    "should_trigger": true
+  },
+  {
+    "query": "What's the process for generating homeserver.yaml.active from the template?",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to enable registration tokens so signups require an invite code",
+    "should_trigger": true
+  },
+  {
+    "query": "The notif_mail email template needs to include our branding, how does the base template work?",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I check what Jinja2 variables are available in Synapse's default templates?",
+    "should_trigger": true
+  },
+  {
+    "query": "DigitalOcean blocks SMTP port 587, what port does Resend use for Synapse?",
+    "should_trigger": true
+  },
+  {
+    "query": "The Element login page background color needs to change to our brand purple",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you SSH into the server and pull the latest changes?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I register a new Matrix user from the command line?",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to restart the Docker containers after a config change",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the command to dump the Postgres database for backup?",
+    "should_trigger": false
+  },
+  {
+    "query": "The welcome page CSS is leaking into Element's parent document",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a Templ component for the Assembly app",
+    "should_trigger": false
+  },
+  {
+    "query": "What's the best hashtag strategy for our Mastodon posts?",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you analyze this chicken curry recipe for health alignment?",
+    "should_trigger": false
+  },
+  {
+    "query": "How should we structure the BC cooperative bylaws?",
+    "should_trigger": false
+  }
+]
