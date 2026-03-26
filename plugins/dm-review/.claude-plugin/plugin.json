@@ -6,7 +6,7 @@
     "name": "Design Machines",
     "url": "https://designmachines.io"
   },
-  "dependencies": {
+  "pluginDependencies": {
     "accessibility-compliance": ">=1.2.0",
     "live-wires": ">=1.5.1",
     "ghostwriter": ">=3.7.0",

@@ -92,18 +92,18 @@ Plugins that reference skills or agents from other plugins declare those relatio
 
 ```json
 {
-  "dependencies": {
+  "pluginDependencies": {
     "ned": ">=1.4.0",
     "ghostwriter": ">=3.7.0"
   },
-  "optionalDependencies": {
+  "optionalPluginDependencies": {
     "council": ">=1.5.0"
   }
 }
 ```
 
-- `dependencies` are hard requirements -- the plugin will not function without them.
-- `optionalDependencies` enrich behavior but the plugin works without them.
+- `pluginDependencies` are hard requirements -- the plugin will not function without them.
+- `optionalPluginDependencies` enrich behavior but the plugin works without them.
 - Version constraints use semver `>=X.Y.Z` syntax. Set the floor to the version where the specific referenced capability (agent, skill) was present and stable.
 - Most plugins are self-contained and need no dependencies field.
 

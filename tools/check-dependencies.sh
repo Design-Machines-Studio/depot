@@ -55,10 +55,10 @@ for pj_path in sorted(glob.glob(os.path.join(plugins_dir, "*/.claude-plugin/plug
         pj = json.load(f)
     name = pj["name"]
 
-    for dep_name in pj.get("dependencies", {}):
+    for dep_name in pj.get("pluginDependencies", {}):
         edges.append(f"  {name} --> {dep_name}")
 
-    for dep_name in pj.get("optionalDependencies", {}):
+    for dep_name in pj.get("optionalPluginDependencies", {}):
         edges.append(f"  {name} -.-> {dep_name}")
 
 for edge in edges:
@@ -162,9 +162,9 @@ validate_plugin() {
   local any_hard_fail=0
   local dep_type dep_field
 
-  for dep_field in dependencies optionalDependencies; do
+  for dep_field in pluginDependencies optionalPluginDependencies; do
     local is_optional=0
-    [ "$dep_field" = "optionalDependencies" ] && is_optional=1
+    [ "$dep_field" = "optionalPluginDependencies" ] && is_optional=1
 
     local dep_type_label="required"
     [ "$is_optional" -eq 1 ] && dep_type_label="optional"
@@ -260,7 +260,7 @@ main() {
     has_deps=$(PJSON="$pj" python3 -c "
 import json, os
 pj = json.load(open(os.environ['PJSON']))
-has = bool(pj.get('dependencies')) or bool(pj.get('optionalDependencies'))
+has = bool(pj.get('pluginDependencies')) or bool(pj.get('optionalPluginDependencies'))
 print('yes' if has else 'no')
 ")
 

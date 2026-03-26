@@ -14,11 +14,11 @@ Your command has a multi-phase workflow where certain phases need domain experti
 
 ### How to declare
 
-**In plugin.json:** Add the companion plugin to `dependencies`:
+**In plugin.json:** Add the companion plugin to `pluginDependencies`:
 
 ```json
 {
-  "dependencies": {
+  "pluginDependencies": {
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0"
   }
@@ -65,11 +65,11 @@ You need multiple specialized perspectives on the same input. Each perspective i
 
 ### How to declare
 
-**In plugin.json:** Add `dependencies` for external agent providers:
+**In plugin.json:** Add `pluginDependencies` for external agent providers:
 
 ```json
 {
-  "dependencies": {
+  "pluginDependencies": {
     "accessibility-compliance": ">=1.2.0",
     "live-wires": ">=1.5.1"
   }
