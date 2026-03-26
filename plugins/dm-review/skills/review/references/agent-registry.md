@@ -33,9 +33,10 @@ These agents launch based on which file types were changed.
 | 12 | governance-domain | council | Paths containing: `governance`, `proposal`, `voting`, `member`, `resolution`, `bylaw` | — |
 | 13 | go-build-verifier | dm-review | `.go`, `.templ` | Project has `go.mod` + `docker-compose.yml` |
 | 14 | craft-reviewer | dm-review | `.twig`, `.php` | Project has `craft/` or `.ddev/` |
-| 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Eight phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), UX Design Review (F), Visual Design Quality (G), Live Wires CSS Compliance (H). Uses `mcp__rag__rag_search` for design reference material in Phases F/G. |
+| 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Six phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), Live Wires CSS Compliance (F). UX design and visual design quality review moved to ux-quality-reviewer. |
+| 16 | ux-quality-reviewer | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Nine phases: Information Hierarchy (1), Spacing & Alignment (2), UI State Completeness (3), Navigation & Wayfinding (4), Content Quality (5), Typography (6), Layout & Composition (7), Edge Case Resilience (8), Interaction Polish (9). Saves screenshots to `.claude/ux-review/`. |
 
-**Trigger overlap note:** The visual-browser-tester shares trigger extensions with a11y-html-reviewer (`.templ`, `.twig`, `.html`) and a11y-css-reviewer/css-reviewer (`.css`). This is intentional — static agents analyze source code while the browser agent tests rendered output. Both perspectives are needed; the consolidator deduplicates any overlapping findings.
+**Trigger overlap note:** The visual-browser-tester and ux-quality-reviewer share trigger extensions with a11y-html-reviewer (`.templ`, `.twig`, `.html`) and a11y-css-reviewer/css-reviewer (`.css`). This is intentional — static agents analyze source code while the browser agents test rendered output. The visual-browser-tester owns rendering, responsive, and runtime a11y; the ux-quality-reviewer owns design quality and usability. Both perspectives are needed; the consolidator deduplicates any overlapping findings.
 
 ---
 
@@ -46,10 +47,10 @@ Quick reference for Phase 3 agent selection:
 | Extension | Always-run | Conditional agents added |
 |-----------|-----------|------------------------|
 | `.go` | All 5 | go-build-verifier, test-coverage-reviewer |
-| `.templ` | All 5 | a11y-html-reviewer, a11y-dynamic-content-reviewer, go-build-verifier, test-coverage-reviewer, visual-browser-tester |
-| `.css` | All 5 | a11y-css-reviewer, css-reviewer, visual-browser-tester |
-| `.twig` | All 5 | a11y-html-reviewer, craft-reviewer, visual-browser-tester |
-| `.html` | All 5 | a11y-html-reviewer, visual-browser-tester |
+| `.templ` | All 5 | a11y-html-reviewer, a11y-dynamic-content-reviewer, go-build-verifier, test-coverage-reviewer, visual-browser-tester, ux-quality-reviewer |
+| `.css` | All 5 | a11y-css-reviewer, css-reviewer, visual-browser-tester, ux-quality-reviewer |
+| `.twig` | All 5 | a11y-html-reviewer, craft-reviewer, visual-browser-tester, ux-quality-reviewer |
+| `.html` | All 5 | a11y-html-reviewer, visual-browser-tester, ux-quality-reviewer |
 | `.php` | All 5 | craft-reviewer, test-coverage-reviewer |
 | `.js`, `.ts` | All 5 | a11y-dynamic-content-reviewer (if Go project), test-coverage-reviewer |
 | `.md`, `.txt` | All 5 | voice-editor |
@@ -73,13 +74,14 @@ plugins/council/agents/review/governance-domain.md
 
 These paths are relative to the depot root. When the depot is installed as a plugin, the paths will be inside the plugin cache directory. Search for the file by name if the exact path is not accessible.
 
-### dm-review Browser Agent
+### dm-review Browser Agents
 
 ```
 plugins/dm-review/agents/review/visual-browser-tester.md
+plugins/dm-review/agents/review/ux-quality-reviewer.md
 ```
 
-This agent uses Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) and the RAG knowledge library (`mcp__rag__rag_search`) rather than reading files. It requires a running dev server. Runs eight phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), UX Design Review (F), Visual Design Quality (G), Live Wires CSS Compliance (H). If Playwright fails, follows a fallback chain (retry, restart, Chrome for Claude) before stopping.
+Both agents use Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) and require a running dev server. The **visual-browser-tester** runs six phases (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, Live Wires CSS Compliance). The **ux-quality-reviewer** runs nine phases focused on design quality and usability (Information Hierarchy, Spacing, State Completeness, Navigation, Content, Typography, Layout, Edge Cases, Interaction Polish), uses the RAG knowledge library, and saves screenshots to `.claude/ux-review/`. If Playwright fails, visual-browser-tester follows a fallback chain; ux-quality-reviewer reports "Skipped."
 
 ---
 

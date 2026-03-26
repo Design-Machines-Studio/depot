@@ -29,6 +29,7 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 | **go-build-verifier** | Compilation failure | `go vet` warnings | — |
 | **craft-reviewer** | N+1 queries in loops, `\|raw` on user input | Missing eager loading, no null checks on relations | Suboptimal query patterns, minor template issues |
 | **visual-browser-tester** | Layout completely broken at any breakpoint, keyboard trap in browser, axe-core critical violations, focus indicators missing entirely, JS exceptions preventing render | Layout degraded at mobile (content cut off, overlapping, horizontal scroll), interactive states not visually distinct, axe-core serious violations, console JS errors, contrast failures, missing scheme tokens | Minor spacing inconsistencies, axe-core moderate violations, responsive polish, baseline rhythm misalignment |
+| **ux-quality-reviewer** | Navigation dead ends, missing error states that strand users, primary action invisible or unreachable, voting interface ambiguous enough to cause wrong votes | Missing feedback states (loading, empty, success), inconsistent interaction patterns, poor hierarchy burying content, missing empty states on lists/tables | Spacing inconsistencies, minor alignment drift, suboptimal typography, missing hover states, orphaned headings, edge case overflow |
 
 ### Depot-Native Agents (from other plugins)
 
@@ -43,13 +44,13 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 
 ---
 
-### Design Review Phases (visual-browser-tester)
+### Browser Agent Phases
 
-| Agent Phase | Critical/P1 | Serious/P2 | Moderate/P3 |
-|-------------|------------|------------|-------------|
-| **UX Design** | No clear information hierarchy (page purpose unidentifiable), users cannot find primary actions | Inconsistent interaction patterns, measure exceeds 90 characters, missing empty states for key flows | Minor consistency issues, suboptimal but functional form layout |
-| **Visual Design Quality** | — | Broken typographic hierarchy (no visual differentiation between heading levels), arbitrary spacing (no system), color used decoratively without purpose | Minor alignment issues, inconsistent but non-breaking border-radii, minor rhythm misalignment |
-| **Live Wires CSS Compliance** | — | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, optional primitive alternatives |
+| Agent | Phase | Critical/P1 | Serious/P2 | Moderate/P3 |
+|-------|-------|------------|------------|-------------|
+| **visual-browser-tester** | Live Wires CSS Compliance | — | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, optional primitive alternatives |
+
+UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer** (see dm-review Agents table above).
 
 ---
 

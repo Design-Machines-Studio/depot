@@ -99,7 +99,7 @@ If route mapping fails, test:
 
 ## Testing Protocol
 
-Execute these eight phases sequentially for each discovered URL.
+Execute these six phases sequentially for each discovered URL.
 
 ### Phase A: Baseline Capture
 
@@ -300,38 +300,7 @@ return JSON.stringify([...allClasses].sort());
 
 Compare the class list against Live Wires conventions. Classes that don't match documented utilities, layout primitives, or scheme names are P3 findings.
 
-### Phase F: UX Design Review
-
-Use the severity thresholds in the "Design Review Phases" section of `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` to classify findings.
-
-Evaluate the user experience of each tested page:
-
-1. **Information hierarchy** — Is the most important content visually dominant? Can a user scan the page and understand its purpose in 3 seconds?
-2. **Navigation clarity** — Are calls to action obvious? Can the user tell where they are and where they can go?
-3. **Content readability** — Is the text readable at all breakpoints? Is the measure (line length) comfortable (45-75 characters)?
-4. **Form usability** — Are forms logically grouped? Do labels clearly describe inputs? Are required fields obvious?
-5. **Error prevention** — Are destructive actions clearly distinguished? Do confirmations exist where needed?
-6. **Consistency** — Do similar elements look and behave consistently across the page? Are interaction patterns predictable?
-7. **Empty states** — If lists or content areas could be empty, are empty states handled with helpful messaging?
-
-When uncertain about UX principles or best practices, search the RAG knowledge library via `mcp__rag__rag_search` for reference material on user experience design.
-
-### Phase G: Visual Design Quality Review
-
-Use the severity thresholds in the "Design Review Phases" section of `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` to classify findings.
-
-Evaluate the visual design quality against editorial design principles:
-
-1. **Typographic hierarchy** — Does the heading scale create clear visual steps? Is there sufficient contrast between heading levels? Is the type scale systematic (not arbitrary sizes)?
-2. **Spacing and rhythm** — Are spacing intervals consistent and systematic? Does the vertical rhythm feel intentional? Are gaps between sections proportional?
-3. **Color usage** — Are colors used purposefully (not decoratively)? Do color choices support the content hierarchy? Are scheme tokens applied correctly?
-4. **Visual weight and balance** — Is the layout balanced? Are heavy elements offset appropriately? Does the page have visual breathing room?
-5. **Alignment** — Are elements on a clear grid? Do edges align where they should? Is there accidental ragged alignment?
-6. **Polish** — Are border radii consistent? Are shadows consistent? Are icons sized and aligned consistently? Do images have consistent treatment?
-
-When uncertain about design principles, search the RAG knowledge library via `mcp__rag__rag_search` for reference material on editorial design, typography, and layout.
-
-### Phase H: Live Wires CSS Compliance
+### Phase F: Live Wires CSS Compliance
 
 When the project uses Live Wires, evaluate CSS quality beyond functional correctness:
 

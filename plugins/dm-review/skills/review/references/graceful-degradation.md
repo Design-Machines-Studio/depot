@@ -46,6 +46,7 @@ Multiple core failures compound: "REVIEW INCOMPLETE -- security-auditor, archite
 | test-coverage-reviewer | Test coverage unverified. | "Skipped" |
 | voice-editor | Voice/tone unreviewed. | "Skipped" |
 | visual-browser-tester | Visual testing skipped. | "Skipped -- has its own fallback chain" |
+| ux-quality-reviewer | UX/design quality unreviewed. | "Skipped" |
 
 ### All Conditional Agents Failed
 
@@ -101,3 +102,4 @@ Full degradation priority from guardrails.md. Agents are dropped in this order w
 | 13 | test-coverage-reviewer | LOW | Yes |
 | 14 | voice-editor | LOW | Yes |
 | 15 | visual-browser-tester | LOW | Yes |
+| 16 | ux-quality-reviewer | LOW | Yes |

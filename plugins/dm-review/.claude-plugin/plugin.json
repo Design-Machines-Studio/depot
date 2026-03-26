@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -120,6 +120,13 @@
         "category": "review",
         "description": "Tests rendered pages for visual regressions, responsive layout, and runtime accessibility",
         "tags": ["visual-testing", "browser", "responsive", "accessibility"]
+      },
+      {
+        "id": "ux-quality-reviewer",
+        "name": "UX Quality Reviewer",
+        "category": "review",
+        "description": "Reviews rendered pages for UX/UI quality — hierarchy, spacing, states, navigation, typography, and interaction polish",
+        "tags": ["ux", "design-quality", "usability", "playwright"]
       },
       {
         "id": "review-consolidator",
