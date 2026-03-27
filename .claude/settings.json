@@ -5,8 +5,6 @@
       "Skill(commit-commands:commit-push-pr)",
       "Skill(commit-commands:commit-push-pr:*)",
       "mcp__ai-memory__add_observation",
-      "Bash(for f:*)",
-      "Bash(do echo:*)",
       "Read(//Users/trav/Websites/design-machines/depot/**)",
       "Bash(uvx --version)",
       "Bash(uvx scuerda-mela-mcp:*)",
@@ -16,12 +14,13 @@
       "Bash(osascript -e 'tell application \"\"Mail\"\" to get name of every mailbox')",
       "Bash(git tag:*)",
       "Bash(git commit:*)",
-      "Bash(This Session\"\\), anti-band-aid Fix Philosophy added, prototype hygiene rules enforce:*)"
+      "Bash(bash tools/check-dependencies.sh:*)"
     ],
     "additionalDirectories": [
       "/Users/trav/Websites/design-machines/depot/plugins/chef",
       "/Users/trav/Library/Application Support/Claude",
-      "/Users/trav/Websites/design-machines/depot/todos"
+      "/Users/trav/Websites/design-machines/depot/todos",
+      "/Users/trav/.claude/plugins"
     ]
   }
 }

@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -167,6 +167,12 @@
         "name": "Visual Review",
         "description": "Run visual browser testing on rendered pages",
         "argumentHint": "[optional: URL to test, --states, or --a11y]"
+      },
+      {
+        "id": "dm-review-loop",
+        "name": "Review-Fix Loop",
+        "description": "Run dm-review then dm-review-fix in a convergence loop until zero findings remain",
+        "argumentHint": "[optional: --full, --max-iterations N, PR/branch/path]"
       }
     ]
   }

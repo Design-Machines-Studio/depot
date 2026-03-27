@@ -119,11 +119,12 @@ Every skill, agent, and command is indexed in `docs/search-index.md` -- a genera
 
 ## Orchestration Patterns
 
-Plugins compose through three patterns documented in `docs/orchestration-patterns.md`:
+Plugins compose through four patterns documented in `docs/orchestration-patterns.md`:
 
 - **Companion Skill Loading** -- a command loads skills from other plugins at specific workflow phases (e.g. sprint-plan)
 - **Multi-Agent Dispatch** -- a skill launches agents in parallel and consolidates results (e.g. dm-review)
 - **Memory-Mediated Coordination** -- plugins write to ai-memory entities that other plugins read later (e.g. depot-metrics)
+- **Pipeline Orchestration** -- a conductor plugin composes all three patterns into an autonomous multi-phase workflow with review-fix loops (e.g. pipeline)
 
 ## Composition Validation
 
@@ -176,6 +177,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **dm-review** | Code review orchestrator with parallel agents, visual browser testing, UX design review, visual design quality review, and Live Wires CSS compliance across all DM stacks |
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
+| **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, and worktree execution with review-fix loops |
 
 ## Description Evaluation
 

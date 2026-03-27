@@ -1,0 +1,14 @@
+[
+  {"query": "generate execution prompts from this plan", "should_trigger": true},
+  {"query": "break this plan into executable chunks", "should_trigger": true},
+  {"query": "create prompts for autonomous execution", "should_trigger": true},
+  {"query": "generate a manifest from my plan", "should_trigger": true},
+  {"query": "decompose the plan into parallel and sequential chunks", "should_trigger": true},
+  {"query": "create self-contained prompts with dependency ordering", "should_trigger": true},
+  {"query": "analyze file overlap across plan tasks", "should_trigger": true},
+  {"query": "review my code", "should_trigger": false},
+  {"query": "write a plan for this feature", "should_trigger": false},
+  {"query": "assess the current state", "should_trigger": false},
+  {"query": "run the pipeline", "should_trigger": false},
+  {"query": "deploy to production", "should_trigger": false}
+]

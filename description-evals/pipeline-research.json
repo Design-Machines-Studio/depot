@@ -1,0 +1,13 @@
+[
+  {"query": "research context for a new feature", "should_trigger": true},
+  {"query": "gather context before planning", "should_trigger": true},
+  {"query": "what do we know about the voting system", "should_trigger": true},
+  {"query": "research before building the dashboard", "should_trigger": true},
+  {"query": "check ai-memory and RAG for background on proposals", "should_trigger": true},
+  {"query": "gather domain knowledge for this feature", "should_trigger": true},
+  {"query": "look up context from memory and plugins", "should_trigger": true},
+  {"query": "review my PR", "should_trigger": false},
+  {"query": "run tests", "should_trigger": false},
+  {"query": "fix this bug", "should_trigger": false},
+  {"query": "generate execution prompts", "should_trigger": false}
+]

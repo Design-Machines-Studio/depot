@@ -1,6 +1,6 @@
 # Plugin Orchestration Patterns
 
-Plugins compose through three patterns. Each solves a different coordination problem -- when to load another plugin's expertise, how to run agents in parallel, and where to persist state across sessions.
+Plugins compose through four patterns. Each solves a different coordination problem -- when to load another plugin's expertise, how to run agents in parallel, where to persist state across sessions, and how to orchestrate autonomous multi-phase workflows.
 
 ---
 
@@ -173,6 +173,61 @@ See `docs/plugin-memory-schema.md` for the full entity schema and rollup policy.
 
 ---
 
+## Pattern 4: Pipeline Orchestration
+
+The pipeline plugin composes all three patterns above into a sequential workflow with review-fix loops at each execution stage.
+
+### When to use
+
+You have a multi-step development workflow that needs to run autonomously: assess current state, research context, generate execution prompts, review adversarially, execute chunks in worktrees, run review-fix loops after each chunk, and deliver a clean feature branch.
+
+### How it works
+
+The pipeline plugin combines:
+
+1. **Companion Skill Loading** -- Each phase loads domain skills (ai-memory from ned, development from assembly, livewires from live-wires, etc.)
+2. **Multi-Agent Dispatch** -- Research phase dispatches 5 parallel research agents; adversarial review dispatches 3 perspective agents; execution dispatches subagents per chunk
+3. **Memory-Mediated Coordination** -- Records pipeline sessions to ai-memory for cross-session learning
+4. **Worktree Isolation** -- Each execution chunk runs in its own worktree, merged back after passing review
+5. **Review-Fix Convergence** -- dm-review-loop runs after each chunk with zero-deferral policy (all P1/P2/P3 fixed)
+
+### Execution model
+
+```
+assess (parallel: code + UX agents)
+  -> research (parallel: 5 research agents)
+    -> plan (user or compound-engineering)
+      -> promptcraft (overlap analysis, manifest generation)
+        -> adversarial review (3 perspectives, iterate to convergence)
+          -> execution (worktree per chunk, dm-review-loop per chunk)
+            -> final review (full dm-review on feature branch)
+              -> deliver (clean feature branch ready for PR)
+```
+
+### Real example
+
+`plugins/pipeline/commands/pipeline.md` orchestrates the full workflow:
+
+- Phase 1 (Assess): Assess skill with parallel code + UX agents
+- Phase 2 (Research): Research skill with 5 parallel research sources
+- Phase 3 (Plan): User or compound-engineering creates the plan
+- Phase 4 (Prompts): Promptcraft skill generates manifests with overlap-aware ordering
+- Phase 5 (Adversarial Review): Plan-adversary agent iterates to convergence
+- Phase 6 (Execute): Execution-orchestrator manages worktrees, subagents, and dm-review-loop; records to ai-memory via ned
+- Phase 7 (Deliver): Final review, branch summary, PR option
+
+### Failure modes
+
+| Failure | Handling |
+|---------|----------|
+| Subagent fails to complete chunk | Flag chunk, skip dependent chunks, continue independent chunks |
+| Review-fix loop doesn't converge (max iterations) | Flag chunk as "needs attention," continue pipeline |
+| Merge conflict after chunk | Attempt auto-resolution; if complex, flag and continue |
+| Worktree creation fails | Fall back to branch-based execution without worktree isolation |
+| ai-memory unavailable | Skip memory capture, note in final report |
+
+---
+
 ## Choosing a Pattern
 
 | Situation | Pattern |
@@ -181,6 +236,7 @@ See `docs/plugin-memory-schema.md` for the full entity schema and rollup policy.
 | Need multiple independent perspectives on the same input | Multi-Agent Dispatch |
 | State must persist across sessions or between unrelated plugins | Memory-Mediated Coordination |
 | Combination: workflow with parallel agents AND persistent tracking | Use all three (see dm-review, which combines dispatch + memory) |
+| Autonomous multi-phase workflow combining all three patterns with review-fix loops | Pipeline Orchestration |
 
 ---
 

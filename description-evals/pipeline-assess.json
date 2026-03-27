@@ -1,0 +1,14 @@
+[
+  {"query": "assess the current state of the codebase", "should_trigger": true},
+  {"query": "review before planning a new feature", "should_trigger": true},
+  {"query": "what's the current state of the proposals page", "should_trigger": true},
+  {"query": "evaluate what exists before I start building", "should_trigger": true},
+  {"query": "pre-plan review of the dashboard", "should_trigger": true},
+  {"query": "check the current code quality", "should_trigger": true},
+  {"query": "baseline assessment of the auth module", "should_trigger": true},
+  {"query": "review my PR for bugs", "should_trigger": false},
+  {"query": "run a code review on this diff", "should_trigger": false},
+  {"query": "fix the broken test", "should_trigger": false},
+  {"query": "deploy to production", "should_trigger": false},
+  {"query": "write a new feature", "should_trigger": false}
+]

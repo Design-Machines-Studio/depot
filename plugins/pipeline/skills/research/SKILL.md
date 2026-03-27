@@ -1,0 +1,143 @@
+---
+name: research
+description: Gathers context from ai-memory, RAG, web search, and DM domain plugins for feature planning. Use when starting a feature and needing comprehensive background before planning. Dispatches parallel research agents across all DM knowledge sources -- ai-memory knowledge graph, personal RAG library, web search, Context7 framework docs, and compound-engineering research agents. Invoke with /pipeline (research phase) or load directly when planning any DM project feature.
+---
+
+# DM Research Orchestrator
+
+Gather context from all available DM knowledge sources before planning a feature. Produces a Research Brief that informs plan creation and prompt generation.
+
+## Input
+
+Requires two things:
+1. **Feature description** -- What the user wants to build or change
+2. **Assessment Brief** (optional) -- Output from the assess skill, if available
+
+## Process
+
+### Phase 1: Source Detection
+
+Determine which research sources are available. Check each and note availability:
+
+| Source | How to Check | Required |
+|--------|-------------|----------|
+| ai-memory | Call `mcp__ai-memory__search_entities` with a test query | Yes (hard dep on ned) |
+| RAG | Call `mcp__rag__rag_search` with a test query | No -- graceful skip |
+| Web search | WebSearch tool available | No -- graceful skip |
+| Context7 | `mcp__plugin_context7_context7__resolve-library-id` available | No -- graceful skip |
+| compound-engineering | Check if repo-research-analyst agent is available | No -- graceful skip |
+
+### Phase 2: Project Type Detection
+
+Detect the project type to determine which domain plugins to load as companions. Use the same detection logic as dm-review:
+
+| Marker | Project Type | Companion Skill |
+|--------|-------------|-----------------|
+| `go.mod` | Go+Templ+Datastar | assembly `development` |
+| `craft/` or `config/` with `craft` | Craft CMS | craft-developer `craft-development` |
+| CSS files in `src/css/` or Live Wires patterns | Live Wires CSS | live-wires `livewires` |
+| Design/UX context in feature description | Design practice | design-practice skills |
+| Cooperative governance context | Governance | council `governance` |
+
+### Phase 3: Parallel Research Dispatch
+
+Launch all available research agents simultaneously. Each agent gets the feature description and assessment brief (if available).
+
+**Agent 1: ai-memory Researcher**
+
+Search the knowledge graph for everything related to the feature area:
+
+1. Search for project entities related to the feature
+2. Search for person entities (who has context on this?)
+3. Search for decision or architecture entities
+4. For each relevant entity, get full details with `get_entity`
+5. Extract: prior decisions, known constraints, related work, key contacts
+
+**Agent 2: RAG Researcher** (if available)
+
+Search the personal knowledge library:
+
+1. Search for the feature topic broadly
+2. Search for related design patterns or principles
+3. Search for relevant technical approaches
+4. Extract: design references, methodology guidance, prior art
+
+**Agent 3: Domain Plugin Researcher**
+
+Load companion skills based on project type and extract relevant patterns:
+
+1. If Go project: What assembly patterns apply? Handler conventions? DTO patterns?
+2. If Craft project: What content modeling patterns? Query patterns? Template conventions?
+3. If CSS work: What Live Wires primitives exist? Token conventions? Component patterns?
+4. If governance: What BC Co-op Act requirements apply? Voting thresholds? Member lifecycle?
+
+This agent reads the companion skill content and extracts the sections most relevant to the feature.
+
+**Agent 4: Web + Context7 Researcher** (if available)
+
+Search for current best practices:
+
+1. If a framework/library is involved, use Context7 to get current docs
+2. WebSearch for recent best practices articles
+3. Search for common pitfalls or known issues
+4. Extract: current documentation, community patterns, version-specific guidance
+
+**Agent 5: Codebase Researcher** (if compound-engineering available)
+
+Delegate to compound-engineering's research agents:
+
+1. `repo-research-analyst` -- Repository structure and conventions
+2. `best-practices-researcher` -- Industry best practices for the feature type
+3. `framework-docs-researcher` -- Framework-specific documentation
+
+If compound-engineering is not installed, perform basic codebase research directly:
+- Grep for similar patterns in the codebase
+- Read CLAUDE.md files for conventions
+- Check git log for related recent changes
+
+### Phase 4: Consolidation
+
+Collect results from all agents and produce a **Research Brief**:
+
+```markdown
+# Research Brief: [Feature Name]
+
+## Summary
+[2-3 sentence summary of what was found]
+
+## Project Context
+[From ai-memory: prior decisions, known constraints, related work]
+
+## Domain Knowledge
+[From domain plugins: applicable patterns, conventions, requirements]
+
+## Design References
+[From RAG: relevant design principles, methodology guidance]
+
+## Technical References
+[From web/Context7: current docs, best practices, version guidance]
+
+## Codebase Patterns
+[From codebase research: existing similar implementations, conventions to follow]
+
+## Constraints and Risks
+[Anything that could complicate implementation]
+
+## Key Decisions Needed
+[Questions that planning will need to answer]
+```
+
+Save the brief to `plans/research-<feature-slug>.md` in the target project.
+
+### Phase 5: Handoff
+
+If running as part of `/pipeline`, pass the Research Brief forward to the planning phase. If running standalone, present it to the user.
+
+## Graceful Degradation
+
+Each research source operates independently. If a source is unavailable:
+- Note it in the brief: "RAG search unavailable -- personal knowledge library not consulted"
+- Continue with remaining sources
+- The brief is still useful with partial research
+
+Minimum viable research requires only ai-memory (hard dependency on ned).

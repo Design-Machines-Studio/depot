@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "plugins": [
     {
@@ -137,8 +137,8 @@
       "capabilities_summary": {
         "skills": 2,
         "agents": 12,
-        "commands": 4,
-        "tags": ["code-review", "orchestrator", "multi-agent", "security", "architecture", "visual-testing", "ux-quality", "playwright"]
+        "commands": 5,
+        "tags": ["code-review", "orchestrator", "multi-agent", "security", "architecture", "visual-testing", "ux-quality", "playwright", "review-loop"]
       }
     },
     {
@@ -161,6 +161,17 @@
         "agents": 1,
         "commands": 4,
         "tags": ["cooking", "recipes", "nutrition", "meal-planning", "bali", "mela", "dietary"]
+      }
+    },
+    {
+      "name": "pipeline",
+      "source": "./plugins/pipeline",
+      "description": "Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, and worktree-based execution with review-fix loops",
+      "capabilities_summary": {
+        "skills": 3,
+        "agents": 2,
+        "commands": 4,
+        "tags": ["pipeline", "orchestrator", "autonomous", "worktree", "execution", "prompt-generation", "review-loop"]
       }
     }
   ]
