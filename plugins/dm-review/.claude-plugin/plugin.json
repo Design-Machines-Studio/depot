@@ -125,7 +125,7 @@
         "id": "ux-quality-reviewer",
         "name": "UX Quality Reviewer",
         "category": "review",
-        "description": "Reviews rendered pages for UX/UI quality — hierarchy, spacing, states, navigation, typography, and interaction polish",
+        "description": "Reviews rendered pages for UX/UI quality -- hierarchy, spacing, states, navigation, typography, and interaction polish",
         "tags": ["ux", "design-quality", "usability", "playwright"]
       },
       {

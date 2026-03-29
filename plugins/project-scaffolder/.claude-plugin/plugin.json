@@ -10,7 +10,7 @@
       {
         "id": "scaffolding",
         "name": "Project Scaffolding",
-        "description": "Scaffold Claude Code project infrastructure — hooks, agents, settings.json, and CLAUDE.md",
+        "description": "Scaffold Claude Code project infrastructure -- hooks, agents, settings.json, and CLAUDE.md",
         "triggers": [
           "set up new project",
           "configure Claude Code hooks",
