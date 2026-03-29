@@ -8,6 +8,42 @@ argument-hint: "[feature idea or feedback]"
 
 Full autonomous feature development pipeline. Takes an idea and delivers a clean feature branch.
 
+## CRITICAL: No Shortcuts
+
+You MUST execute every phase in order. You MUST NOT skip phases, combine phases, or take shortcuts. Specifically:
+
+- You MUST NOT skip research because you think you have enough context
+- You MUST NOT execute chunks yourself -- you MUST launch the execution-orchestrator agent
+- You MUST NOT skip dm-review-loop after each chunk
+- You MUST NOT skip the final full dm-review
+- You MUST pause for user input at every marked pause point
+- You MUST save all artifacts to disk (briefs, plans, prompts, manifest) -- not just hold them in context
+
+If you are tempted to skip a phase, STOP and re-read this section.
+
+## Progress Ledger
+
+Create this ledger with TodoWrite at the start. Update it as you complete each phase. This is your proof of compliance.
+
+```
+1. Save original prompt to plans/<slug>/original-prompt.md
+2. Phase 1: Assess -- save Assessment Brief to disk
+3. Phase 1 GATE: Pause for user input
+4. Phase 2: Research -- save Research Brief to disk
+5. Phase 2 GATE: Pause for user input
+6. Phase 3: Plan -- save plan to disk
+7. Phase 3 GATE: Pause for user input
+8. Phase 4: Generate prompts -- save manifest + prompts to disk
+9. Phase 4 VERIFY: Requirements coverage check against original-prompt.md
+10. Phase 5: Adversarial review -- iterate to APPROVED
+11. Phase 5 GATE: Pause for user input (present prompts for approval)
+12. Phase 6: Launch execution-orchestrator agent (NOT manual execution)
+13. Phase 7: Deliver -- requirements cross-check against original-prompt.md
+14. Phase 7 GATE: Present results and ask user for next step
+```
+
+Mark each item as you complete it. Do not mark a GATE as complete until the user has responded.
+
 ## Feature Input
 
 <feature_input> #$ARGUMENTS </feature_input>
@@ -18,7 +54,7 @@ Do not proceed without a clear feature description.
 
 ## Original Prompt Preservation
 
-**Immediately** save the user's original input (verbatim) to `plans/<feature-slug>/original-prompt.md`. This is the ground truth for what the user asked for. Every subsequent phase must check back against this file to prevent context loss during compaction.
+**Immediately** save the user's original input (verbatim) to `plans/<feature-slug>/original-prompt.md`. This is the ground truth. Every subsequent phase MUST check back against this file.
 
 The file format:
 
@@ -32,58 +68,74 @@ The file format:
 [YYYY-MM-DD]
 
 ## Key Requirements Extracted
-- [Requirement 1]
-- [Requirement 2]
-- [Requirement N]
+1. [Requirement 1]
+2. [Requirement 2]
+3. [Requirement N]
 ```
 
-Extract the key requirements as a numbered checklist. This checklist is used in Phases 4, 5, and 7 to verify nothing was dropped.
+Mark ledger item 1 as complete. Proceed to Phase 1.
 
-## Phases
-
-Execute these phases in order. Each phase builds on the previous phase's output.
-
-### Phase 1: Assess Current State
+## Phase 1: Assess Current State
 
 Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`.
 
 1. Determine the codebase area affected by the feature
 2. Run the pre-plan assessment (code + UX in parallel)
-3. Save the Assessment Brief to `plans/assessment-<feature-slug>.md`
+3. Save the Assessment Brief to `plans/<feature-slug>/assessment.md`
 4. Present key findings to the user
 
-**Pause for user input.** Ask: "Assessment complete. Any corrections or context to add before I research?"
+Mark ledger item 2 as complete.
 
-### Phase 2: Research
+**GATE (ledger item 3):** You MUST stop here and ask the user: "Assessment complete. Any corrections or context to add before I research?"
+
+Do NOT proceed to Phase 2 until the user responds. Mark item 3 when they do.
+
+## Phase 2: Research
 
 Load the research skill from `plugins/pipeline/skills/research/SKILL.md`.
 
+You MUST run this phase even if you think you already have enough context. Research finds things you don't know you're missing.
+
 1. Pass the feature description and Assessment Brief to the research orchestrator
-2. Dispatch parallel research agents across all available sources
-3. Save the Research Brief to `plans/research-<feature-slug>.md`
+2. Dispatch parallel research agents across all available sources (ai-memory, RAG, domain plugins, web, codebase)
+3. Save the Research Brief to `plans/<feature-slug>/research.md`
 4. Present the Research Brief summary to the user
 
-**Pause for user input.** Ask: "Research complete. Ready to plan, or want to adjust the scope?"
+**Verification:** The Research Brief file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/research.md` to confirm.
 
-### Phase 3: Plan
+Mark ledger item 4 as complete.
+
+**GATE (ledger item 5):** You MUST stop here and ask: "Research complete. Ready to plan, or want to adjust the scope?"
+
+Do NOT proceed to Phase 3 until the user responds. Mark item 5 when they do.
+
+## Phase 3: Plan
 
 Create the implementation plan. Two options:
 
 **Option A:** If compound-engineering `/workflows:plan` is available, invoke it with the feature description, Assessment Brief, and Research Brief as context.
 
 **Option B:** If not available, create the plan directly:
-1. Break the feature into logical implementation steps
-2. Identify file paths, patterns, and dependencies
-3. Write acceptance criteria for each step
-4. Save to `plans/<feature-slug>.md`
 
-**Pause for user input.** Ask: "Plan ready at `plans/<feature-slug>.md`. Review it and let me know when to generate execution prompts."
+1. Re-read `plans/<feature-slug>/original-prompt.md` to refresh the full original context
+2. Break the feature into logical implementation steps
+3. Identify file paths, patterns, and dependencies
+4. Write acceptance criteria for each step
+5. Save to `plans/<feature-slug>/plan.md`
 
-### Phase 4: Generate Execution Prompts
+**Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.md` to confirm.
+
+Mark ledger item 6 as complete.
+
+**GATE (ledger item 7):** You MUST stop here and ask: "Plan ready at `plans/<feature-slug>/plan.md`. Review it and let me know when to generate execution prompts."
+
+Do NOT proceed to Phase 4 until the user responds. Mark item 7 when they do.
+
+## Phase 4: Generate Execution Prompts
 
 Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
-1. Read `plans/<feature-slug>/original-prompt.md` to refresh the full original context
+1. Re-read `plans/<feature-slug>/original-prompt.md` to refresh the full original context
 2. Decompose the plan into chunks
 3. Extract context for each chunk from the Assessment and Research Briefs
 4. Perform overlap analysis
@@ -91,41 +143,83 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
-**Context-loss check:** After generating prompts, re-read the Key Requirements from `original-prompt.md`. For each requirement, verify at least one chunk's acceptance criteria covers it. If any requirement is unaddressed, add it to the appropriate chunk or create a new chunk. List the mapping in the manifest summary.
+**Verification:** Run `ls plans/<feature-slug>/manifest.json plans/<feature-slug>/prompts/` to confirm all files exist on disk.
+
+Mark ledger item 8 as complete.
+
+**Requirements coverage check (ledger item 9):** Re-read the Key Requirements from `original-prompt.md`. For each requirement, verify at least one chunk's acceptance criteria covers it. Present the coverage map:
+
+```
+Requirements Coverage:
+  1. [Requirement] -> chunk-XX (criterion #N)
+  2. [Requirement] -> chunk-YY (criterion #M)
+  3. [Requirement] -> NOT COVERED -- adding to chunk-ZZ
+```
+
+If any requirement is uncovered, fix it before proceeding. Mark item 9 when coverage is 100%.
 
 Present the manifest summary: chunk count, parallel groups, overlap risk, requirements coverage.
 
-### Phase 5: Adversarial Review
+## Phase 5: Adversarial Review
 
 Launch the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adversary.md`.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
-2. The adversary checks prompts against the original requirements (see Perspective 2: Completeness)
+2. The adversary checks prompts against the original requirements
 3. Collect findings
 4. If verdict is REVISE: apply revisions and re-submit (max 3 rounds)
 5. If verdict is APPROVED: proceed
 
-**Pause for user input.** Present the approved prompts and manifest. Ask: "Prompts reviewed and approved by adversary. Review the prompts in `plans/<feature-slug>/prompts/` and approve when ready to execute."
+Mark ledger item 10 as complete.
 
-### Phase 6: Execute
+**GATE (ledger item 11):** You MUST stop here and present the approved prompts. Ask: "Prompts reviewed and approved by adversary. Review the prompts in `plans/<feature-slug>/prompts/` and approve when ready to execute."
+
+Do NOT proceed to Phase 6 until the user explicitly approves. Mark item 11 when they do.
+
+## Phase 6: Execute
 
 **Pre-flight check:**
+
 1. Confirm bypass permissions mode is active
-2. Confirm git working tree is clean
+2. Confirm git working tree is clean (`git status --porcelain`)
 3. Confirm on main branch with latest changes
 
-Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`.
+**You MUST launch the execution-orchestrator agent.** You MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles worktree isolation, input guardrails, Fix Philosophy injection, output validation, dm-review-loop after each chunk, merging, final full dm-review, and memory capture. If you skip it, all of those steps get skipped.
 
-1. Pass the manifest path and prompts directory
-2. The orchestrator handles: branch creation, worktree execution, review-fix loops, merging, final review, memory capture
-3. Wait for completion
+Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with:
 
-### Phase 7: Deliver
+- The manifest path: `plans/<feature-slug>/manifest.json`
+- The prompts directory: `plans/<feature-slug>/prompts/`
+- The feature branch name from the manifest
+
+Wait for the orchestrator to complete. Mark ledger item 12 as complete.
+
+## Phase 7: Deliver
 
 Present the execution summary from the orchestrator. The feature branch is ready for user review.
 
-Ask: "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. Want to create a PR, give feedback for another iteration, or done?"
+**Requirements cross-check (ledger item 13):** Re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
 
-**Context-loss check:** Before delivering, re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
+Mark item 13 as complete.
+
+**GATE (ledger item 14):** Ask: "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. Want to create a PR, give feedback for another iteration, or done?"
 
 **If feedback given:** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
+
+## Self-Audit
+
+Before delivering to the user, verify your own compliance by answering these questions honestly:
+
+1. Did I save the original prompt to disk?
+2. Did I run the full assessment (not just skim the code)?
+3. Did I run the full research phase (not skip it)?
+4. Did I pause for user input at every GATE?
+5. Did I generate prompts and manifest to disk (not just in context)?
+6. Did I check requirements coverage against original-prompt.md?
+7. Did I run the adversarial review?
+8. Did I launch the actual execution-orchestrator agent (not run chunks manually)?
+9. Did the orchestrator run dm-review-loop after each chunk?
+10. Did the orchestrator run a final full dm-review?
+11. Did the orchestrator record the session to ai-memory?
+
+If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.
