@@ -10,8 +10,9 @@ Transform a plan into self-contained execution prompts with overlap-aware depend
 ## Input
 
 1. **Plan file** -- A markdown plan (from `/workflows:plan`, superpowers writing-plans, or hand-written)
-2. **Research Brief** (optional) -- Output from the research skill
-3. **Assessment Brief** (optional) -- Output from the assess skill
+2. **Original prompt** -- The user's verbatim input saved at `plans/<feature-slug>/original-prompt.md` with extracted Key Requirements
+3. **Research Brief** (optional) -- Output from the research skill
+4. **Assessment Brief** (optional) -- Output from the assess skill
 
 ## Process
 
@@ -88,17 +89,33 @@ The manifest encodes:
 - Feature branch naming
 - Execution metadata
 
-### Phase 6: Handoff
+### Phase 6: Requirements Coverage Check
+
+Re-read `plans/<feature-slug>/original-prompt.md` and verify every Key Requirement is covered by at least one chunk's acceptance criteria. Produce a coverage map:
+
+```
+Requirements Coverage:
+  1. [Requirement text] -> chunk-02a (acceptance criterion #3)
+  2. [Requirement text] -> chunk-03 (acceptance criterion #1)
+  3. [Requirement text] -> NOT COVERED -- adding to chunk-04
+```
+
+If any requirement is uncovered, either add it to an existing chunk's acceptance criteria or create a new chunk. Do not proceed with gaps.
+
+### Phase 7: Handoff
 
 If running as part of `/pipeline`, pass the manifest to the adversarial review phase. If running standalone via `/pipeline-prompts`, present the manifest summary and prompt list to the user.
 
 Present a summary:
+
 ```
 Generated N prompts for feature "<name>":
   Sequential: [chunks that must run in order]
   Parallel groups: [groups of chunks that can run simultaneously]
   Estimated overlap risk: low/medium/high
+  Requirements covered: N/N from original prompt
 
 Manifest: plans/<feature-slug>/manifest.json
 Prompts: plans/<feature-slug>/prompts/
+Original: plans/<feature-slug>/original-prompt.md
 ```

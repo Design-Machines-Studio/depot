@@ -16,6 +16,29 @@ If the feature input above is empty, ask: "What feature or change do you want to
 
 Do not proceed without a clear feature description.
 
+## Original Prompt Preservation
+
+**Immediately** save the user's original input (verbatim) to `plans/<feature-slug>/original-prompt.md`. This is the ground truth for what the user asked for. Every subsequent phase must check back against this file to prevent context loss during compaction.
+
+The file format:
+
+```markdown
+# Original Prompt
+
+## User Input
+[Exact user input, verbatim, including all bullet points, issues raised, and context]
+
+## Date
+[YYYY-MM-DD]
+
+## Key Requirements Extracted
+- [Requirement 1]
+- [Requirement 2]
+- [Requirement N]
+```
+
+Extract the key requirements as a numbered checklist. This checklist is used in Phases 4, 5, and 7 to verify nothing was dropped.
+
 ## Phases
 
 Execute these phases in order. Each phase builds on the previous phase's output.
@@ -60,23 +83,27 @@ Create the implementation plan. Two options:
 
 Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
-1. Decompose the plan into chunks
-2. Extract context for each chunk from the Assessment and Research Briefs
-3. Perform overlap analysis
-4. Generate self-contained execution prompts
-5. Generate the manifest
-6. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
+1. Read `plans/<feature-slug>/original-prompt.md` to refresh the full original context
+2. Decompose the plan into chunks
+3. Extract context for each chunk from the Assessment and Research Briefs
+4. Perform overlap analysis
+5. Generate self-contained execution prompts
+6. Generate the manifest
+7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
-Present the manifest summary: chunk count, parallel groups, overlap risk.
+**Context-loss check:** After generating prompts, re-read the Key Requirements from `original-prompt.md`. For each requirement, verify at least one chunk's acceptance criteria covers it. If any requirement is unaddressed, add it to the appropriate chunk or create a new chunk. List the mapping in the manifest summary.
+
+Present the manifest summary: chunk count, parallel groups, overlap risk, requirements coverage.
 
 ### Phase 5: Adversarial Review
 
 Launch the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adversary.md`.
 
-1. Pass the plan, prompts, and manifest
-2. Collect findings
-3. If verdict is REVISE: apply revisions and re-submit (max 3 rounds)
-4. If verdict is APPROVED: proceed
+1. Pass the plan, prompts, manifest, AND `original-prompt.md`
+2. The adversary checks prompts against the original requirements (see Perspective 2: Completeness)
+3. Collect findings
+4. If verdict is REVISE: apply revisions and re-submit (max 3 rounds)
+5. If verdict is APPROVED: proceed
 
 **Pause for user input.** Present the approved prompts and manifest. Ask: "Prompts reviewed and approved by adversary. Review the prompts in `plans/<feature-slug>/prompts/` and approve when ready to execute."
 
@@ -99,4 +126,6 @@ Present the execution summary from the orchestrator. The feature branch is ready
 
 Ask: "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. Want to create a PR, give feedback for another iteration, or done?"
 
-**If feedback given:** Re-enter the pipeline at Phase 3 or Phase 4 depending on the scope of feedback. Generate new prompts for the revisions and execute again on the same feature branch.
+**Context-loss check:** Before delivering, re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
+
+**If feedback given:** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.

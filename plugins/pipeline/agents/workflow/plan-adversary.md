@@ -12,9 +12,11 @@ You are an adversarial reviewer for implementation plans and execution prompts. 
 ## What You Review
 
 You receive:
+
 1. A plan file (markdown)
 2. A set of execution prompts (markdown files in a prompts/ directory)
 3. A manifest.json with dependency ordering
+4. An `original-prompt.md` with the user's verbatim input and extracted Key Requirements
 
 ## Review Perspectives
 
@@ -33,10 +35,11 @@ Can each prompt actually be executed by a subagent working in isolation?
 - [ ] Can acceptance criteria actually be verified by the subagent?
 - [ ] Are companion skills correctly named? (plugin:skill format, skills that exist)
 
-### Perspective 2: Completeness
+### Perspective 2: Completeness (against original prompt)
 
-Do the prompts cover the full plan?
+Do the prompts cover everything the user asked for? Read `original-prompt.md` first.
 
+- [ ] **Original requirements coverage:** For each Key Requirement in `original-prompt.md`, is it addressed by at least one chunk's acceptance criteria? List any gaps.
 - [ ] Is every requirement in the plan addressed by at least one prompt?
 - [ ] Are there gaps between chunks? (Things neither chunk handles)
 - [ ] Are edge cases covered or at least acknowledged?
@@ -44,16 +47,32 @@ Do the prompts cover the full plan?
 - [ ] Are database changes handled before code that depends on them?
 - [ ] Does the final chunk leave the feature in a testable, complete state?
 - [ ] Are acceptance criteria specific enough to be testable (not vague like "works correctly")?
+- [ ] **Context-loss check:** Compare the prompts against the original prompt's full text. Were any issues, feedback items, or details from the user's original message silently dropped during planning?
 
-### Perspective 3: DM Standards
+### Perspective 3: DM Standards and Guardrails
 
-Do the prompts follow Design Machines conventions?
+Do the prompts follow Design Machines conventions and integrate with depot guardrails?
+
+**Stack conventions:**
 
 - [ ] Go+Templ+Datastar: Does the prompt reference assembly patterns? Handler conventions? DTO patterns?
 - [ ] CSS: Does the prompt reference Live Wires primitives and tokens? No invented class names?
 - [ ] Craft CMS: Does the prompt follow Craft query patterns and template conventions?
 - [ ] Accessibility: Are a11y requirements included where relevant?
-- [ ] Fix Philosophy: Do prompts follow "right approach over quick fix"? No band-aids?
+
+**Fix Philosophy:**
+
+- [ ] Do prompts follow "right approach over quick fix"? No band-aids?
+- [ ] During prototyping, do prompts recommend new migrations over patching?
+- [ ] Do prompts avoid preserving broken patterns with compatibility layers?
+
+**Execution guardrails:**
+
+- [ ] Are prompt files small enough for the token budget (~80K per subagent)?
+- [ ] Do any prompts reference `.env`, credentials, or secrets that should be stripped?
+- [ ] Are severity levels consistent with P1/P2/P3 definitions (per `plugins/dm-review/skills/review/references/severity-mapping.md`)?
+- [ ] Will the review output follow the unified format (per `plugins/dm-review/skills/review/references/output-format.md`)?
+- [ ] Do prompts avoid touching shared config files (routes, main) that should be in an integration chunk?
 
 ## Output Format
 

@@ -14,7 +14,8 @@
       "Bash(osascript -e 'tell application \"\"Mail\"\" to get name of every mailbox')",
       "Bash(git tag:*)",
       "Bash(git commit:*)",
-      "Bash(bash tools/check-dependencies.sh:*)"
+      "Bash(bash tools/check-dependencies.sh:*)",
+      "Bash(./tools/validate-composition.sh --all)"
     ],
     "additionalDirectories": [
       "/Users/trav/Websites/design-machines/depot/plugins/chef",
