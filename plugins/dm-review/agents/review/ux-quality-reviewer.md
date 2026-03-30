@@ -61,6 +61,32 @@ mkdir -p .claude/ux-review/screenshots/$(date +%Y-%m-%d)
 
 ---
 
+## Assembly Persona Integration
+
+When reviewing an Assembly project (detected by `go.mod` + governance-related templates), load the UX persona framework from `tests/ux/`:
+
+1. **Read `tests/ux/personas/_index.md`** to understand the six personas and their testing focus
+2. **Read `tests/ux/heuristics/governance-specific.md`** for the G1-G10 governance heuristics
+3. **Check `tests/ux/coverage-matrix.md`** to see which personas and expected outcomes apply to the pages being reviewed
+
+During each review phase, evaluate through the lens of at least 2 personas:
+
+- **The casual member (David)**: Can he complete the primary action in under 15 seconds without governance jargon blocking him?
+- **The reluctant board member (Aisha)**: Does this work on mobile? Does it cause anxiety or confusion?
+- **The new probationary (Alex)**: Are permission boundaries clear? Is the onboarding gap bridged?
+
+For governance pages specifically, check these heuristics from `tests/ux/heuristics/governance-specific.md`:
+
+- **G1 (Permission Clarity)**: Are unavailable actions hidden or explained, not silently broken?
+- **G2 (Lifecycle Comprehension)**: Can the user tell where a proposal is and what happens next?
+- **G3 (Position vs Vote)**: Is the consensus language clear, not confused with binary voting?
+- **G7 (Participation Threshold)**: Is the barrier to participation low enough for the casual member?
+- **G10 (Trust Architecture)**: Does the interface earn trust through transparency?
+
+If `tests/ux/tasks/` contains task files relevant to the pages under review, reference their success criteria and expected friction points per persona.
+
+---
+
 ## Review Protocol
 
 Execute these nine evaluation phases for each discovered page URL.

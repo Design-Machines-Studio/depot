@@ -1,7 +1,7 @@
 {
   "name": "assembly",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "2.7.0",
+  "version": "2.8.0",
   "author": {
     "name": "Design Machines"
   },
@@ -27,7 +27,15 @@
           "Datastar modal",
           "compliance dashboard handler"
         ],
-        "tags": ["go", "templ", "datastar", "assembly", "sse", "docker", "handlers"]
+        "tags": [
+          "go",
+          "templ",
+          "datastar",
+          "assembly",
+          "sse",
+          "docker",
+          "handlers"
+        ]
       }
     ],
     "agents": [
@@ -36,14 +44,24 @@
         "name": "Datastar SSE",
         "category": "workflow",
         "description": "Specializes in Datastar reactivity and SSE endpoint patterns for Assembly",
-        "tags": ["datastar", "sse", "real-time", "signals"]
+        "tags": [
+          "datastar",
+          "sse",
+          "real-time",
+          "signals"
+        ]
       },
       {
         "id": "templ-scaffolder",
         "name": "Templ Scaffolder",
         "category": "workflow",
         "description": "Scaffolds new Templ pages, handlers, routes, and SSE endpoints following Assembly patterns",
-        "tags": ["templ", "scaffolding", "handlers", "routes"]
+        "tags": [
+          "templ",
+          "scaffolding",
+          "handlers",
+          "routes"
+        ]
       }
     ],
     "commands": [

@@ -123,6 +123,25 @@ When generating seed data, use realistic cooperative patterns:
 - Typical size: 5-25 members
 - Typical governance: modified consensus with vote fallback
 
+## UX Heuristics Integration
+
+When reviewing governance features in Assembly, reference the governance-specific UX heuristics at `tests/ux/heuristics/governance-specific.md` (G1-G10). These heuristics address cooperative governance UX concerns not covered by general usability principles:
+
+- **G1 (Permission Clarity)**: Unavailable actions should be hidden or explained, never silently broken
+- **G2 (Lifecycle Comprehension)**: Members should understand where a proposal is and what happens next
+- **G3 (Position vs Vote)**: Consensus language should be distinct from binary voting language
+- **G4 (Quorum Awareness)**: Quorum status should be visible during active decision-making
+- **G5 (Compliance Transparency)**: Legal requirements should surface at decision points, not be hidden
+- **G6 (Role Fluidity)**: Members who hold multiple roles should context-switch without confusion
+- **G7 (Participation Threshold)**: The barrier to participate should be as low as possible
+- **G8 (Temporal Context)**: Deadlines, notice periods, and time-sensitive actions should be prominent
+- **G9 (Decision Traceability)**: Every decision should link back to its source proposal and meeting
+- **G10 (Trust Architecture)**: The interface should earn trust through transparency and predictability
+
+When reviewing governance UI, check relevant heuristics against the implementation and flag violations with their G-number (e.g., "G3 violation: position selector uses 'Vote' instead of 'Take Position'").
+
+Also reference the persona files at `tests/ux/personas/` -- particularly the casual member (David) and reluctant board member (Aisha), who represent the members most likely to be failed by governance UX that only works for engaged power users.
+
 ## Output Format
 
 When reviewing governance features:

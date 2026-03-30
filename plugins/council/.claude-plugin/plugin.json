@@ -1,7 +1,7 @@
 {
   "name": "council",
   "description": "Worker cooperative governance and decolonial content strategy",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "author": {
     "name": "Design Machines"
   },
@@ -11,15 +11,46 @@
         "id": "decolonial-language",
         "name": "Decolonial Language",
         "description": "Decolonial and anti-capitalist content strategy for cooperative software and member-facing communications",
-        "triggers": ["should I call this profit or surplus", "naming UI elements", "member-friendly language", "terminology for co-ops", "values-aligned language", "button text for governance"],
-        "tags": ["content-strategy", "decolonial", "terminology", "cooperative", "language"]
+        "triggers": [
+          "should I call this profit or surplus",
+          "naming UI elements",
+          "member-friendly language",
+          "terminology for co-ops",
+          "values-aligned language",
+          "button text for governance"
+        ],
+        "tags": [
+          "content-strategy",
+          "decolonial",
+          "terminology",
+          "cooperative",
+          "language"
+        ]
       },
       {
         "id": "governance",
         "name": "Cooperative Governance",
         "description": "Worker cooperative governance expertise for BC Cooperative Association Act compliance",
-        "triggers": ["quorum requirements", "voting threshold for special resolution", "patronage allocation", "co-op discovery questions", "compliance deadlines", "consent-based decision making", "bylaw red flags", "member lifecycle stages", "board composition minimum directors", "cooperative vs corporation"],
-        "tags": ["governance", "cooperative", "bc-act", "bylaws", "voting", "compliance"]
+        "triggers": [
+          "quorum requirements",
+          "voting threshold for special resolution",
+          "patronage allocation",
+          "co-op discovery questions",
+          "compliance deadlines",
+          "consent-based decision making",
+          "bylaw red flags",
+          "member lifecycle stages",
+          "board composition minimum directors",
+          "cooperative vs corporation"
+        ],
+        "tags": [
+          "governance",
+          "cooperative",
+          "bc-act",
+          "bylaws",
+          "voting",
+          "compliance"
+        ]
       }
     ],
     "agents": [
@@ -28,7 +59,11 @@
         "name": "Governance Domain",
         "category": "review",
         "description": "Reviews and guides cooperative governance feature development for BC Act compliance",
-        "tags": ["governance", "compliance", "review"]
+        "tags": [
+          "governance",
+          "compliance",
+          "review"
+        ]
       }
     ],
     "commands": [

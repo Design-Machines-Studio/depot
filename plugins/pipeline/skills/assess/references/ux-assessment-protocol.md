@@ -80,6 +80,34 @@ Flag issues found:
 - Missing loading states
 - Navigation issues (unclear where you are, how to go back)
 
+## Step 6b: Persona-Driven Evaluation (Assembly projects only)
+
+If the project has a `tests/ux/` directory with persona files, run an additional evaluation pass:
+
+1. Read `tests/ux/personas/_index.md` to load the persona spectrum
+2. Read `tests/ux/heuristics/governance-specific.md` for G1-G10 governance heuristics
+3. For each page assessed, evaluate through the lens of at least 3 personas:
+   - **Lowest tech comfort** (e.g., Aisha, reluctant board member): Does this work on mobile? Is it anxiety-free?
+   - **Lowest governance knowledge** (e.g., David, casual member): Can the primary action be completed in under 15 seconds without jargon?
+   - **Most restricted permissions** (e.g., Alex, new probationary): Are permission boundaries clear and non-frustrating?
+4. Check relevant governance heuristics (G1-G10) against the assessed pages
+5. Reference the coverage matrix (`tests/ux/coverage-matrix.md`) for expected outcomes per persona
+
+Add a "Persona Evaluation" section to the UX report:
+
+```markdown
+## Persona Evaluation
+| Persona | Page | Expected | Actual | Friction Points |
+|---------|------|----------|--------|-----------------|
+| casual-member | /proposals | SUCCESS | FRICTION | Position types unexplained |
+
+## Governance Heuristics
+| ID | Heuristic | Status | Notes |
+|----|-----------|--------|-------|
+| G1 | Permission Clarity | PASS/FAIL | |
+| G2 | Lifecycle Comprehension | PASS/FAIL | |
+```
+
 ## Step 7: Produce Report
 
 Structure the Current UX Report as:

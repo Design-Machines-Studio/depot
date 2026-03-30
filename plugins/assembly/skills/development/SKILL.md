@@ -355,6 +355,10 @@ templ Show(meeting dto.MeetingResponse) {
 
 Every major chunk gets reviewed. The review catches issues early.
 
+### Don't Skip UX Testing
+
+Every user-facing feature gets tested through the UX persona framework at `tests/ux/`. This isn't optional -- it catches issues that code review misses (jargon barriers, permission confusion, mobile dead ends).
+
 ### Don't Forget Null Handling
 
 Use pointers for optional fields and check them:
@@ -434,6 +438,49 @@ Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` fo
 1. **Phase 0 (Pilot)**: Single binary + runtime config toggles. Manual Docker deploy. No update mechanism.
 2. **Phase 1 (Self-Updating)**: Registry + update client. One-click updates in Admin UI. Lightweight Mothership.
 3. **Phase 2 (Platform)**: Builder service + fixture marketplace. Per-client binaries. License management.
+
+---
+
+## UX Testing Framework
+
+Assembly has a persona-based UX test framework at `tests/ux/`. Use it when building or reviewing user-facing features.
+
+### Personas
+
+Six personas mapped to real seed accounts, covering the full spectrum of co-op member engagement:
+
+| Persona | Account | Role | Key Testing Focus |
+|---------|---------|------|-------------------|
+| Reluctant Board Member | `mem_005` | Board, low engagement | Mobile usability, anxiety, dead ends |
+| Power Secretary | `mem_003` | Officer, daily user | Efficiency friction, workflow bottlenecks |
+| Engaged Chair | `mem_001` | Chair + admin | Admin/governance boundary, dual-role confusion |
+| Casual Member | `mem_007` | Regular member | "Just let me do the thing" friction, jargon barriers |
+| New Probationary | `mem_010` | Probationary | Permission boundaries, onboarding gaps |
+| Numbers Treasurer | `mem_002` | Officer, detail-focused | Compliance visibility, data accuracy |
+
+Read the full persona files at `tests/ux/personas/` for backstories, behavioral patterns, patience thresholds, and abandonment triggers.
+
+### Heuristics
+
+Two heuristic checklists at `tests/ux/heuristics/`:
+
+- **nielsen-10.md** -- Nielsen's 10 usability heuristics adapted for cooperative governance
+- **governance-specific.md** -- 10 governance-specific heuristics (G1-G10): permission clarity, lifecycle comprehension, position vs vote distinction, quorum awareness, and more
+
+### When Building New Features
+
+1. **Check the coverage matrix** (`tests/ux/coverage-matrix.md`) to see which personas and tasks cover the area you're working on
+2. **Write task files** for new flows -- add them to `tests/ux/tasks/{area}/` following the frontmatter format in the README
+3. **Update the coverage matrix** when adding new tasks
+4. **Run UX tests** through the dm-review ux-quality-reviewer agent, which loads personas and governance heuristics for Assembly projects
+
+### When to Write New Task Files
+
+Write a task file when you add:
+- A new page or route that members will use
+- A new interactive flow (form, wizard, multi-step process)
+- A new governance action (position, vote, motion, approval)
+- Changes to navigation, permissions, or lifecycle stages
 
 ---
 
