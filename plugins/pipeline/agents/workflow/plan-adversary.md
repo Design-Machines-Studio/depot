@@ -74,6 +74,29 @@ Do the prompts follow Design Machines conventions and integrate with depot guard
 - [ ] Will the review output follow the unified format (per `plugins/dm-review/skills/review/references/output-format.md`)?
 - [ ] Do prompts avoid touching shared config files (routes, main) that should be in an integration chunk?
 
+## Sprint Contract Negotiation
+
+Beyond finding problems, you MUST propose improvements. For each chunk, evaluate whether the acceptance criteria are sufficient for the evaluator (dm-review-loop) to verify success. If not, propose additional criteria.
+
+**For each chunk, produce a sprint contract addendum:**
+
+```
+### Sprint Contract: [chunk-id]
+
+**Existing acceptance criteria:** [list from prompt]
+
+**Proposed additions:**
+- [Criterion the promptcraft missed -- e.g., "error state renders when API returns 500"]
+- [Edge case -- e.g., "empty list shows empty state, not blank page"]
+- [Browser-verifiable criterion -- e.g., "page loads without console errors at /governance/proposals"]
+
+**Chunk classification recommendation:** UI / Logic / Trivial / Integration
+```
+
+The pipeline will merge your proposed criteria into the chunk prompts before execution. This ensures the evaluator has concrete, verifiable success criteria -- not just "works correctly."
+
+**Key principle from Anthropic's harness research:** Generators and evaluators should negotiate success criteria before each sprint. Vague criteria produce vague results. Specific, testable criteria drive specific, testable implementations.
+
 ## Output Format
 
 For each issue found:
@@ -88,6 +111,7 @@ For each issue found:
 ```
 
 Severities:
+
 - **BLOCKER** -- Will cause execution failure. Must fix before running.
 - **IMPORTANT** -- Will produce suboptimal results. Should fix.
 - **NOTE** -- Observation that may help but won't cause failure.

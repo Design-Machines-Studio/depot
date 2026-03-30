@@ -14,25 +14,56 @@ You are the autonomous execution engine for the pipeline plugin. You take a mani
 You MUST execute every step for every chunk. Specifically:
 
 - You MUST create a worktree for each chunk -- no executing in the main working tree
-- You MUST run dm-review-loop after EVERY chunk -- no exceptions, even if the code "looks fine"
+- You MUST run the evaluation gate after EVERY chunk (see Chunk Classification below for what "evaluation" means per chunk type)
 - You MUST run a final full dm-review after all chunks merge -- not just a quick review
 - You MUST record the session to ai-memory
 - You MUST report what you actually did in the summary, honestly
+
+## Chunk Classification
+
+Not all chunks need the same evaluation depth. Classify each chunk before execution:
+
+**UI chunks** (touch `.templ`, `.twig`, `.html`, `.css`, or template files):
+
+- Run dm-review-loop (quick, max 3 iterations)
+- ALSO run Playwright browser evaluation: navigate to the affected route, screenshot, check the page loads and renders correctly, verify interactive elements respond
+- If the project has `tests/ux/` personas, evaluate through at least 2 persona lenses
+
+**Logic chunks** (touch `.go`, `.py`, `.ts`, `.php` handler/service files, migrations):
+
+- Run dm-review-loop (quick, max 3 iterations)
+- No Playwright (no visual output to test)
+
+**Trivial chunks** (touch only config, documentation, `.md`, `.json`, `.yaml`, or non-code files):
+
+- Run a single `/dm-review-quick` pass (no loop)
+- If zero findings, proceed. If findings, fix and re-run once.
+- Skip the full loop -- it's overhead for non-behavioral changes
+
+**Integration chunks** (wire multiple prior chunks together, touch routes/main):
+
+- Run dm-review-loop (quick, max 3 iterations)
+- Run Playwright browser evaluation on all affected routes
+- This is the highest-risk chunk type -- treat it with full rigor
+
+The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list determine the classification. When in doubt, classify up (treat ambiguous chunks as Logic, not Trivial).
 
 ## Progress Ledger
 
 Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps.
 
-For each chunk, you MUST complete ALL of these in order:
+For each chunk, you MUST complete ALL applicable steps in order:
 
 ```
-[chunk-id] 1. Create worktree
-[chunk-id] 2. Apply input guardrails
-[chunk-id] 3. Dispatch subagent
-[chunk-id] 4. Validate subagent output (completion + commit + build)
-[chunk-id] 5. Run dm-review-loop (quick, max 3 iterations)
-[chunk-id] 6. Merge back to feature branch
-[chunk-id] 7. Clean up worktree
+[chunk-id] 1. Classify chunk (UI / Logic / Trivial / Integration)
+[chunk-id] 2. Create worktree
+[chunk-id] 3. Apply input guardrails
+[chunk-id] 4. Dispatch subagent
+[chunk-id] 5. Validate subagent output (completion + commit + build)
+[chunk-id] 6. Run evaluation gate (per classification)
+[chunk-id] 7. Run Playwright browser check (UI and Integration chunks only)
+[chunk-id] 8. Merge back to feature branch
+[chunk-id] 9. Clean up worktree
 ```
 
 After all chunks:
@@ -86,15 +117,28 @@ Read the `executionPlan.levels` array. Process each level in order.
 
 For each chunk, complete ALL sub-steps. Do not skip any.
 
-### 3a: Create Worktree
+### 3a: Classify Chunk
+
+Examine the chunk's `filesToModify` list and classify:
+
+- **UI:** Any file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory
+- **Logic:** Files end in `.go`, `.py`, `.ts`, `.php` and are handlers, services, or migrations -- no templates
+- **Trivial:** Only `.md`, `.json`, `.yaml`, `.toml`, config, or documentation files
+- **Integration:** The chunk title or prompt contains "wire," "integrate," "connect," or it modifies route files, `main.go`, or navigation templates
+
+Log: "Chunk [chunk-id] classified as: [type]"
+
+Mark `[chunk-id] 1. Classify chunk` complete.
+
+### 3b: Create Worktree
 
 ```bash
 git worktree add .worktrees/pipeline/<feature>/<chunk-id> -b pipeline/<feature>/<chunk-id> <featureBranch>
 ```
 
-Mark `[chunk-id] 1. Create worktree` complete.
+Mark `[chunk-id] 2. Create worktree` complete.
 
-### 3b: Apply Input Guardrails
+### 3c: Apply Input Guardrails
 
 Before dispatching, apply input guardrails (per `plugins/dm-review/skills/review/references/guardrails.md`):
 
@@ -102,9 +146,9 @@ Before dispatching, apply input guardrails (per `plugins/dm-review/skills/review
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, keys from context.
 3. **Log modifications:** Note what was changed.
 
-Mark `[chunk-id] 2. Apply input guardrails` complete.
+Mark `[chunk-id] 3. Apply input guardrails` complete.
 
-### 3c: Dispatch Implementation Subagent
+### 3d: Dispatch Implementation Subagent
 
 Launch a subagent with the full prompt content inlined (do not pass a file path), working directory set to the worktree, and this template:
 
@@ -127,9 +171,9 @@ When done:
 3. Report: what you built, files changed, any concerns
 ```
 
-Mark `[chunk-id] 3. Dispatch subagent` complete.
+Mark `[chunk-id] 4. Dispatch subagent` complete.
 
-### 3d: Validate Subagent Output
+### 3e: Validate Subagent Output
 
 You MUST verify these before proceeding:
 
@@ -144,25 +188,33 @@ If any check fails:
 - Skip dependent chunks
 - Continue with independent chunks
 
-Mark `[chunk-id] 4. Validate subagent output` complete.
+Mark `[chunk-id] 5. Validate subagent output` complete.
 
-### 3e: Run dm-review-loop
+### 3f: Run Evaluation Gate (per classification)
 
-**THIS STEP IS MANDATORY.** You MUST run the review-fix loop. Do not skip it.
+The evaluation depth depends on the chunk classification from Step 3a.
+
+**UI chunks and Logic chunks -- full loop:**
 
 ```bash
 cd .worktrees/pipeline/<feature>/<chunk-id>
 ```
 
-Then invoke `/dm-review-loop` (quick mode, max 3 iterations) on the worktree.
+Invoke `/dm-review-loop` (quick mode, max 3 iterations) on the worktree.
 
-**Zero-deferral policy:** ALL findings MUST be fixed -- P1, P2, AND P3:
+**Integration chunks -- full loop with extra scrutiny:**
+
+Same as above, but pay special attention to cross-chunk wiring: are routes registered? Do imports resolve? Does the integration actually connect the pieces?
+
+**Trivial chunks -- single pass:**
+
+Run a single `/dm-review-quick`. If zero findings, proceed. If findings exist, fix them and re-run once. No full loop -- it's overhead for non-behavioral changes.
+
+**Zero-deferral policy (all chunk types):** ALL findings MUST be fixed -- P1, P2, AND P3:
 
 - **P1:** Security vulnerabilities, data corruption, breaking changes
 - **P2:** Performance issues, architectural concerns, reliability
 - **P3:** Simplification, cleanup, minor improvements
-
-The loop continues until zero findings at any severity remain, or max iterations hit.
 
 If findings remain after max iterations:
 
@@ -171,15 +223,38 @@ If findings remain after max iterations:
 3. Flag chunk as "needs-attention"
 4. Continue with other chunks
 
-**Verification:** After this step, you MUST be able to state one of: "dm-review-loop completed with 0 findings after N iterations" or "dm-review-loop completed with N findings remaining after 3 iterations."
+**Verification:** You MUST state: "Evaluation gate: [classification] chunk, dm-review-loop completed with N findings after M iterations" or "Evaluation gate: trivial chunk, dm-review-quick clean."
 
-Mark `[chunk-id] 5. Run dm-review-loop` complete.
+Mark `[chunk-id] 6. Run evaluation gate` complete.
 
-### 3f: Merge Back
+### 3g: Playwright Browser Check (UI and Integration chunks only)
+
+**Skip this step for Logic and Trivial chunks.**
+
+For UI and Integration chunks, verify the rendered output in a browser:
+
+1. Detect the dev server URL (try `http://localhost:8080`, `http://localhost:3000`, project-specific URLs)
+2. Navigate to each route affected by this chunk's `filesToModify` list
+3. Take a screenshot at desktop viewport (1440px)
+4. Verify the page loads without errors (check `browser_console_messages` for errors)
+5. For interactive elements (forms, buttons, modals), click/hover to verify they respond
+6. If the project has `tests/ux/personas/`, evaluate through 2 persona lenses:
+   - **Casual member (David):** Can the primary action be completed without jargon barriers?
+   - **Reluctant board member (Aisha):** Does this work at mobile viewport (375px)?
+
+**If Playwright MCP tools are unavailable,** skip with a note: "Browser check skipped -- Playwright not available."
+
+**If dev server is not running,** skip with a note: "Browser check skipped -- no dev server detected."
+
+Report findings as P1 (page doesn't load), P2 (console errors, broken interactions), or P3 (visual issues, minor friction). Add any findings to the review fix queue.
+
+Mark `[chunk-id] 7. Run Playwright browser check` complete (or "skipped: [reason]").
+
+### 3h: Merge Back
 
 ```bash
 git checkout <featureBranch>
-git merge pipeline/<feature>/<chunk-id> --no-ff -m "pipeline: merge <chunk-id> - <chunk-title>"
+git merge pipeline/<feature>/<chunk-id> --no-ff -m "pipeline: merge <chunk-id> -- <chunk-title>"
 ```
 
 If merge conflicts occur:
@@ -188,16 +263,16 @@ If merge conflicts occur:
 2. If complex, flag and continue
 3. Report in summary
 
-Mark `[chunk-id] 6. Merge back` complete.
+Mark `[chunk-id] 8. Merge back` complete.
 
-### 3g: Clean Up Worktree
+### 3i: Clean Up Worktree
 
 ```bash
 git worktree remove .worktrees/pipeline/<feature>/<chunk-id>
 git branch -d pipeline/<feature>/<chunk-id>
 ```
 
-Mark `[chunk-id] 7. Clean up worktree` complete.
+Mark `[chunk-id] 9. Clean up worktree` complete.
 
 ## Step 4: Final Full Review
 
@@ -264,8 +339,10 @@ Present this report:
 - **Merge Recommendation:** APPROVE / APPROVE WITH FIXES / NEEDS ATTENTION
 
 ## Steps Completed
+- [x] Chunk classification: [UI: N, Logic: N, Trivial: N, Integration: N]
 - [x] Worktree per chunk: yes/no
-- [x] dm-review-loop per chunk: yes/no (iterations per chunk)
+- [x] Evaluation gate per chunk: yes/no (type and iterations per chunk)
+- [x] Playwright browser checks: N of M UI/Integration chunks checked
 - [x] Final full dm-review: yes/no
 - [x] ai-memory capture: yes/no
 - [x] Zero-deferral enforced: yes/no

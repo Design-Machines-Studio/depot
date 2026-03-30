@@ -8,6 +8,46 @@ argument-hint: "[feature idea or feedback]"
 
 Full autonomous feature development pipeline. Takes an idea and delivers a clean feature branch.
 
+## Mode Selection
+
+Before starting, assess the feature scope and select the appropriate mode:
+
+**Simple mode** -- Use when the feature is small enough for a single context window:
+
+- Touches fewer than 5 files
+- One logical concern (not multiple subsystems)
+- No dependency ordering needed (everything is sequential)
+- Can be implemented and reviewed in one pass
+
+In simple mode, skip Phases 4-5 (chunking and adversarial review). Instead:
+
+1. Run Phases 1-3 (assess, research, plan) normally
+2. Execute the plan as a single implementation pass (no manifest, no chunking)
+3. Run `/dm-review-loop` on the result
+4. Deliver
+
+**Full mode** (default) -- Use for everything else. All phases execute in order.
+
+**How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change, use simple mode. When in doubt, use full mode.
+
+## Model-Adaptive Complexity
+
+The pipeline's complexity should match the model's capabilities. Some harness components encode assumptions about model limitations that become stale as models improve.
+
+**If running on Opus 4.6 (or newer):**
+
+- Chunking is optional for medium-complexity features (5-10 files). Opus can sustain coherent multi-hour builds without explicit sprint decomposition. Consider simple mode more aggressively.
+- The adversarial review (Phase 5) is still valuable -- self-evaluation remains unreliable regardless of model capability.
+- dm-review-loop is still mandatory -- the separation of generator from evaluator is an architectural principle, not a model limitation.
+
+**If running on Sonnet 4.6 (or earlier):**
+
+- Always use full mode for features touching more than 3 files
+- Chunking prevents context anxiety (Sonnet prematurely wraps up as context fills)
+- Sprint contracts and explicit acceptance criteria are critical -- Sonnet benefits from concrete guardrails
+
+**Periodically question whether each pipeline component is still necessary.** Every component encodes an assumption about model limitations. Test whether scaffolding remains needed as models improve.
+
 ## CRITICAL: No Shortcuts
 
 You MUST execute every phase in order. You MUST NOT skip phases, combine phases, or take shortcuts. Specifically:
@@ -160,15 +200,16 @@ If any requirement is uncovered, fix it before proceeding. Mark item 9 when cove
 
 Present the manifest summary: chunk count, parallel groups, overlap risk, requirements coverage.
 
-## Phase 5: Adversarial Review
+## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
 Launch the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adversary.md`.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
-2. The adversary checks prompts against the original requirements
-3. Collect findings
-4. If verdict is REVISE: apply revisions and re-submit (max 3 rounds)
-5. If verdict is APPROVED: proceed
+2. The adversary reviews for feasibility, completeness, and DM standards
+3. The adversary also produces **sprint contract addendums** -- additional acceptance criteria per chunk that the promptcraft may have missed (edge cases, error states, browser-verifiable criteria)
+4. Merge the adversary's proposed criteria into the chunk prompts
+5. If verdict is REVISE: apply revisions and re-submit (max 3 rounds)
+6. If verdict is APPROVED: proceed
 
 Mark ledger item 10 as complete.
 

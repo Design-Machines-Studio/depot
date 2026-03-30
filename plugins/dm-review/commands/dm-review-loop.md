@@ -20,6 +20,17 @@ Parse the argument string for flags and pass-through values:
 - `--max-iterations N` -- Maximum review-fix cycles (default: 3)
 - Everything else -- Passed through to dm-review as the review target (PR number, branch, path)
 
+## Evaluation Depth
+
+Out-of-the-box, Claude tends toward shallow testing that misses subtle bugs (per Anthropic's harness design research). The review-fix loop MUST push for depth:
+
+- **Do not accept surface-level "looks fine" reviews.** The dm-review agents must read the actual code, not just scan file names.
+- **Test edge cases, not just happy paths.** What happens with empty data? Missing permissions? Concurrent access?
+- **Verify behavior, not just structure.** "The function exists" is not the same as "the function handles errors correctly."
+- **Check integration points.** Does the new code actually connect to what it's supposed to connect to?
+
+When invoking dm-review within the loop, pass this context to the review: "This is an automated review-fix loop. Be thorough. Check edge cases. Do not rubber-stamp."
+
 ## Process
 
 ### 1. Initialize
