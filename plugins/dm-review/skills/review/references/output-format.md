@@ -142,3 +142,21 @@ else:
   recommendation = "CLEAN"
   summary = "No issues found. Ready to merge."
 ```
+
+## Ops Dashboard Write
+
+After the report is generated and memory is captured (Phase 7c), a structured row is written to the Agent Activity Log database in Notion. This is a parallel write -- ai-memory remains the primary record.
+
+The Notion row maps report data as follows:
+
+| Report Field | Notion Property | Mapping |
+|-------------|----------------|---------|
+| Merge recommendation | Status | CLEAN -> "Clean", APPROVE WITH FIXES -> "Needs Attention", BLOCKS MERGE -> "Blocked" |
+| Merge recommendation | Merge Rec | Verbatim string |
+| Total findings | Findings | Number |
+| P1 count | P1 Count | Number |
+| Agents launched | Agents | Number (completed + skipped) |
+| Target branch | Branch | Text |
+| Review date | Date | Today |
+
+If Notion MCP tools are unavailable, the dashboard write is skipped silently.

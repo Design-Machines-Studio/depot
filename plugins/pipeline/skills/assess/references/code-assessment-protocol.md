@@ -57,7 +57,59 @@ Scan for recurring patterns (both positive and negative):
 3. **Reverse dependencies:** What depends on this area? (grep for imports of this package)
 4. **Circular dependencies:** Any bidirectional imports?
 
-## Step 5: Project History Check
+## Step 5: Route Tracing (web projects)
+
+For every user-visible route in the affected area, trace the full chain end-to-end:
+
+1. **Nav link** -- What URL does the user click? (grep sidebar/nav templates for `href`)
+2. **Route registration** -- Find the route in main.go/routes.go: `r.Get("/members", ...)`
+3. **Handler** -- Which handler function does the route call?
+4. **Template import** -- Which template file does the handler render? (check the import path)
+5. **Template file** -- Does the file at that import path actually exist?
+
+**Search for ALL matches, not just the first.** If you find `pages/people/members/index.templ`, also search for `pages/members/index.templ` -- duplicate files serving different routes is a common source of bugs.
+
+Document the trace:
+
+```
+/members -> r.Get("/members", h.PageMembers) -> handlers/members.go -> pages/members/index.templ
+/admin/members -> r.Get("/admin/members", h.AdminMembers) -> handlers/admin.go -> pages/people/members/index.templ
+```
+
+## Step 5b: Live State Verification (data-dependent features)
+
+For features that touch module gating, settings, permissions, or data-dependent behavior, do NOT trust config files or code comments. Query the actual live state:
+
+1. **Database state:** Run queries to check actual data. For example:
+   - Module slugs: `sqlite3 data/assembly.db "SELECT slug FROM modules"`
+   - Config values: `sqlite3 data/assembly.db "SELECT key, value FROM settings"`
+   - Seed data: Check that referenced IDs actually exist
+2. **Runtime behavior:** If a dev server is running, hit the actual endpoints to verify responses
+3. **Package.json scripts:** Read the actual build commands -- don't assume "Vite" or "webpack"
+
+```bash
+# Verify actual build toolchain
+cat package.json | python3 -c "import json,sys; scripts=json.load(sys.stdin).get('scripts',{}); [print(f'{k}: {v}') for k,v in scripts.items()]"
+```
+
+## Step 5c: Runtime Injection Audit (when removing/replacing components)
+
+When the assessment involves removing or replacing a web component, JS module, or framework feature, audit what it injects at runtime beyond what appears in templates:
+
+1. Read the component's source (JS/TS file)
+2. Search for `connectedCallback`, `render()`, `setAttribute`, `classList.add`, `innerHTML` -- anything that modifies the DOM
+3. List every attribute, class, or element the component adds that doesn't appear in the template source
+4. Each injected behavior needs explicit migration -- it won't happen automatically
+
+```
+Runtime injection audit for popup-dialog.js:
+- Adds aria-haspopup="dialog" to trigger elements (line 178)
+- Adds role="dialog" to content wrapper (line 203)
+- Manages focus trap on open (lines 210-230)
+Migration required: All three behaviors must be replicated in replacement approach
+```
+
+## Step 6: Project History Check
 
 Load the `ai-memory` skill from ned and search for:
 

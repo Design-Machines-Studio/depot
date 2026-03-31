@@ -46,6 +46,16 @@ Run this during Phase 1 (Sprint Review) of the sprint planning workflow.
 6. **Get previous stats:** Use `get_entity("Sprint Stats")` to retrieve past observations.
 7. **Calculate rolling average:** Average of completed tasks over the last 3 sprints (or fewer if less data exists).
 8. **Store:** Use `add_observation("Sprint Stats", "[observation string]")`.
+9. **Ops Dashboard write:** Write a structured row to the Agent Activity Log database in Notion:
+   - Look up "Agent Activity Log DB" ID from the `DM Notion Workspace` ai-memory entity. If not found, skip silently.
+   - Create a page using `notion-create-pages`:
+     - **Entry:** "Sprint Close: Sprint N (X/Y completed, Z%)"
+     - **Type:** "Sprint Close"
+     - **Status:** "Clean" if completion >= 80%, "Needs Attention" if < 80%
+     - **Date:** Today's date
+     - **Findings:** Number of rolled-over tasks (total - completed)
+   - Update the created page with `notion-update-page` to set the **Sprint** relation to the sprint being closed.
+   - If any Notion MCP call fails, skip silently -- ai-memory is the primary record.
 
 ## Capacity Planning Application
 

@@ -165,6 +165,15 @@ Create the implementation plan. Two options:
 
 **Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.md` to confirm.
 
+**Plan self-review (before presenting):** Re-read your own plan and check:
+
+1. **Internal contradictions:** Do any two design decisions conflict? (e.g., "follow existing convention" in one section and "use a different approach" in another)
+2. **API existence:** Does the plan propose using specific framework functions? Grep the dependency source to verify they exist in the installed version. Do NOT present a plan built on hallucinated APIs.
+3. **Terminology consistency:** Does the plan use the same term for the same concept throughout?
+4. **Build tool accuracy:** Do verification steps reference the actual commands from package.json / Makefile, not assumed tools?
+
+If any check fails, fix the plan before presenting it.
+
 Mark ledger item 6 as complete.
 
 **GATE (ledger item 7):** You MUST stop here and ask: "Plan ready at `plans/<feature-slug>/plan.md`. Review it and let me know when to generate execution prompts."
@@ -240,6 +249,25 @@ Wait for the orchestrator to complete. Mark ledger item 12 as complete.
 Present the execution summary from the orchestrator. The feature branch is ready for user review.
 
 **Requirements cross-check (ledger item 13):** Re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
+
+**Ops Dashboard write:** After the requirements cross-check, write a structured row to the Agent Activity Log database in Notion:
+
+1. Look up "Agent Activity Log DB" ID from the `DM Notion Workspace` ai-memory entity
+2. If the ID is not found, skip silently (database not yet created)
+3. Create a page in the Agent Activity Log database using `notion-create-pages`:
+   - **Entry:** "Pipeline: <feature-slug>"
+   - **Type:** "Pipeline Run"
+   - **Status:** "Clean" if final review was clean, "Needs Attention" if findings remain, "Blocked" if pipeline failed
+   - **Date:** Today's date
+   - **Findings:** Total findings from the orchestrator's final review
+   - **P1 Count:** P1 findings from the final review
+   - **Chunks:** Number of chunks executed
+   - **Merge Rec:** Merge recommendation from the final review (CLEAN / APPROVE WITH FIXES / BLOCKS MERGE)
+   - **Branch:** Feature branch name
+4. Update the created page with `notion-update-page` to set relations:
+   - **Project:** Link to the project's Notion page (from `memory/project-notion.md` if available)
+   - **Sprint:** Link to the current "In progress" sprint (query Sprints DB)
+5. If any Notion MCP call fails, skip silently -- ai-memory (captured by the orchestrator) is the primary record
 
 Mark item 13 as complete.
 

@@ -67,6 +67,60 @@ Result:
 - B and C: no overlap -> C can run after A, parallel with B
 ```
 
+### Phase 3b: Cross-Chunk Namespace Analysis
+
+For projects using client-side state (Datastar signals, React state, Vue refs, etc.), analyze state namespaces across ALL chunks:
+
+1. List every signal/state variable each chunk introduces or modifies
+2. Check for name collisions across chunks AND existing app code
+3. Check for shell-level vs page-level scope conflicts (e.g., both a global search modal and a page filter using `searchQuery`)
+
+```
+Signal namespace map:
+  chunk-01: introduces filterStatus, filterYear (page-level, /proposals)
+  chunk-02: introduces searchQuery (shell-level, global search modal)
+  chunk-03: introduces searchQuery (page-level, /members filter)
+  COLLISION: searchQuery used in both chunk-02 (shell) and chunk-03 (page)
+  FIX: Rename chunk-03's signal to memberSearchQuery
+```
+
+Flag collisions before generating prompts. Do not proceed with namespace conflicts.
+
+### Phase 3c: Usage Count Reconciliation
+
+If the research phase identified a specific count of usages (e.g., "35 instances of popup-dialog"), verify the prompts account for ALL of them:
+
+1. Sum the instances addressed across all chunk prompts
+2. Compare to the total from research
+3. If the counts don't match, the gap represents unplanned work that will break
+
+```
+Usage reconciliation:
+  Research found: 35 popup-dialog usages
+  Chunk 01 addresses: 12 (governance pages)
+  Chunk 02 addresses: 14 (member pages)
+  Chunk 03 addresses: 0 (documentation -- miscategorized as text-only)
+  TOTAL PLANNED: 26
+  GAP: 9 usages unaccounted for
+  FIX: Add documentation page conversions to chunk 03
+```
+
+This is a mandatory gate. Do not proceed if planned conversions != total usages.
+
+### Phase 3d: Survivor Audit
+
+After deciding what to add, modify, or delete, review what STAYS:
+
+1. For every file that survives unchanged, ask: "Does this file still make sense given what was removed/added?"
+2. For shared utilities/base classes, check if they still have enough consumers to justify their existence
+3. If a file exists only to serve one remaining consumer, evaluate inlining
+
+```
+Survivor audit:
+  base.js (108 lines) -- kept for markdown-editor.js (1 consumer, uses 3 of 10 features)
+  VERDICT: Inline the 3 used features into markdown-editor.js, delete base.js
+```
+
 ### Phase 4: Prompt Generation
 
 For each chunk, generate a self-contained execution prompt using the template from `references/prompt-template.md`. Each prompt must be:

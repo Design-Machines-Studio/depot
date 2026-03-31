@@ -388,6 +388,29 @@ After the project-level memory capture, record depot-level metrics. This tracks 
 
 If ai-memory tools are not available, skip silently. See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
 
+#### Phase 7c: Ops Dashboard Write
+
+After ai-memory capture, write a structured row to the Agent Activity Log database in Notion. This surfaces review data in the Ops Dashboard for at-a-glance visibility.
+
+1. Look up "Agent Activity Log DB" ID from the `DM Notion Workspace` ai-memory entity
+2. If the ID is not found, skip silently (database not yet created)
+3. Create a page in the Agent Activity Log database using `notion-create-pages`:
+   - **Entry:** "Review: [project-name] [branch-or-scope]"
+   - **Type:** "Code Review"
+   - **Status:** Map from merge recommendation — CLEAN → "Clean", APPROVE WITH FIXES → "Needs Attention", BLOCKS MERGE → "Blocked"
+   - **Date:** Today's date
+   - **Findings:** Total finding count from the report
+   - **P1 Count:** P1 finding count
+   - **Agents:** Count of agents dispatched (completed + skipped)
+   - **Merge Rec:** The merge recommendation string (CLEAN / APPROVE WITH FIXES / BLOCKS MERGE)
+   - **Branch:** The reviewed branch name
+4. Update the created page with `notion-update-page` to set relations:
+   - **Project:** Link to the project's Notion page (from `memory/project-notion.md` if available)
+   - **Sprint:** Link to the current "In progress" sprint (query Sprints DB)
+5. If any Notion MCP call fails, skip silently — ai-memory is the primary record
+
+See `${CLAUDE_SKILL_DIR}/../../../project-manager/skills/planner/references/databases.md` for the Agent Activity Log schema.
+
 ---
 
 ## Reference Files

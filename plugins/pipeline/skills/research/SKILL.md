@@ -95,6 +95,56 @@ If compound-engineering is not installed, perform basic codebase research direct
 - Read CLAUDE.md files for conventions
 - Check git log for related recent changes
 
+### Phase 3b: Verify-Don't-Trust Checks
+
+After parallel research completes, run these mandatory verification steps. These prevent the most common pipeline failures:
+
+**1. API Existence Verification**
+
+If the research suggests using specific framework functions, APIs, or library features, verify they exist in the actual installed version:
+
+```bash
+# Go: check if a function exists in the module
+docker compose exec app grep -r "func.*WithID" /go/pkg/mod/github.com/a-h/templ* 2>/dev/null
+
+# Node: check exports
+node -e "console.log(Object.keys(require('package-name')))"
+
+# General: check go.mod/package.json for actual version installed
+```
+
+Do NOT propose using an API that hasn't been verified to exist in the installed version. Hallucinated APIs are the #1 cause of pipeline failures.
+
+**2. Codebase Pattern Verification**
+
+When research finds framework patterns (e.g., Datastar attribute syntax), verify the EXACT syntax used in the CURRENT codebase, not documentation:
+
+```bash
+# Find actual Datastar modifier syntax in use
+grep -r "data-on:" backend/internal/ --include="*.templ" | head -5
+```
+
+If the codebase uses `data-on:keydown__window` but docs say `data-on:keydown.window`, the CODEBASE wins. Document the actual patterns found.
+
+**3. Build Tool Detection**
+
+Read the actual build configuration -- don't assume:
+
+```bash
+cat package.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('scripts:', json.dumps(d.get('scripts',{}), indent=2))"
+```
+
+**4. Exhaustive File Search**
+
+When research finds a file matching a pattern, search for ALL matches -- don't stop at the first one:
+
+```bash
+# Find ALL template files for a given feature
+find . -name "*.templ" -path "*/members/*" 2>/dev/null
+```
+
+Document every match. Duplicate files serving different routes is a common source of bugs.
+
 ### Phase 4: Consolidation
 
 Collect results from all agents and produce a **Research Brief**:

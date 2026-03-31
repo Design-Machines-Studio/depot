@@ -60,10 +60,11 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 3. Apply input guardrails
 [chunk-id] 4. Dispatch subagent
 [chunk-id] 5. Validate subagent output (completion + commit + build)
-[chunk-id] 6. Run evaluation gate (per classification)
-[chunk-id] 7. Run Playwright browser check (UI and Integration chunks only)
-[chunk-id] 8. Merge back to feature branch
-[chunk-id] 9. Clean up worktree
+[chunk-id] 6. Run anti-pattern scan (framework-specific grep)
+[chunk-id] 7. Run evaluation gate (per classification)
+[chunk-id] 8. Run Playwright browser check (UI and Integration chunks only)
+[chunk-id] 9. Merge back to feature branch
+[chunk-id] 10. Clean up worktree
 ```
 
 After all chunks:
@@ -190,7 +191,43 @@ If any check fails:
 
 Mark `[chunk-id] 5. Validate subagent output` complete.
 
-### 3f: Run Evaluation Gate (per classification)
+### 3f: Pre-Review Anti-Pattern Scan
+
+Before running dm-review, run a targeted grep for known anti-patterns in the chunk's changed files. dm-review agents review broadly; this step catches framework-specific mistakes they miss.
+
+**For Datastar projects:**
+
+```bash
+# Wrong modifier syntax (dot instead of __)
+grep -rn 'data-on:.*\.window\|data-on:.*\.debounce\|data-on:.*\.throttle' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.templ" || echo "clean"
+
+# Signal name collisions with existing codebase
+# Extract new signals from this chunk, compare against full app
+grep -rn 'data-signals=' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.templ"
+```
+
+**For Go projects:**
+
+```bash
+# Swallowed errors (blank identifier discarding errors)
+grep -rn 'err\s*=' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.go" | grep -v 'if err' | grep -v '_ =' | head -10
+
+# fmt.Sprintf in SQL (injection risk)
+grep -rn 'fmt.Sprintf.*SELECT\|fmt.Sprintf.*INSERT\|fmt.Sprintf.*UPDATE' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.go" || echo "clean"
+```
+
+**For all projects:**
+
+```bash
+# LIKE wildcards without escaping
+grep -rn "LIKE '%.*%'" .worktrees/pipeline/<feature>/<chunk-id>/ --include="*.go" --include="*.py" --include="*.ts" || echo "clean"
+```
+
+If anti-patterns are found, fix them BEFORE running the review loop. Don't rely on dm-review to catch framework-specific syntax errors.
+
+Mark `[chunk-id] 6. Run anti-pattern scan` complete.
+
+### 3g: Run Evaluation Gate (per classification)
 
 The evaluation depth depends on the chunk classification from Step 3a.
 
@@ -225,7 +262,7 @@ If findings remain after max iterations:
 
 **Verification:** You MUST state: "Evaluation gate: [classification] chunk, dm-review-loop completed with N findings after M iterations" or "Evaluation gate: trivial chunk, dm-review-quick clean."
 
-Mark `[chunk-id] 6. Run evaluation gate` complete.
+Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 ### 3g: Playwright Browser Check (UI and Integration chunks only)
 
@@ -242,13 +279,15 @@ For UI and Integration chunks, verify the rendered output in a browser:
    - **Casual member (David):** Can the primary action be completed without jargon barriers?
    - **Reluctant board member (Aisha):** Does this work at mobile viewport (375px)?
 
-**If Playwright MCP tools are unavailable,** skip with a note: "Browser check skipped -- Playwright not available."
+**If Playwright MCP tools are unavailable,** flag as WARNING in the summary: "Browser verification: SKIPPED -- Playwright not available. Manual verification required for UI changes."
 
-**If dev server is not running,** skip with a note: "Browser check skipped -- no dev server detected."
+**If dev server is not running,** flag as WARNING: "Browser verification: SKIPPED -- no dev server detected. Manual verification required."
+
+These are WARNINGS, not silent passes. The summary report MUST surface them so the user knows UI changes were not browser-verified.
 
 Report findings as P1 (page doesn't load), P2 (console errors, broken interactions), or P3 (visual issues, minor friction). Add any findings to the review fix queue.
 
-Mark `[chunk-id] 7. Run Playwright browser check` complete (or "skipped: [reason]").
+Mark `[chunk-id] 8. Run Playwright browser check` complete (or "skipped: [reason]").
 
 ### 3h: Merge Back
 
@@ -263,7 +302,7 @@ If merge conflicts occur:
 2. If complex, flag and continue
 3. Report in summary
 
-Mark `[chunk-id] 8. Merge back` complete.
+Mark `[chunk-id] 9. Merge back` complete.
 
 ### 3i: Clean Up Worktree
 
@@ -272,7 +311,7 @@ git worktree remove .worktrees/pipeline/<feature>/<chunk-id>
 git branch -d pipeline/<feature>/<chunk-id>
 ```
 
-Mark `[chunk-id] 9. Clean up worktree` complete.
+Mark `[chunk-id] 10. Clean up worktree` complete.
 
 ## Step 4: Final Full Review
 
@@ -341,11 +380,15 @@ Present this report:
 ## Steps Completed
 - [x] Chunk classification: [UI: N, Logic: N, Trivial: N, Integration: N]
 - [x] Worktree per chunk: yes/no
+- [x] Anti-pattern scan per chunk: yes/no (findings per chunk)
 - [x] Evaluation gate per chunk: yes/no (type and iterations per chunk)
 - [x] Playwright browser checks: N of M UI/Integration chunks checked
 - [x] Final full dm-review: yes/no
 - [x] ai-memory capture: yes/no
 - [x] Zero-deferral enforced: yes/no
+
+## Warnings
+[List any browser verification skips, degraded reviews, or anti-pattern findings that were fixed]
 
 ## Flagged Items
 [Any chunks or findings needing manual attention]

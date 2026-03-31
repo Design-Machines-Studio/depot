@@ -21,7 +21,8 @@
       "/Users/trav/Websites/design-machines/depot/plugins/chef",
       "/Users/trav/Library/Application Support/Claude",
       "/Users/trav/Websites/design-machines/depot/todos",
-      "/Users/trav/.claude/plugins"
+      "/Users/trav/.claude/plugins",
+      "/Users/trav/.claude/plugins/cache/depot"
     ]
   }
 }

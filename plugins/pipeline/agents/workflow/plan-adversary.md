@@ -22,7 +22,7 @@ You receive:
 
 Launch three review perspectives in parallel, then consolidate.
 
-### Perspective 1: Feasibility
+### Perspective 1: Feasibility (verify, don't trust)
 
 Can each prompt actually be executed by a subagent working in isolation?
 
@@ -34,6 +34,9 @@ Can each prompt actually be executed by a subagent working in isolation?
 - [ ] Do parallel chunks truly have no file overlap? (Cross-check manifest filesToModify lists)
 - [ ] Can acceptance criteria actually be verified by the subagent?
 - [ ] Are companion skills correctly named? (plugin:skill format, skills that exist)
+- [ ] **API existence:** Does the prompt propose using framework functions that actually exist? Grep the dependency source to verify. Hallucinated APIs are the #1 pipeline failure cause.
+- [ ] **Framework syntax:** Does the prompt use the exact syntax from the CODEBASE, not from generic docs? (e.g., Datastar `__window` not `.window`, Templ `@` not `{@}`)
+- [ ] **Route tracing:** For UI chunks, has the nav-link -> route -> handler -> template chain been traced? Does the template import path match the actual file?
 
 ### Perspective 2: Completeness (against original prompt)
 
@@ -48,6 +51,16 @@ Do the prompts cover everything the user asked for? Read `original-prompt.md` fi
 - [ ] Does the final chunk leave the feature in a testable, complete state?
 - [ ] Are acceptance criteria specific enough to be testable (not vague like "works correctly")?
 - [ ] **Context-loss check:** Compare the prompts against the original prompt's full text. Were any issues, feedback items, or details from the user's original message silently dropped during planning?
+- [ ] **Usage count reconciliation:** If research identified N usages of something being modified/removed, do the prompts account for all N? Sum planned changes across chunks and compare to the research total. A gap means unplanned breakage.
+- [ ] **Survivor audit:** For files the plan keeps unchanged, do they still make sense given what's being removed/added? Flag dead abstractions kept for a single consumer.
+
+### Perspective 2b: Internal Consistency
+
+Does the plan contradict itself?
+
+- [ ] **Design decision conflicts:** Read every design decision in the plan. Do any two directly contradict each other? (e.g., "follow existing convention" in one place and "use a different approach" in another)
+- [ ] **Terminology consistency:** Does the plan use the same term for the same concept throughout? (Not "position" in one chunk and "vote" in another)
+- [ ] **Scope consistency:** Does the plan say "out of scope" for something that a later chunk quietly includes?
 
 ### Perspective 3: DM Standards and Guardrails
 

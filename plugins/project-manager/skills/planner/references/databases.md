@@ -117,3 +117,41 @@ Full property reference for project management databases. These are personal dat
 - **What I'm Building** -- behind-the-scenes on Assembly, Live Wires, DM products
 - **Influence Quotes** -- quotes from thinkers who shape DM's worldview
 - **Making Things** -- craft, design, CSS, web development
+
+---
+
+## Agent Activity Log Database
+
+**Data source ID:** Look up "Agent Activity Log DB" in `DM Notion Workspace` ai-memory entity
+**Title property:** `Entry`
+
+Surfaces orchestration data (pipeline runs, code reviews, sprint closes) in the Ops Dashboard. Written to by dm-review (Phase 7c), pipeline (Phase 7 Deliver), and sprint-plan (Phase 1 Sprint Review). ai-memory remains the primary record; this database is a parallel write for visual tracking.
+
+| Property | Type | Values / Notes |
+|----------|------|---------------|
+| Entry | title | "Pipeline: feature-slug" or "Review: project branch" or "Sprint Close: Sprint N (X/Y, Z%)" |
+| Type | select | Pipeline Run, Code Review, Sprint Close |
+| Status | select | Clean, Needs Attention, Blocked |
+| Date | date | Completion date |
+| Project | relation | -> Projects DB |
+| Sprint | relation | -> Sprints DB |
+| Findings | number | Total review findings (0 = clean). For Sprint Close: rolled-over task count |
+| P1 Count | number | Critical findings (null for Sprint Close) |
+| Chunks | number | Pipeline chunks executed (null for reviews and sprint closes) |
+| Agents | number | Review agents dispatched (null for pipeline and sprint closes) |
+| Merge Rec | select | CLEAN, APPROVE WITH FIXES, BLOCKS MERGE, N/A |
+| Branch | text | Feature or review branch name |
+
+**Status mapping:**
+- Code Review: CLEAN -> Clean, APPROVE WITH FIXES -> Needs Attention, BLOCKS MERGE -> Blocked
+- Pipeline Run: Clean review -> Clean, findings remain -> Needs Attention, pipeline failed -> Blocked
+- Sprint Close: completion >= 80% -> Clean, completion < 80% -> Needs Attention
+
+**Relation pattern:** Notion MCP cannot set relations at creation time. Each row requires a create call followed by an update call to set Project and Sprint relations (same pattern as Time Tracking entries).
+
+**Dashboard views:** The Ops Dashboard page has five linked database views:
+1. Ops Timeline (table, all types, date desc) -- default at-a-glance view
+2. Pipeline Runs (table, Type = Pipeline Run)
+3. Review Quality (table, Type = Code Review)
+4. By Sprint (board, grouped by Sprint relation)
+5. Health Board (board, grouped by Status, last 30 days)
