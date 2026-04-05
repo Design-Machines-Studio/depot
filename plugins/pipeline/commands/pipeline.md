@@ -65,8 +65,9 @@ If you are tempted to skip a phase, STOP and re-read this section.
 
 Create this ledger with TodoWrite at the start. Update it as you complete each phase. This is your proof of compliance.
 
-```
+```text
 1. Save original prompt to plans/<slug>/original-prompt.md
+1b. Phase 0: Creative routing check -- brainstorming invoked: yes/no
 2. Phase 1: Assess -- save Assessment Brief to disk
 3. Phase 1 GATE: Pause for user input
 4. Phase 2: Research -- save Research Brief to disk
@@ -113,7 +114,33 @@ The file format:
 3. [Requirement N]
 ```
 
-Mark ledger item 1 as complete. Proceed to Phase 1.
+Mark ledger item 1 as complete. Proceed to Phase 0.
+
+## Phase 0: Creative Routing Check
+
+Before starting the pipeline phases, check whether the user's input involves creative or design work that would benefit from brainstorming.
+
+**Scan the original prompt for explicit creative trigger words:** "brainstorm", "explore ideas", "superpowers", "concept", "rethink", "reimagine", "experiment", "try some things", "let's try"
+
+**Also check the Key Requirements:** If any requirement involves NEW visual layout decisions, NEW page designs, or significant UI redesigns (not just adding a field to an existing form or fixing a bug in existing UI), this counts as creative work.
+
+Routine template changes (adding a column, fixing a label, wiring an existing pattern) do NOT trigger brainstorming. The trigger is for work that requires design decisions about how something should look or behave -- not work that follows existing patterns.
+
+**If ANY explicit trigger word is present OR the feature involves new design decisions:**
+
+1. Invoke the `superpowers:brainstorming` skill BEFORE any pipeline phase
+2. Pass the original prompt as context for the brainstorming session
+3. Wait for the brainstorming process to complete (design doc written, user approved)
+4. Save the brainstorming output to `plans/<feature-slug>/brainstorm.md`
+5. Use both the original prompt AND the brainstorming spec as input to Phase 1
+
+This is NOT optional. The brainstorming skill's hard gate ("Do NOT invoke any implementation skill until you have presented a design and the user has approved it") applies to the pipeline. The pipeline IS an implementation skill. "Having a reference pattern to copy" is NOT a reason to skip brainstorming -- the brainstorm explores whether that pattern is the right choice.
+
+**If NO trigger words are present AND the feature is purely backend/logic:**
+
+Skip to Phase 1. Log: "Phase 0: Creative routing check -- no creative triggers detected, skipping brainstorming."
+
+Mark ledger item 1b as complete. Proceed to Phase 1.
 
 ## Phase 1: Assess Current State
 
@@ -279,6 +306,7 @@ Mark item 13 as complete.
 
 Before delivering to the user, verify your own compliance by answering these questions honestly:
 
+0. If the feature involved creative/UI work, did I run the brainstorming skill first?
 1. Did I save the original prompt to disk?
 2. Did I run the full assessment (not just skim the code)?
 3. Did I run the full research phase (not skip it)?

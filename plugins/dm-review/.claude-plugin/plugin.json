@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.16.0",
+  "version": "1.18.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -185,6 +185,20 @@
         ]
       },
       {
+        "id": "ui-standards-reviewer",
+        "name": "UI Standards Reviewer",
+        "category": "review",
+        "description": "Evaluates rendered UI against modern SaaS standards (Stripe, Notion, Linear quality). Checks component quality, spacing tokens, state completeness, visual polish, and Live Wires compliance. Also runs in quick mode for UI files.",
+        "tags": [
+          "ui",
+          "design-standards",
+          "saas-quality",
+          "live-wires",
+          "tokens",
+          "playwright"
+        ]
+      },
+      {
         "id": "review-consolidator",
         "name": "Review Consolidator",
         "category": "workflow",
@@ -223,7 +237,7 @@
       {
         "id": "dm-review-quick",
         "name": "Quick Review",
-        "description": "Quick code review with 5 core agents only",
+        "description": "Quick code review with 5 core agents, plus ui-standards-reviewer when UI files changed",
         "argumentHint": "[optional: PR number, branch name, or file path]"
       },
       {

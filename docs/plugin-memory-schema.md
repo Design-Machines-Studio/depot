@@ -98,6 +98,39 @@ All operations use the ai-memory MCP server:
 | `delete_observation` | Remove individual observations during rollup |
 | `save` | Persist after batch operations |
 
+## Parallel Notion Dashboard Writes
+
+Plugins that capture ai-memory observations can also write structured rows to the **Agent Activity Log** database in Notion. This surfaces orchestration data in the Ops Dashboard for at-a-glance visibility.
+
+### Pattern
+
+The Notion write is always a **parallel** operation -- ai-memory is the primary record, Notion is a convenience view. Every write point follows the same pattern:
+
+1. Look up "Agent Activity Log DB" ID from `DM Notion Workspace` ai-memory entity
+2. If not found, skip silently (database not yet created)
+3. Create a page with structured properties (Entry, Type, Status, Date, Findings, etc.)
+4. Update the page to set Project and Sprint relations (two-call pattern)
+5. If any Notion MCP call fails, skip silently
+
+### Write Points
+
+| Plugin | Phase | Type Written |
+|--------|-------|-------------|
+| dm-review | Phase 7c (after Depot Agent Metrics) | Code Review |
+| pipeline | Phase 7 Deliver (after requirements cross-check) | Pipeline Run |
+| project-manager | Sprint Stats step 9 (after ai-memory store) | Sprint Close |
+
+### Graceful Degradation
+
+Notion MCP tools may not be available in every session. The dashboard write is always optional:
+
+- If `DM Notion Workspace` entity lacks the "Agent Activity Log DB" ID: skip
+- If Notion MCP tools are not loaded: skip
+- If any individual Notion API call fails: skip (do not retry)
+- The ai-memory observation is always written first and independently
+
+See `plugins/project-manager/skills/planner/references/databases.md` for the full Agent Activity Log schema.
+
 ## Relationship to Description Evals
 
 The `description-evals/` JSON files test vocabulary overlap between SKILL.md descriptions and user queries. Plugin memory tracks real-world outcomes. The `/depot-metrics sync` command compares these two data sources to find skills where eval predictions diverge from actual usage -- skills that pass evals but fail in practice need description rewrites.

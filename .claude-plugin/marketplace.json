@@ -270,7 +270,7 @@
       "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
       "capabilities_summary": {
         "skills": 2,
-        "agents": 12,
+        "agents": 13,
         "commands": 5,
         "tags": [
           "code-review",
@@ -280,6 +280,7 @@
           "architecture",
           "visual-testing",
           "ux-quality",
+          "ui-standards",
           "playwright",
           "review-loop"
         ]
