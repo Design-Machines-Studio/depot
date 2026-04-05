@@ -215,6 +215,80 @@ check_companion_skills() {
 
 
 # --------------------------------------------------------------------------
+# Check marketplace.json versions match plugin.json versions
+# --------------------------------------------------------------------------
+check_marketplace_versions() {
+  local marketplace_file="$REPO_ROOT/.claude-plugin/marketplace.json"
+  local any_failed=0
+
+  if [ ! -f "$marketplace_file" ]; then
+    printf "  ${YELLOW}WARN${RESET}  .claude-plugin/marketplace.json not found -- skipping version sync check\n"
+    return 0
+  fi
+
+  local result
+  result=$(PLUGINS_DIR="$PLUGINS_DIR" MARKETPLACE="$marketplace_file" python3 << 'PYEOF'
+import json, os
+
+plugins_dir = os.environ["PLUGINS_DIR"]
+marketplace_path = os.environ["MARKETPLACE"]
+
+with open(marketplace_path) as f:
+    marketplace = json.load(f)
+
+mismatches = []
+ok_count = 0
+
+for entry in marketplace.get("plugins", []):
+    name = entry["name"]
+    market_ver = entry.get("version", "NONE")
+    plugin_json = os.path.join(plugins_dir, name, ".claude-plugin", "plugin.json")
+
+    if not os.path.exists(plugin_json):
+        mismatches.append((name, market_ver, "NOT FOUND"))
+        continue
+
+    with open(plugin_json) as f:
+        actual_ver = json.load(f).get("version", "NONE")
+
+    if market_ver != actual_ver:
+        mismatches.append((name, market_ver, actual_ver))
+    else:
+        ok_count += 1
+
+# Output: first line is ok count, then mismatches
+print(f"OK:{ok_count}")
+for name, market_ver, actual_ver in mismatches:
+    print(f"MISMATCH:{name}:{market_ver}:{actual_ver}")
+PYEOF
+)
+
+  local ok_count=0
+  while IFS= read -r line; do
+    case "$line" in
+      OK:*)
+        ok_count="${line#OK:}"
+        ;;
+      MISMATCH:*)
+        local details="${line#MISMATCH:}"
+        local plugin_name market_ver actual_ver
+        IFS=: read -r plugin_name market_ver actual_ver <<< "$details"
+        printf "  ${RED}FAIL${RESET}  %s: marketplace.json=%s but plugin.json=%s\n" "$plugin_name" "$market_ver" "$actual_ver"
+        any_failed=1
+        ;;
+    esac
+  done <<< "$result"
+
+  if [ "$any_failed" -eq 0 ]; then
+    printf "  ${GREEN}OK${RESET}    All %s plugin versions in sync (marketplace.json == plugin.json)\n" "$ok_count"
+  else
+    printf "  ${YELLOW}FIX${RESET}   Update the version field in .claude-plugin/marketplace.json to match\n"
+  fi
+
+  return $any_failed
+}
+
+# --------------------------------------------------------------------------
 # Check search index freshness
 # --------------------------------------------------------------------------
 check_index_freshness() {
@@ -338,6 +412,11 @@ run_composition_checks() {
 
   printf "\n${BOLD}Companion skill references:${RESET}\n"
   if ! check_companion_skills; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Marketplace version sync:${RESET}\n"
+  if ! check_marketplace_versions; then
     any_failed=1
   fi
 
