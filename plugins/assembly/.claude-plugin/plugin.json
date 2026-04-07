@@ -1,7 +1,7 @@
 {
   "name": "assembly",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "author": {
     "name": "Design Machines"
   },

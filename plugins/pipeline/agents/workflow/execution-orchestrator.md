@@ -302,30 +302,88 @@ This receipt is consumed by the merge step. Without it, merge is blocked.
 
 Mark `[chunk-id] 7. Run evaluation gate` complete.
 
-### 3h: Playwright Browser Check (UI and Integration chunks only)
+### 3h: Visual Verification Protocol (UI and Integration chunks only)
 
 **Skip this step for Logic and Trivial chunks.**
 
-For UI and Integration chunks, verify the rendered output in a browser:
+For UI and Integration chunks, verify the rendered output in a browser against the design spec and visual acceptance criteria. A screenshot without evaluation is theatre — every screenshot must be compared against something.
+
+**If Playwright MCP tools are unavailable,** STOP and ask the user: "Playwright browser tools are unavailable. Visual verification cannot be performed for this UI chunk. Proceed without visual check, or fix the tool issue first?" Do NOT silently continue.
+
+**If dev server is not running,** STOP and ask the user: "No dev server detected. Visual verification requires a running application. Start the dev server, or proceed without visual check?" Do NOT silently continue.
+
+#### Step 1: Design Spec Discovery
+
+Before taking screenshots, check for design specifications:
+
+1. `plans/<feature-slug>/brainstorm.md` — pipeline brainstorm output
+2. `docs/superpowers/specs/*.md` — formal design specs (use most recent)
+3. `.superpowers/brainstorm/` — brainstorm mockups (HTML files with inline styles)
+
+If found, read the spec and extract visual decisions relevant to this chunk's files:
+
+- Component variants (which classes, which visual treatment)
+- Visual hierarchy (what should be prominent, what subdued)
+- Spacing and layout choices (which tokens, which layout primitives)
+- Specific visual treatments called out in the approved design
+
+Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
+
+#### Step 2: Page-Level Screenshots
 
 1. Detect the dev server URL (try `http://localhost:8080`, `http://localhost:3000`, project-specific URLs)
 2. Navigate to each route affected by this chunk's `filesToModify` list
-3. Take a screenshot at desktop viewport (1440px)
+3. Take a full-page screenshot at desktop viewport (1440px)
 4. Verify the page loads without errors (check `browser_console_messages` for errors)
 5. For interactive elements (forms, buttons, modals), click/hover to verify they respond
 6. If the project has `tests/ux/personas/`, evaluate through 2 persona lenses:
    - **Casual member (David):** Can the primary action be completed without jargon barriers?
    - **Reluctant board member (Aisha):** Does this work at mobile viewport (375px)?
 
-**If Playwright MCP tools are unavailable,** flag as WARNING in the summary: "Browser verification: SKIPPED -- Playwright not available. Manual verification required for UI changes."
+#### Step 3: Element-Level Screenshots
 
-**If dev server is not running,** flag as WARNING: "Browser verification: SKIPPED -- no dev server detected. Manual verification required."
+For each acceptance criterion in the chunk prompt that describes a **visual outcome** (not just a structural criterion like "uses class X"), take a targeted screenshot of the relevant element:
 
-These are WARNINGS, not silent passes. The summary report MUST surface them so the user knows UI changes were not browser-verified.
+- If the criterion says "buttons are visually lighter" → screenshot the button group
+- If the criterion says "sidebar headings create clear hierarchy" → screenshot the sidebar
+- If the criterion says "card spacing is consistent" → screenshot 2-3 adjacent cards
 
-Report findings as P1 (page doesn't load), P2 (console errors, broken interactions), or P3 (visual issues, minor friction). Add any findings to the review fix queue.
+Use Playwright's element targeting (`browser_take_screenshot` with a CSS selector or coordinates) when possible. If element-level targeting is unavailable, take a cropped area screenshot or annotate which area of the full-page screenshot to evaluate.
 
-Mark `[chunk-id] 8. Run Playwright browser check` complete (or "skipped: [reason]").
+#### Step 4: Visual Evaluation Against Spec
+
+If a design spec was found in Step 1, compare each screenshot against the spec's visual decisions:
+
+```text
+Visual Spec Check:
+- Spec: "Block button uses outline-danger variant, visually smaller than position buttons" → MATCH / MISMATCH (actual: [describe what you see])
+- Spec: "Sidebar headings use h4 with muted color, not competing with page heading" → MATCH / MISMATCH (actual: [describe])
+- Spec: "Natural-width buttons, not full-width" → MATCH / MISMATCH (actual: [describe])
+```
+
+Spec deviations are P1 findings — the implementation does not match the approved design. Add them to the review fix queue.
+
+#### Step 5: Visual Evaluation Against Acceptance Criteria
+
+Even without a design spec, evaluate each **visual acceptance criterion** from the chunk prompt. These criteria describe the IMPRESSION, not the implementation:
+
+- "Block and Abstain buttons are visually lighter than position buttons" → requires visual judgment
+- "Return to drafting is barely visible — a text link, not a button" → requires visual judgment
+- "Sidebar zones are visually distinct without excessive borders" → requires visual judgment
+
+For each visual criterion, state: PASS (describe what you see and why it matches) or FAIL (describe the gap). Visual criterion failures are P2.
+
+#### Step 6: Verification Receipt
+
+After completing all checks, output this structured receipt:
+
+```text
+BROWSER_VERIFIED: [chunk-id] | screenshots: [N] | element_screenshots: [N] | spec_checks: [N passed]/[N total] | visual_criteria: [N passed]/[N total] | issues: [list or "none"]
+```
+
+Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (minor visual friction). Add findings to the review fix queue.
+
+Mark `[chunk-id] 8. Run visual verification` complete (or "skipped: [reason]").
 
 ### 3i: Merge Back
 

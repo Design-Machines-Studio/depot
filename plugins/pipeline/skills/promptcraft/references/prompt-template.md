@@ -43,12 +43,35 @@ Each generated prompt follows this structure. The goal is a self-contained docum
 Load these skills for domain-specific guidance:
 - [skill name] from [plugin] -- [what it helps with]
 
+## Visual References (UI chunks only)
+
+[If the brainstorm or design spec produced visual mockups, summarize the key decisions here. Omit this section entirely for non-UI chunks.]
+
+Approved design: [path to brainstorm.md or mockup file]
+
+Key visual decisions:
+- [Decision 1: e.g., "Sidebar headings use h4 with --color-muted, not h3"]
+- [Decision 2: e.g., "Block/Abstain buttons use button--outline-danger, visually smaller than position buttons"]
+- [Decision 3: e.g., "Natural-width buttons, not full-width"]
+
+The rendered result must match these visual treatments. If you cannot determine the visual intent from these descriptions, read the mockup file at the path above.
+
 ## Acceptance Criteria
 
-- [ ] [Specific, testable criterion]
-- [ ] [Another criterion]
+- [ ] [Specific, testable structural criterion]
+- [ ] [Another structural criterion]
 - [ ] [Build/compile passes]
 - [ ] [Tests pass (if applicable)]
+
+### Visual Acceptance Criteria (UI chunks only)
+
+[Omit this subsection for non-UI chunks.]
+
+- [ ] [Visual outcome criterion -- describes what it should LOOK like, not just what class to use]
+- [ ] [E.g., "Block and Abstain buttons are visually lighter and smaller than position buttons"]
+- [ ] [E.g., "Sidebar headings create a clear hierarchy -- h4 muted style, not competing with page heading"]
+
+Visual criteria describe the IMPRESSION, not the implementation. "Uses button--outline-danger" is structural. "Block button is visually subordinate to the Accept button" is visual. Include both types.
 
 ## Constraints
 
@@ -75,3 +98,7 @@ Load these skills for domain-specific guidance:
 5. **Scope tightly.** If a subagent touches files outside its scope, it risks conflicting with parallel chunks. Be explicit about boundaries.
 
 6. **Include the "why."** Context helps the subagent make good judgment calls when the prompt doesn't cover every edge case.
+
+7. **Visual criteria are separate from structural criteria.** Structural: "button uses `.button--outline-danger` class." Visual: "button appears lighter and smaller than the primary action buttons." Both are needed for UI work. A subagent can satisfy the structural criterion (correct class) while failing the visual criterion (the class renders differently than expected in context).
+
+8. **Reference the approved design.** When a brainstorm produced mockups, the prompt must reference them. The subagent can read HTML source even if it can't view rendered images. Include the path and the key visual decisions extracted from it.

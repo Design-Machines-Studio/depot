@@ -39,6 +39,21 @@ go build ./cmd/api
 
 ---
 
+## CRITICAL: Never Modify the Live Wires Repository
+
+**Assembly customizes its appearance through project-level CSS overrides, NOT by editing the Live Wires framework.**
+
+Live Wires (`livewires/`) is a shared CSS framework. Assembly consumes it as a dependency. When you need to adjust a Live Wires component's appearance for Assembly:
+
+1. **Override in Assembly's CSS:** Add or modify files in Assembly's `src/css/6_components/` directory
+2. **Use cascade layers:** Assembly's component layer sits above Live Wires, so overrides take precedence naturally
+3. **Never edit files in the `livewires/` repo** -- not `livewires/src/css/`, not component files, not token files
+4. **Example:** To adjust `.card--stat` for Assembly, create or edit `src/css/6_components/_card-overrides.css`, not `livewires/src/css/6_components/_card.css`
+
+This follows the Live Wires philosophy: "Start with Live Wires, make it your own." Each project customizes in its own CSS layer.
+
+---
+
 ## The Prototyping Workflow
 
 ### 1. Create the Page Type

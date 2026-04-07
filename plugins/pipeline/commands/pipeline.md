@@ -273,7 +273,40 @@ Wait for the orchestrator to complete. Mark ledger item 12 as complete.
 
 ## Phase 7: Deliver
 
-Present the execution summary from the orchestrator. The feature branch is ready for user review.
+Present the execution summary from the orchestrator.
+
+**Caller Visual Verification (mandatory for UI features):**
+
+If ANY chunk in the manifest was classified as UI or Integration, you MUST visually verify the rendered output yourself. Do not trust the orchestrator's self-report for visual quality. The orchestrator verifies per-chunk; you verify the whole.
+
+If all chunks were Logic-only, skip to the requirements cross-check.
+
+1. **Discover the design spec.** Check these locations in order:
+   - `plans/<feature-slug>/brainstorm.md`
+   - `docs/superpowers/specs/*.md` (most recently modified)
+   - `.superpowers/brainstorm/` (HTML mockups)
+   - If none exist, use the original prompt's visual requirements as the baseline.
+
+2. **Screenshot every affected page.** Navigate to each route that was touched by any chunk. Take a desktop (1440px) screenshot of each. If the design spec or original prompt mentions mobile, also take 375px screenshots.
+
+3. **Compare to design spec.** For each visual decision in the design spec (or each visual requirement in the original prompt), evaluate the rendered page. State explicitly what you see.
+
+4. **Present gaps to the user BEFORE claiming done.** Format:
+
+```text
+## Caller Visual Verification
+
+Screenshots taken: [N pages at N breakpoints]
+Design spec: [path or "none -- using original prompt requirements"]
+
+### Gaps Found
+- [page URL]: [description of gap] -- spec says [X], actual shows [Y]
+
+### Verified
+- [page URL]: [description of match]
+```
+
+If gaps are found, present them as part of the delivery. Do not present the branch as "ready" with undisclosed visual gaps.
 
 **Requirements cross-check (ledger item 13):** Re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
 
@@ -318,5 +351,6 @@ Before delivering to the user, verify your own compliance by answering these que
 9. Did the orchestrator run dm-review-loop after each chunk?
 10. Did the orchestrator run a final full dm-review?
 11. Did the orchestrator record the session to ai-memory?
+12. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
 
 If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.

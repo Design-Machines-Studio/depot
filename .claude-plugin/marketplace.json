@@ -126,7 +126,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "2.8.0",
+      "version": "2.8.1",
       "author": {
         "name": "Design Machines"
       },
@@ -262,7 +262,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.18.0",
+      "version": "1.19.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.io"
@@ -334,7 +334,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.io"

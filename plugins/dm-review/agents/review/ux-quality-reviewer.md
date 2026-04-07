@@ -23,6 +23,20 @@ Read and follow the token discovery protocol at `${CLAUDE_PLUGIN_ROOT}/plugins/d
 
 ALL spacing evaluations must reference `--line-*` multiples, not generic pixel values. ALL color evaluations must reference the project's semantic tokens and schemes.
 
+## Design Spec Awareness
+
+If your prompt includes a `## Design Spec Context` section (injected by the dm-review orchestrator when a design spec or brainstorm mockup exists), use it as your **PRIMARY evaluation baseline**.
+
+When a design spec exists:
+
+1. For each visual decision listed in the design spec, find the corresponding element on the rendered page
+2. Take an element-level screenshot of that specific element (use `browser_take_screenshot` with coordinates or a CSS selector)
+3. Evaluate whether the rendered element matches the spec's description
+4. If it DOES NOT match, flag as **P1** ("Implementation deviates from approved design: spec says [X], rendered shows [Y]")
+5. Spec deviations are MORE important than general heuristic violations. A page can be "good enough" by general standards but still wrong if it doesn't match the approved design.
+
+When NO design spec exists, evaluate against general heuristics only (the existing behavior). Do not invent a spec -- evaluate what you see against best practices.
+
 ## Live Wires Compliance
 
 All design recommendations MUST use Live Wires vocabulary:
@@ -127,6 +141,24 @@ Take a full-page screenshot. Evaluate:
 - **Visual weight distribution**: Does the eye flow naturally through the intended reading order?
 
 Cite White when flagging: "White would note that readers are lazy and in a hurry — this page doesn't pass the WIIFM test because..."
+
+### Phase 1.5: Design Spec Compliance (when spec exists)
+
+**Skip this phase if no `## Design Spec Context` section was provided in your prompt.**
+
+When a design spec context was provided, evaluate each approved visual decision against the rendered page:
+
+1. For each visual decision in the spec, locate the relevant element on the page
+2. Use `browser_take_screenshot` with element targeting to capture each element (or crop the relevant area from a full-page screenshot)
+3. Compare the rendered element against the spec description:
+   - Button variants: correct class AND correct visual weight relative to surrounding buttons?
+   - Heading hierarchy: correct tag AND correct visual prominence relative to other headings?
+   - Spacing: correct token AND correct visual grouping of related elements?
+   - Layout: correct component AND correct visual composition (not too wide, not too cramped)?
+4. Flag mismatches as **P1**: "[url] [element] deviates from design spec -- spec says [X], rendered shows [Y]"
+5. If ALL spec decisions match, note: "Design spec compliance: PASS ([N] decisions checked)"
+
+This phase runs BEFORE general heuristic evaluation. Spec compliance is the primary quality bar when a spec exists.
 
 ### Phase 2: Spacing & Alignment Consistency
 

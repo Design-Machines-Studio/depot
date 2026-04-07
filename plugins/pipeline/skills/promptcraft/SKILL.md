@@ -43,6 +43,21 @@ For each chunk, extract from the plan, research brief, and assessment brief:
 
 Read `references/prompt-template.md` for the exact prompt structure.
 
+### Phase 2.5: Visual Reference Extraction
+
+For UI chunks (those touching `.templ`, `.twig`, `.html`, or `.css` files), check for brainstorm outputs that define the approved visual design:
+
+1. Check `plans/<feature-slug>/brainstorm.md` for visual design decisions
+2. Check `.superpowers/brainstorm/` for HTML mockups (these contain styling decisions as inline styles)
+3. If found, extract a **Visual Reference Summary**:
+   - Key styling decisions (which component variants, which tokens, which layout patterns)
+   - Visual hierarchy: what should be prominent, what should be subdued
+   - Specific visual treatments called out in the approved design (e.g., "outline variant for destructive actions", "natural-width buttons")
+4. Do NOT embed full HTML mockups in prompts -- extract the decisions, not the markup. Full mockups waste token budget and obscure the intent.
+5. Include the file PATH to the mockup so the subagent can reference it if needed
+
+This summary feeds into each UI chunk's prompt as a `## Visual References` section and shapes the visual acceptance criteria in `### Visual Acceptance Criteria`.
+
 ### Phase 3: Overlap Analysis
 
 Analyze file paths across all chunks to determine execution strategy:
@@ -129,6 +144,7 @@ For each chunk, generate a self-contained execution prompt using the template fr
 2. **Specific** -- Exact file paths, exact patterns to follow, exact acceptance criteria
 3. **Scoped** -- Only touches the files listed, nothing else
 4. **Testable** -- Clear acceptance criteria the subagent can verify
+5. **Visually specified** (UI chunks) -- Include the Visual Reference Summary from Phase 2.5 and generate both structural AND visual acceptance criteria (see prompt template)
 
 Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`.
 

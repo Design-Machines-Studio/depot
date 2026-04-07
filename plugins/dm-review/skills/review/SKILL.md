@@ -132,6 +132,32 @@ Skipping Y agents:
 
 ---
 
+### Phase 3.25: Design Spec Discovery
+
+Check for design specifications that browser-based agents should evaluate against. This step loads the spec ONCE and injects it into visual agents -- individual agents do not discover specs independently.
+
+1. Look for spec files in order of specificity:
+   - `docs/superpowers/specs/*.md` -- formal design specs (use most recently modified)
+   - `.superpowers/brainstorm/` -- brainstorm mockups (HTML files with visual decisions as inline styles)
+   - `plans/*/brainstorm.md` -- pipeline brainstorm output
+2. If ANY spec files are found, read them and extract a structured summary:
+   - Visual decisions (layout choices, spacing tokens, component variants, color usage)
+   - Approved design patterns (specific markup structures, class choices)
+   - Visual hierarchy decisions (what should be prominent, what should be subdued)
+   - Specific visual treatments called out in the approved design
+3. Store this summary as `design_spec_context` for injection into browser-based agents in Phase 4.
+4. Report to the user:
+
+```text
+Design spec found: [path]. Will inject into visual review agents.
+```
+
+Or: "No design spec found. Visual agents will evaluate against general heuristics only."
+
+This context is injected ONLY into the browser-based agents (ux-quality-reviewer, visual-browser-tester, ui-standards-reviewer). Code-only agents do not need it.
+
+---
+
 ### Phase 3.5: Input Guardrails
 
 Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
@@ -211,6 +237,22 @@ When uncertain about design principles, CSS best practices, typography, layout, 
 #### Browser-based agents
 
 The `visual-browser-tester`, `ux-quality-reviewer`, and `ui-standards-reviewer` agents use Playwright MCP tools (prefixed `mcp__plugin_compound-engineering_pw__browser_*`) instead of reading files. They launch in parallel with all other agents. If the dev server is not running, they report "Skipped" and do not block the review.
+
+**Design spec injection:** When `design_spec_context` was discovered in Phase 3.25, append it to the prompt for ALL THREE browser-based agents (visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer). Add this section after `## Caller-Provided Context`:
+
+```text
+## Design Spec Context
+
+The following design decisions were approved before implementation. Evaluate the rendered output against each decision and flag deviations as P1 findings.
+
+1. [Visual decision from spec]
+2. [Visual decision from spec]
+...
+
+Source: [path to spec file]
+```
+
+When no design spec exists, omit this section entirely. The browser agents will evaluate against general heuristics only (their default behavior).
 
 #### Parallelization rules
 
