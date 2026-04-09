@@ -14,6 +14,21 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 
 ---
 
+## Severity Decision Tree
+
+For each finding, walk this tree to assign consistent severity across all agents:
+
+1. **Can the user complete their primary task?** NO -- P1
+2. **Is there a WCAG, security, or legal compliance failure?** YES -- P1
+3. **Can the user complete the task but with confusion or extra effort?** YES -- P2
+4. **Is this a pattern that erodes trust or professionalism?** YES -- P2
+5. **Is this a polish issue visible to a discerning eye?** YES -- P3
+6. **Is this a preference or optimization with no user impact?** -- Not a finding
+
+This tree ensures that a missing error state on a critical form (user stranded = P1) is classified differently from a missing hover state on a non-critical link (polish = P3), regardless of which agent detects it.
+
+---
+
 ## Agent-Specific Mappings
 
 ### dm-review Agents
@@ -29,8 +44,8 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 | **go-build-verifier** | Compilation failure | `go vet` warnings | — |
 | **craft-reviewer** | N+1 queries in loops, `\|raw` on user input | Missing eager loading, no null checks on relations | Suboptimal query patterns, minor template issues |
 | **visual-browser-tester** | Layout completely broken at any breakpoint, keyboard trap in browser, axe-core critical violations, focus indicators missing entirely, JS exceptions preventing render | Layout degraded at mobile (content cut off, overlapping, horizontal scroll), interactive states not visually distinct, axe-core serious violations, console JS errors, contrast failures, missing scheme tokens | Minor spacing inconsistencies, axe-core moderate violations, responsive polish, baseline rhythm misalignment |
-| **ux-quality-reviewer** | Navigation dead ends, missing error states that strand users, primary action invisible or unreachable, voting interface ambiguous enough to cause wrong votes | Missing feedback states (loading, empty, success), inconsistent interaction patterns, poor hierarchy burying content, missing empty states on lists/tables | Spacing inconsistencies, minor alignment drift, suboptimal typography, missing hover states, orphaned headings, edge case overflow |
-| **ui-standards-reviewer** | Missing component states that strand users (no error feedback, no loading indicator on async actions), broken visual hierarchy (can't tell primary from secondary action) | Inconsistent spacing system (hardcoded values instead of `--line-*`), missing empty/loading states, amateur patterns (spinners instead of skeletons, `alert()` instead of inline errors, centered text in left-aligned layouts), missing hover/focus transitions | Minor polish gaps (border-radius inconsistency, suboptimal shadow hierarchy, minor transition timing) |
+| **ux-quality-reviewer** | Navigation dead ends, missing error states that strand users, primary action invisible or unreachable, voting interface ambiguous enough to cause wrong votes | Missing feedback states (loading, empty, success), inconsistent interaction patterns, poor hierarchy burying content, missing empty states on lists/tables, AI slop score below 20/25 | Spacing inconsistencies, minor alignment drift, suboptimal typography, missing hover states, orphaned headings, edge case overflow |
+| **ui-standards-reviewer** | Missing component states that strand users (no error feedback, no loading indicator on async actions), broken visual hierarchy (can't tell primary from secondary action) | Inconsistent spacing system (hardcoded values instead of `--line-*`), missing empty/loading states, amateur patterns (spinners instead of skeletons, `alert()` instead of inline errors, centered text in left-aligned layouts), missing hover/focus transitions, AI slop score below 20/25 | Minor polish gaps (border-radius inconsistency, suboptimal shadow hierarchy, minor transition timing) |
 
 ### Depot-Native Agents (from other plugins)
 

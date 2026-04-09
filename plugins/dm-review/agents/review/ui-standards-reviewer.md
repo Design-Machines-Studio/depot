@@ -189,6 +189,23 @@ Gaps to 8:
   - Spacing inconsistent: mix of --line-1 and hardcoded 12px values
 ```
 
+## Phase 7: AI Output Quality Gate
+
+Read and apply the checklist from `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/ai-slop-detector.md`.
+
+The SaaS quality rating in Phase 6 evaluates polish. This phase evaluates distinctiveness. A page can score 7/10 on SaaS standards but still feel AI-generated if every choice is the safe, predictable option.
+
+Score the page on all 25 points. Report the score alongside the SaaS rating:
+
+```text
+Page: /proposals
+SaaS Rating: 7/10 (Good SaaS)
+AI Slop Score: 22/25 (Minor tells)
+Tells: centered hero stack, round numbers in stat cards, generic "Get Started" CTA
+```
+
+If the score is below 20, add a P2 finding with the specific tells detected.
+
 ## Output Format
 
 Report findings as P1/P2/P3 with file:line references where possible:

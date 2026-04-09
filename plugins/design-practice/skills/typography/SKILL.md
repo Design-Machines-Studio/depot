@@ -360,3 +360,8 @@ Official and third-party Claude Code plugins that complement this skill:
 | **Swiss Modernism** | `${CLAUDE_SKILL_DIR}/references/swiss-modernism.md` | Deep dive on Müller-Brockmann, Gerstner, Vignelli |
 | **Web Typography** | `${CLAUDE_SKILL_DIR}/references/web-typography.md` | Web-specific rules from Brown, Rutter, Latin, Santa Maria |
 | **Evaluation Framework** | `${CLAUDE_SKILL_DIR}/references/evaluation-framework.md` | Detailed critique methodology with specific criteria |
+| **Anti-Patterns** | `${CLAUDE_SKILL_DIR}/references/anti-patterns.md` | Named typography failures and their principled alternatives |
+
+### What NOT to Do
+
+Good typography guidance requires rejection vocabulary alongside aspiration. The anti-patterns reference names specific failures -- training-data default fonts, letterspaced lowercase body text, arbitrary size jumps, rhythm-breaking spacing, incomplete type packages -- each grounded in a DM source (Bringhurst, Vignelli, Gerstner, Latin, Goudy). Load this reference when critiquing typography or advising on typeface selection for non-DM projects.

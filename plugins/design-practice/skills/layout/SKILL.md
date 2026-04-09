@@ -218,3 +218,9 @@ Official and third-party Claude Code plugins that complement this skill:
 | **Grid Systems** | `${CLAUDE_SKILL_DIR}/references/grid-systems.md` | Deep dive on Müller-Brockmann and Gerstner grid theory |
 | **Editorial Design** | `${CLAUDE_SKILL_DIR}/references/editorial-design.md` | White, Franchi, Turley, Caldwell editorial principles |
 | **Digital Editorial** | `${CLAUDE_SKILL_DIR}/references/digital-editorial.md` | Chimero's web-specific framework and responsive layout |
+| **Anti-Patterns** | `${CLAUDE_SKILL_DIR}/references/anti-patterns.md` | Named layout failures and their principled alternatives |
+| **Context Questionnaire** | `${CLAUDE_SKILL_DIR}/references/context-questionnaire.md` | Shared design context prerequisites (used by design-advisor and design-critic agents) |
+
+### What NOT to Do
+
+LLMs produce reflexive layout patterns -- centered hero stacks, three-equal-cards rows, side-stripe decorations, cookie-cutter section rhythm -- that signal template thinking rather than structural design. The anti-patterns reference names these failures with DM source citations (White on pacing, Muller-Brockmann on grid, Gerstner on hierarchy, Tufte on chartjunk, Chimero on why-before-how) and provides Live Wires alternatives. Load this reference when critiquing layouts or reviewing generated output.

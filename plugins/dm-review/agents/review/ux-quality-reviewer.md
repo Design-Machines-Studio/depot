@@ -306,6 +306,51 @@ Test interactive elements:
 - **Destructive differentiation**: Are delete/remove actions visually distinct from create/edit actions? (Color, position, confirmation)
 - **Confirmation appropriateness**: Confirmations should appear only for irreversible actions, not routine ones.
 
+### Phase 10: AI Output Quality Gate
+
+Read and apply the checklist from `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/ai-slop-detector.md`.
+
+Score the page on all 25 points. Many items will already have been observed in earlier phases -- this phase collates them into a single score rather than duplicating work.
+
+**The Swiss Test:** "If someone told you an AI made this, would you believe them immediately?" If yes, the design converges on predictable choices rather than serving this specific content, audience, and medium.
+
+If the score is below 20, add a P2 finding:
+
+```
+AI output quality: [score]/25. Swiss Test: [PASS/FAIL].
+Tells detected: [list the specific failed checklist items]
+```
+
+If the score is 20+, include it in the output as an informational note (not a finding).
+
+### Phase 11: Heuristic Score
+
+Score the page against Nielsen's 10 heuristics, each mapped to a DM influence. Score each 0-4 (0 = not applicable, 1 = major violation, 2 = minor issues, 3 = acceptable, 4 = exemplary):
+
+| # | Heuristic | DM Lens | Score |
+|---|-----------|---------|-------|
+| 1 | Visibility of system status | White: the reader must know what's happening | /4 |
+| 2 | Match between system and real world | Chimero: design with the grain of the medium and audience | /4 |
+| 3 | User control and freedom | Gerstner: maximum freedom within the system's constraints | /4 |
+| 4 | Consistency and standards | Muller-Brockmann: systematic, never arbitrary | /4 |
+| 5 | Error prevention | White: service orientation -- protect the reader | /4 |
+| 6 | Recognition over recall | Lupton: hierarchy communicates without memorization | /4 |
+| 7 | Flexibility and efficiency | Gerstner: the programme accommodates variation | /4 |
+| 8 | Aesthetic and minimalist design | Vignelli: disciplined restraint, nothing unnecessary | /4 |
+| 9 | Help users recover from errors | White: reader service extends to recovery | /4 |
+| 10 | Help and documentation | Bringhurst: honor the content, make it findable | /4 |
+
+**Total: /40**
+
+Rating bands:
+- 36-40: Exceptional -- design quality is a competitive advantage
+- 28-35: Good -- solid craft with clear areas for polish
+- 20-27: Acceptable -- functional but not distinguished
+- 12-19: Needs work -- multiple heuristics undermined
+- <12: Critical -- fundamental usability and design issues
+
+Include the score table in the output. This provides a longitudinal metric that can be tracked across reviews to measure UX quality improvement over time.
+
 ---
 
 ## Output Format
@@ -324,6 +369,14 @@ Test interactive elements:
 
 ### Moderate (P3)
 - [url] Description — principle citation — **Impact**: what reduces perceived quality
+
+### AI Output Quality
+AI Slop Score: [score]/25. Swiss Test: [PASS/FAIL].
+[Tells detected, if any]
+
+### Heuristic Score
+[Nielsen's 10 heuristics table with scores -- see Phase 11]
+Total: [score]/40 ([rating band])
 
 ### What's Working
 - [Genuine strengths worth preserving]

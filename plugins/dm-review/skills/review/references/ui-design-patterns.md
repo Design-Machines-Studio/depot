@@ -221,3 +221,18 @@ These are the specific patterns that separate amateur UI from professional SaaS 
 | Inline styles | Check if a utility class exists first. Use tokens via custom properties. |
 | Manual `padding` on sections | Use `.box` with variants (`box-tight`, `box-loose`) |
 | Manual `margin-bottom` between elements | Use `.stack` (handles vertical spacing for all children) |
+
+---
+
+## 9. AI Output Anti-Patterns (Design-Level)
+
+Higher-level design decisions that signal AI generation, beyond the code-level mistakes in section 8. For the full 25-point scoreable checklist, see `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/ai-slop-detector.md`. The quick-reference table below covers the most common tells with Live Wires fixes:
+
+| AI Tell | Fix (Live Wires) |
+|---------|-----------------|
+| Three-equal-cards layout (no hierarchy) | Use `.grid` with `span` variation, `.sidebar` for primary/secondary |
+| Centered hero + subheading + CTA | Left-aligned with asymmetric composition, or `.sidebar` |
+| Side-stripe border on cards (`border-left: 3px+`) | Use `.scheme-*` for section differentiation |
+| Identical section structure throughout | Vary `.section` density, break with editorial elements |
+| Pure gray neutrals | Tint toward brand hue at low chroma (OKLCH) |
+| Generic CTAs ("Get Started", "Learn More") | Specific action verbs: "View proposals," "Submit vote" |

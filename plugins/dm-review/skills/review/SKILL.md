@@ -476,6 +476,9 @@ These files are loaded on demand during the review process:
 - `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` — Todo file template and GitHub Issue conventions
 - `${CLAUDE_SKILL_DIR}/references/guardrails.md` — Input/output validation rules, failure policies, deduplication precision
 - `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` — Failure classification, degradation priority, merge recommendation overrides
+- `${CLAUDE_SKILL_DIR}/references/ai-slop-detector.md` — 25-point AI output quality checklist (used by ux-quality-reviewer and ui-standards-reviewer)
+- `${CLAUDE_SKILL_DIR}/references/ui-design-patterns.md` — Practical UI patterns with Live Wires vocabulary
+- `${CLAUDE_SKILL_DIR}/references/token-discovery.md` — CSS token discovery protocol for review agents
 
 ## Agent Definition Paths
 

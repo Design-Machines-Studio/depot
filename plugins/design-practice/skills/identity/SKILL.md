@@ -225,6 +225,8 @@ When working on any DM property (Design Machines, Assembly, Live Wires, The Loca
 
 For the full color palette, token architecture, scheme inventory, accessibility guidelines, and product assignments, see `design-machines` strategy skill > `references/design-system.md`.
 
+For new palette work, use OKLCH color space for perceptual uniformity and tinted neutrals. See `${CLAUDE_SKILL_DIR}/references/color-systems.md` for the complete methodology.
+
 ---
 
 ## Companion Skills
@@ -242,3 +244,9 @@ For the full color palette, token architecture, scheme inventory, accessibility 
 | **Masters Philosophy** | `${CLAUDE_SKILL_DIR}/references/masters-philosophy.md` | Deep profiles of Rand, Bass, Draplin, Wyman, Glaser |
 | **Systems Thinking** | `${CLAUDE_SKILL_DIR}/references/systems-thinking.md` | How marks extend to identity systems across media |
 | **Evaluation Framework** | `${CLAUDE_SKILL_DIR}/references/evaluation-framework.md` | Detailed critique methodology with rubric |
+| **Anti-Patterns** | `${CLAUDE_SKILL_DIR}/references/anti-patterns.md` | AI-generated mark tells and identity design failures |
+| **Color Systems** | `${CLAUDE_SKILL_DIR}/references/color-systems.md` | OKLCH color space, tinted neutrals, palette construction |
+
+### What NOT to Do
+
+AI-generated marks share recognizable tells -- gradient shields, conceptless monograms, complexity that fails the favicon test, trendy treatments that will date within years, meaningless abstracts. The anti-patterns reference names these failures through the Five Masters' lens (Rand on monochrome, Bass on symbolism, Draplin on scale, Wyman on environment, Glaser on meaning). Load when critiquing identity work or evaluating proposed marks.

@@ -88,6 +88,16 @@ For each issue, provide:
 - What to do about it (specific, actionable guidance)
 - Priority level
 
+### Step 4.5: AI Output Detector (Deterministic Pass)
+
+After completing the principled evaluation (Steps 1-4), run a separate deterministic check. This is independent of your subjective critique:
+
+1. Count the number of AI-default patterns present (reference the relevant skill's `references/anti-patterns.md` for applicable domains -- typography, layout, and identity have anti-pattern files; dataviz does not, so skip the detector for pure dataviz critiques)
+2. Run the Swiss Test: "If someone told you AI made this, would you believe immediately?"
+3. Report the detector findings SEPARATELY from your critique findings
+
+The two assessments may disagree. A design can be principally sound but feel AI-generated (surface patterns), or it can feel handcrafted but have structural flaws. Report both perspectives honestly.
+
 ### Step 5: Acknowledge What's Working
 
 Always identify genuine strengths. Critique without acknowledgment of good work is incomplete and discouraging.
@@ -114,6 +124,11 @@ Always identify genuine strengths. Critique without acknowledgment of good work 
 
 ### Identity
 [If applicable -- findings with severity]
+
+### AI Output Detector
+- AI-default patterns found: [count]
+- Swiss Test: [PASS/FAIL]
+- Specific tells: [list, if any]
 
 ### Priority Recommendations
 1. [Most important change, with reasoning]
