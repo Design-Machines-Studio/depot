@@ -37,6 +37,8 @@ When a design spec exists:
 
 When NO design spec exists, evaluate against general heuristics only (the existing behavior). Do not invent a spec -- evaluate what you see against best practices.
 
+**Missing design spec warning:** If you are reviewing UI changes (template or CSS files in the diff) and no design spec was injected via `## Design Spec Context`, flag this as a **P2 process finding**: "No design spec available for UI review -- visual quality evaluation is heuristic-only, which has a documented history of missing implementation gaps (see `docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md`). Consider running the pipeline assess phase to establish a design baseline before further UI work." This is a process finding, not a code finding -- it signals that the review's ability to catch visual quality issues is degraded.
+
 ## Live Wires Compliance
 
 All design recommendations MUST use Live Wires vocabulary:
@@ -105,8 +107,9 @@ mkdir -p .claude/ux-review/screenshots/$(date +%Y-%m-%d)
 When reviewing an Assembly project (detected by `go.mod` + governance-related templates), load the UX persona framework from `tests/ux/`:
 
 1. **Read `tests/ux/personas/_index.md`** to understand the six personas and their testing focus
-2. **Read `tests/ux/heuristics/governance-specific.md`** for the G1-G10 governance heuristics
-3. **Check `tests/ux/coverage-matrix.md`** to see which personas and expected outcomes apply to the pages being reviewed
+2. **Read individual persona profiles** from `tests/ux/personas/<name>.md` for each persona relevant to the pages being reviewed. Extract behavioral details: tech comfort level, time constraints, emotional triggers, typical friction points, and device preferences. Do not rely solely on the summary personas (David/Aisha/Alex) below -- their full profiles contain friction patterns that inform evaluation.
+3. **Read `tests/ux/heuristics/governance-specific.md`** for the G1-G10 governance heuristics
+4. **Check `tests/ux/coverage-matrix.md`** to see which personas and expected outcomes apply to the pages being reviewed
 
 During each review phase, evaluate through the lens of at least 2 personas:
 

@@ -61,6 +61,21 @@ You MUST execute every phase in order. You MUST NOT skip phases, combine phases,
 
 If you are tempted to skip a phase, STOP and re-read this section.
 
+## CRITICAL: Do Not Manually Replicate
+
+When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand — launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
+
+The pipeline enforces gates, review loops, visual verification, memory capture, and sprint contracts that manual execution silently skips. "I already understand the code" is not a reason to bypass the pipeline — the pipeline exists precisely because self-confidence is unreliable.
+
+**What happens when you bypass the pipeline:**
+
+- Visual verification gets skipped entirely (documented in `docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md`)
+- Requirements get marked "done" without evidence (documented in `docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`)
+- The adversarial review never runs, so hallucinated APIs and missing edge cases ship
+- dm-review-loop never runs, so the evaluator/generator separation is lost
+
+If you catch yourself planning to "just do it quickly" without invoking the pipeline skill, you are about to repeat a documented failure. Stop and invoke the skill.
+
 ## Progress Ledger
 
 Create this ledger with TodoWrite at the start. Update it as you complete each phase. This is your proof of compliance.
@@ -83,7 +98,7 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 14. Phase 7 GATE: Present results and ask user for next step
 ```
 
-Mark each item as you complete it. Do not mark a GATE as complete until the user has responded.
+Mark each item as you complete it. Do not mark a GATE as complete until AskUserQuestion has returned a response from the user. If you find yourself proceeding past a GATE without an AskUserQuestion response, you have violated the gate.
 
 ## Feature Input
 
@@ -153,9 +168,9 @@ Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`.
 
 Mark ledger item 2 as complete.
 
-**GATE (ledger item 3):** You MUST stop here and ask the user: "Assessment complete. Any corrections or context to add before I research?"
+**GATE (ledger item 3):** You MUST stop here and use AskUserQuestion to ask: "Assessment complete. Any corrections or context to add before I research?" Do NOT proceed by generating an answer to your own question. Do NOT combine this gate with Phase 2 work. The user's response is the gate -- without it, Phase 2 is blocked.
 
-Do NOT proceed to Phase 2 until the user responds. Mark item 3 when they do.
+Mark item 3 when AskUserQuestion returns the user's response.
 
 ## Phase 2: Research
 
@@ -172,9 +187,9 @@ You MUST run this phase even if you think you already have enough context. Resea
 
 Mark ledger item 4 as complete.
 
-**GATE (ledger item 5):** You MUST stop here and ask: "Research complete. Ready to plan, or want to adjust the scope?"
+**GATE (ledger item 5):** You MUST stop here and use AskUserQuestion to ask: "Research complete. Ready to plan, or want to adjust the scope?" Do NOT proceed by generating an answer to your own question. Do NOT combine this gate with Phase 3 work.
 
-Do NOT proceed to Phase 3 until the user responds. Mark item 5 when they do.
+Mark item 5 when AskUserQuestion returns the user's response.
 
 ## Phase 3: Plan
 
@@ -203,9 +218,9 @@ If any check fails, fix the plan before presenting it.
 
 Mark ledger item 6 as complete.
 
-**GATE (ledger item 7):** You MUST stop here and ask: "Plan ready at `plans/<feature-slug>/plan.md`. Review it and let me know when to generate execution prompts."
+**GATE (ledger item 7):** You MUST stop here and use AskUserQuestion to ask: "Plan ready at `plans/<feature-slug>/plan.md`. Review it and let me know when to generate execution prompts." Do NOT proceed by generating an answer to your own question.
 
-Do NOT proceed to Phase 4 until the user responds. Mark item 7 when they do.
+Mark item 7 when AskUserQuestion returns the user's response.
 
 ## Phase 4: Generate Execution Prompts
 
@@ -249,9 +264,9 @@ Launch the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adve
 
 Mark ledger item 10 as complete.
 
-**GATE (ledger item 11):** You MUST stop here and present the approved prompts. Ask: "Prompts reviewed and approved by adversary. Review the prompts in `plans/<feature-slug>/prompts/` and approve when ready to execute."
+**GATE (ledger item 11):** You MUST stop here and use AskUserQuestion to present the approved prompts: "Prompts reviewed and approved by adversary. Review the prompts in `plans/<feature-slug>/prompts/` and approve when ready to execute." Do NOT proceed by generating an answer to your own question.
 
-Do NOT proceed to Phase 6 until the user explicitly approves. Mark item 11 when they do.
+Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 ## Phase 6: Execute
 
@@ -308,7 +323,26 @@ Design spec: [path or "none -- using original prompt requirements"]
 
 If gaps are found, present them as part of the delivery. Do not present the branch as "ready" with undisclosed visual gaps.
 
-**Requirements cross-check (ledger item 13):** Re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
+**Evidence Requirement:** Every "Verified" item in the visual verification report MUST include concrete evidence:
+
+- A screenshot path or inline screenshot reference
+- A specific visual observation ("heading is h4 with muted color at 0.875rem" not just "heading looks correct")
+- If a computed style matters (font-size, weight, color, background), the actual computed value from `getComputedStyle` via browser_evaluate
+
+Assertions without evidence are findings, not verifications. "Verified: sidebar looks good" is NOT acceptable. "Verified: sidebar headings use 0.875rem / 400 weight / var(--color-muted) per getComputedStyle" IS acceptable.
+
+If you cannot provide evidence (no browser tools), you MUST state: "Visual verification incomplete -- no browser tools available. The following requirements could not be visually verified: [list]." This is NOT a passing verification.
+
+**Requirements cross-check (ledger item 13):** Re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. Each entry requires an evidence type:
+
+```text
+Requirements Cross-Check:
+  1. [Requirement] -> Addressed in [commit/file] -- Evidence: [screenshot/build pass/computed style/test pass]
+  2. [Requirement] -> Addressed in [commit/file] -- Evidence: [type]
+  3. [Requirement] -> NOT ADDRESSED -- [reason]
+```
+
+Entries marked "Addressed" without an evidence type are treated as NOT ADDRESSED. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
 
 **Ops Dashboard write:** After the requirements cross-check, write a structured row to the Agent Activity Log database in Notion:
 
@@ -331,7 +365,7 @@ If gaps are found, present them as part of the delivery. Do not present the bran
 
 Mark item 13 as complete.
 
-**GATE (ledger item 14):** Ask: "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. Want to create a PR, give feedback for another iteration, or done?"
+**GATE (ledger item 14):** Use AskUserQuestion to ask: "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. Want to create a PR, give feedback for another iteration, or done?"
 
 **If feedback given:** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
 

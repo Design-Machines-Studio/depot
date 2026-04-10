@@ -96,6 +96,56 @@ Before any git operations, validate the manifest:
 
 If validation fails, report the specific issue and stop.
 
+## Step 0b: MCP Pre-Flight Check
+
+Before any chunk execution, verify that browser testing tools are available for UI and Integration chunks.
+
+### 1. Count UI/Integration chunks
+
+Scan the manifest's `chunks` array. Count chunks where the classification (from prompt content or manifest metadata) is UI or Integration. If all chunks are Logic or Trivial, log `MCP Pre-Flight: not required (no UI/Integration chunks)` and skip to Step 1.
+
+### 2. Check Playwright MCP availability
+
+Use ToolSearch to check for the presence of browser tools. Check both naming variants:
+
+- `mcp__plugin_compound-engineering_pw__browser_take_screenshot`
+- `mcp__plugin_playwright_playwright__browser_take_screenshot`
+
+Also check for Chrome DevTools MCP:
+
+- `mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot`
+
+### 3. Decision gate
+
+**If UI/Integration chunks > 0 AND no browser MCP tools found:**
+
+STOP. Output:
+
+```text
+BLOCKED: This manifest contains [N] UI/Integration chunks that require browser verification, but no Playwright or Chrome DevTools MCP tools are available. Visual verification cannot be performed.
+
+Fix: Ensure a Playwright or Chrome DevTools MCP server is running before pipeline execution.
+```
+
+Use AskUserQuestion to ask: "Proceed without visual verification (degraded quality -- visual issues will not be caught), or fix the tool issue first?"
+
+If the user chooses to proceed degraded, log: `MCP Pre-Flight: DEGRADED -- user approved proceeding without browser tools. Visual verification will be skipped for all UI/Integration chunks.` Continue to Step 1 but mark all subsequent visual verification steps as SKIPPED in chunk receipts.
+
+**If browser tools are available:**
+
+Log: `MCP Pre-Flight: Playwright=[available/unavailable], Chrome DevTools=[available/unavailable], UI chunks=[N], decision=proceed`
+
+### 4. Dev server check
+
+If browser tools are available and UI chunks exist, verify the dev server is reachable. Try these URLs in order:
+
+1. `http://localhost:8080` (Go+Templ+Datastar)
+2. `http://localhost:3000` (Node/general)
+
+Use `browser_navigate` to test. If none respond:
+
+STOP and use AskUserQuestion: "No dev server detected at localhost:8080 or :3000. Visual verification requires a running application. Start the dev server, or proceed without visual checks?"
+
 ## Step 1: Setup
 
 ### 1a: Git Safety Check
@@ -372,6 +422,40 @@ Even without a design spec, evaluate each **visual acceptance criterion** from t
 - "Sidebar zones are visually distinct without excessive borders" → requires visual judgment
 
 For each visual criterion, state: PASS (describe what you see and why it matches) or FAIL (describe the gap). Visual criterion failures are P2.
+
+#### Step 5b: Visual Parity Diff (when applicable)
+
+When the chunk's acceptance criteria include a parity requirement ("visually identical to," "match the existing," "same treatment as," "these should be the same component"), perform a computed style comparison:
+
+1. **Identify elements:** Determine the reference element (the one being matched) and the target element (the one being changed). These may be on different pages.
+2. **Navigate and extract:** For each element, navigate to its page and use `browser_evaluate` to run:
+   ```javascript
+   JSON.stringify((() => {
+     const el = document.querySelector('[SELECTOR]');
+     const s = getComputedStyle(el);
+     return {
+       fontFamily: s.fontFamily, fontSize: s.fontSize, fontWeight: s.fontWeight,
+       lineHeight: s.lineHeight, letterSpacing: s.letterSpacing,
+       color: s.color, backgroundColor: s.backgroundColor,
+       border: s.border, borderRadius: s.borderRadius,
+       padding: s.padding, margin: s.margin,
+       display: s.display
+     };
+   })())
+   ```
+3. **Compare:** For each property, compare the reference and target values. Log mismatches:
+   ```text
+   PARITY MISMATCH: font-weight -- reference: 400, target: 700
+   PARITY MISMATCH: background-color -- reference: rgb(240,248,240), target: rgb(220,240,220)
+   ```
+4. **Severity:** Parity mismatches are **P1 findings** when the user explicitly requested visual identity. These are not optional polish.
+5. **Fallback:** If `browser_evaluate` cannot run (no browser tools), log: "Parity diff skipped -- no browser tools available" and flag as DEFERRED with explicit justification. Do NOT silently skip.
+
+**Baseline comparison:** If `plans/<feature-slug>/baselines/` exists (created by the assess phase), also compare post-implementation screenshots against the baseline:
+
+1. Take a new screenshot of the same route/viewport as each baseline file
+2. Note visual differences between baseline and current state
+3. Expected differences (the feature being built) are fine; unexpected regressions are P2 findings
 
 #### Step 6: Verification Receipt
 

@@ -260,6 +260,84 @@ func rowFilter(p dto.ProposalResponse) string {
 
 ---
 
+## Application Context (appctx)
+
+The `appctx` package (`backend/internal/appctx/modules.go`) provides request-scoped values shared across packages. It breaks import cycles between handlers (which set values) and templates (which read them).
+
+### NavUser Struct
+
+```go
+type NavUser struct {
+    MemberID          string
+    Initials          string
+    Name              string
+    Status            string // "active", "probationary", "departed"
+    IsBoard           bool
+    IsOfficer         bool
+    IsAdmin           bool
+    ProfileIncomplete bool   // true when phone == "" || bio == ""
+}
+```
+
+### Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `SetNavUser(ctx, user)` / `GetNavUser(ctx)` | Store/retrieve member identity. GetNavUser returns safe fallback (`Initials: "?"`) if not set. |
+| `SetEnabledModules(ctx, map)` / `IsModuleEnabled(ctx, slug)` | Module gating. `IsModuleEnabled` is fail-closed (returns false if no context). |
+| `SetNavPath(ctx, path)` / `GetNavPath(ctx)` | Active nav state for sidebar highlighting. |
+| `SetNavPrefs(ctx, closedGroups)` / `GetNavPrefs(ctx)` | Collapsed nav groups from `nav_closed` cookie. |
+
+### Middleware Chain
+
+`AppContextMiddleware` in `backend/internal/handlers/middleware.go` runs on every request:
+
+1. Loads enabled modules from database (`db.EnabledModuleSlugs()`)
+2. Parses `nav_closed` cookie for collapsed nav groups
+3. Reads `coop_member` cookie for current member ID (via `resolveNavMemberID`)
+4. Queries database for member details (`preferred_name`, `phone`, `bio`, `status`, `is_super_admin`)
+5. Queries `member_roles` for board and officer status
+6. Sets all values in context: `SetEnabledModules`, `SetNavPath`, `SetNavPrefs`, `SetNavUser`
+
+### Template Usage
+
+```templ
+// Read the current user in any template
+user := appctx.GetNavUser(ctx)
+if user.IsAdmin {
+    // render admin controls
+}
+
+// Check module availability before rendering nav items
+if appctx.IsModuleEnabled(ctx, "governance") {
+    // render governance nav section
+}
+```
+
+### Member Switching (?member= parameter)
+
+During development, switch the active member identity to test different personas and permission levels without modifying code or database.
+
+**How it works:** `getCurrentMemberID()` in `backend/internal/handlers/handlers.go` checks three sources in order:
+
+1. **`?member=` query parameter** (development only, gated by `ENV=development`). Validates the member exists in the database, then sets the `coop_member` cookie for 7 days.
+2. **`coop_member` cookie** (persists across requests, HttpOnly, SameSite=Lax).
+3. **Default:** `mem_009` (Ned Ludd) if neither source has a value.
+
+**Usage:** Append `?member=mem_001` to any URL. The cookie persists, so subsequent requests use that identity automatically.
+
+**Persona mapping for testing:**
+
+| Persona | Member ID | Role |
+|---------|-----------|------|
+| David (casual member) | Use `mem_XXX` from seed data | Active member, no board role |
+| Aisha (reluctant board member) | Use board member seed ID | Board role, mobile-first |
+| Alex (new probationary) | Use probationary seed ID | Status: "probationary" |
+
+**Security note:** This is UI-level identity only, NOT a security boundary. The `coop_member` cookie is unauthenticated and forgeable. Real authentication is required before production. The `?member=` param is environment-gated to `ENV=development` only.
+
+---
+
 ## Quality Workflow
 
 ### After Every Major Chunk

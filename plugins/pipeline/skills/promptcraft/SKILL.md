@@ -172,6 +172,27 @@ Requirements Coverage:
 
 If any requirement is uncovered, either add it to an existing chunk's acceptance criteria or create a new chunk. Do not proceed with gaps.
 
+### Phase 6b: Prompt Quality Parity Check
+
+Compare prompt detail levels across same-classification chunks to catch context fatigue -- later prompts tend to be less detailed than earlier ones.
+
+1. **Group prompts by classification** (UI, Logic, Trivial, Integration).
+2. **For each group, measure:**
+   - Line count per prompt
+   - Number of acceptance criteria per prompt
+   - Number of visual acceptance criteria per prompt (UI/Integration only)
+3. **Flag outliers:**
+   - If any prompt has fewer than 50% of the group's average line count, flag: "WARNING: [chunk-id] may be under-specified ([N] lines vs group average [M])"
+   - If a UI chunk has 0 visual acceptance criteria when siblings have 2+, flag: "WARNING: [chunk-id] has no visual acceptance criteria -- visual requirements may have been dropped during decomposition"
+   - If the last prompt in a group is the shortest, this is likely context fatigue -- flag it specifically
+4. **Output a parity summary:**
+   ```text
+   Prompt Quality Parity:
+     UI chunks: chunk-01 (82 lines, 4 visual criteria), chunk-03 (45 lines, 1 visual criterion) -- WARNING: chunk-03 under-specified
+     Logic chunks: chunk-02 (60 lines), chunk-04 (55 lines) -- OK
+   ```
+5. **Fix warnings** by expanding under-specified prompts before proceeding to handoff. Add missing context, acceptance criteria, and visual specifications from the plan and research briefs.
+
 ### Phase 7: Handoff
 
 If running as part of `/pipeline`, pass the manifest to the adversarial review phase. If running standalone via `/pipeline-prompts`, present the manifest summary and prompt list to the user.

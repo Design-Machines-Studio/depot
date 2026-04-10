@@ -76,6 +76,20 @@ Produce a **Current UX Report** covering:
 
 If no dev server is available, skip this agent and note: "UX assessment skipped -- no dev server detected."
 
+#### Baseline Screenshot Persistence
+
+Save all screenshots taken during the UX assessment to disk for later comparison:
+
+1. Create directory: `plans/<feature-slug>/baselines/`
+2. Save each screenshot with a descriptive name: `baselines/<route-slug>-<viewport>.png`
+   - Example: `baselines/governance-proposals-desktop-1440.png`
+   - Example: `baselines/governance-proposals-mobile-375.png`
+3. Record the screenshot manifest in the Assessment Brief under a `## Baseline Screenshots` section listing every saved file and its route/viewport.
+
+These baselines serve as the "before" state for visual diff comparisons after implementation. The execution-orchestrator's visual verification protocol compares post-implementation screenshots against these baselines to detect regressions. Expected changes (the feature being built) are fine; unexpected visual differences are findings.
+
+Note: Baseline screenshots are ephemeral -- useful within a pipeline run but not committed to git. Add `plans/*/baselines/*.png` to `.gitignore` if not already ignored.
+
 ### Phase 3: Consolidation
 
 Combine both reports into a single **Assessment Brief**:

@@ -118,6 +118,19 @@ Examine the screenshot and snapshot for obvious rendering problems:
 - Overlapping text or elements
 - Unstyled content (flash of unstyled content indicators)
 
+### Phase A.5: Design Spec Comparison
+
+If your prompt includes a `## Design Spec Context` section (injected by the dm-review orchestrator), compare the rendered page against the design spec's visual decisions:
+
+1. **Extract visual decisions** from the design spec: component variants, visual hierarchy, spacing choices, color treatments, and specific visual outcomes described.
+2. **For each decision that maps to a visible element**, take an element-level screenshot using `browser_take_screenshot` with a CSS selector or coordinates targeting the specific component.
+3. **Evaluate match:** Compare what the design spec describes against what the screenshot shows. State explicitly what you see.
+4. **Flag deviations as P1:** "Design spec says [X], rendered page shows [Y]." Implementation deviating from the approved design is a P1 finding -- not optional polish.
+
+If no design spec was injected, skip this phase. Do not invent a spec.
+
+This phase complements the ux-quality-reviewer's design spec awareness (which evaluates from a design quality perspective) by testing at the rendering level -- catching cases where CSS inheritance, layout context, or scheme color differences produce a different visual result than the code suggests.
+
 ### Phase B: Responsive Testing
 
 For each URL when CSS or layout-affecting templates changed, resize and screenshot at each viewport:

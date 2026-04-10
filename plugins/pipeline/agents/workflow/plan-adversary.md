@@ -87,6 +87,26 @@ Do the prompts follow Design Machines conventions and integrate with depot guard
 - [ ] Will the review output follow the unified format (per `plugins/dm-review/skills/review/references/output-format.md`)?
 - [ ] Do prompts avoid touching shared config files (routes, main) that should be in an integration chunk?
 
+### Perspective 4: Visual Verification Readiness
+
+For each chunk classified as UI or Integration, verify the prompts are set up for visual quality enforcement:
+
+- [ ] Does the chunk have a `## Visual References` section citing a design spec, brainstorm mockup, or original prompt's visual requirements? If no visual baseline exists, flag as **IMPORTANT**: "UI chunk [chunk-id] has no visual baseline to verify against -- visual quality will be evaluated by heuristics only, which has a documented history of missing implementation gaps."
+- [ ] Does the chunk have `### Visual Acceptance Criteria` with at least 2 criteria describing visual IMPRESSIONS (not just structural class names)? "Button uses `button--outline-danger` class" is structural. "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
+- [ ] Does each visual acceptance criterion include a browser-verifiable test? A criterion is browser-verifiable if it can be confirmed by screenshot comparison or getComputedStyle extraction. "Code is clean" is not verifiable. "Button has font-size < 1rem per getComputedStyle" is verifiable.
+- [ ] For chunks modifying the same visual area (e.g., sidebar, form, card), do the visual criteria align across chunks? One chunk shouldn't say "prominent headings" while another says "subdued headings."
+- [ ] If the original prompt or plan says "visually identical," "match the existing," "same as," or "these should be the same component" between two pages or elements, is there an explicit **Visual Parity Criterion**? (See below.)
+
+**Visual Diff Protocol:**
+
+When the original prompt or plan requires UI parity ("these should look the same," "visually identical," "match X"), the acceptance criteria MUST include:
+
+1. A screenshot comparison criterion: "Screenshot of [A] and [B] at same viewport should show visually identical [component/layout]"
+2. A computed style comparison criterion: "getComputedStyle on [selector] for [A] and [B] must match for: font-size, font-weight, color, padding, margin, background-color, border"
+3. Both criteria are **P1** -- visual parity requirements from the user are not optional polish.
+
+If these criteria are missing from the prompts, add them to the sprint contract addendum.
+
 ## Sprint Contract Negotiation
 
 Beyond finding problems, you MUST propose improvements. For each chunk, evaluate whether the acceptance criteria are sufficient for the evaluator (dm-review-loop) to verify success. If not, propose additional criteria.

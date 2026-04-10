@@ -212,3 +212,45 @@ claude plugin validate plugins/<name>
 - Agent files are categorized by purpose: `review/` for code review agents, `workflow/` for automation agents.
 - Plugin JSON requires `name`, `description`, `version`, `author`, and `capabilities`. Optional fields include `keywords`, `repository`, and `author.url`.
 - The marketplace manifest at `.claude-plugin/marketplace.json` must stay in sync with the actual plugin directories.
+
+## Pipeline Enforcement
+
+When the user says `/pipeline` or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke the pipeline skill from `plugins/pipeline/`. Do not manually execute pipeline steps. Do not replicate the pipeline's assess-research-plan-prompt-review-execute phases by hand. The pipeline enforces gates, review loops, visual verification, and memory capture that manual execution skips.
+
+If the pipeline skill is unavailable (not installed), tell the user and stop. Do not improvise a substitute.
+
+## Known Pipeline Failure Modes
+
+These failure patterns have been observed in production pipeline runs. Each has a documented root cause and a corresponding hardening measure in the pipeline plugin.
+
+1. **Pipeline bypass:** Claude skips the pipeline and manually implements features. The pipeline's gates, reviews, and visual checks are all skipped. Hardening: "Do Not Manually Replicate" section in `pipeline.md`.
+2. **Silent MCP fallback:** The execution-orchestrator continues without browser verification when Playwright/Chrome DevTools MCP is unavailable. UI chunks ship without visual testing. Hardening: MCP pre-flight check in `execution-orchestrator.md`.
+3. **Code-only adversarial review:** The plan-adversary reviews code patterns but not visual/rendered output. UI chunks pass review without visual acceptance criteria. Hardening: Visual Verification Readiness perspective in `plan-adversary.md`.
+4. **Evidence-free assertions:** "Requirements covered" claims are assertions without screenshots, computed style comparisons, or other evidence. Hardening: Evidence requirement in `pipeline.md` Phase 7.
+5. **Missing visual diff protocol:** When the user says "these should be visually identical," no protocol exists for getComputedStyle comparison. Hardening: Visual Parity Diff step in `execution-orchestrator.md`.
+6. **dm-review-loop not invoked:** The caller never runs dm-review-loop on the final result, trusting the orchestrator's self-report. Hardening: Caller Visual Verification section in `pipeline.md` Phase 7.
+7. **Prompt quality degradation:** Across large chunk sets, later prompts have less detail, fewer acceptance criteria, and weaker visual specifications. Hardening: Prompt Quality Parity Check in `promptcraft SKILL.md`.
+
+See `docs/post-mortems/` for detailed root cause analysis.
+
+## Post-Implementation Checklist
+
+After any pipeline run or manual feature implementation, verify:
+
+- [ ] All affected pages render without console errors
+- [ ] Screenshots taken at desktop (1440px) and mobile (375px) for every UI change
+- [ ] Visual output compared to design spec or brainstorm mockup (if one exists)
+- [ ] dm-review-loop run on the final branch (not just per-chunk quick reviews)
+- [ ] Requirements cross-check with EVIDENCE type for each requirement (screenshot, build pass, computed style)
+- [ ] No "visually identical" requirements left unverified (visual diff protocol applied)
+- [ ] Session recorded to ai-memory
+- [ ] Postmortem written if any failure patterns were observed
+
+## Postmortems
+
+Pipeline failure analysis documents live in `docs/post-mortems/`:
+
+- `2026-04-07-pipeline-ui-refinement-postmortem.md` -- 6 failure modes from Assembly UI refinement run
+- `2026-04-10-pipeline-visual-testing-postmortem.md` -- 7 failure modes from Assembly pipeline bypass and visual testing gaps
+
+These postmortems inform the Known Pipeline Failure Modes section above and the hardening measures in the pipeline plugin.
