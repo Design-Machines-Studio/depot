@@ -38,13 +38,14 @@ Each agent runs in its own context. They don't share a budget.
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)
 3. test-coverage-reviewer (LOW -- advisory only)
-4. craft-reviewer (MEDIUM -- domain-specific)
-5. governance-domain (MEDIUM -- domain-specific)
-6. a11y-dynamic-content-reviewer (MEDIUM)
-7. a11y-css-reviewer (MEDIUM)
-8. css-reviewer (MEDIUM)
-9. a11y-html-reviewer (HIGH -- legal compliance)
-10. go-build-verifier (HIGH -- catches compilation failures)
+4. gemini-diff-analyst (MEDIUM -- supplementary full-diff analysis, requires gemini plugin)
+5. craft-reviewer (MEDIUM -- domain-specific)
+6. governance-domain (MEDIUM -- domain-specific)
+7. a11y-dynamic-content-reviewer (MEDIUM)
+8. a11y-css-reviewer (MEDIUM)
+9. css-reviewer (MEDIUM)
+10. a11y-html-reviewer (HIGH -- legal compliance)
+11. go-build-verifier (HIGH -- catches compilation failures)
 
 Core agents (NEVER dropped): security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer.
 

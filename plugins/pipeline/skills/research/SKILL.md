@@ -26,6 +26,7 @@ Determine which research sources are available. Check each and note availability
 | Web search | WebSearch tool available | No -- graceful skip |
 | Context7 | `mcp__plugin_context7_context7__resolve-library-id` available | No -- graceful skip |
 | compound-engineering | Check if repo-research-analyst agent is available | No -- graceful skip |
+| Gemini CLI | Run `timeout 10 gemini -p "test" -m flash-lite --yolo --output-format json --raw-output 2>/dev/null` and check for valid JSON | No -- graceful skip |
 
 ### Phase 2: Project Type Detection
 
@@ -94,6 +95,17 @@ If compound-engineering is not installed, perform basic codebase research direct
 - Grep for similar patterns in the codebase
 - Read CLAUDE.md files for conventions
 - Check git log for related recent changes
+
+**Agent 6: Gemini Search Researcher** (if Gemini CLI available)
+
+Search with Google grounding for current, cited results:
+
+1. Formulate 2-3 search queries from the feature description targeting current best practices, recent framework changes, and community patterns
+2. Load the **Search Grounding Template** from `plugins/gemini/skills/gemini-delegate/references/prompt-templates.md`. Fill in the topic queries and project context, then invoke via heredoc as documented in `plugins/gemini/skills/gemini-delegate/references/invocation-protocol.md`. Use `flash` model with 60s timeout.
+3. Parse the `response` field from JSON output. Verify `stats.tools.byName.google_web_search` is present (confirms search grounding was used).
+4. Extract: authoritative sources with URLs, recent changes or deprecations, community consensus, version-specific guidance
+
+**Advantage over Agent 4 (Web + Context7):** Gemini's search grounding returns structured citations with URLs automatically. Context7 is better for framework API docs; Gemini is better for current best practices, recent changes, and community patterns. They complement each other.
 
 ### Phase 3b: Verify-Don't-Trust Checks
 

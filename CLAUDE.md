@@ -119,12 +119,13 @@ Every skill, agent, and command is indexed in `docs/search-index.md` -- a genera
 
 ## Orchestration Patterns
 
-Plugins compose through four patterns documented in `docs/orchestration-patterns.md`:
+Plugins compose through five patterns documented in `docs/orchestration-patterns.md`:
 
 - **Companion Skill Loading** -- a command loads skills from other plugins at specific workflow phases (e.g. sprint-plan)
 - **Multi-Agent Dispatch** -- a skill launches agents in parallel and consolidates results (e.g. dm-review)
 - **Memory-Mediated Coordination** -- plugins write to ai-memory entities that other plugins read later (e.g. depot-metrics)
 - **Pipeline Orchestration** -- a conductor plugin composes all three patterns into an autonomous multi-phase workflow with review-fix loops (e.g. pipeline)
+- **CLI-Mediated Model Delegation** -- a Claude subagent invokes an external AI model via CLI, parses structured output, and formats findings for the calling workflow (e.g. gemini)
 
 ## Composition Validation
 
@@ -145,6 +146,45 @@ When you modify a plugin's skills, agents, or references, **bump the version** i
 - **Major** (1.0.0 → 2.0.0) — skill renamed/restructured, breaking changes to how the plugin works
 
 Never commit plugin changes without also bumping the version.
+
+### Version Sync: marketplace.json and plugin.json
+
+**Both files must declare the same version.** Claude Desktop uses the version string to detect updates. Here's how the update pipeline works:
+
+1. Claude Desktop clones the marketplace repo to `~/.claude/plugins/marketplaces/depot/`
+2. On marketplace update, it does a `git pull` on that clone
+3. It compares each plugin's version against the cached version at `~/.claude/plugins/cache/depot/<plugin>/<version>/`
+4. If the version string hasn't changed, **no update is detected** -- even if the underlying files changed
+
+Because our plugins use relative-path sources (`"source": "./plugins/assembly"`), the version can live in either `marketplace.json` or `plugin.json`. When both declare a version, **`plugin.json` wins silently** for resolution, but the marketplace entry version is what appears in cache paths and update detection UI.
+
+**Rule: when you bump the version in `plugin.json`, also bump it in `.claude-plugin/marketplace.json`.** Run `./tools/validate-composition.sh --all` to catch any drift -- it includes a marketplace version sync check.
+
+### Troubleshooting Update Failures
+
+If Claude Desktop says plugins are "up to date" but versions look stale:
+
+1. **Check the cached marketplace clone:** `cd ~/.claude/plugins/marketplaces/depot && git log --oneline -1` -- if it's behind `origin/main`, the auto-update `git pull` failed
+2. **Manually pull:** `cd ~/.claude/plugins/marketplaces/depot && git pull origin main`
+3. **Update individual plugins:** `claude plugin update <plugin-name>@depot`
+4. **Check cache versions:** `ls ~/.claude/plugins/cache/depot/<plugin>/` shows which version directories exist
+
+### CLI vs Desktop Cowork: Two Separate Plugin Systems
+
+The CLI/VSCode and Desktop Cowork maintain **independent** plugin caches. Updating one does NOT update the other.
+
+| System | Marketplace clone | Plugin cache |
+|--------|------------------|--------------|
+| CLI/VSCode | `~/.claude/plugins/marketplaces/depot/` | `~/.claude/plugins/cache/depot/` |
+| Desktop Cowork | `~/Library/Application Support/Claude/local-agent-mode-sessions/<session>/<account>/cowork_plugins/marketplaces/depot/` | Same path but `/cache/depot/` |
+
+To fix stale Desktop plugins, pull the Desktop's marketplace clone directly:
+
+```shell
+cd ~/Library/Application\ Support/Claude/local-agent-mode-sessions/*/*/cowork_plugins/marketplaces/depot && git pull origin main
+```
+
+Then restart Claude Desktop for it to detect the new versions.
 
 ## Notion Manual Sync
 
@@ -178,6 +218,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 | **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, and worktree execution with review-fix loops |
+| **gemini** | Gemini CLI subagent for Google search grounding, 2M token context diff analysis, and code execution sandbox |
 
 ## Description Evaluation
 

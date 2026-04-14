@@ -115,6 +115,7 @@ Add these agents based on which file extensions appear in the changed files:
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `plugins/dm-review/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `plugins/dm-review/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `plugins/dm-review/agents/review/ui-standards-reviewer.md` |
+| Diff >5000 lines AND gemini plugin installed | **gemini-diff-analyst** | `plugins/gemini/agents/review/gemini-diff-analyst.md` |
 
 #### Report Selection
 
@@ -162,7 +163,7 @@ This context is injected ONLY into the browser-based agents (ux-quality-reviewer
 
 Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt.
+1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If the gemini plugin is installed, the gemini-diff-analyst agent receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
 3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
 

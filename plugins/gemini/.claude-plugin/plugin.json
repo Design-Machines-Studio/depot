@@ -1,0 +1,101 @@
+{
+  "name": "gemini",
+  "description": "Gemini CLI subagent for delegating tasks that benefit from Google search grounding, 2M token context, or code execution sandbox. Wraps gemini CLI invocation with structured JSON output, model selection, and error handling.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
+  },
+  "keywords": [
+    "gemini",
+    "subagent",
+    "delegation",
+    "search-grounding",
+    "large-context",
+    "code-execution",
+    "web-search",
+    "citations"
+  ],
+  "capabilities": {
+    "skills": [
+      {
+        "id": "gemini-delegate",
+        "name": "Gemini Delegation",
+        "description": "Delegate tasks to Gemini CLI for search grounding, large diff analysis, or code execution. Use when Claude's native tools are insufficient.",
+        "triggers": [
+          "search with gemini",
+          "ask gemini",
+          "delegate to gemini",
+          "gemini search",
+          "full diff analysis",
+          "search with citations",
+          "gemini code execution",
+          "use gemini for research"
+        ],
+        "tags": [
+          "gemini",
+          "delegation",
+          "search",
+          "large-context",
+          "subagent",
+          "citations",
+          "code-execution"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "gemini-diff-analyst",
+        "name": "Gemini Diff Analyst",
+        "category": "review",
+        "description": "Analyzes full diffs using Gemini's 2M token context when diffs exceed Claude's truncation threshold",
+        "tags": [
+          "diff",
+          "review",
+          "large-context",
+          "gemini"
+        ]
+      },
+      {
+        "id": "gemini-search-grounded",
+        "name": "Gemini Search Grounded Researcher",
+        "category": "workflow",
+        "description": "Performs web research with Google search grounding and returns structured, cited results",
+        "tags": [
+          "search",
+          "citations",
+          "research",
+          "web",
+          "gemini"
+        ]
+      },
+      {
+        "id": "gemini-code-executor",
+        "name": "Gemini Code Executor",
+        "category": "workflow",
+        "description": "Verifies algorithms and data transformations using Gemini's Python code execution sandbox",
+        "tags": [
+          "code-execution",
+          "verification",
+          "python",
+          "sandbox",
+          "gemini"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "gemini",
+        "name": "Gemini",
+        "description": "Direct Gemini invocation with model selection",
+        "argumentHint": "<prompt> [--model flash|pro|flash-lite]"
+      },
+      {
+        "id": "gemini-search",
+        "name": "Gemini Search",
+        "description": "Search-grounded query returning cited results",
+        "argumentHint": "<query>"
+      }
+    ]
+  }
+}

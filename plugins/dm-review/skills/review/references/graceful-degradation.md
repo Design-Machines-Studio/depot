@@ -47,6 +47,7 @@ Multiple core failures compound: "REVIEW INCOMPLETE -- security-auditor, archite
 | voice-editor | Voice/tone unreviewed. | "Skipped" |
 | visual-browser-tester | Visual testing skipped. | "Skipped -- has its own fallback chain" |
 | ux-quality-reviewer | UX/design quality unreviewed. | "Skipped" |
+| gemini-diff-analyst | Full diff analysis unavailable. Review uses truncated diff. | "Skipped -- Gemini unavailable" |
 
 ### All Conditional Agents Failed
 
@@ -99,7 +100,8 @@ Full degradation priority from guardrails.md. Agents are dropped in this order w
 | 10 | a11y-dynamic-content-reviewer | MEDIUM | Yes |
 | 11 | governance-domain | MEDIUM | Yes |
 | 12 | craft-reviewer | MEDIUM | Yes |
-| 13 | test-coverage-reviewer | LOW | Yes |
-| 14 | voice-editor | LOW | Yes |
-| 15 | visual-browser-tester | LOW | Yes |
-| 16 | ux-quality-reviewer | LOW | Yes |
+| 13 | gemini-diff-analyst | MEDIUM | Yes (requires gemini plugin) |
+| 14 | test-coverage-reviewer | LOW | Yes |
+| 15 | voice-editor | LOW | Yes |
+| 16 | visual-browser-tester | LOW | Yes |
+| 17 | ux-quality-reviewer | LOW | Yes |

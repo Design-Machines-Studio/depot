@@ -15,7 +15,10 @@
       "Bash(git tag:*)",
       "Bash(git commit:*)",
       "Bash(bash tools/check-dependencies.sh:*)",
-      "Bash(./tools/validate-composition.sh --all)"
+      "Bash(./tools/validate-composition.sh --all)",
+      "Bash(gemini -p:*)",
+      "Bash(timeout * gemini:*)",
+      "Bash(timeout * cat *| gemini:*)"
     ],
     "additionalDirectories": [
       "/Users/trav/Websites/design-machines/depot/plugins/chef",

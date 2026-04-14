@@ -1,0 +1,18 @@
+[
+  {"query": "search with gemini for current best practices", "should_trigger": true},
+  {"query": "ask gemini about Datastar SSE patterns", "should_trigger": true},
+  {"query": "delegate this to gemini", "should_trigger": true},
+  {"query": "use gemini for research with citations", "should_trigger": true},
+  {"query": "full diff analysis with large context", "should_trigger": true},
+  {"query": "search with citations for framework docs", "should_trigger": true},
+  {"query": "gemini code execution to verify this algorithm", "should_trigger": true},
+  {"query": "use gemini to analyze this big diff", "should_trigger": true},
+  {"query": "search google for the latest Go Templ version", "should_trigger": true},
+  {"query": "run gemini search grounding on this topic", "should_trigger": true},
+  {"query": "review my PR", "should_trigger": false},
+  {"query": "fix this CSS bug", "should_trigger": false},
+  {"query": "write a Go handler", "should_trigger": false},
+  {"query": "check my Craft CMS templates", "should_trigger": false},
+  {"query": "run the pipeline", "should_trigger": false},
+  {"query": "commit and push", "should_trigger": false}
+]

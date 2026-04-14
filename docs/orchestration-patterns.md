@@ -1,6 +1,6 @@
 # Plugin Orchestration Patterns
 
-Plugins compose through four patterns. Each solves a different coordination problem -- when to load another plugin's expertise, how to run agents in parallel, where to persist state across sessions, and how to orchestrate autonomous multi-phase workflows.
+Plugins compose through five patterns. Each solves a different coordination problem -- when to load another plugin's expertise, how to run agents in parallel, where to persist state across sessions, how to orchestrate autonomous multi-phase workflows, and how to delegate to external AI models.
 
 ---
 
@@ -228,6 +228,45 @@ assess (parallel: code + UX agents)
 
 ---
 
+## Pattern 5: CLI-Mediated Model Delegation
+
+A Claude subagent constructs a prompt, invokes an external AI model via a CLI tool, parses the structured response, and formats findings for the calling workflow.
+
+### When to use
+
+A task benefits from capabilities that Claude doesn't have natively -- Google search grounding with citations, very large context windows (2M tokens), or a code execution sandbox. The external model supplements Claude; it never replaces Claude as the orchestrator.
+
+### How it works
+
+1. A Claude subagent (model: sonnet) is dispatched as part of a normal Multi-Agent Dispatch
+2. The subagent constructs a self-contained prompt (the external model has no conversation context)
+3. The subagent invokes the external CLI via Bash with `timeout` and `--output-format json`
+4. The subagent parses the JSON response and formats findings for the consolidator
+5. On any failure (timeout, rate limit, empty, malformed), the subagent reports gracefully and the review/research proceeds without it
+
+### Key constraint
+
+The external model is stateless -- each invocation is a fresh session with no memory. Every prompt must be fully self-contained. The external model cannot access Claude's MCP servers, conversation history, or tool results.
+
+### Real example
+
+`plugins/gemini/` wraps Gemini CLI as a subagent. Three agents use this pattern:
+
+- **gemini-diff-analyst** -- dm-review conditional agent. When diffs exceed 5000 lines, sends the full untruncated diff to Gemini's 2M token context for analysis alongside the truncated-diff core agents.
+- **gemini-search-grounded** -- pipeline research Agent 6. Delegates web research to Gemini's Google search grounding, which returns structured citations with URLs.
+- **gemini-code-executor** -- on-demand agent. Delegates algorithm verification to Gemini's Python sandbox.
+
+### Failure modes
+
+| Failure | Handling |
+|---------|----------|
+| CLI timeout | Report "timed out," proceed without external input |
+| Model rate limit (quota exhausted) | Fall back through model chain (pro -> flash -> flash-lite -> skip) |
+| Empty or malformed response | Report and skip gracefully |
+| CLI not installed | Skip at source detection phase (graceful skip) |
+
+---
+
 ## Choosing a Pattern
 
 | Situation | Pattern |
@@ -237,6 +276,7 @@ assess (parallel: code + UX agents)
 | State must persist across sessions or between unrelated plugins | Memory-Mediated Coordination |
 | Combination: workflow with parallel agents AND persistent tracking | Use all three (see dm-review, which combines dispatch + memory) |
 | Autonomous multi-phase workflow combining all three patterns with review-fix loops | Pipeline Orchestration |
+| Task benefits from capabilities of an external AI model (search grounding, large context, code execution) | CLI-Mediated Model Delegation |
 
 ---
 
