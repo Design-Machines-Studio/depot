@@ -248,6 +248,8 @@ Use data-class for active states:
 Generate filter expressions for each row:
 
 ```go
+// SAFETY: p.Status is a controlled enum from the database (draft, active, closed),
+// not user-supplied text. Do NOT interpolate arbitrary user input into expressions.
 func rowFilter(p dto.ProposalResponse) string {
     status := strings.ToLower(p.Status)
     return "($statusFilter === 'all' || $statusFilter === '" + status + "')"
@@ -323,6 +325,8 @@ During development, switch the active member identity to test different personas
 1. **`?member=` query parameter** (development only, gated by `ENV=development`). Validates the member exists in the database, then sets the `coop_member` cookie for 7 days.
 2. **`coop_member` cookie** (persists across requests, HttpOnly, SameSite=Lax).
 3. **Default:** `mem_009` (Ned Ludd) if neither source has a value.
+
+**Prototype only:** This entire fallback chain is a prototype convenience. In production, `RequireAuth` middleware fires before any handler, so `getCurrentMemberID()` is never reached without a valid session. The `?member=` parameter and `mem_009` default are unreachable in production builds (gated by `ENV=development`).
 
 **Usage:** Append `?member=mem_001` to any URL. The cookie persists, so subsequent requests use that identity automatically.
 
@@ -534,6 +538,172 @@ Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` fo
 
 ---
 
+## Production Architecture (DM-021)
+
+The production backend lives in a separate repo (`assembly-baseplate`, DM-021) and is built from first principles. The prototype (`assembly`, DM-006) is the design workspace — patterns are validated there, then implemented properly in production. Neither blocks the other. See ADR-002.
+
+### Two-Repo Model
+
+| Repo | Project | Purpose |
+|------|---------|---------|
+| `assembly/` | DM-006 | Prototype, UI/UX design, persona testing, mockup data |
+| `assembly-baseplate/` | DM-021 | Production platform, auth, NATS, SQLite, install, CLI |
+
+Design in the prototype → extract validated pattern → implement in production.
+
+### Module Interface
+
+Fixtures implement the `Module` interface for clean isolation (Caddy-style compile-time registration):
+
+```go
+type Module interface {
+    ID() string                                              // "governance"
+    Name() string                                            // "Governance"
+    SetupRoutes(r chi.Router, deps *app.Dependencies) error  // Mount routes
+    Migrations() embed.FS                                    // Embedded SQL migrations
+}
+
+// Optional: declare NATS event patterns
+type EventDeclarer interface {
+    Events() module.EventConfig
+}
+```
+
+Fixtures register via `init()` and are included via blank imports in `cmd/api/imports.go`:
+
+```go
+import _ "github.com/Design-Machines-Studio/assembly-governance"
+```
+
+### Dependencies Struct
+
+Each fixture receives a `Dependencies` struct via `SetupRoutes()`:
+
+```go
+type Dependencies struct {
+    DB            *ScopedDB         // Restricted to fixture's tables
+    Auth          *Authorizer       // Object-level authorization
+    Members       MemberReader      // Read-only member lookups
+    Events        ScopedEventBus    // Restricted NATS subjects
+    Audit         AuditWriter       // Shared audit log access
+    Config        ConfigReader      // Co-op settings
+    Logger        *slog.Logger
+}
+```
+
+### ScopedDB
+
+Wraps `*sql.DB` with table-prefix enforcement. Fixtures never bypass ScopedDB — this is the core data isolation contract.
+
+- Baseplate tables: no prefix (`members`, `groups`, `permissions`, `audit_log`)
+- Fixture tables: prefixed (`gov_proposals`, `doc_documents`, `eq_shares`, `health_metrics`)
+
+Fixtures use `$TABLE` and `$PREFIX_` placeholders in queries — ScopedDB substitutes the correct prefix at runtime. See ADR-003 (in the `assembly-baseplate` repo at `docs/adr/`).
+
+### ScopedNATS / ScopedEventBus
+
+Each fixture gets a scoped event bus restricting NATS publishing to its subject prefix:
+
+```go
+type ScopedEventBus struct {
+    bus       EventBus
+    prefix    string   // "assembly.gov."
+    allowRead []string // Cross-boundary read subjects
+}
+```
+
+`allowRead` permits subscribing to specific cross-boundary subjects (e.g., governance subscribing to `assembly.member.status_changed`). See the **nats-jetstream** skill for full patterns.
+
+**Note:** ADRs (ADR-002 through ADR-007) live in the `assembly-baseplate` repo at `docs/adr/`, not in the depot.
+
+### Service Layer Pattern
+
+Handlers → Services → ScopedDB. Services contain business logic. Handlers are thin HTTP adapters (parse request, call service, render response).
+
+**Size limits:** No handler file over 200 lines. No service file over 500 lines. Split into focused files if needed.
+
+```go
+// Handler (thin adapter)
+func (h *Handlers) ListProposals(w http.ResponseWriter, r *http.Request) {
+    proposals, err := h.service.ListProposals(r.Context())
+    if err != nil {
+        http.Error(w, "Internal error", http.StatusInternalServerError)
+        return
+    }
+    pages.Index(proposals).Render(r.Context(), w)
+}
+
+// Service (business logic)
+func (s *GovernanceService) ListProposals(ctx context.Context) ([]Proposal, error) {
+    return s.db.Query("gov_proposals", "SELECT * FROM $TABLE ORDER BY created_at DESC")
+}
+```
+
+### Authorization
+
+Three-layer authorization (ADR-004):
+
+**Layer 1 — Route middleware:**
+- `RequireAuth` — session exists
+- `RequirePermission("governance.view")` — role-based
+- `RequireModule("governance")` — fixture enabled
+- `RequireAdmin` — board/officer/super_admin
+
+**Layer 2 — Object-level (core):**
+```go
+func (a *Authorizer) Authorize(ctx context.Context, action string, resource Resource) error
+```
+
+Default-deny switch on action strings (`proposal.edit`, `meeting.manage`, `vote.cast`). The `Resource` struct carries `ID`, `AuthorID`, `Status`, `GroupID` for ownership/visibility checks.
+
+**Layer 3 — Template conditional rendering:** Delegates to `Authorize()` internally. UX concern, not a security boundary.
+
+### Install Identity & Federation
+
+Each install generates a UUID (`install_id`) and Ed25519 keypair at first boot (ADR-005). The keypair lives at `data/identity.key` (0600 permissions).
+
+**Well-known endpoint:**
+```json
+GET /.well-known/assembly
+{
+  "install_id": "uuid",
+  "name": "TACO",
+  "protocol_version": 1,
+  "public_key": "base64-ed25519-public-key",
+  "federation": true
+}
+```
+
+Federation uses OAuth-style account linking with signed tokens: 5-minute TTL, single-use nonce, audience validation, HTTPS required in production. See ADR-006 for the full linking flow.
+
+### Cobra CLI
+
+`spf13/cobra` provides the CLI:
+
+| Command | Purpose |
+|---------|---------|
+| `assembly serve` | Start HTTP server (default) |
+| `assembly admin create` | Headless install (--name, --email, --password-file) |
+| `assembly admin reset-password` | CLI password reset (--email) |
+| `assembly migrate` | Run pending goose migrations |
+| `assembly seed --demo` | Load Catalyst Cooperative demo data (dev only) |
+| `assembly version` | Show version and install ID |
+| `assembly backup` | Manual SQLite backup |
+
+Passwords only via `--password-file` or `--password-stdin` — never env vars or CLI flags. See ADR-005.
+
+### Build & Test (Production)
+
+Same Docker-only rule as the prototype:
+
+```bash
+docker compose exec app go test -race -cover ./...
+docker compose exec app go build ./cmd/api
+docker compose exec app templ generate
+```
+
+---
+
 ## UX Testing Framework
 
 Assembly has a persona-based UX test framework at `tests/ux/`. Use it when building or reviewing user-facing features.
@@ -581,6 +751,8 @@ Write a task file when you add:
 
 | Skill | Plugin | When to Load |
 |-------|--------|--------------|
+| **nats-jetstream** | assembly | Embedded NATS patterns, KV store, event bus, SSE streaming |
+| **golang-patterns** | assembly | Go library choices (SQLite, sessions, CSRF, migrations, CLI) |
 | **governance** | council | Co-op domain knowledge, voting thresholds, compliance requirements |
 | **decolonial-language** | council | UI labels, member-facing copy, terminology mappings |
 | **strategy** | design-machines | Product positioning, pricing, client pipeline context |

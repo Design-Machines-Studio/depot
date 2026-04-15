@@ -1,0 +1,22 @@
+[
+  {"query": "Which SQLite driver should Assembly use - modernc or mattn? What are the connection pragmas?", "should_trigger": true},
+  {"query": "How do I set up goose migrations with embedded SQL files? What's the file naming format?", "should_trigger": true},
+  {"query": "I need to configure SCS session management with SQLite backend. What are the timeout settings?", "should_trigger": true},
+  {"query": "How does the nosurf CSRF protection work with Datastar? How does the token get to the frontend?", "should_trigger": true},
+  {"query": "What rate limiting should I configure for login, API, and SSE endpoints?", "should_trigger": true},
+  {"query": "How do I add a new cobra CLI subcommand to Assembly? What's the command structure?", "should_trigger": true},
+  {"query": "What SQLite pragmas should I use for production? WAL mode, synchronous, cache size?", "should_trigger": true},
+  {"query": "How do I write Go tests with real SQLite? Why can't I use :memory: with WAL mode?", "should_trigger": true},
+  {"query": "What security headers should Assembly set? Content-Security-Policy, HSTS, etc.", "should_trigger": true},
+  {"query": "How do I set up the read/write connection pools for SQLite? I'm getting SQLITE_BUSY errors.", "should_trigger": true},
+  {"query": "Where should passwords be passed in the CLI? Can I use environment variables for the admin create command?", "should_trigger": true},
+  {"query": "What HTTP server timeouts should I configure? SSE connections keep timing out.", "should_trigger": true},
+  {"query": "I need to add a new page to Assembly with filtering and SSE updates.", "should_trigger": false},
+  {"query": "How do I publish NATS events after a mutation? What's the subject hierarchy?", "should_trigger": false},
+  {"query": "What voting threshold does the BC Act require for special resolutions?", "should_trigger": false},
+  {"query": "The baseline rhythm CSS is broken on the dashboard. How do I fix the spacing?", "should_trigger": false},
+  {"query": "Help me write a blog post about cooperative governance technology.", "should_trigger": false},
+  {"query": "How do I set up Element Web branding for The Local Matrix server?", "should_trigger": false},
+  {"query": "Can you review this Craft CMS Twig template for accessibility issues?", "should_trigger": false},
+  {"query": "I want to create a Figma design for the Assembly landing page.", "should_trigger": false}
+]

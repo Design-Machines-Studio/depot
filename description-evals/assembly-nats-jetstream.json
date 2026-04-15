@@ -1,0 +1,22 @@
+[
+  {"query": "How do I set up the embedded NATS server with JetStream for Assembly? I need KV store and streaming capabilities.", "should_trigger": true},
+  {"query": "I need to publish a NATS event after a proposal status change. What's the subject naming pattern and envelope format?", "should_trigger": true},
+  {"query": "How does the KV Watch to SSE pattern work? I want real-time updates on the proposals page without polling.", "should_trigger": true},
+  {"query": "What NATS streams do we configure and what are their retention policies? I need to set up the audit trail stream.", "should_trigger": true},
+  {"query": "How does ScopedEventBus work? I need my governance fixture to subscribe to member status change events.", "should_trigger": true},
+  {"query": "I'm getting errors with DontListen configuration. How should embedded NATS be configured for in-process only?", "should_trigger": true},
+  {"query": "What are the NATS KV buckets we use? I need to store presence data showing who's viewing a proposal.", "should_trigger": true},
+  {"query": "How do I write tests for NATS event publishing? I need an embedded server per test with isolation.", "should_trigger": true},
+  {"query": "The KV data is stale after a server restart. How does the rebuild strategy work for rebuilding from SQLite?", "should_trigger": true},
+  {"query": "I need to set up a durable consumer that watches for member role assignment events. What's the consumer pattern?", "should_trigger": true},
+  {"query": "Should I publish the NATS event before or after the database transaction commits? Getting inconsistent state.", "should_trigger": true},
+  {"query": "What subject hierarchy does Assembly use for NATS? I need the scope prefixes for each fixture.", "should_trigger": true},
+  {"query": "I need to add a new page to Assembly with a list template and standard DTO pattern.", "should_trigger": false},
+  {"query": "What voting threshold does the BC Co-op Act require for removing a director?", "should_trigger": false},
+  {"query": "The CSS baseline rhythm is off on the meetings page. How do I fix the spacing?", "should_trigger": false},
+  {"query": "Can you help me set up goose migrations for a new table? I need the file format.", "should_trigger": false},
+  {"query": "How do I configure the SCS session middleware with SQLite store?", "should_trigger": false},
+  {"query": "I need to deploy Assembly to production. What's the docker compose setup?", "should_trigger": false},
+  {"query": "Help me write a Datastar modal for confirming vote submissions.", "should_trigger": false},
+  {"query": "What rate limiting should I apply to the login endpoint?", "should_trigger": false}
+]

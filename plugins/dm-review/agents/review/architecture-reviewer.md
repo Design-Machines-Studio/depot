@@ -57,6 +57,20 @@ Violations:
 - Models importing handlers or services
 - Circular imports between packages
 
+### Assembly Production Architecture Checks
+
+When reviewing Assembly production code (`internal/fixtures/` or `internal/baseplate/`):
+
+**File Size Limits (P2):** Flag handler files exceeding 200 lines and service files exceeding 500 lines. Suggest splitting into focused files by domain area.
+
+**Service Layer Bypass (P2):** Flag handlers that call `ScopedDB` methods directly (`.Query()`, `.Exec()`, `.QueryRow()`) instead of going through a service layer. Handlers should be thin HTTP adapters that delegate to services.
+
+**Module Boundary Violations (P1):** Flag fixture code that imports from another fixture's package. For example, `internal/fixtures/governance/` must not import from `internal/fixtures/documents/`. Fixtures communicate via the event bus, not direct imports.
+
+**ScopedDB Bypass (P1):** Flag fixture code that imports `database/sql` directly or uses `*sql.DB` instead of `*ScopedDB`. Fixtures must access data exclusively through `ScopedDB` to enforce table-prefix isolation. Exception: baseplate code (`internal/baseplate/`) and test utilities may use raw `*sql.DB`.
+
+**Note:** Missing NATS events after mutations are checked by the `nats-reviewer` agent (assembly plugin), not this agent. Do not duplicate that check here.
+
 #### Craft CMS Projects
 Expected layers:
 1. **Templates** (Twig) — Presentation only

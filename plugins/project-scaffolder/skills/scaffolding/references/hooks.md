@@ -437,3 +437,53 @@ exit 0
 - For go-library projects (no frontend): skip this hook entirely
 - For projects using Datastar heavily, the JS check will fire on Datastar signal files too
 - **Note:** This hook fires alongside `post-edit-context.sh` on `.css` and template files. That's intentional — post-edit-context reminds about build/CSS agents while this hook reminds about accessibility agents. Both systemMessages are useful.
+
+---
+
+## 7. nats-safety.sh
+
+**Event:** PostToolUse
+**Matcher:** Edit|Write
+**Project types:** `go-templ-datastar`
+
+Fires when NATS-related Go files are edited. Reminds about DontListen enforcement, event-after-commit ordering, and ScopedEventBus usage.
+
+```bash
+#!/usr/bin/env bash
+# PostToolUse hook: NATS safety reminders
+# Fires after editing Go files related to NATS/events
+
+set -euo pipefail
+
+# Read the tool result from stdin
+INPUT=$(cat)
+FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.command // empty' 2>/dev/null || echo "")
+
+# Only check Go files related to NATS
+if [[ -z "$FILE_PATH" ]] || [[ "$FILE_PATH" != *.go ]]; then
+  exit 0
+fi
+
+# Check if the file is NATS-related
+if ! grep -qE '(nats\.|embeddednats|jetstream|ScopedEventBus|EventBus|KVStore|kv\.Watch|kv\.Put|kv\.Get)' "$FILE_PATH" 2>/dev/null; then
+  exit 0
+fi
+
+# Provide context-aware reminder
+cat <<'REMINDER'
+
+🔒 NATS file changed. Remember:
+- DontListen: true must be set on embedded NATS server (P1 if missing)
+- Events publish AFTER db.WithTx() commit, never inside the transaction
+- Fixtures use ScopedEventBus, not raw nats.Conn
+- Subject pattern: assembly.{scope}.{entity}.{event}
+- Run nats-reviewer agent to validate patterns
+
+REMINDER
+
+exit 0
+```
+
+**Customization notes:**
+- The grep pattern can be extended for project-specific NATS types
+- Consider adding a marker file to prevent repeated reminders within the same edit session

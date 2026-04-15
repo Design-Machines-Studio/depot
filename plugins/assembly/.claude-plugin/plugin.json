@@ -1,7 +1,7 @@
 {
   "name": "assembly",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "2.9.0",
+  "version": "3.0.0",
   "author": {
     "name": "Design Machines"
   },
@@ -36,6 +36,52 @@
           "docker",
           "handlers"
         ]
+      },
+      {
+        "id": "nats-jetstream",
+        "name": "NATS JetStream",
+        "description": "Embedded NATS patterns -- KV store, event bus, streams, consumers, and real-time SSE via KV Watch",
+        "triggers": [
+          "set up NATS",
+          "publish event after mutation",
+          "KV Watch for real-time updates",
+          "NATS stream configuration",
+          "event bus pattern",
+          "audit trail events",
+          "ScopedEventBus",
+          "embedded NATS DontListen"
+        ],
+        "tags": [
+          "nats",
+          "jetstream",
+          "events",
+          "kv-store",
+          "real-time",
+          "messaging"
+        ]
+      },
+      {
+        "id": "golang-patterns",
+        "name": "Go Ecosystem Patterns",
+        "description": "Assembly-specific Go library patterns -- SQLite, migrations, sessions, CSRF, CLI, rate limiting",
+        "triggers": [
+          "which SQLite driver to use",
+          "set up migrations with goose",
+          "session management pattern",
+          "CSRF protection",
+          "rate limiting middleware",
+          "cobra CLI setup",
+          "SCS session store"
+        ],
+        "tags": [
+          "go",
+          "sqlite",
+          "goose",
+          "sessions",
+          "csrf",
+          "cobra",
+          "rate-limiting"
+        ]
       }
     ],
     "agents": [
@@ -61,6 +107,30 @@
           "scaffolding",
           "handlers",
           "routes"
+        ]
+      },
+      {
+        "id": "nats-reviewer",
+        "name": "NATS Reviewer",
+        "category": "review",
+        "description": "Reviews NATS usage for embedded safety, ScopedEventBus patterns, subject naming, and event ordering",
+        "tags": [
+          "nats",
+          "review",
+          "safety",
+          "events"
+        ]
+      },
+      {
+        "id": "go-test-runner",
+        "name": "Go Test Runner",
+        "category": "workflow",
+        "description": "Runs Go tests with race detection, reports coverage, flags missing test files",
+        "tags": [
+          "go",
+          "testing",
+          "coverage",
+          "race-detection"
         ]
       }
     ],

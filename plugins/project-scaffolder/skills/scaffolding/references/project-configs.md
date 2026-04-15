@@ -322,6 +322,37 @@ After code changes, run the `doc-sync` agent. Checks CLAUDE.md, README.md, and r
 ### [ADD ARCHITECTURE SECTIONS]
 <!-- e.g., backend stack, frontend stack, database, deployment -->
 
+### ScopedDB / ScopedNATS
+
+Fixtures access the database exclusively through `ScopedDB` (table-prefix isolation) and NATS through `ScopedEventBus` (subject-prefix isolation). Never use raw `*sql.DB` or `nats.Conn` in fixture code.
+
+### Module Interface
+
+Fixtures implement the `Module` interface (`ID()`, `Name()`, `SetupRoutes()`, `Migrations()`), register via `init()`, and are included via blank imports. See `cmd/api/imports.go`.
+
+### NATS Patterns
+
+- Embedded NATS with `DontListen: true` (no external TCP)
+- Subject hierarchy: `assembly.{scope}.{entity}.{event}`
+- Events publish AFTER `db.WithTx()` commit, never inside transaction
+- KV Watch for SSE real-time updates
+
+### Federation
+
+- HTTPS required for all federation endpoints in production
+- Link tokens: 5-minute TTL, single-use nonce, audience validation
+- `return_url` validated with exact host match
+
+### Architecture Decision Records
+
+Check `docs/adr/` for architectural decisions. Key ADRs:
+- ADR-002: Production architecture philosophy
+- ADR-003: SQLite + NATS dual-store
+- ADR-004: Authorization pattern
+- ADR-005: Install flow
+- ADR-006: Member identity and federation
+- ADR-007: NATS event patterns
+
 ## Build Commands
 
 ```bash
@@ -334,6 +365,9 @@ docker compose exec app templ generate
 docker compose exec app go build -o bin/app ./cmd/api
 docker compose restart app
 docker compose exec app go test ./...
+
+# Tests with race detection
+docker compose exec app go test -race ./...
 
 # Dev environment
 docker compose up     # Start with hot reload

@@ -96,6 +96,50 @@ Only review changed files. Read each file fully before reporting findings.
 - [file] Description of what passes security checks
 ```
 
+## Assembly Production Architecture Checks
+
+When reviewing Go code in Assembly projects (detected by `internal/fixtures/` or `internal/baseplate/` directory structure):
+
+### NATS Subject ACL Violations (P1)
+
+Flag fixtures publishing to NATS subjects outside their `ScopedEventBus` prefix. Each fixture is scoped to its own subject namespace (e.g., governance publishes to `assembly.gov.*` only).
+
+**Look for:** `Publish()` calls with subjects not matching the fixture's scope prefix. Direct `nats.Conn` usage in fixture code.
+
+### SSE Session Validation (P1)
+
+Flag SSE handlers that don't validate the session before starting a KV Watch or streaming data. All SSE endpoints must verify authentication and extract member ID before streaming.
+
+**Look for:** SSE handler functions that call `datastar.NewSSE()` or `kv.Watch()` without a preceding auth check.
+
+### Object-Level Authorization (P1)
+
+Flag mutation handlers (POST, PUT, PATCH, DELETE) that don't call `Authorize()` before modifying resources. Read-only GET handlers may skip object-level auth if route-level middleware covers the permission.
+
+**Look for:** Handler methods containing `db.Exec`, `db.ExecContext`, `service.Create`, `service.Update`, `service.Delete` without a preceding `auth.Authorize()` or `deps.Auth.Authorize()` call.
+
+### Federation Security (P1)
+
+Check federation-related code for security requirements:
+- Link tokens must include TTL (max 5 minutes), single-use nonce, and audience (`aud`) field
+- `return_url` / `callback` must be validated with exact host match (not suffix match)
+- HTTPS must be enforced on all federation endpoints in production
+- Rate limiting: 10 link requests/hour per source, 5 callbacks/hour
+
+**Look for:** Code in `federation/`, `/.well-known/assembly` handler, link token generation/validation.
+
+### Hardcoded Member IDs (P2)
+
+Flag literal member ID strings (e.g., `"mem_001"`, `"mem_009"`) in non-test, non-seed code. These are prototype carryovers that must be replaced with dynamic lookups.
+
+**Look for:** String literals matching `mem_\d+` pattern outside `*_test.go`, `*_seed.go`, `seeds/`, and `testdata/` files.
+
+### Input Validation (P2)
+
+Flag handlers that accept form input, URL parameters, or request body data without calling a validation function on the request DTO. All user input must be validated for type, length, and format before use.
+
+**Look for:** `r.FormValue()`, `r.URL.Query()`, `json.Decode()` without a subsequent `Validate()` or validation call on the parsed data.
+
 ## Rules
 
 1. Security P1 findings always block merge — no exceptions

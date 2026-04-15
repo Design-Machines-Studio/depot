@@ -178,6 +178,96 @@ For real-time updates (e.g., voting results):
 </form>
 ```
 
+## NATS KV Watch → SSE Pattern (Production)
+
+In the production architecture, SSE endpoints use NATS KV Watch instead of polling or custom hubs.
+
+### How It Works
+
+1. **Mutation happens**: Handler writes to SQLite via service layer
+2. **KV updated**: After successful commit, service puts updated view state to NATS KV bucket
+3. **Watchers fire**: Any SSE handler watching that KV key receives the update automatically
+4. **Fragment pushed**: SSE handler renders a Templ fragment and pushes via Datastar
+
+### SSE Handler with KV Watch
+
+```go
+func (h *Handlers) ProposalSSE(w http.ResponseWriter, r *http.Request) {
+    // Session validation — required before streaming
+    memberID := session.GetMemberID(r.Context())
+    if memberID == "" {
+        http.Error(w, "Unauthorized", http.StatusUnauthorized)
+        return
+    }
+
+    sse := datastar.NewSSE(w, r)
+    proposalID := chi.URLParam(r, "id")
+
+    // Watch KV key for updates
+    watcher, err := h.kv.Watch(r.Context(), "ui-state.proposal." + proposalID)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    defer watcher.Stop()
+
+    for {
+        select {
+        case <-r.Context().Done():
+            return
+        case entry := <-watcher.Updates():
+            if entry == nil {
+                continue
+            }
+            var state ProposalViewState
+            if err := json.Unmarshal(entry.Value(), &state); err != nil {
+                sse.ConsoleError(err)
+                return
+            }
+            sse.PatchElementTempl(views.ProposalDetail(state))
+        }
+    }
+}
+```
+
+### Key Rules
+
+- **Session validation at connect**: Always check auth before starting KV Watch. Extract member ID from session.
+- **WriteTimeout handling**: SSE connections are long-lived. Use `http.ResponseController` to extend WriteTimeout per-connection beyond the server's default 30s.
+- **Connection limits**: Max 5 concurrent SSE connections per user. Enforce at middleware level.
+- **Cleanup**: Always `defer watcher.Stop()`. Context cancellation handles client disconnect.
+- **Error handling**: Use `sse.ConsoleError(err)` to send errors to the browser console, then return.
+
+### Service-Side KV Update
+
+After a mutation, the service updates the KV bucket so watchers fire:
+
+```go
+func (s *ProposalService) UpdateStatus(ctx context.Context, id, newStatus string) error {
+    err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
+        // Update in SQLite
+        _, err := tx.ExecContext(ctx, "UPDATE gov_proposals SET status = ? WHERE id = ?", newStatus, id)
+        return err
+    })
+    if err != nil {
+        return err
+    }
+
+    // After commit: publish event
+    s.events.Publish("proposal", "status_changed", EventData{
+        EntityID: id,
+        Data:     map[string]string{"new_status": newStatus},
+    })
+
+    // After commit: update KV for SSE watchers
+    state := s.buildProposalViewState(ctx, id)
+    data, _ := json.Marshal(state)
+    s.kv.Put(ctx, "ui-state.proposal." + id, data)
+
+    return nil
+}
+```
+
 ## Security Considerations
 
 - **Filter server-side for security, client-side for UX**: `data-show` hides elements visually but data is still in the DOM. Never rely on client-side filtering for access control.

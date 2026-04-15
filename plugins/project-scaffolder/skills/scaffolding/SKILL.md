@@ -29,6 +29,7 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 | `commit-push-reminder.sh` | PostToolUse | Edit\|Write | ALL | Nudge commits at 3+ files, push at 2+ commits |
 | `post-edit-context.sh` | PostToolUse | Edit\|Write | ALL | Agent reminders based on file type |
 | `a11y-check.sh` | PostToolUse | Edit\|Write | Frontend projects | A11y agent reminders after template/CSS/JS changes |
+| `nats-safety.sh` | PostToolUse | Edit\|Write | `go-templ-datastar` | NATS config safety reminders after editing NATS-related files |
 | `pre-stop-check.sh` | Stop | — | ALL | Uncommitted work check + agent compliance |
 
 ### Agent Inventory
@@ -42,6 +43,11 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 | `a11y-html-reviewer.md` | Frontend projects | WCAG HTML/template compliance |
 | `a11y-css-reviewer.md` | Frontend projects | WCAG visual accessibility (contrast, focus, motion) |
 | `a11y-dynamic-content-reviewer.md` | Datastar projects | Live regions, focus management, keyboard |
+| `nats-reviewer.md` | `go-templ-datastar` | NATS safety: DontListen, ScopedEventBus, subject naming, event ordering |
+| `go-test-runner.md` | `go-templ-datastar`, `go-library` | Go test runner: race detection, coverage, missing test files |
+| `migration-validator.md` | `go-templ-datastar`, `go-library` | Migration review: goose format, table prefixes, cross-fixture FK |
+
+**Module Interface (go-templ-datastar):** Production Assembly projects use a Module interface for fixture registration. When scaffolding, the generated CLAUDE.md includes ScopedDB, ScopedNATS, Module interface, and federation sections. See the `project-configs.md` reference for the full CLAUDE.md template.
 
 ## Scaffold Workflow
 

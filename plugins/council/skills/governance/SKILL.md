@@ -342,6 +342,93 @@ Search the RAG for deeper material when designing governance features:
 
 ---
 
+## Governance → Production Architecture Mapping
+
+How governance domain concepts map to Assembly's production backend (assembly-baseplate, DM-021).
+
+### Voting Thresholds in Service Layer
+
+Voting threshold calculations belong in the governance service, not in handlers or templates:
+
+- **Ordinary resolution:** 50%+1 of votes cast
+- **Special resolution:** ≥2/3 of votes cast
+- **Director termination:** 3/4 of all directors (not just those present)
+- **Consent resolution:** 100% written consent
+
+The service validates thresholds and returns a pass/fail result. Handlers render the result. Templates never calculate thresholds.
+
+```go
+func (s *GovernanceService) CheckVoteResult(ctx context.Context, proposalID string) (VoteResult, error) {
+    // Count votes, apply threshold based on decision type
+    // Return: passed bool, votesFor, votesAgainst, threshold, quorumMet
+}
+```
+
+### Quorum Calculation in Meeting Service
+
+Quorum logic lives in the meeting service. Takes current member count and the co-op's quorum rule (from `coop_settings`), returns whether quorum is met.
+
+Quorum must be checked before allowing any vote to proceed. If quorum is lost mid-meeting (members leave), votes taken after that point are invalid.
+
+### Resolution Numbering in Transactions
+
+Resolution numbers must be generated inside a `db.WithTx()` transaction to prevent duplicates under concurrent access:
+
+```go
+err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
+    // Get next number inside transaction
+    var nextNum int
+    tx.QueryRow("SELECT COALESCE(MAX(number), 0) + 1 FROM gov_resolutions WHERE fiscal_year = ?", year).Scan(&nextNum)
+    // Insert resolution with that number
+    _, err := tx.Exec("INSERT INTO gov_resolutions (number, ...) VALUES (?, ...)", nextNum, ...)
+    return err
+})
+```
+
+### BC Act Fields → Database Columns
+
+Statutory requirements map to specific database columns and validation rules:
+
+| BC Act Requirement | Database Column | Validation |
+|---|---|---|
+| ≥3 directors (s.72) | `member_roles WHERE role='director'` | Count ≥ 3 |
+| Majority Canadian directors | `members.country` via role join | Count check |
+| ≥1 BC resident director | `members.province` via role join | Exists check |
+| AGM within 15 months | `gov_meetings WHERE type='agm'` | Date interval check |
+| Financial statements 10 days pre-AGM | `doc_documents WHERE type='financial'` | Date comparison |
+| Annual report within 2 months post-AGM | `doc_documents WHERE type='annual_report'` | Date comparison |
+
+### Audit Trail → NATS AUDIT Stream
+
+Every governance action publishes to the NATS `AUDIT` stream (90-day retention):
+
+- Vote cast → `assembly.audit.action` (type: `vote.cast`)
+- Resolution passed → `assembly.audit.action` (type: `resolution.passed`)
+- Meeting called → `assembly.audit.action` (type: `meeting.called`)
+- Member status change → `assembly.audit.action` (type: `member.status_changed`)
+- Proposal status change → `assembly.audit.action` (type: `proposal.status_changed`)
+
+The NATS event envelope includes `actor_id`, `entity_id`, `timestamp`, and a `data` payload with the specific change details. This creates the statutory audit trail required by the BC Cooperative Association Act.
+
+### Decision Types as Seed Data
+
+Decision types (ordinary, special, consent, director-termination) are seed data loaded via goose migrations, not hardcoded enums in Go code. This allows co-ops to:
+
+- Add custom decision types via the admin UI (future)
+- Configure thresholds per decision type
+- Meet jurisdiction-specific requirements without code changes
+
+```sql
+-- seeds/001_decision_types.sql
+INSERT INTO gov_decision_types (id, name, threshold_type, threshold_value) VALUES
+    ('ordinary', 'Ordinary Resolution', 'majority', 0.50),
+    ('special', 'Special Resolution', 'supermajority', 0.6667),
+    ('consent', 'Consent Resolution', 'unanimous', 1.00),
+    ('director_termination', 'Director Termination', 'supermajority', 0.75);
+```
+
+---
+
 ## Cross-Reference Guide
 
 | Topic | Related Sections |

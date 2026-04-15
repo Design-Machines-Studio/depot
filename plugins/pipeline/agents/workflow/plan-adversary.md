@@ -73,6 +73,17 @@ Do the prompts follow Design Machines conventions and integrate with depot guard
 - [ ] Craft CMS: Does the prompt follow Craft query patterns and template conventions?
 - [ ] Accessibility: Are a11y requirements included where relevant?
 
+#### Assembly Production Architecture
+
+When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), verify:
+
+- **Authorization coverage:** "Does every mutation handler call `Authorize()` before modifying resources? Flag any POST/PUT/PATCH/DELETE handler without an `auth.Authorize()` call."
+- **Event completeness:** "Is every SQLite mutation followed by a NATS event publish? The publish must happen AFTER commit, not inside the transaction. Flag any service method that writes to the database without a corresponding event."
+- **ScopedDB enforcement:** "Are all fixtures using `ScopedDB`, or is any fixture bypassing it with raw `*sql.DB`? Direct database access in fixture code is a P1 architectural violation."
+- **File size compliance:** "Does the plan respect the handler < 200 lines, service < 500 lines rule? Flag any plan that would create or extend files beyond these limits."
+- **Federation security:** "Are federation endpoints (if any) HTTPS-only with validated `return_url`? Link tokens must have 5-minute TTL, single-use nonce, and audience validation."
+- **Input validation:** "Is input validation present on all write endpoints? Every handler that accepts user input must validate the request DTO before passing to the service layer."
+
 **Fix Philosophy:**
 
 - [ ] Do prompts follow "right approach over quick fix"? No band-aids?

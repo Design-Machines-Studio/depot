@@ -82,7 +82,7 @@
     {
       "name": "council",
       "source": "./plugins/council",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "author": {
         "name": "Design Machines"
       },
@@ -126,14 +126,14 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "2.9.0",
+      "version": "3.0.0",
       "author": {
         "name": "Design Machines"
       },
       "description": "Assembly governance application development with Go, Templ, and Datastar",
       "capabilities_summary": {
-        "skills": 1,
-        "agents": 2,
+        "skills": 3,
+        "agents": 4,
         "commands": 1,
         "tags": [
           "go",
@@ -142,7 +142,10 @@
           "assembly",
           "sse",
           "docker",
-          "scaffolding"
+          "nats",
+          "jetstream",
+          "production",
+          "testing"
         ]
       }
     },
@@ -216,7 +219,7 @@
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "author": {
         "name": "Design Machines"
       },
@@ -230,7 +233,9 @@
           "claude-code",
           "hooks",
           "settings",
-          "project-setup"
+          "project-setup",
+          "nats",
+          "module-interface"
         ]
       }
     },
@@ -262,7 +267,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.22.0",
+      "version": "1.23.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -270,7 +275,7 @@
       "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
       "capabilities_summary": {
         "skills": 2,
-        "agents": 13,
+        "agents": 14,
         "commands": 5,
         "tags": [
           "code-review",
@@ -282,7 +287,8 @@
           "ux-quality",
           "ui-standards",
           "playwright",
-          "review-loop"
+          "review-loop",
+          "migrations"
         ]
       }
     },
@@ -334,7 +340,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.8.0",
+      "version": "1.8.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

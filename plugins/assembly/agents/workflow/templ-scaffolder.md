@@ -147,6 +147,101 @@ type {Type}Response struct {
 - **Check module enabled**: Navigation items must check `appctx.IsModuleEnabled()` before rendering
 - **Self-contained domains**: Each fixture's handlers, DTOs, and templates stay within their domain boundary
 
+## Production Architecture Patterns
+
+In the production codebase (`assembly-baseplate`), the directory structure and patterns differ from the prototype.
+
+### Production Directory Layout
+
+```
+internal/
+├── baseplate/{name}/         # Core modules (always installed)
+│   ├── module.go             # Module interface implementation
+│   ├── service.go            # Business logic
+│   ├── handlers.go           # HTTP handlers (thin adapters)
+│   └── routes.go             # Route registration
+├── fixtures/{name}/          # Optional modules
+│   ├── module.go             # Module interface implementation
+│   ├── service.go            # Business logic (max 500 lines)
+│   ├── handlers.go           # HTTP handlers (max 200 lines)
+│   ├── routes.go             # Route registration
+│   └── pages/                # Templ templates for this fixture
+│       ├── index.templ
+│       ├── show.templ
+│       └── new.templ
+```
+
+### Module Interface
+
+Every fixture implements the `Module` interface:
+
+```go
+type GovernanceModule struct{}
+
+func (m *GovernanceModule) ID() string   { return "governance" }
+func (m *GovernanceModule) Name() string { return "Governance" }
+
+func (m *GovernanceModule) SetupRoutes(r chi.Router, deps *module.Dependencies) error {
+    svc := NewGovernanceService(deps.DB, deps.Events, deps.Auth)
+    h := NewHandlers(svc)
+    r.Get("/governance/proposals", h.ListProposals)
+    r.Get("/governance/proposals/{id}", h.ShowProposal)
+    return nil
+}
+
+func (m *GovernanceModule) Migrations() embed.FS { return migrationsFS }
+
+func init() {
+    module.Register(&GovernanceModule{})
+}
+```
+
+### Handler → Service → ScopedDB
+
+Production handlers are thin HTTP adapters. They parse the request, call a service method, and render the response. **Handlers never touch the database directly.**
+
+```go
+// Handler (thin adapter)
+func (h *Handlers) ListProposals(w http.ResponseWriter, r *http.Request) {
+    proposals, err := h.service.ListProposals(r.Context())
+    if err != nil {
+        http.Error(w, "Internal error", http.StatusInternalServerError)
+        return
+    }
+    pages.Index(proposals).Render(r.Context(), w)
+}
+
+// Service (business logic, uses ScopedDB)
+func (s *GovernanceService) ListProposals(ctx context.Context) ([]Proposal, error) {
+    return s.db.Query("gov_proposals", "SELECT * FROM $TABLE ORDER BY created_at DESC")
+}
+```
+
+### Dependencies Injection
+
+Services receive dependencies via constructor:
+
+```go
+type GovernanceService struct {
+    db     *ScopedDB
+    events ScopedEventBus
+    auth   *Authorizer
+}
+
+func NewGovernanceService(db *ScopedDB, events ScopedEventBus, auth *Authorizer) *GovernanceService {
+    return &GovernanceService{db: db, events: events, auth: auth}
+}
+```
+
+### Route Registration via Module
+
+Fixtures mount themselves on a chi subrouter. The baseplate calls `SetupRoutes()` during startup, passing a subrouter and the `Dependencies` struct with `ScopedDB`, `ScopedEventBus`, `Authorizer`, etc.
+
+### Size Limits
+
+- **Handler files**: max 200 lines. Split into multiple files by domain area if needed.
+- **Service files**: max 500 lines. Extract sub-services for complex domains.
+
 ## CSS in Templates
 
 Use Live Wires layout primitives and utilities. Never invent new CSS classes:
