@@ -429,6 +429,14 @@ INSERT INTO gov_decision_types (id, name, threshold_type, threshold_value) VALUE
 
 ---
 
+## Plain-Language Glossary
+
+The translation table at `${CLAUDE_SKILL_DIR}/references/plain-language-glossary.md` documents legalese-to-plain-language pairs for cooperative governance terminology. Assembly's decolonizing-language product move depends on this glossary: bylaws and statutory filings keep the legal terms; everything members actually read uses the plain-language defaults. When writing UI copy, onboarding flows, or member-facing documentation, consult the glossary first.
+
+The glossary is the source of truth that backs Assembly's UI copy, member statements, and education material. It cross-references the existing `decolonial-language` skill so that positions taken there (patronage refunds not dividends, surpluses not profits, member capital not equity) appear consistently across both skills. Per Chris Galloway (April 21, 2026): governance terminology was overwhelmingly written by lawyers in the 1970s and absorbed wholesale by software developers; co-ops inherit a dialect that does not sound like them. The glossary is how Assembly stops that inheritance from showing up in member-facing surfaces.
+
+---
+
 ## Cross-Reference Guide
 
 | Topic | Related Sections |
