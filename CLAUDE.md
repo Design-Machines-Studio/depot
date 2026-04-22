@@ -217,7 +217,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **dm-review** | Code review orchestrator with parallel agents, visual browser testing, UX design review, visual design quality review, and Live Wires CSS compliance across all DM stacks |
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
-| **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, and worktree execution with review-fix loops |
+| **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, worktree execution with review-fix loops, and `/pipeline-fix` fix-pass flavor for addressing numbered review findings |
 | **gemini** | Gemini CLI subagent for Google search grounding, 2M token context diff analysis, and code execution sandbox |
 
 ## Description Evaluation
@@ -272,6 +272,12 @@ These failure patterns have been observed in production pipeline runs. Each has 
 5. **Missing visual diff protocol:** When the user says "these should be visually identical," no protocol exists for getComputedStyle comparison. Hardening: Visual Parity Diff step in `execution-orchestrator.md`.
 6. **dm-review-loop not invoked:** The caller never runs dm-review-loop on the final result, trusting the orchestrator's self-report. Hardening: Caller Visual Verification section in `pipeline.md` Phase 7.
 7. **Prompt quality degradation:** Across large chunk sets, later prompts have less detail, fewer acceptance criteria, and weaker visual specifications. Hardening: Prompt Quality Parity Check in `promptcraft SKILL.md`.
+8. **Silent curl-fallback merge claims:** The orchestrator emits "ready to merge" when visual verification was skipped. Hardening: `execution_mode: curl_fallback` flag, forbidden-phrases list, and `BLOCKED PENDING CALLER VERIFICATION` merge recommendation in `execution-orchestrator.md`; Caller Verification Checklist (screenshot + runtime eval + cardinality) in `pipeline.md` Phase 7.
+9. **Multi-chunk rename atomicity:** Identifiers renamed across non-adjacent chunks produce a broken window under orchestrator parallelization. Hardening: Rename Atomicity Check in `plan-adversary.md`.
+10. **Append-only revision residue:** Round N amendments coexist with superseded content. Hardening: Append-Only Purge Check + Final Audit + imperative verb discipline (`REPLACE`/`DELETE`/`INSERT`/`RENAME`) in `plan-adversary.md`.
+11. **Dev-mode module loader desync:** New JS module ships without updating the dev-mode module map, loads 404 in browser. Hardening: Step 0c Module-Loader Pre-Flight in `execution-orchestrator.md`.
+12. **P3 deferral drift:** P3-only returning CLEAN silently compounds tech debt. Hardening: zero-deferral policy as default in `dm-review/skills/review/references/severity-mapping.md` and command files; `--allow-defer-p3` opt-in requires written justification + tracking destination.
+13. **Brittle line-number references:** Prompt references to `file:line` become stale as interstitial chunks edit files. Hardening: Phase 3e Stable Anchors Audit in `promptcraft SKILL.md` (prefer function/templ names over line numbers).
 
 See `docs/post-mortems/` for detailed root cause analysis.
 
@@ -283,8 +289,10 @@ After any pipeline run or manual feature implementation, verify:
 - [ ] Screenshots taken at desktop (1440px) and mobile (375px) for every UI change
 - [ ] Visual output compared to design spec or brainstorm mockup (if one exists)
 - [ ] dm-review-loop run on the final branch (not just per-chunk quick reviews)
+- [ ] Zero pending P3 findings OR explicit `--allow-defer-p3` with justification + tracking ID for each (zero-deferral default)
 - [ ] Requirements cross-check with EVIDENCE type for each requirement (screenshot, build pass, computed style)
 - [ ] No "visually identical" requirements left unverified (visual diff protocol applied)
+- [ ] If the orchestrator ran in `execution_mode: curl_fallback`, the 3-item Caller Verification Checklist is complete with attached evidence
 - [ ] Session recorded to ai-memory
 - [ ] Postmortem written if any failure patterns were observed
 

@@ -340,6 +340,19 @@ During development, switch the active member identity to test different personas
 
 **Security note:** This is UI-level identity only, NOT a security boundary. The `coop_member` cookie is unauthenticated and forgeable. Real authentication is required before production. The `?member=` param is environment-gated to `ENV=development` only.
 
+### Auth Bypass for Test Users (fixture-discovery beacon)
+
+Beacon for the pipeline's Fixture Discovery step (see `plugins/pipeline/skills/assess/SKILL.md`). Canonical persona list:
+
+| Member ID | Persona | Use for |
+|-----------|---------|---------|
+| `mem_001` | Director | privileged actions, approvals |
+| `mem_005` | Aisha -- member without position | empty-state views, unprivileged flows |
+| `mem_009` | Ned Ludd (default) | baseline sanity |
+| `mem_012` | David -- authored content | authored-content views |
+
+Consult `internal/fixtures/<module>/seed.go` for the full seeded member list.
+
 ---
 
 ## Quality Workflow

@@ -125,7 +125,7 @@ If your prompt includes a `## Design Spec Context` section (injected by the dm-r
 1. **Extract visual decisions** from the design spec: component variants, visual hierarchy, spacing choices, color treatments, and specific visual outcomes described.
 2. **For each decision that maps to a visible element**, take an element-level screenshot using `browser_take_screenshot` with a CSS selector or coordinates targeting the specific component.
 3. **Evaluate match:** Compare what the design spec describes against what the screenshot shows. State explicitly what you see.
-4. **Flag deviations as P1:** "Design spec says [X], rendered page shows [Y]." Implementation deviating from the approved design is a P1 finding -- not optional polish.
+4. **Flag deviations as P1:** "Design spec says [X], rendered page shows [Y]." Implementation deviating from the approved design is a P1 finding. Every visual finding -- P1, P2, or P3 -- is tracked as a mandatory fix under the zero-deferral policy. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the full escalation rules.
 
 If no design spec was injected, skip this phase. Do not invent a spec.
 

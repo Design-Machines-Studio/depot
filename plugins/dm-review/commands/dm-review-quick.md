@@ -16,17 +16,30 @@ Run a fast code review using the core agents plus ui-standards-reviewer for UI f
 4. architecture-reviewer
 5. doc-sync-reviewer
 
-## UI Design Agent (run when .templ, .twig, .html, or .css files are in the diff)
+## Classification-Aware Agents (skip when not applicable)
 
-6. ui-standards-reviewer -- evaluates rendered UI against Stripe/Notion/Linear quality bar with token discovery and Live Wires compliance
+Each agent has a file-type trigger. Do NOT dispatch an agent whose trigger is absent from the diff -- it wastes tokens and may emit confused findings.
+
+- **go-build-verifier:** dispatch ONLY if `.go` files changed. Skip otherwise.
+- **craft-reviewer:** dispatch ONLY if `.twig`, `.php`, or Craft module config files changed. Skip otherwise.
+- **migration-validator:** dispatch ONLY if `.sql` files under a migrations directory changed. Skip otherwise.
+- **ui-standards-reviewer:** dispatch when `.templ`, `.twig`, `.html`, or `.css` files changed. Evaluates rendered UI against Stripe/Notion/Linear quality bar with token discovery and Live Wires compliance.
+
+Compute the trigger set from the diff before dispatching. Skipped agents are logged in the report's Agent Summary as `<agent>: skipped (no matching files in diff)` so the zero-deferral audit can confirm nothing was overlooked by accident.
+
+## Zero-Deferral Policy (default)
+
+Quick mode surfaces findings at the same P1/P2/P3 severities as full mode. The zero-deferral policy applies equally -- any P3 surfaced here is a mandatory fix before merge unless `--allow-defer-p3` is explicitly used (see `/dm-review`).
 
 ## Process
 
 1. Load the review skill from `plugins/dm-review/skills/review/SKILL.md`
-2. Execute in **Quick** mode with the provided argument:
+2. Compute the file-type trigger set from the diff (Go, Twig/PHP, SQL, UI)
+3. Execute in **Quick** mode with the provided argument:
    - No argument: review uncommitted changes or current branch vs main
    - PR number or URL: review that pull request
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
-3. If UI files are in the diff, include the ui-standards-reviewer agent
-4. Output the unified review report with merge recommendation
+4. Dispatch core agents + any classification-aware agents whose triggers match the diff
+5. Log skipped agents explicitly in the Agent Summary
+6. Output the unified review report with merge recommendation (per zero-deferral)

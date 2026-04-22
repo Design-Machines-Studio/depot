@@ -12,6 +12,7 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
   "featureBranch": "feature/feature-slug",
   "generatedAt": "2026-03-27T10:00:00Z",
   "overlapRisk": "low|medium|high",
+  "noMergeOnCompletion": false,
   "chunks": [
     {
       "id": "01-database-migration",
@@ -113,6 +114,7 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `featureBranch` | string | Name for the feature branch |
 | `generatedAt` | string | ISO 8601 timestamp of manifest generation |
 | `overlapRisk` | enum | "low" (0-1 overlapping files), "medium" (2-4), "high" (5+) |
+| `noMergeOnCompletion` | boolean | Optional. Default `false`. When `true`, the execution-orchestrator runs every chunk and the final review, but does NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. Use when you want pipeline automation without the final merge (e.g. review-first workflows, fix-pass runs that should keep the branch open for iteration). |
 
 ### Chunk
 

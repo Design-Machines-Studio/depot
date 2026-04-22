@@ -50,7 +50,7 @@ The canonical unified report format produced by the review-consolidator after al
 
 ---
 
-### P3 — Fix This Session
+### P3 -- Fix Before Merge
 
 #### [Finding Title]
 - **Source:** [agent-name]
@@ -129,19 +129,25 @@ The consolidator preserves the original citation format from each agent.
 7. **Full agent reports** are always included in collapsible sections for reference
 8. **No sugar-coating** — if the code has problems, say so directly
 
-## Merge Recommendation Logic
+## Merge Recommendation Logic (zero-deferral default)
 
-```
+```text
 if any P1 findings:
   recommendation = "BLOCKS MERGE"
   summary = "X critical issues must be fixed before merging."
-elif any P2 findings:
+elif any P2 findings or any P3 findings:
+  # Zero-deferral: P3-only is NOT clean. P3s are mandatory fixes before merge.
   recommendation = "APPROVE WITH FIXES"
-  summary = "X issues should be addressed. None block merge."
+  if only_p3_findings:
+    summary = "X P3 issue(s) mandatory under zero-deferral. Resolve before merge or pass --allow-defer-p3 with justification."
+  else:
+    summary = "X issue(s) must be addressed before merging."
 else:
   recommendation = "CLEAN"
   summary = "No issues found. Ready to merge."
 ```
+
+Under `--allow-defer-p3`, P3s may be explicitly deferred with a written justification and a tracking destination. In that mode only, P3-only can return `CLEAN` -- but the report must list every deferred P3 in a dedicated "Deferred Findings" section with tracking IDs.
 
 ## Ops Dashboard Write
 

@@ -112,6 +112,20 @@ Do not proceed without a clear feature description.
 
 **Immediately** save the user's original input (verbatim) to `plans/<feature-slug>/original-prompt.md`. This is the ground truth. Every subsequent phase MUST check back against this file.
 
+**Slug validation:** the `<feature-slug>` MUST match `^[a-z0-9][a-z0-9-]{0,63}$`. If the derived slug contains `..`, `/`, spaces, uppercase, or exceeds 64 chars, regenerate it. Slug violations escape the `plans/` directory and are rejected.
+
+### Re-read discipline (token budget)
+
+`original-prompt.md` is read canonically ONCE in Phase 1 (Assessment). Phase 1 extracts a `Key Requirements` list and saves it into `plans/<feature-slug>/assessment.md`. After that, Phases 3, 4, and 7 reference the cached Key Requirements list from the assessment brief, NOT the full original-prompt.md.
+
+**When to re-read original-prompt.md anyway:**
+
+- The user provided feedback between phases (append to original-prompt.md as `## Iteration N Feedback`, then re-read).
+- The cached Key Requirements summary appears incomplete or ambiguous (re-read to verify, then correct the summary).
+- You are the execution-orchestrator preparing subagent context (orchestrator inlines from cache).
+
+Defaulting to "re-read to refresh" in every phase burns tokens without adding information. Prefer the cache.
+
 The file format:
 
 ```markdown
@@ -134,6 +148,22 @@ Mark ledger item 1 as complete. Proceed to Phase 0.
 ## Phase 0: Creative Routing Check
 
 Before starting the pipeline phases, check whether the user's input involves creative or design work that would benefit from brainstorming.
+
+### 0a. Structured Decision Scan (run FIRST)
+
+Before the trigger-word scan, look for structured decision markers in the original prompt. These are signals that the user has already done some of the creative work upstream:
+
+Grep the original prompt for lines matching (case-insensitive): `^(APPROVED|OPEN|BRAINSTORM):`
+
+- **`APPROVED:` lines** -- the user has locked these decisions. Do NOT brainstorm them. Treat them as requirements for Phase 1 onward.
+- **`OPEN:` or `BRAINSTORM:` lines** -- the user wants these specific items explored. Invoke `superpowers:brainstorming` scoped to ONLY these items. Pass the APPROVED list as context so the brainstorm does not re-open settled decisions.
+- **Linked upstream documents** -- if the original prompt links to a file (e.g. `review-findings.md`, `post-mortem.md`, an approved design doc) that contains APPROVED-marked decisions, honor those markers. Do NOT re-brainstorm an approved decision just because the link is present.
+
+If structured markers are present, log: `Phase 0: Scoped brainstorming -- N APPROVED decisions locked, M OPEN/BRAINSTORM items to explore.` Proceed with scoped brainstorming (only M items), then move to Phase 1.
+
+If NO structured markers are present, fall through to the trigger-word scan (0b).
+
+### 0b. Trigger-Word Scan (fallback when 0a found no markers)
 
 **Scan the original prompt for explicit creative trigger words:** "brainstorm", "explore ideas", "superpowers", "concept", "rethink", "reimagine", "experiment", "try some things", "let's try"
 
@@ -199,7 +229,7 @@ Create the implementation plan. Two options:
 
 **Option B:** If not available, create the plan directly:
 
-1. Re-read `plans/<feature-slug>/original-prompt.md` to refresh the full original context
+1. Use the cached Key Requirements from `plans/<feature-slug>/assessment.md` (re-read original-prompt.md only if the user gave feedback since Phase 1)
 2. Break the feature into logical implementation steps
 3. Identify file paths, patterns, and dependencies
 4. Write acceptance criteria for each step
@@ -226,7 +256,7 @@ Mark item 7 when AskUserQuestion returns the user's response.
 
 Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
-1. Re-read `plans/<feature-slug>/original-prompt.md` to refresh the full original context
+1. Use the cached Key Requirements from `plans/<feature-slug>/assessment.md` (re-read original-prompt.md only if the user gave feedback since Phase 1)
 2. Decompose the plan into chunks
 3. Extract context for each chunk from the Assessment and Research Briefs
 4. Perform overlap analysis
@@ -238,7 +268,7 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
 Mark ledger item 8 as complete.
 
-**Requirements coverage check (ledger item 9):** Re-read the Key Requirements from `original-prompt.md`. For each requirement, verify at least one chunk's acceptance criteria covers it. Present the coverage map:
+**Requirements coverage check (ledger item 9):** Read the cached Key Requirements from `plans/<feature-slug>/assessment.md`. For each requirement, verify at least one chunk's acceptance criteria covers it. Present the coverage map:
 
 ```
 Requirements Coverage:
@@ -270,6 +300,8 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 ## Phase 6: Execute
 
+**Budget nudge (before pre-flight):** If the Progress Ledger shows more than 10 completed items AND the session has been running over 90 minutes of wall-clock time, pause and use AskUserQuestion: "Pipeline has been running a while. Continue with full scope (zero-deferral default), or break remaining work into a follow-up fix-pass run? Zero-deferral is the default; a split is the exception." This is a soft nudge, not a hard gate -- the default answer is "continue."
+
 **Pre-flight check:**
 
 1. Confirm bypass permissions mode is active
@@ -290,7 +322,28 @@ Wait for the orchestrator to complete. Mark ledger item 12 as complete.
 
 Present the execution summary from the orchestrator.
 
-**Caller Visual Verification (mandatory for UI features):**
+### Orchestrator Blind Spots (read before starting Phase 7)
+
+The execution-orchestrator verifies per-chunk, but `curl` + `grep` + HTML regex CANNOT observe:
+
+- **JS runtime state** -- whether `window.assemblyPopup` actually attached, whether an event listener bound, whether a module imported.
+- **Visual cardinality** -- whether a button appears "exactly once" vs duplicated via a second code path that independently satisfies the same DOM assertion.
+- **Layout regressions** -- whether a neighboring card got pushed off-screen by your margin change.
+- **Duplicate elements** -- an AC saying "Post comment button is present" passes when there are two Post comment buttons as long as at least one is there.
+
+If the orchestrator ran in `executionMode: curl_fallback`, assume ALL of the above were unverified. The caller (you) must verify them in Phase 7.
+
+### Caller Verification Checklist (mandatory when ANY UI/Integration chunk was executed, OR executionMode was `curl_fallback`)
+
+Complete ALL THREE checks. Record evidence in the delivery report.
+
+- [ ] **(1) Screenshot at minimum one viewport.** Desktop 1440px is mandatory. Also capture mobile 375px if the original prompt mentions responsive behavior, mobile, narrow viewport, or touch interaction. Save to `plans/<feature-slug>/screenshots/phase7-*.png`.
+- [ ] **(2) One runtime state eval per new JS module.** For each chunk that added a JS module, run `browser_evaluate` with a snippet like `typeof window.<globalName>` or `typeof document.querySelector('<selector>').dataset.<attr>` to confirm the module attached at runtime. curl confirms the file responds; `browser_evaluate` confirms it actually ran. Record the snippet and its result.
+- [ ] **(3) Cardinality check per AC containing quantity language.** For every acceptance criterion containing "exactly N", "no duplicate", "only one", "should replace", or "instead of", run a `browser_evaluate` that counts matching elements: e.g. `document.querySelectorAll('button[type=submit]').length`. An AC that says "Post comment should REPLACE the old button" passes only when count is 1, not 2.
+
+Any check that cannot be completed (no browser tools, dev server down) MUST be recorded as `FAILED -- no browser tools` in the delivery report, and the merge recommendation MUST escalate to `BLOCKED PENDING CALLER VERIFICATION`. Do NOT deliver as "ready" without these evidence items.
+
+### Caller Visual Verification (mandatory for UI features)
 
 If ANY chunk in the manifest was classified as UI or Integration, you MUST visually verify the rendered output yourself. Do not trust the orchestrator's self-report for visual quality. The orchestrator verifies per-chunk; you verify the whole.
 
@@ -333,7 +386,7 @@ Assertions without evidence are findings, not verifications. "Verified: sidebar 
 
 If you cannot provide evidence (no browser tools), you MUST state: "Visual verification incomplete -- no browser tools available. The following requirements could not be visually verified: [list]." This is NOT a passing verification.
 
-**Requirements cross-check (ledger item 13):** Re-read `original-prompt.md` and verify every Key Requirement was addressed in the final branch. Each entry requires an evidence type:
+**Requirements cross-check (ledger item 13):** Use the cached Key Requirements from `plans/<feature-slug>/assessment.md`. (At this phase, re-read original-prompt.md is justified ONLY if the user has layered feedback on during execution -- otherwise the cache is authoritative.) Verify every Key Requirement was addressed in the final branch. Each entry requires an evidence type:
 
 ```text
 Requirements Cross-Check:
@@ -373,18 +426,20 @@ Mark item 13 as complete.
 
 Before delivering to the user, verify your own compliance by answering these questions honestly:
 
-0. If the feature involved creative/UI work, did I run the brainstorming skill first?
+0. If the feature involved creative/UI work, did I run the brainstorming skill first (or the scoped brainstorm from Phase 0a)?
 1. Did I save the original prompt to disk?
 2. Did I run the full assessment (not just skim the code)?
 3. Did I run the full research phase (not skip it)?
 4. Did I pause for user input at every GATE?
 5. Did I generate prompts and manifest to disk (not just in context)?
-6. Did I check requirements coverage against original-prompt.md?
-7. Did I run the adversarial review?
+6. Did I check requirements coverage against the cached Key Requirements?
+7. Did I run the adversarial review (max 4 rounds)?
 8. Did I launch the actual execution-orchestrator agent (not run chunks manually)?
 9. Did the orchestrator run dm-review-loop after each chunk?
 10. Did the orchestrator run a final full dm-review?
 11. Did the orchestrator record the session to ai-memory?
-12. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
+12. **Curl-fallback audit:** If the orchestrator ran in `executionMode: curl_fallback`, did I complete the 3-item Caller Verification Checklist (screenshot, runtime eval, cardinality) with attached evidence? If the answer is "no" for any item, this self-audit FAILS LOUDLY -- I must not deliver until every check has evidence or the merge recommendation is set to `BLOCKED PENDING CALLER VERIFICATION`. "I ran curl and grep" is NOT visual verification.
+13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
+14. If the feature involved UI work beyond curl_fallback mode, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
 
 If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.

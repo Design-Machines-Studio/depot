@@ -80,7 +80,7 @@ Examples:
 |----------------|---------------|----------|
 | P1 — Critical | `p1` | Yes — always |
 | P2 — Should Fix | `p2` | Yes — always |
-| P3 — Fix This Session | `p3` | Yes — always |
+| P3 -- Fix Before Merge | `p3` | Yes -- always |
 
 ---
 

@@ -8,6 +8,10 @@ argument-hint: "[optional: URL to test, --states, or --a11y]"
 
 Run the visual testing protocol on rendered web pages using Playwright browser tools.
 
+## Zero-Deferral Policy (default)
+
+Visual findings at any severity (P1/P2/P3) are mandatory fixes before merge. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the policy and `--allow-defer-p3` opt-out.
+
 ## Process
 
 1. Load the visual-test skill from `plugins/dm-review/skills/visual-test/SKILL.md`

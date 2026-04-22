@@ -128,7 +128,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.0.0",
+      "version": "3.1.0",
       "author": {
         "name": "Design Machines"
       },
@@ -269,7 +269,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.23.0",
+      "version": "1.24.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -342,7 +342,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.8.1",
+      "version": "1.9.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -351,7 +351,7 @@
       "capabilities_summary": {
         "skills": 3,
         "agents": 2,
-        "commands": 4,
+        "commands": 5,
         "tags": [
           "pipeline",
           "orchestrator",
@@ -359,7 +359,8 @@
           "worktree",
           "execution",
           "prompt-generation",
-          "review-loop"
+          "review-loop",
+          "fix-pass"
         ]
       }
     },

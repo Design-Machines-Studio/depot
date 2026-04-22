@@ -57,7 +57,16 @@ Produce a **Current State Report** covering:
 - Dependencies (internal and external)
 - Known issues from project history
 
-**Agent 2: UX Assessment** (conditional)
+**Agent 2: UX Assessment** (conditional -- dev server AND UI-touching feature)
+
+**Skip rule (token budget):** if the feature's scope is entirely backend/logic -- none of the planned work touches templates, CSS, JS modules, or rendered pages -- skip the UX assessment. Log one line: `UX assessment: skipped (no UI/Integration surface detected).`
+
+Heuristic (applied on the user's feature description since the chunk classification does not yet exist in Phase 1):
+
+- UI-touching if the description mentions: route, page, form, button, modal, dialog, screen, visual, layout, styling, accessibility, template, component, or any filename ending in `.templ`, `.twig`, `.html`, `.css`, `.jsx`, `.tsx`.
+- Backend-only if the description mentions only: handler, service, migration, schema, API, endpoint, background job, database, SQL, ETL, without any UI verbs above.
+
+When in doubt, run the UX assessment -- false positives are cheaper than missing a regression. But a strict backend-only assessment (e.g. "add a new migration column for vote_count") should NOT trigger 3-viewport screenshots.
 
 Only runs if a dev server is detected or a URL is provided. Read `references/ux-assessment-protocol.md` for the full protocol. In summary:
 
@@ -90,18 +99,73 @@ These baselines serve as the "before" state for visual diff comparisons after im
 
 Note: Baseline screenshots are ephemeral -- useful within a pipeline run but not committed to git. Add `plans/*/baselines/*.png` to `.gitignore` if not already ignored.
 
+#### Fixture Discovery
+
+Many codebases ship with dev-time auth bypasses or persona-switching helpers. Discovering these up-front saves the prompt-writer from having to re-derive them from handler code.
+
+Protocol:
+
+1. **Auth middleware scan:** grep the project's auth middleware (common locations: `internal/handlers/middleware.go`, `backend/auth/*.go`, `app/Http/Middleware/*.php`, `config/authentication.*`) for keywords: `cookie`, `X-Test-User`, `Bearer`, `session`, `impersonate`. **Extract the header/cookie NAME only. Redact values.** If a matched line contains `=<literal>`, `: "<literal>"`, `Bearer <literal>`, or any hardcoded token, flag the file for manual review and record only the field name in the Assessment Brief. Never copy raw matched lines into `plans/<feature-slug>/assessment.md` -- dev-mode middleware sometimes hardcodes bearer tokens or session secrets that must not propagate downstream.
+2. **Seed data scan:** grep seed files (`seeds/`, `fixtures/`, `db/seed.*`, `internal/fixtures/*/seed.go`) for user/member IDs and role names. Collect 2-3 representative personas per role.
+3. **Test helper scan:** grep `tests/`, `_test.go`, `spec/` for patterns like `loginAs(`, `asUser(`, `setCurrentUser(` to find helper functions that scripts/tests use to switch identity.
+
+Report findings in the Assessment Brief under a `## Test Personas` heading:
+
+```markdown
+## Test Personas
+
+**Auth-switching mechanism:** `coop_member` cookie (fake auth middleware at internal/handlers/middleware.go:42)
+
+| Persona | ID | Role | Use for |
+|---------|-----|------|---------|
+| Aisha Williams | mem_005 | Member, no position | Verify empty-state and unprivileged views |
+| David Chen | mem_012 | Member with position | Verify authored-content views |
+| Maria Rodriguez | mem_001 | Director | Verify privileged actions and approvals |
+
+To switch identity: set `coop_member=<id>` cookie before navigating.
+```
+
+The prompt-writer reuses this instead of re-discovering the mechanism per chunk.
+
+If no auth-bypass mechanism is found, log `fixture discovery: no dev-mode auth bypass detected` and continue.
+
+#### Prior Lessons Check
+
+If `tasks/lessons.md` exists in the project root (created by prior pipeline runs via `execution-orchestrator`), surface recent entries that may apply to this feature:
+
+1. Run `test -f tasks/lessons.md && grep -A 3 "^## " tasks/lessons.md | head -60` to list the most recent lesson headings plus their first three lines.
+2. Filter to entries modified in the last 60 days (use `git log --format=%ad --date=short tasks/lessons.md | head -5` to estimate recency if file-level mtime is unreliable).
+3. Keyword-match lesson headings against the original prompt's key nouns -- if the lesson mentions any of those nouns, it is potentially relevant.
+4. Record matches in the Assessment Brief under a `## Recent Lessons That May Apply` heading. Include the lesson heading and a one-line excerpt.
+
+If no `tasks/lessons.md` exists, log `prior lessons check: no lessons file -- skipping` and continue.
+
 ### Phase 3: Consolidation
 
-Combine both reports into a single **Assessment Brief**:
+Combine both reports into a single **Assessment Brief**. When running as part of `/pipeline`, the Assessment Brief also serves as the cached source of truth for the Key Requirements list (extracted from `original-prompt.md` once, referenced many times across phases).
 
 ```markdown
 # Assessment: [Area Name]
+
+## Key Requirements (cached from original-prompt.md)
+1. [Requirement 1 verbatim]
+2. [Requirement 2 verbatim]
+3. [Requirement N verbatim]
 
 ## Code State
 [From Code Assessment agent]
 
 ## UX State
-[From UX Assessment agent, or "Skipped" if no dev server]
+[From UX Assessment agent, or "Skipped" if no dev server or no UI surface]
+
+## Test Personas
+[From Fixture Discovery, or "No dev-mode auth bypass detected."]
+
+## Recent Lessons That May Apply
+[From Prior Lessons Check, or "No lessons file."]
+
+## Baseline Screenshots
+[Manifest of saved baselines, or "No baselines -- skipped UX assessment."]
 
 ## Key Findings
 - [Top 3-5 findings that should inform planning]
@@ -111,7 +175,7 @@ Combine both reports into a single **Assessment Brief**:
 - [What to leave alone]
 ```
 
-Save the brief to `plans/assessment-<area-slug>.md` in the target project.
+Save the brief to `plans/<feature-slug>/assessment.md` in the target project. When running standalone via `/pipeline-assess`, the slug may be the area name instead of a feature slug.
 
 ### Phase 4: Handoff
 

@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review, orchestrate concurrent worktree execution with review-fix loops, and deliver clean branches",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -143,6 +143,12 @@
         "name": "Pipeline Run",
         "description": "Execute generated prompts in worktrees with review-fix loops",
         "argumentHint": "[path to manifest.json or prompts directory]"
+      },
+      {
+        "id": "pipeline-fix",
+        "name": "Pipeline Fix-Pass",
+        "description": "Fix-pass pipeline: consumes numbered findings, reuses the current branch, enforces before/after baselines",
+        "argumentHint": "[path or URL to findings document]"
       }
     ]
   }

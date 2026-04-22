@@ -129,12 +129,31 @@ After deciding what to add, modify, or delete, review what STAYS:
 1. For every file that survives unchanged, ask: "Does this file still make sense given what was removed/added?"
 2. For shared utilities/base classes, check if they still have enough consumers to justify their existence
 3. If a file exists only to serve one remaining consumer, evaluate inlining
+4. **Automatic zero-caller check:** for every helper, constant, or function defined in a file listed in `filesToModify`, grep the codebase for its callers. If the proposed changes leave it with zero callers, flag as "survivor needs inlining or deletion."
 
 ```
 Survivor audit:
   base.js (108 lines) -- kept for markdown-editor.js (1 consumer, uses 3 of 10 features)
   VERDICT: Inline the 3 used features into markdown-editor.js, delete base.js
 ```
+
+### Phase 3e: Stable Anchors Audit
+
+Line numbers are time-bounded. A prompt written in Phase 3 and executed in Phase 6 may see completely different lines if an interstitial chunk edited the file. Prefer stable anchors in all prompt text.
+
+**Anchor hierarchy (prefer the highest-ranking anchor available):**
+
+1. **Function / method names** (Go, Python, TS, PHP): use `grep -n "func <name>" <file>` or `grep -n "def <name>" <file>` as the localization mechanism. Example: "Edit the `SetPosition` handler in `internal/handler/position.go`" beats "Edit lines 42-68 of `internal/handler/position.go`".
+2. **Templ / component names** (.templ, .twig, .jsx/.tsx components): use `grep -n "templ <name>" <file>` or `grep -n "<component name>" <file>`. Example: "Amend the `PositionChangeDialog` component in `internal/view/proposal/dialogs.templ`" beats "Amend lines 235-259".
+3. **Markdown heading slugs** (documentation cross-refs): link to `#section-name` rather than `docs/foo.md:42`.
+4. **SQL table + column** (migrations): reference the migration filename plus the table and column name, e.g. `003_add_votes.sql modifies proposals.vote_count`.
+
+**When line numbers are unavoidable** (unnamed blocks, constants, YAML keys):
+
+- Annotate with `// verified at HEAD <short-sha>` so the reader knows the reference's time window.
+- Include a re-verification grep as an acceptance criterion: `AC: lines 42-68 of path/to/file still contain the signature "<unique-string>" at execution time; if the grep fails, the chunk must stop and re-anchor.`
+
+**Enforcement:** when generating prompts, prefer structural anchors. A prompt-wide line-number count above 5 is a smell -- most of those should be function or component names.
 
 ### Phase 4: Prompt Generation
 
@@ -174,24 +193,40 @@ If any requirement is uncovered, either add it to an existing chunk's acceptance
 
 ### Phase 6b: Prompt Quality Parity Check
 
-Compare prompt detail levels across same-classification chunks to catch context fatigue -- later prompts tend to be less detailed than earlier ones.
+Compare prompt detail levels against classification-specific floors (primary) and against same-classification siblings (secondary) to catch both context fatigue and category-level under-specification.
 
-1. **Group prompts by classification** (UI, Logic, Trivial, Integration).
-2. **For each group, measure:**
-   - Line count per prompt
-   - Number of acceptance criteria per prompt
-   - Number of visual acceptance criteria per prompt (UI/Integration only)
-3. **Flag outliers:**
-   - If any prompt has fewer than 50% of the group's average line count, flag: "WARNING: [chunk-id] may be under-specified ([N] lines vs group average [M])"
-   - If a UI chunk has 0 visual acceptance criteria when siblings have 2+, flag: "WARNING: [chunk-id] has no visual acceptance criteria -- visual requirements may have been dropped during decomposition"
-   - If the last prompt in a group is the shortest, this is likely context fatigue -- flag it specifically
-4. **Output a parity summary:**
-   ```text
-   Prompt Quality Parity:
-     UI chunks: chunk-01 (82 lines, 4 visual criteria), chunk-03 (45 lines, 1 visual criterion) -- WARNING: chunk-03 under-specified
-     Logic chunks: chunk-02 (60 lines), chunk-04 (55 lines) -- OK
-   ```
-5. **Fix warnings** by expanding under-specified prompts before proceeding to handoff. Add missing context, acceptance criteria, and visual specifications from the plan and research briefs.
+**Classification-specific floors (BLOCKERS -- must be met before handoff):**
+
+| Classification | Min acceptance criteria | Min prompt lines | Min visual ACs |
+|----------------|-------------------------|------------------|----------------|
+| Trivial        | 3                       | 40               | n/a            |
+| Logic          | 5                       | 100              | n/a            |
+| Integration    | 10                      | 200              | 1 (if UI surface) |
+| UI             | 15                      | 250              | 2              |
+
+A prompt below any floor for its classification is a BLOCKER, not a warning. Expand it before handoff -- missing context, missing acceptance criteria, missing visual specifications.
+
+**Sibling parity (secondary signal -- flags context fatigue within a classification):**
+
+1. Group prompts by classification.
+2. For each group, compute the average line count and AC count.
+3. Flag outliers:
+   - Any prompt at less than 50% of the group's average line count (context fatigue signal).
+   - The LAST prompt in a group being the shortest (strong context fatigue signal -- flag even if still above the classification floor).
+   - A UI chunk with 0 visual ACs when siblings have 2+ (visual requirements dropped during decomposition).
+
+**Output a parity summary:**
+
+```text
+Prompt Quality Parity:
+  Classification floors:
+    UI chunks: chunk-01 (252 lines, 18 ACs, 3 visual) PASS, chunk-03 (120 lines, 8 ACs, 1 visual) BLOCKER (below UI floor)
+    Logic chunks: chunk-02 (115 lines, 6 ACs) PASS, chunk-04 (98 lines, 4 ACs) BLOCKER (below Logic floor)
+  Sibling parity:
+    UI group avg 186 lines. chunk-03 at 65% -- under-specified relative to siblings.
+```
+
+**Fix BLOCKERs** by expanding under-specified prompts. Classification floors are non-negotiable -- if a prompt genuinely cannot be expanded to the floor, the chunk is misclassified (reclassify it). Do not proceed to handoff with BLOCKER-class parity violations.
 
 ### Phase 7: Handoff
 

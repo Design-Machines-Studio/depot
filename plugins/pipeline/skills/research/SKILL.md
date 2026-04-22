@@ -157,6 +157,21 @@ find . -name "*.templ" -path "*/members/*" 2>/dev/null
 
 Document every match. Duplicate files serving different routes is a common source of bugs.
 
+### Phase 3b: Stable Anchor Recommendations
+
+When research uncovers code-to-doc cross-references (e.g. a spec cites a specific handler, or code references a design doc), prefer stable anchors over line numbers in the Research Brief output.
+
+Rules the Research Brief should follow:
+
+- **Go / Python / TS functions:** reference by function name, not line number. `func SetPosition in internal/handler/position.go` beats `position.go:42`.
+- **Templ components:** `templ PositionChangeDialog` beats `dialogs.templ:235`.
+- **Markdown documents:** use heading slugs (`#voting-thresholds`) rather than `docs/governance.md:120`.
+- **Migrations:** cite filename plus table/column (`003_add_votes.sql -> proposals.vote_count`) rather than SQL line numbers.
+
+When the research agent generates citations, it should apply these rules to its own outputs. The prompt-writer (Phase 4) inherits these anchors and does not have to clean up brittle line-number references the research phase introduced.
+
+Also loads (see Phase 4 handoff): the promptcraft skill's Phase 3e Stable Anchors Audit enforces the same rule downstream.
+
 ### Phase 4: Consolidation
 
 Collect results from all agents and produce a **Research Brief**:
@@ -203,3 +218,13 @@ Each research source operates independently. If a source is unavailable:
 - The brief is still useful with partial research
 
 Minimum viable research requires only ai-memory (hard dependency on ned).
+
+## Reference Loading Discipline
+
+Reference files under `plugins/*/references/` (domain plugins, companion skills) are loaded ON DEMAND by research agents, not eagerly up front. The Research Brief is synthesized from targeted loads -- an agent reads a specific reference only when its research thread needs it.
+
+- DO: load `live-wires:livewires/references/spacing.md` when the feature touches CSS spacing.
+- DO: load `council:governance/references/bc-cooperative-act.md` when the feature involves voting thresholds.
+- DON'T: bulk-load every reference from every companion plugin at the start of the research phase -- that burns tokens without adding focus.
+
+When in doubt, load narrowly. Re-load only if the first pass missed necessary detail.

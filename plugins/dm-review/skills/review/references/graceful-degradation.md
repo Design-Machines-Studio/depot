@@ -62,12 +62,15 @@ Degraded: all conditional agents unavailable. Review covers core concerns
 
 ## Merge Recommendation Modifications
 
-The standard merge recommendation logic (from severity-mapping.md) applies first:
+The standard merge recommendation logic (from severity-mapping.md §Escalation Rules and output-format.md §Merge Recommendation Logic) applies first:
 
-```
-if any P1 → BLOCKS MERGE
-elif any P2 → APPROVE WITH FIXES
-else → CLEAN
+```text
+if any P1:
+  BLOCKS MERGE
+elif any P2 or any P3:
+  APPROVE WITH FIXES   (P3-only is mandatory under zero-deferral; --allow-defer-p3 opts out)
+else:
+  CLEAN
 ```
 
 Then overlay failure status:

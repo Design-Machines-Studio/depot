@@ -9,6 +9,20 @@ argument-hint: "[scope: PR number, branch, path, or blank]"
 
 A single-command code review system that launches parallel specialized agents tailored to Design Machines stacks: Go+Templ+Datastar, Craft CMS+Twig, and Live Wires CSS.
 
+## Zero-Deferral Policy (default)
+
+This plugin defaults to zero-deferral: P1, P2, AND P3 findings are mandatory fixes before merge. The opt-out is `--allow-defer-p3` with a written justification and tracking destination. See `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` for the decision tree and `${CLAUDE_SKILL_DIR}/references/output-format.md` for the merge-recommendation logic.
+
+## Reviewer Output Style (applies to all review agents)
+
+Every review agent dispatched by this skill operates under a terse-output contract:
+
+- No preamble sentences ("I'll review...", "Let me check...", "Here is my analysis..."). Start with the first finding.
+- No summary paragraphs. The consolidator composes the summary.
+- Findings are structured blocks (severity, file:line, description, fix). One block per finding, no prose between.
+- An agent that found nothing writes exactly one line: `<agent-name>: clean.` Nothing more.
+- Every sentence must advance a specific finding or state a verified fact. If you catch yourself narrating your process, delete that sentence.
+
 ## Usage
 
 - `/dm-review` — Full review: all applicable agents + memory capture
@@ -292,10 +306,10 @@ Read the consolidation instructions from `plugins/dm-review/agents/workflow/revi
 1. **Collect** all findings from all agent outputs (post-guardrail)
 2. **Deduplicate** findings using the precision rules in `${CLAUDE_SKILL_DIR}/references/guardrails.md` (same-line merge, adjacent-line merge, severity-disagreement escalation)
 3. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
-4. **Determine merge recommendation** using the logic:
-   - Any P1 → "BLOCKS MERGE"
-   - P2 only → "APPROVE WITH FIXES"
-   - P3 only or clean → "CLEAN"
+4. **Determine merge recommendation** using the zero-deferral logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
+   - Any P1 -> "BLOCKS MERGE"
+   - Any P2 OR any P3 -> "APPROVE WITH FIXES" (P3-only is NOT clean under zero-deferral; use `--allow-defer-p3` to explicitly opt out with justification)
+   - Zero findings -> "CLEAN"
 5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
 
 Output the full report to the user.

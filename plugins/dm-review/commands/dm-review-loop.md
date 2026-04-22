@@ -8,9 +8,11 @@ argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or pat
 
 Automates the cycle of reviewing code, fixing all findings, and re-reviewing until clean.
 
-## Zero-Deferral Policy
+## Zero-Deferral Policy (default)
 
-This command treats ALL findings as blockers -- P1, P2, AND P3. Unlike standalone `/dm-review` where P3s may be triaged as "nice-to-have," the loop fixes everything. P3s (tech debt, band-aid solutions, simplification opportunities) are just as important to fix when encountered -- deferring them is how tech debt compounds.
+All dm-review commands default to zero-deferral: P1, P2, AND P3 findings MUST be fixed. P3s fix band-aid solutions and tech debt -- deferring them is how debt compounds silently. The loop automates fix-until-clean; `/dm-review` and `/dm-review-fix` follow the same policy.
+
+**When triage IS warranted** (rare): use `--allow-defer-p3`. This flag is the explicit opt-in for cases where a P3 is truly out of scope for this branch AND the deferred items will be tracked elsewhere (an issue tracker, a follow-up TODO with a ticket ID, a scheduled fix-pass pipeline run). Generic reasons like "not enough time" or "will do later" are not valid -- the point of zero-deferral is that "later" never comes.
 
 ## Arguments
 
@@ -18,6 +20,7 @@ Parse the argument string for flags and pass-through values:
 
 - `--full` -- Use full dm-review (all agents) instead of quick (5 core agents)
 - `--max-iterations N` -- Maximum review-fix cycles (default: 3)
+- `--allow-defer-p3` -- Opt out of zero-deferral for P3 findings. Requires each deferred finding to carry an explicit justification and a tracking destination. Default OFF.
 - Everything else -- Passed through to dm-review as the review target (PR number, branch, path)
 
 ## Evaluation Depth
@@ -35,16 +38,18 @@ When invoking dm-review within the loop, pass this context to the review: "This 
 
 ### 1. Initialize
 
-```
+```text
 iteration = 0
 max_iterations = 3 (or from --max-iterations)
 mode = "quick" (or "full" if --full flag present)
+allow_defer_p3 = true if --allow-defer-p3 flag present, else false
 target = remaining arguments after flag parsing
+prior_findings_signature = null  # for stalled-convergence detection
 ```
 
 ### 2. Review-Fix Loop
 
-```
+```text
 while iteration < max_iterations:
   iteration += 1
 
@@ -56,13 +61,29 @@ while iteration < max_iterations:
 
   # Check for findings
   Count findings in todos/*-pending-*.md
+  current_signature = sorted list of pending todo filenames
 
   if findings == 0:
     Report: "Clean after {iteration} iteration(s). Zero findings."
     STOP -- success
 
+  # Stalled-convergence short-circuit (token saver):
+  # if this iteration produced the same findings as the prior one,
+  # further fix-review loops will not resolve them -- stop and escalate.
+  if prior_findings_signature != null and current_signature == prior_findings_signature:
+    Report: "Convergence stalled at iteration {iteration}. Same {findings} finding(s) remain as prior pass. Manual review required."
+    List remaining todo files
+    STOP -- needs attention
+
+  prior_findings_signature = current_signature
+
   # Fix all findings (all severities -- P1, P2, AND P3)
-  Run /dm-review-fix
+  # Under zero-deferral (default), dm-review-fix addresses every pending finding.
+  # Under --allow-defer-p3, P3s may be triaged; P1/P2 still mandatory.
+  if allow_defer_p3:
+    Run /dm-review-fix --allow-defer-p3
+  else:
+    Run /dm-review-fix
   # dm-review-fix resolves and cleans up todo files
 
   # If this was the last iteration, run one final review to verify

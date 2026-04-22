@@ -2,6 +2,10 @@
 
 Rules for mapping each agent's native severity terminology to the unified P1/P2/P3 system.
 
+## Zero-Deferral Policy (default)
+
+All findings at all severities -- P1, P2, AND P3 -- must be fixed before the branch is considered ready to merge. "CLEAN" means zero findings. P3-only does NOT mean clean; it means APPROVE WITH FIXES and P3s are mandatory. The explicit opt-out is `--allow-defer-p3`, which requires each deferred item to carry a written justification and a tracking destination. See `plugins/dm-review/commands/dm-review.md` for the full policy statement.
+
 ---
 
 ## Unified Severity Levels
@@ -10,7 +14,7 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 |-------|-------|---------|-------------|
 | **P1** | Blocks Merge | Must fix before merging | Review recommendation = BLOCKS MERGE |
 | **P2** | Should Fix | Fix soon, track if not immediate | Review recommendation = APPROVE WITH FIXES |
-| **P3** | Fix This Session | Improvement required. Does not block merge but must be addressed before the session ends. | No merge impact — but must be fixed |
+| **P3** | Fix Before Merge | Improvement required. Mandatory under zero-deferral policy. Resolve before merge or explicitly defer with `--allow-defer-p3` + justification. | APPROVE WITH FIXES (mandatory) |
 
 ---
 
@@ -64,7 +68,7 @@ This tree ensures that a missing error state on a critical form (user stranded =
 
 | Agent | Phase | Critical/P1 | Serious/P2 | Moderate/P3 |
 |-------|-------|------------|------------|-------------|
-| **visual-browser-tester** | Live Wires CSS Compliance | — | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, optional primitive alternatives |
+| **visual-browser-tester** | Live Wires CSS Compliance | — | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, alternative primitive patterns (mandatory -- zero-deferral applies) |
 
 UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer** (see dm-review Agents table above).
 
@@ -72,16 +76,17 @@ UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer**
 
 ## Escalation Rules
 
-1. **Any P1 from any agent** → merge recommendation = "BLOCKS MERGE"
-2. **P2 only (no P1)** → merge recommendation = "APPROVE WITH FIXES"
-3. **P3 only or clean** → merge recommendation = "CLEAN"
-4. **Security P1** always escalates — no exceptions, no "we'll fix it later"
-5. **Accessibility P1** always escalates — legal compliance (EAA, ADA)
-6. **Governance P1** always escalates — statutory requirements
-7. **Visual P1** always escalates — if layout is completely broken or keyboard traps exist in the rendered page
+1. **Any P1 from any agent** -> merge recommendation = `BLOCKS MERGE`
+2. **P2 present (any count, regardless of P3)** -> merge recommendation = `APPROVE WITH FIXES` (must fix before merge)
+3. **P3 only (no P1/P2)** -> merge recommendation = `APPROVE WITH FIXES -- P3s mandatory under zero-deferral.` This is NOT clean. Run `/dm-review-fix` (or `/dm-review-loop`) to resolve every P3 before merging. To explicitly opt out for one or more P3s, pass `--allow-defer-p3` to the review-fix command with written justifications and tracking destinations.
+4. **Zero findings** -> merge recommendation = `CLEAN`
+5. **Security P1** always escalates -- no exceptions, no "we'll fix it later"
+6. **Accessibility P1** always escalates -- legal compliance (EAA, ADA)
+7. **Governance P1** always escalates -- statutory requirements
+8. **Visual P1** always escalates -- if layout is completely broken or keyboard traps exist in the rendered page
 
 ## De-escalation Rules
 
-1. P3 findings are shown in the report with full detail (same format as P1/P2) and must be fixed before the session ends, but don't affect merge recommendation
-2. Findings from agents that partially overlap (e.g., both a11y-css-reviewer and css-reviewer flag the same file) count as ONE finding at the higher severity
-3. If a finding is already tracked in a known issue / TODO, note it but don't block merge
+1. P3 findings are shown in the report with full detail (same format as P1/P2) AND must be fixed before the branch is considered ready to merge (zero-deferral default). They no longer carry a "no merge impact" free pass.
+2. Findings from agents that partially overlap (e.g., both a11y-css-reviewer and css-reviewer flag the same file) count as ONE finding at the higher severity.
+3. If a finding is already tracked in a known issue / TODO with a specific ticket ID: note the tracker reference in the todo file AND still require a fix in this branch OR an explicit `--allow-defer-p3` with justification. "It's tracked" is not a substitute for "it's fixed."
