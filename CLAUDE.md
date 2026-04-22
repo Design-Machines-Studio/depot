@@ -207,7 +207,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **craft-developer** | Craft CMS 4/5 development patterns and query cookbook |
 | **project-manager** | LT10 methodology, Notion-integrated sprint planning with Userback triage, Calendar.app meeting prep, Mail.app scanning, content ideation, and velocity tracking |
 | **council** | Worker cooperative governance (BC Co-op Act) and decolonial content strategy |
-| **design-machines** | DM business strategy, catalog, partnerships, revenue model, design system |
+| **design-machines** | DM business strategy, catalog, partnerships, revenue model, design system, audience research (positioning, pitch material, competitive landscape) |
 | **assembly** | Go/Templ/Datastar governance app development with embedded NATS, SQLite, and production backend architecture |
 | **live-wires** | CSS framework with layout primitives and baseline rhythm |
 | **ghostwriter** | Personal writing voice, editorial style engine, and voice editing |
