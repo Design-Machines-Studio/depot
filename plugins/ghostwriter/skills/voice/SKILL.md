@@ -315,6 +315,39 @@ Clear and specific. Use active voice. Lead with why, not how. Trust the reader t
 
 ---
 
+## Audience Awareness
+
+Design Machines writes for three overlapping audiences. Before drafting any external piece, identify which one is primary and calibrate the register. The `design-machines:audience` skill holds the canonical research and routes to the detailed pitch references.
+
+### Co-op developers and federation staff
+
+Pipeline economics, sectoral density, curriculum embedding, cross-developer solidarity. Assume fluency with technical assistance, patronage, internal capital accounts, the seven cooperative principles. Do not over-explain movement vocabulary to this audience. It reads as condescension. Pull from the "Use freely" set in `design-machines/audience/references/language-card.md` without restraint.
+
+### Worker co-op members
+
+Daily-experience framings. The Tuesday morning frame: *"I own where I work, and my ownership feels real on a Tuesday."* Admin debt as the diagnosis of why governance currently feels like homework. The "ask Sarah" problem of institutional knowledge concentrated in one person. Less movement jargon, more lived-experience language. The audience already lives the politics. You don't have to convince them. You have to make the work feel sustainable.
+
+### Broader labor and solidarity-economy public
+
+The door-opening register. Lead with the survival reframe — co-ops outlast conventional businesses by significant margins. Workplace democracy as a proposition. The AI-and-labor intersection as a Design Machines beat. This audience may not have heard of patronage allocation. Teach where teaching helps. Never lecture.
+
+### Landing phrases
+
+Findable language to drop into drafts when the moment calls for it:
+
+- *bylaws become operational, not aspirational*
+- *the rules run the system*
+- *admin debt*
+- *scale out, not up*
+- *sectoral density*
+- *Tuesday morning frame*
+
+### When to ask before drafting
+
+If the brief doesn't specify the primary audience, ask. The same Loomio comparison reads completely differently for a USFWC staffer (who cares about how Assembly fits in the TA pipeline) and a worker co-op member (who cares about whether decisions still feel like real decisions when the system enforces them). Asking takes ten seconds. Drafting for the wrong audience wastes hours.
+
+---
+
 ## Anti-AI-Writing Patterns
 
 This is critical. AI-generated text has recognizable tells that immediately undermine credibility. When writing as Travis, actively avoid these:
@@ -361,6 +394,15 @@ These words and phrases are AI fingerprints. Never use them:
 - "synergy"
 - "at its core"
 - "undeniably"
+
+**SaaS-pitch tells.** Extends the list above; does not duplicate. These came out of the April 2026 audience research as the failure modes most likely to land Design Machines in the same bucket as the governance vendors it's trying to displace:
+
+- "scale up" (as a virtue — use *scale out* instead)
+- "compliance-as-code" (use *operationalizing the bylaws* instead)
+- "best-in-class"
+- "enterprise-grade"
+- "unlock value"
+- "drive adoption"
 
 ### Rhythm tells
 
