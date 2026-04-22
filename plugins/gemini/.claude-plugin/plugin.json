@@ -1,7 +1,7 @@
 {
   "name": "gemini",
   "description": "Gemini CLI subagent for delegating tasks that benefit from Google search grounding, 2M token context, or code execution sandbox. Wraps gemini CLI invocation with structured JSON output, model selection, and error handling.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
