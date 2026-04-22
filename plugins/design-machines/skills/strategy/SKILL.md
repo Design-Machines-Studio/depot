@@ -21,13 +21,23 @@ Governance is the part of running a co-op that nobody wants to do. It's boring. 
 
 ### The survival reframe
 
-Worker co-ops outlast conventional businesses. UK: 76% five-year survival vs ~42% for all new companies (Co-operatives UK). France: 80–90% three-year worker co-op survival vs ~66% conventional (CG Scop / Review of Industrial Organisation 2015). Italy: 87% three-year survival for worker-buyout co-ops vs 48% all Italian businesses (CECOP/CICOPA). The standard pitch to co-ops assumes fragility; the data inverts the frame. Assembly is infrastructure that compounds an existing competitive advantage, not a life-support system. Full citations live at `references/survival-reframe.md`.
+Worker co-ops outlast conventional businesses.
+
+UK: 76% five-year survival vs ~42% for all new companies (Co-operatives UK). France: 80–90% three-year worker co-op survival vs ~66% conventional (CG Scop / *Review of Industrial Organisation* 2015). Italy: 87% three-year survival for worker-buyout co-ops vs 48% all Italian businesses (CECOP/CICOPA).
+
+The standard pitch to co-ops assumes fragility. The data inverts the frame. Assembly is infrastructure that compounds an existing competitive advantage, not a life-support system.
+
+Full citations live at `references/survival-reframe.md`. Verified URLs for external use are at `plugins/design-machines/skills/audience/references/survival-reframe-citations.md`.
 
 ### The two moats
 
-Design Machines' moat is two things working together. First, integration across the six governance fixtures — decisions, meetings, members, equity, compliance, documentation in one system. No competitor does all six. Second, bylaws stop being paperwork — Assembly enforces statutory requirements as defaults (2/3 quorum on special resolutions, AGM within 15 months of prior, director-change filing within 14 days, block requires mandatory comment, new-member approval follows each co-op's actual bylaws). Every other tool treats bylaws as reference docs.
+Design Machines' moat is two things working together.
 
-Landing lines: *"Your bylaws stop being paperwork." · "The rules run the system." · "Governance you can't accidentally break."* Full positioning at `references/two-moats.md`.
+First, integration across the six governance fixtures (decisions, meetings, members, equity, compliance, documentation) in one system of record. No competitor does all six.
+
+Second, bylaws stop being paperwork. Assembly enforces statutory requirements (the AGM 15-month rule, the 14-day director-change filing) and bylaw-or-process requirements (the 2/3-of-votes-cast special-resolution threshold encoded in your rules; quorum thresholds set per the Rules of Association; blocks in consent decision-making require a written reason; new-member approval per each co-op's bylaws). Every other tool treats bylaws as reference docs.
+
+Landing lines: *"Your bylaws stop being paperwork." · "The rules run the system." · "Governance you can't accidentally break."* Full positioning at `references/two-moats.md`. Audience-specific pitch versions at `plugins/design-machines/skills/audience/references/developer-federation-pitch.md` and `coop-pitch.md`.
 
 ---
 
@@ -342,9 +352,11 @@ When in doubt: check the reference file first (faster, always available), then a
 
 | Skill | Plugin | When to Load |
 |-------|--------|--------------|
+| **audience** | design-machines | External communication, pitching, federation outreach, competitive analysis (this skill is internal business decisions; audience is everything aimed outward) |
 | **voice** | ghostwriter | Writing any DM content, copy, or communications |
 | **social-media** | ghostwriter | Platform-specific content distribution |
 | **governance** | council | Co-op domain knowledge for client conversations |
+| **decolonial-language** | council | Terminology positions (patronage refunds not dividends; surpluses not profits; member capital not equity) referenced from the strategy skill's positioning sections |
 | **development** | assembly | Technical Assembly architecture discussions |
 | **livewires** | live-wires | Live Wires framework positioning and technical details |
 

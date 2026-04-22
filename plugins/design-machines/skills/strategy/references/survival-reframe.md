@@ -18,7 +18,7 @@ During the global financial crisis, worker-owned employment in France *grew* 4.2
 
 ## Why this reframes the pitch
 
-The standard sales motion to co-ops assumes fragility. *Build resilience. Don't fail. Avoid the 5-year curse.* Software pitches lean into rescue language. The data says the opposite. Co-ops already outlast the businesses pitching them software.
+The standard sales motion to co-ops assumes fragility. *Build resilience. Don't fail. Avoid the 5-year curse.* Software pitches lean into rescue language. The data inverts the frame. Co-ops already outlast the businesses pitching them software.
 
 Assembly is positioned as *amplifying an existing competitive advantage*, not life support for a fragile form. That single shift in framing changes the register of every conversation.
 

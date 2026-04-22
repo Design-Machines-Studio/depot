@@ -321,7 +321,7 @@ Design Machines writes for three overlapping audiences. Before drafting any exte
 
 ### Co-op developers and federation staff
 
-Pipeline economics, sectoral density, curriculum embedding, cross-developer solidarity. Assume fluency with technical assistance, patronage, internal capital accounts, the seven cooperative principles. Do not over-explain movement vocabulary to this audience. It reads as condescension. Pull from the "Use freely" set in `design-machines/audience/references/language-card.md` without restraint.
+Pipeline economics, sectoral density, curriculum embedding, cross-developer solidarity. Assume fluency with technical assistance, patronage, internal capital accounts, the seven cooperative principles. Do not over-explain movement vocabulary to this audience. It reads as condescension. Use the "Use freely" vocabulary in `plugins/design-machines/skills/audience/references/language-card.md` as native, not as terms requiring translation.
 
 ### Worker co-op members
 

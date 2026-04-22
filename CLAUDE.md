@@ -247,11 +247,12 @@ claude plugin validate plugins/<name>
 
 ## Conventions
 
-- All content is Markdown. No code to compile, lint, or test.
+- Almost all content is Markdown. No code to compile, lint, or test.
 - Skills use `SKILL.md` as the canonical filename for the primary skill definition. The `name:` field in its YAML frontmatter must match the skill folder name exactly.
 - Reference files live in `references/` subdirectories and are named descriptively (e.g., `estimation.md`, `bc-cooperative-act.md`).
+- Reference files are typically Markdown. Executable scripts (`.sh`) are permitted when a skill needs runtime tooling. Established pattern (see `plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh`): shebang line, top-of-file comment block with `WHY THIS EXISTS` / `WHAT THIS FIXES` / `DEPENDENCIES` / `USAGE` sections, executable bit set (`chmod +x`), POSIX-portable bash 3.2+ for macOS compatibility, no `set -e` if the script needs to detect non-zero exits, and a fixed `PATH` reset to prevent caller-controlled hijack of dependencies.
 - Agent files are categorized by purpose: `review/` for code review agents, `workflow/` for automation agents.
-- Plugin JSON requires `name`, `description`, `version`, `author`, and `capabilities`. Optional fields include `keywords`, `repository`, and `author.url`.
+- Plugin JSON requires `name`, `description`, `version`, `author`, and `capabilities`. Optional fields include `keywords`, `repository`, `author.url`, `pluginDependencies`, and `optionalPluginDependencies`.
 - The marketplace manifest at `.claude-plugin/marketplace.json` must stay in sync with the actual plugin directories.
 
 ## Pipeline Enforcement

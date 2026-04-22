@@ -13,7 +13,7 @@ Most worker co-op governance language was written by lawyers in the 1970s and im
 - *Patronage allocation subject to qualified written notice of allocation* / Your share of this year's surplus.
 - *Quorum* / How many members need to show up for a vote to count.
 - *Internal capital account* / The co-op's savings account in your name.
-- *Special resolution* / The bigger decisions that need two-thirds of the room.
+- *Special resolution* / The bigger decisions that need two-thirds of the votes cast.
 - *Probationary period* / The first stretch where new members work before they vote.
 
 ## LinkedIn long-form (~150-300 words)
@@ -22,7 +22,7 @@ Most worker co-op governance language was written by lawyers in the 1970s and im
 
 That's the legal term for a chunk of money the co-op is paying you out of this year's surplus. It is technically precise. It is also written in a dialect almost no member of any worker co-op I have ever met would use to describe what's happening.
 
-Most worker co-op governance language was written by lawyers in the 1970s. Then the first generation of governance software imported it wholesale. The result: co-ops inherited a dialect that does not sound like them, and the dialect runs through every member-facing screen of every tool they use.
+Most worker co-op governance language was written by lawyers in the 1970s. Then the first generation of governance software imported it wholesale. Co-ops inherited a dialect that does not sound like them. The dialect runs through every member-facing screen of every tool they use.
 
 Chris Galloway named this for me in a conversation last week. The fix is not to remove legal precision. Bylaws and statutory filings still need the legal terms because that's the audience for those documents — regulators, lawyers, the future board that has to interpret the language under stress. The fix is to stop forcing the legal terms into the places members actually live.
 

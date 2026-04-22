@@ -5,39 +5,35 @@
   "author": {
     "name": "Design Machines"
   },
+  "pluginDependencies": {
+    "council": ">=1.9.0"
+  },
   "capabilities": {
     "skills": [
       {
         "id": "strategy",
         "name": "DM Strategy",
-        "description": "Design Machines business strategy, product positioning, catalog system, partnerships, and revenue model",
-        "triggers": ["call with Chris about partnership", "pricing for co-op client", "update catalog entry", "grant opportunity", "how much runway", "write a proposal", "white-label Assembly", "conversion funnel Live Wires to Assembly", "conference talking points", "freemium vs subscription"],
+        "description": "Design Machines business strategy, product positioning, catalog system, partnerships, and revenue model. Internal business decisions: pricing, partnerships, catalog, revenue model, conversion funnel. For external comms, pitching, and competitive landscape, see the audience skill.",
+        "triggers": ["call with Chris about partnership", "pricing for co-op client", "update catalog entry", "grant opportunity", "how much runway", "white-label Assembly", "conversion funnel Live Wires to Assembly", "freemium vs subscription"],
         "tags": ["strategy", "business", "pricing", "partnerships", "catalog", "revenue"]
       },
       {
         "id": "audience",
         "name": "DM Audience Research",
-        "description": "April 22, 2026 audience research as canonical: who DM is talking to, what to say, competitive landscape, pitch material",
+        "description": "Design Machines audience research and external positioning. Use for pitching, federation outreach, conference talks, competitive analysis, and any external communication about Assembly or Live Wires. Holds the April 22, 2026 audience research as canonical.",
         "triggers": [
           "what's our positioning vs Loomio",
           "help me draft a pitch",
           "what do I say to the federation",
-          "how should I talk about this to Chris",
-          "what's the right framing for a co-op developer",
-          "draft a positioning paragraph",
           "USFWC outreach",
           "CWCF outreach",
           "competitive analysis Decidim",
-          "Cooperation Works",
           "the survival reframe",
           "two moats",
           "admin debt",
-          "sectoral density",
-          "decolonizing governance language",
-          "scale out not scale up"
+          "sectoral density"
         ],
-        "tags": ["audience", "positioning", "pitching", "competitive-landscape", "federation", "research"],
-        "mcpDependencies": []
+        "tags": ["audience", "positioning", "pitching", "competitive-landscape", "federation", "research"]
       }
     ],
     "agents": [],

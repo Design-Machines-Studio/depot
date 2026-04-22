@@ -4,7 +4,7 @@ The primary audience. USFWC, CWCF, DAWI (Democracy at Work Institute), Cooperati
 
 ## What they care about
 
-- **Pipeline economics.** Each co-op they help formalize is months of unpaid TA work. A tool that compresses formalization from five months to five days is real money — and real bandwidth to take on the next co-op.
+- **Pipeline economics.** Each co-op they help formalize is months of unpaid TA work. A tool that compresses formalization from five months to five days is real money. And real bandwidth to take on the next co-op.
 - **Curriculum embedding.** They run training programs. Assembly that fits into curriculum (rather than competing with it) is referenceable to every cohort.
 - **Client retention.** Their member co-ops outgrow them. A governance OS keeps the relationship by making the federation the channel that introduced the co-op to it.
 - **Co-branded artifacts.** Federation-branded onboarding flows, federation-mentioned in member-facing UI, federation-recognized as the source of the recommendation.
@@ -14,8 +14,8 @@ The primary audience. USFWC, CWCF, DAWI (Democracy at Work Institute), Cooperati
 ## What they fear
 
 - **Software that competes with their consulting revenue.** Pitch Assembly as augmenting TA work, not replacing it. Position the tool as the artifact the consulting produces.
-- **Extractive pricing that punishes adding member co-ops.** Per-seat pricing is poison in this audience. Federation-tier pricing that gets cheaper-per-co-op is essential.
-- **Tools whose politics are illegible or hostile.** Estonian OÜ registration is neutral-to-mildly-negative (sounds like a shell). LT10 conversion credential and Slate / Co-Active partnership are strongly positive. Lead with the politics.
+- **Extractive pricing that punishes adding member co-ops.** Per-seat pricing is poison in this audience. Federation-tier pricing that gets cheaper per co-op is essential.
+- **Tools whose politics are illegible or hostile.** Estonian OÜ registration reads as a shell. LT10 conversion credential and the Slate / Co-Active partnership read as movement. Lead with the politics.
 - **Vendor lock-in via proprietary data formats.** Open data and exportable governance records are non-negotiable.
 - **AI features bolted on as "innovation"** when the underlying governance work is the same. They have seen this many times.
 
@@ -30,21 +30,21 @@ The primary audience. USFWC, CWCF, DAWI (Democracy at Work Institute), Cooperati
 
 ## Where each finding lands
 
-- **Survival reframe** — opens any pitch. "You're already managing the business form that outlasts the others." Lets the federation lead with strength.
-- **Two moats** — middle of the pitch. Integration plus enforcement; nobody else does both. This is the answer to "why not just use Loomio and Notion?"
-- **Sectoral density** — close. "We're not chasing scale. We're trying to make every region worth living in."
-- **Admin debt** — landed when prospects describe their member co-ops' governance frustrations. "That's admin debt. It compounds."
-- **Decolonizing language** — pitched as a product feature; concrete and demoable. Show the plain-language defaults next to the legal terms; the contrast does the work.
-- **Channel-first GTM** — implicit in the structure of the meeting. Two decks, two sales motions: federation deck for them, member-co-op deck for their member co-ops. Different products from a sales-motion view.
+- **Survival reframe.** Opens any pitch. "You're already managing the business form that outlasts the others." Lets the federation lead with strength.
+- **Two moats.** Middle of the pitch. Integration plus enforcement; nobody else does both. This is the answer to "why not just use Loomio and Notion?"
+- **Sectoral density.** Close. "We're not chasing scale. We're trying to make every region worth living in."
+- **Admin debt.** Landed when prospects describe their member co-ops' governance frustrations. "That's admin debt. It compounds."
+- **Decolonizing language.** Pitched as a product feature; concrete and demoable. Show the plain-language defaults next to the legal terms. The contrast does the work.
+- **Channel-first GTM.** Implicit in the structure of the meeting. Two decks, two sales motions: federation deck for them, member-co-op deck for their member co-ops. Different products from a sales-motion view.
 
 ## What to NOT say
 
-- "Help me drive adoption" — drive adoption is on the avoid list.
-- "Empower your members" — empowerment is overused, condescending. Co-op members already have power.
-- "Scale your federation" — scale up is on the avoid list. Sectoral density and scale out are the right frames.
-- "Best-in-class governance" — best-in-class is on the avoid list.
-- "Compliance-as-code" — too SaaS-brained. Use *operationalizing the bylaws*.
-- "Stakeholder" in NA contexts — workable in Europe, suspect in North America.
+- "Help me drive adoption." Drive adoption is on the avoid list.
+- "Empower your members." Empowerment is overused, condescending. Co-op members already have power.
+- "Scale your federation." Scale up is on the avoid list. Sectoral density and scale out are the right frames.
+- "Best-in-class governance." Best-in-class is on the avoid list.
+- "Compliance-as-code." Too SaaS-brained. Use *operationalizing the bylaws*.
+- "Stakeholder" in NA contexts. Workable in Europe, suspect in North America.
 
 ## The two-deck principle
 

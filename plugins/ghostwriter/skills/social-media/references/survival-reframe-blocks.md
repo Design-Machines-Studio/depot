@@ -1,8 +1,10 @@
-# Cornerstone Blocks — The Survival Reframe
+# Cornerstone Blocks: The Survival Reframe
 
 Cornerstone content blocks for the survival statistics. **Adapt, don't drop in.** Each draft demonstrates the register. The actual post will paraphrase based on the moment, the link, and the conversation it's joining.
 
-The headline statistics and the inversion ("rescue → strength") stay constant. Everything else flexes.
+The headline statistics and the inversion (rescue framing to strength framing) stay constant. Everything else flexes.
+
+The canonical phrasing is **"the data inverts the frame"** — use it consistently across files. Drift between files reads as the AI-tell pattern the voice avoid list calls out.
 
 ## The headline statistics (always lead with these)
 
@@ -12,11 +14,11 @@ The headline statistics and the inversion ("rescue → strength") stay constant.
 
 ## LinkedIn long-form (~150-300 words)
 
-Worker co-ops in the UK survive five years at a 76% clip. Conventional new companies survive at about 42%. France and Italy show similar gaps.
+Worker co-ops in the UK survive five years 76% of the time. Conventional new companies survive at about 42%. France and Italy show similar gaps.
 
 I think about that gap a lot. Every governance vendor I've ever met pitches co-ops as a fragile thing that needs rescuing. Better tooling. Better process. A platform that finally makes the math work. The pitch assumes the co-op model is the problem.
 
-The data inverts the pitch. The model isn't fragile. It outlasts the thing it's compared against.
+The data inverts the frame. The model isn't fragile. It outlasts the thing it's compared against.
 
 What founders watching their startup fail rate are actually buying when they look at workplace democracy isn't a values upgrade. It's a survival upgrade. The values come along for the ride.
 
@@ -30,7 +32,7 @@ The work isn't to defend the co-op model. The work is to point at the data and l
 
 Worker co-ops in the UK survive 5 years at 76%. Conventional companies: ~42%. France and Italy show the same gap.
 
-Every governance vendor pitches co-ops as fragile. The data inverts the pitch. The model isn't the problem. It's the thing that outlasts the thing it's compared against.
+Every governance vendor pitches co-ops as fragile. The data inverts the frame. The model isn't the problem. It outlasts the thing it's compared against.
 
 ## Mastodon with content warning (~500 chars)
 

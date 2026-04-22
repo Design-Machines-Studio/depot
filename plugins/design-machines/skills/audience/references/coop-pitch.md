@@ -9,11 +9,11 @@ The emotional outcome to pitch: *"I own where I work, and my ownership feels rea
 What that looks like:
 
 - Logs in Tuesday morning, sees three decisions pending, one is theirs to vote on. Votes in under a minute.
-- Knows what their share is worth without asking the treasurer.
-- Knows when the AGM is, what's on the agenda, and what their role is. Not panicked the week before.
-- Reads the minutes of last month's board meeting in five minutes.
-- Brings a new hire in Tuesday afternoon and walks them through onboarding without printing anything.
-- Feels democracy is ambient, not an obligation.
+- Knows what their share is worth. Doesn't have to ask the treasurer.
+- Knows when the AGM is. Knows what's on the agenda. Knows their role. Not panicked the week before.
+- Reads last month's board minutes in five minutes.
+- Walks a new hire through onboarding on a Tuesday afternoon. Doesn't print anything.
+- Democracy feels ambient, not like an obligation.
 - Is not the person everyone else asks.
 
 This is the emotional register the pitch lives in. Not feature lists. Not ROI math. A Tuesday morning that feels different.
