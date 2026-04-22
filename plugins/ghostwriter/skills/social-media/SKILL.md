@@ -184,3 +184,13 @@ Account verification: add `rel="me"` link on your website pointing to your Masto
 For detailed media specs, suppression triggers, and extended platform data, read: `${CLAUDE_SKILL_DIR}/references/platform-specs.md`
 
 For systems-informed propaganda strategy, narrative insurgency principles, and content topic guidance, read: `${CLAUDE_SKILL_DIR}/references/propaganda-strategy.md`
+
+## Cornerstone Blocks
+
+Three reference files hold cornerstone content blocks (LinkedIn long-form / Bluesky compressed / Mastodon w/ CW / Instagram carousel) for the most-reused DM themes. Adapt, don't drop in. Load when drafting any post on the matching theme.
+
+- `${CLAUDE_SKILL_DIR}/references/survival-reframe-blocks.md`: cornerstone blocks for the survival statistics (UK 76%/42%, France 80–90%/66%, Italy 87%/48%) and the inversion framing (the data inverts the frame).
+- `${CLAUDE_SKILL_DIR}/references/enforcement-angle-blocks.md`: cornerstone blocks for "bylaws become operational" with concrete BC Co-op Act enforcement examples (special resolutions, AGM deadlines, director-change filings, blocks in consent decision-making).
+- `${CLAUDE_SKILL_DIR}/references/plain-language-blocks.md`: cornerstone blocks for the decolonizing-governance-language move per Chris Galloway's framing (legal terms stay in bylaws and statutory filings; member-facing surfaces use plain language).
+
+The blocks are register exemplars, not drop-in templates. Real posts paraphrase based on the moment, the conversation joined, and the audience.

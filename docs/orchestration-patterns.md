@@ -267,6 +267,32 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 ---
 
+## Pattern 6: Soft Cross-Skill Companions
+
+Skills cross-reference each other in their SKILL.md text without declaring a hard `pluginDependencies` constraint. Loading happens implicitly when Claude reads the skill body and follows a path pointer to a sibling reference; nothing forces the sibling to be installed.
+
+This pattern is appropriate when:
+
+- The cross-reference enriches behavior but the source skill remains useful without it.
+- The pointed-at file is documentation a reader can fall back to reading manually.
+- Hard `pluginDependencies` would over-constrain installation for users who do not need the enrichment.
+
+When to upgrade to a hard dependency:
+
+- The source skill makes assertions that depend on the sibling existing (e.g., "the canonical glossary lives at `plugins/council/skills/governance/references/plain-language-glossary.md`" assumes council is installed).
+- The user-experience drop is severe without the sibling (broken cross-reference looks like a bug).
+- Multiple skills point at the same sibling, so a missing sibling cascades.
+
+**Examples:**
+
+- `plugins/design-machines/skills/strategy/SKILL.md` references `plugins/council/skills/governance/references/plain-language-glossary.md` as a "source of truth." This is a hard dependency: design-machines now declares `pluginDependencies: { "council": ">=1.9.0" }` in its plugin.json.
+- `plugins/ghostwriter/skills/voice/SKILL.md` references `plugins/design-machines/skills/audience/references/language-card.md` from the Audience Awareness section. Voice still functions without audience awareness, just less well; ghostwriter declares `optionalPluginDependencies: { "design-machines": ">=1.5.0" }` to express the soft expectation.
+- `plugins/design-machines/skills/audience/SKILL.md` lists `council:governance`, `council:decolonial-language`, `ghostwriter:voice`, and `ghostwriter:social-media` as Companion Skills. These pointers help Claude assemble the right context window when audience-related work begins; none of them are strict requirements.
+
+**Validation:** `./tools/check-dependencies.sh --graph` reflects only declared `pluginDependencies` and `optionalPluginDependencies`. Soft cross-skill pointers do not appear in the graph by design. If you want a soft pointer to be visible to the validator, upgrade it to an `optionalPluginDependencies` entry.
+
+---
+
 ## Choosing a Pattern
 
 | Situation | Pattern |
@@ -277,6 +303,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 | Combination: workflow with parallel agents AND persistent tracking | Use all three (see dm-review, which combines dispatch + memory) |
 | Autonomous multi-phase workflow combining all three patterns with review-fix loops | Pipeline Orchestration |
 | Task benefits from capabilities of an external AI model (search grounding, large context, code execution) | CLI-Mediated Model Delegation |
+| Skills cross-reference each other in body text without hard install requirements | Soft Cross-Skill Companions |
 
 ---
 

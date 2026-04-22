@@ -1,9 +1,12 @@
 {
   "name": "ghostwriter",
   "description": "Travis Gertz's personal writing voice, editorial style engine, and social media publishing intelligence",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "author": {
     "name": "Design Machines"
+  },
+  "optionalPluginDependencies": {
+    "design-machines": ">=1.5.0"
   },
   "capabilities": {
     "skills": [

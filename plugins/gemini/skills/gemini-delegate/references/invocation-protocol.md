@@ -2,6 +2,50 @@
 
 Complete reference for invoking Gemini CLI from Claude Code via the Bash tool.
 
+## Fallback chain
+
+The Gemini CLI does not auto-fall-back when a model returns HTTP 429. Earlier versions of this document claimed `pro → flash → flash-lite → skip` happens automatically; it does not. On 2026-04-22 Pro was rate-limited across 10 internal retries and exited with an error, while a manual rerun with `-m flash` succeeded in 23 seconds.
+
+The fix is `references/gemini-wrapper.sh`, a small bash wrapper that walks the fallback chain in real life.
+
+**Why it exists.** Replaces aspirational documentation with a working script. Captures stderr from each invocation, matches it against anchored rate-limit patterns (`\b429\b`, `exhausted your capacity`, `\bquota\b (exceeded|limit|exhaust)`, `\brate limit\b`, `\btoo many requests\b`), and only retries on the next model when the failure looks like a quota issue. Non-quota failures (auth, malformed prompt, network) abort and surface the original exit code. Word boundaries on `429` and contextual punctuation around `quota`/`rate limit` prevent the wrapper from silently downgrading the model when the words appear coincidentally in non-error stderr output.
+
+**How to invoke.**
+
+```bash
+# Direct invocation (starts at pro, walks down on 429)
+bash plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh \
+  -p "your prompt" --output-format json --raw-output
+
+# Start at a specific model and walk down from there
+bash plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh \
+  -m flash -p "your prompt" --output-format json --raw-output
+
+# Source it and call the function
+source plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh
+gemini_with_fallback -p "your prompt" --output-format json --raw-output
+```
+
+The wrapper passes every argument other than `-m <model>` through to the `gemini` CLI verbatim, so existing flag conventions (`--output-format json`, `--raw-output`, `-p`, heredoc piping) keep working.
+
+**Dependency.** The wrapper bounds run time with `gtimeout` from coreutils. Install once with `brew install coreutils`. If `gtimeout` is missing the wrapper exits 127 with a clear message.
+
+**429 detection.** A failure counts as a rate-limit case when the underlying `gemini` exit was non-zero AND stderr matches the rate-limit regex above. Anything else is treated as a real failure and surfaced. This avoids burning through the chain on bugs that look nothing like quota errors.
+
+**Exit behavior.** When all three models in the chain are rate-limited, the wrapper exits 1 with the message `all models in fallback chain exhausted; try again later`. It does NOT return success silently. Callers can branch on the exit code and decide whether to skip the Gemini-dependent step or surface the failure.
+
+**Environment variables.**
+
+- `GEMINI_TIMEOUT_S` (default `60`): per-attempt timeout in seconds.
+- `GEMINI_YOLO` (default `1`): pass `--yolo` to gemini for automated flows. Set to `0` for sensitive contexts where you want gemini to pause for tool-use confirmation. The wrapper still runs; only the `--yolo` flag is omitted.
+
+**Security hardening.**
+
+- The wrapper resets `PATH` to a fixed value (`/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`) before invoking dependencies. Caller-controlled `PATH` cannot hijack `gemini`, `gtimeout`, `grep`, `cat`, `rm`, or `mktemp`. The caller's `PATH` is restored on return.
+- Stderr from gemini is filtered through `tr` to strip ANSI escape sequences before forwarding to the user's terminal. This blocks OSC 52 clipboard hijack, OSC 8 phishing hyperlinks, and cursor manipulation that could land via crafted prompts reflected in gemini's error output.
+- Temp files are created with 0600 permissions and cleaned up on every return path. When the wrapper runs as a script (not sourced), an `EXIT INT TERM` trap removes any leftover temp files. Sourced mode does not register the trap (it would fire on the caller's shell exit) and instead relies on per-iteration explicit cleanup.
+- Sourced mode does not export `PATH` to the caller's shell; the function saves and restores `PATH` internally. Internal constants are prefixed `__GEMINI_WRAPPER_` to avoid namespace collisions.
+
 ## CLI Syntax
 
 ```
@@ -18,7 +62,7 @@ gemini -p "<prompt>" -m <model> --output-format json --raw-output
 | `--raw-output` | Suppress interactive formatting | Recommended |
 | `--yolo` | Bypass all interactive confirmation prompts | Recommended for automated flows |
 
-**The `--yolo` flag** is critical for automated pipelines. Without it, Gemini may pause for tool-use confirmation (e.g., before executing `google_web_search`), breaking the automation loop. Always append `--yolo` when invoking from a subagent or pipeline.
+**The `--yolo` flag** is critical for automated pipelines. Without it, Gemini may pause for tool-use confirmation (e.g., before executing `google_web_search`), breaking the automation loop. Always append `--yolo` when invoking from a subagent or pipeline. When using `gemini-wrapper.sh`, `--yolo` is on by default; set `GEMINI_YOLO=0` to opt out for sensitive contexts where you want the confirmation prompts.
 
 **Always wrap with `timeout`** to prevent hanging:
 
@@ -147,7 +191,7 @@ if echo "$RESULT" | grep -q "exhausted your capacity"; then
 fi
 ```
 
-**Action:** Fall back through the model chain: `pro` → `flash` → `flash-lite`. If all exhausted, skip gracefully. Log: "Gemini rate-limited on [model]. Falling back to [fallback]." or "All Gemini models rate-limited. Skipping."
+**Action:** Use `references/gemini-wrapper.sh` to walk the fallback chain (`pro` → `flash` → `flash-lite`). The CLI does not auto-fall-back; the wrapper does. See the **Fallback chain** section at the top of this file for invocation, dependencies, and exit semantics. If all three models are exhausted the wrapper exits 1; surface that to the caller rather than skipping silently.
 
 ### 3. Empty Response
 
