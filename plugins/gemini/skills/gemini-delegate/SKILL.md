@@ -25,7 +25,7 @@ Invoke Gemini CLI as a subagent for tasks where Gemini has a demonstrable advant
 
 ## Invocation Protocol
 
-Load the full protocol from `${CLAUDE_SKILL_DIR}/references/invocation-protocol.md`. It covers CLI syntax, input methods (direct `-p` for short prompts, heredoc for large inputs), JSON response parsing (`{response, stats}`), error response format, the four failure modes (timeout, empty, malformed, rate limit), and shell safety rules.
+Load the full protocol from `${CLAUDE_SKILL_DIR}/references/invocation-protocol.md`. It covers CLI syntax, input methods (direct `-p` for short prompts, heredoc for large inputs), JSON response parsing (`{response, stats}`), error response format, the four failure modes (timeout, empty, malformed, rate limit), the **Fallback chain** wrapper (`references/gemini-wrapper.sh`) that walks `pro → flash → flash-lite` on real 429s (the CLI does not auto-fall-back), and shell safety rules.
 
 Key rules: always wrap with `timeout`, always use `--yolo` for automated flows, always use heredoc with quoted delimiter (`<<'GEMINI_INPUT'`) for content containing code or user input. All failures are graceful skips.
 
