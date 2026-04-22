@@ -19,6 +19,16 @@ Governance is the part of running a co-op that nobody wants to do. It's boring. 
 
 **For** small worker cooperatives struggling with governance, **Assembly** is a bespoke operations system **that** makes running a co-op simple and even enjoyable. **Unlike** spreadsheets, generic business tools, or expensive enterprise solutions, **I** build purpose-built systems informed by years of actually running a worker co-op.
 
+### The survival reframe
+
+Worker co-ops outlast conventional businesses. UK: 76% five-year survival vs ~42% for all new companies (Co-operatives UK). France: 80–90% three-year worker co-op survival vs ~66% conventional (CG Scop / Review of Industrial Organisation 2015). Italy: 87% three-year survival for worker-buyout co-ops vs 48% all Italian businesses (CECOP/CICOPA). The standard pitch to co-ops assumes fragility; the data inverts the frame. Assembly is infrastructure that compounds an existing competitive advantage, not a life-support system. Full citations live at `references/survival-reframe.md`.
+
+### The two moats
+
+Design Machines' moat is two things working together. First, integration across the six governance fixtures — decisions, meetings, members, equity, compliance, documentation in one system. No competitor does all six. Second, bylaws stop being paperwork — Assembly enforces statutory requirements as defaults (2/3 quorum on special resolutions, AGM within 15 months of prior, director-change filing within 14 days, block requires mandatory comment, new-member approval follows each co-op's actual bylaws). Every other tool treats bylaws as reference docs.
+
+Landing lines: *"Your bylaws stop being paperwork." · "The rules run the system." · "Governance you can't accidentally break."* Full positioning at `references/two-moats.md`.
+
 ---
 
 ## Product Family
@@ -124,6 +134,10 @@ People who:
 
 Large established co-ops with own systems. Co-ops with no budget and no path to funding. Traditional businesses wanting a website.
 
+### Pain point: admin debt
+
+Admin debt functions like technical debt for governance. Bylaws drift from how the co-op actually works. Equity spreadsheets only one person understands. Decisions get relitigated because nobody can find the last one. The Tuesday-morning member can't act without "asking Sarah." Admin debt sits squarely inside the DM factory/labor/publishing triangle because debt is materialist. Assembly's diagnosis: admin debt is a measurable, fixable thing — the same way you wouldn't run a production system on a spreadsheet, you shouldn't run a co-op on one.
+
 ---
 
 ## Revenue Model
@@ -170,6 +184,8 @@ Active pipeline details (specific clients, meeting dates, status) are stored in 
 3. **Charge from day one.** Validate with revenue, not vanity metrics.
 4. **Build for yourself.** The customer is someone like you.
 5. **Stay small, stay profitable.** Basecamp model, not VC model.
+6. **Sectoral density, not scale.** Design Machines does not chase scale in the VC sense. It builds for sectoral density — more co-ops per region, more co-op-to-co-op trade, more federation infrastructure. Co-op developers fluently distinguish *scale out* (replicate the model in many places) from *scale up* (grow one org huge). DM scales out, never up.
+7. **Decolonize governance language.** Most worker co-op governance terminology was written by lawyers in the 1970s and imported wholesale by software developers. Per Chris Galloway (April 21, 2026), Assembly ships opinionated plain-language defaults — "how we're splitting this year's surplus" instead of "patronage allocation subject to qualified written notice of allocation." Bylaws and statutory filings keep the legal terms; everything members read uses the plain-language version. Source of truth: `plugins/council/skills/governance/references/plain-language-glossary.md`.
 
 ---
 
@@ -195,6 +211,20 @@ Before naming anything: **Can I picture this in a factory, a union hall, or a pr
 
 ## Go-to-Market: The Trojan Horse
 
+### Primary: channel-first via co-op developers, federations, and incubators
+
+Primary audience is co-op developers, federations, and incubators (USFWC, CWCF, DAWI / Democracy at Work Institute, Cooperation Works!, Cooperatives Europe). They recommend Assembly to dozens of member co-ops each. The federation is the channel; the co-ops are the members. Assembly is what their consulting engagement leaves behind.
+
+What this audience cares about: pipeline economics (compressing TA work from months to days), curriculum embedding, client retention, federation-recognized co-branded artifacts, sectoral density. What they fear: software that competes with their consulting revenue, per-seat pricing that punishes adding member co-ops, tools whose politics are illegible. Pitch Assembly as augmenting TA work, not replacing it; pitch federation-tier pricing that gets cheaper-per-co-op; lead with the politics.
+
+Full pitch material lives in the `audience` skill (`plugins/design-machines/skills/audience/references/developer-federation-pitch.md`).
+
+### Also primary: existing worker co-ops directly
+
+The Tuesday-morning member; the small-to-mid co-op (5-30 members) that knows what governance is supposed to feel like and is currently making it work despite their tools, not because of them. Pitch material at `plugins/design-machines/skills/audience/references/coop-pitch.md`.
+
+### Secondary / long-term: designer-developer funnel via Live Wires
+
 Lead with internal operations, not public-facing design.
 
 **Why:**
@@ -210,6 +240,8 @@ Lead with internal operations, not public-facing design.
 - Credit unions as funders AND clients
 - Content: blog, YouTube, resources
 - Speaking: co-op conferences, design conferences
+
+This Live Wires-led funnel is deprioritized for now in favor of the channel-first federation play above. Live Wires stays in the catalog and stays useful as the top-of-funnel for designers who eventually become Assembly clients; it just is not the lead motion any more.
 
 ---
 
@@ -329,3 +361,5 @@ Load specific reference files based on needs:
 | Brand language | `${CLAUDE_SKILL_DIR}/references/brand-language.md` | Naming, copy, marketing |
 | Design system | `${CLAUDE_SKILL_DIR}/references/design-system.md` | Colors, typography, tokens, schemes, product assignments |
 | Pipeline & pilots | `${CLAUDE_SKILL_DIR}/references/pipeline.md` | Client conversations, preparation |
+| Survival reframe | `${CLAUDE_SKILL_DIR}/references/survival-reframe.md` | Citable survival statistics with sources; positioning from strength, not rescue |
+| Two moats | `${CLAUDE_SKILL_DIR}/references/two-moats.md` | Integration + enforcement positioning with concrete BC Act enforcement examples |
