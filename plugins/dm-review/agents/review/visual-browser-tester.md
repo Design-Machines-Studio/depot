@@ -158,7 +158,6 @@ document.documentElement.scrollWidth > document.documentElement.clientWidth
    - Text overflowing containers
    - Elements overlapping
    - Navigation not accessible (hamburger menu visible and functional)
-   - Touch targets too small (below 24x24px)
    - Images not scaling or cropping correctly
 
 ### Phase C: Interactive State Testing

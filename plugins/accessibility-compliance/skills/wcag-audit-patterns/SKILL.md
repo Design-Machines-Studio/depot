@@ -15,7 +15,7 @@ Accessibility compliance follows the same progressive refinement approach as Liv
 1. **Semantic HTML first** — correct elements, heading hierarchy, landmark regions
 2. **Keyboard operability** — tab order, focus management, skip links
 3. **ARIA enhancement** — only when native semantics are insufficient
-4. **Visual compliance** — contrast, motion, spacing, touch targets
+4. **Visual compliance** — contrast, motion, spacing, reflow
 
 If you get Step 1 right, most of the work is done. ARIA is a repair tool, not a construction material.
 
@@ -45,7 +45,7 @@ These are the criteria most commonly failed. Check these first:
 | 2.1.1 | Keyboard | A | All functionality reachable via keyboard |
 | 2.4.3 | Focus Order | A | Tab order matches visual reading order |
 | 2.4.7 | Focus Visible | AA | Visible focus indicator on all interactive elements |
-| 2.5.8 | Target Size (Minimum) | AA | 24x24px minimum (44x44px recommended) |
+| 2.5.8 | Target Size (Minimum) | AA | 24x24px minimum. **Not auto-flagged** -- the SC has real-world exceptions (inline links, grouped targets, spaced targets, browser defaults, essential presentation) that automated checks routinely misfire on. Audit manually when touch-surface scrutiny is warranted. |
 | 3.3.2 | Labels or Instructions | A | Every form input has a visible label |
 | 4.1.2 | Name, Role, Value | A | Custom widgets expose name, role, state to AT |
 
@@ -56,7 +56,7 @@ These are the criteria most commonly failed. Check these first:
 | 2.4.11 | Focus Not Obscured (Minimum) | Focused element not fully hidden by sticky headers/modals |
 | 2.4.13 | Focus Appearance | Focus indicator meets minimum area and contrast |
 | 2.5.7 | Dragging Movements | Single-pointer alternative for drag operations |
-| 2.5.8 | Target Size (Minimum) | 24x24px minimum for pointer targets |
+| 2.5.8 | Target Size (Minimum) | 24x24px minimum for pointer targets. Auto-check removed (Apr 2026) due to WCAG exception complexity; manual audit only. |
 | 3.2.6 | Consistent Help | Help mechanisms in same relative order across pages |
 | 3.3.7 | Redundant Entry | Don't make users re-enter previously provided info |
 | 3.3.8 | Accessible Authentication (Minimum) | No cognitive function tests for login |

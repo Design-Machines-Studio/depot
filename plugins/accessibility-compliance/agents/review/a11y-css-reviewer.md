@@ -1,6 +1,6 @@
 ---
 name: a11y-css-reviewer
-description: Reviews CSS changes for WCAG 2.2 visual accessibility compliance. Use proactively after any CSS modification, color token changes, animation additions, focus style updates, or responsive layout changes. Checks color contrast ratios, focus visibility, reduced motion support, forced-colors compatibility, touch target sizes, text spacing resilience, and reflow at zoom levels. <example>Context: The user modified color tokens.\nuser: "I updated the color scheme for the dashboard"\nassistant: "Let me use the a11y-css-reviewer to verify the new colors meet WCAG AA contrast requirements."\n<commentary>Color changes are the most common source of contrast failures. Every color pair needs verification.</commentary></example> <example>Context: The user added an animation.\nuser: "I added a fade-in animation to the hero section"\nassistant: "I'll run the a11y-css-reviewer to check the animation respects prefers-reduced-motion."\n<commentary>All animations must be wrapped in motion-safe media queries.</commentary></example> <example>Context: The user changed focus styles.\nuser: "I updated the focus ring to match the new brand colors"\nassistant: "Let me verify the focus indicators meet WCAG 2.4.7 and 2.4.13 requirements with the a11y-css-reviewer."\n<commentary>Focus indicators must be visible and meet contrast requirements against adjacent colors.</commentary></example>
+description: Reviews CSS changes for WCAG 2.2 visual accessibility compliance. Use proactively after any CSS modification, color token changes, animation additions, focus style updates, or responsive layout changes. Checks color contrast ratios, focus visibility, reduced motion support, forced-colors compatibility, text spacing resilience, and reflow at zoom levels. <example>Context: The user modified color tokens.\nuser: "I updated the color scheme for the dashboard"\nassistant: "Let me use the a11y-css-reviewer to verify the new colors meet WCAG AA contrast requirements."\n<commentary>Color changes are the most common source of contrast failures. Every color pair needs verification.</commentary></example> <example>Context: The user added an animation.\nuser: "I added a fade-in animation to the hero section"\nassistant: "I'll run the a11y-css-reviewer to check the animation respects prefers-reduced-motion."\n<commentary>All animations must be wrapped in motion-safe media queries.</commentary></example> <example>Context: The user changed focus styles.\nuser: "I updated the focus ring to match the new brand colors"\nassistant: "Let me verify the focus indicators meet WCAG 2.4.7 and 2.4.13 requirements with the a11y-css-reviewer."\n<commentary>Focus indicators must be visible and meet contrast requirements against adjacent colors.</commentary></example>
 ---
 
 # Accessibility CSS Reviewer
@@ -105,25 +105,7 @@ html { scroll-padding-top: 80px; } /* Height of sticky header */
 
 **Live Wires:** The framework handles this globally in `reset.css`. Check that custom CSS doesn't bypass the global override.
 
-### 4. Touch Target Size (WCAG 2.5.8)
-
-Interactive targets must be at least 24x24px (44x44px recommended):
-
-```css
-/* Check small buttons/links */
-.button--small {
-  padding: 4px 8px;           /* Is the total target area ≥ 24x24? */
-  min-height: 24px;           /* Ensure minimum */
-  min-width: 24px;
-}
-
-/* Check icon buttons */
-.icon-button {
-  width: 20px; height: 20px;  /* VIOLATION: Below 24px minimum */
-}
-```
-
-### 5. Reflow and Zoom (WCAG 1.4.10, 1.4.4)
+### 4. Reflow and Zoom (WCAG 1.4.10, 1.4.4)
 
 **Content must work at 320px viewport (400% zoom of 1280px):**
 
@@ -137,7 +119,7 @@ overflow-x: hidden;                    /* May clip content at narrow widths */
 white-space: nowrap;                   /* Prevents text wrapping */
 ```
 
-### 6. Text Spacing (WCAG 1.4.12)
+### 5. Text Spacing (WCAG 1.4.12)
 
 Content must not be clipped when these overrides are applied:
 - Line height: 1.5x font size
@@ -159,7 +141,7 @@ Content must not be clipped when these overrides are applied:
 }
 ```
 
-### 7. Forced Colors Mode
+### 6. Forced Colors Mode
 
 UI should remain usable in Windows High Contrast / forced-colors mode:
 
@@ -176,7 +158,7 @@ UI should remain usable in Windows High Contrast / forced-colors mode:
 }
 ```
 
-### 8. Content on Hover/Focus (WCAG 1.4.13)
+### 7. Content on Hover/Focus (WCAG 1.4.13)
 
 Tooltip and hover content must be:
 - **Dismissible** (Escape key)
@@ -194,7 +176,7 @@ Tooltip and hover content must be:
 ## Severity Levels
 
 - **Critical** — `outline: none` without replacement, below-minimum contrast on primary text
-- **Serious** — animations without motion preference check, touch targets below 24px
+- **Serious** — animations without motion preference check, reflow broken at 320px
 - **Moderate** — low contrast on secondary text, fixed heights that may clip
 - **Minor** — missing forced-colors fallback, suboptimal but functional
 

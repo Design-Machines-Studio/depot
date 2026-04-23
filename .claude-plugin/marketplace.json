@@ -244,7 +244,7 @@
     {
       "name": "accessibility-compliance",
       "source": "./plugins/accessibility-compliance",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -269,7 +269,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.24.0",
+      "version": "1.25.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

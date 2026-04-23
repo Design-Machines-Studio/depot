@@ -39,8 +39,10 @@ Launch the a11y-css-reviewer agent to check:
 - Color contrast ratios (4.5:1 text, 3:1 large text)
 - Focus indicator visibility
 - Reduced motion support (prefers-reduced-motion)
-- Touch target sizes (44x44px minimum)
 - Text spacing resilience
+- Reflow at 320px viewport (400% zoom)
+
+Touch target size (WCAG 2.5.8) is documented for manual audit but not automatically flagged -- the SC has real-world exceptions (inline links, grouped targets, browser defaults, essential presentation) that automated checks misfire on. Audit manually when touch surfaces are a known concern.
 
 **For live URLs (if browser tools available):**
 
