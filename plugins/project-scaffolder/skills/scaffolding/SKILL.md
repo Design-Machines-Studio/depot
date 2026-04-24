@@ -56,7 +56,7 @@ When the user asks to scaffold a project, follow these steps:
 ### Step 1: Gather Requirements
 
 Ask the user:
-1. **Project type** — one of: `go-templ-datastar`, `go-library`, `css-framework`, `craft-cms`
+1. **Project type** — one of: `go-templ-datastar`, `go-library`, `css-framework`, `craft-cms`. If the project doesn't fit any of these, use a generic starter from `references/claude-md-templates/` (see "Generic CLAUDE.md Starters" below) and skip to Step 5.
 2. **Project name** — used for display in CLAUDE.md (e.g., "Assembly", "Dashboard", "Live Wires")
 3. **Enable session-start-gate?** — opt-in, only for projects using the planner workflow
 4. **Any additional agents?** — project-specific agents beyond the defaults
@@ -123,6 +123,17 @@ Tell the user:
 - Add any project-specific agents to `.claude/agents/`
 - The `post-edit-context.sh` hook can be extended with project-specific file type → agent mappings
 
+## Generic CLAUDE.md Starters
+
+For projects that don't match one of the four project-type templates above, use a starter from `${CLAUDE_SKILL_DIR}/references/claude-md-templates/`. These files sit in a sub-directory (not flat under `references/`) to signal "choose one" and to reserve room for additional stack-generic starters (python, node, docs-site) without polluting the top-level reference namespace.
+
+| Template | Use when |
+|----------|----------|
+| [${CLAUDE_SKILL_DIR}/references/claude-md-templates/minimal.md](${CLAUDE_SKILL_DIR}/references/claude-md-templates/minimal.md) | No DM-stack assumptions. Any project, any stack. |
+| [${CLAUDE_SKILL_DIR}/references/claude-md-templates/dm-standard.md](${CLAUDE_SKILL_DIR}/references/claude-md-templates/dm-standard.md) | DM project that doesn't match one of the four project-type templates. |
+
+Copy the chosen template to the target project's `CLAUDE.md` and edit in place. No `{{PLACEHOLDER}}` substitution required — these starters ship with concrete content, unlike the project-type templates in `project-configs.md` which do use placeholder substitution. `minimal.md`'s header comment is a license-mandated attribution block; retain it verbatim when the template is redistributed. `dm-standard.md`'s header is informational and may be stripped by the consumer.
+
 ## Parameterization Convention
 
 All templates use double-brace placeholders:
@@ -174,3 +185,5 @@ Official and third-party Claude Code plugins that complement this skill:
 | [${CLAUDE_SKILL_DIR}/references/hooks.md](${CLAUDE_SKILL_DIR}/references/hooks.md) | All 5 hook script templates with full source and customization notes |
 | [${CLAUDE_SKILL_DIR}/references/agents.md](${CLAUDE_SKILL_DIR}/references/agents.md) | Agent definition templates (go-builder, css-reviewer, doc-sync, security-auditor) |
 | [${CLAUDE_SKILL_DIR}/references/project-configs.md](${CLAUDE_SKILL_DIR}/references/project-configs.md) | settings.json templates, CLAUDE.md routing doc templates, tasks file starters — organized by project type |
+| [${CLAUDE_SKILL_DIR}/references/claude-md-templates/minimal.md](${CLAUDE_SKILL_DIR}/references/claude-md-templates/minimal.md) | Drop-in CLAUDE.md starter for any stack — Karpathy's four principles, verbatim, with MIT attribution |
+| [${CLAUDE_SKILL_DIR}/references/claude-md-templates/dm-standard.md](${CLAUDE_SKILL_DIR}/references/claude-md-templates/dm-standard.md) | Drop-in CLAUDE.md starter for DM projects that don't match a project-type template — paraphrased principles plus DM conventions |

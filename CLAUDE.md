@@ -212,7 +212,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **live-wires** | CSS framework with layout primitives and baseline rhythm |
 | **ghostwriter** | Personal writing voice, editorial style engine, and voice editing |
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
-| **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md |
+| **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters) |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
 | **dm-review** | Code review orchestrator with parallel agents, visual browser testing, UX design review, visual design quality review, and Live Wires CSS compliance across all DM stacks |
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
@@ -278,6 +278,7 @@ These failure patterns have been observed in production pipeline runs. Each has 
 11. **Dev-mode module loader desync:** New JS module ships without updating the dev-mode module map, loads 404 in browser. Hardening: Step 0c Module-Loader Pre-Flight in `execution-orchestrator.md`.
 12. **P3 deferral drift:** P3-only returning CLEAN silently compounds tech debt. Hardening: zero-deferral policy as default in `dm-review/skills/review/references/severity-mapping.md` and command files; `--allow-defer-p3` opt-in requires written justification + tracking destination.
 13. **Brittle line-number references:** Prompt references to `file:line` become stale as interstitial chunks edit files. Hardening: Phase 3e Stable Anchors Audit in `promptcraft SKILL.md` (prefer function/templ names over line numbers).
+14. **Silent mid-execution ambiguity:** A subagent encounters a chunk prompt that admits multiple reasonable interpretations, picks one silently, and ships. The brainstorming skill catches pre-plan ambiguity and plan-adversary catches structural ambiguity, but neither covers implementation-time micro-decisions. Hardening (pipeline v1.10.0): Ambiguity Protocol block in `promptcraft/references/prompt-template.md`; Ambiguity Handling section in `execution-orchestrator.md` (autonomous-mode commit trailers `Chose:` / `Rejected:` + `ambiguity_resolved:` receipt flag); Ambiguity surfacing perspective in `plan-adversary.md` Sprint Contract Negotiation. Three-layer defence with "cheapest catch first" wording aligned across all three locations.
 
 See `docs/post-mortems/` for detailed root cause analysis.
 

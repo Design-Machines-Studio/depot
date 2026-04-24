@@ -333,6 +333,15 @@ The execution-orchestrator verifies per-chunk, but `curl` + `grep` + HTML regex 
 
 If the orchestrator ran in `executionMode: curl_fallback`, assume ALL of the above were unverified. The caller (you) must verify them in Phase 7.
 
+### Ambiguity Protocol Check (pipeline v1.10.0+)
+
+The three-layer ambiguity defence added in v1.10.0 leaves an audit trail. Inspect each chunk's commit and receipt:
+
+- **Commit trailers** -- each chunk commit may contain two trailers: `Chose: <interpretation>` and `Rejected: <alt-1>; <alt-2>`. Extract with `git log <featureBranch> --format=%B | git interpret-trailers --parse --only-trailers` or grep. Trailers are emitted only when a subagent had to pick between defensible interpretations in autonomous mode.
+- **Receipt flag** -- chunk receipts may include `ambiguity_resolved: true` with a one-line summary. Cross-check against the commit trailers.
+- **If trailers or the flag are present,** review the chosen path. If the chosen interpretation conflicts with what the user actually wanted, this is a Phase 7 gap -- fix inline on the feature branch, then re-run `/dm-review-quick` on the affected chunk.
+- **If neither signal is present,** either the chunks were unambiguous OR the subagents silently picked. The plan-adversary's Sprint Contract Negotiation should have caught the latter at Phase 5; if you suspect it didn't, sample one or two chunks' rendered output against the original prompt before approving merge.
+
 ### Caller Verification Checklist (mandatory when ANY UI/Integration chunk was executed, OR executionMode was `curl_fallback`)
 
 Complete ALL THREE checks. Record evidence in the delivery report.

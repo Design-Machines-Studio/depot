@@ -135,15 +135,20 @@ Beyond finding problems, you MUST propose improvements. For each chunk, evaluate
 
 **Existing acceptance criteria:** [list from prompt]
 
-**Proposed additions:**
+**Proposed acceptance criteria (evaluator-checkable):**
 - [Criterion the promptcraft missed -- e.g., "error state renders when API returns 500"]
 - [Edge case -- e.g., "empty list shows empty state, not blank page"]
 - [Browser-verifiable criterion -- e.g., "page loads without console errors at /governance/proposals"]
+
+**Proposed prompt-structure additions (pre-execution):**
+- [Ambiguity surface -- e.g., "'Make the members page faster' allows at least three interpretations (server query, perceived load, bundle size). The prompt MUST name them and pre-select one with a stated rationale, or hand the decision back to the caller."]
 
 **Chunk classification recommendation:** UI / Logic / Trivial / Integration
 ```
 
 The pipeline will merge your proposed criteria into the chunk prompts before execution. This ensures the evaluator has concrete, verifiable success criteria -- not just "works correctly."
+
+**Ambiguity surfacing:** Before a chunk reaches the execution-orchestrator, inspect its Task and Acceptance Criteria for phrases that allow multiple reasonable interpretations (comparative adjectives without a baseline, verbs like "improve/fix/clean up" without a specific failure, noun phrases like "the right way" or "better UX"). If the prompt would force a subagent to pick silently between defensible paths, emit a finding with perspective `Completeness` and action verb `INSERT` that adds an explicit interpretation block to the chunk. This is the cheapest of three layers — the sibling layers are `promptcraft/references/prompt-template.md` Ambiguity Protocol (shipped into every chunk prompt) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode runtime fallback). The subagent's inline protocol is a last-resort safety net; catching ambiguity here is cheaper. Keep wording aligned across all three layers.
 
 **Key principle from Anthropic's harness research:** Generators and evaluators should negotiate success criteria before each sprint. Vague criteria produce vague results. Specific, testable criteria drive specific, testable implementations.
 

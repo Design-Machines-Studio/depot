@@ -221,11 +221,11 @@
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "version": "1.7.0",
+      "version": "1.8.0",
       "author": {
         "name": "Design Machines"
       },
-      "description": "Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates",
+      "description": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters)",
       "capabilities_summary": {
         "skills": 1,
         "agents": 0,
@@ -236,6 +236,7 @@
           "hooks",
           "settings",
           "project-setup",
+          "claude-md-starter",
           "nats",
           "module-interface"
         ]
@@ -342,12 +343,12 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, and worktree-based execution with review-fix loops",
+      "description": "Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review (ambiguity surfacing), and worktree-based execution with review-fix loops and surgical-change discipline",
       "capabilities_summary": {
         "skills": 3,
         "agents": 2,

@@ -61,7 +61,7 @@ Common questions mapped to the right skill:
 | pipeline | promptcraft | prompts, chunking, orchestration, dependency-ordering, manifest | -- | "generate execution prompts", "create prompts from plan", "break plan into chunks", "generate manifest" |
 | project-manager | lt10 | project-management, estimation, scoping, pricing, methodology | -- | "how to estimate", "scope creep", "burn rate", "ROM estimate", "when to use agile", ... |
 | project-manager | planner | sprint-planning, notion, task-management, userback, velocity | notion, ai-memory, userback | "what should I work on", "sprint status", "create a task", "what's in this sprint", "check todos", ... |
-| project-scaffolder | scaffolding | scaffolding, claude-code, hooks, settings, project-setup | -- | "set up new project", "configure Claude Code hooks", "create CLAUDE.md", "scaffold .claude directory", "commit-push reminder hook", ... |
+| project-scaffolder | scaffolding | scaffolding, claude-code, hooks, settings, project-setup, claude-md-starter | -- | "set up new project", "configure Claude Code hooks", "create CLAUDE.md", "add CLAUDE.md to existing project", "CLAUDE.md starter template", ... |
 | the-local | element-branding | element-web, branding, css, theming, matrix | -- | "Element Web appearance", "auth page styling", "logo replacement", "welcome page", "custom CSS not applying", ... |
 | the-local | server-ops | server-ops, docker, matrix, digitalocean, infrastructure | -- | "SSH into server", "docker compose restart", "create Matrix account", "check server logs", "backup database", ... |
 | the-local | synapse-config | synapse, matrix, configuration, email, jinja2 | -- | "homeserver.yaml", "registration token", "email template", "SMTP setup", "Resend config", ... |
@@ -138,7 +138,7 @@ Common questions mapped to the right skill:
 | pipeline | /pipeline-assess | [area to assess or feature context] | Pre-plan assessment of current codebase and UX state |
 | pipeline | /pipeline-prompts | [path to plan file] | Generate execution prompts from an existing plan with overlap analysis |
 | pipeline | /pipeline-run | [path to manifest.json or prompts directory] | Execute generated prompts in worktrees with review-fix loops |
-| pipeline | /pipeline-fix | [path or URL to findings document] | Fix-pass flavor of the pipeline: consumes a review-findings document and runs the full pipeline with fix-pass pre-population (existing branch, mandatory baselines, scoped brainstorming, findings-indexed plan) |
+| pipeline | /pipeline-fix | [path or URL to findings document] | Fix-pass pipeline: consumes numbered findings, reuses the current branch, enforces before/after baselines |
 | project-manager | /sprint-plan | [skip phases: 'skip content', 'skip mail', 'just review and load'] | Run the full sprint planning workflow -- review, triage, calendar, content, and loading |
 | the-local | /create-user | [username] | Create a new Matrix user account on The Local |
 | the-local | /deploy | [service|file] | Deploy changed files to The Local production server |

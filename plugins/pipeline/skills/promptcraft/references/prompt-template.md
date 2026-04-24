@@ -73,11 +73,24 @@ The rendered result must match these visual treatments. If you cannot determine 
 
 Visual criteria describe the IMPRESSION, not the implementation. "Uses button--outline-danger" is structural. "Block button is visually subordinate to the Accept button" is visual. Include both types.
 
+## Ambiguity Protocol
+
+This block is one of three layers in the pipeline's ambiguity defence. Sibling layers: `plan-adversary.md` Sprint Contract Negotiation (catches structural ambiguity at prompt-review time, cheapest) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode commit-trailer fallback). Keep the wording here in sync with those two.
+
+If the Task or Acceptance Criteria allow more than one reasonable interpretation, do not pick silently.
+
+- Name the interpretations in a single short list before you touch code. Example: "Task says 'make the members page faster' -- this could mean (a) reduce server render time, (b) reduce perceived load time via progressive rendering, (c) reduce bundle size. Proceeding with (a) because the assessment flagged a slow query; alternatives rejected for lack of evidence."
+- When running under the execution-orchestrator's autonomous mode, record the chosen interpretation and rejected alternatives as two separate git-style trailer lines in the chunk's commit message: one `Chose: <interpretation>` line and one `Rejected: <alt-1>; <alt-2>` line. Multiple rejected alternatives are `; `-separated on the single `Rejected:` line. Follow the canonical `git interpret-trailers` shape so downstream tools can parse them.
+- Flag the decision in the chunk receipt (`ambiguity_resolved: true` with a one-line summary) so the adversarial reviewer on the next round can evaluate whether the right path was taken.
+- Fabricating certainty is a P1 failure. Surfacing ambiguity is never penalized.
+
 ## Constraints
 
 - Only modify the files listed above
 - Follow existing patterns -- do not introduce new abstractions
 - Do not refactor surrounding code unless required for the task
+- Only lines that directly serve the Acceptance Criteria should change. If you notice unrelated issues in files you are editing, list them at the end of your response as "Noted, not fixed" -- do not include them in the diff.
+- Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing for this chunk.
 - [Any additional constraints specific to this chunk]
 
 ## Research Context
@@ -102,3 +115,5 @@ Visual criteria describe the IMPRESSION, not the implementation. "Uses button--o
 7. **Visual criteria are separate from structural criteria.** Structural: "button uses `.button--outline-danger` class." Visual: "button appears lighter and smaller than the primary action buttons." Both are needed for UI work. A subagent can satisfy the structural criterion (correct class) while failing the visual criterion (the class renders differently than expected in context).
 
 8. **Reference the approved design.** When a brainstorm produced mockups, the prompt must reference them. The subagent can read HTML source even if it can't view rendered images. Include the path and the key visual decisions extracted from it.
+
+9. **The Ambiguity Protocol and the last two Constraints bullets are invariant.** Copy them verbatim into every prompt. They close the seam between plan-adversary (structural ambiguity) and brainstorming (pre-plan ambiguity) by addressing implementation-time micro-decisions and drive-by refactors. Do not rewrite or shorten them per chunk.
