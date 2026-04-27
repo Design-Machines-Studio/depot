@@ -280,7 +280,7 @@ For each selected agent, check the Phase 3.75 routing decision first:
 
 Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime — the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
 
-**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, treat it the same as a Claude agent that failed to respond. Per `guardrails.md`, RUNNER FAILURE on a core-listed agent (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) triggers REVIEW INCOMPLETE — do NOT mark the run clean.
+**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, treat it the same as a Claude agent that failed to respond. `guardrails.md` defines the core-agent list and the REVIEW INCOMPLETE trigger — do NOT mark the run clean.
 
 **Example prompt structure for each agent:**
 

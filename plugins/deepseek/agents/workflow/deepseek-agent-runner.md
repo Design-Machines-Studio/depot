@@ -55,10 +55,11 @@ esac
 }
 
 # Validate target_agent_path:
-#  - resolve to absolute path
+#  - resolve to physical absolute path (pwd -P follows symlinks, blocking
+#    a symlinked directory from sneaking past the depot prefix check)
 #  - assert prefix is depot's plugins/ directory
 #  - assert .md extension
-RESOLVED="$(cd "$(dirname "$target_agent_path")" 2>/dev/null && pwd)/$(basename "$target_agent_path")"
+RESOLVED="$(cd "$(dirname "$target_agent_path")" 2>/dev/null && pwd -P)/$(basename "$target_agent_path")"
 case "$RESOLVED" in
   "$DEPOT_ROOT/plugins/"*) ;;
   *) echo "ERROR: target_agent_path outside depot plugins/: $target_agent_path" >&2; exit 2 ;;
@@ -68,29 +69,41 @@ esac
   exit 2
 }
 
-# Read the target agent body (strip frontmatter)
+# Read the target agent body (strip frontmatter). Requires both opening and
+# closing --- delimiters. Empty body would mean malformed YAML and an empty
+# system prompt, which would silently degrade the review.
 TARGET_BODY=$(awk 'BEGIN{fm=0} /^---$/{fm++; next} fm>=2{print}' "$RESOLVED")
+if [ -z "$TARGET_BODY" ]; then
+  echo "ERROR: target agent body is empty (missing closing frontmatter delimiter?): $RESOLVED" >&2
+  exit 2
+fi
 ```
 
 The body becomes DeepSeek's system prompt.
 
 ### Step 1.5: Pre-flight Sensitive-File Filter
 
-Defence-in-depth — even though dm-review Phase 3.5 should have stripped sensitive files, the runner re-checks:
+The runner strips sensitive-file hunks before they reach DeepSeek, regardless of whether dm-review Phase 3.5 already filtered upstream. Defence-in-depth.
+
+The python script writes the filtered diff to a temp file (passed as argv[1]) and prints the redaction count to stdout. The shell captures the count, reads the filtered diff back, and refuses to proceed if the entire diff was redacted.
 
 ```bash
-# Strip diff hunks belonging to sensitive filenames
-SENSITIVE_PATTERNS='\.env(\.|$)|\.pem$|\.key$|\.p12$|/secrets?\.(yml|yaml|json)$|/credentials?\.(json|yml|yaml)$|secret|credential'
+REDACT_TMP=$(mktemp)
+trap 'rm -f "$REDACT_TMP" "${SYS_FILE:-/dev/null}"' EXIT
 
-REDACTION_COUNT=0
-FILTERED_DIFF=$(python3 - <<'PY' <<<"$diff_content"
+REDACTION_COUNT=$(python3 - "$REDACT_TMP" <<'PY' <<<"$diff_content"
 import re, sys
 text = sys.stdin.read()
 pat = re.compile(r'^diff --git a/(.+?) b/', re.M)
 hunks = re.split(r'(?=^diff --git )', text, flags=re.M)
+sensitive = re.compile(
+    r'\.env(\.|$)|\.pem$|\.key$|\.p12$'
+    r'|/secrets?\.(yml|yaml|json)$|/credentials?\.(json|yml|yaml)$'
+    r'|secret|credential',
+    re.I,
+)
 out = []
 redacted = 0
-sensitive = re.compile(r'\.env(\.|$)|\.pem$|\.key$|\.p12$|/secrets?\.(yml|yaml|json)$|/credentials?\.(json|yml|yaml)$|secret|credential', re.I)
 for h in hunks:
     if not h.strip():
         continue
@@ -99,16 +112,35 @@ for h in hunks:
         redacted += 1
         continue
     out.append(h)
-print(''.join(out))
-print(f"REDACTION_COUNT={redacted}", file=sys.stderr)
+with open(sys.argv[1], 'w') as f:
+    f.write(''.join(out))
+print(redacted)
 PY
 )
+FILTERED_DIFF=$(cat "$REDACT_TMP")
 
-# Log redactions to stderr
-[ "$REDACTION_COUNT" -gt 0 ] && echo "[deepseek-agent-runner/$target_agent_name] redacted $REDACTION_COUNT sensitive-file hunks" >&2
+# Audit log: only emitted if any hunks were dropped
+[ "$REDACTION_COUNT" -gt 0 ] && \
+  echo "[deepseek-agent-runner/$target_agent_name] redacted $REDACTION_COUNT sensitive-file hunks" >&2
+
+# Hard guard: if the entire diff was redacted, emit RUNNER FAILURE and exit
+if [ -z "$FILTERED_DIFF" ]; then
+  cat <<EOF
+## ${target_agent_name} Review (via DeepSeek ${target_model})
+
+### RUNNER FAILURE
+DeepSeek runner (${target_agent_name}): All diff hunks were redacted as sensitive. Review unavailable.
+
+### Critical (P1)
+### Serious (P2)
+### Moderate (P3)
+### Approved
+EOF
+  exit 0
+fi
 ```
 
-If hunks were redacted, the diff sent to DeepSeek has them removed. The runner does NOT proceed if the entire diff was redacted (defence-in-depth would have already failed elsewhere).
+The empty-diff guard prevents the runner from sending a vacuous prompt to DeepSeek (which would return a meaningless CLEAN).
 
 ### Step 2: Build the DeepSeek Prompts
 
@@ -151,19 +183,19 @@ RESULT=$(echo "$USER_PROMPT" | DEEPSEEK_TIMEOUT_S="$target_timeout" \
 EXIT_CODE=$?
 ```
 
-The `-s "$(cat "$SYS_FILE")"` form passes the system prompt as a single argument that the shell sees as one already-expanded string — no further interpretation of metacharacters within `$TARGET_BODY`.
+The `-s "$(cat "$SYS_FILE")"` form passes the file's contents as a single quoted argument. The shell does not re-expand the captured string, so backticks, dollar signs, and other metacharacters inside `$TARGET_BODY` reach the wrapper as literal characters.
 
 ### Step 4: Branch on Exit Code
 
-The wrapper's exit codes drive the failure-mode mapping:
+The wrapper's exit codes drive the failure-mode mapping. Exit semantics match `deepseek-wrapper.sh`:
 
-| Exit Code | Cause | Fallback Reason |
+| Exit Code | Cause | FAILURE_REASON value |
 |---|---|---|
 | `0` | Success | (proceed to Step 5) |
-| `28` | curl timeout | "Timed out at ${target_timeout}s" |
-| `1` (key missing) | Pre-flight failure | "DEEPSEEK_API_KEY not set" |
-| `2` (rate limit / all models exhausted) | Rate limit | "Rate-limited" |
-| other non-zero | API or transport error | "Wrapper exited $EXIT_CODE" |
+| `28` | curl timeout | `"Timed out at ${target_timeout}s"` |
+| `1` | All models exhausted, key missing, or non-rate-limit HTTP error | `"All models exhausted, key missing, or HTTP error"` |
+| `2` | Bad invocation arguments (programming bug in the runner) | `"Invocation error -- bad runner arguments (programming bug)"` |
+| other non-zero | API or transport error | `"Wrapper exited $EXIT_CODE"` |
 
 ```bash
 case "$EXIT_CODE" in
@@ -174,10 +206,10 @@ case "$EXIT_CODE" in
     FAILURE_REASON="Timed out at ${target_timeout}s"
     ;;
   1)
-    FAILURE_REASON="DEEPSEEK_API_KEY not set"
+    FAILURE_REASON="All models exhausted, key missing, or HTTP error"
     ;;
   2)
-    FAILURE_REASON="Rate-limited or all models exhausted"
+    FAILURE_REASON="Invocation error -- bad runner arguments (programming bug)"
     ;;
   *)
     FAILURE_REASON="Wrapper exited $EXIT_CODE"
@@ -201,7 +233,7 @@ EOF
 fi
 ```
 
-The `### RUNNER FAILURE` marker is structurally distinguishable from a clean run. `dm-review/skills/review/references/guardrails.md` detects this marker and triggers REVIEW INCOMPLETE for any core agent that produced it — see the guardrails file for the consolidator rule.
+`dm-review/skills/review/references/guardrails.md` detects the `### RUNNER FAILURE` marker and triggers REVIEW INCOMPLETE for any core agent that produced it.
 
 ### Step 5: Parse the Response
 
@@ -225,7 +257,7 @@ EOF
 fi
 ```
 
-If `python3` fails to parse the JSON, the surrounding shell will exit non-zero — treat that the same as malformed-response and emit the failure envelope.
+If `python3` raises a JSON decode error, `CONTENT` ends up empty and the empty-content check above emits the RUNNER FAILURE envelope. No separate malformed-JSON branch is needed.
 
 ### Step 6: Tag and Format Findings
 
@@ -259,4 +291,4 @@ If DeepSeek's response uses different section labels, normalize them to the P1/P
 
 The target agent's `.md` body is the single source of truth for review criteria. When pattern-recognition-specialist gets new rules added, this runner picks them up automatically — no sync, no drift. The same criteria run on Claude when `DEEPSEEK_API_KEY` is unset, and on DeepSeek when set. Findings are interchangeable; the consolidator deduplicates by file:line regardless of source.
 
-The offload list in `dm-review/skills/review/SKILL.md` Phase 3.75 is the only place that controls routing eligibility. Adding a new offloadable agent is a single-row change to that table.
+The offload list in `dm-review/skills/review/SKILL.md` Phase 3.75 is the only place that controls routing eligibility. Adding a new offloadable agent is a single-row change to that table — no new file required.
