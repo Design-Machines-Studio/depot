@@ -267,6 +267,33 @@ DeepSeek runner (${target_agent_name}): Empty response from API. Review unavaila
 EOF
   exit 0
 fi
+
+# Refusal-phrase guard: a content-filtered response is non-empty and parses
+# cleanly, so it would otherwise be treated as a legitimate "no findings"
+# review and silently produce a false CLEAN. Detect common refusal openers
+# and emit RUNNER FAILURE so the consolidator triggers REVIEW INCOMPLETE.
+# Only the first ~200 chars are scanned -- valid review content can mention
+# refusal phrases inside findings (e.g. "the agent should not assist with...")
+# but never opens with them.
+HEAD=$(printf '%s' "$CONTENT" | head -c 200 | LC_ALL=C tr '[:upper:]' '[:lower:]')
+case "$HEAD" in
+  *"i'm sorry"*|*"i am sorry"*|*"i cannot assist"*|*"i can't assist"*\
+  |*"i cannot help"*|*"i can't help"*|*"i am unable"*|*"i'm unable"*\
+  |*"against my guidelines"*|*"violates my"*|*"as an ai"*|*"i must decline"*)
+    cat <<EOF
+## ${target_agent_name} Review (via DeepSeek ${target_model})
+
+### RUNNER FAILURE
+DeepSeek runner (${target_agent_name}): Content-filter refusal detected. Review unavailable.
+
+### Critical (P1)
+### Serious (P2)
+### Moderate (P3)
+### Approved
+EOF
+    exit 0
+    ;;
+esac
 ```
 
 If `python3` raises a JSON decode error, `CONTENT` ends up empty and the empty-content check above emits the RUNNER FAILURE envelope. No separate malformed-JSON branch is needed.

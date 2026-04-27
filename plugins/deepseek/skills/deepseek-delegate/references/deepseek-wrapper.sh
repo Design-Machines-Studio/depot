@@ -172,9 +172,23 @@ deepseek_with_fallback() {
     # are well-defined and reasoning is unnecessary. Opt back in by setting
     # DEEPSEEK_THINKING=enabled in the environment.
     local thinking_mode="${DEEPSEEK_THINKING:-disabled}"
+
+    # max_tokens is a hard ceiling on completion length. Per DeepSeek's
+    # self-evaluation, an unbounded completion can blow past curl's timeout
+    # on verbose responses. The default scales by model: v4-pro gets 8192
+    # (longer reviews tolerated), v4-flash gets 4096 (mechanical agents
+    # rarely need more). Override with DEEPSEEK_MAX_TOKENS in the environment.
+    local default_max_tokens
+    case "$model_alias" in
+      v4-pro)   default_max_tokens=8192 ;;
+      v4-flash) default_max_tokens=4096 ;;
+      *)        default_max_tokens=4096 ;;
+    esac
+    local max_tokens="${DEEPSEEK_MAX_TOKENS:-$default_max_tokens}"
+
     local request_body
-    request_body=$(printf '{"model":"%s","messages":%s,"temperature":%s,"stream":false,"thinking":{"type":"%s"}}' \
-      "$model_id" "$messages_json" "$temperature" "$thinking_mode")
+    request_body=$(printf '{"model":"%s","messages":%s,"temperature":%s,"max_tokens":%s,"stream":false,"thinking":{"type":"%s"}}' \
+      "$model_id" "$messages_json" "$temperature" "$max_tokens" "$thinking_mode")
 
     local http_code
     http_code=$(curl -s -w '%{http_code}' \
@@ -204,20 +218,30 @@ deepseek_with_fallback() {
       return 0
     fi
 
-    local is_rate_limit=0
+    # Classify the failure. Both rate-limits and transient server errors
+    # (5xx, content-pattern matches) trigger the fallback chain. Per
+    # DeepSeek's own evaluation, a transient 502/504 on v4-pro should not
+    # kill a review that v4-flash would handle cleanly.
+    local is_retriable=0
+    local failure_reason=""
     if [ "$http_code" = "429" ]; then
-      is_rate_limit=1
+      is_retriable=1
+      failure_reason="rate-limited (HTTP 429)"
     elif grep -iE "$__DEEPSEEK_WRAPPER_RATE_LIMIT_PATTERNS" "$err_log" >/dev/null 2>&1; then
-      is_rate_limit=1
+      is_retriable=1
+      failure_reason="rate-limited (pattern match in body)"
+    elif [ "${http_code:0:1}" = "5" ]; then
+      is_retriable=1
+      failure_reason="transient server error (HTTP $http_code)"
     fi
 
-    if [ $is_rate_limit -eq 1 ]; then
+    if [ $is_retriable -eq 1 ]; then
       local next_idx=$((i+1))
       if [ $next_idx -lt ${#__DEEPSEEK_WRAPPER_FALLBACK_CHAIN[@]} ]; then
         local next_alias="${__DEEPSEEK_WRAPPER_FALLBACK_CHAIN[$next_idx]}"
-        echo "[deepseek-wrapper] DOWNGRADE: $model_alias rate-limited (HTTP $http_code); falling back to $next_alias" >&2
+        echo "[deepseek-wrapper] DOWNGRADE: $model_alias $failure_reason; falling back to $next_alias" >&2
       else
-        echo "[deepseek-wrapper] $model_alias rate-limited (HTTP $http_code); no further fallback available" >&2
+        echo "[deepseek-wrapper] $model_alias $failure_reason; no further fallback available" >&2
       fi
       __deepseek_wrapper_cleanup
       i=$((i+1))
@@ -230,6 +254,42 @@ deepseek_with_fallback() {
     export PATH="$_saved_path"
     return 1
   done
+
+  # All models in the chain exhausted. Single backoff retry, in case the
+  # rate-limit is a brief burst that has cleared. Sleep is capped to keep
+  # the total wall-clock under the caller's typical timeout budget.
+  if [ "${DEEPSEEK_NO_BACKOFF_RETRY:-0}" != "1" ]; then
+    echo "[deepseek-wrapper] all models exhausted; retrying once after 3s backoff" >&2
+    sleep 3
+    i=$start_idx
+    while [ $i -lt ${#__DEEPSEEK_WRAPPER_FALLBACK_CHAIN[@]} ]; do
+      local model_alias="${__DEEPSEEK_WRAPPER_FALLBACK_CHAIN[$i]}"
+      local model_id=""
+      case "$model_alias" in
+        v4-pro)   model_id="$__DEEPSEEK_WRAPPER_MODEL_MAP_v4_pro" ;;
+        v4-flash) model_id="$__DEEPSEEK_WRAPPER_MODEL_MAP_v4_flash" ;;
+      esac
+      err_log=$(mktemp -t deepseek-wrapper.XXXXXX) || break
+      chmod 600 "$err_log" 2>/dev/null || true
+      echo "[deepseek-wrapper] retry: $model_alias ($model_id)" >&2
+      local http_code
+      http_code=$(curl -s -w '%{http_code}' \
+        --max-time "$timeout_s" \
+        -X POST "${base_url}/v1/chat/completions" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${DEEPSEEK_API_KEY}" \
+        -d "$request_body" \
+        -o "$err_log" 2>/dev/null)
+      if [ $? -eq 0 ] && [ "$http_code" = "200" ]; then
+        cat "$err_log"
+        __deepseek_wrapper_cleanup
+        export PATH="$_saved_path"
+        return 0
+      fi
+      __deepseek_wrapper_cleanup
+      i=$((i+1))
+    done
+  fi
 
   echo "[deepseek-wrapper] all models in fallback chain exhausted; try again later" >&2
   export PATH="$_saved_path"
