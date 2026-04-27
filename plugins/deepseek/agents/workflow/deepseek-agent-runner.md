@@ -22,7 +22,7 @@ The caller passes you these inputs in the prompt body:
 - `target_agent_path` — repo-relative path to the agent definition file (must be inside `plugins/`)
 - `target_agent_name` — bare agent ID (must match `^[a-z0-9-]+$`)
 - `target_model` — `v4-pro` (default for code analysis, per DeepSeek's coding agents guidance) or `v4-flash` (lighter mechanical workloads)
-- `target_timeout` — seconds; canonical values are 90s for v4-pro and 60s for v4-flash with thinking disabled
+- `target_timeout` — seconds; 90s for v4-pro, 60s for v4-flash (both with thinking disabled). Both ceilings sit safely below the orchestrator's 120s agent-timeout threshold defined in `dm-review/skills/review/references/guardrails.md`.
 - `diff_content` — the diff to review
 - `changed_files` — list of changed file paths
 - `project_context` — stack info (e.g., "Plugin Marketplace (Markdown+JSON)")
@@ -172,22 +172,32 @@ Pass the system prompt via a temp file so its content (which may contain backtic
 ```bash
 # Write the system prompt to a temp file (avoids shell interpretation of backticks/$)
 SYS_FILE=$(mktemp)
-trap 'rm -f "$SYS_FILE"' EXIT
+trap 'rm -f "$SYS_FILE" "$WRAPPER_STDERR"' EXIT
 printf '%s' "$TARGET_BODY" > "$SYS_FILE"
 
-# Invoke the wrapper, capture exit code immediately
+# Invoke the wrapper, capture exit code AND stderr (for downgrade detection)
+WRAPPER_STDERR=$(mktemp)
 RESULT=$(echo "$USER_PROMPT" | DEEPSEEK_TIMEOUT_S="$target_timeout" \
   bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
     -m "$target_model" \
-    -s "$(cat "$SYS_FILE")")
+    -s "$(cat "$SYS_FILE")" 2>"$WRAPPER_STDERR")
 EXIT_CODE=$?
+
+# Detect silent fallback: if the wrapper rate-limited v4-pro and downgraded
+# to v4-flash, the `DOWNGRADE:` marker appears on stderr. The runner surfaces
+# this in the findings header so reviewers know findings came from the
+# fallback model, not the requested one.
+ACTUAL_MODEL="$target_model"
+if grep -q "DOWNGRADE: $target_model rate-limited.*falling back to" "$WRAPPER_STDERR" 2>/dev/null; then
+  ACTUAL_MODEL=$(grep -oE "falling back to [a-z0-9-]+" "$WRAPPER_STDERR" | tail -1 | awk '{print $4}')
+fi
 ```
 
 The `-s "$(cat "$SYS_FILE")"` form passes the file's contents as a single quoted argument. The shell does not re-expand the captured string, so backticks, dollar signs, and other metacharacters inside `$TARGET_BODY` reach the wrapper as literal characters.
 
 ### Step 4: Branch on Exit Code
 
-The wrapper's exit codes drive the failure-mode mapping. Exit semantics match `deepseek-wrapper.sh`:
+The wrapper's exit codes drive the failure-mode mapping. Exit semantics match `deepseek-wrapper.sh`. Canonical timeout ceilings from dm-review Phase 3.75: 90s for v4-pro, 60s for v4-flash. Both sit safely below the orchestrator's 120s agent-timeout threshold in `guardrails.md`.
 
 | Exit Code | Cause | FAILURE_REASON value |
 |---|---|---|
@@ -263,10 +273,13 @@ If `python3` raises a JSON decode error, `CONTENT` ends up empty and the empty-c
 
 ### Step 6: Tag and Format Findings
 
-Wrap DeepSeek's response and tag every finding with `[deepseek/{target_agent_name}]`:
+Wrap DeepSeek's response and tag every finding with `[deepseek/{target_agent_name}]`. If the wrapper silently downgraded the model (Step 3 detected `DOWNGRADE:` on stderr), use `$ACTUAL_MODEL` in the header and add a one-line note so reviewers know findings came from the fallback model, not the requested one:
 
 ```markdown
-## {target_agent_name} Review (via DeepSeek {target_model})
+## {target_agent_name} Review (via DeepSeek {ACTUAL_MODEL})
+
+[If ACTUAL_MODEL != target_model:]
+> **Note:** Requested {target_model}, but DeepSeek rate-limited that model. Findings produced by {ACTUAL_MODEL} (fallback).
 
 ### Critical (P1)
 [findings tagged [deepseek/{target_agent_name}]]

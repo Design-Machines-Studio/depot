@@ -212,7 +212,13 @@ deepseek_with_fallback() {
     fi
 
     if [ $is_rate_limit -eq 1 ]; then
-      echo "[deepseek-wrapper] $model_alias rate-limited (HTTP $http_code); trying next model" >&2
+      local next_idx=$((i+1))
+      if [ $next_idx -lt ${#__DEEPSEEK_WRAPPER_FALLBACK_CHAIN[@]} ]; then
+        local next_alias="${__DEEPSEEK_WRAPPER_FALLBACK_CHAIN[$next_idx]}"
+        echo "[deepseek-wrapper] DOWNGRADE: $model_alias rate-limited (HTTP $http_code); falling back to $next_alias" >&2
+      else
+        echo "[deepseek-wrapper] $model_alias rate-limited (HTTP $http_code); no further fallback available" >&2
+      fi
       __deepseek_wrapper_cleanup
       i=$((i+1))
       continue

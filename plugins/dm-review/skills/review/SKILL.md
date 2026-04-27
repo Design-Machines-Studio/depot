@@ -207,12 +207,12 @@ Before dispatching agents, decide whether mechanical review work should be route
 
 | Agent ID | DeepSeek Model | Timeout | Rationale |
 |---|---|---|---|
-| `pattern-recognition-specialist` | `v4-pro` | 90s | Pattern + naming analysis benefits from V4-Pro's stronger code reasoning (DeepSeek's recommended default for code work). |
-| `code-simplicity-reviewer` | `v4-pro` | 90s | Complexity + simplification heuristics benefit from V4-Pro's code reasoning. |
-| `doc-sync-reviewer` | `v4-flash` | 60s | Mechanical cross-reference (file paths, version sync); V4-Flash quality is sufficient. |
-| `test-coverage-reviewer` | `v4-flash` | 60s | Mechanical file matching (does test exist for changed code); V4-Flash quality is sufficient. |
+| `pattern-recognition-specialist` | `v4-pro` | 90s | DeepSeek's recommended default for code work; pattern + naming analysis needs strong cross-file reasoning. |
+| `code-simplicity-reviewer` | `v4-pro` | 90s | Complexity heuristics often span multiple files (duplication, dead code); V4-Flash misses non-local smells. |
+| `doc-sync-reviewer` | `v4-flash` | 60s | Mechanical cross-reference between code and docs (file paths, version sync, eval coverage). |
+| `test-coverage-reviewer` | `v4-flash` | 60s | Mechanical file matching: does a test exist for each changed source file. |
 
-All four offloaded agents run with `thinking: disabled` (set by the wrapper). Disabling chain-of-thought reasoning is the critical latency fix: with thinking enabled, ~75% of completion tokens are hidden reasoning that triples wall-clock latency without improving findings quality on well-defined review criteria.
+All four offloaded agents run with `thinking: disabled` (set by the wrapper). Disabling thinking is the critical latency lever: with thinking enabled, ~75% of completion tokens are hidden reasoning that triples latency without improving findings quality on well-defined review criteria.
 
 Model selection follows DeepSeek's published guidance: V4-Pro is the default for code analysis (pattern + simplicity), V4-Flash for lighter mechanical workloads (doc sync + test coverage). Both run with the same `strict=False` JSON parsing in the runner to tolerate any control characters in long content fields.
 
@@ -258,7 +258,7 @@ For each selected agent, check the Phase 3.75 routing decision first:
    - `target_agent_path` — path to the original agent's definition file
    - `target_agent_name` — bare ID (e.g., `pattern-recognition-specialist`)
    - `target_model` — `v4-pro` or `v4-flash` per the offload table
-   - `target_timeout` — `60` or `30` per the offload table
+   - `target_timeout` — `90` (v4-pro agents) or `60` (v4-flash agents) per the offload table
    - The list of changed files
    - The diff content
    - Project context
