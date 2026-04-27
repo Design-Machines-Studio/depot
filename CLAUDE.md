@@ -219,7 +219,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 | **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, worktree execution with review-fix loops, and `/pipeline-fix` fix-pass flavor for addressing numbered review findings |
 | **gemini** | Gemini CLI subagent for Google search grounding, 2M token context diff analysis, and code execution sandbox |
-| **deepseek** | DeepSeek V4 API subagent for delegating code review and diff analysis at Sonnet-class quality and lower cost |
+| **deepseek** | DeepSeek V4 API subagent for delegating code review and bulk diff analysis at Sonnet-class quality and lower cost. Includes a generic agent runner that routes dm-review's mechanical agents (pattern-recognition, code-simplicity, doc-sync, test-coverage) through DeepSeek when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota |
 
 ## Description Evaluation
 

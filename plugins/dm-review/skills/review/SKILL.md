@@ -193,13 +193,78 @@ Input guardrails applied:
 
 ---
 
+### Phase 3.75: Provider Routing
+
+Before dispatching agents, decide whether mechanical review work should be routed to DeepSeek to offload the Anthropic Max quota. This step does not add agents — it re-routes existing ones.
+
+**Routing conditions** (all must be true to route):
+
+1. `DEEPSEEK_API_KEY` is set in the environment (check via `[ -n "$DEEPSEEK_API_KEY" ]`)
+2. The deepseek plugin is installed (`plugins/deepseek/agents/workflow/deepseek-agent-runner.md` exists)
+3. The agent appears in the offload table below AND was selected in Phase 3
+
+**Offload table:**
+
+| Agent ID | DeepSeek Model | Timeout | Rationale |
+|---|---|---|---|
+| `pattern-recognition-specialist` | `v4-pro` | 60s | Pattern matching + naming conventions; V4-Pro matches Sonnet quality |
+| `code-simplicity-reviewer` | `v4-pro` | 60s | Heuristic-based (length, redundancy, dead code) |
+| `doc-sync-reviewer` | `v4-flash` | 30s | Mechanical cross-reference (file paths, version sync) |
+| `test-coverage-reviewer` | `v4-flash` | 30s | Mechanical file matching (does test exist for changed code) |
+
+Agents NOT in this table always run on Claude — they involve judgment-heavy work (security, architecture, voice, a11y, governance, visual review) where Sonnet's quality matters.
+
+**Routing report** — print before Phase 4:
+
+```
+Provider routing:
+- Routing 4 agents through DeepSeek (offload list, DEEPSEEK_API_KEY set):
+    - pattern-recognition-specialist → v4-pro (60s)
+    - code-simplicity-reviewer → v4-pro (60s)
+    - doc-sync-reviewer → v4-flash (30s)
+    - test-coverage-reviewer → v4-flash (30s)
+- N agents on Claude (judgment-heavy or specialized)
+```
+
+If `DEEPSEEK_API_KEY` is not set, print:
+
+```
+Provider routing: all agents on Claude (DEEPSEEK_API_KEY not set; deepseek offload disabled).
+```
+
+This routing is graceful — when conditions aren't met, the original Claude agents run as before.
+
+**Provider lanes:** Anthropic Max powers the dm-review orchestrator and the deepseek-agent-runner subagent (haiku, mechanical orchestration). DeepSeek API powers the actual analysis. The runner uses curl to hit `api.deepseek.com` directly — no Anthropic API credentials are touched.
+
+---
+
 ### Phase 4: Parallel Agent Launch
 
 Launch ALL selected agents simultaneously using multiple Agent tool calls in a single message. This is critical for performance — agents must run in parallel, not sequentially.
 
 #### How to launch each agent
 
-For each agent, follow this pattern:
+For each selected agent, check the Phase 3.75 routing decision first:
+
+**A. If the agent is routed to DeepSeek** (in the offload table AND `DEEPSEEK_API_KEY` is set):
+
+1. **Read the deepseek-agent-runner definition** from `plugins/deepseek/agents/workflow/deepseek-agent-runner.md`
+2. **Build the runner prompt** by combining:
+   - The full content of the runner definition file (this is the runner's instructions)
+   - `target_agent_path` — path to the original agent's definition file
+   - `target_agent_name` — bare ID (e.g., `pattern-recognition-specialist`)
+   - `target_model` — `v4-pro` or `v4-flash` per the offload table
+   - `target_timeout` — `60` or `30` per the offload table
+   - The list of changed files
+   - The diff content
+   - Project context
+3. **Launch via the Agent tool** with:
+   - `subagent_type`: "general-purpose"
+   - `description`: e.g., "DeepSeek-routed: pattern-recognition"
+   - `prompt`: the combined runner prompt from step 2
+   - `model`: "haiku" (per deepseek-agent-runner frontmatter — mechanical orchestration only)
+
+**B. Otherwise, dispatch normally on Claude:**
 
 1. **Read the agent definition file** from the depot (the path listed in the agent selection table)
 2. **Build the agent prompt** by combining:
@@ -212,6 +277,8 @@ For each agent, follow this pattern:
    - `description`: short description (e.g., "Security audit of changes")
    - `prompt`: the combined prompt from step 2
    - `model`: use the agent's frontmatter `model:` field if declared (e.g., "haiku" for mechanical agents), otherwise "sonnet"
+
+Both A and B agents launch in parallel in the same message. The runner's stderr token-accounting log appears in the agent's output stream but does not enter the findings report. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
 
 **Example prompt structure for each agent:**
 

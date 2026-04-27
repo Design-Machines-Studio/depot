@@ -1,7 +1,7 @@
 {
   "name": "deepseek",
   "description": "DeepSeek V4 API subagent for delegating code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro matches Opus 4.6 on SWE-bench (80.6%); V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -64,6 +64,19 @@
           "patterns",
           "refactoring",
           "architecture",
+          "deepseek"
+        ]
+      },
+      {
+        "id": "deepseek-agent-runner",
+        "name": "DeepSeek Agent Runner",
+        "category": "workflow",
+        "description": "Generic DeepSeek delegation runner for dm-review agent offload. Loads a target agent's review criteria and delegates analysis to DeepSeek V4 API.",
+        "tags": [
+          "delegation",
+          "runner",
+          "dm-review",
+          "offload",
           "deepseek"
         ]
       }

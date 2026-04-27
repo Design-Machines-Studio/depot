@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.9.0"
+    "version": "1.10.0"
   },
   "plugins": [
     {
@@ -270,7 +270,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.26.0",
+      "version": "1.27.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -392,15 +392,15 @@
     {
       "name": "deepseek",
       "source": "./plugins/deepseek",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "DeepSeek V4 API subagent for delegating code review and diff analysis to V4-Pro or V4-Flash at Sonnet-class quality and lower cost",
+      "description": "DeepSeek V4 API subagent for delegating code review and diff analysis to V4-Pro or V4-Flash at Sonnet-class quality and lower cost. Includes generic agent runner that routes dm-review mechanical agents (pattern-recognition, code-simplicity, doc-sync, test-coverage) through DeepSeek when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota.",
       "capabilities_summary": {
         "skills": 1,
-        "agents": 2,
+        "agents": 3,
         "commands": 1,
         "tags": [
           "deepseek",
@@ -409,7 +409,9 @@
           "diff-analysis",
           "cost-optimization",
           "multi-provider",
-          "delegation"
+          "delegation",
+          "agent-runner",
+          "offload"
         ]
       }
     }
