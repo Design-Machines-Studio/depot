@@ -125,7 +125,7 @@ Plugins compose through five patterns documented in `docs/orchestration-patterns
 - **Multi-Agent Dispatch** -- a skill launches agents in parallel and consolidates results (e.g. dm-review)
 - **Memory-Mediated Coordination** -- plugins write to ai-memory entities that other plugins read later (e.g. depot-metrics)
 - **Pipeline Orchestration** -- a conductor plugin composes all three patterns into an autonomous multi-phase workflow with review-fix loops (e.g. pipeline)
-- **CLI-Mediated Model Delegation** -- a Claude subagent invokes an external AI model via CLI, parses structured output, and formats findings for the calling workflow (e.g. gemini)
+- **CLI-Mediated Model Delegation** -- a Claude subagent invokes an external AI model via CLI, parses structured output, and formats findings for the calling workflow (e.g. gemini, deepseek)
 
 ## Composition Validation
 
@@ -219,6 +219,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 | **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, worktree execution with review-fix loops, and `/pipeline-fix` fix-pass flavor for addressing numbered review findings |
 | **gemini** | Gemini CLI subagent for Google search grounding, 2M token context diff analysis, and code execution sandbox |
+| **deepseek** | DeepSeek V4 API subagent for delegating code review and diff analysis at Sonnet-class quality and lower cost |
 
 ## Description Evaluation
 

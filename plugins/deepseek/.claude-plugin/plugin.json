@@ -1,0 +1,80 @@
+{
+  "name": "deepseek",
+  "description": "DeepSeek V4 API subagent for delegating code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro matches Opus 4.6 on SWE-bench (80.6%); V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
+  },
+  "keywords": [
+    "deepseek",
+    "subagent",
+    "delegation",
+    "code-review",
+    "diff-analysis",
+    "cost-optimization",
+    "multi-provider"
+  ],
+  "capabilities": {
+    "skills": [
+      {
+        "id": "deepseek-delegate",
+        "name": "DeepSeek Delegation",
+        "description": "Delegate tasks to DeepSeek V4 API for code review, diff analysis, and pattern checks at Sonnet-class quality. Use when offloading from Anthropic quota.",
+        "triggers": [
+          "use deepseek",
+          "ask deepseek",
+          "delegate to deepseek",
+          "deepseek review",
+          "cheaper code review",
+          "offload to deepseek",
+          "deepseek analysis",
+          "reduce anthropic usage"
+        ],
+        "tags": [
+          "deepseek",
+          "delegation",
+          "code-review",
+          "diff-analysis",
+          "subagent",
+          "cost-optimization"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "deepseek-bulk-analyst",
+        "name": "DeepSeek Bulk Diff Analyst",
+        "category": "review",
+        "description": "Analyzes full diffs using DeepSeek V4's 1M token context when diffs exceed Claude's truncation threshold",
+        "tags": [
+          "diff",
+          "review",
+          "large-context",
+          "deepseek"
+        ]
+      },
+      {
+        "id": "deepseek-code-analyst",
+        "name": "DeepSeek Code Analyst",
+        "category": "workflow",
+        "description": "Analyzes code patterns, suggests refactorings, and reviews architecture using DeepSeek V4-Pro",
+        "tags": [
+          "code-analysis",
+          "patterns",
+          "refactoring",
+          "architecture",
+          "deepseek"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "deepseek",
+        "name": "DeepSeek",
+        "description": "Direct DeepSeek V4 invocation with model selection",
+        "argumentHint": "<prompt> [--model v4-pro|v4-flash]"
+      }
+    ]
+  }
+}

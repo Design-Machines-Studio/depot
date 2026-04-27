@@ -38,7 +38,7 @@ Each agent runs in its own context. They don't share a budget.
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)
 3. test-coverage-reviewer (LOW -- advisory only)
-4. gemini-diff-analyst (MEDIUM -- supplementary full-diff analysis, requires gemini plugin)
+4. deepseek-bulk-analyst / gemini-diff-analyst (MEDIUM -- supplementary full-diff analysis, mutually exclusive, requires provider plugin)
 5. craft-reviewer (MEDIUM -- domain-specific)
 6. governance-domain (MEDIUM -- domain-specific)
 7. a11y-dynamic-content-reviewer (MEDIUM)

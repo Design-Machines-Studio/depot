@@ -1,6 +1,7 @@
 ---
 name: go-build-verifier
 description: Verifies Go and Templ code compiles and passes go vet. Runs when .go or .templ files change.
+model: haiku
 ---
 
 # Go Build Verifier

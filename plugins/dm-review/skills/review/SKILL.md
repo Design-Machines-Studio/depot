@@ -129,7 +129,8 @@ Add these agents based on which file extensions appear in the changed files:
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `plugins/dm-review/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `plugins/dm-review/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `plugins/dm-review/agents/review/ui-standards-reviewer.md` |
-| Diff >5000 lines AND gemini plugin installed | **gemini-diff-analyst** | `plugins/gemini/agents/review/gemini-diff-analyst.md` |
+| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set | **deepseek-bulk-analyst** | `plugins/deepseek/agents/review/deepseek-bulk-analyst.md` |
+| Diff >5000 lines AND gemini plugin installed AND (`DEEPSEEK_API_KEY` not set OR deepseek plugin not installed) | **gemini-diff-analyst** | `plugins/gemini/agents/review/gemini-diff-analyst.md` |
 
 #### Report Selection
 
@@ -177,7 +178,7 @@ This context is injected ONLY into the browser-based agents (ux-quality-reviewer
 
 Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If the gemini plugin is installed, the gemini-diff-analyst agent receives the full untruncated diff separately.
+1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (deepseek-bulk-analyst or gemini-diff-analyst), it receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
 3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
 
@@ -210,7 +211,7 @@ For each agent, follow this pattern:
    - `subagent_type`: "general-purpose"
    - `description`: short description (e.g., "Security audit of changes")
    - `prompt`: the combined prompt from step 2
-   - `model`: "sonnet" (for all review agents)
+   - `model`: use the agent's frontmatter `model:` field if declared (e.g., "haiku" for mechanical agents), otherwise "sonnet"
 
 **Example prompt structure for each agent:**
 
@@ -507,5 +508,5 @@ See `${CLAUDE_SKILL_DIR}/references/agent-registry.md` for the complete agent ca
 
 - Agent definition files are read at runtime from the depot. If the exact path is not accessible (e.g., installed as a remote plugin), search for the file by name.
 - The maximum number of parallel agents is 16 (full mode, all triggers hit). The minimum is 5 (quick mode, no UI files) or 6 (quick mode with UI files).
-- Each agent uses the `sonnet` model for speed and cost efficiency.
+- Agents default to `sonnet`. Agents that declare `model:` in their frontmatter use that model instead (e.g., go-build-verifier uses `haiku` for mechanical build checks).
 - The consolidator and memory recorder run after all review agents complete — they are not launched in parallel with the review agents.

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.8.0"
+    "version": "1.9.0"
   },
   "plugins": [
     {
@@ -270,7 +270,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.25.0",
+      "version": "1.26.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -385,6 +385,30 @@
           "large-context",
           "code-execution",
           "citations",
+          "delegation"
+        ]
+      }
+    },
+    {
+      "name": "deepseek",
+      "source": "./plugins/deepseek",
+      "version": "1.0.0",
+      "author": {
+        "name": "Design Machines",
+        "url": "https://designmachines.studio"
+      },
+      "description": "DeepSeek V4 API subagent for delegating code review and diff analysis to V4-Pro or V4-Flash at Sonnet-class quality and lower cost",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 2,
+        "commands": 1,
+        "tags": [
+          "deepseek",
+          "subagent",
+          "code-review",
+          "diff-analysis",
+          "cost-optimization",
+          "multi-provider",
           "delegation"
         ]
       }
