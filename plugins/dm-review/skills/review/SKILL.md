@@ -232,7 +232,7 @@ If `DEEPSEEK_API_KEY` is not set, print:
 Provider routing: all agents on Claude (DEEPSEEK_API_KEY not set; deepseek offload disabled).
 ```
 
-This routing is graceful — when conditions aren't met, the original Claude agents run as before.
+When conditions aren't met, all agents run on Claude.
 
 **Provider lanes:** Anthropic Max powers the dm-review orchestrator and the deepseek-agent-runner subagent (haiku, mechanical orchestration). DeepSeek API powers the actual analysis. The runner uses curl to hit `api.deepseek.com` directly — no Anthropic API credentials are touched.
 
@@ -278,7 +278,9 @@ For each selected agent, check the Phase 3.75 routing decision first:
    - `prompt`: the combined prompt from step 2
    - `model`: use the agent's frontmatter `model:` field if declared (e.g., "haiku" for mechanical agents), otherwise "sonnet"
 
-Both A and B agents launch in parallel in the same message. The runner's stderr token-accounting log appears in the agent's output stream but does not enter the findings report. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
+Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime — the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
+
+**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, treat it the same as a Claude agent that failed to respond. Per `guardrails.md`, RUNNER FAILURE on a core-listed agent (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) triggers REVIEW INCOMPLETE — do NOT mark the run clean.
 
 **Example prompt structure for each agent:**
 

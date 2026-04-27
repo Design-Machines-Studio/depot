@@ -92,6 +92,7 @@ Don't match exact header text -- agents use different formatting (`## Findings`,
 | Agent timeout (>120s) | Skip. Record "Timed out" in Agent Summary. No retry. |
 | Agent returns empty | Treat as "Clean (empty response)" in Agent Summary. |
 | Agent returns error | Record error message in Agent Summary. Don't retry. |
+| Agent output contains `### RUNNER FAILURE` | DeepSeek-routed runner failed. If the target agent is core (per the list below), treat as core agent failure (REVIEW INCOMPLETE). Otherwise treat as conditional agent failure (degraded but valid). Extract the failure reason from the marker line for the Agent Summary. |
 | All conditional agents fail | Review proceeds with core agents only. Note "Degraded: conditional agents unavailable" in report header. |
 | Core agent fails | Flag: "REVIEW INCOMPLETE -- [agent-name] failed." Change merge recommendation accordingly. |
 | Consolidator fails | Output raw agent findings as unmerged list. Prefix: "Consolidation failed -- raw findings below." |

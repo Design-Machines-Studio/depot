@@ -225,6 +225,10 @@ deepseek_with_fallback() {
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  # Fix PATH at the very top, before any other operations, so subsequent
+  # builtin or external lookups (set, trap, mktemp, rm) cannot be hijacked
+  # by a caller-controlled PATH.
+  export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
   set -uo pipefail
   trap 'rm -f /tmp/deepseek-wrapper.* 2>/dev/null || true' EXIT INT TERM
   deepseek_with_fallback "$@"
