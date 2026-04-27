@@ -166,9 +166,15 @@ deepseek_with_fallback() {
         "$(printf '%s' "$user_prompt" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")
     fi
 
+    # Build request body. Default thinking: disabled because DeepSeek V4's
+    # chain-of-thought reasoning generates ~70-80% more completion tokens AND
+    # roughly triples wall-clock latency for review work, where the criteria
+    # are well-defined and reasoning is unnecessary. Opt back in by setting
+    # DEEPSEEK_THINKING=enabled in the environment.
+    local thinking_mode="${DEEPSEEK_THINKING:-disabled}"
     local request_body
-    request_body=$(printf '{"model":"%s","messages":%s,"temperature":%s,"stream":false}' \
-      "$model_id" "$messages_json" "$temperature")
+    request_body=$(printf '{"model":"%s","messages":%s,"temperature":%s,"stream":false,"thinking":{"type":"%s"}}' \
+      "$model_id" "$messages_json" "$temperature" "$thinking_mode")
 
     local http_code
     http_code=$(curl -s -w '%{http_code}' \

@@ -207,10 +207,12 @@ Before dispatching agents, decide whether mechanical review work should be route
 
 | Agent ID | DeepSeek Model | Timeout | Rationale |
 |---|---|---|---|
-| `pattern-recognition-specialist` | `v4-pro` | 60s | Pattern matching + naming conventions; V4-Pro matches Sonnet quality |
-| `code-simplicity-reviewer` | `v4-pro` | 60s | Heuristic-based (length, redundancy, dead code) |
-| `doc-sync-reviewer` | `v4-flash` | 30s | Mechanical cross-reference (file paths, version sync) |
-| `test-coverage-reviewer` | `v4-flash` | 30s | Mechanical file matching (does test exist for changed code) |
+| `pattern-recognition-specialist` | `v4-flash` | 60s | Pattern matching + naming conventions |
+| `code-simplicity-reviewer` | `v4-flash` | 60s | Heuristic-based (length, redundancy, dead code) |
+| `doc-sync-reviewer` | `v4-flash` | 60s | Mechanical cross-reference (file paths, version sync) |
+| `test-coverage-reviewer` | `v4-flash` | 60s | Mechanical file matching (does test exist for changed code) |
+
+All four offloaded agents use `v4-flash` with `thinking: disabled` (set by the wrapper). This combination consistently completes review work in 15-30 seconds. `v4-pro` is intentionally excluded from the offload list because the model occasionally emits responses with invalid JSON escape sequences in code-fenced findings, which can break the runner's parsing — `v4-flash` does not exhibit this issue and produces sufficient quality for the four mechanical agents listed above.
 
 Agents NOT in this table always run on Claude — they involve judgment-heavy work (security, architecture, voice, a11y, governance, visual review) where Sonnet's quality matters.
 
@@ -219,10 +221,10 @@ Agents NOT in this table always run on Claude — they involve judgment-heavy wo
 ```
 Provider routing:
 - Routing 4 agents through DeepSeek (offload list, DEEPSEEK_API_KEY set):
-    - pattern-recognition-specialist → v4-pro (60s)
-    - code-simplicity-reviewer → v4-pro (60s)
-    - doc-sync-reviewer → v4-flash (30s)
-    - test-coverage-reviewer → v4-flash (30s)
+    - pattern-recognition-specialist → v4-flash (60s)
+    - code-simplicity-reviewer → v4-flash (60s)
+    - doc-sync-reviewer → v4-flash (60s)
+    - test-coverage-reviewer → v4-flash (60s)
 - N agents on Claude (judgment-heavy or specialized)
 ```
 

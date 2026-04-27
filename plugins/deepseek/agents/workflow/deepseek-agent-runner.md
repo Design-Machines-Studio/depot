@@ -21,8 +21,8 @@ The caller passes you these inputs in the prompt body:
 
 - `target_agent_path` — repo-relative path to the agent definition file (must be inside `plugins/`)
 - `target_agent_name` — bare agent ID (must match `^[a-z0-9-]+$`)
-- `target_model` — `v4-pro` or `v4-flash`
-- `target_timeout` — seconds (typically `60` for v4-pro, `30` for v4-flash)
+- `target_model` — `v4-flash` (canonical) or `v4-pro` (excluded from current offload list due to occasional invalid JSON escapes)
+- `target_timeout` — seconds (60s is the canonical value for review work with thinking disabled)
 - `diff_content` — the diff to review
 - `changed_files` — list of changed file paths
 - `project_context` — stack info (e.g., "Plugin Marketplace (Markdown+JSON)")
@@ -238,7 +238,9 @@ fi
 ### Step 5: Parse the Response
 
 ```bash
-CONTENT=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin)['choices'][0]['message']['content'])")
+# strict=False tolerates raw control characters in the content field, which
+# DeepSeek occasionally emits inside long code-fenced findings.
+CONTENT=$(echo "$RESULT" | python3 -c "import json,sys; print(json.loads(sys.stdin.read(), strict=False)['choices'][0]['message']['content'])")
 
 # Empty content treated as a failure
 if [ -z "$CONTENT" ]; then
