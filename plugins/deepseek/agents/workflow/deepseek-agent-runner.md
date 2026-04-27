@@ -21,8 +21,8 @@ The caller passes you these inputs in the prompt body:
 
 - `target_agent_path` — repo-relative path to the agent definition file (must be inside `plugins/`)
 - `target_agent_name` — bare agent ID (must match `^[a-z0-9-]+$`)
-- `target_model` — `v4-flash` (canonical) or `v4-pro` (excluded from current offload list due to occasional invalid JSON escapes)
-- `target_timeout` — seconds (60s is the canonical value for review work with thinking disabled)
+- `target_model` — `v4-pro` (default for code analysis, per DeepSeek's coding agents guidance) or `v4-flash` (lighter mechanical workloads)
+- `target_timeout` — seconds; canonical values are 90s for v4-pro and 60s for v4-flash with thinking disabled
 - `diff_content` — the diff to review
 - `changed_files` — list of changed file paths
 - `project_context` — stack info (e.g., "Plugin Marketplace (Markdown+JSON)")

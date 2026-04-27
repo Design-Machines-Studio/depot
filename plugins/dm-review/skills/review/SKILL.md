@@ -207,12 +207,14 @@ Before dispatching agents, decide whether mechanical review work should be route
 
 | Agent ID | DeepSeek Model | Timeout | Rationale |
 |---|---|---|---|
-| `pattern-recognition-specialist` | `v4-flash` | 60s | Pattern matching + naming conventions |
-| `code-simplicity-reviewer` | `v4-flash` | 60s | Heuristic-based (length, redundancy, dead code) |
-| `doc-sync-reviewer` | `v4-flash` | 60s | Mechanical cross-reference (file paths, version sync) |
-| `test-coverage-reviewer` | `v4-flash` | 60s | Mechanical file matching (does test exist for changed code) |
+| `pattern-recognition-specialist` | `v4-pro` | 90s | Pattern + naming analysis benefits from V4-Pro's stronger code reasoning (DeepSeek's recommended default for code work). |
+| `code-simplicity-reviewer` | `v4-pro` | 90s | Complexity + simplification heuristics benefit from V4-Pro's code reasoning. |
+| `doc-sync-reviewer` | `v4-flash` | 60s | Mechanical cross-reference (file paths, version sync); V4-Flash quality is sufficient. |
+| `test-coverage-reviewer` | `v4-flash` | 60s | Mechanical file matching (does test exist for changed code); V4-Flash quality is sufficient. |
 
-All four offloaded agents use `v4-flash` with `thinking: disabled` (set by the wrapper). This combination consistently completes review work in 15-30 seconds. `v4-pro` is intentionally excluded from the offload list because the model occasionally emits responses with invalid JSON escape sequences in code-fenced findings, which can break the runner's parsing — `v4-flash` does not exhibit this issue and produces sufficient quality for the four mechanical agents listed above.
+All four offloaded agents run with `thinking: disabled` (set by the wrapper). Disabling chain-of-thought reasoning is the critical latency fix: with thinking enabled, ~75% of completion tokens are hidden reasoning that triples wall-clock latency without improving findings quality on well-defined review criteria.
+
+Model selection follows DeepSeek's published guidance: V4-Pro is the default for code analysis (pattern + simplicity), V4-Flash for lighter mechanical workloads (doc sync + test coverage). Both run with the same `strict=False` JSON parsing in the runner to tolerate any control characters in long content fields.
 
 Agents NOT in this table always run on Claude — they involve judgment-heavy work (security, architecture, voice, a11y, governance, visual review) where Sonnet's quality matters.
 
@@ -221,8 +223,8 @@ Agents NOT in this table always run on Claude — they involve judgment-heavy wo
 ```
 Provider routing:
 - Routing 4 agents through DeepSeek (offload list, DEEPSEEK_API_KEY set):
-    - pattern-recognition-specialist → v4-flash (60s)
-    - code-simplicity-reviewer → v4-flash (60s)
+    - pattern-recognition-specialist → v4-pro (90s)
+    - code-simplicity-reviewer → v4-pro (90s)
     - doc-sync-reviewer → v4-flash (60s)
     - test-coverage-reviewer → v4-flash (60s)
 - N agents on Claude (judgment-heavy or specialized)
