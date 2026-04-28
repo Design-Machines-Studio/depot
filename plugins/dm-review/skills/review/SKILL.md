@@ -129,7 +129,7 @@ Add these agents based on which file extensions appear in the changed files:
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `plugins/dm-review/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `plugins/dm-review/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `plugins/dm-review/agents/review/ui-standards-reviewer.md` |
-| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set | **deepseek-bulk-analyst** | `plugins/deepseek/agents/review/deepseek-bulk-analyst.md` |
+| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set (resolve via plugin cache, see Phase 3.75) | **deepseek-bulk-analyst** | `~/.claude/plugins/cache/depot/deepseek/*/agents/review/deepseek-bulk-analyst.md` (glob latest version) |
 | Diff >5000 lines AND gemini plugin installed AND (`DEEPSEEK_API_KEY` not set OR deepseek plugin not installed) | **gemini-diff-analyst** | `plugins/gemini/agents/review/gemini-diff-analyst.md` |
 
 #### Report Selection
@@ -200,7 +200,14 @@ Before dispatching agents, decide whether mechanical review work should be route
 **Routing conditions** (all must be true to route):
 
 1. `DEEPSEEK_API_KEY` is set in the environment (check via `[ -n "$DEEPSEEK_API_KEY" ]`)
-2. The deepseek plugin is installed (`plugins/deepseek/agents/workflow/deepseek-agent-runner.md` exists)
+2. The deepseek plugin is installed — resolve via the plugin cache so this check works from any CWD (pipeline runs in worktrees outside the depot where depot-relative paths fail):
+
+   ```bash
+   RUNNER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)
+   [ -n "$RUNNER_PATH" ] && [ -f "$RUNNER_PATH" ]
+   ```
+
+   The `ls -t` glob picks the newest installed version. Save `$RUNNER_PATH` for Phase 4 Branch A — do not recompute it there.
 3. The agent appears in the offload table below AND was selected in Phase 3
 
 **Offload table:**
@@ -252,7 +259,7 @@ For each selected agent, check the Phase 3.75 routing decision first:
 
 **A. If the agent is routed to DeepSeek** (in the offload table AND `DEEPSEEK_API_KEY` is set):
 
-1. **Read the deepseek-agent-runner definition** from `plugins/deepseek/agents/workflow/deepseek-agent-runner.md`
+1. **Read the deepseek-agent-runner definition** from `$RUNNER_PATH` (resolved in Phase 3.75 condition #2). If `$RUNNER_PATH` was not preserved between phases, recompute it: `RUNNER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)`. Never use a depot-relative path here — pipeline runs in worktrees outside the depot.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
    - `target_agent_path` — path to the original agent's definition file
