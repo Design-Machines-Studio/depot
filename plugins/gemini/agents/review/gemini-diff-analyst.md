@@ -43,7 +43,12 @@ Determine the project type to inject into the prompt:
 
 ### Step 3: Invoke Gemini
 
-Load the **Diff Analysis Template** from `plugins/gemini/skills/gemini-delegate/references/prompt-templates.md`. Fill in the `{PROJECT_CONTEXT}` and `{FULL_DIFF_CONTENT}` placeholders.
+Resolve the templates path via the plugin cache (works from any CWD), then load the **Diff Analysis Template** and fill the `{PROJECT_CONTEXT}` and `{FULL_DIFF_CONTENT}` placeholders:
+
+```bash
+TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+[ -n "$TEMPLATES_PATH" ] && [ -f "$TEMPLATES_PATH" ] || { echo "gemini templates not found in plugin cache"; exit 1; }
+```
 
 Pipe via heredoc with quoted delimiter to prevent shell expansion:
 

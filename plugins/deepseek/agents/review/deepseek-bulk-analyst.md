@@ -44,12 +44,25 @@ Determine the project type to inject into the prompt:
 
 ### Step 3: Invoke DeepSeek
 
-Load the **Diff Analysis Template** from the canonical reference. Resolve both the wrapper and the templates via the plugin cache so they work from any CWD (pipeline runs in worktrees outside the depot):
+Resolve the wrapper and templates via the plugin cache (works from any CWD), then load the **Diff Analysis Template** from `$TEMPLATES_PATH`:
 
 ```bash
 WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
 TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/prompt-templates.md 2>/dev/null | head -1)
-[ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] && { echo "deepseek wrapper not found in plugin cache"; exit 1; }
+if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] || [ -z "$TEMPLATES_PATH" ] || [ ! -f "$TEMPLATES_PATH" ]; then
+  cat <<EOF
+## DeepSeek Bulk Analyst (deepseek-v4)
+
+### RUNNER FAILURE
+DeepSeek bulk analyst: wrapper or templates not found in plugin cache. Bulk diff review unavailable.
+
+### Critical (P1)
+### Serious (P2)
+### Moderate (P3)
+### Approved
+EOF
+  exit 0
+fi
 ```
 
 Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`. Then invoke the wrapper:

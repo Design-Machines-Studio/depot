@@ -95,19 +95,19 @@ Select which agents to launch based on mode, changed file extensions, and projec
 
 #### Always-Run Agents (both Full and Quick mode)
 
-These 5 agents always run:
+These 5 agents always run. Resolve each agent's path via the plugin cache (see Phase 4 preamble for the canonical resolver pattern):
 
-1. **code-simplicity-reviewer** — read agent from `plugins/dm-review/agents/review/code-simplicity-reviewer.md`
-2. **security-auditor** — read agent from `plugins/dm-review/agents/review/security-auditor.md`
-3. **pattern-recognition-specialist** — read agent from `plugins/dm-review/agents/review/pattern-recognition-specialist.md`
-4. **architecture-reviewer** — read agent from `plugins/dm-review/agents/review/architecture-reviewer.md`
-5. **doc-sync-reviewer** — read agent from `plugins/dm-review/agents/review/doc-sync-reviewer.md`
+1. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md`
+2. **security-auditor** — `dm-review/*/agents/review/security-auditor.md`
+3. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md`
+4. **architecture-reviewer** — `dm-review/*/agents/review/architecture-reviewer.md`
+5. **doc-sync-reviewer** — `dm-review/*/agents/review/doc-sync-reviewer.md`
 
 **If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with only these 5 agents.**
 
 **If mode is "quick" AND UI files changed** (`.templ`, `.twig`, `.html`, or `.css` in the diff), add one more agent:
 
-6. **ui-standards-reviewer** -- read agent from `plugins/dm-review/agents/review/ui-standards-reviewer.md`
+6. **ui-standards-reviewer** — `dm-review/*/agents/review/ui-standards-reviewer.md`
 
 This ensures per-chunk pipeline reviews catch design quality issues, not just code quality. Skip to Phase 4 with these 6 agents.
 
@@ -115,22 +115,31 @@ This ensures per-chunk pipeline reviews catch design quality issues, not just co
 
 Add these agents based on which file extensions appear in the changed files:
 
-| Condition | Agent | Agent definition file |
-|-----------|-------|-----------------------|
-| `.templ`, `.twig`, or `.html` changed | **a11y-html-reviewer** | `plugins/accessibility-compliance/agents/review/a11y-html-reviewer.md` |
-| `.css` changed | **a11y-css-reviewer** | `plugins/accessibility-compliance/agents/review/a11y-css-reviewer.md` |
-| `.css` changed | **css-reviewer** | `plugins/live-wires/agents/review/css-reviewer.md` |
-| `.templ`, `.js`, or `.ts` changed AND project is Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `plugins/accessibility-compliance/agents/review/a11y-dynamic-content-reviewer.md` |
-| `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `plugins/ghostwriter/agents/review/voice-editor.md` |
-| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** | `plugins/dm-review/agents/review/test-coverage-reviewer.md` |
-| Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `plugins/council/agents/review/governance-domain.md` |
-| `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `plugins/dm-review/agents/review/go-build-verifier.md` |
-| `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `plugins/dm-review/agents/review/craft-reviewer.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `plugins/dm-review/agents/review/visual-browser-tester.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `plugins/dm-review/agents/review/ux-quality-reviewer.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `plugins/dm-review/agents/review/ui-standards-reviewer.md` |
-| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set (resolve via plugin cache, see Phase 3.75) | **deepseek-bulk-analyst** | `~/.claude/plugins/cache/depot/deepseek/*/agents/review/deepseek-bulk-analyst.md` (glob latest version) |
-| Diff >5000 lines AND gemini plugin installed AND (`DEEPSEEK_API_KEY` not set OR deepseek plugin not installed) | **gemini-diff-analyst** | `plugins/gemini/agents/review/gemini-diff-analyst.md` |
+**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve each via the plugin cache before dispatch — pipeline runs in worktrees outside the depot where these paths do not exist. The canonical resolver:
+
+```bash
+AGENT_PATH=$(ls -t ~/.claude/plugins/cache/depot/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
+[ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ]
+```
+
+Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` per row. The Phase 3.75 routing condition shows the same pattern for the deepseek runner.
+
+| Condition | Agent | Cache-relative path components |
+|-----------|-------|--------------------------------|
+| `.templ`, `.twig`, or `.html` changed | **a11y-html-reviewer** | `accessibility-compliance/*/agents/review/a11y-html-reviewer.md` |
+| `.css` changed | **a11y-css-reviewer** | `accessibility-compliance/*/agents/review/a11y-css-reviewer.md` |
+| `.css` changed | **css-reviewer** | `live-wires/*/agents/review/css-reviewer.md` |
+| `.templ`, `.js`, or `.ts` changed AND project is Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `accessibility-compliance/*/agents/review/a11y-dynamic-content-reviewer.md` |
+| `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `ghostwriter/*/agents/review/voice-editor.md` |
+| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** | `dm-review/*/agents/review/test-coverage-reviewer.md` |
+| Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
+| `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
+| `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
+| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set | **deepseek-bulk-analyst** | `deepseek/*/agents/review/deepseek-bulk-analyst.md` |
+| Diff >5000 lines AND gemini plugin installed AND (`DEEPSEEK_API_KEY` not set OR deepseek plugin not installed) | **gemini-diff-analyst** | `gemini/*/agents/review/gemini-diff-analyst.md` |
 
 #### Report Selection
 
@@ -277,7 +286,15 @@ For each selected agent, check the Phase 3.75 routing decision first:
 
 **B. Otherwise, dispatch normally on Claude:**
 
-1. **Read the agent definition file** from the depot (the path listed in the agent selection table)
+1. **Read the agent definition file** by resolving the path components from the agent selection table via the plugin cache:
+
+   ```bash
+   AGENT_PATH=$(ls -t ~/.claude/plugins/cache/depot/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
+   [ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ] || { echo "ERROR: agent not found in plugin cache: <plugin>/<agent-id>"; exit 1; }
+   ```
+
+   Substitute `<plugin>`, `<category>`, and `<agent-id>` per the table row. Never use depot-relative paths — pipeline runs in worktrees.
+
 2. **Build the agent prompt** by combining:
    - The full content of the agent definition file (this is the agent's system prompt)
    - The list of changed files
@@ -382,7 +399,13 @@ Before merging findings, apply the output guardrails from `${CLAUDE_SKILL_DIR}/r
 
 #### Consolidation steps
 
-Read the consolidation instructions from `plugins/dm-review/agents/workflow/review-consolidator.md` and follow them exactly:
+Resolve the consolidator agent path via the plugin cache (same pattern as Phase 4) and read its instructions:
+
+```bash
+CONSOLIDATOR_PATH=$(ls -t ~/.claude/plugins/cache/depot/dm-review/*/agents/workflow/review-consolidator.md 2>/dev/null | head -1)
+```
+
+Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 
 1. **Collect** all findings from all agent outputs (post-guardrail)
 2. **Deduplicate** findings using the precision rules in `${CLAUDE_SKILL_DIR}/references/guardrails.md` (same-line merge, adjacent-line merge, severity-disagreement escalation)
@@ -514,7 +537,11 @@ Official and third-party Claude Code plugins that complement this skill:
 
 After issue tracking (or if skipped), record the review in ai-memory:
 
-1. Read the memory recorder instructions from `plugins/dm-review/agents/workflow/review-memory-recorder.md`
+1. Resolve the memory recorder path via the plugin cache and read its instructions:
+   ```bash
+   RECORDER_PATH=$(ls -t ~/.claude/plugins/cache/depot/dm-review/*/agents/workflow/review-memory-recorder.md 2>/dev/null | head -1)
+   ```
+   Read from `$RECORDER_PATH`.
 2. Use the ai-memory MCP tools to:
    - Search for the project entity
    - Add a review summary observation (under 300 characters)

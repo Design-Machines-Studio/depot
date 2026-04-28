@@ -45,12 +45,15 @@ Read the files relevant to the analysis task. Understand:
 
 ### Step 3: Construct Prompt
 
-Load the **Code Analysis Template** from the canonical reference. Fill the placeholders, then invoke the wrapper. Resolve both via the plugin cache so this works from any CWD (pipeline runs in worktrees outside the depot):
+Resolve the wrapper and templates via the plugin cache (works from any CWD), then load the **Code Analysis Template** from `$TEMPLATES_PATH`:
 
 ```bash
 WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
 TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/prompt-templates.md 2>/dev/null | head -1)
-[ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] && { echo "deepseek wrapper not found in plugin cache"; exit 1; }
+if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] || [ -z "$TEMPLATES_PATH" ] || [ ! -f "$TEMPLATES_PATH" ]; then
+  echo "deepseek wrapper or templates not found in plugin cache" >&2
+  exit 1
+fi
 ```
 
 Fill the `{STACK_DESCRIPTION}`, `{ANALYSIS_TASK}`, `{CODE_CONTENT}`, and `{SPECIFIC_QUESTIONS_OR_CRITERIA}` placeholders from `$TEMPLATES_PATH`.

@@ -50,7 +50,10 @@ Resolve the wrapper script via the plugin cache (works from any CWD, including n
 
 ```bash
 WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
-[ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] && { echo "deepseek wrapper not found in plugin cache"; exit 1; }
+if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
+  echo "deepseek wrapper not found in plugin cache" >&2
+  exit 1
+fi
 
 RESULT=$(DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL} \

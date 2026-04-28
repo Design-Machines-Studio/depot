@@ -101,7 +101,12 @@ If compound-engineering is not installed, perform basic codebase research direct
 Search with Google grounding for current, cited results:
 
 1. Formulate 2-3 search queries from the feature description targeting current best practices, recent framework changes, and community patterns
-2. Load the **Search Grounding Template** from `plugins/gemini/skills/gemini-delegate/references/prompt-templates.md`. Fill in the topic queries and project context, then invoke via heredoc as documented in `plugins/gemini/skills/gemini-delegate/references/invocation-protocol.md`. Use `flash` model with 60s timeout.
+2. Resolve the gemini template and protocol paths via the plugin cache (pipeline runs in worktrees):
+   ```bash
+   TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+   PROTOCOL_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/invocation-protocol.md 2>/dev/null | head -1)
+   ```
+   Load the **Search Grounding Template** from `$TEMPLATES_PATH`. Fill in the topic queries and project context, then invoke per `$PROTOCOL_PATH` (which itself resolves the gemini-wrapper.sh via the cache). Use `flash` model with 60s timeout.
 3. Parse the `response` field from JSON output. Verify `stats.tools.byName.google_web_search` is present (confirms search grounding was used).
 4. Extract: authoritative sources with URLs, recent changes or deprecations, community consensus, version-specific guidance
 

@@ -59,7 +59,11 @@ DeepSeek API key must be set:
 export DEEPSEEK_API_KEY="sk-..."
 
 # Resolve the wrapper via the plugin cache (works from any CWD)
-WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh | head -1)
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
+  echo "deepseek wrapper not found in plugin cache" >&2
+  exit 1
+fi
 
 # Verify authentication
 bash "$WRAPPER_PATH" -m v4-flash -p "test"

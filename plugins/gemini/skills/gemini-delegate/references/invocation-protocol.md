@@ -15,7 +15,8 @@ The fix is `references/gemini-wrapper.sh`, a small bash wrapper that walks the f
 Resolve the wrapper path via the plugin cache so this works from any CWD (pipeline runs in worktrees outside the depot where depot-relative paths fail):
 
 ```bash
-WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/gemini-wrapper.sh | head -1)
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/gemini-wrapper.sh 2>/dev/null | head -1)
+[ -n "$WRAPPER_PATH" ] && [ -f "$WRAPPER_PATH" ] || { echo "gemini wrapper not found in plugin cache" >&2; exit 1; }
 ```
 
 Then use `$WRAPPER_PATH` for every invocation:

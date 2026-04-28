@@ -41,7 +41,12 @@ Read the function, algorithm, or transformation to verify. Understand:
 
 ### Step 2: Construct Verification Prompt
 
-Load the **Code Execution Template** from `plugins/gemini/skills/gemini-delegate/references/prompt-templates.md`. Fill in the `{CODE}` and `{EXPECTED_BEHAVIOR}` placeholders with the function under test and its specification.
+Resolve the templates path via the plugin cache (works from any CWD), then load the **Code Execution Template** and fill the `{CODE}` and `{EXPECTED_BEHAVIOR}` placeholders with the function under test and its specification:
+
+```bash
+TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+[ -n "$TEMPLATES_PATH" ] && [ -f "$TEMPLATES_PATH" ] || { echo "gemini templates not found in plugin cache"; exit 1; }
+```
 
 Use heredoc with quoted delimiter to prevent shell expansion of code content:
 

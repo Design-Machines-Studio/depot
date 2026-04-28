@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review (with ambiguity surfacing), orchestrate concurrent worktree execution with review-fix loops and surgical-change discipline, and deliver clean branches",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
