@@ -394,6 +394,60 @@ run_all() {
 }
 
 # --------------------------------------------------------------------------
+# Check SKILL.md frontmatter integrity
+#
+# A recurring corruption pattern collapses YAML frontmatter into a Markdown
+# heading. The signature: file starts with `---` (opening delimiter) but the
+# closing `---` is missing within the first 100 lines, AND line 3 starts with
+# `## name:` -- the `name:` and `description:` keys got fused into a heading.
+#
+# Detection is one-pass and deterministic. False positives are essentially
+# zero because no legitimate SKILL.md has `## name:` on line 3.
+# --------------------------------------------------------------------------
+check_skill_frontmatter() {
+  local any_failed=0
+  local checked=0
+  local plugins_dir="$REPO_ROOT/plugins"
+
+  while IFS= read -r -d '' skill_file; do
+    checked=$((checked + 1))
+    local rel="${skill_file#$REPO_ROOT/}"
+
+    # Smoking gun #1: file does not start with ---
+    if [ "$(head -1 "$skill_file")" != "---" ]; then
+      printf "  ${RED}FAIL${RESET}  %s: missing opening '---' frontmatter delimiter on line 1\n" "$rel"
+      any_failed=1
+      continue
+    fi
+
+    # Smoking gun #2: fewer than 2 '---' delimiter lines in the first 100 lines
+    local delim_count
+    delim_count=$(head -100 "$skill_file" | grep -c '^---$')
+    if [ "$delim_count" -lt 2 ]; then
+      printf "  ${RED}FAIL${RESET}  %s: only %s '---' delimiter(s) in first 100 lines (frontmatter must have opening AND closing)\n" "$rel" "$delim_count"
+      any_failed=1
+      continue
+    fi
+
+    # Smoking gun #3: '## name:' as a heading inside what should be frontmatter
+    # (canonical corruption signature: keys fused into a Markdown heading)
+    if head -10 "$skill_file" | grep -qE '^##[[:space:]]+name:'; then
+      printf "  ${RED}FAIL${RESET}  %s: corruption pattern detected -- '## name:' heading found in first 10 lines (frontmatter destroyed)\n" "$rel"
+      any_failed=1
+      continue
+    fi
+  done < <(find "$plugins_dir" -name "SKILL.md" -path "*/skills/*" -print0 2>/dev/null)
+
+  if [ "$any_failed" -eq 0 ]; then
+    printf "  ${GREEN}OK${RESET}    %s SKILL.md files have valid frontmatter\n" "$checked"
+  else
+    printf "  ${YELLOW}FIX${RESET}   Restore via: git checkout HEAD -- <path>  (then verify the description fields are intact before committing)\n"
+  fi
+
+  return $any_failed
+}
+
+# --------------------------------------------------------------------------
 # Composition checks (the default mode)
 # --------------------------------------------------------------------------
 run_composition_checks() {
@@ -417,6 +471,11 @@ run_composition_checks() {
 
   printf "\n${BOLD}Marketplace version sync:${RESET}\n"
   if ! check_marketplace_versions; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}SKILL.md frontmatter integrity:${RESET}\n"
+  if ! check_skill_frontmatter; then
     any_failed=1
   fi
 
