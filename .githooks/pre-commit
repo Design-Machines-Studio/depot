@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# pre-commit: Block commits that introduce SKILL.md frontmatter corruption.
+#
+# WHY THIS EXISTS:
+#   A recurring corruption pattern collapses YAML frontmatter into a Markdown
+#   heading. The signature is deterministic enough that we can detect it
+#   pre-commit and refuse to record the bad state. See
+#   tools/validate-composition.sh -- this hook runs only the SKILL.md
+#   integrity subset of that validator (fast path, ~50ms).
+#
+# INSTALLATION:
+#   bash tools/install-hooks.sh
+#   (sets core.hooksPath = .githooks for this repo)
+#
+# BYPASS:
+#   git commit --no-verify
+#   (only if you are CERTAIN the SKILL.md changes are intentional)
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+any_failed=0
+
+# Only inspect SKILL.md files staged for commit (added, copied, or modified).
+# Deletions (D) and renames-without-content-change can't introduce corruption.
+STAGED_SKILLS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)SKILL\.md$' || true)
+
+if [ -z "$STAGED_SKILLS" ]; then
+  # Nothing relevant staged -- fast exit. The hook never blocks unrelated commits.
+  exit 0
+fi
+
+while IFS= read -r f; do
+  # Read the staged version (not the working tree -- they may differ if a file
+  # has unstaged changes). This is what's actually about to be committed.
+  CONTENT=$(git show ":$f" 2>/dev/null) || continue
+
+  # Smoking gun #1: file does not start with ---
+  if [ "$(printf '%s' "$CONTENT" | head -1)" != "---" ]; then
+    printf 'blocked: %s -- missing opening "---" frontmatter delimiter on line 1\n' "$f"
+    any_failed=1
+    continue
+  fi
+
+  # Smoking gun #2: fewer than 2 '---' delimiter lines in the first 100 lines
+  # (proper frontmatter has opening AND closing; corruption removes the closing)
+  delim_count=$(printf '%s' "$CONTENT" | head -100 | grep -c '^---$')
+  if [ "$delim_count" -lt 2 ]; then
+    printf 'blocked: %s -- only %s "---" delimiter(s) in first 100 lines (frontmatter must have opening AND closing)\n' "$f" "$delim_count"
+    any_failed=1
+    continue
+  fi
+
+  # Smoking gun #3: '## name:' heading in the first 10 lines
+  # (canonical signature of YAML keys collapsed into a Markdown heading)
+  if printf '%s' "$CONTENT" | head -10 | grep -qE '^##[[:space:]]+name:'; then
+    printf 'blocked: %s -- corruption pattern detected ("## name:" heading found in first 10 lines)\n' "$f"
+    any_failed=1
+    continue
+  fi
+done <<< "$STAGED_SKILLS"
+
+if [ "$any_failed" -eq 1 ]; then
+  printf '\n'
+  printf 'Pre-commit blocked: SKILL.md frontmatter corruption detected in staged files.\n'
+  printf '\n'
+  printf 'Recover the affected files with:\n'
+  printf '  git checkout HEAD -- <path>\n'
+  printf '\n'
+  printf 'Then re-stage and commit. If the corruption is somehow intentional and\n'
+  printf 'you are CERTAIN, bypass this hook with:\n'
+  printf '  git commit --no-verify\n'
+  exit 1
+fi
+
+exit 0

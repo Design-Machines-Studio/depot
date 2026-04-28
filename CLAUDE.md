@@ -246,6 +246,26 @@ Validate a plugin:
 claude plugin validate plugins/<name>
 ```
 
+### Git Hooks
+
+The depot tracks a pre-commit hook under `.githooks/pre-commit` that blocks commits introducing the canonical SKILL.md frontmatter corruption pattern (opening `---` intact but closing delimiter missing, or `## name:` heading appearing where YAML keys belong). The hook only runs when SKILL.md files are staged -- it never blocks unrelated commits.
+
+Install once per local clone:
+
+```shell
+bash tools/install-hooks.sh
+```
+
+This sets `core.hooksPath = .githooks` and makes every script in `.githooks/` executable. After installation, every `git commit` automatically runs the corruption check on staged SKILL.md files. Recovery hint is included in the failure message (`git checkout HEAD -- <path>`).
+
+Bypass for genuinely intentional changes:
+
+```shell
+git commit --no-verify
+```
+
+Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) runs the same SKILL.md integrity check plus everything else and is the right pre-push gate.
+
 ## Conventions
 
 - Almost all content is Markdown. No code to compile, lint, or test.
