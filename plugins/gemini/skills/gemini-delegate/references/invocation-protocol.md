@@ -12,17 +12,23 @@ The fix is `references/gemini-wrapper.sh`, a small bash wrapper that walks the f
 
 **How to invoke.**
 
+Resolve the wrapper path via the plugin cache so this works from any CWD (pipeline runs in worktrees outside the depot where depot-relative paths fail):
+
+```bash
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/gemini-wrapper.sh | head -1)
+```
+
+Then use `$WRAPPER_PATH` for every invocation:
+
 ```bash
 # Direct invocation (starts at pro, walks down on 429)
-bash plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh \
-  -p "your prompt" --output-format json --raw-output
+bash "$WRAPPER_PATH" -p "your prompt" --output-format json --raw-output
 
 # Start at a specific model and walk down from there
-bash plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh \
-  -m flash -p "your prompt" --output-format json --raw-output
+bash "$WRAPPER_PATH" -m flash -p "your prompt" --output-format json --raw-output
 
 # Source it and call the function
-source plugins/gemini/skills/gemini-delegate/references/gemini-wrapper.sh
+source "$WRAPPER_PATH"
 gemini_with_fallback -p "your prompt" --output-format json --raw-output
 ```
 

@@ -10,24 +10,29 @@ The DeepSeek API does not auto-retry on rate limits. The wrapper script `referen
 
 **How to invoke.**
 
+Resolve the wrapper path via the plugin cache so this works from any CWD (pipeline runs in worktrees outside the depot where depot-relative paths fail):
+
+```bash
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh | head -1)
+```
+
+Then use `$WRAPPER_PATH` for every invocation:
+
 ```bash
 # Direct invocation (starts at v4-pro, falls back to v4-flash on 429)
-bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
-  -p "your prompt"
+bash "$WRAPPER_PATH" -p "your prompt"
 
 # Start at a specific model
-bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
-  -m v4-flash -p "your prompt"
+bash "$WRAPPER_PATH" -m v4-flash -p "your prompt"
 
 # With system prompt
-bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
-  -s "You are a code reviewer" -p "Review this diff..."
+bash "$WRAPPER_PATH" -s "You are a code reviewer" -p "Review this diff..."
 
 # Pipe large content via stdin
-echo "large prompt content" | bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh -m v4-pro
+echo "large prompt content" | bash "$WRAPPER_PATH" -m v4-pro
 
 # Source it and call the function
-source plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh
+source "$WRAPPER_PATH"
 deepseek_with_fallback -p "your prompt"
 ```
 

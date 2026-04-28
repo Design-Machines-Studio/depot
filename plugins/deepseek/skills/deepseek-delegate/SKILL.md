@@ -58,9 +58,11 @@ DeepSeek API key must be set:
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
 
+# Resolve the wrapper via the plugin cache (works from any CWD)
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh | head -1)
+
 # Verify authentication
-bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
-  -m v4-flash -p "test"
+bash "$WRAPPER_PATH" -m v4-flash -p "test"
 ```
 
 The invoking Claude Code session must have Bash permissions for `curl` commands. If the first invocation is blocked by permissions, report to the user and skip gracefully.

@@ -1,7 +1,7 @@
 {
   "name": "deepseek",
   "description": "DeepSeek V4 API subagent for delegating code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro matches Opus 4.6 on SWE-bench (80.6%); V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"

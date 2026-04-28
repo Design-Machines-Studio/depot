@@ -46,10 +46,13 @@ Based on model:
 
 ### Step 4: Invoke DeepSeek
 
-Use the wrapper script with the user's prompt:
+Resolve the wrapper script via the plugin cache (works from any CWD, including non-depot worktrees), then invoke it with the user's prompt:
 
 ```bash
-RESULT=$(DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+[ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] && { echo "deepseek wrapper not found in plugin cache"; exit 1; }
+
+RESULT=$(DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL} \
   -p "${USER_PROMPT}")
 ```
@@ -57,7 +60,7 @@ RESULT=$(DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-del
 For prompts containing code or special characters, pipe via stdin:
 
 ```bash
-RESULT=$(echo "${USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+RESULT=$(echo "${USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL})
 ```
 

@@ -44,12 +44,18 @@ Determine the project type to inject into the prompt:
 
 ### Step 3: Invoke DeepSeek
 
-Load the **Diff Analysis Template** from `plugins/deepseek/skills/deepseek-delegate/references/prompt-templates.md`. Fill in the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders.
-
-Use the wrapper script with system and user prompts:
+Load the **Diff Analysis Template** from the canonical reference. Resolve both the wrapper and the templates via the plugin cache so they work from any CWD (pipeline runs in worktrees outside the depot):
 
 ```bash
-DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+[ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] && { echo "deepseek wrapper not found in plugin cache"; exit 1; }
+```
+
+Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`. Then invoke the wrapper:
+
+```bash
+DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL} \
   -s "You are a senior code reviewer. Analyze diffs for security vulnerabilities, architectural violations, code quality issues, and potential bugs. Be precise: cite file paths and line numbers. Report only genuine issues, not style preferences." \
   -p "${FILLED_USER_PROMPT}"
@@ -58,7 +64,7 @@ DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/ref
 For diffs too large for `-p` (shell argument limits), pipe via stdin:
 
 ```bash
-echo "${FILLED_USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+echo "${FILLED_USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL} \
   -s "You are a senior code reviewer. Analyze diffs for security vulnerabilities, architectural violations, code quality issues, and potential bugs. Be precise: cite file paths and line numbers. Report only genuine issues, not style preferences."
 ```

@@ -45,14 +45,20 @@ Read the files relevant to the analysis task. Understand:
 
 ### Step 3: Construct Prompt
 
-Load the **Code Analysis Template** from `plugins/deepseek/skills/deepseek-delegate/references/prompt-templates.md`. Fill in the `{STACK_DESCRIPTION}`, `{ANALYSIS_TASK}`, `{CODE_CONTENT}`, and `{SPECIFIC_QUESTIONS_OR_CRITERIA}` placeholders.
+Load the **Code Analysis Template** from the canonical reference. Fill the placeholders, then invoke the wrapper. Resolve both via the plugin cache so this works from any CWD (pipeline runs in worktrees outside the depot):
+
+```bash
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+[ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] && { echo "deepseek wrapper not found in plugin cache"; exit 1; }
+```
+
+Fill the `{STACK_DESCRIPTION}`, `{ANALYSIS_TASK}`, `{CODE_CONTENT}`, and `{SPECIFIC_QUESTIONS_OR_CRITERIA}` placeholders from `$TEMPLATES_PATH`.
 
 ### Step 4: Invoke DeepSeek
 
-Use the wrapper script:
-
 ```bash
-DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL} \
   -s "You are a code analyst specializing in ${STACK_DESCRIPTION}. Provide specific, actionable analysis with file:line citations. Be concise." \
   -p "${FILLED_USER_PROMPT}"
@@ -61,7 +67,7 @@ DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/ref
 For large code payloads, pipe via stdin:
 
 ```bash
-echo "${FILLED_USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+echo "${FILLED_USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH" \
   -m ${MODEL} \
   -s "You are a code analyst specializing in ${STACK_DESCRIPTION}. Provide specific, actionable analysis with file:line citations. Be concise."
 ```

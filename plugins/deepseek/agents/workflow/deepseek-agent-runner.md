@@ -170,6 +170,24 @@ Follow the review criteria in your system prompt exactly. Report findings using 
 Pass the system prompt via a temp file so its content (which may contain backticks, dollar signs, or other shell metacharacters from agent body code blocks) cannot be shell-interpreted. Quote every variable.
 
 ```bash
+# Resolve the wrapper script via the plugin cache so this works from any CWD.
+# Pipeline runs in worktrees outside the depot where depot-relative paths fail.
+WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
+  cat <<EOF
+## ${target_agent_name} Review (via DeepSeek ${target_model})
+
+### RUNNER FAILURE
+DeepSeek runner (${target_agent_name}): wrapper script not found in plugin cache. Review unavailable.
+
+### Critical (P1)
+### Serious (P2)
+### Moderate (P3)
+### Approved
+EOF
+  exit 0
+fi
+
 # Write the system prompt to a temp file (avoids shell interpretation of backticks/$)
 SYS_FILE=$(mktemp)
 trap 'rm -f "$SYS_FILE" "$WRAPPER_STDERR"' EXIT
@@ -178,7 +196,7 @@ printf '%s' "$TARGET_BODY" > "$SYS_FILE"
 # Invoke the wrapper, capture exit code AND stderr (for downgrade detection)
 WRAPPER_STDERR=$(mktemp)
 RESULT=$(echo "$USER_PROMPT" | DEEPSEEK_TIMEOUT_S="$target_timeout" \
-  bash plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh \
+  bash "$WRAPPER_PATH" \
     -m "$target_model" \
     -s "$(cat "$SYS_FILE")" 2>"$WRAPPER_STDERR")
 EXIT_CODE=$?
