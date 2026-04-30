@@ -89,13 +89,39 @@ If reviewing the depot itself, project type is "Plugin Marketplace (Markdown+JSO
 
 ---
 
+### Phase 2.5: Diff Size Classification
+
+Count diff lines from Phase 1. Classify:
+
+| Diff lines | Classification |
+|---|---|
+| < 100 | `lightweight` |
+| 100–500 | `standard` |
+| > 500 | `extended` |
+
+This classification scales agent count in Phase 3. Only applies to quick mode — full mode ignores this and always dispatches all applicable agents.
+
+---
+
 ### Phase 3: Agent Selection
 
-Select which agents to launch based on mode, changed file extensions, and project type.
+Select which agents to launch based on mode, diff classification, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern).
 
-#### Always-Run Agents (both Full and Quick mode)
+#### Quick mode with `lightweight` classification (diff < 100 lines)
 
-These 5 agents always run. Resolve each agent's path via the plugin cache (see Phase 4 preamble for the canonical resolver pattern):
+Run only these 3 agents:
+
+1. **security-auditor** — `dm-review/*/agents/review/security-auditor.md`
+2. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md`
+3. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md`
+
+Skip architecture-reviewer and doc-sync-reviewer — small diffs rarely have architectural or documentation-sync impact. With DeepSeek routing (Phase 3.75), this becomes 1 Claude agent (security) + 2 DeepSeek agents.
+
+Skip to Phase 4 with these 3 agents.
+
+#### Always-Run Agents (quick `standard`/`extended`, or full mode)
+
+These 5 agents always run in standard+ quick mode and all full-mode reviews:
 
 1. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md`
 2. **security-auditor** — `dm-review/*/agents/review/security-auditor.md`
