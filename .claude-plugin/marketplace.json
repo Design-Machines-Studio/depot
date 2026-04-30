@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.10.12"
+    "version": "1.10.13"
   },
   "plugins": [
     {
@@ -270,7 +270,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.27.9",
+      "version": "1.27.10",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

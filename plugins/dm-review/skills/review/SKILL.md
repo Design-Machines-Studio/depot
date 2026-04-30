@@ -107,15 +107,28 @@ This classification scales agent count in Phase 3. Only applies to quick mode �
 
 Select which agents to launch based on mode, diff classification, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern).
 
+#### MANDATORY: DeepSeek Routing for Mechanical Agents
+
+**Before selecting agents, check DeepSeek routing availability:**
+
+```bash
+[ -n "$DEEPSEEK_API_KEY" ] && RUNNER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)
+DEEPSEEK_AVAILABLE=$( [ -n "$RUNNER_PATH" ] && [ -f "$RUNNER_PATH" ] && echo true || echo false )
+```
+
+**When `DEEPSEEK_AVAILABLE=true`:** agents marked `→ DeepSeek` below MUST be dispatched via the deepseek-agent-runner (see Phase 4 Branch A), NOT on Claude. This is a cost architecture decision — DeepSeek V4 matches Sonnet on code analysis at ~10x lower cost. Dispatching these on Claude when DeepSeek is available wastes Anthropic Max quota.
+
+**When `DEEPSEEK_AVAILABLE=false`:** all agents run on Claude as before.
+
 #### Quick mode with `lightweight` classification (diff < 100 lines)
 
 Run only these 3 agents:
 
-1. **security-auditor** — `dm-review/*/agents/review/security-auditor.md`
-2. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md`
-3. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md`
+1. **security-auditor** — `dm-review/*/agents/review/security-auditor.md` — **Claude** (security judgment, never offload)
+2. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md` — **→ DeepSeek v4-pro** (90s) when available
+3. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md` — **→ DeepSeek v4-pro** (90s) when available
 
-Skip architecture-reviewer and doc-sync-reviewer — small diffs rarely have architectural or documentation-sync impact. With DeepSeek routing (Phase 3.75), this becomes 1 Claude agent (security) + 2 DeepSeek agents.
+Skip architecture-reviewer and doc-sync-reviewer — small diffs rarely have architectural or documentation-sync impact. Net: 1 Claude agent + 2 DeepSeek agents (or 3 Claude if DeepSeek unavailable).
 
 Skip to Phase 4 with these 3 agents.
 
@@ -123,11 +136,11 @@ Skip to Phase 4 with these 3 agents.
 
 These 5 agents always run in standard+ quick mode and all full-mode reviews:
 
-1. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md`
-2. **security-auditor** — `dm-review/*/agents/review/security-auditor.md`
-3. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md`
-4. **architecture-reviewer** — `dm-review/*/agents/review/architecture-reviewer.md`
-5. **doc-sync-reviewer** — `dm-review/*/agents/review/doc-sync-reviewer.md`
+1. **security-auditor** — `dm-review/*/agents/review/security-auditor.md` — **Claude** (never offload)
+2. **architecture-reviewer** — `dm-review/*/agents/review/architecture-reviewer.md` — **Claude** (multi-file SOLID reasoning)
+3. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md` — **→ DeepSeek v4-pro** (90s) when available
+4. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md` — **→ DeepSeek v4-pro** (90s) when available
+5. **doc-sync-reviewer** — `dm-review/*/agents/review/doc-sync-reviewer.md` — **→ DeepSeek v4-flash** (60s) when available
 
 **If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with only these 5 agents.**
 
@@ -157,7 +170,7 @@ Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` p
 | `.css` changed | **css-reviewer** | `live-wires/*/agents/review/css-reviewer.md` |
 | `.templ`, `.js`, or `.ts` changed AND project is Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `accessibility-compliance/*/agents/review/a11y-dynamic-content-reviewer.md` |
 | `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `ghostwriter/*/agents/review/voice-editor.md` |
-| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** | `dm-review/*/agents/review/test-coverage-reviewer.md` |
+| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** — **→ DeepSeek v4-flash** (60s) when available | `dm-review/*/agents/review/test-coverage-reviewer.md` |
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
@@ -228,59 +241,28 @@ Input guardrails applied:
 
 ---
 
-### Phase 3.75: Provider Routing
+### Phase 3.75: Provider Routing Reference
 
-Before dispatching agents, decide whether mechanical review work should be routed to DeepSeek to offload the Anthropic Max quota. This step does not add agents — it re-routes existing ones.
+Routing decisions are annotated inline in Phase 3 agent lists above (every agent marked `→ DeepSeek` or `Claude`). This section documents the technical details for Phase 4 dispatch.
 
-**Routing conditions** (all must be true to route):
+**DeepSeek models + timeouts** (used in Phase 4 Branch A dispatch):
 
-1. `DEEPSEEK_API_KEY` is set in the environment (check via `[ -n "$DEEPSEEK_API_KEY" ]`)
-2. The deepseek plugin is installed — resolve via the plugin cache so this check works from any CWD (pipeline runs in worktrees outside the depot where depot-relative paths fail):
+| Agent ID | DeepSeek Model | Timeout |
+|---|---|---|
+| `pattern-recognition-specialist` | `v4-pro` | 90s |
+| `code-simplicity-reviewer` | `v4-pro` | 90s |
+| `doc-sync-reviewer` | `v4-flash` | 60s |
+| `test-coverage-reviewer` | `v4-flash` | 60s |
 
-   ```bash
-   RUNNER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)
-   [ -n "$RUNNER_PATH" ] && [ -f "$RUNNER_PATH" ]
-   ```
-
-   The `ls -t` glob picks the newest installed version. Save `$RUNNER_PATH` for Phase 4 Branch A — do not recompute it there.
-3. The agent appears in the offload table below AND was selected in Phase 3
-
-**Offload table:**
-
-| Agent ID | DeepSeek Model | Timeout | Rationale |
-|---|---|---|---|
-| `pattern-recognition-specialist` | `v4-pro` | 90s | DeepSeek's recommended default for code work; pattern + naming analysis needs strong cross-file reasoning. |
-| `code-simplicity-reviewer` | `v4-pro` | 90s | Complexity heuristics often span multiple files (duplication, dead code); V4-Flash misses non-local smells. |
-| `doc-sync-reviewer` | `v4-flash` | 60s | Mechanical cross-reference between code and docs (file paths, version sync, eval coverage). |
-| `test-coverage-reviewer` | `v4-flash` | 60s | Mechanical file matching: does a test exist for each changed source file. |
-
-All four offloaded agents run with `thinking: disabled` (set by the wrapper). Disabling thinking is the critical latency lever: with thinking enabled, ~75% of completion tokens are hidden reasoning that triples latency without improving findings quality on well-defined review criteria.
-
-Model selection follows DeepSeek's published guidance: V4-Pro is the default for code analysis (pattern + simplicity), V4-Flash for lighter mechanical workloads (doc sync + test coverage). Both run with the same `strict=False` JSON parsing in the runner to tolerate any control characters in long content fields.
-
-Agents NOT in this table always run on Claude — they involve judgment-heavy work (security, architecture, voice, a11y, governance, visual review) where Sonnet's quality matters.
+All run with `thinking: disabled` (set by wrapper). V4-Pro for code analysis, V4-Flash for mechanical checks.
 
 **Routing report** — print before Phase 4:
 
 ```
-Provider routing:
-- Routing 4 agents through DeepSeek (offload list, DEEPSEEK_API_KEY set):
-    - pattern-recognition-specialist → v4-pro (90s)
-    - code-simplicity-reviewer → v4-pro (90s)
-    - doc-sync-reviewer → v4-flash (60s)
-    - test-coverage-reviewer → v4-flash (60s)
-- N agents on Claude (judgment-heavy or specialized)
+Provider routing (DEEPSEEK_AVAILABLE={true|false}):
+- N agents → DeepSeek (pattern-recognition, code-simplicity, doc-sync, test-coverage)
+- N agents → Claude (security, architecture, and all conditional agents)
 ```
-
-If `DEEPSEEK_API_KEY` is not set, print:
-
-```
-Provider routing: all agents on Claude (DEEPSEEK_API_KEY not set; deepseek offload disabled).
-```
-
-When conditions aren't met, all agents run on Claude.
-
-**Provider lanes:** Anthropic Max powers the dm-review orchestrator and the deepseek-agent-runner subagent (haiku, mechanical orchestration). DeepSeek API powers the actual analysis. The runner uses curl to hit `api.deepseek.com` directly — no Anthropic API credentials are touched.
 
 ---
 
