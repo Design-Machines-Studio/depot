@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.10.13"
+    "version": "1.10.14"
   },
   "plugins": [
     {
@@ -343,7 +343,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.10.3",
+      "version": "1.10.4",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

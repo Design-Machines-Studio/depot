@@ -448,21 +448,29 @@ Mark `[chunk-id] 6. Run anti-pattern scan` complete.
 
 The evaluation depth depends on the chunk classification from Step 3a.
 
-**UI chunks and Logic chunks -- full loop:**
+**Per-chunk review uses Codex (OpenAI), NOT Claude dm-review.** This offloads review work from Anthropic Max quota to OpenAI's Codex. dm-review is reserved for the final full review in Step 4.
+
+**UI chunks and Logic chunks -- Codex review loop:**
 
 ```bash
 cd .worktrees/pipeline/<feature>/<chunk-id>
 ```
 
-Run the review-fix loop pattern from "How to Run dm-review" above (quick mode, max 3 iterations) on the worktree. Use the `Skill` tool, NOT a slash command.
+Run `/codex:review` on the worktree. This delegates code review to OpenAI's Codex — runs on OpenAI quota, NOT Claude tokens. If findings:
 
-**Integration chunks -- full loop with extra scrutiny:**
+1. Apply fixes via Edit/Write
+2. Re-run `/codex:review`
+3. Max 2 iterations
 
-Same as above, but pay special attention to cross-chunk wiring: are routes registered? Do imports resolve? Does the integration actually connect the pieces?
+If Codex is unavailable (plugin not installed, auth failure), fall back to the dm-review Skill pattern from "How to Run dm-review" above.
 
-**Trivial chunks -- single pass:**
+**Integration chunks -- Codex review with extra scrutiny:**
 
-Run the single-pass review pattern from "How to Run dm-review" above. If zero findings, proceed. If findings exist, fix them and re-run once. No full loop -- it's overhead for non-behavioral changes. Use the `Skill` tool, NOT a slash command.
+Same as above, but after Codex review passes, also check cross-chunk wiring: are routes registered? Do imports resolve? Does the integration actually connect the pieces?
+
+**Trivial chunks -- single Codex pass:**
+
+Run `/codex:review` once. If zero findings, proceed. If findings, fix and re-run once. No full loop.
 
 **Zero-deferral policy (all chunk types):** ALL findings MUST be fixed -- P1, P2, AND P3:
 
@@ -474,7 +482,7 @@ Run the single-pass review pattern from "How to Run dm-review" above. If zero fi
 
 1. STOP chunk processing. Do NOT proceed to merge.
 2. Read each remaining finding and apply targeted fixes to the specific lines cited in the worktree -- do not re-implement sections wholesale or launch another subagent.
-3. Re-run a single-pass review (per "How to Run dm-review" helper) to verify the manual fixes.
+3. Re-run `/codex:review` to verify manual fixes (or dm-review Skill pattern if Codex unavailable).
 4. If findings STILL remain after this manual pass, you MUST log each one as DEFERRED with an explicit justification explaining why it cannot be fixed now. Generic justifications like "max iterations reached" are not acceptable -- state the specific technical reason.
 5. The Summary Report (Step 5) MUST list every DEFERRED finding with its justification in a dedicated "Deferred Findings" section. The user will see this.
 6. Only then continue to the next step.
