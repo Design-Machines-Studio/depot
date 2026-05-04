@@ -283,7 +283,9 @@ Present the manifest summary: chunk count, parallel groups, overlap risk, requir
 
 ## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
-Launch the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adversary.md`.
+Use `/codex:adversarial-review` to review the prompts (runs on OpenAI quota, saves Claude tokens). Pass the plan, prompts, manifest, and `original-prompt.md` as context.
+
+If Codex is unavailable (plugin not installed, auth failure, or OpenAI quota exhausted), fall back to launching the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adversary.md`.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
 2. The adversary reviews for feasibility, completeness, and DM standards
