@@ -91,7 +91,7 @@ All review findings resolved. Commit the fixes?
 
 ### 5. Cleanup Completed Todos
 
-After fixes are committed, clean up the completed todo files:
+Clean up completed todo files. This runs unconditionally -- do not gate on whether fixes were committed. Stale done files accumulate across sessions when this step is skipped.
 
 1. Find all done todo files:
 ```bash

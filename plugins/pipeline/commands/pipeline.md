@@ -429,9 +429,25 @@ Entries marked "Addressed" without an evidence type are treated as NOT ADDRESSED
 
 Mark item 13 as complete.
 
-**GATE (ledger item 14):** Use AskUserQuestion to ask: "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. Want to create a PR, give feedback for another iteration, or done?"
+**GATE (ledger item 14):** Use AskUserQuestion to present options:
 
-**If feedback given:** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
+"Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. What next?"
+
+Options:
+1. **Create PR** -- work continues on the branch; no artifact cleanup yet
+2. **Give feedback** -- another iteration; no cleanup
+3. **Done -- clean up** -- write receipt, delete all ephemeral + run-scoped + feature-scoped artifacts, retain only `receipt.md`
+
+**If option 1 (PR):** Proceed to create PR. Artifact cleanup deferred until user returns.
+
+**If option 2 (feedback):** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
+
+**If option 3 (done):** Run full cleanup per the artifact lifecycle policy:
+1. Ensure `plans/<feature-slug>/receipt.md` exists (written by orchestrator Step 5b). If missing, write it now.
+2. Delete Tier 1 + 2 artifacts (if not already cleaned by orchestrator).
+3. Delete Tier 3 artifacts: `rm -f plans/<slug>/original-prompt.md assessment.md research.md plan.md final-requirements-crosscheck.md`
+4. Only `receipt.md` remains in `plans/<feature-slug>/`.
+5. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.`
 
 ## Self-Audit
 

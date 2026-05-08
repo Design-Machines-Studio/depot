@@ -105,3 +105,11 @@ In addition to `/pipeline`'s normal self-audit, verify:
 - Are all `deferred` rows explicitly approved by the user?
 
 If any answer is "no," do not deliver. Fix-pass quality hinges on the 1:1 mapping from findings to fixes.
+
+## Fix-Pass Cleanup
+
+After the fix-pass completes and the user has reviewed the Findings Resolution Table:
+
+1. Write receipt: `plans/<fix-slug>/receipt.md` (if not already written by the orchestrator's Step 5b)
+2. Delete baselines: `rm -rf plans/<fix-slug>/baselines-pre-fix/ plans/<fix-slug>/baselines-post-fix/`
+3. The Findings Resolution Table in the delivery report serves as durable evidence. Screenshots referenced in the table were consumed for comparison and are cleaned as Tier 1 artifacts.

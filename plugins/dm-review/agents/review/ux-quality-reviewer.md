@@ -75,6 +75,19 @@ Before beginning review, set up the screenshot directory:
 grep -qxF '.claude/ux-review/' .gitignore 2>/dev/null || echo '.claude/ux-review/' >> .gitignore
 ```
 
+1b. Rotate old screenshots -- keep only the current date directory to prevent accumulation:
+
+```bash
+REVIEW_DIR=".claude/ux-review/screenshots"
+if [ -d "$REVIEW_DIR" ]; then
+  TODAY=$(date +%Y-%m-%d)
+  for dir in "$REVIEW_DIR"/????-??-??; do
+    DIRNAME=$(basename "$dir")
+    [ "$DIRNAME" != "$TODAY" ] && rm -rf "$dir"
+  done
+fi
+```
+
 2. Create today's screenshot directory:
 
 ```bash

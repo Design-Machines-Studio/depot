@@ -165,11 +165,11 @@ For each chunk, generate a self-contained execution prompt using the template fr
 4. **Testable** -- Clear acceptance criteria the subagent can verify
 5. **Visually specified** (UI chunks) -- Include the Visual Reference Summary from Phase 2.5 and generate both structural AND visual acceptance criteria (see prompt template)
 
-Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`.
+Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`. Prompts are Tier 2 (run-scoped) artifacts -- auto-deleted by the orchestrator's cleanup phase after successful execution.
 
 ### Phase 5: Manifest Generation
 
-Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`.
+Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
 The manifest encodes:
 - Chunk ordering and dependencies

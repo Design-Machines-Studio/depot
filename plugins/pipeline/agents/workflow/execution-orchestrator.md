@@ -147,6 +147,7 @@ FINAL 1. Run full dm-review on feature branch
 FINAL 2. Requirements cross-check against original-prompt.md (write final-requirements-crosscheck.md)
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
 FINAL 4. Record session to ai-memory
+FINAL 4b. Artifact cleanup (write receipt, delete ephemeral/run-scoped artifacts)
 FINAL 5. Present summary report
 ```
 
@@ -261,6 +262,34 @@ If the chunk prompt does not already mention the loader routing file, flag it as
 ### 4. Negative case
 
 If no loader routing file is found (e.g. a framework that auto-discovers modules), log `module-loader pre-flight: no dev-mode loader detected -- assuming auto-discovery` and continue. This is the common case for modern bundlers.
+
+## Step 0d: Gitignore Enforcement
+
+Before any file writes, ensure the downstream project's `.gitignore` includes depot plugin artifact entries. This runs once per orchestrator invocation and is idempotent.
+
+```bash
+ENTRIES=(
+  'plans/*/baselines/'
+  'plans/*/baselines-pre-fix/'
+  'plans/*/baselines-post-fix/'
+  'plans/*/screenshots/'
+  'plans/*/prompts/'
+  'plans/*/manifest.json'
+  'plans/*/brainstorm.md'
+  '.worktrees/'
+  '.claude/ux-review/'
+  'todos/'
+)
+ADDED=0
+for ENTRY in "${ENTRIES[@]}"; do
+  grep -qxF "$ENTRY" .gitignore 2>/dev/null || { echo "$ENTRY" >> .gitignore; ADDED=$((ADDED+1)); }
+done
+if [ "$ADDED" -gt 0 ]; then
+  git add .gitignore && git commit -m "chore: add depot plugin artifact entries to .gitignore"
+fi
+```
+
+If `.gitignore` was modified, the commit happens before any pipeline artifacts are created. Log: `Gitignore enforcement: added N entries` or `Gitignore enforcement: all entries present`.
 
 ## Step 1: Setup
 
@@ -769,6 +798,68 @@ If ai-memory unavailable, skip silently.
 
 Mark `FINAL 4. Record session to ai-memory` complete.
 
+## Step 5b: Artifact Cleanup
+
+Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`).
+
+### 1. Write receipt
+
+Create `plans/<feature-slug>/receipt.md`:
+
+```markdown
+# Pipeline Receipt: <feature-slug>
+
+- Date: YYYY-MM-DD
+- Branch: <featureBranch>
+- Merge: <merge recommendation from Step 4>
+- Chunks: <N> executed, <M> parallel
+- Mode: <executionMode>
+
+## Evidence
+| # | Requirement | Evidence |
+|---|-------------|----------|
+[Copy rows from final-requirements-crosscheck.md]
+
+## Cleanup
+- Ephemeral removed: <count> files
+- Run-scoped removed: <count> files
+- Feature-scoped retained: <count> files
+- Deferred findings: none | <list with justifications>
+```
+
+### 2. Delete artifacts by tier
+
+**Always (success or failure) -- delete Tier 1 (ephemeral):**
+
+```bash
+rm -rf plans/<feature-slug>/baselines/ plans/<feature-slug>/baselines-pre-fix/ plans/<feature-slug>/baselines-post-fix/ plans/<feature-slug>/screenshots/
+```
+
+**On success only (merge recommendation is CLEAN or APPROVE WITH FIXES) -- also delete Tier 2 (run-scoped):**
+
+```bash
+rm -rf plans/<feature-slug>/prompts/
+rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.md
+```
+
+On failure, preserve Tier 2 for debugging. Log: `Artifact cleanup (partial -- run failed): preserved prompts and manifest for debugging.`
+
+### 3. Worktree sweep
+
+Ensure no stale worktrees remain from this feature (handles cases where per-chunk cleanup in Step 3j was interrupted):
+
+```bash
+git worktree list --porcelain | grep -o '\.worktrees/pipeline/<feature>[^ ]*' | while read wt; do
+  git worktree remove --force "$wt" 2>/dev/null
+done
+```
+
+### 4. Report
+
+Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, retained K feature-scoped files.`
+
+Mark `FINAL 4b. Artifact cleanup` complete.
+
 ## Step 6: Summary Report
 
 Present this report:
@@ -802,7 +893,14 @@ Present this report:
 - [x] final-requirements-crosscheck.md written: yes/no
 - [x] Merge policy honored (noMergeOnCompletion): yes/no
 - [x] ai-memory capture: yes/no
+- [x] Artifact cleanup: yes/no
 - [x] Zero-deferral enforced: yes/no
+
+## Artifact Cleanup
+- Receipt: plans/<feature-slug>/receipt.md
+- Ephemeral removed: N files
+- Run-scoped removed: N files (or "preserved -- run failed")
+- Feature-scoped retained: N files
 
 ## Evaluation Receipts
 [List every EVAL_GATE_PASSED line, proving each chunk was evaluated]
@@ -852,5 +950,6 @@ Mark `FINAL 5. Present summary report` complete.
 - Never modify main directly
 - Never skip dm-review-loop -- this is the most commonly skipped step and the most important
 - Always clean up worktrees, even on failure
+- Always run Step 5b artifact cleanup, even on failure (Tier 1 always, Tier 2 only on success)
 - Always report honestly what you did and didn't do
 - Always follow the Fix Philosophy

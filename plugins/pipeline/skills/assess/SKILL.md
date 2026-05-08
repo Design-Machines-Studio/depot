@@ -97,7 +97,7 @@ Save all screenshots taken during the UX assessment to disk for later comparison
 
 These baselines serve as the "before" state for visual diff comparisons after implementation. The execution-orchestrator's visual verification protocol compares post-implementation screenshots against these baselines to detect regressions. Expected changes (the feature being built) are fine; unexpected visual differences are findings.
 
-Note: Baseline screenshots are ephemeral -- useful within a pipeline run but not committed to git. Add `plans/*/baselines/*.png` to `.gitignore` if not already ignored.
+Baseline screenshots are Tier 1 (ephemeral) artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`). They are auto-deleted by the execution-orchestrator's cleanup phase (Step 5b). Gitignore enforcement in Step 0d ensures they are never tracked by git.
 
 #### Fixture Discovery
 
