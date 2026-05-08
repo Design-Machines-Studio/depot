@@ -1,0 +1,64 @@
+{
+  "name": "project-scaffolder",
+  "version": "1.8.0",
+  "description": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters)",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "scaffolding",
+        "name": "Project Scaffolding",
+        "description": "Scaffold Claude Code project infrastructure -- hooks, agents, settings.json, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters)",
+        "triggers": [
+          "set up new project",
+          "configure Claude Code hooks",
+          "create CLAUDE.md",
+          "add CLAUDE.md to existing project",
+          "CLAUDE.md starter template",
+          "generic CLAUDE.md",
+          "Karpathy starter",
+          "scaffold .claude directory",
+          "commit-push reminder hook",
+          "Docker safety gate",
+          "session-start workflow"
+        ],
+        "tags": [
+          "scaffolding",
+          "claude-code",
+          "hooks",
+          "settings",
+          "project-setup",
+          "claude-md-starter"
+        ]
+      }
+    ],
+    "agents": [],
+    "commands": []
+  },
+  "optionalPluginDependencies": {
+    "live-wires": ">=1.0.0",
+    "dm-review": ">=1.0.0",
+    "pipeline": ">=1.0.0",
+    "accessibility-compliance": ">=1.0.0"
+  },
+  "interface": {
+    "displayName": "Project Scaffolder",
+    "shortDescription": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates (project-type-speci",
+    "longDescription": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters)",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "scaffolding",
+      "claude-code",
+      "hooks",
+      "settings",
+      "project-setup",
+      "claude-md-starter",
+      "nats",
+      "module-interface"
+    ]
+  }
+}

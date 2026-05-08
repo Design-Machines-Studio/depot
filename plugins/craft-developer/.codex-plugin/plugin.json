@@ -1,0 +1,181 @@
+{
+  "name": "craft-developer",
+  "version": "2.5.0",
+  "description": "Craft CMS development expertise including content modeling, template development, debugging, and AI-assisted workflows via MCP integration. Covers Craft 4 and 5 patterns.",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.io"
+  },
+  "repository": "https://github.com/design-machines/craft-developer",
+  "keywords": [
+    "craft-cms",
+    "content-modeling",
+    "twig",
+    "graphql",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "content-modeling",
+        "name": "Content Modeling",
+        "description": "Content modeling methodology for Craft CMS projects using the three-layer approach",
+        "triggers": [
+          "sections vs channels",
+          "Matrix nesting",
+          "how should I structure this content",
+          "field naming",
+          "entry type sharing",
+          "CKEditor vs Matrix",
+          "content architecture"
+        ],
+        "tags": [
+          "craft-cms",
+          "content-modeling",
+          "architecture",
+          "matrix",
+          "sections"
+        ]
+      },
+      {
+        "id": "craft-5-migration",
+        "name": "Craft 5 Migration",
+        "description": "Patterns and breaking changes for Craft CMS 4 to 5 migrations",
+        "triggers": [
+          "upgrade to Craft 5",
+          "empty array breaking change",
+          "GraphQL types not found",
+          "block.type.handle",
+          "entrification",
+          "Craft 5 compatibility"
+        ],
+        "tags": [
+          "craft-cms",
+          "migration",
+          "craft-5",
+          "upgrade",
+          "breaking-changes"
+        ]
+      },
+      {
+        "id": "craft-development",
+        "name": "Craft Development",
+        "description": "Craft CMS development expertise for building sites, debugging issues, and community support",
+        "triggers": [
+          "craft.entries()",
+          "Twig template",
+          "eager loading",
+          "relatedTo",
+          "Matrix blocks",
+          "element query",
+          "N+1 query",
+          "cache invalidation",
+          "GraphQL mutation"
+        ],
+        "tags": [
+          "craft-cms",
+          "twig",
+          "element-queries",
+          "graphql",
+          "development"
+        ]
+      },
+      {
+        "id": "craft-mcp",
+        "name": "Craft MCP",
+        "description": "Craft CMS MCP server tools for direct database and schema access",
+        "triggers": [
+          "check my Craft setup",
+          "what sections do I have",
+          "list entry types",
+          "inspect field layout",
+          "query Craft entries",
+          "debug content model"
+        ],
+        "tags": [
+          "craft-cms",
+          "mcp",
+          "database",
+          "schema",
+          "inspection"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "content-modeler",
+        "name": "Content Modeler",
+        "category": "workflow",
+        "description": "Full content modeling workflow for Craft CMS projects using the three-layer methodology with MCP integration",
+        "tags": [
+          "craft-cms",
+          "content-modeling",
+          "workflow"
+        ]
+      },
+      {
+        "id": "craft-debugger",
+        "name": "Craft Debugger",
+        "category": "workflow",
+        "description": "Deep debugging agent for Craft CMS issues using MCP tools and systematic analysis",
+        "tags": [
+          "craft-cms",
+          "debugging",
+          "mcp"
+        ]
+      },
+      {
+        "id": "template-builder",
+        "name": "Template Builder",
+        "category": "workflow",
+        "description": "Template development agent for Craft CMS Twig templates with performance optimization",
+        "tags": [
+          "craft-cms",
+          "twig",
+          "templates",
+          "performance"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "craft-debug",
+        "name": "Craft Debug",
+        "description": "Debug Craft CMS issues with systematic analysis"
+      },
+      {
+        "id": "craft-migrate",
+        "name": "Craft Migrate",
+        "description": "Plan and execute Craft CMS migrations (especially Craft 4 to 5)"
+      },
+      {
+        "id": "craft-model",
+        "name": "Craft Model",
+        "description": "Start a content modeling session for a Craft CMS project"
+      },
+      {
+        "id": "craft-query",
+        "name": "Craft Query",
+        "description": "Build complex Craft CMS element queries"
+      }
+    ]
+  },
+  "interface": {
+    "displayName": "Craft Developer",
+    "shortDescription": "Craft CMS development expertise including content modeling, template development, debugging, and AI-assisted workflows v",
+    "longDescription": "Craft CMS development expertise including content modeling, template development, debugging, and AI-assisted workflows via MCP integration. Covers Craft 4 and 5 patterns.",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "craft-cms",
+      "content-modeling",
+      "twig",
+      "graphql",
+      "migration",
+      "mcp",
+      "debugging"
+    ]
+  }
+}

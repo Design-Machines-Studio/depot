@@ -1,0 +1,164 @@
+{
+  "name": "assembly",
+  "version": "3.1.0",
+  "description": "Assembly governance application development with Go, Templ, and Datastar",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "development",
+        "name": "Assembly Development",
+        "description": "Go, Templ, and Datastar patterns -- handlers, migrations, CRUD flows, SSE endpoints, and Docker ops",
+        "triggers": [
+          "add a new page to Assembly",
+          "docker container crashing",
+          "scaffold CRUD flow",
+          "how does the fixture system work",
+          "write a migration",
+          "set up SSE endpoint",
+          "DTO mapping issue",
+          "deploy to production",
+          "Datastar modal",
+          "compliance dashboard handler"
+        ],
+        "tags": [
+          "go",
+          "templ",
+          "datastar",
+          "assembly",
+          "sse",
+          "docker",
+          "handlers"
+        ]
+      },
+      {
+        "id": "nats-jetstream",
+        "name": "NATS JetStream",
+        "description": "Embedded NATS patterns -- KV store, event bus, streams, consumers, and real-time SSE via KV Watch",
+        "triggers": [
+          "set up NATS",
+          "publish event after mutation",
+          "KV Watch for real-time updates",
+          "NATS stream configuration",
+          "event bus pattern",
+          "audit trail events",
+          "ScopedEventBus",
+          "embedded NATS DontListen"
+        ],
+        "tags": [
+          "nats",
+          "jetstream",
+          "events",
+          "kv-store",
+          "real-time",
+          "messaging"
+        ]
+      },
+      {
+        "id": "golang-patterns",
+        "name": "Go Ecosystem Patterns",
+        "description": "Assembly-specific Go library patterns -- SQLite, migrations, sessions, CSRF, CLI, rate limiting",
+        "triggers": [
+          "which SQLite driver to use",
+          "set up migrations with goose",
+          "session management pattern",
+          "CSRF protection",
+          "rate limiting middleware",
+          "cobra CLI setup",
+          "SCS session store"
+        ],
+        "tags": [
+          "go",
+          "sqlite",
+          "goose",
+          "sessions",
+          "csrf",
+          "cobra",
+          "rate-limiting"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "datastar-sse",
+        "name": "Datastar SSE",
+        "category": "workflow",
+        "description": "Specializes in Datastar reactivity and SSE endpoint patterns for Assembly",
+        "tags": [
+          "datastar",
+          "sse",
+          "real-time",
+          "signals"
+        ]
+      },
+      {
+        "id": "templ-scaffolder",
+        "name": "Templ Scaffolder",
+        "category": "workflow",
+        "description": "Scaffolds new Templ pages, handlers, routes, and SSE endpoints following Assembly patterns",
+        "tags": [
+          "templ",
+          "scaffolding",
+          "handlers",
+          "routes"
+        ]
+      },
+      {
+        "id": "nats-reviewer",
+        "name": "NATS Reviewer",
+        "category": "review",
+        "description": "Reviews NATS usage for embedded safety, ScopedEventBus patterns, subject naming, and event ordering",
+        "tags": [
+          "nats",
+          "review",
+          "safety",
+          "events"
+        ]
+      },
+      {
+        "id": "go-test-runner",
+        "name": "Go Test Runner",
+        "category": "workflow",
+        "description": "Runs Go tests with race detection, reports coverage, flags missing test files",
+        "tags": [
+          "go",
+          "testing",
+          "coverage",
+          "race-detection"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "assembly-build",
+        "name": "Assembly Build",
+        "description": "Build and test Assembly via Docker",
+        "argumentHint": "[optional: test, generate, or full]"
+      }
+    ]
+  },
+  "optionalPluginDependencies": {
+    "council": ">=1.5.0",
+    "design-machines": ">=1.3.0"
+  },
+  "interface": {
+    "displayName": "Assembly",
+    "shortDescription": "Assembly governance application development with Go, Templ, and Datastar",
+    "longDescription": "Assembly governance application development with Go, Templ, and Datastar",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "go",
+      "templ",
+      "datastar",
+      "assembly",
+      "sse",
+      "docker",
+      "nats",
+      "jetstream"
+    ]
+  }
+}

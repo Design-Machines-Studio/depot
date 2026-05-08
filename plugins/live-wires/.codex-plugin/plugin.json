@@ -1,0 +1,68 @@
+{
+  "name": "live-wires",
+  "version": "1.6.0",
+  "description": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "livewires",
+        "name": "Live Wires",
+        "description": "CSS framework for editorial websites with layout primitives and baseline rhythm",
+        "triggers": [
+          "spacing tokens setup",
+          "sidebar not collapsing on mobile",
+          "responsive card grid",
+          "baseline rhythm alignment",
+          "stack vs margin-bottom",
+          "dark color scheme theming",
+          "cascade layer specificity",
+          "Live Wires vs Tailwind",
+          "right Live Wires classes",
+          "fluid typography setup"
+        ],
+        "tags": [
+          "css",
+          "layout-primitives",
+          "baseline-rhythm",
+          "tokens",
+          "cascade-layers",
+          "responsive"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "css-reviewer",
+        "name": "CSS Reviewer",
+        "category": "review",
+        "description": "Reviews CSS and HTML template changes for Live Wires framework compliance",
+        "tags": [
+          "css",
+          "review",
+          "compliance",
+          "live-wires"
+        ]
+      }
+    ],
+    "commands": []
+  },
+  "interface": {
+    "displayName": "Live Wires",
+    "shortDescription": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm",
+    "longDescription": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "css",
+      "layout-primitives",
+      "baseline-rhythm",
+      "tokens",
+      "cascade-layers",
+      "responsive"
+    ]
+  }
+}

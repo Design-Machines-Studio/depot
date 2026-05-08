@@ -1,0 +1,113 @@
+{
+  "name": "ghostwriter",
+  "version": "3.9.0",
+  "description": "Travis Gertz's personal writing voice, editorial style engine, and social media publishing intelligence",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "social-media",
+        "name": "Social Media Strategy",
+        "description": "Platform-specific social media strategy for Design Machines across LinkedIn, Instagram, Bluesky, and Mastodon",
+        "triggers": [
+          "write a LinkedIn post",
+          "Instagram caption",
+          "posting schedule",
+          "hashtag strategy",
+          "cross-platform content",
+          "Bluesky thread",
+          "Mastodon post",
+          "content calendar",
+          "best time to post"
+        ],
+        "tags": [
+          "social-media",
+          "linkedin",
+          "instagram",
+          "bluesky",
+          "mastodon",
+          "content"
+        ]
+      },
+      {
+        "id": "voice",
+        "name": "Writing Voice",
+        "description": "Travis Gertz's personal writing voice and editorial style engine",
+        "triggers": [
+          "edit this to sound more like me",
+          "fix this AI-sounding text",
+          "write an email to a client",
+          "check for AI tells",
+          "write About page copy",
+          "short bio for conference",
+          "make this sound human",
+          "commit message voice",
+          "newsletter intro draft",
+          "clean up the voice"
+        ],
+        "tags": [
+          "writing",
+          "voice",
+          "editing",
+          "anti-ai",
+          "tone",
+          "style"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "voice-editor",
+        "name": "Voice Editor",
+        "category": "review",
+        "description": "Reviews and edits written content to match Travis Gertz's personal writing voice",
+        "tags": [
+          "voice",
+          "editing",
+          "review",
+          "writing"
+        ]
+      },
+      {
+        "id": "social-publisher",
+        "name": "Social Publisher",
+        "category": "workflow",
+        "description": "Drafts platform-native social media content for Design Machines",
+        "tags": [
+          "social-media",
+          "content-creation",
+          "multi-platform"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "voice-check",
+        "name": "Voice Check",
+        "description": "Check text against Travis Gertz's writing voice",
+        "argumentHint": "[paste text or provide file path]"
+      }
+    ]
+  },
+  "optionalPluginDependencies": {
+    "design-machines": ">=1.5.0"
+  },
+  "interface": {
+    "displayName": "Ghostwriter",
+    "shortDescription": "Travis Gertz's personal writing voice, editorial style engine, and social media publishing intelligence",
+    "longDescription": "Travis Gertz's personal writing voice, editorial style engine, and social media publishing intelligence",
+    "developerName": "Design Machines",
+    "category": "Writing",
+    "capabilities": [
+      "writing",
+      "voice",
+      "social-media",
+      "anti-ai",
+      "editing",
+      "multi-platform"
+    ]
+  }
+}

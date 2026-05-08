@@ -1,5 +1,42 @@
 # Depot Tools
 
+## generate-codex-manifests.py
+
+Generates Codex compatibility manifests from the Claude marketplace manifests.
+Claude remains canonical:
+
+- `.claude-plugin/marketplace.json`
+- `plugins/*/.claude-plugin/plugin.json`
+
+Generated Codex files:
+
+- `.agents/plugins/marketplace.json`
+- `plugins/*/.codex-plugin/plugin.json`
+
+### Regenerate Codex manifests
+
+```bash
+./tools/generate-codex-manifests.py
+```
+
+### Check generated files are current
+
+```bash
+./tools/generate-codex-manifests.py --check
+```
+
+## validate-dual-compat.sh
+
+Verifies the generated Codex manifests match the Claude source manifests and
+that execution-critical Claude plugin-cache lookups also include Codex cache
+fallbacks.
+
+```bash
+./tools/validate-dual-compat.sh
+```
+
+This check is included in `./tools/validate-composition.sh`.
+
 ## eval-descriptions.sh
 
 Evaluates whether SKILL.md descriptions would plausibly trigger for test queries using term-overlap heuristics. Catches regressions when descriptions are edited.

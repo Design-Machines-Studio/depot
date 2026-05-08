@@ -1,6 +1,6 @@
 # depot
 
-DM-013/WORKS -- Design Machines' AI plugin marketplace for Claude Code.
+DM-013/WORKS -- Design Machines' AI plugin marketplace for Claude Code and Codex.
 
 ## Install
 
@@ -26,11 +26,21 @@ Then install individual plugins:
 /plugin install the-local@depot
 /plugin install chef@depot
 /plugin install pipeline@depot
+/plugin install gemini@depot
+/plugin install deepseek@depot
+```
+
+Codex compatibility is generated from the Claude manifests. Claude remains the
+source of truth; do not hand-edit Codex manifest files.
+
+```shell
+./tools/generate-codex-manifests.py
+./tools/validate-dual-compat.sh
 ```
 
 ## Plugins
 
-15 plugins | 31 skills | 31 agents | 27 commands
+17 plugins | 36 skills | 41 agents | 31 commands
 
 ### ned
 
@@ -186,14 +196,36 @@ Autonomous feature development pipeline. 3 skills, 2 agents, 4 commands.
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
 - `/pipeline-run` -- Execute prompts in worktrees with review-fix loops
 
+### gemini
+
+Gemini CLI delegation for grounded research, large-context diff analysis, and code execution. 1 skill, 3 agents, 2 commands.
+
+- **gemini-delegate** -- Delegates web-grounded search, 2M-context diff analysis, and sandboxed code execution to Gemini
+- **gemini-search-grounded** (agent) -- Runs search-grounded research with cited sources
+- **gemini-code-executor** (agent) -- Verifies algorithms and data transformations in Gemini's execution sandbox
+- **gemini-diff-analyst** (agent) -- Reviews large diffs that exceed normal truncation limits
+- `/gemini` -- Delegate a task to Gemini CLI
+- `/gemini-search` -- Run search-grounded Gemini research
+
+### deepseek
+
+DeepSeek V4 delegation for lower-cost code review and bulk diff analysis. 1 skill, 3 agents, 1 command.
+
+- **deepseek-delegate** -- Delegates code analysis and review work to DeepSeek V4-Pro/V4-Flash with fallback handling
+- **deepseek-bulk-analyst** (agent) -- Reviews large diffs with DeepSeek's long context
+- **deepseek-code-analyst** (agent) -- Performs focused code analysis and refactoring review
+- **deepseek-agent-runner** (agent) -- Runs dm-review mechanical agents through DeepSeek-compatible prompts
+- `/deepseek` -- Delegate a task to DeepSeek
+
 ## Orchestration
 
-Plugins compose through four patterns:
+Plugins compose through five patterns:
 
 1. **Companion Skill Loading** -- A command loads skills from other plugins at specific workflow phases
 2. **Multi-Agent Dispatch** -- A skill launches agents in parallel and consolidates results
 3. **Memory-Mediated Coordination** -- Plugins write to ai-memory entities that other plugins read later
 4. **Pipeline Orchestration** -- A conductor plugin composes all three patterns into an autonomous workflow with review-fix loops
+5. **CLI-Mediated Model Delegation** -- A plugin invokes an external model CLI/API and returns structured findings to the calling workflow
 
 See [docs/orchestration-patterns.md](docs/orchestration-patterns.md) for details.
 
@@ -201,6 +233,7 @@ See [docs/orchestration-patterns.md](docs/orchestration-patterns.md) for details
 
 ```shell
 ./tools/validate-composition.sh --all    # run all validators
+./tools/validate-dual-compat.sh          # check Claude/Codex manifest sync and cache fallbacks
 ./tools/eval-descriptions.sh             # run description trigger evals
 ./tools/check-dependencies.sh            # check plugin dependencies
 ```

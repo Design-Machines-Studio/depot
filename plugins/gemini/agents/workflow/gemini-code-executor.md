@@ -44,7 +44,11 @@ Read the function, algorithm, or transformation to verify. Understand:
 Resolve the templates path via the plugin cache (works from any CWD), then load the **Code Execution Template** and fill the `{CODE}` and `{EXPECTED_BEHAVIOR}` placeholders with the function under test and its specification:
 
 ```bash
-TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+TEMPLATES_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  TEMPLATES_PATH=$(ls -t "$CACHE_ROOT"/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+  [ -n "$TEMPLATES_PATH" ] && break
+done
 [ -n "$TEMPLATES_PATH" ] && [ -f "$TEMPLATES_PATH" ] || { echo "gemini templates not found in plugin cache"; exit 1; }
 ```
 

@@ -38,7 +38,11 @@ From the feature description or research topic, generate 2-3 focused search quer
 Resolve the templates path via the plugin cache (works from any CWD), then load the **Search Grounding Template** and fill the `{TOPIC_DESCRIPTION}` with the batched queries and `{WHY_THIS_MATTERS}` with the project context:
 
 ```bash
-TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+TEMPLATES_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  TEMPLATES_PATH=$(ls -t "$CACHE_ROOT"/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+  [ -n "$TEMPLATES_PATH" ] && break
+done
 [ -n "$TEMPLATES_PATH" ] && [ -f "$TEMPLATES_PATH" ] || { echo "gemini templates not found in plugin cache"; exit 1; }
 ```
 

@@ -1,0 +1,143 @@
+{
+  "name": "design-practice",
+  "version": "1.7.0",
+  "description": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters and editorial tradition",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "dataviz",
+        "name": "Data Visualization",
+        "description": "Data visualization and information graphics philosophy rooted in graphical integrity and data-ink efficiency",
+        "triggers": [
+          "should I use a pie chart",
+          "this chart looks cluttered",
+          "data-ink ratio",
+          "dashboard layout",
+          "best chart type for",
+          "sparklines",
+          "equity visualization",
+          "financial dashboard"
+        ],
+        "tags": [
+          "dataviz",
+          "charts",
+          "infographics",
+          "tufte",
+          "dashboards"
+        ]
+      },
+      {
+        "id": "identity",
+        "name": "Identity Design",
+        "description": "Identity and logo design philosophy rooted in bold simplicity and systematic thinking",
+        "triggers": [
+          "does this logo work",
+          "what makes a good mark",
+          "brand identity system",
+          "favicon design",
+          "color palette for brand",
+          "logo critique",
+          "brand guidelines"
+        ],
+        "tags": [
+          "identity",
+          "logo",
+          "branding",
+          "marks",
+          "visual-identity"
+        ]
+      },
+      {
+        "id": "layout",
+        "name": "Editorial Layout",
+        "description": "Editorial layout and art direction philosophy rooted in grid systems and reader-centered design",
+        "triggers": [
+          "how should I lay this out",
+          "spacing feels wrong",
+          "grid construction",
+          "editorial spread",
+          "visual hierarchy",
+          "responsive layout strategy",
+          "whitespace balance"
+        ],
+        "tags": [
+          "layout",
+          "grid",
+          "editorial",
+          "art-direction",
+          "hierarchy"
+        ]
+      },
+      {
+        "id": "typography",
+        "name": "Typography",
+        "description": "Typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice",
+        "triggers": [
+          "what font should I use",
+          "heading sizes",
+          "type scale",
+          "this text feels off",
+          "line-height",
+          "font pairing",
+          "fluid type clamp",
+          "baseline grid",
+          "vertical rhythm"
+        ],
+        "tags": [
+          "typography",
+          "type-scale",
+          "fonts",
+          "rhythm",
+          "swiss-modernism"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "design-critic",
+        "name": "Design Critic",
+        "category": "review",
+        "description": "Evaluates design work against Design Machines' combined influences across typography, layout, dataviz, and identity",
+        "tags": [
+          "design",
+          "critique",
+          "review",
+          "evaluation"
+        ]
+      },
+      {
+        "id": "design-advisor",
+        "name": "Design Advisor",
+        "category": "workflow",
+        "description": "Advises on design decisions and provides strategic design guidance rooted in principle",
+        "tags": [
+          "design",
+          "advisory",
+          "strategy",
+          "decisions"
+        ]
+      }
+    ],
+    "commands": []
+  },
+  "interface": {
+    "displayName": "Design Practice",
+    "shortDescription": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters and editori",
+    "longDescription": "Design philosophy, typography, layout, data visualization, and identity design informed by modernist masters and editorial tradition",
+    "developerName": "Design Machines",
+    "category": "Design",
+    "capabilities": [
+      "typography",
+      "layout",
+      "dataviz",
+      "identity",
+      "design",
+      "swiss-modernism",
+      "editorial"
+    ]
+  }
+}

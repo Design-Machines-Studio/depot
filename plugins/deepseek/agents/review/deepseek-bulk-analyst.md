@@ -47,8 +47,13 @@ Determine the project type to inject into the prompt:
 Resolve the wrapper and templates via the plugin cache (works from any CWD), then load the **Diff Analysis Template** from `$TEMPLATES_PATH`:
 
 ```bash
-WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
-TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+WRAPPER_PATH=""
+TEMPLATES_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+  TEMPLATES_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/skills/deepseek-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+  [ -n "$WRAPPER_PATH" ] && [ -n "$TEMPLATES_PATH" ] && break
+done
 if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] || [ -z "$TEMPLATES_PATH" ] || [ ! -f "$TEMPLATES_PATH" ]; then
   cat <<EOF
 ## DeepSeek Bulk Analyst (deepseek-v4)

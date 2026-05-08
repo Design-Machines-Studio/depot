@@ -112,7 +112,13 @@ Select which agents to launch based on mode, diff classification, changed file e
 **Before selecting agents, check DeepSeek routing availability:**
 
 ```bash
-[ -n "$DEEPSEEK_API_KEY" ] && RUNNER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)
+RUNNER_PATH=""
+if [ -n "$DEEPSEEK_API_KEY" ]; then
+  for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+    RUNNER_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)
+    [ -n "$RUNNER_PATH" ] && break
+  done
+fi
 DEEPSEEK_AVAILABLE=$( [ -n "$RUNNER_PATH" ] && [ -f "$RUNNER_PATH" ] && echo true || echo false )
 ```
 
@@ -157,7 +163,11 @@ Add these agents based on which file extensions appear in the changed files:
 **Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve each via the plugin cache before dispatch — pipeline runs in worktrees outside the depot where these paths do not exist. The canonical resolver:
 
 ```bash
-AGENT_PATH=$(ls -t ~/.claude/plugins/cache/depot/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
+AGENT_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
+  [ -n "$AGENT_PATH" ] && break
+done
 [ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ]
 ```
 
@@ -276,7 +286,7 @@ For each selected agent, check the Phase 3.75 routing decision first:
 
 **A. If the agent is routed to DeepSeek** (in the offload table AND `DEEPSEEK_API_KEY` is set):
 
-1. **Read the deepseek-agent-runner definition** from `$RUNNER_PATH` (resolved in Phase 3.75 condition #2). If `$RUNNER_PATH` was not preserved between phases, recompute it: `RUNNER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)`. Never use a depot-relative path here — pipeline runs in worktrees outside the depot.
+1. **Read the deepseek-agent-runner definition** from `$RUNNER_PATH` (resolved in Phase 3.75 condition #2). If `$RUNNER_PATH` was not preserved between phases, recompute it using the same Claude-first/Codex-fallback cache-root loop from Phase 3. Never use a depot-relative path here — pipeline runs in worktrees outside the depot.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
    - `target_agent_path` — path to the original agent's definition file
@@ -297,7 +307,11 @@ For each selected agent, check the Phase 3.75 routing decision first:
 1. **Read the agent definition file** by resolving the path components from the agent selection table via the plugin cache:
 
    ```bash
-   AGENT_PATH=$(ls -t ~/.claude/plugins/cache/depot/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
+   AGENT_PATH=""
+   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+     AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
+     [ -n "$AGENT_PATH" ] && break
+   done
    [ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ] || { echo "ERROR: agent not found in plugin cache: <plugin>/<agent-id>"; exit 1; }
    ```
 
@@ -410,7 +424,11 @@ Before merging findings, apply the output guardrails from `${CLAUDE_SKILL_DIR}/r
 Resolve the consolidator agent path via the plugin cache (same pattern as Phase 4) and read its instructions:
 
 ```bash
-CONSOLIDATOR_PATH=$(ls -t ~/.claude/plugins/cache/depot/dm-review/*/agents/workflow/review-consolidator.md 2>/dev/null | head -1)
+CONSOLIDATOR_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  CONSOLIDATOR_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-consolidator.md 2>/dev/null | head -1)
+  [ -n "$CONSOLIDATOR_PATH" ] && break
+done
 ```
 
 Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
@@ -471,6 +489,12 @@ No todos/ directory found. How should I track these findings?
 ```
 
 **Text file tracking:**
+
+Before creating new todo files, clean up stale completed files from previous sessions:
+
+```bash
+rm -- todos/*-done-*.md 2>/dev/null
+```
 
 Create `todos/` directory if it doesn't exist. For each P1, P2, and P3 finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
 
@@ -547,7 +571,11 @@ After issue tracking (or if skipped), record the review in ai-memory:
 
 1. Resolve the memory recorder path via the plugin cache and read its instructions:
    ```bash
-   RECORDER_PATH=$(ls -t ~/.claude/plugins/cache/depot/dm-review/*/agents/workflow/review-memory-recorder.md 2>/dev/null | head -1)
+   RECORDER_PATH=""
+   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+     RECORDER_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-memory-recorder.md 2>/dev/null | head -1)
+     [ -n "$RECORDER_PATH" ] && break
+   done
    ```
    Read from `$RECORDER_PATH`.
 2. Use the ai-memory MCP tools to:

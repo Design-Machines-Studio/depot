@@ -1,0 +1,110 @@
+{
+  "name": "the-local",
+  "version": "1.1.0",
+  "description": "The Local -- self-hosted Matrix network for the workplace democracy movement. Operational knowledge, Element Web branding, Synapse configuration, and deployment workflow.",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "element-branding",
+        "name": "Element Branding",
+        "description": "Element Web branding including custom CSS injection, welcome page customization, and auth page styling",
+        "triggers": [
+          "Element Web appearance",
+          "auth page styling",
+          "logo replacement",
+          "welcome page",
+          "custom CSS not applying",
+          "service worker caching"
+        ],
+        "tags": [
+          "element-web",
+          "branding",
+          "css",
+          "theming",
+          "matrix"
+        ]
+      },
+      {
+        "id": "server-ops",
+        "name": "Server Ops",
+        "description": "Operational knowledge for The Local's self-hosted Matrix infrastructure on DigitalOcean",
+        "triggers": [
+          "SSH into server",
+          "docker compose restart",
+          "create Matrix account",
+          "check server logs",
+          "backup database",
+          "droplet ops"
+        ],
+        "tags": [
+          "server-ops",
+          "docker",
+          "matrix",
+          "digitalocean",
+          "infrastructure"
+        ]
+      },
+      {
+        "id": "synapse-config",
+        "name": "Synapse Config",
+        "description": "Synapse Matrix homeserver configuration, email setup via Resend, and Jinja2 template system",
+        "triggers": [
+          "homeserver.yaml",
+          "registration token",
+          "email template",
+          "SMTP setup",
+          "Resend config",
+          "Jinja2 template",
+          "Synapse settings"
+        ],
+        "tags": [
+          "synapse",
+          "matrix",
+          "configuration",
+          "email",
+          "jinja2"
+        ]
+      }
+    ],
+    "agents": [],
+    "commands": [
+      {
+        "id": "create-user",
+        "name": "Create User",
+        "description": "Create a new Matrix user account on The Local",
+        "argumentHint": "[username]"
+      },
+      {
+        "id": "deploy",
+        "name": "Deploy",
+        "description": "Deploy changed files to The Local production server",
+        "argumentHint": "[service|file]"
+      },
+      {
+        "id": "logs",
+        "name": "Logs",
+        "description": "Tail Docker Compose logs for The Local services",
+        "argumentHint": "[synapse|caddy|element|livekit|lk-jwt|postgres|all]"
+      }
+    ]
+  },
+  "interface": {
+    "displayName": "The Local",
+    "shortDescription": "The Local -- self-hosted Matrix network for the workplace democracy movement. Operational knowledge, Element Web brandin",
+    "longDescription": "The Local -- self-hosted Matrix network for the workplace democracy movement. Operational knowledge, Element Web branding, Synapse configuration, and deployment workflow.",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "matrix",
+      "element-web",
+      "synapse",
+      "docker",
+      "server-ops",
+      "branding"
+    ]
+  }
+}

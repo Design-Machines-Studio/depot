@@ -474,6 +474,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}Dual compatibility:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-dual-compat.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}SKILL.md frontmatter integrity:${RESET}\n"
   if ! check_skill_frontmatter; then
     any_failed=1

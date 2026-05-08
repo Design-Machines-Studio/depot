@@ -1,0 +1,94 @@
+{
+  "name": "chef",
+  "version": "1.2.0",
+  "description": "Science-driven cooking assistant for Travis and Lydia with dietary analysis, meal planning, Mela integration, and Bali sourcing aligned with nutritionist Eve Persak's framework",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "cooking",
+        "name": "Cooking Assistant",
+        "description": "Science-driven cooking assistant with dietary analysis, meal planning, Mela integration, and Bali sourcing",
+        "triggers": [
+          "what should we eat tonight",
+          "is this recipe healthy",
+          "convert recipe to healthier",
+          "ingredient substitution",
+          "Bali grocery sourcing",
+          "meal timing",
+          "what can I make with",
+          "I'm hungry",
+          "Eve Persak guidelines"
+        ],
+        "tags": [
+          "cooking",
+          "recipes",
+          "nutrition",
+          "meal-planning",
+          "bali",
+          "mela",
+          "dietary"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "recipe-analyzer",
+        "name": "Recipe Analyzer",
+        "category": "workflow",
+        "description": "Analyzes recipes against Eve Persak's dietary framework for Travis and Lydia",
+        "tags": [
+          "recipes",
+          "nutrition",
+          "dietary-analysis",
+          "health"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "meal-plan",
+        "name": "Meal Plan",
+        "description": "Generate a meal plan following Eve Persak's timing framework",
+        "argumentHint": "[number of days, any constraints or preferences]"
+      },
+      {
+        "id": "recipe-check",
+        "name": "Recipe Check",
+        "description": "Analyze a recipe against Eve Persak's dietary framework",
+        "argumentHint": "[paste recipe text, URL, or Mela recipe name]"
+      },
+      {
+        "id": "recipe-convert",
+        "name": "Recipe Convert",
+        "description": "Convert a recipe to a healthy, Bali-friendly version and export as .melarecipe",
+        "argumentHint": "[recipe name from Mela, URL, or paste recipe text]"
+      },
+      {
+        "id": "shop",
+        "name": "Shop",
+        "description": "Build a shopping list organized by Bali store",
+        "argumentHint": "[meal plan, recipe list, or ingredient needs]"
+      }
+    ]
+  },
+  "interface": {
+    "displayName": "Chef",
+    "shortDescription": "Science-driven cooking assistant for Travis and Lydia with dietary analysis, meal planning, Mela integration, and Bali s",
+    "longDescription": "Science-driven cooking assistant for Travis and Lydia with dietary analysis, meal planning, Mela integration, and Bali sourcing aligned with nutritionist Eve Persak's framework",
+    "developerName": "Design Machines",
+    "category": "Lifestyle",
+    "capabilities": [
+      "cooking",
+      "recipes",
+      "nutrition",
+      "meal-planning",
+      "bali",
+      "mela",
+      "dietary"
+    ]
+  }
+}

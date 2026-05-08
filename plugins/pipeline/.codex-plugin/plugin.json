@@ -1,0 +1,173 @@
+{
+  "name": "pipeline",
+  "version": "1.11.0",
+  "description": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review (with ambiguity surfacing), orchestrate concurrent worktree execution with review-fix loops and surgical-change discipline, and deliver clean branches",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.io"
+  },
+  "keywords": [
+    "pipeline",
+    "orchestrator",
+    "autonomous",
+    "worktree",
+    "execution",
+    "review-loop",
+    "prompt-generation",
+    "multi-agent"
+  ],
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "assess",
+        "name": "Pre-Plan Assessment",
+        "description": "Reviews current codebase state and UX before planning changes, producing Current State and UX reports",
+        "triggers": [
+          "assess current state",
+          "review before planning",
+          "what's the current state of",
+          "pre-plan review",
+          "evaluate what exists"
+        ],
+        "tags": [
+          "assessment",
+          "pre-plan",
+          "current-state",
+          "code-review",
+          "ux-review"
+        ]
+      },
+      {
+        "id": "research",
+        "name": "DM Research Orchestrator",
+        "description": "Gathers context from ai-memory, RAG, web search, and DM domain plugins for feature planning",
+        "mcpDependencies": [
+          "ai-memory",
+          "rag"
+        ],
+        "triggers": [
+          "research for feature",
+          "gather context for planning",
+          "what do we know about",
+          "research before building"
+        ],
+        "tags": [
+          "research",
+          "context-gathering",
+          "ai-memory",
+          "rag",
+          "domain-knowledge"
+        ]
+      },
+      {
+        "id": "promptcraft",
+        "name": "Execution Prompt Generator",
+        "description": "Takes a plan and generates self-contained execution prompts with overlap-aware dependency ordering and manifest",
+        "triggers": [
+          "generate execution prompts",
+          "create prompts from plan",
+          "break plan into chunks",
+          "generate manifest"
+        ],
+        "tags": [
+          "prompts",
+          "chunking",
+          "orchestration",
+          "dependency-ordering",
+          "manifest"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "plan-adversary",
+        "name": "Plan Adversary",
+        "category": "workflow",
+        "description": "Adversarially reviews plans and execution prompts for feasibility, completeness, and DM standards, iterating to convergence",
+        "tags": [
+          "review",
+          "adversarial",
+          "plan-review",
+          "convergence"
+        ]
+      },
+      {
+        "id": "execution-orchestrator",
+        "name": "Execution Orchestrator",
+        "category": "workflow",
+        "description": "Autonomously executes sub-prompts in worktrees with dm-review-loop review-fix loops and zero-deferral policy",
+        "tags": [
+          "orchestration",
+          "worktrees",
+          "autonomous",
+          "execution",
+          "review-loop"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "pipeline",
+        "name": "Pipeline",
+        "description": "Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver",
+        "argumentHint": "[feature idea or feedback]"
+      },
+      {
+        "id": "pipeline-assess",
+        "name": "Pipeline Assess",
+        "description": "Pre-plan assessment of current codebase and UX state",
+        "argumentHint": "[area to assess or feature context]"
+      },
+      {
+        "id": "pipeline-prompts",
+        "name": "Pipeline Prompts",
+        "description": "Generate execution prompts from an existing plan with overlap analysis",
+        "argumentHint": "[path to plan file]"
+      },
+      {
+        "id": "pipeline-run",
+        "name": "Pipeline Run",
+        "description": "Execute generated prompts in worktrees with review-fix loops",
+        "argumentHint": "[path to manifest.json or prompts directory]"
+      },
+      {
+        "id": "pipeline-fix",
+        "name": "Pipeline Fix-Pass",
+        "description": "Fix-pass pipeline: consumes numbered findings, reuses the current branch, enforces before/after baselines",
+        "argumentHint": "[path or URL to findings document]"
+      }
+    ]
+  },
+  "pluginDependencies": {
+    "dm-review": ">=1.14.0",
+    "ned": ">=1.4.0"
+  },
+  "optionalPluginDependencies": {
+    "design-machines": ">=1.3.0",
+    "assembly": ">=1.0.0",
+    "live-wires": ">=1.5.1",
+    "craft-developer": ">=1.0.0",
+    "accessibility-compliance": ">=1.2.0",
+    "ghostwriter": ">=3.7.0",
+    "superpowers": ">=1.0.0",
+    "gemini": ">=1.0.0"
+  },
+  "interface": {
+    "displayName": "Pipeline",
+    "shortDescription": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with depende",
+    "longDescription": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review (with ambiguity surfacing), orchestrate concurrent worktree execution with review-fix loops and surgical-change discipline, and deliver clean branches",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "pipeline",
+      "orchestrator",
+      "autonomous",
+      "worktree",
+      "execution",
+      "prompt-generation",
+      "review-loop",
+      "fix-pass"
+    ]
+  }
+}

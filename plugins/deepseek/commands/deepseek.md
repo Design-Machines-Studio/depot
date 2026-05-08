@@ -49,7 +49,11 @@ Based on model:
 Resolve the wrapper script via the plugin cache (works from any CWD, including non-depot worktrees), then invoke it with the user's prompt:
 
 ```bash
-WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+WRAPPER_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+  [ -n "$WRAPPER_PATH" ] && break
+done
 if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
   echo "deepseek wrapper not found in plugin cache" >&2
   exit 1

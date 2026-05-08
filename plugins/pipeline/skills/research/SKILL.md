@@ -103,8 +103,13 @@ Search with Google grounding for current, cited results:
 1. Formulate 2-3 search queries from the feature description targeting current best practices, recent framework changes, and community patterns
 2. Resolve the gemini template and protocol paths via the plugin cache (pipeline runs in worktrees):
    ```bash
-   TEMPLATES_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
-   PROTOCOL_PATH=$(ls -t ~/.claude/plugins/cache/depot/gemini/*/skills/gemini-delegate/references/invocation-protocol.md 2>/dev/null | head -1)
+   TEMPLATES_PATH=""
+   PROTOCOL_PATH=""
+   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+     TEMPLATES_PATH=$(ls -t "$CACHE_ROOT"/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
+     PROTOCOL_PATH=$(ls -t "$CACHE_ROOT"/gemini/*/skills/gemini-delegate/references/invocation-protocol.md 2>/dev/null | head -1)
+     [ -n "$TEMPLATES_PATH" ] && [ -n "$PROTOCOL_PATH" ] && break
+   done
    ```
    Load the **Search Grounding Template** from `$TEMPLATES_PATH`. Fill in the topic queries and project context, then invoke per `$PROTOCOL_PATH` (which itself resolves the gemini-wrapper.sh via the cache). Use `flash` model with 60s timeout.
 3. Parse the `response` field from JSON output. Verify `stats.tools.byName.google_web_search` is present (confirms search grounding was used).

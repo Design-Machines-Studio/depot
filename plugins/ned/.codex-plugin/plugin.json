@@ -1,0 +1,92 @@
+{
+  "name": "ned",
+  "version": "1.6.0",
+  "description": "Personal knowledge graph and session capture for Travis Gertz",
+  "author": {
+    "name": "Design Machines"
+  },
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "ai-memory",
+        "name": "AI Memory",
+        "description": "Personal knowledge graph tracking projects, people, and decisions",
+        "mcpDependencies": [
+          "ai-memory"
+        ],
+        "triggers": [
+          "what do you know about",
+          "who is",
+          "look up",
+          "remember this",
+          "search memory",
+          "add observation",
+          "what's the status of",
+          "find contact",
+          "knowledge graph"
+        ],
+        "tags": [
+          "memory",
+          "knowledge-graph",
+          "entities",
+          "relationships",
+          "personal"
+        ]
+      },
+      {
+        "id": "recorder",
+        "name": "Session Recorder",
+        "description": "Captures conversation sessions into structured summaries and pushes observations to ai-memory",
+        "mcpDependencies": [
+          "ai-memory",
+          "notion"
+        ],
+        "triggers": [
+          "capture this session",
+          "log this",
+          "save this conversation",
+          "remember this discussion",
+          "document what we decided"
+        ],
+        "tags": [
+          "session-capture",
+          "documentation",
+          "conversation-logging"
+        ]
+      }
+    ],
+    "agents": [],
+    "commands": [
+      {
+        "id": "capture",
+        "name": "Quick Capture",
+        "description": "Quick capture an observation to ai-memory",
+        "argumentHint": "<entity name> <observation text>"
+      },
+      {
+        "id": "depot-metrics",
+        "name": "Depot Metrics",
+        "description": "Track and report plugin usage metrics via ai-memory",
+        "argumentHint": "[record <skill> <outcome> | report | sync]"
+      }
+    ]
+  },
+  "interface": {
+    "displayName": "Ned",
+    "shortDescription": "Personal knowledge graph and session capture for Travis Gertz",
+    "longDescription": "Personal knowledge graph and session capture for Travis Gertz",
+    "developerName": "Design Machines",
+    "category": "Knowledge",
+    "capabilities": [
+      "memory",
+      "knowledge-graph",
+      "session-capture",
+      "ai-memory",
+      "notion",
+      "entities",
+      "relationships",
+      "metrics"
+    ]
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "name": "depot",
+  "interface": {
+    "displayName": "Design Machines Depot"
+  },
+  "plugins": [
+    {
+      "name": "ned",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ned"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Knowledge"
+    },
+    {
+      "name": "craft-developer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/craft-developer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "project-manager",
+      "source": {
+        "source": "local",
+        "path": "./plugins/project-manager"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
+      "name": "council",
+      "source": {
+        "source": "local",
+        "path": "./plugins/council"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Knowledge"
+    },
+    {
+      "name": "design-machines",
+      "source": {
+        "source": "local",
+        "path": "./plugins/design-machines"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Business"
+    },
+    {
+      "name": "assembly",
+      "source": {
+        "source": "local",
+        "path": "./plugins/assembly"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "live-wires",
+      "source": {
+        "source": "local",
+        "path": "./plugins/live-wires"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "ghostwriter",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ghostwriter"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Writing"
+    },
+    {
+      "name": "design-practice",
+      "source": {
+        "source": "local",
+        "path": "./plugins/design-practice"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Design"
+    },
+    {
+      "name": "project-scaffolder",
+      "source": {
+        "source": "local",
+        "path": "./plugins/project-scaffolder"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "accessibility-compliance",
+      "source": {
+        "source": "local",
+        "path": "./plugins/accessibility-compliance"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "dm-review",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dm-review"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "the-local",
+      "source": {
+        "source": "local",
+        "path": "./plugins/the-local"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "chef",
+      "source": {
+        "source": "local",
+        "path": "./plugins/chef"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Lifestyle"
+    },
+    {
+      "name": "pipeline",
+      "source": {
+        "source": "local",
+        "path": "./plugins/pipeline"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "gemini",
+      "source": {
+        "source": "local",
+        "path": "./plugins/gemini"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    },
+    {
+      "name": "deepseek",
+      "source": {
+        "source": "local",
+        "path": "./plugins/deepseek"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

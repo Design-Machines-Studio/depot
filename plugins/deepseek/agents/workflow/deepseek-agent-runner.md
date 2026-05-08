@@ -172,7 +172,11 @@ Pass the system prompt via a temp file so its content (which may contain backtic
 ```bash
 # Resolve the wrapper script via the plugin cache so this works from any CWD.
 # Pipeline runs in worktrees outside the depot where depot-relative paths fail.
-WRAPPER_PATH=$(ls -t ~/.claude/plugins/cache/depot/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+WRAPPER_PATH=""
+for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+  [ -n "$WRAPPER_PATH" ] && break
+done
 if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
   cat <<EOF
 ## ${target_agent_name} Review (via DeepSeek ${target_model})
