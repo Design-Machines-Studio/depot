@@ -14,13 +14,15 @@ A design passes the Swiss Test when it shows **authorial intent**: choices that 
 
 ## Checklist (score each item 0 or 1)
 
-### Layout (5 points)
+### Layout (7 points)
 
 - [ ] **No centered hero stack** -- The page does NOT open with centered heading + centered subheading + centered CTA (the single most common AI layout pattern). Exception: intentional display typography at `--text-5xl+` on brand pages.
 - [ ] **Card hierarchy exists** -- Card-based layouts have visual hierarchy (varied widths, spans, or prominence) rather than three-or-more equal-weight cards in a row. Gerstner: equal weight = no hierarchy = no guidance for the reader.
 - [ ] **Section rhythm varies** -- Sections have different density, structure, or composition. Not every section follows the same heading + paragraph + button template. White: alternate between dense and open for pacing.
 - [ ] **Horizontal composition present** -- At least one content area uses horizontal layout (`.grid`, `.sidebar`, `.cluster`) rather than pure vertical stacking. Muller-Brockmann's grid IS horizontal + vertical composition.
 - [ ] **Whitespace is active** -- Empty space serves compositional purpose (grouping, separating, breathing room) rather than being leftover from layout defaults.
+- [ ] **No full-width buttons** -- Buttons are natural width, not stretched to 100% of their container. Full-width buttons are the second most common AI layout tell after centered hero stacks. Exception: a mobile-only CTA in a narrow column where the wide tap target is intentional.
+- [ ] **No text-muted overuse** -- `.text-muted` appears on genuinely de-emphasized metadata only (footnotes, dense-view timestamps), not on labels, descriptions, help text, empty states, or any secondary text by default. Most text should inherit its color from the scheme.
 
 ### Typography (5 points)
 
@@ -60,10 +62,10 @@ A design passes the Swiss Test when it shows **authorial intent**: choices that 
 
 | Score | Rating | Meaning |
 |-------|--------|---------|
-| 25/25 | **No AI tells** | Output shows authorial voice and structural intent |
-| 20-24 | **Minor tells** | Polish pass recommended -- a few patterns need attention |
-| 15-19 | **Moderate tells** | Several patterns need rethinking, not just polishing |
-| 10-14 | **Significant tells** | Redesign specific sections rather than polishing |
+| 27/27 | **No AI tells** | Output shows authorial voice and structural intent |
+| 22-26 | **Minor tells** | Polish pass recommended -- a few patterns need attention |
+| 16-21 | **Moderate tells** | Several patterns need rethinking, not just polishing |
+| 10-15 | **Significant tells** | Redesign specific sections rather than polishing |
 | <10 | **Pervasive slop** | Fundamental rethinking needed -- output is generic throughout |
 
 ---
@@ -72,10 +74,10 @@ A design passes the Swiss Test when it shows **authorial intent**: choices that 
 
 ### For ux-quality-reviewer
 
-Run this checklist as Phase 10 (after Interaction Polish). Score the page on all 25 points. If the score is below 20, add a P2 finding:
+Run this checklist as Phase 10 (after Interaction Polish). Score the page on all 27 points. If the score is below 22, add a P2 finding:
 
 ```
-AI output quality: [score]/25. Swiss Test: [PASS/FAIL].
+AI output quality: [score]/27. Swiss Test: [PASS/FAIL].
 Tells detected: [list the specific failed checklist items]
 ```
 
@@ -90,6 +92,6 @@ Report the score alongside the SaaS rating:
 ```
 Page: /proposals
 SaaS Rating: 7/10 (Good SaaS)
-AI Slop Score: 22/25 (Minor tells)
+AI Slop Score: 24/27 (Minor tells)
 Tells: centered hero stack, round numbers in stat cards, generic "Get Started" CTA
 ```

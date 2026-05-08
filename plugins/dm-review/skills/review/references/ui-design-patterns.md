@@ -12,13 +12,13 @@ Practical UI patterns for evaluating and building modern SaaS interfaces. Every 
 
 **Stat Cards**
 
-Good: `.grid` + `.box` with semantic scheme for each card. Status value in `.text-2xl font-bold`, label in `.text-sm text-muted`. Change indicators use `.badge--success` or `.badge--error`.
+Good: `.grid` + `.box` with semantic scheme for each card. Status value in `.text-2xl font-bold`, label in `.text-sm`. Change indicators use `.badge--success` or `.badge--error`.
 
 Bad: Manual `display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px`. Hardcoded card backgrounds. Inconsistent padding across cards.
 
 **Activity Feeds**
 
-Good: `.stack` for the feed, `.cluster cluster-compact` for each entry's metadata (avatar + name + timestamp). Timestamps in `.text-sm text-muted`. Dividers between entries using `.divider--hairline`.
+Good: `.stack` for the feed, `.cluster cluster-compact` for each entry's metadata (avatar + name + timestamp). Timestamps in `.text-sm`. Dividers between entries using `.divider--hairline`.
 
 Bad: Manual `margin-bottom` on each entry. No consistent spacing. Timestamps same size as content.
 
@@ -42,7 +42,7 @@ Bad: `<div>` grid pretending to be a table. No hover states. Sort indicators mis
 
 **Empty States**
 
-Good: Centered in a `.stack` with illustration or icon, descriptive text in `.text-muted`, and a primary CTA button (`.button button--accent`). The empty state should explain what will appear here and how to create the first item.
+Good: Centered in a `.stack` with illustration or icon, descriptive text, and a primary CTA button (`.button button--accent`). The empty state should explain what will appear here and how to create the first item.
 
 Bad: Just the text "No items found." No CTA. No explanation. No visual interest.
 
@@ -66,7 +66,7 @@ Benchmark: Linear -- clean tables with subtle row hover, inline status badges, k
 
 **Field Layout**
 
-Good: `.stack stack-compact` for field groups (label + input + help text). Labels use `.text-sm font-medium`. Help text in `.text-sm text-muted` below the input. Required fields indicated with a subtle asterisk, not color alone.
+Good: `.stack stack-compact` for field groups (label + input + help text). Labels use `.text-sm font-medium`. Help text in `.text-sm` below the input. Required fields indicated with a subtle asterisk, not color alone.
 
 Bad: Labels and inputs side-by-side on mobile. No help text. Required indicated only by red text (accessibility issue).
 
@@ -221,6 +221,8 @@ These are the specific patterns that separate amateur UI from professional SaaS 
 | Inline styles | Check if a utility class exists first. Use tokens via custom properties. |
 | Manual `padding` on sections | Use `.box` with variants (`box-tight`, `box-loose`) |
 | Manual `margin-bottom` between elements | Use `.stack` (handles vertical spacing for all children) |
+| `.text-muted` on every secondary element | Use sparingly. Most text inherits adequate contrast from its scheme. Reserve `text-muted` for genuinely de-emphasized metadata like footnotes or timestamps in dense views. Labels, help text, descriptions, and empty states should use default text color. |
+| Full-width buttons (`.w-full`, `width: 100%`, block-level) | Buttons should be natural width. Full-width buttons are almost never correct -- they signal a missing layout decision. Use `.cluster` to group buttons. Exception: mobile CTA in a narrow column where tapping a wide target helps. |
 
 ---
 

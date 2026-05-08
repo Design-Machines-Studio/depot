@@ -50,7 +50,7 @@ Load these skills for domain-specific guidance:
 Approved design: [path to brainstorm.md or mockup file]
 
 Key visual decisions:
-- [Decision 1: e.g., "Sidebar headings use h4 with --color-muted, not h3"]
+- [Decision 1: e.g., "Sidebar headings use h4 with font-medium, not h3"]
 - [Decision 2: e.g., "Block/Abstain buttons use button--outline-danger, visually smaller than position buttons"]
 - [Decision 3: e.g., "Natural-width buttons, not full-width"]
 
