@@ -4,3 +4,13 @@
 
 # Pipeline-generated feature artefacts (per-feature plans, briefs, manifests, prompts)
 plans/
+plans/*/baselines/
+plans/*/baselines-pre-fix/
+plans/*/baselines-post-fix/
+plans/*/screenshots/
+plans/*/prompts/
+plans/*/manifest.json
+plans/*/brainstorm.md
+.worktrees/
+.claude/ux-review/
+todos/
