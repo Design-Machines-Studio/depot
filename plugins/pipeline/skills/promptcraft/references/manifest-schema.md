@@ -13,6 +13,7 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
   "generatedAt": "2026-03-27T10:00:00Z",
   "overlapRisk": "low|medium|high",
   "noMergeOnCompletion": false,
+  "campaignSlug": null,
   "chunks": [
     {
       "id": "01-database-migration",
@@ -25,7 +26,9 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
         "internal/database/migrations/003_add_votes.sql"
       ],
       "companionSkills": ["assembly:development"],
-      "estimatedComplexity": "small"
+      "estimatedComplexity": "small",
+      "kind": "logic",
+      "executor": "codex"
     },
     {
       "id": "02a-vote-handler",
@@ -39,7 +42,9 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
         "internal/router/routes.go"
       ],
       "companionSkills": ["assembly:development"],
-      "estimatedComplexity": "medium"
+      "estimatedComplexity": "medium",
+      "kind": "logic",
+      "executor": "codex"
     },
     {
       "id": "02b-vote-display",
@@ -53,7 +58,9 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
         "internal/view/proposal/components.templ"
       ],
       "companionSkills": ["assembly:development", "live-wires:livewires"],
-      "estimatedComplexity": "medium"
+      "estimatedComplexity": "medium",
+      "kind": "ui",
+      "executor": "claude"
     },
     {
       "id": "03-integration",
@@ -67,7 +74,9 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
         "internal/view/proposal/show.templ"
       ],
       "companionSkills": ["assembly:development"],
-      "estimatedComplexity": "medium"
+      "estimatedComplexity": "medium",
+      "kind": "integration",
+      "executor": "claude"
     }
   ],
   "executionPlan": {
@@ -115,6 +124,7 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `generatedAt` | string | ISO 8601 timestamp of manifest generation |
 | `overlapRisk` | enum | "low" (0-1 overlapping files), "medium" (2-4), "high" (5+) |
 | `noMergeOnCompletion` | boolean | Optional. Default `false`. When `true`, the execution-orchestrator runs every chunk and the final review, but does NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. Use when you want pipeline automation without the final merge (e.g. review-first workflows, fix-pass runs that should keep the branch open for iteration). |
+| `campaignSlug` | string or null | Optional. Campaign identifier for cross-session state tracking. When present, the orchestrator writes `.campaign/state.json` after the run. When null or absent, campaign state is skipped. |
 
 ### Chunk
 
@@ -129,6 +139,8 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `filesToModify` | string[] | Files this chunk will create or modify |
 | `companionSkills` | string[] | Skills to load in format "plugin:skill" |
 | `estimatedComplexity` | enum | "small" (1-2 files), "medium" (3-5 files), "large" (6+ files) |
+| `kind` | enum | Chunk type classification: `"ui"`, `"logic"`, `"integration"`, or `"config"`. Inferred from `filesToModify` during prompt generation. Used by the execution-orchestrator for evaluation depth and by the `executor` field for tool routing. See Classification Rules below. |
+| `executor` | enum | Execution tool: `"codex"` or `"claude"`. Derived from `kind`. Determines whether the chunk is dispatched to Codex (OpenAI) or Claude for implementation. See Executor Mapping below. |
 
 ### Execution Plan
 
@@ -143,6 +155,34 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `parallelChunks` | number | Number of chunks that will run in parallel |
 | `sequentialChunks` | number | Number of chunks that must run sequentially |
 | `maxConcurrency` | number | Maximum simultaneous worktrees needed |
+
+## Classification Rules
+
+The `kind` field is inferred from `filesToModify` during prompt generation (Phase 1 of promptcraft):
+
+| Kind | Condition |
+|------|-----------|
+| `ui` | Any file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory |
+| `logic` | Files end in `.go`, `.py`, `.ts`, `.php` and are handlers, services, or migrations -- no templates |
+| `integration` | Prompt contains wiring verbs ("wire," "integrate," "connect") OR chunk modifies route files, `main.go`, or navigation templates |
+| `config` | Only `.md`, `.json`, `.yaml`, `.toml`, documentation, or configuration files |
+
+When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
+
+## Executor Mapping
+
+The `executor` field is derived from `kind`:
+
+| Kind | Executor | Rationale |
+|------|----------|-----------|
+| `logic` | `codex` | Backend-only work doesn't need Claude's visual reasoning |
+| `config` | `codex` | Documentation and configuration edits are mechanical |
+| `ui` | `claude` | Visual verification and Live Wires judgment require Claude |
+| `integration` | `claude` | Cross-chunk wiring and route verification require Claude's broader context |
+
+## Graceful Fallback
+
+If Codex auth is absent or the Codex plugin is not installed, all chunks execute on Claude regardless of the `executor` field. The orchestrator logs: `"Codex unavailable for chunk [id], falling back to Claude execution."` and proceeds with the existing Claude subagent dispatch path. The `executor` field is advisory -- it never blocks execution.
 
 ## Naming Conventions
 
