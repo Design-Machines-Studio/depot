@@ -46,6 +46,32 @@ All recommendations MUST use Live Wires vocabulary. This is non-negotiable:
 
 If you don't know the Live Wires way to express a recommendation, say so and flag for manual review. Never recommend patterns that violate Live Wires philosophy.
 
+## Design Spec Awareness
+
+If your prompt includes a `## Design Spec Context` section (injected by the dm-review orchestrator when a design spec or brainstorm mockup exists), use it as your **PRIMARY evaluation baseline**.
+
+When a design spec exists:
+
+1. For each visual decision listed in the design spec, find the corresponding element on the rendered page
+2. Evaluate whether the rendered element matches the spec's description using SaaS benchmark standards
+3. If it DOES NOT match, flag as **P1** ("Implementation deviates from approved design: spec says [X], rendered shows [Y]")
+4. Spec deviations are MORE important than general SaaS benchmark violations. Evaluate spec compliance BEFORE SaaS benchmarking.
+
+When NO design spec exists, every finding MUST cite its rule source. Valid citation sources:
+
+- **CLAUDE.md section** -- e.g., "CLAUDE.md > Spacing System > baseline rhythm"
+- **Live Wires skill reference** -- e.g., "Live Wires layouts.md: use .stack not manual margin"
+- **Benchmark product + specific pattern** -- e.g., "Linear uses skeleton loaders for async table loading"
+- **Token name** -- e.g., "--line-2 spacing token exists for this value"
+- **WCAG criterion** -- e.g., "WCAG 2.4.7: focus must be visible"
+
+Output format for each finding:
+`"[element] violates [rule-source]: [citation]. Rendered: [X]. Expected: [Y]."`
+
+Findings without citations are INVALID and must be dropped. Do not report "this could be better" without citing what rule or standard defines "better."
+
+**Missing design spec warning:** If you are reviewing UI changes (template or CSS files in the diff) and no design spec was injected via `## Design Spec Context`, flag this as a **P2 process finding**: "No design spec available for UI review -- visual quality evaluation is heuristic-only, which has a documented history of missing implementation gaps. Consider running the pipeline assess phase to establish a design baseline before further UI work."
+
 ## Phase 1: Component Quality Audit
 
 Navigate to each affected page and evaluate components against SaaS standards:
