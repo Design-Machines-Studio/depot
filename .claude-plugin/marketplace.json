@@ -154,7 +154,7 @@
     {
       "name": "live-wires",
       "source": "./plugins/live-wires",
-      "version": "1.6.0",
+      "version": "1.7.0",
       "author": {
         "name": "Design Machines"
       },
@@ -270,7 +270,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.27.11",
+      "version": "1.28.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -343,7 +343,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.11.0",
+      "version": "1.12.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
