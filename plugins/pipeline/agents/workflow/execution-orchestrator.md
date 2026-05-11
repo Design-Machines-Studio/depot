@@ -467,6 +467,45 @@ If any check fails:
 
 Mark `[chunk-id] 5. Validate subagent output` complete.
 
+### 3e.5: Live Wires Lint Guard
+
+Check if any files modified by this chunk match `.html`, `.templ`, `.twig`, or `.css`. If none match, skip this step with: `"livewires-lint: skipped (no CSS/HTML/template files modified)"`
+
+If lint-applicable files exist:
+
+1. Resolve the Live Wires plugin root via dual-cache pattern:
+   ```bash
+   LW_ROOT=""
+   for CACHE in "$HOME/.claude/plugins/cache/depot/live-wires" "$HOME/.codex/plugins/cache/depot/live-wires"; do
+     LW_ROOT=$(ls -td "$CACHE"/*/ 2>/dev/null | head -1)
+     [ -n "$LW_ROOT" ] && break
+   done
+   ```
+
+2. Read lint rules from `${LW_ROOT}/references/lint-rules.md`
+
+3. Run all **hard-fail** grep checks on the chunk's modified files:
+   - **LW-INLINE:** `grep -n 'style="' <files>` on .html/.templ/.twig
+   - **LW-BASELINE:** `grep -nE '(margin|padding|gap):\s*[0-9]+(px|rem|em)' <files> | grep -vE ':\s*1px'` on .css
+   - **LW-BEM:** `grep -nE '__' <files>` on .css/.html/.templ/.twig
+   - **LW-LAYER:** Check for CSS rules outside `@layer` blocks on .css
+
+4. If ANY hard-fail rule triggers:
+   - Block the chunk commit
+   - Report violations with file:line references
+   - Dispatch a fix subagent (or fix directly) to resolve violations
+   - Re-run lint after fix
+   - Maximum 2 lint-fix iterations. After 2 failed attempts, escalate as P1 finding.
+
+5. Run all **warning** grep checks:
+   - **LW-STATE:** `grep -nE '\.(is-|active|disabled)' <files>`
+   - **LW-HARDCODED-COLOR:** `grep -nE '#[0-9a-fA-F]{3,8}|rgb\(|rgba\(' <files>` on .css
+   - **LW-LOGICAL:** `grep -nE '(margin|padding|border)-(top|bottom|left|right):' <files>` on .css
+
+6. Warning rules: report in the chunk receipt but don't block commit.
+
+Mark `[chunk-id] 5.5. Run livewires-lint` complete.
+
 ### 3f: Pre-Review Anti-Pattern Scan
 
 Before running dm-review, run a targeted grep for known anti-patterns in the chunk's changed files. dm-review agents review broadly; this step catches framework-specific mistakes they miss.
