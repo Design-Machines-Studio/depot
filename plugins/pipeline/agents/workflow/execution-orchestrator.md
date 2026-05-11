@@ -148,6 +148,7 @@ FINAL 2. Requirements cross-check against original-prompt.md (write final-requir
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
 FINAL 4. Record session to ai-memory
 FINAL 4b. Artifact cleanup (write receipt, delete ephemeral/run-scoped artifacts)
+FINAL 4c. Campaign state write (when campaignSlug present)
 FINAL 5. Present summary report
 ```
 
