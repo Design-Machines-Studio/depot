@@ -12,23 +12,28 @@ Full autonomous feature development pipeline. Takes an idea and delivers a clean
 
 Before starting, assess the feature scope and select the appropriate mode:
 
-**Simple mode** -- Use when the feature is small enough for a single context window:
+**Lean mode** -- Use when the feature is small enough for single-pass execution but still needs quality gates:
 
-- Touches fewer than 5 files
+- Touches fewer than 10 files (Opus can sustain coherent multi-file builds without chunking)
 - One logical concern (not multiple subsystems)
 - No dependency ordering needed (everything is sequential)
-- Can be implemented and reviewed in one pass
+- Can be implemented in one pass
 
-In simple mode, skip Phases 4-5 (chunking and adversarial review). Instead:
+Lean mode skips Phase 4 (chunking, manifest generation, prompts) and iterative review loops. It keeps Phase 5 adversarial review (runs once, non-iteratively) and the final dm-review pass (runs once, not in a loop). This preserves the generator/evaluator separation while eliminating chunking overhead.
+
+In lean mode:
 
 1. Run Phases 1-3 (assess, research, plan) normally
 2. Execute the plan as a single implementation pass (no manifest, no chunking)
-3. Run `/dm-review-loop` on the result
-4. Deliver
+3. Run Phase 5 adversarial review once (non-iteratively)
+4. Run dm-review once (non-iteratively, no loop)
+5. Deliver
+
+**Rationale:** Post-mortems documented that skipping adversarial review and dm-review compounds failures. "Structural criteria are necessary but not sufficient" (`docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md`). "The pattern across all failures is: optimizing for speed over correctness" (`docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`). Evidence-free assertions emerge when gates are skipped (`docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`, lines 41-47).
 
 **Full mode** (default) -- Use for everything else. All phases execute in order.
 
-**How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change, use simple mode. When in doubt, use full mode.
+**How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change that still benefits from quality checks, use lean mode. When in doubt, use full mode.
 
 ## Model-Adaptive Complexity
 
@@ -36,7 +41,7 @@ The pipeline's complexity should match the model's capabilities. Some harness co
 
 **If running on Opus 4.6 (or newer):**
 
-- Chunking is optional for medium-complexity features (5-10 files). Opus can sustain coherent multi-hour builds without explicit sprint decomposition. Consider simple mode more aggressively.
+- Chunking is optional for medium-complexity features (5-10 files). Opus can sustain coherent multi-hour builds without explicit sprint decomposition. Consider lean mode more aggressively.
 - The adversarial review (Phase 5) is still valuable -- self-evaluation remains unreliable regardless of model capability.
 - dm-review-loop is still mandatory -- the separation of generator from evaluator is an architectural principle, not a model limitation.
 
