@@ -335,14 +335,23 @@ For each chunk, complete ALL sub-steps. Do not skip any.
 
 ### 3a: Classify Chunk
 
-Examine the chunk's `filesToModify` list and classify:
+Read the chunk's `kind` field from the manifest and map to the orchestrator's classification labels:
+
+| Manifest `kind` | Orchestrator classification |
+|------------------|-----------------------------|
+| `ui` | UI |
+| `logic` | Logic |
+| `integration` | Integration |
+| `config` | Trivial |
+
+**Fallback (older manifests without `kind`):** If the `kind` field is absent, fall back to the runtime file-extension heuristic:
 
 - **UI:** Any file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory
 - **Logic:** Files end in `.go`, `.py`, `.ts`, `.php` and are handlers, services, or migrations -- no templates
 - **Trivial:** Only `.md`, `.json`, `.yaml`, `.toml`, config, or documentation files
 - **Integration:** The chunk title or prompt contains "wire," "integrate," "connect," or it modifies route files, `main.go`, or navigation templates
 
-Log: "Chunk [chunk-id] classified as: [type]"
+Log: "Chunk [chunk-id] classified as: [type] (source: manifest kind | file-extension heuristic)"
 
 Mark `[chunk-id] 1. Classify chunk` complete.
 
@@ -365,6 +374,27 @@ Before dispatching, apply input guardrails (per `plugins/dm-review/skills/review
 Mark `[chunk-id] 3. Apply input guardrails` complete.
 
 ### 3d: Dispatch Implementation Subagent
+
+**Executor routing:** Read the chunk's `executor` field from the manifest.
+
+**When `executor: codex` (or derived from `kind: logic` / `kind: config`):**
+
+1. Resolve the Codex plugin root using the dual-cache resolver pattern:
+   ```bash
+   CODEX_ROOT=""
+   for CACHE in "$HOME/.claude/plugins/cache/openai-codex/codex" "$HOME/.codex/plugins/cache/openai-codex/codex"; do
+     CODEX_ROOT=$(ls -td "$CACHE"/*/ 2>/dev/null | head -1)
+     [ -n "$CODEX_ROOT" ] && break
+   done
+   ```
+2. If `CODEX_ROOT` is found, invoke: `node "${CODEX_ROOT}/scripts/codex-companion.mjs" task --write "<chunk prompt>"`
+3. Parse task output for completion (exit code 0 + commit present in worktree)
+4. On success: proceed to eval gate (Step 3e onward)
+5. On failure (auth error, plugin not installed, timeout): log `"Codex unavailable for chunk [id], falling back to Claude execution."` and dispatch via the existing Claude subagent path below
+
+Do NOT use slash command invocation (`/codex:*`) -- use direct node CLI invocation. Slash commands are unreliable from subagent context.
+
+**When `executor: claude` (or field absent, or Codex fallback):**
 
 Launch a subagent with the full prompt content inlined (do not pass a file path), working directory set to the worktree, and this template:
 
@@ -522,7 +552,7 @@ Run `/codex:review` once. If zero findings, proceed. If findings, fix and re-run
 EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | deferred: [N]
 ```
 
-This receipt is consumed by the merge step. Without it, merge is blocked.
+The `[type]` value uses the classification from the manifest's `kind` field when available (mapped per Step 3a), falling back to the runtime heuristic classification for older manifests. This receipt is consumed by the merge step. Without it, merge is blocked.
 
 Mark `[chunk-id] 7. Run evaluation gate` complete.
 
