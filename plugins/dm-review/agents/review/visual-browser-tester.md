@@ -127,7 +127,20 @@ If your prompt includes a `## Design Spec Context` section (injected by the dm-r
 3. **Evaluate match:** Compare what the design spec describes against what the screenshot shows. State explicitly what you see.
 4. **Flag deviations as P1:** "Design spec says [X], rendered page shows [Y]." Implementation deviating from the approved design is a P1 finding. Every visual finding -- P1, P2, or P3 -- is tracked as a mandatory fix under the zero-deferral policy. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the full escalation rules.
 
-If no design spec was injected, skip this phase. Do not invent a spec.
+If no design spec was injected, skip this phase for spec comparison. However, for ALL non-spec phases (responsive testing, interaction states, CSS compliance), every finding MUST cite its rule source. Valid citation sources:
+
+- **CLAUDE.md section** -- e.g., "CLAUDE.md > Spacing System > baseline rhythm"
+- **Live Wires skill reference** -- e.g., "Live Wires layouts.md: use .stack not manual margin"
+- **Benchmark product + specific pattern** -- e.g., "Linear uses skeleton loaders for async table loading"
+- **Token name** -- e.g., "--line-2 spacing token exists for this value"
+- **WCAG criterion** -- e.g., "WCAG 2.4.7: focus must be visible"
+
+Output format for each finding:
+`"[element] violates [rule-source]: [citation]. Rendered: [X]. Expected: [Y]."`
+
+Findings without citations are INVALID and must be dropped. Do not report "this could be better" without citing what rule or standard defines "better."
+
+**Missing design spec warning:** If you are reviewing UI changes (template or CSS files in the diff) and no design spec was injected via `## Design Spec Context`, flag this as a **P2 process finding**: "No design spec available for visual browser testing -- visual quality evaluation is heuristic-only. Consider running the pipeline assess phase to establish a design baseline before further UI work."
 
 This phase complements the ux-quality-reviewer's design spec awareness (which evaluates from a design quality perspective) by testing at the rendering level -- catching cases where CSS inheritance, layout context, or scheme color differences produce a different visual result than the code suggests.
 
