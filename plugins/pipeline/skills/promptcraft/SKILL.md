@@ -29,6 +29,19 @@ Read the plan and identify discrete chunks of work. A chunk is:
 3. Integration work (wiring things together) depends on the pieces it connects
 4. Test-only chunks are rare -- tests should live with their implementation chunk
 5. Configuration/deployment chunks run last
+6. After determining `filesToModify` for each chunk, classify its `kind` using the file-extension heuristic:
+   - `ui`: any `.templ`, `.twig`, `.html`, `.css`, or files in `pages/`, `templates/`, `views/`
+   - `logic`: `.go`, `.py`, `.ts`, `.php` handlers/services/migrations without templates
+   - `integration`: prompt contains wiring verbs ("wire," "integrate," "connect") OR modifies route files / `main.go`
+   - `config`: `.md`, `.json`, `.yaml`, `.toml`, docs
+
+   Then derive `executor` from `kind`:
+   - `logic` -> `codex`
+   - `config` -> `codex`
+   - `ui` -> `claude`
+   - `integration` -> `claude`
+
+   When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
 
 ### Phase 2: Context Extraction
 
@@ -170,6 +183,24 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`. Prompts are T
 ### Phase 5: Manifest Generation
 
 Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
+
+Each chunk object in the manifest MUST include `kind` and `executor` fields (classified in Phase 1, step 6). Example:
+
+```json
+{
+  "id": "01-database-migration",
+  "title": "Add vote columns to proposals table",
+  "prompt": "prompts/01-database-migration.md",
+  "level": 0,
+  "parallelGroup": null,
+  "dependsOn": [],
+  "filesToModify": ["internal/database/migrations/003_add_votes.sql"],
+  "companionSkills": ["assembly:development"],
+  "estimatedComplexity": "small",
+  "kind": "logic",
+  "executor": "codex"
+}
+```
 
 The manifest encodes:
 - Chunk ordering and dependencies
