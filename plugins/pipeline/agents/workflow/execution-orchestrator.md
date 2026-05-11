@@ -929,6 +929,38 @@ Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, 
 
 Mark `FINAL 4b. Artifact cleanup` complete.
 
+## Step 5c: Campaign State Write
+
+If the manifest contains a non-null `campaignSlug`:
+
+1. Read the final-requirements-crosscheck.md to extract covered and deferred requirements
+2. Read the final dm-review results for the findings summary
+3. Create `.campaign/` directory in the target repo root if absent
+4. Write `.campaign/state.json` following the schema at `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/campaign-state-schema.md`:
+
+```json
+{
+  "campaignSlug": "<from manifest>",
+  "lastFeatureSlug": "<feature slug>",
+  "branch": "<featureBranch>",
+  "commit": "<HEAD SHA>",
+  "completedAt": "<ISO 8601 now>",
+  "requirementsCovered": ["<from crosscheck>"],
+  "requirementsDeferred": ["<from crosscheck>"],
+  "dmReviewFindingsSummary": {
+    "p1": 0, "p2": 0, "p3": 0,
+    "mergeRecommendation": "<from Step 4>"
+  },
+  "nextSuggestedFeature": null
+}
+```
+
+5. Commit: `git commit -m "pipeline: write campaign state for <campaignSlug>"`
+
+If `campaignSlug` is null or absent, skip this step with: `"Campaign state: skipped (no campaignSlug in manifest)"`
+
+Mark `FINAL 4c. Campaign state write` complete.
+
 ## Step 6: Summary Report
 
 Present this report:
