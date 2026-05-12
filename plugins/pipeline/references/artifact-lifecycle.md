@@ -104,6 +104,9 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 |---|-------------|----------|
 | 1 | <text> | grep:`...` |
 | 2 | <text> | screenshot (cleaned) |
+| 3 | <text> | authorize-present:`grep -n "Authorize" internal/handler/foo.go` |
+| 4 | <text> | event-published:`grep -n "Publish" internal/service/foo.go` |
+| 5 | <text> | docker-test-pass:`docker compose exec app go test ./...` |
 
 ## Cleanup
 - Ephemeral removed: N files

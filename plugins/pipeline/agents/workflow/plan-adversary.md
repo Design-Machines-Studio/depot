@@ -89,6 +89,10 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 - **File size compliance:** "Does the plan respect the handler < 200 lines, service < 500 lines rule? Flag any plan that would create or extend files beyond these limits."
 - **Federation security:** "Are federation endpoints (if any) HTTPS-only with validated `return_url`? Link tokens must have 5-minute TTL, single-use nonce, and audience validation."
 - **Input validation:** "Is input validation present on all write endpoints? Every handler that accepts user input must validate the request DTO before passing to the service layer."
+- **Migration sequencing:** "Are migration numbers sequential with no gaps or duplicates? Does every schema migration precede the handler/service chunks that depend on the new tables or columns? Verify by checking `ls migrations/*.sql | sort | tail -1` in the target repo."
+- **Destructive confirmation:** "Do destructive operations (delete, archive, revoke) require server-verified confirmation? Client-only `confirm()` dialogs are insufficient -- the handler must validate a confirmation token or re-authenticate."
+- **Generated Templ files:** "Do any acceptance criteria or `filesToModify` lists include `*_templ.go` files? These are generated artifacts -- only `.templ` source files should appear. Flag any `*_templ.go` reference as a BLOCKER."
+- **Companion skills validation:** "Do Assembly-targeting chunks include `assembly:development` in their `companionSkills` list? Missing companion skills cause subagents to miss domain conventions."
 
 **Fix Philosophy:**
 
@@ -147,6 +151,8 @@ Beyond finding problems, you MUST propose improvements. For each chunk, evaluate
 ```
 
 The pipeline will merge your proposed criteria into the chunk prompts before execution. This ensures the evaluator has concrete, verifiable success criteria -- not just "works correctly."
+
+**Mutation invariant coverage:** For Assembly mutation chunks, propose acceptance criteria covering all 7 steps of the mutation invariant checklist: (1) DTO validated at handler boundary, (2) `Authorize()` called with correct action, (3) service method receives validated DTO, (4) SQLite write inside transaction, (5) event published after commit, (6) audit log entry written, (7) SSE broadcast to connected clients. If any step is missing from the chunk's existing ACs, add it to the sprint contract addendum.
 
 **Ambiguity surfacing:** Before a chunk reaches the execution-orchestrator, inspect its Task and Acceptance Criteria for phrases that allow multiple reasonable interpretations (comparative adjectives without a baseline, verbs like "improve/fix/clean up" without a specific failure, noun phrases like "the right way" or "better UX"). If the prompt would force a subagent to pick silently between defensible paths, emit a finding with perspective `Completeness` and action verb `INSERT` that adds an explicit interpretation block to the chunk. This is the cheapest of three layers — the sibling layers are `promptcraft/references/prompt-template.md` Ambiguity Protocol (shipped into every chunk prompt) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode runtime fallback). The subagent's inline protocol is a last-resort safety net; catching ambiguity here is cheaper. Keep wording aligned across all three layers.
 

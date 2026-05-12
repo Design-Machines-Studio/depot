@@ -532,6 +532,20 @@ grep -rn 'err\s*=' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="
 grep -rn 'fmt.Sprintf.*SELECT\|fmt.Sprintf.*INSERT\|fmt.Sprintf.*UPDATE' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.go" || echo "clean"
 ```
 
+**For Assembly mutation handlers:**
+
+**Authorize() Presence:**
+- Grep every POST/PUT/PATCH/DELETE handler for `Authorize()` call. A mutation handler without authorization is a P1 security violation.
+- Severity: P1
+
+**Post-Commit Event Sequencing:**
+- Grep for `Publish(` inside transaction scope (`tx.` context). Events must fire after commit, not inside the transaction. A `Publish()` call between `Begin()` and `Commit()` risks publishing events for rolled-back mutations.
+- Severity: P1
+
+**ScopedDB Fixture Audit:**
+- Grep fixture files for raw `*sql.DB` usage: `grep -rn '\*sql\.DB' .worktrees/pipeline/<feature>/<chunk-id>/ --include="*_test.go" --include="*fixture*"`. All fixtures must use `ScopedDB`.
+- Severity: P1
+
 **For all projects:**
 
 ```bash
@@ -805,6 +819,10 @@ If findings remain after 2 full review iterations, apply the same deferred-findi
 - `APPROVE WITH FIXES` -- zero P1, any P2/P3 findings resolved before this line is emitted (zero-deferral). Emit only when every finding from the final review is resolved.
 - `BLOCKS MERGE` -- any P1 remains, or any finding could not be resolved.
 - `BLOCKED PENDING CALLER VERIFICATION` -- the Progress Ledger has `degradedMode=curl_fallback` for ANY chunk. Emit this regardless of review findings. The caller must complete Phase 7 visual verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
+
+**Docker verification (Assembly projects):** Before emitting any merge recommendation, run `docker compose exec app go build ./cmd/api && docker compose exec app go test ./...` to confirm the feature branch compiles and passes tests inside the container. A merge recommendation emitted without a passing Docker build is invalid.
+
+**Doc-sync check:** Grep for `CLAUDE.md` and `README.md` in the repo root. If the feature introduced new patterns, modules, or architectural conventions, verify these files reflect the changes. Flag missing doc updates as P2.
 
 Mark `FINAL 1. Run full dm-review` complete.
 
