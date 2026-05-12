@@ -197,7 +197,54 @@ r.With(httprate.LimitByIP(10, time.Minute)).Get("/sse/*", handleSSE)
 
 ---
 
-## 8. Testing Patterns
+## 8. Post-Commit Event Publishing
+
+Events must publish AFTER `tx.Commit()`, never inside the transaction. If the transaction rolls back, a pre-commit event is a lie that corrupts downstream state (KV cache, SSE clients, audit trail).
+
+```go
+// CORRECT — publish after commit
+err := db.WithTx(ctx, func(tx *sql.Tx) error {
+    // ... mutations and audit write ...
+    return nil
+})
+if err != nil {
+    return err
+}
+deps.Events.Publish("assembly.gov.proposal.status_changed", envelope)
+
+// WRONG — publish inside transaction
+err := db.WithTx(ctx, func(tx *sql.Tx) error {
+    // ... mutations ...
+    deps.Events.Publish(...)  // fires even if tx rolls back
+    return nil
+})
+```
+
+---
+
+## 9. Route Middleware Is Not Object Authorization
+
+Route middleware (`RequireAuth`, `RequirePermission`, `RequireAdmin`) handles RBAC -- "can this role access this route?" Object-level authorization (`deps.Auth.Authorize()`) handles ownership and status -- "can this member edit this specific proposal?"
+
+Both are required for mutations. Route middleware alone is insufficient because it cannot check resource ownership, status gates, or group membership. Every mutation handler must call `Authorize()` even if the route already has permission middleware.
+
+```go
+// Route: RequirePermission("governance.edit") gates the route
+// Handler: Authorize() gates the specific resource
+func (h *Handlers) UpdateProposal(w http.ResponseWriter, r *http.Request) {
+    // Route middleware already checked role permission
+    // Still need object-level auth:
+    if err := h.deps.Auth.Authorize(ctx, "proposal.edit", resource); err != nil {
+        http.Error(w, "Forbidden", http.StatusForbidden)
+        return
+    }
+    // ... proceed with mutation
+}
+```
+
+---
+
+## 10. Testing Patterns
 
 SQLite in tests:
 
@@ -241,9 +288,40 @@ tests := []struct {
 }
 ```
 
+### Service-Layer Mutation Tests
+
+Test mutation flows end-to-end through the service layer. Mock the `Dependencies` struct interfaces and verify the full invariant sequence:
+
+```go
+func TestCreateProposal(t *testing.T) {
+    db := NewTestDB(t)
+    auth := &MockAuthorizer{}
+    audit := &MockAuditWriter{}
+    events := &MockEventBus{}
+
+    svc := governance.NewService(governance.Deps{
+        DB: db, Auth: auth, Audit: audit, Events: events,
+    })
+
+    err := svc.CreateProposal(ctx, input)
+    require.NoError(t, err)
+
+    // Verify invariant sequence
+    assert.True(t, auth.AuthorizeCalled, "Authorize must be called")
+    assert.Equal(t, "proposal.create", auth.LastAction)
+    assert.True(t, audit.WriteCalled, "Audit entry must be written")
+    assert.True(t, events.PublishCalled, "Event must be published")
+    // Verify state change
+    got, _ := svc.GetProposal(ctx, input.ID)
+    assert.Equal(t, "draft", got.Status)
+}
+```
+
+Focus: verify authorize was called with correct action, audit was written, event was published after commit, and DB state changed.
+
 ---
 
-## 9. Security Headers
+## 11. Security Headers
 
 ```go
 w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
@@ -255,7 +333,7 @@ w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'
 
 ---
 
-## 10. HTTP Server Timeouts
+## 12. HTTP Server Timeouts
 
 ```go
 srv := &http.Server{

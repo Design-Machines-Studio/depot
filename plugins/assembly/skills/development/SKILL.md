@@ -69,9 +69,11 @@ Think in **page types**, not individual pages. One template serves many instance
 
 ### 2. Define DTOs First
 
-Before writing handlers, define your data shapes in `backend/internal/dto/responses.go`:
+Define data shapes in the fixture's `model/` directory (e.g., `internal/fixtures/governance/model/proposal.go`):
 
 ```go
+package model
+
 type ProposalResponse struct {
     ID          string  `json:"id"`
     Title       string  `json:"title"`
@@ -206,6 +208,28 @@ func (h *Handlers) getProposal(id string) (*dto.ProposalResponse, error) {
 }
 ```
 
+### Static SQL Preference
+
+Prefer static SQL with optional predicates over dynamic `fmt.Sprintf` query building. Dynamic SQL triggers gosec G202 and risks injection.
+
+```go
+// CORRECT — static SQL with conditional append
+query := `SELECT id, title, status FROM $TABLE WHERE 1=1`
+args := []any{}
+if status != "" {
+    query += ` AND status = ?`
+    args = append(args, status)
+}
+if memberID != "" {
+    query += ` AND proposed_by = ?`
+    args = append(args, memberID)
+}
+rows, err := db.QueryContext(ctx, query, args...)
+
+// WRONG — dynamic SQL via fmt.Sprintf (gosec G202)
+query := fmt.Sprintf(`SELECT * FROM %s WHERE status = '%s'`, table, status)
+```
+
 ### Avoid N+1 Queries
 
 Batch fetch related data:
@@ -258,6 +282,20 @@ func rowFilter(p dto.ProposalResponse) string {
 
 ```templ
 <tr data-show={ rowFilter(p) }>
+```
+
+### Boolean vs String Signals
+
+Use explicit string comparisons (`$filter === 'all'`) when CSS classes or visibility depend on exact values. Boolean signals (`$showDrafts`) work for simple show/hide but break when `data-class` needs to match one of several states. When in doubt, use string signals with `===` matching.
+
+```templ
+// CORRECT — string signal with exact matching
+data-signals="{ view: 'grid' }"
+data-class:active="$view === 'grid'"
+
+// RISKY — boolean loses which state is active
+data-signals="{ isGrid: true }"
+data-class:active="$isGrid"  // Can't distinguish grid vs list vs table
 ```
 
 ---
@@ -385,37 +423,55 @@ Consult `internal/fixtures/<module>/seed.go` for the full seeded member list.
 
 ## File Organization
 
-### Handler Files
+### Fixture-Owned Directories
 
-Split by domain in `backend/internal/handlers/`:
-
-| File | Domain |
-|------|--------|
-| `handlers.go` | Core infrastructure |
-| `members.go` | Member CRUD, invites |
-| `governance.go` | Proposals, meetings, resolutions, decisions |
-| `health.go` | Financial dashboard |
-| `account.go` | User account, profile |
-| `documents.go` | Static documents |
-
-### Page Templates
-
-Organize by domain in `backend/internal/pages/`:
+Each fixture owns its code in `internal/fixtures/{name}/`:
 
 ```
-pages/
-├── members/
-│   ├── index.templ
-│   ├── show.templ
-│   └── new.templ
-├── governance/
-│   ├── proposals/
-│   ├── meetings/
-│   ├── resolutions/
-│   └── decisions/
-├── health/
-└── documents/
+internal/fixtures/governance/
+├── routes.go           # Chi route registration
+├── handlers.go         # Thin HTTP adapters (parse → call service → render)
+├── services/           # Business logic
+│   ├── proposals.go
+│   └── meetings.go
+├── model/              # DTOs and domain types (fixture-owned)
+│   ├── proposal.go
+│   └── meeting.go
+└── pages/              # Templ page templates (fixture-owned)
+    ├── proposals/
+    │   ├── index.templ
+    │   └── show.templ
+    └── meetings/
+        └── index.templ
 ```
+
+Baseplate code (members, admin, auth, groups) lives in `internal/baseplate/`.
+
+### Shared Components
+
+Shared components in `internal/components/` accept **primitive props only** (strings, ints, bools). They never import fixture-specific DTOs or model packages. If a component needs fixture data, the caller maps it to primitives before passing.
+
+```go
+// CORRECT — primitive props
+components.Avatar(member.Name, "md", member.ImageURL)
+
+// WRONG — importing fixture model
+components.ProposalCard(governance.Proposal{...})
+```
+
+---
+
+## Mutation Invariant Checklist
+
+Every state-changing operation (create, update, delete, status transition) must follow this sequence. Skipping a step is a review finding.
+
+1. **Authorize** -- call `deps.Auth.Authorize(ctx, "entity.action", resource)` before any write. Route middleware (RBAC) is not sufficient; object-level auth is required for every mutation.
+2. **Validate** -- validate all input fields (length, format, enum membership) in the service layer. Never trust handler-level parsing alone.
+3. **Transaction** -- wrap multi-step mutations in `db.WithTx()`. Number generation (sequence IDs, resolution numbers) happens inside the transaction.
+4. **Preserve invariants** -- enforce domain rules within the transaction (e.g., quorum thresholds, status transition validity, uniqueness constraints).
+5. **Audit** -- write an audit log entry via `deps.Audit` inside the transaction. Include actor, action, entity, and changed fields.
+6. **Publish event after commit** -- call `deps.Events.Publish()` only AFTER `tx.Commit()` returns nil. Never publish inside the transaction scope.
+7. **Tests** -- service-layer tests verify the full sequence: mock deps, assert authorize was called, assert audit was written, assert event was published, assert state change in DB.
 
 ---
 
