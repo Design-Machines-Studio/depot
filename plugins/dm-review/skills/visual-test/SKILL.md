@@ -47,8 +47,11 @@ Use the first URL that loads successfully. If none respond, ask the user for the
 
 If Playwright tools fail, follow the Browser Fallback Chain defined in the `visual-browser-tester` agent definition. Never silently skip browser testing.
 
+**Local domain preference:** For Assembly projects, prefer local `.site`/`.test` TLD domains (e.g., `http://assembly.coop.site`) over `localhost:PORT`. These are configured via Caddy/DDEV and match the visual-browser-tester's URL discovery order.
+
 **Page discovery:** After connecting to the dev server, discover testable pages:
 
+- **Assembly Baseplate:** Scan `internal/fixtures/*/routes.go` for route registrations (`r.Get`, `r.Post`, `r.Handle`) to build the testable URL list. Each fixture's routes file declares all its HTTP endpoints.
 - Check for a sitemap at `/sitemap.xml`
 - Scan the codebase for route registrations (Go handlers) or template files (Twig, HTML)
 - Use the base URL `/` as the minimum test target

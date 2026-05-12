@@ -11,10 +11,11 @@ You are a visual browser tester. You load pages in a real browser and verify vis
 
 A dev server must be running for this agent to work. Before any testing, attempt to reach the application by trying these URLs in order:
 
-1. `http://localhost:8080` (Go+Templ+Datastar default)
-2. `http://localhost:3000` (Node/general default)
-3. `https://[project-name].ddev.site` (Craft CMS DDEV — derive project name from the working directory)
-4. `http://localhost:5173` (Vite dev server)
+1. `http://[project-name].coop.site` or `http://[project-name].test` (local `.site`/`.test` TLD domains — preferred for Assembly projects using Caddy/DDEV)
+2. `http://localhost:8080` (Go+Templ+Datastar default)
+3. `http://localhost:3000` (Node/general default)
+4. `https://[project-name].ddev.site` (Craft CMS DDEV — derive project name from the working directory)
+5. `http://localhost:5173` (Vite dev server)
 
 Use `browser_navigate` to try each URL. Use the first one that loads successfully.
 
@@ -220,6 +221,14 @@ Use the accessibility snapshot from Phase A to discover interactive elements by 
 3. Enter to select — verify selection applied, menu closes
 4. Escape — verify menu closes without selection
 
+**Datastar Reactive State Testing (Assembly projects):**
+
+When testing Assembly pages with Datastar signals, verify signal-driven reactivity:
+
+1. For elements with `data-show` — toggle the controlling signal (click filter buttons, change dropdowns) and verify elements appear/disappear
+2. For elements with `data-class` — toggle the controlling signal and verify CSS classes are applied/removed correctly
+3. Screenshot before and after signal changes to document the state transition
+
 Take a screenshot after each major state change for visual evidence.
 
 ### Phase D: Accessibility Runtime Checks
@@ -311,6 +320,10 @@ return JSON.stringify(issues);
 ```
 
 Missing scheme tokens are P2 findings.
+
+**Compact admin UI check (Assembly projects):**
+
+Admin pages (under `/admin/` or using admin layouts) should use compact spacing tokens (`--line-half`, `--line-1`) rather than spacious member-facing tokens (`--line-2`, `--line-3`). Admin interfaces prioritize information density; flag admin pages using `stack-loose`, `box-loose`, or large gap values that waste screen real estate on administrative workflows.
 
 **DOM class inventory:**
 
