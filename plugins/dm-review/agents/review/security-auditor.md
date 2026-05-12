@@ -140,6 +140,36 @@ Flag handlers that accept form input, URL parameters, or request body data witho
 
 **Look for:** `r.FormValue()`, `r.URL.Query()`, `json.Decode()` without a subsequent `Validate()` or validation call on the parsed data.
 
+### Authorizer Pattern Validation (P1)
+
+Flag mutation handlers/services that write data without calling `deps.Auth.Authorize()` with the correct action string. This check strengthens the existing Object-Level Authorization check above: that check flags *missing* auth calls; this check flags *incorrect* ones (wrong action string, wrong resource, or scope mismatch).
+
+**Look for:** `Authorize()` calls where the action string doesn't match the handler's purpose (e.g., `proposal.view` in an update handler), or where the `Resource` struct is missing `AuthorID` or `Status` fields needed for ownership checks.
+
+### Dynamic SQL Detection (P2)
+
+Flag SQL queries built with `fmt.Sprintf` or string concatenation. Prefer static SQL with conditional predicates (`WHERE 1=1` + append). Dynamic SQL triggers gosec G202 and risks injection even when values appear controlled.
+
+**Look for:** `fmt.Sprintf` with SQL keywords (`SELECT`, `INSERT`, `UPDATE`, `DELETE`), string concatenation (`+`) adjacent to SQL query strings.
+
+### Destructive Confirmation (P2)
+
+Flag DELETE, archive, or reset handlers that execute the destructive action without requiring a server-verified confirmation token. Client-only `confirm()` dialogs are insufficient -- the server must verify the user confirmed.
+
+**Look for:** HTTP DELETE handlers or archive/reset service methods that proceed directly to `db.Exec` without checking a confirmation token or nonce parameter from the request.
+
+### Raw Error Exposure (P2)
+
+Flag `err.Error()` output passed directly to HTTP responses. Internal error details leak implementation information to attackers.
+
+**Look for:** `http.Error(w, err.Error(), ...)`, `fmt.Fprintf(w, ... err.Error())`, or error strings included in JSON response bodies.
+
+### Admin Form Input Validation (P2)
+
+Flag admin-facing forms that skip length/format validation because "only admins use them." Admin interfaces are still attack surfaces -- compromised admin accounts or CSRF attacks can exploit unvalidated inputs.
+
+**Look for:** Form handlers in admin routes (`/admin/`, `RequireAdmin` middleware) that parse input without calling validation functions.
+
 ## Rules
 
 1. Security P1 findings always block merge — no exceptions

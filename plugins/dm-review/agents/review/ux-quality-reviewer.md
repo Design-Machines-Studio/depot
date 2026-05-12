@@ -151,6 +151,28 @@ For governance pages specifically, check these heuristics from `tests/ux/heurist
 
 If `tests/ux/tasks/` contains task files relevant to the pages under review, reference their success criteria and expected friction points per persona.
 
+### Active Coverage Matrix Validation
+
+Parse `tests/ux/coverage-matrix.md` and compare against the routes/pages under review. Flag gaps where:
+- A reviewed page has no corresponding row in the coverage matrix (P3)
+- A coverage matrix row lists a persona but no task file exists in `tests/ux/tasks/` for that flow (P2)
+- New routes added in the diff have zero persona coverage in the matrix (P2)
+
+### Persona Task Friction Tracking
+
+When reporting findings on Assembly pages, attribute each finding to the affected personas. Use the persona friction profiles from `tests/ux/personas/` to determine impact:
+- A finding that blocks the casual member (David) from a primary action is P1
+- A finding that causes anxiety for the reluctant board member (Aisha) on mobile is P2
+- A finding that confuses the new probationary (Alex) about permissions is P2
+
+### Destructive Action UX Heuristic
+
+For any delete, archive, reset, or irreversible action on reviewed pages, check:
+- **Consequence communication:** Does the UI explain what will happen? (e.g., "This will permanently delete 3 proposals and their votes")
+- **Undo vs confirmation:** Reversible actions should offer undo; irreversible actions need confirmation dialogs
+- **Language:** Confirm button should name the action ("Delete proposal") not use generic "OK" or "Yes"
+- Missing consequence communication on destructive actions is P2.
+
 ---
 
 ## Review Protocol

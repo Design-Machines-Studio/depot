@@ -154,6 +154,18 @@ For every data-driven view on the affected pages, check:
 - Successful actions show a toast notification or inline confirmation
 - The user is never left wondering "did that work?"
 
+### Assembly: Datastar State Attribute Validation
+
+When reviewing Assembly projects (Go+Templ+Datastar), flag boolean Datastar signals used with `data-class` when the CSS depends on matching one of several states. String signals with `===` matching are required when `data-class` needs to distinguish between more than two states (e.g., filter buttons where `all`, `active`, `closed` are distinct values). Boolean signals are fine for simple show/hide (`data-show`).
+
+### Assembly: Destructive Action Confirmation
+
+Flag delete, archive, or reset actions that lack a confirmation UI. Destructive actions require a `popup-dialog` or equivalent confirmation step with consequence explanation and a `.button--red` confirm button. Client-only `confirm()` dialogs are insufficient.
+
+### Assembly: UX Task Coverage
+
+When `tests/ux/` exists in the project, flag new routes or pages that lack corresponding task files in `tests/ux/tasks/`. New user-facing flows need UX task coverage to be tested through the persona framework. This is a P3 process finding.
+
 ## Phase 4: Visual Polish Audit
 
 **Border radius:**

@@ -37,6 +37,7 @@ Each generated prompt follows this structure. The goal is a self-contained docum
 - Handler pattern: [describe or show example]
 - Error handling: [describe convention]
 - Naming: [describe convention]
+- Assembly mutation pattern (when targeting Assembly): Authorize before write, publish events after commit (never inside the transaction), validate DTO at handler boundary
 
 ## Companion Skills
 
@@ -91,6 +92,8 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 - Do not refactor surrounding code unless required for the task
 - Only lines that directly serve the Acceptance Criteria should change. If you notice unrelated issues in files you are editing, list them at the end of your response as "Noted, not fixed" -- do not include them in the diff.
 - Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing for this chunk.
+- Do not create or modify `*_templ.go` files. Run `docker compose exec app templ generate` to regenerate them after editing `.templ` source files.
+- When adding database migrations, verify the next sequence number: `ls migrations/*.sql | sort | tail -1`. Use the next consecutive number.
 - [Any additional constraints specific to this chunk]
 
 ## Research Context

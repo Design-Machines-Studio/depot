@@ -231,6 +231,41 @@ func (m *GovernanceModule) Events() module.EventConfig {
 
 The baseplate uses `Events()` to configure ScopedEventBus allowlists.
 
+**Post-commit publishing rule:** `ScopedEventBus.Publish()` must only be called AFTER `tx.Commit()` returns nil. The bus has no transaction awareness -- it fires immediately. Publishing inside a transaction scope means downstream consumers (KV cache, SSE, audit) see state that may roll back.
+
+```go
+// CORRECT
+err := db.WithTx(ctx, func(tx *sql.Tx) error {
+    // ... mutations ...
+    return nil
+})
+if err != nil { return err }
+deps.Events.Publish("assembly.gov.proposal.created", envelope)
+
+// WRONG — publishes even if tx rolls back
+err := db.WithTx(ctx, func(tx *sql.Tx) error {
+    deps.Events.Publish(...)  // too early
+    return nil
+})
+```
+
+---
+
+## Event Subject Coverage
+
+Common event actions and their subject format. Use this as a reference when adding events to a fixture.
+
+| Action | Subject Pattern | Example |
+|--------|----------------|---------|
+| Created | `assembly.{scope}.{entity}.created` | `assembly.gov.proposal.created` |
+| Updated | `assembly.{scope}.{entity}.updated` | `assembly.gov.meeting.updated` |
+| Status changed | `assembly.{scope}.{entity}.status_changed` | `assembly.gov.proposal.status_changed` |
+| Deleted/archived | `assembly.{scope}.{entity}.archived` | `assembly.doc.document.archived` |
+| Vote cast | `assembly.{scope}.vote.cast` | `assembly.gov.vote.cast` |
+| Role assigned | `assembly.member.role_assigned` | (baseplate-owned) |
+
+Every mutation that changes persisted state should publish an event. If a handler writes to SQLite but publishes no event, downstream real-time consumers (SSE, KV cache) will be stale.
+
 ---
 
 ## Write-Through Pattern

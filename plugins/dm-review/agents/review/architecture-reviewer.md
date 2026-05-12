@@ -69,7 +69,17 @@ When reviewing Assembly production code (`internal/fixtures/` or `internal/basep
 
 **ScopedDB Bypass (P1):** Flag fixture code that imports `database/sql` directly or uses `*sql.DB` instead of `*ScopedDB`. Fixtures must access data exclusively through `ScopedDB` to enforce table-prefix isolation. Exception: baseplate code (`internal/baseplate/`) and test utilities may use raw `*sql.DB`.
 
-**Note:** Missing NATS events after mutations are checked by the `nats-reviewer` agent (assembly plugin), not this agent. Do not duplicate that check here.
+**Handler Thickness (P2):** Flag handler functions that contain business logic beyond parse-call-render (validation logic, DB queries, conditional branching on domain rules). Handlers should be thin HTTP adapters that delegate to services. Suggest extracting business logic to the service layer.
+
+**Shared Component Isolation (P1):** Flag `internal/components/` files that import fixture-specific types (e.g., importing from `internal/fixtures/governance/model/`). Shared components must accept primitive props only (strings, ints, bools) so they remain reusable across fixtures.
+
+**Module-Owned Model Placement (P2):** Flag DTO or model types defined outside `internal/fixtures/{name}/model/`. Centralized `dto/` or `models/` packages create coupling between fixtures. Each fixture owns its data shapes.
+
+**Page Template Placement (P2):** Flag page-level Templ templates located outside `internal/fixtures/{name}/pages/`. Fixture pages belong in the fixture directory, not in a centralized `internal/pages/` directory.
+
+**Fixture Ownership Boundary (P1):** Flag fixture code that directly accesses baseplate internals (e.g., importing from `internal/baseplate/` private packages, calling baseplate DB tables without going through the `Dependencies` struct interfaces). Fixtures interact with baseplate only through the provided `Dependencies` interfaces (`MemberReader`, `ConfigReader`, etc.).
+
+**Note:** Missing NATS events after mutations are checked by the `nats-reviewer` agent (assembly plugin), not this agent. Do not duplicate that check here. Authorizer call *presence* is checked by the `security-auditor` agent; this agent checks *structural* placement (logic in handler vs service layer).
 
 #### Craft CMS Projects
 Expected layers:
