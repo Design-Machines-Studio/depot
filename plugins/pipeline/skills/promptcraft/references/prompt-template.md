@@ -94,6 +94,7 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 - Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing for this chunk.
 - Do not create or modify `*_templ.go` files. Run `docker compose exec app templ generate` to regenerate them after editing `.templ` source files.
 - When adding database migrations, verify the next sequence number: `ls migrations/*.sql | sort | tail -1`. Use the next consecutive number.
+- When this chunk touches `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths in Assembly code, the final acceptance criterion must include an Auth Boundary Map receipt covering: surfaces mapped, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases, test coverage, and residual risk. Omit the receipt only when no auth surface is affected.
 - [Any additional constraints specific to this chunk]
 
 ## Research Context

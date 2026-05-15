@@ -186,6 +186,8 @@ Every mutation chunk (creates, updates, deletes, or transitions state) must incl
 
 **Rule:** If a chunk's task description contains mutation verbs (create, update, delete, archive, approve, reject, transition) AND targets Assembly code, its acceptance criteria must include: (1) `Authorize()` called with correct action string, (2) event published after commit, (3) audit log entry written.
 
+**Auth Boundary Map gate:** When a chunk touches paths matching `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission code in Assembly projects, the prompt MUST include an Auth Boundary Map receipt as a final acceptance criterion. The receipt enumerates: mapped surfaces, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases addressed, test files, and residual risk. Without this receipt the chunk is incomplete -- the execution-orchestrator must not mark it done.
+
 ### Phase 3i: Visual Acceptance Criteria Gate
 
 Every UI chunk must include at least 2 visual acceptance criteria describing rendered impressions, not just structural class names.

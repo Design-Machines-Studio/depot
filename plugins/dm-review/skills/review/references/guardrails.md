@@ -92,7 +92,7 @@ Don't match exact header text -- agents use different formatting (`## Findings`,
 | Agent timeout (>120s) | Skip. Record "Timed out" in Agent Summary. No retry. The 120s threshold provides a buffer above the routed-agent ceilings (90s for v4-pro, 60s for v4-flash, per dm-review Phase 3.75). If those ceilings are ever raised above 120s, this guardrail must be raised in lockstep or it will silently pass timed-out agents. |
 | Agent returns empty | Treat as "Clean (empty response)" in Agent Summary. |
 | Agent returns error | Record error message in Agent Summary. Don't retry. |
-| Agent output contains `### RUNNER FAILURE` | DeepSeek-routed runner failed. If the target agent is in the core list (see the Per-Agent Token Budget section above), treat as core agent failure (REVIEW INCOMPLETE). Otherwise treat as conditional agent failure (degraded but valid). Extract the failure reason from the marker line for the Agent Summary. |
+| Agent output contains `### RUNNER FAILURE` | External-LLM-routed runner failed. See Phase 4.5 for fallback procedure. If fallback also fails, apply core/conditional failure policies (REVIEW INCOMPLETE for core agents, degraded for conditional). Extract failure reasons from both runs for the Agent Summary. |
 | All conditional agents fail | Review proceeds with core agents only. Note "Degraded: conditional agents unavailable" in report header. |
 | Core agent fails | Flag: "REVIEW INCOMPLETE -- [agent-name] failed." Change merge recommendation accordingly. |
 | Consolidator fails | Output raw agent findings as unmerged list. Prefix: "Consolidation failed -- raw findings below." |

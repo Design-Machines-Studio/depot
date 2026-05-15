@@ -20,6 +20,12 @@ If all 5 complete, the review is valid regardless of conditional agent status. I
 
 ## Failure Classification
 
+### External LLM Fallback (pre-classification)
+
+Before classifying an agent failure as "Review Compromised" or "Safe to Skip," check whether the agent was routed to an external LLM (DeepSeek, Gemini) in Phase 4. If so, Phase 4.5 retries it on Claude first. Only classify the failure after the Claude fallback has also been attempted.
+
+Agents that succeed via Claude fallback are reported as "Completed (fallback)" in the Agent Summary. They do not affect the merge recommendation -- their findings are treated identically to primary-run findings, tagged with `[claude-fallback/{agent-name}]` for traceability.
+
 ### Review Compromised (core agent failure)
 
 | Failed Agent | Impact | Merge Recommendation |

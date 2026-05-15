@@ -170,6 +170,38 @@ Flag admin-facing forms that skip length/format validation because "only admins 
 
 **Look for:** Form handlers in admin routes (`/admin/`, `RequireAdmin` middleware) that parse input without calling validation functions.
 
+### Auth Boundary Map Gap (P2)
+
+Flag PRs touching `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths that rely ONLY on `RequireAdmin`/`RequireSuperAdmin` middleware for mutations without explicit `deps.Auth.Authorize()` calls in the service layer. Middleware is necessary but insufficient -- it proves a coarse route precondition, not an authorization decision.
+
+**Note:** This check subsumes Object-Level Authorization (above) for auth-surface paths. If both trigger on the same handler, report under Auth Boundary Map Gap only -- but retain P1 severity if there is no `Authorize()` call in either the handler or the service layer (complete authorization bypass). The P2 severity applies only when handler-layer middleware provides coarse auth but the service layer lacks fine-grained `Authorize()` calls.
+
+**Look for:** Handler or service methods in `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level paths containing `db.Exec`, `db.ExecContext`, `service.Create`, `service.Update`, `service.Delete` without a preceding `deps.Auth.Authorize()` call, even when `RequireAdmin` is present on the route.
+
+### UI Capability Flag Mismatch (P2)
+
+Flag template conditionals that gate admin/mutation UI using role-string comparisons (`member.Role == "admin"`, `member.IsSuperAdmin`) instead of delegating to `Authorize(ctx, action, resource)` with the same action/resource pairs used by the corresponding handler.
+
+**Look for:** `.templ` files with role-string comparisons or boolean role checks adjacent to mutation buttons, admin-only sections, or privileged controls, where the handler uses `deps.Auth.Authorize()` with a different gating mechanism.
+
+### Nil ContextMember Guard (P1)
+
+Flag handler or service code that accesses fields on `auth.ContextMember(ctx)` (`.ID`, `.Role`, `.Email`, etc.) without a nil check. A nil `ContextMember` occurs when middleware is misconfigured, when internal service calls bypass the HTTP layer, or when session hydration fails silently.
+
+**Look for:** Direct field access on the return value of `ContextMember()` without a preceding `if member == nil` or `if member := auth.ContextMember(ctx); member != nil` guard.
+
+### Stale Operator Session (P2)
+
+Flag operator privilege mutations (role changes, member removal, permission updates, super-admin revocation) that do not invalidate or revalidate the affected member's session. Stale operator sessions must fail closed.
+
+**Look for:** Service methods that update `member.role`, `member.status`, or remove super-admin privileges without a subsequent `session.Destroy()`, session invalidation, or role revalidation call for the affected member.
+
+### PII-Safe Logging (P2)
+
+Flag error responses or structured log calls that include raw email addresses or member IDs in user-facing HTTP responses, or that distinguish between "user not found" and "password wrong" in login flows (account-existence oracle). Logs should use stable non-PII identifiers when available.
+
+**Look for:** `slog.String("email", ...)`, `http.Error(w, ... member.Email ...)`, login handlers with distinct user-facing error messages for missing-account vs wrong-password. For raw `err.Error()` in responses, see Raw Error Exposure above.
+
 ## Rules
 
 1. Security P1 findings always block merge — no exceptions

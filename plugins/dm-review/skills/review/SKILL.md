@@ -330,7 +330,7 @@ For each selected agent, check the Phase 3.75 routing decision first:
 
 Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime — the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
 
-**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, treat it the same as a Claude agent that failed to respond. `guardrails.md` defines the core-agent list and the REVIEW INCOMPLETE trigger — do NOT mark the run clean.
+**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, do not classify the failure yet — Phase 4.5 retries external-LLM failures on Claude before applying failure policies from `guardrails.md`. Do NOT mark the run clean until Phase 4.5 completes.
 
 **Example prompt structure for each agent:**
 
@@ -400,9 +400,49 @@ When no design spec exists, omit this section entirely. The browser agents will 
 Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 - If an agent fails or times out (>120s), record the failure in the Agent Summary table and proceed
-- If a **core agent** (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails, flag the review as "REVIEW INCOMPLETE" in the merge recommendation
+- For agents routed to external LLMs, defer failure classification to Phase 4.5 before applying these policies
+- If a **core agent** (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation
 - If all conditional agents fail but core agents succeed, the review is "Degraded" but still valid
 - See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full failure classification table
+
+---
+
+### Phase 4.5: External LLM Fallback
+
+After all Phase 4 agents complete, scan their results for `### RUNNER FAILURE` markers. This phase retries failed external-LLM agents on Claude before applying the existing failure policies.
+
+#### When to trigger
+
+Only applies to agents that were routed to an external LLM (DeepSeek, Gemini) in Phase 4 Branch A. Claude-native agents that fail do NOT get retried -- their failure policies in guardrails.md apply immediately.
+
+#### Retry procedure
+
+For each agent whose output contains `### RUNNER FAILURE`:
+
+1. **Re-dispatch using Phase 4 Branch B** (normal Claude dispatch) with the same agent definition file, diff content, and project context. Use the agent's default model (`sonnet` unless frontmatter declares otherwise).
+2. **Tag fallback findings** with `[claude-fallback/{agent-name}]` to distinguish from primary-run results. The consolidator in Phase 5 treats these as normal findings for deduplication and severity mapping.
+3. **Timeout:** Use the same 120s ceiling from guardrails.md. The fallback is a single retry, not a retry loop.
+
+#### If fallback also fails
+
+Apply the existing failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
+- Core agent (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer): REVIEW INCOMPLETE
+- Conditional agent: degraded but valid
+
+#### Agent Summary reporting
+
+Report the fallback in the Agent Summary table:
+
+| Agent | Provider | Status |
+|-------|----------|--------|
+| pattern-recognition-specialist | DeepSeek v4-pro | RUNNER FAILURE |
+| pattern-recognition-specialist | Claude (fallback) | Completed |
+
+Summarize: "pattern-recognition-specialist: DeepSeek failed -> Claude fallback succeeded"
+
+#### Cost note
+
+This fallback exists for resilience, not as replacement routing. DeepSeek remains the preferred provider for cost. If fallback triggers frequently (>30% of reviews in a sprint), investigate DeepSeek provider health rather than switching to Claude-primary routing.
 
 ---
 

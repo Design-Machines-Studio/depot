@@ -81,6 +81,12 @@ When reviewing Assembly production code (`internal/fixtures/` or `internal/basep
 
 **Note:** Missing NATS events after mutations are checked by the `nats-reviewer` agent (assembly plugin), not this agent. Do not duplicate that check here. Authorizer call *presence* is checked by the `security-auditor` agent; this agent checks *structural* placement (logic in handler vs service layer).
 
+**Auth Boundary Violation (P2):** Flag handlers that perform mutations (create/update/delete/transition) where the `Authorize()` call lives in the handler layer rather than the service layer. Even if a handler correctly delegates to a service, an `Authorize()` call in the handler means a different caller (CLI command, event handler, internal service call) could bypass auth entirely. The `Authorize()` call belongs inside the service method, not above it.
+
+**Look for:** `Authorize()` calls inside `func (h *Handler)` or `func (h *handler)` methods that precede `h.service.Foo()` calls -- the Authorize should be inside `service.Foo()`, not the handler.
+
+**Auth Boundary Map advisory:** When reviewing PRs that touch `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths, check if the PR description includes an Auth Boundary Map receipt. If absent, note in the "Approved" section: "Consider adding an Auth Boundary Map receipt for this auth-surface PR (see assembly development skill)." This is advisory, not a finding.
+
 #### Craft CMS Projects
 Expected layers:
 1. **Templates** (Twig) — Presentation only

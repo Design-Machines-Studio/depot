@@ -475,6 +475,66 @@ Every state-changing operation (create, update, delete, status transition) must 
 
 ---
 
+## Auth Boundary Map
+
+Produce this map before review on any PR touching authentication, authorization, admin surfaces, member mutations, install flow, account/profile state, fixture enablement, or UI capability flags.
+
+**Middleware is a route precondition, not an authorization decision.** Every mutation and every privileged read (member PII, financial data, audit logs) requires an explicit `deps.Auth.Authorize(ctx, action, resource)` call in the service layer. The boundary map makes this visible.
+
+### When to Produce
+
+- Any route adds, removes, or changes auth middleware (`RequireAuth`, `RequireAdmin`, `RequireSuperAdmin`, `RequirePermission`, `RequireModule`).
+- Any handler performs a persistent mutation.
+- Any service method mutates members, roles, settings, modules, accounts, or install state.
+- Any UI hides, shows, enables, or disables privileged controls.
+- Any change touches operator/super-admin behavior, `LoadMember`, install guard, session rotation, or account existence handling.
+
+### Boundary Map Table
+
+Fill one row per route, handler action, service mutation, or privileged UI capability:
+
+| Surface | File / Handler | Method + Route | Actor | Route Middleware | Authorizer Action | Resource | Read / Write Target | UI Capability Source | Failure Mode | Tests |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| _example_ | `internal/baseplate/admin/...` | `POST /admin/...` | active admin | `RequireAuth -> LoadMember -> RequireAdmin` | `admin.*.update` | baseplate admin resource with object ID | static SQL service mutation in tx | `deps.Auth.Authorize`, default-deny on error | 403 before mutation, no event/audit | focused handler + service test |
+
+### Baseplate-Specific Required Checks
+
+1. **Stale operator sessions** -- operator privilege changes (role downgrade, removal) must fail closed. Session-cached roles must be revalidated at mutation time, not just route entry. Operator accounts only hydrate as privileged sessions while they remain super-admins.
+2. **Nil `ContextMember`** -- handlers must handle `auth.ContextMember(ctx)` returning nil without panic or accidental privilege. A nil check before any `.ID` or `.Role` access is mandatory.
+3. **Install guard rechecks** -- install wizard GET and POST paths re-check current admin eligibility per request, including the case where a CLI-created admin appears mid-flow. Aborted or privilege-changing auth flows rotate or destroy session state.
+4. **UI capability default-deny** -- template conditionals gating admin/mutation UI must use the same `Authorize(ctx, action, resource)` pairs as the handler. Default deny on nil authz, missing member, unexpected account type, or authorization error.
+5. **PII-safe logs** -- error responses and logs avoid account-existence disclosure and raw or reversible PII when a stable non-PII identifier is available. Service validation errors map to 400-class; auth failures to 403-class; storage failures to 500-class.
+6. **Post-commit events** -- events published only after `tx.Commit()` (per Mutation Invariant #6). The map should note which events each surface publishes and confirm none are inside the transaction.
+7. **Audit expectations** -- each mapped surface declares its audit log entry (actor, action, entity, changed fields) per the module's existing audit pattern.
+
+### Test Expectations
+
+For each mapped row, include at least one focused test for the failure mode:
+
+- Authorized actor succeeds
+- Unauthorized actor denied before service mutation
+- Missing/nil current member does not panic and does not gain privilege
+- Stale operator or stale install-wizard session fails closed when applicable
+- UI capability flags hide or disable privileged controls when Authorizer denies
+- Post-commit event/audit behavior covered for persistent mutations
+
+### PR Review Receipt
+
+Add this receipt to the PR body or final cross-check:
+
+```text
+Auth Boundary Map:
+- Mapped surfaces:
+- Middleware checked:
+- Authorizer action/resource pairs checked:
+- Default-deny UI capabilities checked:
+- Stale-session/operator/install edge cases checked:
+- Tests added or verified:
+- Residual risk:
+```
+
+---
+
 ## Supporting Files
 
 For detailed reference:
