@@ -12,7 +12,7 @@ plans/*/baselines-post-fix/
 plans/*/screenshots/
 plans/*/prompts/
 plans/*/manifest.json
-plans/*/brainstorm.md
+plans/*/brainstorm.html
 .worktrees/
 
 # dm-review artifacts
@@ -24,10 +24,10 @@ todos/
 
 Feature-scoped files (Tier 3) inside `plans/<feature>/` remain trackable:
 
-- `original-prompt.md` — user's verbatim input
-- `assessment.md` — current state report
-- `research.md` — research findings
-- `plan.md` — implementation plan
+- `original-prompt.md` — user's verbatim input (markdown)
+- `assessment.html` — current state report (HTML + island)
+- `research.html` — research findings (HTML + island)
+- `plan.html` — implementation plan (HTML + island)
 - `final-requirements-crosscheck.md` — delivery proof
 - `receipt.md` — post-cleanup summary
 
@@ -45,7 +45,7 @@ ENTRIES=(
   'plans/*/screenshots/'
   'plans/*/prompts/'
   'plans/*/manifest.json'
-  'plans/*/brainstorm.md'
+  'plans/*/brainstorm.html'
   '.worktrees/'
   '.claude/ux-review/'
   'todos/'

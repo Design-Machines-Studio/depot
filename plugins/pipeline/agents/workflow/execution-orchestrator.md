@@ -276,7 +276,7 @@ ENTRIES=(
   'plans/*/screenshots/'
   'plans/*/prompts/'
   'plans/*/manifest.json'
-  'plans/*/brainstorm.md'
+  'plans/*/brainstorm.html'
   '.worktrees/'
   '.claude/ux-review/'
   'todos/'
@@ -624,7 +624,7 @@ For UI and Integration chunks, verify the rendered output in a browser against t
 
 Before taking screenshots, check for design specifications:
 
-1. `plans/<feature-slug>/brainstorm.md` — pipeline brainstorm output
+1. `plans/<feature-slug>/brainstorm.html` — pipeline brainstorm output (read the `visualDecisions` island with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
 2. `docs/superpowers/specs/*.md` — formal design specs (use most recent)
 3. `.superpowers/brainstorm/` — brainstorm mockups (HTML files with inline styles)
 
@@ -927,7 +927,7 @@ rm -rf plans/<feature-slug>/baselines/ plans/<feature-slug>/baselines-pre-fix/ p
 
 ```bash
 rm -rf plans/<feature-slug>/prompts/
-rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.md
+rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.html
 ```
 
 On failure, preserve Tier 2 for debugging. Log: `Artifact cleanup (partial -- run failed): preserved prompts and manifest for debugging.`

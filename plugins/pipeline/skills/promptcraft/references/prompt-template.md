@@ -48,7 +48,7 @@ Load these skills for domain-specific guidance:
 
 [If the brainstorm or design spec produced visual mockups, summarize the key decisions here. Omit this section entirely for non-UI chunks.]
 
-Approved design: [path to brainstorm.md or mockup file]
+Approved design: [path to brainstorm.html or mockup file]
 
 Key visual decisions:
 - [Decision 1: e.g., "Sidebar headings use h4 with font-medium, not h3"]

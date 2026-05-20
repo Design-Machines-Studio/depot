@@ -184,7 +184,7 @@ Also loads (see Phase 4 handoff): the promptcraft skill's Phase 3e Stable Anchor
 
 ### Phase 4: Consolidation
 
-Collect results from all agents and produce a **Research Brief**:
+Collect results from all agents and produce a **Research Brief**. Write it as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/research.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. This is the synthesized brief; if research also produced facet notes (`research-codebase.md`, `research-context.md`, `research-design.md`), leave those as markdown supporting detail. The `findings` and `references` arrays populate the `#pipeline-data` island. The content outline below maps to the section's slots:
 
 ```markdown
 # Research Brief: [Feature Name]
@@ -214,7 +214,7 @@ Collect results from all agents and produce a **Research Brief**:
 [Questions that planning will need to answer]
 ```
 
-Save the brief to `plans/research-<feature-slug>.md` in the target project.
+Save the brief to `plans/<feature-slug>/research.html` in the target project (detect host CSS first; on `FALLBACK` inline `templates/baseline.css`).
 
 ### Phase 5: Handoff
 

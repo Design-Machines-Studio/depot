@@ -275,6 +275,7 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 - Agent files are categorized by purpose: `review/` for code review agents, `workflow/` for automation agents.
 - Plugin JSON requires `name`, `description`, `version`, `author`, and `capabilities`. Optional fields include `keywords`, `repository`, `author.url`, `pluginDependencies`, and `optionalPluginDependencies`.
 - The marketplace manifest at `.claude-plugin/marketplace.json` must stay in sync with the actual plugin directories.
+- **Artifact format (pipeline planning phase):** the four pipeline planning artifacts -- `brainstorm`, `assessment`, `research`, `plan` -- are emitted as self-contained **HTML carrying a JSON data island** (a `<script type="application/json" id="pipeline-data">` block). The HTML links the target project's compiled CSS; the island is what downstream agents read (via `extract-json-island.sh`) instead of grepping prose. Agent-only handoffs (`original-prompt.md`, `prompts/*.md`, `manifest.json`, crosscheck) stay **Markdown/JSON**. Terminal status reports (dm-review reports, pipeline receipts, delivery reports) stay **inline/markdown** -- HTML buys nothing for a one-shot status summary. Templates and the rationale live in `plugins/pipeline/skills/promptcraft/references/templates/` and `docs/html-artifacts.md`.
 
 ## Pipeline Enforcement
 

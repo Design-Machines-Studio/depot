@@ -448,6 +448,108 @@ check_skill_frontmatter() {
 }
 
 # --------------------------------------------------------------------------
+# Validate the pipeline HTML artifact templates
+#
+# The pipeline emits its four planning artifacts (assessment/research/brainstorm/
+# plan) as self-contained HTML carrying a JSON data island. This checks that the
+# template system is intact: base.html has every substitution slot, the section
+# and widget fragments are structurally sane, and the two bash helpers are
+# executable and syntactically valid.
+#
+# Note: we do NOT use `xmllint --html` here. libxml2's HTML parser is HTML4-era
+# and emits false "Tag header/main/footer invalid" errors on HTML5 semantic
+# elements while still exiting 0 — useless as a gate. We use deterministic
+# structural checks (slot presence, balanced comments/script tags) instead.
+# --------------------------------------------------------------------------
+validate_html_templates() {
+  local any_failed=0
+  local tdir="$PLUGINS_DIR/pipeline/skills/promptcraft/references/templates"
+
+  if [ ! -d "$tdir" ]; then
+    printf "  ${RED}FAIL${RESET}  templates directory missing: %s\n" "${tdir#$REPO_ROOT/}"
+    return 1
+  fi
+
+  # Required files.
+  local required=(
+    "base.html" "data-island.html" "baseline.css" "README.md"
+    "detect-host-css.sh" "extract-json-island.sh"
+    "sections/assessment.html" "sections/research.html"
+    "sections/brainstorm.html" "sections/plan.html"
+    "widgets/decision-table.html" "widgets/widget-scripts.js"
+    "widgets/mockup-frame.html" "widgets/diagram-mermaid.html"
+  )
+  local f
+  for f in "${required[@]}"; do
+    if [ ! -f "$tdir/$f" ]; then
+      printf "  ${RED}FAIL${RESET}  missing template file: %s\n" "$f"
+      any_failed=1
+    fi
+  done
+
+  # base.html must declare every substitution slot.
+  local slot
+  for slot in TITLE ARTIFACT_KIND GENERATED_AT HOST_CSS_HREF SIBLING_NAV BODY WIDGET_SCRIPTS DATA_ISLAND; do
+    if ! grep -qF "{{$slot}}" "$tdir/base.html" 2>/dev/null; then
+      printf "  ${RED}FAIL${RESET}  base.html missing slot {{%s}}\n" "$slot"
+      any_failed=1
+    fi
+  done
+
+  # data-island.html must carry the canonical island id and type.
+  if ! grep -qF 'id="pipeline-data"' "$tdir/data-island.html" 2>/dev/null \
+     || ! grep -qF 'type="application/json"' "$tdir/data-island.html" 2>/dev/null; then
+    printf "  ${RED}FAIL${RESET}  data-island.html missing id=\"pipeline-data\" or type=\"application/json\"\n"
+    any_failed=1
+  fi
+
+  # Structural sanity for every HTML fragment: balanced comments and script tags.
+  while IFS= read -r -d '' htmlf; do
+    local rel="${htmlf#$tdir/}"
+    local open_c close_c open_s close_s
+    open_c=$(grep -o '<!--' "$htmlf" | wc -l | tr -d ' ')
+    close_c=$(grep -o -- '-->' "$htmlf" | wc -l | tr -d ' ')
+    if [ "$open_c" != "$close_c" ]; then
+      printf "  ${RED}FAIL${RESET}  %s: unbalanced HTML comments (%s '<!--' vs %s '-->')\n" "$rel" "$open_c" "$close_c"
+      any_failed=1
+    fi
+    open_s=$(grep -o '<script' "$htmlf" | wc -l | tr -d ' ')
+    close_s=$(grep -o '</script>' "$htmlf" | wc -l | tr -d ' ')
+    if [ "$open_s" != "$close_s" ]; then
+      printf "  ${RED}FAIL${RESET}  %s: unbalanced <script> tags (%s open vs %s close)\n" "$rel" "$open_s" "$close_s"
+      any_failed=1
+    fi
+  done < <(find "$tdir" -name '*.html' -print0 2>/dev/null)
+
+  # Each section must reference the data island so its structured data round-trips.
+  for f in assessment research brainstorm plan; do
+    local secf="$tdir/sections/$f.html"
+    [ -f "$secf" ] || continue
+    if ! grep -qiE "island|pipeline-data" "$secf"; then
+      printf "  ${YELLOW}WARN${RESET}  sections/%s.html does not mention its data island\n" "$f"
+    fi
+  done
+
+  # Helpers: executable bit + syntax.
+  for f in detect-host-css.sh extract-json-island.sh; do
+    [ -f "$tdir/$f" ] || continue
+    if [ ! -x "$tdir/$f" ]; then
+      printf "  ${RED}FAIL${RESET}  %s is not executable (chmod +x)\n" "$f"
+      any_failed=1
+    fi
+    if ! bash -n "$tdir/$f" 2>/dev/null; then
+      printf "  ${RED}FAIL${RESET}  %s has a bash syntax error\n" "$f"
+      any_failed=1
+    fi
+  done
+
+  if [ "$any_failed" -eq 0 ]; then
+    printf "  ${GREEN}OK${RESET}    pipeline HTML templates intact (slots, fragments, helpers)\n"
+  fi
+  return $any_failed
+}
+
+# --------------------------------------------------------------------------
 # Composition checks (the default mode)
 # --------------------------------------------------------------------------
 run_composition_checks() {
@@ -481,6 +583,11 @@ run_composition_checks() {
 
   printf "\n${BOLD}SKILL.md frontmatter integrity:${RESET}\n"
   if ! check_skill_frontmatter; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Pipeline HTML templates:${RESET}\n"
+  if ! validate_html_templates; then
     any_failed=1
   fi
 

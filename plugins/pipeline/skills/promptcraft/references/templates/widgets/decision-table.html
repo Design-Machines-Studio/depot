@@ -1,0 +1,32 @@
+<!--
+  decision-table widget. Editable table whose Copy button serializes rows back to
+  JSON matching the data island schema. Drop one instance per editable section in
+  the body; include widget-scripts.js ONCE via the base.html WIDGET_SCRIPTS slot.
+
+  Contract:
+    - Wrap the table in a section with class "widget--edit" and a
+      data-island-key="<key>" naming the island array this table maps to
+      (e.g. "chunks", "decisions"). The section is provided by the section
+      template; this widget supplies the <table> + Copy button.
+    - Each <th> carries data-field="<jsonKey>" naming the property each column
+      serializes to. Header text is for humans; data-field drives the JSON.
+    - Body cells are contenteditable. A cell may hold a comma-separated list;
+      mark it data-list="true" to serialize as a JSON array.
+  Example header for the plan "chunks" table:
+    n | slug | scope | acceptance | deps(data-list)
+-->
+<table>
+  <thead>
+    <tr>
+      <th data-field="n">NN</th>
+      <th data-field="slug">Slug</th>
+      <th data-field="scope">Scope</th>
+      <th data-field="acceptance">Acceptance</th>
+      <th data-field="deps" data-list="true">Depends on</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ROWS}}
+  </tbody>
+</table>
+<button type="button" class="widget__copy" data-copy-island>Copy table as JSON</button>

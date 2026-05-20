@@ -1,0 +1,14 @@
+<!--
+  diagram-mermaid widget. Renders a Mermaid diagram (flowchart, sequence, ER).
+  Use in plan.html / research.html for dependency graphs and flows.
+  Slot: MERMAID_SOURCE (raw Mermaid text — do NOT HTML-escape; Mermaid reads
+  the element's textContent).
+  The CDN loader goes into the base.html WIDGET_SCRIPTS slot ONCE per artifact, as two
+  deferred script tags: one with
+    src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
+  and one inline that calls mermaid.initialize({startOnLoad:true}) on window load.
+  When offline (no CDN), the <pre> degrades to readable diagram source — acceptable.
+-->
+<figure class="diagram">
+  <pre class="mermaid">{{MERMAID_SOURCE}}</pre>
+</figure>
