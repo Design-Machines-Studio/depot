@@ -213,7 +213,7 @@ Check for design specifications that browser-based agents should evaluate agains
 1. Look for spec files in order of specificity:
    - `docs/superpowers/specs/*.md` -- formal design specs (use most recently modified)
    - `.superpowers/brainstorm/` -- brainstorm mockups (HTML files with visual decisions as inline styles)
-   - `plans/*/brainstorm.md` -- pipeline brainstorm output
+   - `plans/*/brainstorm.html` -- pipeline brainstorm output (HTML with a `visualDecisions` JSON island)
 2. If ANY spec files are found, read them and extract a structured summary:
    - Visual decisions (layout choices, spacing tokens, component variants, color usage)
    - Approved design patterns (specific markup structures, class choices)

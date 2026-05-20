@@ -1,0 +1,49 @@
+<!--
+  Research section body. Fills the base.html BODY slot for kind "research".
+  Mirrors the Research Brief markdown structure (skills/research/SKILL.md Phase 4).
+  This is the synthesized brief. Facet files (research-codebase/context/design.md)
+  stay as markdown supporting detail and are NOT converted.
+  Island schema: { artifact:"research", slug, findings[], references[] }
+  references[] items: { title, url|path, source }.
+-->
+<h1>Research Brief: {{FEATURE_NAME}}</h1>
+
+<section aria-labelledby="summary">
+  <h2 id="summary">Summary</h2>
+  {{SUMMARY}}
+</section>
+
+<section aria-labelledby="project-context">
+  <h2 id="project-context">Project Context</h2>
+  {{PROJECT_CONTEXT}}
+</section>
+
+<section aria-labelledby="domain-knowledge">
+  <h2 id="domain-knowledge">Domain Knowledge</h2>
+  {{DOMAIN_KNOWLEDGE}}
+</section>
+
+<section aria-labelledby="design-references">
+  <h2 id="design-references">Design References</h2>
+  {{DESIGN_REFERENCES}}
+</section>
+
+<section aria-labelledby="technical-references">
+  <h2 id="technical-references">Technical References</h2>
+  {{TECHNICAL_REFERENCES}}
+</section>
+
+<section aria-labelledby="codebase-patterns">
+  <h2 id="codebase-patterns">Codebase Patterns</h2>
+  {{CODEBASE_PATTERNS}}
+</section>
+
+<section aria-labelledby="constraints-risks">
+  <h2 id="constraints-risks">Constraints and Risks</h2>
+  {{CONSTRAINTS_RISKS}}
+</section>
+
+<section aria-labelledby="key-decisions">
+  <h2 id="key-decisions">Key Decisions Needed</h2>
+  {{KEY_DECISIONS}}
+</section>

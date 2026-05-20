@@ -105,7 +105,7 @@ Many codebases ship with dev-time auth bypasses or persona-switching helpers. Di
 
 Protocol:
 
-1. **Auth middleware scan:** grep the project's auth middleware (common locations: `internal/handlers/middleware.go`, `backend/auth/*.go`, `app/Http/Middleware/*.php`, `config/authentication.*`) for keywords: `cookie`, `X-Test-User`, `Bearer`, `session`, `impersonate`. **Extract the header/cookie NAME only. Redact values.** If a matched line contains `=<literal>`, `: "<literal>"`, `Bearer <literal>`, or any hardcoded token, flag the file for manual review and record only the field name in the Assessment Brief. Never copy raw matched lines into `plans/<feature-slug>/assessment.md` -- dev-mode middleware sometimes hardcodes bearer tokens or session secrets that must not propagate downstream.
+1. **Auth middleware scan:** grep the project's auth middleware (common locations: `internal/handlers/middleware.go`, `backend/auth/*.go`, `app/Http/Middleware/*.php`, `config/authentication.*`) for keywords: `cookie`, `X-Test-User`, `Bearer`, `session`, `impersonate`. **Extract the header/cookie NAME only. Redact values.** If a matched line contains `=<literal>`, `: "<literal>"`, `Bearer <literal>`, or any hardcoded token, flag the file for manual review and record only the field name in the Assessment Brief. Never copy raw matched lines into `plans/<feature-slug>/assessment.html` (neither the rendered Test Personas section nor the `testPersonas` data island) -- dev-mode middleware sometimes hardcodes bearer tokens or session secrets that must not propagate downstream.
 2. **Seed data scan:** grep seed files (`seeds/`, `fixtures/`, `db/seed.*`, `internal/fixtures/*/seed.go`) for user/member IDs and role names. Collect 2-3 representative personas per role.
 3. **Test helper scan:** grep `tests/`, `_test.go`, `spec/` for patterns like `loginAs(`, `asUser(`, `setCurrentUser(` to find helper functions that scripts/tests use to switch identity.
 
@@ -144,6 +144,8 @@ If no `tasks/lessons.md` exists, log `prior lessons check: no lessons file -- sk
 
 Combine both reports into a single **Assessment Brief**. When running as part of `/pipeline`, the Assessment Brief also serves as the cached source of truth for the Key Requirements list (extracted from `original-prompt.md` once, referenced many times across phases).
 
+The brief is written as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/assessment.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. The content outline below maps to the section's slots; the `keyRequirements`, `testPersonas`, `recentLessons`, and `baselineScreenshots` arrays also populate the `#pipeline-data` island so later phases read them with `extract-json-island.sh` instead of grepping prose.
+
 ```markdown
 # Assessment: [Area Name]
 
@@ -175,7 +177,7 @@ Combine both reports into a single **Assessment Brief**. When running as part of
 - [What to leave alone]
 ```
 
-Save the brief to `plans/<feature-slug>/assessment.md` in the target project. When running standalone via `/pipeline-assess`, the slug may be the area name instead of a feature slug.
+Save the brief to `plans/<feature-slug>/assessment.html` in the target project (detect host CSS first; on `FALLBACK` inline `templates/baseline.css`). When running standalone via `/pipeline-assess`, the slug may be the area name instead of a feature slug.
 
 ### Phase 4: Handoff
 

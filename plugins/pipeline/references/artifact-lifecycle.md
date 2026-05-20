@@ -23,11 +23,11 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `screenshots/*.png` | 1 | Phase 7 verification screenshots |
 | `prompts/*.md` | 2 | Chunk execution prompts consumed by orchestrator |
 | `manifest.json` | 2 | Chunk ordering and dependency metadata |
-| `brainstorm.md` | 2 | Design decisions (key choices captured in plan.md) |
-| `original-prompt.md` | 3 | User's verbatim input — ground truth |
-| `assessment.md` | 3 | Current state report with cached Key Requirements |
-| `research.md` | 3 | Findings from research phase |
-| `plan.md` | 3 | Implementation plan |
+| `brainstorm.html` | 2 | Design decisions (HTML + `visualDecisions` island) |
+| `original-prompt.md` | 3 | User's verbatim input — ground truth (markdown) |
+| `assessment.html` | 3 | Current state report (HTML + cached Key Requirements island) |
+| `research.html` | 3 | Findings from research phase (HTML + island) |
+| `plan.html` | 3 | Implementation plan (HTML + `chunks`/`decisions` island) |
 | `final-requirements-crosscheck.md` | 3 | Delivery proof with evidence types |
 | `receipt.md` | 3 | Compact post-cleanup summary (written by Step 5b) |
 
@@ -61,7 +61,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 
 1. Write `plans/<feature-slug>/receipt.md`
 2. Delete all Tier 1 files: `rm -rf plans/<slug>/baselines/ baselines-pre-fix/ baselines-post-fix/ screenshots/`
-3. Delete all Tier 2 files: `rm -rf plans/<slug>/prompts/` and `rm -f plans/<slug>/manifest.json plans/<slug>/brainstorm.md`
+3. Delete all Tier 2 files: `rm -rf plans/<slug>/prompts/` and `rm -f plans/<slug>/manifest.json plans/<slug>/brainstorm.html`
 4. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`
 
 ### On failed pipeline run (Step 5b)

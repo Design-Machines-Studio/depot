@@ -1,0 +1,37 @@
+<!--
+  Plan section body. Fills the base.html BODY slot for kind "plan".
+  Layout-aware per the assembly-baseplate plans/ convention:
+    - the base.html SIBLING_NAV slot links assessment.html, research.html, prompts/.
+    - Chunk rows map 1:1 onto prompts/NN-<slug>.md (promptcraft Phase 4 output).
+  Island schema (feature plan):
+    { artifact:"plan", slug,
+      chunks:[{ n:"01", slug:"reader-service", scope, acceptance, deps:[] }],
+      decisions:[{ id, decision, rationale, alternatives }],
+      requirementsCoverage:[{ requirement, chunk }] }
+  Epic-plan variant: replace the chunk table with the sub-plan roadmap and emit
+    "subPlans":[{ n, slug, featureDir }] instead of "chunks".
+  The chunk and decision tables use the decision-table widget (editable + copy-back).
+-->
+<h1>Plan: {{FEATURE_NAME}}</h1>
+
+<section aria-labelledby="overview">
+  <h2 id="overview">Overview</h2>
+  {{OVERVIEW}}
+</section>
+
+<section aria-labelledby="chunks" class="widget--edit" data-island-key="chunks">
+  <h2 id="chunks">Chunk Decomposition</h2>
+  <p>Each row becomes <code>prompts/NN-&lt;slug&gt;.md</code>. Edit cells inline, then Copy to round-trip into the data island.</p>
+  {{CHUNK_TABLE}}
+</section>
+
+<section aria-labelledby="decisions" class="widget--edit" data-island-key="decisions">
+  <h2 id="decisions">Decisions &amp; Tradeoffs</h2>
+  {{DECISION_TABLE}}
+</section>
+
+<section aria-labelledby="coverage">
+  <h2 id="coverage">Requirements Coverage</h2>
+  <p>Maps each cached Key Requirement (from <a href="assessment.html">assessment.html</a>) to the chunk that satisfies it.</p>
+  {{COVERAGE_TABLE}}
+</section>

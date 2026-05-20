@@ -9,12 +9,22 @@ Transform a plan into self-contained execution prompts with overlap-aware depend
 
 ## Input
 
-1. **Plan file** -- A markdown plan (from `/workflows:plan`, superpowers writing-plans, or hand-written)
-2. **Original prompt** -- The user's verbatim input saved at `plans/<feature-slug>/original-prompt.md` with extracted Key Requirements
-3. **Research Brief** (optional) -- Output from the research skill
-4. **Assessment Brief** (optional) -- Output from the assess skill
+1. **Plan file** -- A pipeline `plan.html` carrying a `#pipeline-data` JSON island (`chunks`, `decisions`, `requirementsCoverage`). When invoked standalone on a hand-written markdown plan, parse the prose directly; within `/pipeline` the plan is HTML.
+2. **Original prompt** -- The user's verbatim input saved at `plans/<feature-slug>/original-prompt.md` with extracted Key Requirements (stays markdown)
+3. **Research Brief** (optional) -- `research.html` from the research skill
+4. **Assessment Brief** (optional) -- `assessment.html` from the assess skill (cached Key Requirements live in its `keyRequirements` island)
 
 ## Process
+
+### Phase 0: Artifact Format Policy
+
+Pipeline planning artifacts (`assessment`, `research`, `brainstorm`, `plan`) are **HTML carrying a JSON data island**, not markdown. Read their structured data with the island extractor rather than grepping rendered prose:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/skills/promptcraft/references/templates/extract-json-island.sh" plans/<feature-slug>/plan.html
+```
+
+The plan island's `chunks` array seeds Phase 1 decomposition; each chunk's `n` + `slug` map 1:1 onto the `prompts/NN-<slug>.md` you write in Phase 4 (the assembly-baseplate chunk-prompt convention). The assessment island's `keyRequirements` is the cached requirements source for the Phase 6 coverage check. The execution prompts and `manifest.json` you generate stay **markdown/JSON** -- they are agent-only handoffs, not human-facing artifacts. See `references/templates/README.md`.
 
 ### Phase 1: Plan Decomposition
 
@@ -60,7 +70,7 @@ Read `references/prompt-template.md` for the exact prompt structure.
 
 For UI chunks (those touching `.templ`, `.twig`, `.html`, or `.css` files), check for brainstorm outputs that define the approved visual design:
 
-1. Check `plans/<feature-slug>/brainstorm.md` for visual design decisions
+1. Check `plans/<feature-slug>/brainstorm.html` for visual design decisions -- read the `visualDecisions` island with `references/templates/extract-json-island.sh`
 2. Check `.superpowers/brainstorm/` for HTML mockups (these contain styling decisions as inline styles)
 3. If found, extract a **Visual Reference Summary**:
    - Key styling decisions (which component variants, which tokens, which layout patterns)
@@ -222,7 +232,7 @@ For each chunk, generate a self-contained execution prompt using the template fr
 4. **Testable** -- Clear acceptance criteria the subagent can verify
 5. **Visually specified** (UI chunks) -- Include the Visual Reference Summary from Phase 2.5 and generate both structural AND visual acceptance criteria (see prompt template)
 
-Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`. Prompts are Tier 2 (run-scoped) artifacts -- auto-deleted by the orchestrator's cleanup phase after successful execution.
+Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk-id>` is the `NN-<slug>` from the plan island's `chunks` (zero-padded, ordered; e.g. `00-preflight`, `01-reader-service`, ... `10-doc-sync`). Prompts stay **markdown** -- they are Tier 2 (run-scoped) agent-only artifacts, auto-deleted by the orchestrator's cleanup phase after successful execution.
 
 ### Phase 5: Manifest Generation
 
@@ -255,7 +265,7 @@ The manifest encodes:
 
 ### Phase 6: Requirements Coverage Check
 
-Re-read `plans/<feature-slug>/original-prompt.md` and verify every Key Requirement is covered by at least one chunk's acceptance criteria. Produce a coverage map:
+Read the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (`extract-json-island.sh`), re-reading `plans/<feature-slug>/original-prompt.md` only if the cache looks incomplete. Verify every Key Requirement is covered by at least one chunk's acceptance criteria. Produce a coverage map:
 
 ```
 Requirements Coverage:

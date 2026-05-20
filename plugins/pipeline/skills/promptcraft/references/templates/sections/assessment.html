@@ -1,0 +1,49 @@
+<!--
+  Assessment section body. Fills the base.html BODY slot for kind "assessment".
+  Mirrors the Assessment Brief markdown structure (skills/assess/SKILL.md Phase 3).
+  Island schema: { artifact:"assessment", slug, keyRequirements[], testPersonas[],
+                    recentLessons[], baselineScreenshots[] }
+  keyRequirements IS the cached Key Requirements source the pipeline re-reads in
+  Phases 3/4/7 — keep it complete and verbatim.
+-->
+<h1>Assessment: {{AREA_NAME}}</h1>
+
+<section aria-labelledby="key-requirements">
+  <h2 id="key-requirements">Key Requirements <small>(cached from original-prompt.md)</small></h2>
+  <ol>{{KEY_REQUIREMENTS_LIST}}</ol>
+</section>
+
+<section aria-labelledby="code-state">
+  <h2 id="code-state">Code State</h2>
+  {{CODE_STATE}}
+</section>
+
+<section aria-labelledby="ux-state">
+  <h2 id="ux-state">UX State</h2>
+  {{UX_STATE}}
+</section>
+
+<section aria-labelledby="test-personas">
+  <h2 id="test-personas">Test Personas</h2>
+  {{TEST_PERSONAS}}
+</section>
+
+<section aria-labelledby="recent-lessons">
+  <h2 id="recent-lessons">Recent Lessons That May Apply</h2>
+  {{RECENT_LESSONS}}
+</section>
+
+<section aria-labelledby="baseline-screenshots">
+  <h2 id="baseline-screenshots">Baseline Screenshots</h2>
+  {{BASELINE_SCREENSHOTS}}
+</section>
+
+<section aria-labelledby="key-findings">
+  <h2 id="key-findings">Key Findings</h2>
+  {{KEY_FINDINGS}}
+</section>
+
+<section aria-labelledby="recommendations">
+  <h2 id="recommendations">Recommendations</h2>
+  {{RECOMMENDATIONS}}
+</section>

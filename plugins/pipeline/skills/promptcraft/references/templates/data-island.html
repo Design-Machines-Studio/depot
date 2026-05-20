@@ -1,0 +1,13 @@
+<!--
+  Data island snippet. Substituted into base.html's DATA_ISLAND slot.
+  This is the machine-readable half of a dual-purpose artifact: agents read it
+  via extract-json-island.sh instead of grepping the rendered prose.
+
+  The id MUST be "pipeline-data". The "artifact" key MUST be one of:
+  assessment | research | brainstorm | plan. Keep the JSON in sync with the
+  rendered tables — the decision-table widget's Copy button serializes back to
+  this exact shape.
+-->
+<script type="application/json" id="pipeline-data">
+{{ISLAND_JSON}}
+</script>

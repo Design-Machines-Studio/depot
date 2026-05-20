@@ -105,6 +105,21 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 
 Mark each item as you complete it. Do not mark a GATE as complete until AskUserQuestion has returned a response from the user. If you find yourself proceeding past a GATE without an AskUserQuestion response, you have violated the gate.
 
+## Artifact Format (planning phase)
+
+The four planning-phase artifacts -- **brainstorm, assessment, research, plan** -- are written as self-contained **HTML carrying a JSON data island**, not markdown. Each links the target project's compiled CSS so it renders in the project's own skin, and embeds a `<script type="application/json" id="pipeline-data">` island that later phases read instead of grepping prose.
+
+At every "Save the ..." step below, emit HTML this way:
+
+1. Detect host CSS from the project root:
+   ```bash
+   HOST_CSS_LINK=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/promptcraft/references/templates/detect-host-css.sh" 2>/dev/null || echo "FALLBACK")
+   ```
+   On `FALLBACK`, inline `templates/baseline.css` into a `<style>` block instead of using a `<link>`.
+2. Assemble `templates/base.html` + `templates/sections/<kind>.html` + any widgets + the data island, per `templates/README.md`. Write the result to `plans/<feature-slug>/<kind>.html`.
+
+Agent-only handoffs (`original-prompt.md`, `prompts/*.md`, `manifest.json`, `final-requirements-crosscheck.md`) stay markdown/JSON. Terminal status reports (delivery report, receipt) stay inline/markdown -- they are NOT HTML. Read an artifact's structured data downstream with `templates/extract-json-island.sh <file.html>`.
+
 ## Feature Input
 
 <feature_input> #$ARGUMENTS </feature_input>
@@ -121,7 +136,7 @@ Do not proceed without a clear feature description.
 
 ### Re-read discipline (token budget)
 
-`original-prompt.md` is read canonically ONCE in Phase 1 (Assessment). Phase 1 extracts a `Key Requirements` list and saves it into `plans/<feature-slug>/assessment.md`. After that, Phases 3, 4, and 7 reference the cached Key Requirements list from the assessment brief, NOT the full original-prompt.md.
+`original-prompt.md` is read canonically ONCE in Phase 1 (Assessment). Phase 1 extracts a `Key Requirements` list and saves it into the `keyRequirements` data island of `plans/<feature-slug>/assessment.html`. After that, Phases 3, 4, and 7 reference the cached Key Requirements list from the assessment island (read it with `templates/extract-json-island.sh plans/<feature-slug>/assessment.html`), NOT the full original-prompt.md.
 
 **When to re-read original-prompt.md anyway:**
 
@@ -181,7 +196,7 @@ Routine template changes (adding a column, fixing a label, wiring an existing pa
 1. Invoke the `superpowers:brainstorming` skill BEFORE any pipeline phase
 2. Pass the original prompt as context for the brainstorming session
 3. Wait for the brainstorming process to complete (design doc written, user approved)
-4. Save the brainstorming output to `plans/<feature-slug>/brainstorm.md`
+4. Save the brainstorming output to `plans/<feature-slug>/brainstorm.html` (per **Artifact Format** above; `visualDecisions` island)
 5. Use both the original prompt AND the brainstorming spec as input to Phase 1
 
 This is NOT optional. The brainstorming skill's hard gate ("Do NOT invoke any implementation skill until you have presented a design and the user has approved it") applies to the pipeline. The pipeline IS an implementation skill. "Having a reference pattern to copy" is NOT a reason to skip brainstorming -- the brainstorm explores whether that pattern is the right choice.
@@ -198,7 +213,7 @@ Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`.
 
 1. Determine the codebase area affected by the feature
 2. Run the pre-plan assessment (code + UX in parallel)
-3. Save the Assessment Brief to `plans/<feature-slug>/assessment.md`
+3. Save the Assessment Brief to `plans/<feature-slug>/assessment.html` (per **Artifact Format** above). The cached Key Requirements go in the `keyRequirements` island.
 4. Present key findings to the user
 
 Mark ledger item 2 as complete.
@@ -215,10 +230,10 @@ You MUST run this phase even if you think you already have enough context. Resea
 
 1. Pass the feature description and Assessment Brief to the research orchestrator
 2. Dispatch parallel research agents across all available sources (ai-memory, RAG, domain plugins, web, codebase)
-3. Save the Research Brief to `plans/<feature-slug>/research.md`
+3. Save the Research Brief to `plans/<feature-slug>/research.html` (per **Artifact Format** above; `findings`/`references` island)
 4. Present the Research Brief summary to the user
 
-**Verification:** The Research Brief file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/research.md` to confirm.
+**Verification:** The Research Brief file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/research.html` to confirm.
 
 Mark ledger item 4 as complete.
 
@@ -234,13 +249,13 @@ Create the implementation plan. Two options:
 
 **Option B:** If not available, create the plan directly:
 
-1. Use the cached Key Requirements from `plans/<feature-slug>/assessment.md` (re-read original-prompt.md only if the user gave feedback since Phase 1)
-2. Break the feature into logical implementation steps
+1. Use the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (re-read original-prompt.md only if the user gave feedback since Phase 1)
+2. Break the feature into logical implementation steps. Each step is a chunk that maps to `prompts/NN-<slug>.md` -- record them in the plan's `chunks` island.
 3. Identify file paths, patterns, and dependencies
 4. Write acceptance criteria for each step
-5. Save to `plans/<feature-slug>/plan.md`
+5. Save to `plans/<feature-slug>/plan.html` (per **Artifact Format** above; `chunks`/`decisions`/`requirementsCoverage` island). For a high-level/epic plan that decomposes into sibling feature dirs, use the epic variant (`subPlans` island).
 
-**Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.md` to confirm.
+**Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.html` to confirm.
 
 **Plan self-review (before presenting):** Re-read your own plan and check:
 
@@ -253,7 +268,7 @@ If any check fails, fix the plan before presenting it.
 
 Mark ledger item 6 as complete.
 
-**GATE (ledger item 7):** You MUST stop here and use AskUserQuestion to ask: "Plan ready at `plans/<feature-slug>/plan.md`. Review it and let me know when to generate execution prompts." Do NOT proceed by generating an answer to your own question.
+**GATE (ledger item 7):** You MUST stop here and use AskUserQuestion to ask: "Plan ready at `plans/<feature-slug>/plan.html` (open it in a browser to review and edit decision tables inline). Let me know when to generate execution prompts." Do NOT proceed by generating an answer to your own question.
 
 Mark item 7 when AskUserQuestion returns the user's response.
 
@@ -261,8 +276,8 @@ Mark item 7 when AskUserQuestion returns the user's response.
 
 Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
-1. Use the cached Key Requirements from `plans/<feature-slug>/assessment.md` (re-read original-prompt.md only if the user gave feedback since Phase 1)
-2. Decompose the plan into chunks
+1. Use the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (re-read original-prompt.md only if the user gave feedback since Phase 1)
+2. Decompose the plan into chunks (read the plan's `chunks` island with `templates/extract-json-island.sh plans/<feature-slug>/plan.html`)
 3. Extract context for each chunk from the Assessment and Research Briefs
 4. Perform overlap analysis
 5. Generate self-contained execution prompts
@@ -273,7 +288,7 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
 Mark ledger item 8 as complete.
 
-**Requirements coverage check (ledger item 9):** Read the cached Key Requirements from `plans/<feature-slug>/assessment.md`. For each requirement, verify at least one chunk's acceptance criteria covers it. Present the coverage map:
+**Requirements coverage check (ledger item 9):** Read the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. For each requirement, verify at least one chunk's acceptance criteria covers it. Present the coverage map:
 
 ```
 Requirements Coverage:
@@ -366,7 +381,7 @@ If ANY chunk in the manifest was classified as UI or Integration, you MUST visua
 If all chunks were Logic-only, skip to the requirements cross-check.
 
 1. **Discover the design spec.** Check these locations in order:
-   - `plans/<feature-slug>/brainstorm.md`
+   - `plans/<feature-slug>/brainstorm.html` (read the `visualDecisions` island with `templates/extract-json-island.sh`)
    - `docs/superpowers/specs/*.md` (most recently modified)
    - `.superpowers/brainstorm/` (HTML mockups)
    - If none exist, use the original prompt's visual requirements as the baseline.
@@ -402,7 +417,7 @@ Assertions without evidence are findings, not verifications. "Verified: sidebar 
 
 If you cannot provide evidence (no browser tools), you MUST state: "Visual verification incomplete -- no browser tools available. The following requirements could not be visually verified: [list]." This is NOT a passing verification.
 
-**Requirements cross-check (ledger item 13):** Use the cached Key Requirements from `plans/<feature-slug>/assessment.md`. (At this phase, re-read original-prompt.md is justified ONLY if the user has layered feedback on during execution -- otherwise the cache is authoritative.) Verify every Key Requirement was addressed in the final branch. Each entry requires an evidence type:
+**Requirements cross-check (ledger item 13):** Use the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. (At this phase, re-read original-prompt.md is justified ONLY if the user has layered feedback on during execution -- otherwise the cache is authoritative.) Verify every Key Requirement was addressed in the final branch. Each entry requires an evidence type:
 
 ```text
 Requirements Cross-Check:
@@ -450,7 +465,7 @@ Options:
 **If option 3 (done):** Run full cleanup per the artifact lifecycle policy:
 1. Ensure `plans/<feature-slug>/receipt.md` exists (written by orchestrator Step 5b). If missing, write it now.
 2. Delete Tier 1 + 2 artifacts (if not already cleaned by orchestrator).
-3. Delete Tier 3 artifacts: `rm -f plans/<slug>/original-prompt.md assessment.md research.md plan.md final-requirements-crosscheck.md`
+3. Delete Tier 3 artifacts: `rm -f plans/<slug>/original-prompt.md assessment.html research.html plan.html final-requirements-crosscheck.md`
 4. Only `receipt.md` remains in `plans/<feature-slug>/`.
 5. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.`
 

@@ -17,10 +17,12 @@ Terse. No preamble, no narrative framing, no "thank you for the plan" sentiments
 
 You receive:
 
-1. A plan file (markdown)
+1. A plan file (`plan.html` carrying a `#pipeline-data` JSON island). Read its structured `chunks`/`decisions`/`requirementsCoverage` with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh plans/<feature-slug>/plan.html`, and read the rendered prose for narrative context. (A hand-written markdown plan may be passed when invoked outside `/pipeline`.)
 2. A set of execution prompts (markdown files in a prompts/ directory)
 3. A manifest.json with dependency ordering
 4. An `original-prompt.md` with the user's verbatim input and extracted Key Requirements
+
+Your own findings output (the `## Output Format` per-finding blocks) stays **markdown** -- it is returned to the caller, not a human-facing artifact.
 
 ## Review Perspectives
 
@@ -112,7 +114,7 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 
 For each chunk classified as UI or Integration, verify the prompts are set up for visual quality enforcement:
 
-- [ ] Does the chunk have a `## Visual References` section citing a design spec, brainstorm mockup, or original prompt's visual requirements? If no visual baseline exists, flag as **IMPORTANT**: "UI chunk [chunk-id] has no visual baseline to verify against -- visual quality will be evaluated by heuristics only, which has a documented history of missing implementation gaps."
+- [ ] Does the chunk have a `## Visual References` section citing a design spec, the `brainstorm.html` `visualDecisions` island, or the original prompt's visual requirements? If no visual baseline exists, flag as **IMPORTANT**: "UI chunk [chunk-id] has no visual baseline to verify against -- visual quality will be evaluated by heuristics only, which has a documented history of missing implementation gaps."
 - [ ] Does the chunk have `### Visual Acceptance Criteria` with at least 2 criteria describing visual IMPRESSIONS (not just structural class names)? "Button uses `button--outline-danger` class" is structural. "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
 - [ ] Does each visual acceptance criterion include a browser-verifiable test? A criterion is browser-verifiable if it can be confirmed by screenshot comparison or getComputedStyle extraction. "Code is clean" is not verifiable. "Button has font-size < 1rem per getComputedStyle" is verifiable.
 - [ ] For chunks modifying the same visual area (e.g., sidebar, form, card), do the visual criteria align across chunks? One chunk shouldn't say "prominent headings" while another says "subdued headings."

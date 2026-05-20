@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!--
+  Pipeline planning artifact. Self-contained HTML carrying a JSON data island.
+  Assembled by a pipeline agent from base.html + sections/<kind>.html + widgets/*.
+  Required slots (validate-composition.sh validate_html_templates checks these),
+  written here WITHOUT braces so mechanical string-replace does not hit this note:
+    TITLE  ARTIFACT_KIND  GENERATED_AT  HOST_CSS_HREF
+    SIBLING_NAV  BODY  WIDGET_SCRIPTS  DATA_ISLAND
+  The HOST_CSS_HREF slot is replaced with the output of detect-host-css.sh —
+  either a complete <link rel="stylesheet"> tag, or (on FALLBACK) an inline
+  <style> block holding baseline.css.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="{{ARTIFACT_KIND}}">
+  <title>{{TITLE}}</title>
+  {{HOST_CSS_HREF}}
+  <style>
+    /* Minimal host-agnostic chrome. Host CSS above owns typography/color;
+       this only adds layout affordances the host stylesheet won't provide. */
+    .skip-link { position: absolute; left: -9999px; top: 0; }
+    .skip-link:focus { left: 0; padding: 0.5rem 1rem; z-index: 10; }
+    .artifact-main { max-width: 70rem; margin-inline: auto; padding: 1rem; }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: 0.75rem; list-style: none; padding: 0; }
+    .widget--edit table { border-collapse: collapse; width: 100%; }
+    .widget--edit th, .widget--edit td { border: 1px solid currentColor; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
+    .widget--edit td[contenteditable]:focus { outline: 2px solid Highlight; }
+    .widget__copy { margin: 0.5rem 0; }
+    @media (prefers-color-scheme: dark) {
+      /* Fallback only — applies when host CSS does not define a dark scheme. */
+      html:not([data-theme]) { background: #14161a; color: #e6e7e9; }
+    }
+    @media print {
+      nav, .widget--edit .widget__copy { display: none; }
+      .artifact-main { max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="artifact-header">
+    <nav aria-label="Pipeline artifacts">
+      {{SIBLING_NAV}}
+    </nav>
+    <p class="artifact-meta"><span class="artifact-kind">{{ARTIFACT_KIND}}</span> &middot; generated {{GENERATED_AT}}</p>
+  </header>
+  <main id="content" class="artifact-main">
+    {{BODY}}
+  </main>
+  <footer class="artifact-footer">
+    <p>Pipeline planning artifact. Edit decision tables inline, then use the Copy button to round-trip changes back into the data island.</p>
+  </footer>
+  {{DATA_ISLAND}}
+  {{WIDGET_SCRIPTS}}
+</body>
+</html>

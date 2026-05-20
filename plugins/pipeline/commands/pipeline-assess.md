@@ -18,9 +18,9 @@ If the input above is empty, ask: "What area should I assess? Give me a feature 
 
 1. Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`
 2. Execute the full assessment protocol (code + UX in parallel)
-3. Save the Assessment Brief to `plans/assessment-<area-slug>.md`
+3. Save the Assessment Brief to `plans/<area-slug>/assessment.html` (HTML + data island, per the assess skill's Artifact Format)
 4. Present the brief to the user
 
 ## After Assessment
 
-Ask: "Assessment saved to `plans/assessment-<slug>.md`. Want to run the full pipeline from here (`/pipeline`), or use this brief as context for your own planning?"
+Ask: "Assessment saved to `plans/<slug>/assessment.html` (open it in a browser to review). Want to run the full pipeline from here (`/pipeline`), or use this brief as context for your own planning?"
