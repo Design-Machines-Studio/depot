@@ -29,8 +29,12 @@
 # SECURITY NOTES:
 #   - PATH is reset to a fixed value to prevent caller-controlled hijack of grep,
 #     sed, cat, head.
-#   - A .dm-review-css override is read as a single trusted line and emitted
-#     verbatim; only the first line is used and surrounding whitespace trimmed.
+#   - A .dm-review-css override (and a livewires.config.json cssPath) is read from
+#     a project file and emitted into an href="" attribute of the generated
+#     artifact, which a human opens in a browser. emit_link refuses any value
+#     containing attribute-breakout characters (" < > or a newline) so a crafted
+#     project file cannot inject markup. Only the first line of the override is
+#     used and surrounding whitespace is trimmed.
 
 set -uo pipefail
 
@@ -38,28 +42,36 @@ set -uo pipefail
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
+# Emit a <link> tag, but refuse paths that could break out of the href=""
+# attribute and inject markup into the artifact. On rejection, returns non-zero
+# so the caller falls through to the next detection rung (and ultimately
+# FALLBACK) instead of emitting an empty/broken tag.
 emit_link() {
+  case "$1" in
+    *'"'* | *'<'* | *'>'* | *$'\n'* | *$'\r'*)
+      echo "[detect-host-css] SECURITY: refusing CSS path with unsafe characters: $1" >&2
+      return 1
+      ;;
+  esac
   printf '<link rel="stylesheet" href="%s">\n' "$1"
 }
 
-# 5. Manual override wins over autodetection when present.
+# 1. Manual override wins over autodetection when present.
 if [ -f ".dm-review-css" ]; then
   override=$(head -1 ".dm-review-css" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
   if [ -n "$override" ]; then
     echo "[detect-host-css] using .dm-review-css override" >&2
-    emit_link "$override"
-    exit 0
+    emit_link "$override" && exit 0
   fi
 fi
 
-# 1. Assembly (Go + Templ): compiled CSS served from internal/assets/css/.
+# 2. Assembly (Go + Templ): compiled CSS served from internal/assets/css/.
 if [ -f "go.mod" ] && [ -d "internal/assets/css" ]; then
   echo "[detect-host-css] matched Assembly (go.mod + internal/assets/css/)" >&2
-  emit_link "/static/css/assembly.css"
-  exit 0
+  emit_link "/static/css/assembly.css" && exit 0
 fi
 
-# 2. Live Wires: package.json livewires dep OR the settings layer directory.
+# 3. Live Wires: package.json livewires dep OR the settings layer directory.
 if { [ -f "package.json" ] && grep -q '"livewires"' package.json 2>/dev/null; } \
    || [ -d "src/css/0_settings" ]; then
   href="/dist/livewires.css"
@@ -69,27 +81,24 @@ if { [ -f "package.json" ] && grep -q '"livewires"' package.json 2>/dev/null; } 
     [ -n "$configured" ] && href="$configured"
   fi
   echo "[detect-host-css] matched Live Wires" >&2
-  emit_link "$href"
-  exit 0
+  emit_link "$href" && exit 0
 fi
 
-# 3. Tailwind: a tailwind config plus a built output stylesheet.
+# 4. Tailwind: a tailwind config plus a built output stylesheet.
 for cfg in tailwind.config.js tailwind.config.ts tailwind.config.cjs tailwind.config.mjs; do
   if [ -f "$cfg" ] && [ -f "dist/output.css" ]; then
     echo "[detect-host-css] matched Tailwind ($cfg + dist/output.css)" >&2
-    emit_link "/dist/output.css"
-    exit 0
+    emit_link "/dist/output.css" && exit 0
   fi
 done
 
-# 4. Craft CMS: general config present, conventional site stylesheet.
+# 5. Craft CMS: general config present, conventional site stylesheet.
 if [ -f "config/general.php" ]; then
   echo "[detect-host-css] matched Craft CMS (config/general.php)" >&2
-  emit_link "/css/site.css"
-  exit 0
+  emit_link "/css/site.css" && exit 0
 fi
 
-# 6. Nothing matched — caller inlines baseline.css.
+# 6. Nothing matched (or every candidate path was rejected) — caller inlines baseline.css.
 echo "[detect-host-css] no host CSS detected; FALLBACK" >&2
 echo "FALLBACK"
 exit 0

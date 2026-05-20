@@ -29,7 +29,7 @@ extract-json-island.sh    # prints an artifact's island JSON
 
 1. **Detect host CSS** from the target project root:
    ```bash
-   HOST_CSS_LINK=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/promptcraft/references/templates/detect-host-css.sh" 2>/dev/null || echo "FALLBACK")
+   HOST_CSS_LINK=$(bash "${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/detect-host-css.sh" 2>/dev/null || echo "FALLBACK")
    ```
    If the output is `FALLBACK`, set the `{{HOST_CSS_HREF}}` substitution to
    `<style>` + the contents of `baseline.css` + `</style>`. Otherwise use the
@@ -62,31 +62,10 @@ within the same `plans/<feature-slug>/` directory.
 
 ## Data island schemas
 
-```jsonc
-// assessment.html
-{ "artifact": "assessment", "slug": "<slug>",
-  "keyRequirements": ["..."], "testPersonas": [{"name","id","role","useFor"}],
-  "recentLessons": ["..."], "baselineScreenshots": [{"route","viewport","path"}] }
-
-// research.html
-{ "artifact": "research", "slug": "<slug>",
-  "findings": ["..."], "references": [{"title","url|path","source"}] }
-
-// brainstorm.html
-{ "artifact": "brainstorm", "slug": "<slug>",
-  "visualDecisions": [{"area","decision","variant|token|treatment","rationale"}] }
-
-// plan.html (feature plan)
-{ "artifact": "plan", "slug": "<slug>",
-  "chunks": [{"n":"01","slug":"reader-service","scope","acceptance","deps":[]}],
-  "decisions": [{"id","decision","rationale","alternatives"}],
-  "requirementsCoverage": [{"requirement","chunk"}] }
-
-// plan.html (epic / high-level plan variant)
-{ "artifact": "plan", "slug": "<slug>",
-  "subPlans": [{"n","slug","featureDir"}],
-  "decisions": [...], "requirementsCoverage": [...] }
-```
+The per-artifact island schemas (`assessment`, `research`, `brainstorm`, `plan`
+feature + epic variants) are defined canonically in **`docs/html-artifacts.md`
+§Data-island schema** (repo root). It is the single source of truth — do not
+duplicate the field list here; link to it so the two cannot drift.
 
 `keyRequirements` in `assessment.html` is the cached Key Requirements source the
 pipeline re-reads in Phases 3/4/7. `chunks[].n` + `chunks[].slug` map 1:1 onto
@@ -95,7 +74,7 @@ pipeline re-reads in Phases 3/4/7. `chunks[].n` + `chunks[].slug` map 1:1 onto
 ## Reading the island downstream
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/promptcraft/references/templates/extract-json-island.sh" \
+bash "${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh" \
   plans/<slug>/plan.html | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["chunks"]))'
 ```
 

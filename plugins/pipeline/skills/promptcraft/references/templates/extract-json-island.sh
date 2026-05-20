@@ -37,6 +37,14 @@ export PATH
 FILE="${1:-}"
 ISLAND_ID="${2:-pipeline-data}"
 
+# SECURITY: the sed fallback below interpolates ISLAND_ID into a sed address
+# regex, so a value containing sed metacharacters or a newline could corrupt or
+# inject sed commands. Restrict it to the character class real island ids use.
+if ! printf '%s' "$ISLAND_ID" | grep -qE '^[A-Za-z0-9_-]+$'; then
+  echo "ERROR: invalid island-id (must match [A-Za-z0-9_-]+): $ISLAND_ID" >&2
+  exit 2
+fi
+
 if [ -z "$FILE" ]; then
   echo "ERROR: usage: extract-json-island.sh <file.html> [island-id]" >&2
   exit 2

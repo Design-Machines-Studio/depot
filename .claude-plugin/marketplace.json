@@ -343,7 +343,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.15.0",
+      "version": "1.15.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

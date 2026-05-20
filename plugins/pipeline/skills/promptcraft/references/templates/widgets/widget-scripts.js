@@ -38,13 +38,13 @@
       setTimeout(function () { button.textContent = prev; }, 1500);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done, button); });
     } else {
-      fallbackCopy(text, done);
+      fallbackCopy(text, done, button);
     }
   }
 
-  function fallbackCopy(text, done) {
+  function fallbackCopy(text, done, button) {
     var ta = document.createElement("textarea");
     ta.value = text;
     ta.setAttribute("readonly", "");
@@ -52,7 +52,13 @@
     ta.style.left = "-9999px";
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand("copy"); done(); } catch (e) { /* no-op */ }
+    try {
+      document.execCommand("copy");
+      done();
+    } catch (e) {
+      button.textContent = "Copy failed";
+      console.warn("widget copy-back: clipboard write failed", e);
+    }
     document.body.removeChild(ta);
   }
 

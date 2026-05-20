@@ -15,7 +15,7 @@ Generate self-contained execution prompts from an existing plan. Standalone comm
 If the plan path above is empty, check for plans in the current project:
 
 ```bash
-ls plans/*.md 2>/dev/null
+ls plans/*/plan.html 2>/dev/null
 ```
 
 If plans found, ask: "Which plan should I generate prompts for?" and list them.
@@ -23,8 +23,8 @@ If no plans found, ask: "Provide a path to your plan file, or run `/pipeline` fo
 
 ## Process
 
-1. Read the plan file
-2. Check for an Assessment Brief (`plans/assessment-*.md`) and Research Brief (`plans/research-*.md`) in the same directory
+1. Read the plan file (`plans/<feature-slug>/plan.html` carries a `#pipeline-data` island; read its structured `chunks` with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
+2. Check for an Assessment Brief (`plans/<feature-slug>/assessment.html`) and Research Brief (`plans/<feature-slug>/research.html`) in the same directory
 3. Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`
 4. Generate execution prompts with overlap analysis
 5. Save manifest and prompts to `plans/<feature-slug>/`

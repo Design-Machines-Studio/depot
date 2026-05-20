@@ -21,7 +21,7 @@ Transform a plan into self-contained execution prompts with overlap-aware depend
 Pipeline planning artifacts (`assessment`, `research`, `brainstorm`, `plan`) are **HTML carrying a JSON data island**, not markdown. Read their structured data with the island extractor rather than grepping rendered prose:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/promptcraft/references/templates/extract-json-island.sh" plans/<feature-slug>/plan.html
+bash "${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh" plans/<feature-slug>/plan.html
 ```
 
 The plan island's `chunks` array seeds Phase 1 decomposition; each chunk's `n` + `slug` map 1:1 onto the `prompts/NN-<slug>.md` you write in Phase 4 (the assembly-baseplate chunk-prompt convention). The assessment island's `keyRequirements` is the cached requirements source for the Phase 6 coverage check. The execution prompts and `manifest.json` you generate stay **markdown/JSON** -- they are agent-only handoffs, not human-facing artifacts. See `references/templates/README.md`.

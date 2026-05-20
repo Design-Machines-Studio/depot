@@ -113,7 +113,7 @@ At every "Save the ..." step below, emit HTML this way:
 
 1. Detect host CSS from the project root:
    ```bash
-   HOST_CSS_LINK=$(bash "${CLAUDE_PLUGIN_ROOT}/skills/promptcraft/references/templates/detect-host-css.sh" 2>/dev/null || echo "FALLBACK")
+   HOST_CSS_LINK=$(bash "${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/detect-host-css.sh" 2>/dev/null || echo "FALLBACK")
    ```
    On `FALLBACK`, inline `templates/baseline.css` into a `<style>` block instead of using a `<link>`.
 2. Assemble `templates/base.html` + `templates/sections/<kind>.html` + any widgets + the data island, per `templates/README.md`. Write the result to `plans/<feature-slug>/<kind>.html`.
