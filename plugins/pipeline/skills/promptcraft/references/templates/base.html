@@ -6,7 +6,7 @@
   written here WITHOUT braces so mechanical string-replace does not hit this note:
     TITLE  ARTIFACT_KIND  GENERATED_AT  HOST_CSS_HREF
     SIBLING_NAV  BODY  WIDGET_SCRIPTS  DATA_ISLAND
-  The HOST_CSS_HREF slot is replaced with the output of detect-host-css.sh —
+  The HOST_CSS_HREF slot is replaced with the output of detect-host-css.sh --
   either a complete <link rel="stylesheet"> tag, or (on FALLBACK) an inline
   <style> block holding baseline.css.
 -->
@@ -31,7 +31,7 @@
     .widget--edit td[contenteditable]:focus { outline: 2px solid Highlight; }
     .widget__copy { margin: 0.5rem 0; }
     @media (prefers-color-scheme: dark) {
-      /* Fallback only — applies when host CSS does not define a dark scheme. */
+      /* Fallback only -- applies when host CSS does not define a dark scheme. */
       html:not([data-theme]) { background: #14161a; color: #e6e7e9; }
     }
     @media print {
@@ -40,7 +40,7 @@
     }
   </style>
 </head>
-<body>
+<body class="scheme-subtle">
   <a class="skip-link" href="#content">Skip to content</a>
   <header class="artifact-header">
     <nav aria-label="Pipeline artifacts">
@@ -48,7 +48,7 @@
     </nav>
     <p class="artifact-meta"><span class="artifact-kind">{{ARTIFACT_KIND}}</span> &middot; generated {{GENERATED_AT}}</p>
   </header>
-  <main id="content" class="artifact-main">
+  <main id="content" class="artifact-main center stack">
     {{BODY}}
   </main>
   <footer class="artifact-footer">

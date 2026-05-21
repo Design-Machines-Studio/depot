@@ -1,8 +1,13 @@
 /*
-  baseline.css — host-agnostic fallback. Inlined into base.html {{HOST_CSS_HREF}}
+  baseline.css -- host-agnostic fallback. Inlined into base.html {{HOST_CSS_HREF}}
   as a <style> block when detect-host-css.sh returns FALLBACK (no host CSS found).
   Deliberately minimal: readable typography, sane measure, light/dark via
   color-scheme. Host stylesheets, when present, replace this entirely.
+
+  Defines minimal versions of the Live Wires primitives the artifact markup uses
+  (.center, .stack, .grid) so a FALLBACK artifact still lays out correctly. When
+  a host stylesheet is linked it provides the real primitives and these never
+  apply (host CSS loads after / wins).
 */
 :root {
   color-scheme: light dark;
@@ -29,3 +34,14 @@ section { margin-block: 1.5rem; }
 small { color: GrayText; }
 .artifact-meta { color: GrayText; font-size: 0.875rem; }
 button { font: inherit; padding: 0.375rem 0.75rem; cursor: pointer; }
+img { max-width: 100%; height: auto; }
+
+/* Minimal Live Wires primitive fallbacks (host CSS supplies the real ones). */
+.center { max-inline-size: var(--measure, 70rem); margin-inline: auto; }
+.stack > * + * { margin-block-start: 1.5rem; }
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(var(--grid-min, 16rem), 1fr));
+}
+figure { margin: 0; }

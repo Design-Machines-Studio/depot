@@ -16,7 +16,7 @@ sections/                 # one body per artifact kind
   assessment.html  research.html  brainstorm.html  plan.html
 widgets/
   decision-table.html     # editable table fragment
-  widget-scripts.js       # copy-back JS — INLINE into {{WIDGET_SCRIPTS}}
+  widget-scripts.js       # copy-back JS -- INLINE into {{WIDGET_SCRIPTS}}
   mockup-frame.html       # sandboxed iframe mockup
   diagram-mermaid.html    # Mermaid diagram (+ CDN script note)
 data-island.html          # <script type="application/json"> snippet
@@ -36,10 +36,25 @@ extract-json-island.sh    # prints an artifact's island JSON
    emitted `<link>` tag verbatim.
 2. **Fill the section.** Take `sections/<kind>.html` and replace its `{{...}}`
    content slots with rendered HTML.
-3. **Add widgets where needed.** Splice `decision-table.html` (rows filled) into
-   the section's editable areas. Add `mockup-frame.html` / `diagram-mermaid.html`
-   as needed. If any decision-table is present, inline `widget-scripts.js` into
-   `{{WIDGET_SCRIPTS}}` inside a single `<script defer> ... </script>`.
+3. **Add widgets and visuals where needed.** Splice `decision-table.html` (rows
+   filled) into the section's editable areas. Add `mockup-frame.html` /
+   `diagram-mermaid.html` as needed. If any decision-table is present, inline
+   `widget-scripts.js` into `{{WIDGET_SCRIPTS}}` inside a single
+   `<script defer> ... </script>`.
+   - **Render evidence as images, not filenames.** Baseline screenshots,
+     mockups, and any captured PNGs go in an `<img>` gallery, never a text list
+     of paths. The whole reason these artifacts are HTML is so the human SEES
+     the visuals inline. Use `<div class="grid" style="--grid-min: 22rem;">` of
+     `<figure class="stack">` blocks with `<a href="..."><img src="..."
+     alt="..." loading="lazy"></a>` + `<figcaption>`. Image `src` is relative to
+     the artifact file (e.g. `baselines/dashboard-desktop-1440.png`).
+   - **Lay out with host primitives, not invented classes.** The emitted markup
+     uses Live Wires primitives the host stylesheet already defines: `.center`
+     (measure), `.stack` (vertical rhythm), `.grid` (galleries/cards), `.cluster`
+     (inline groups). `<main>` carries `class="artifact-main center stack"` and
+     `<body>` carries a `scheme-*` class (default `scheme-subtle`) so the linked
+     host CSS themes the doc. baseline.css ships minimal fallbacks for the
+     FALLBACK case.
 4. **Build the island.** Fill `data-island.html`'s `{{ISLAND_JSON}}` with the
    artifact's schema object (see below), then place it in `{{DATA_ISLAND}}`.
 5. **Substitute base.html** slots and `Write` the final file to
@@ -64,12 +79,12 @@ within the same `plans/<feature-slug>/` directory.
 
 The per-artifact island schemas (`assessment`, `research`, `brainstorm`, `plan`
 feature + epic variants) are defined canonically in **`docs/html-artifacts.md`
-§Data-island schema** (repo root). It is the single source of truth — do not
+§Data-island schema** (repo root). It is the single source of truth -- do not
 duplicate the field list here; link to it so the two cannot drift.
 
 `keyRequirements` in `assessment.html` is the cached Key Requirements source the
 pipeline re-reads in Phases 3/4/7. `chunks[].n` + `chunks[].slug` map 1:1 onto
-`prompts/NN-<slug>.md` (the assembly-baseplate chunk-prompt convention).
+`prompts/NN-<slug>.md` (assembly-baseplate chunk-prompt convention).
 
 ## Reading the island downstream
 

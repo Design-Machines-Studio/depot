@@ -167,7 +167,15 @@ The brief is written as **HTML with a JSON data island**, not markdown -- assemb
 [From Prior Lessons Check, or "No lessons file."]
 
 ## Baseline Screenshots
-[Manifest of saved baselines, or "No baselines -- skipped UX assessment."]
+[Render the saved baselines as an actual image gallery, NOT a text list of
+filenames. The whole point of HTML artifacts is that the human sees the
+screenshots inline. Use a `<div class="grid" style="--grid-min: 22rem;">` of
+`<figure class="stack">` blocks, each wrapping `<a href="baselines/<file>"><img
+src="baselines/<file>" alt="<route> at <viewport>" loading="lazy"
+style="width:100%;height:auto;border:1px solid;"></a>` plus a `<figcaption>`
+naming the route. Show the desktop 1440 shot per route; the mobile 375/320 files
+still go in the `baselineScreenshots` island array. If no baselines: "No
+baselines -- skipped UX assessment."]
 
 ## Key Findings
 - [Top 3-5 findings that should inform planning]

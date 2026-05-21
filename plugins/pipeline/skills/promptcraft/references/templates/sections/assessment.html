@@ -4,7 +4,7 @@
   Island schema: { artifact:"assessment", slug, keyRequirements[], testPersonas[],
                     recentLessons[], baselineScreenshots[] }
   keyRequirements IS the cached Key Requirements source the pipeline re-reads in
-  Phases 3/4/7 — keep it complete and verbatim.
+  Phases 3/4/7 -- keep it complete and verbatim.
 -->
 <h1>Assessment: {{AREA_NAME}}</h1>
 
@@ -33,6 +33,13 @@
   {{RECENT_LESSONS}}
 </section>
 
+<!--
+  BASELINE_SCREENSHOTS: render an IMAGE GALLERY, not a filename list. Use
+  <div class="grid" style="--grid-min: 22rem;"> of <figure class="stack"> blocks,
+  each <a href="baselines/<f>"><img src="baselines/<f>" alt="<route> <viewport>"
+  loading="lazy" style="width:100%;height:auto;border:1px solid;"></a> + caption.
+  The host grid/stack primitives lay it out; img paths are relative to this file.
+-->
 <section aria-labelledby="baseline-screenshots">
   <h2 id="baseline-screenshots">Baseline Screenshots</h2>
   {{BASELINE_SCREENSHOTS}}
