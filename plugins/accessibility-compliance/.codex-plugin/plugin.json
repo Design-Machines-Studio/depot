@@ -17,6 +17,8 @@
     "craft-cms"
   ],
   "skills": "./skills/",
+  "commands": "./commands/",
+  "agents": "./agents/",
   "capabilities": {
     "skills": [
       {

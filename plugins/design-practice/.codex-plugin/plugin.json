@@ -6,6 +6,7 @@
     "name": "Design Machines"
   },
   "skills": "./skills/",
+  "agents": "./agents/",
   "capabilities": {
     "skills": [
       {

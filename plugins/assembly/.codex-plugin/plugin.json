@@ -1,11 +1,13 @@
 {
   "name": "assembly",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
   "author": {
     "name": "Design Machines"
   },
   "skills": "./skills/",
+  "commands": "./commands/",
+  "agents": "./agents/",
   "capabilities": {
     "skills": [
       {

@@ -35,12 +35,18 @@ source of truth; do not hand-edit Codex manifest files.
 
 ```shell
 ./tools/generate-codex-manifests.py
+./tools/generate-codex-command-skills.py
 ./tools/validate-dual-compat.sh
 ```
 
+Codex exposes Claude slash commands through generated skill aliases, so workflows
+like `/pipeline`, `/pipeline-run`, `/dm-review`, and `/dm-review-fix` are also
+available as `pipeline:pipeline`, `pipeline:pipeline-run`, `dm-review:dm-review`,
+and `dm-review:dm-review-fix`.
+
 ## Plugins
 
-17 plugins | 36 skills | 41 agents | 31 commands
+17 plugins | 36 canonical skills + 31 generated Codex command-skill aliases | 41 agents | 31 commands
 
 ### ned
 

@@ -19,7 +19,7 @@ Claude Code is the primary consumer. Codex support is an adapter layer:
 | Plugin cache (runtime) | `~/.claude/plugins/cache/depot/` | `~/.codex/plugins/cache/depot/` |
 | Project instructions | `CLAUDE.md` | `AGENTS.md` (this file) |
 
-**All skill content, agent definitions, and reference material are shared.** Only the manifest layer differs.
+**All skill content, agent definitions, commands, and reference material are shared.** Codex also gets generated command-skill aliases so Claude slash commands are visible through Codex's skill-first surface.
 
 ## Repository Structure
 
@@ -49,6 +49,17 @@ Claude manifests are the source of truth. Never hand-edit Codex manifest files â
 ./tools/generate-codex-manifests.py          # regenerate all Codex manifests
 ./tools/generate-codex-manifests.py --check  # verify generated files are current
 ```
+
+## Codex Command Skill Aliases
+
+Claude slash commands are also the source of truth for Codex workflow aliases. Never hand-edit generated command-skill aliases â€” edit `plugins/<name>/commands/<command>.md`, then regenerate:
+
+```shell
+./tools/generate-codex-command-skills.py          # regenerate command aliases
+./tools/generate-codex-command-skills.py --check  # verify aliases are current
+```
+
+These aliases live at `plugins/<name>/skills/<command>/SKILL.md` so Codex can expose root workflows such as `pipeline:pipeline`, `pipeline:pipeline-run`, `dm-review:dm-review`, and `dm-review:dm-review-fix`.
 
 ## Runtime Cache Path Resolution
 
@@ -81,7 +92,7 @@ When editing cache lookups, always include both roots. Validate with:
 
 1. **Claude manifests are canonical.** Edit `.claude-plugin/plugin.json`, then run `./tools/generate-codex-manifests.py` to sync.
 2. **Bump versions in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.** Codex manifests pick up the version automatically on regeneration.
-3. **Skills, agents, commands, and references are shared.** Edit them once; both platforms consume the same files.
+3. **Skills, agents, commands, and references are shared.** Edit them once; both platforms consume the same files. When editing commands, regenerate Codex command-skill aliases.
 4. **Cache lookups need both roots.** Any new `~/.claude/plugins/cache/depot` reference must include the `~/.codex/plugins/cache/depot` fallback.
 5. **Run `./tools/validate-composition.sh --all` before committing.** It catches manifest drift, stale Codex shims, missing cache fallbacks, and frontmatter corruption.
 
@@ -91,7 +102,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-17 plugins | 36 skills | 41 agents | 31 commands
+17 plugins | 36 canonical skills + 31 generated Codex command-skill aliases | 41 agents | 31 commands
 
 | Plugin | Purpose |
 |---|---|

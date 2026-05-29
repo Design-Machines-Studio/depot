@@ -90,6 +90,10 @@ def codex_plugin_manifest(
 
     if (plugin_dir / "skills").is_dir():
         manifest["skills"] = "./skills/"
+    if (plugin_dir / "commands").is_dir():
+        manifest["commands"] = "./commands/"
+    if (plugin_dir / "agents").is_dir():
+        manifest["agents"] = "./agents/"
     if (plugin_dir / "hooks" / "hooks.json").is_file():
         manifest["hooks"] = "./hooks/hooks.json"
     if (plugin_dir / ".mcp.json").is_file():

@@ -24,6 +24,64 @@ check_generated_manifests() {
   "$SCRIPT_DIR/generate-codex-manifests.py" --check
 }
 
+check_generated_command_skills() {
+  "$SCRIPT_DIR/generate-codex-command-skills.py" --check
+}
+
+check_codex_component_paths() {
+  local result
+  result=$(REPO_ROOT="$REPO_ROOT" python3 << 'PYEOF'
+from pathlib import Path
+import json
+import os
+
+repo = Path(os.environ["REPO_ROOT"])
+issues = []
+
+component_paths = {
+    "skills": Path("skills"),
+    "commands": Path("commands"),
+    "agents": Path("agents"),
+}
+
+for plugin_dir in sorted((repo / "plugins").iterdir()):
+    if not plugin_dir.is_dir():
+        continue
+
+    manifest_path = plugin_dir / ".codex-plugin" / "plugin.json"
+    if not manifest_path.is_file():
+        issues.append(f"{plugin_dir.name}: missing .codex-plugin/plugin.json")
+        continue
+
+    manifest = json.loads(manifest_path.read_text())
+
+    for key, rel_dir in component_paths.items():
+        expected = f"./{key}/"
+        has_component_dir = (plugin_dir / rel_dir).is_dir()
+        actual = manifest.get(key)
+
+        if has_component_dir and actual != expected:
+            issues.append(f"{plugin_dir.name}: expected {key}={expected!r}, found {actual!r}")
+        if not has_component_dir and key in manifest:
+            issues.append(f"{plugin_dir.name}: manifest declares {key} but {rel_dir}/ is missing")
+
+for issue in issues:
+    print(issue)
+PYEOF
+)
+
+  if [ -n "$result" ]; then
+    while IFS= read -r issue; do
+      [ -z "$issue" ] && continue
+      printf "  ${RED}FAIL${RESET}  %s\n" "$issue"
+    done <<< "$result"
+    printf "  ${YELLOW}FIX${RESET}   Run ./tools/generate-codex-manifests.py after editing Claude manifests or component directories\n"
+    return 1
+  fi
+
+  printf "  ${GREEN}OK${RESET}    Codex manifests expose skills, commands, and agents component paths\n"
+}
+
 check_claude_cache_fallbacks() {
   local result
   result=$(REPO_ROOT="$REPO_ROOT" python3 << 'PYEOF'
@@ -76,6 +134,16 @@ main() {
 
   printf "${BOLD}Generated Codex manifests:${RESET}\n"
   if ! check_generated_manifests; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Generated command skill aliases:${RESET}\n"
+  if ! check_generated_command_skills; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Codex component paths:${RESET}\n"
+  if ! check_codex_component_paths; then
     any_failed=1
   fi
 

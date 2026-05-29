@@ -25,11 +25,39 @@ Generated Codex files:
 ./tools/generate-codex-manifests.py --check
 ```
 
+## generate-codex-command-skills.py
+
+Generates Codex skill aliases from Claude slash commands. Claude command files
+remain canonical, but Codex can only reliably expose skill-style workflows, so
+this adds generated `SKILL.md` wrappers for command workflows such as
+`/pipeline`, `/pipeline-run`, `/dm-review`, and `/dm-review-fix`.
+
+Source command files:
+
+- `plugins/*/commands/*.md`
+
+Generated skill aliases:
+
+- `plugins/*/skills/<command-name>/SKILL.md`
+
+### Regenerate command skill aliases
+
+```bash
+./tools/generate-codex-command-skills.py
+```
+
+### Check generated aliases are current
+
+```bash
+./tools/generate-codex-command-skills.py --check
+```
+
 ## validate-dual-compat.sh
 
-Verifies the generated Codex manifests match the Claude source manifests and
-that execution-critical Claude plugin-cache lookups also include Codex cache
-fallbacks.
+Verifies the generated Codex manifests and command skill aliases match the
+Claude source files, that generated manifests expose component paths Codex needs
+for skills/commands/agents, and that execution-critical Claude plugin-cache
+lookups also include Codex cache fallbacks.
 
 ```bash
 ./tools/validate-dual-compat.sh
