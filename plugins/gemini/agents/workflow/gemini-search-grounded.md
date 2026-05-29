@@ -2,6 +2,7 @@
 name: gemini-search-grounded
 description: Performs web research with Google search grounding and returns structured, cited results. Use when pipeline research needs current, authoritative web sources with citations, or when the user needs cited research on frameworks, libraries, or best practices. Produces a research brief compatible with the pipeline research consolidator.
 model: sonnet
+effort: medium
 tools: Bash
 ---
 

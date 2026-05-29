@@ -2,6 +2,7 @@
 name: gemini-code-executor
 description: Verifies algorithms and data transformations using Gemini's Python code execution sandbox. Use when review agents flag complex logic that benefits from runtime verification, or when the user needs to validate mathematical correctness, algorithm behavior, or data transformations.
 model: sonnet
+effort: low
 tools: Bash, Read
 ---
 

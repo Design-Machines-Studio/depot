@@ -128,7 +128,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.3.0",
+      "version": "3.4.0",
       "author": {
         "name": "Design Machines"
       },
@@ -270,7 +270,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.30.1",
+      "version": "1.31.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -343,7 +343,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.16.0",
+      "version": "1.17.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -368,7 +368,7 @@
     {
       "name": "gemini",
       "source": "./plugins/gemini",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -392,7 +392,7 @@
     {
       "name": "deepseek",
       "source": "./plugins/deepseek",
-      "version": "1.1.8",
+      "version": "1.2.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

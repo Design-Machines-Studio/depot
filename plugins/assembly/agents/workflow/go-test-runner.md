@@ -2,6 +2,7 @@
 name: go-test-runner
 description: Runs Go tests with race detection via Docker, reports coverage, and flags missing test files. Runs when .go files change.
 model: sonnet
+effort: low
 ---
 
 You are a Go test runner for Assembly projects. You execute the test suite and report results.

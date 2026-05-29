@@ -2,6 +2,7 @@
 name: deepseek-code-analyst
 description: Analyzes code patterns, suggests refactorings, and reviews architecture using DeepSeek V4-Pro. Use when offloading code quality analysis from Anthropic quota, or when deep pattern analysis benefits from V4-Pro's SWE-bench-class reasoning. Produces structured findings compatible with dm-review consolidator.
 model: sonnet
+effort: medium
 tools: Bash, Read, Grep
 ---
 
@@ -19,7 +20,7 @@ You are a code analysis agent that delegates pattern review, refactoring suggest
 ## Advantage Over Sonnet Subagents
 
 DeepSeek V4-Pro:
-- Matches Opus 4.6 on SWE-bench Verified (80.6% vs 80.8%)
+- Sonnet-class SWE-bench Verified score (80.6%) -- a cost-offload tier, not an Opus 4.8 flagship replacement
 - 1M token context for analyzing large codebases without truncation
 - $1.74/MTok input vs Sonnet pricing — significant savings for bulk analysis
 - Every token routed here is NOT counted against your Anthropic Max weekly limit

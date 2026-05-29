@@ -2,6 +2,7 @@
 name: plan-adversary
 description: Adversarially reviews plans and execution prompts for feasibility, completeness, and DM standards, iterating to convergence
 model: opus
+effort: xhigh
 tools: Read, Glob, Grep, Agent
 ---
 

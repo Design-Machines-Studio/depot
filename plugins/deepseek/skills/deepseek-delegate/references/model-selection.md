@@ -6,14 +6,14 @@ Decision table for choosing the right DeepSeek V4 model for each delegation task
 
 | Model | Alias | Parameters | Strengths | Latency | Cost (Input/Output per MTok) |
 |-------|-------|------------|-----------|---------|------------------------------|
-| `deepseek-v4-pro` | `v4-pro` | 1.6T total, 49B active | Near-Opus SWE-bench (80.6%). Deep code reasoning. 1M context. | 5-60s | $1.74 / $3.48 |
+| `deepseek-v4-pro` | `v4-pro` | 1.6T total, 49B active | Sonnet-class SWE-bench (80.6%). Deep code reasoning. 1M context. | 5-60s | $1.74 / $3.48 |
 | `deepseek-v4-flash` | `v4-flash` | 284B total, 13B active | Fast, cheap. Good for mechanical checks and extraction. 1M context. | 1-10s | $0.14 / $0.28 |
 
 ## Task -> Model Mapping
 
 | Task Type | Model | Timeout | Rationale |
 |-----------|-------|---------|-----------|
-| Code review (quality, patterns) | `v4-pro` | 60s | Matches Opus 4.6 on coding benchmarks; best quality for review |
+| Code review (quality, patterns) | `v4-pro` | 60s | Sonnet-class on coding benchmarks; best DeepSeek tier for review |
 | Diff analysis (<10K lines) | `v4-flash` | 60s | Fast enough for medium diffs with decent analysis quality |
 | Diff analysis (>10K lines) | `v4-pro` | 180s | Larger diffs benefit from deeper reasoning |
 | Anti-pattern scan | `v4-flash` | 15s | Mechanical pattern matching, no deep reasoning needed |
@@ -51,3 +51,5 @@ For everything else, V4-Flash provides adequate quality at 8% of V4-Pro's cost.
 | LiveCodeBench | 88.8% | 93.5% | ~72% | ~78% |
 
 V4-Pro is Sonnet-replacement tier for code work. V4-Flash is Haiku-replacement tier.
+
+Note: Opus 4.8 is the current Claude Code flagship (high effort default). The 4.6-era benchmarks above are the historical reference V4-Pro was measured against -- V4-Pro is a Sonnet-replacement for cost-offload, not a flagship-replacement. Keep adversarial review, ambiguity detection, and security-critical analysis on Anthropic.

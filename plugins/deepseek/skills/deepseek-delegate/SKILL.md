@@ -1,6 +1,6 @@
 ---
 name: deepseek-delegate
-description: Delegate tasks to DeepSeek V4 API for high-quality code analysis at lower cost than Sonnet. V4-Pro matches Opus 4.6 on SWE-bench (80.6%); V4-Flash handles mechanical checks at Haiku-tier cost. Use when offloading bulk diff review, code pattern analysis, or mechanical checks from Anthropic quota. Includes a generic agent runner that routes specific dm-review agents (pattern-recognition, code-simplicity, doc-sync, test-coverage) through DeepSeek when DEEPSEEK_API_KEY is set. Invoke with /deepseek for direct delegation.
+description: Delegate tasks to DeepSeek V4 API for high-quality code analysis at lower cost than Sonnet. V4-Pro delivers Sonnet-class code reasoning (80.6% SWE-bench Verified); V4-Flash handles mechanical checks at Haiku-tier cost. Use when offloading bulk diff review, code pattern analysis, or mechanical checks from Anthropic quota. Includes a generic agent runner that routes specific dm-review agents (pattern-recognition, code-simplicity, doc-sync, test-coverage) through DeepSeek when DEEPSEEK_API_KEY is set. Invoke with /deepseek for direct delegation.
 ---
 
 # DeepSeek Delegation
@@ -11,7 +11,7 @@ Invoke DeepSeek V4 API as a supplementary provider for tasks where cost-per-toke
 
 | Advantage | Use Case | Why DeepSeek |
 |-----------|----------|--------------|
-| **Sonnet-tier quality at lower cost** | Code review agents, pattern analysis, refactoring suggestions | V4-Pro scores 80.6% SWE-bench Verified, matches Opus 4.6. $1.74/MTok input vs Sonnet pricing. |
+| **Sonnet-tier quality at lower cost** | Code review agents, pattern analysis, refactoring suggestions | V4-Pro scores 80.6% SWE-bench Verified -- Sonnet-class for code work. $1.74/MTok input vs Sonnet pricing. |
 | **Bulk diff analysis** | Large diffs (>5K lines, >20 files) | 1M token context. No truncation needed. Doesn't burn Anthropic Max quota. |
 | **Mechanical checks** | Anti-pattern scans, link rot, doc-sync verification | V4-Flash at $0.14/MTok for tasks that don't need deep reasoning. |
 | **Capacity relief** | Pipeline runs burning through Max quota | Every token routed to DeepSeek is a token NOT counted against your Anthropic weekly limit. |

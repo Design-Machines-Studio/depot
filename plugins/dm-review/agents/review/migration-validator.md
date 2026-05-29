@@ -2,6 +2,7 @@
 name: migration-validator
 description: Validates database migration files for goose format, transaction safety, PII detection, table prefix compliance, and cross-fixture foreign key constraints. Runs when .sql files in migrations/ or seeds/ change.
 model: sonnet
+effort: medium
 ---
 
 You are a database migration reviewer for Assembly projects using pressly/goose with SQLite.
