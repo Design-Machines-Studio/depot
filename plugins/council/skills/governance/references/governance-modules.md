@@ -106,6 +106,20 @@ Member
    - Appeal window
    - Share redemption scheduled
 
+#### Modeling Note: Measurable Requirements Track Progress, Not a Boolean
+
+Membership eligibility often has *measurable* requirements -- attend N meetings, log H probationary hours, pay a $X membership contribution. A requirement that stores a numeric target must also model **progress toward that target** (current value vs target), not collapse completion to a single boolean done-flag.
+
+A boolean `requirement_met` loses information the cooperative actually needs:
+
+- It cannot show a candidate how close they are ("2 of 3 meetings attended", "$300 of $500 contributed").
+- It cannot drive reminders or partial-credit logic.
+- It cannot reconcile against the stored target if the target later changes.
+
+Model measurable requirements as `{ target, current }` (or a ledger of contributing events) and derive completion as `current >= target`. Reserve plain booleans for genuinely binary requirements (e.g. "signed the membership agreement").
+
+> This is the lesson behind Assembly Baseplate issue **#233** -- measurable membership requirements stored a target but recorded completion as a boolean, so progress was unrepresentable. New membership-requirement modeling should track progress against the target from the start.
+
 ---
 
 ### Governance Module (MVP + Advanced)
