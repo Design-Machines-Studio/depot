@@ -47,7 +47,7 @@ Only review changed files. Read each file fully before reporting findings.
 - Missing validation on user input (length, format, range)
 - Type coercion vulnerabilities
 - Path traversal in file operations
-- Unvalidated redirects
+- Unvalidated redirects (see Unvalidated Redirect / gosec G710 under Assembly checks)
 
 ## Stack-Specific Checks
 
@@ -201,6 +201,14 @@ Flag operator privilege mutations (role changes, member removal, permission upda
 Flag error responses or structured log calls that include raw email addresses or member IDs in user-facing HTTP responses, or that distinguish between "user not found" and "password wrong" in login flows (account-existence oracle). Logs should use stable non-PII identifiers when available.
 
 **Look for:** `slog.String("email", ...)`, `http.Error(w, ... member.Email ...)`, login handlers with distinct user-facing error messages for missing-account vs wrong-password. For raw `err.Error()` in responses, see Raw Error Exposure above.
+
+### Unvalidated Redirect / gosec G710 (P2)
+
+Flag `http.Redirect` (or `Location` header writes) whose destination is derived from request input -- query params, form values, referer -- without a validating guard. This is the open-redirect vector gosec reports as **G710**.
+
+A redirect already constrained by a `safeRelativeRedirect`-style guard (rejects absolute URLs, `//host` targets, and non-local paths) is **compliant** -- do not flag it; a gosec G710 hit on a guarded path is a false positive resolved with a justified `#nosec G710` naming the guard (see the golang-patterns "CI Security Scanner Diagnosis" section), not a code change.
+
+**Look for:** `http.Redirect(w, r, X, ...)` or `w.Header().Set("Location", X)` where `X` comes from `r.URL.Query()`, `r.FormValue()`, or `r.Referer()` with no preceding local-only validation. If a `safeRelativeRedirect`-style helper already constrains `X`, treat it as safe.
 
 ## Rules
 

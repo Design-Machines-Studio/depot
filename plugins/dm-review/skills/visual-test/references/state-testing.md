@@ -43,6 +43,16 @@ For each element type, test the listed states using the specified Playwright MCP
 - Check that error summary (if present) links to each invalid field
 - Verify tab order follows visual layout order
 
+### Blur / focusout autosubmit regression (Datastar)
+
+If any field submits on blur (`data-on-blur` / `data-on-focusout`), test the keyboard path, not just the mouse path:
+
+1. `browser_click` the first auto-submitting field, type a value, then `browser_press_key` Tab to move to the next field.
+2. Use `browser_network_requests` to confirm exactly **one** submit fired -- not one per field exit, and not a duplicate triggered by the morph stealing focus.
+3. After the morph settles, `browser_snapshot` and confirm focus did not bounce back into the field and re-fire the submit.
+
+A second or duplicate request here is a P2 (race / double-write), matching the membership form regression. Flag it even if the visible result looks correct.
+
 ---
 
 ## Accordions / Disclosures
