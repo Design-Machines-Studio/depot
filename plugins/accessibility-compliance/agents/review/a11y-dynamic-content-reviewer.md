@@ -23,6 +23,24 @@ Check for:
 - [ ] Live region elements exist in the initial HTML (before first update)
 - [ ] Live region wrappers are NOT inside the morphed content (they must be stable parents)
 - [ ] `aria-atomic="true"` on regions where the entire content should be re-announced
+- [ ] A visually-hidden live region is NOT the layout-significant first/last child of a styled container -- it must not land in a `:first-child` / `:last-child` / `:first-of-type` rule, flex/grid `order`, adjacent-sibling (`+`) selector, or top-margin collapse on the visible content
+
+A visually-hidden live region (`.visually-hidden`, `.sr-only`) stays in the DOM, so if it becomes the first/last child of a layout-sensitive container it silently breaks structure for everyone -- the `ProfileHeader` regression shipped when a hidden live region displaced the visible header's `:first-child` spacing. Prefer one page-level live region (just before `</body>`) over per-component hidden regions; if one must live inside a styled container, target the visible element by class rather than a positional pseudo-class.
+
+```html
+<!-- WRONG: hidden live region becomes the first child, stealing :first-child styling -->
+<div class="profile-header">
+  <div class="visually-hidden" aria-live="polite"></div>  <!-- now :first-child -->
+  <img class="avatar" ...>   <!-- expected to be :first-child, no longer matches -->
+</div>
+
+<!-- RIGHT: live region lives outside the layout container -->
+<div class="profile-header">
+  <img class="avatar" ...>
+  ...
+</div>
+<div class="visually-hidden" aria-live="polite"></div>  <!-- page-level, layout-neutral -->
+```
 
 ```html
 <!-- WRONG: aria-live added with the content -->
@@ -172,12 +190,35 @@ Check Go handlers for:
 - [ ] `aria-invalid="true"` set on fields with validation errors
 - [ ] `aria-describedby` linking error messages to their fields
 
+### 9. Blur / Focusout Autosubmit Races
+
+**`data-on-blur` / `data-on-focusout` autosubmit fires on every focus loss -- keyboard tabbing between fields and morph-driven focus changes both trigger it -- which harms keyboard users and races the server (a submit can morph the DOM, steal focus, and re-fire `focusout` into a self-feeding loop; adjacent-field submits can resolve out of order).**
+
+This is the `membership` form regression: `focusout` autosubmit raced its own morph and overlapping field exits, producing duplicate/conflicting submissions.
+
+Check for:
+- [ ] `data-on-blur` / `data-on-focusout` is NOT used to trigger a network mutation without a guard
+- [ ] If blur-submit is required, it is debounced AND skipped when focus moves to another control inside the same form (compare `relatedTarget`/`event.detail` against the form), so internal tab moves do not submit
+- [ ] The trigger is disabled or marked in-flight (`aria-busy`, disabled) while a submit is pending, so the morph-steals-focus loop cannot re-fire it
+- [ ] Prefer an explicit Save/submit control, or a debounced `data-on-input`, over `focusout` autosubmit for anything that writes server state
+- [ ] After the morph, focus is restored deliberately (per check #2) rather than left to bounce and re-trigger blur
+
+```html
+<!-- VIOLATION: every field exit submits, and the morph re-fires focusout -->
+<input name="email" data-on-focusout="$$post('/member/update')">
+
+<!-- SAFER: explicit submit; or debounced input guarded against in-flight state -->
+<input name="email" data-bind-email>
+<button data-on-click="$$post('/member/update')"
+        data-attr-disabled="$saving" data-attr-aria-busy="$saving">Save</button>
+```
+
 ## Severity Levels
 
-- **Critical** — click handlers on non-interactive elements, no live regions for dynamic content that replaces page state
-- **Serious** — focus lost after morph with no recovery, loading states not communicated
-- **Moderate** — ARIA states not synchronized with Datastar signals, missing aria-controls
-- **Minor** — suboptimal focus target after morph, verbose live region announcements
+- **Critical** -- click handlers on non-interactive elements, no live regions for dynamic content that replaces page state
+- **Serious** -- focus lost after morph with no recovery, loading states not communicated, a visually-hidden live region placed as a layout-significant first/last child that breaks visible structure, blur/focusout autosubmit that fires on internal focus moves or races its own morph
+- **Moderate** -- ARIA states not synchronized with Datastar signals, missing aria-controls
+- **Minor** -- suboptimal focus target after morph, verbose live region announcements
 
 ## Output Format
 

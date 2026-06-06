@@ -1,6 +1,6 @@
 {
   "name": "accessibility-compliance",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "WCAG 2.2 accessibility auditing, screen reader testing, and automated compliance enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS projects",
   "author": {
     "name": "Design Machines",
