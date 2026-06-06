@@ -347,6 +347,49 @@ SSE handlers use `http.ResponseController` to extend WriteTimeout per-connection
 
 ---
 
+## 13. CI Security Scanner Diagnosis (gosec)
+
+CI runs `gosec` on every push. When it fails -- especially after a version bump -- diagnose it from the **exact failing step**. A scanner upgrade can surface new rules (true positives) and new false positives at the same time; treat them differently.
+
+### Reproduce the exact failing step
+
+Read the failing job's command from the workflow file and run that exact command, at that version, locally.
+
+```bash
+# Match the version the workflow pins, then run the workflow's exact args.
+go install github.com/securego/gosec/v2/cmd/gosec@vX.Y.Z   # version from the CI job
+gosec -fmt=text -severity=medium ./...                     # flags copied from the workflow step
+```
+
+The output names the rule ID (e.g. `G202`, `G710`) and the line. That rule ID is the unit of diagnosis -- resolve per rule, never blanket-suppress the run.
+
+### True positive vs false positive
+
+| Rule | Common cause | Resolution |
+|------|--------------|------------|
+| **G202** (SQL string concat) | `fmt.Sprintf` / `+` building a query | Real -- rewrite as static SQL with conditional predicates (`WHERE 1=1` + append bound args). See the Object Authorization and query patterns above. |
+| **G710** (unvalidated `http.Redirect` target) | redirect destination derived from request input | Real **unless** the path is already constrained by a guard such as `safeRelativeRedirect` (rejects absolute URLs / `//host` / non-local targets). When a guard exists, this is a false positive -- the scanner cannot see the guard. |
+
+### Resolving a false positive
+
+When the value is genuinely guarded (e.g. `safeRelativeRedirect` validated the redirect is local before `http.Redirect`), do **not** weaken the code to satisfy the scanner. Either:
+
+1. Refactor so the guard and the sink are adjacent enough that gosec's flow analysis sees the constraint, or
+2. Add a narrow, justified suppression on the exact line, naming the guard:
+
+```go
+// #nosec G710 -- target validated by safeRelativeRedirect (rejects absolute/cross-host URLs)
+http.Redirect(w, r, dest, http.StatusSeeOther)
+```
+
+Rules for suppressions: one rule ID per annotation, on the specific line, with a comment stating *why* it is safe. Never `#nosec` a whole file or omit the justification. A suppression without a named guard is itself a review finding.
+
+### Know which checks actually ran
+
+CI workflow `if:` conditions can skip jobs (race detector, container scan are commonly gated on labels, paths, or branch). A green run is not full coverage if those jobs were skipped. When relying on a check for sign-off, confirm it executed -- a skipped job is not a passing job.
+
+---
+
 ## Companion Skills
 
 | Skill | Plugin | When to Load |
