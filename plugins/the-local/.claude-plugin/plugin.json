@@ -1,7 +1,7 @@
 {
   "name": "the-local",
   "description": "The Local -- self-hosted Matrix network for the workplace democracy movement. Operational knowledge, Element Web branding, Synapse configuration, and deployment workflow.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": {
     "name": "Design Machines"
   },
@@ -19,7 +19,13 @@
           "custom CSS not applying",
           "service worker caching"
         ],
-        "tags": ["element-web", "branding", "css", "theming", "matrix"]
+        "tags": [
+          "element-web",
+          "branding",
+          "css",
+          "theming",
+          "matrix"
+        ]
       },
       {
         "id": "server-ops",
@@ -33,7 +39,13 @@
           "backup database",
           "droplet ops"
         ],
-        "tags": ["server-ops", "docker", "matrix", "digitalocean", "infrastructure"]
+        "tags": [
+          "server-ops",
+          "docker",
+          "matrix",
+          "digitalocean",
+          "infrastructure"
+        ]
       },
       {
         "id": "synapse-config",
@@ -48,7 +60,13 @@
           "Jinja2 template",
           "Synapse settings"
         ],
-        "tags": ["synapse", "matrix", "configuration", "email", "jinja2"]
+        "tags": [
+          "synapse",
+          "matrix",
+          "configuration",
+          "email",
+          "jinja2"
+        ]
       }
     ],
     "agents": [],

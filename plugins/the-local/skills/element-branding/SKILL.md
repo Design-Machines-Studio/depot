@@ -1,6 +1,6 @@
 ---
 name: element-branding
-description: Provides Element Web branding knowledge including custom CSS injection methodology, welcome page customization, auth page styling, service worker caching behaviour, and all visual override patterns for thelocal.chat. Use when editing custom.css, index.html, welcome/index.html, or element-config.json. Trigger for any mention of: Element Web appearance, auth page styling, logo replacement, welcome page, mx_AuthPage, mx_Login_submit, custom_css_url, welcomePageUrl, service worker, brand purple, or any visual change to thelocal.chat's Element Web interface. Also trigger when investigating CSS not applying, button styling issues, font overrides, or layout problems on the sign-in or welcome screens.
+description: "Provides Element Web branding knowledge including custom CSS injection methodology, welcome page customization, auth page styling, service worker caching behaviour, and all visual override patterns for thelocal.chat. Use when editing custom.css, index.html, welcome/index.html, or element-config.json. Trigger for any mention of: Element Web appearance, auth page styling, logo replacement, welcome page, mx_AuthPage, mx_Login_submit, custom_css_url, welcomePageUrl, service worker, brand purple, or any visual change to thelocal.chat's Element Web interface. Also trigger when investigating CSS not applying, button styling issues, font overrides, or layout problems on the sign-in or welcome screens."
 ---
 
 # The Local — Element Web Branding

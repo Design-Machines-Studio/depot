@@ -1,7 +1,7 @@
 {
   "name": "accessibility-compliance",
   "description": "WCAG 2.2 accessibility auditing, screen reader testing, and automated compliance enforcement for Live Wires, Go+Templ+Datastar, and Craft CMS projects",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -30,7 +30,13 @@
           "keyboard navigation test",
           "assistive technology"
         ],
-        "tags": ["accessibility", "screen-reader", "voiceover", "nvda", "testing"]
+        "tags": [
+          "accessibility",
+          "screen-reader",
+          "voiceover",
+          "nvda",
+          "testing"
+        ]
       },
       {
         "id": "wcag-audit-patterns",
@@ -45,7 +51,13 @@
           "accessible markup patterns",
           "heading hierarchy"
         ],
-        "tags": ["accessibility", "wcag", "audit", "compliance", "remediation"]
+        "tags": [
+          "accessibility",
+          "wcag",
+          "audit",
+          "compliance",
+          "remediation"
+        ]
       }
     ],
     "agents": [
@@ -54,35 +66,64 @@
         "name": "A11y CSS Reviewer",
         "category": "review",
         "description": "Reviews CSS changes for WCAG 2.2 visual accessibility compliance",
-        "tags": ["accessibility", "css", "contrast", "focus", "review"]
+        "tags": [
+          "accessibility",
+          "css",
+          "contrast",
+          "focus",
+          "review"
+        ]
       },
       {
         "id": "a11y-html-reviewer",
         "name": "A11y HTML Reviewer",
         "category": "review",
         "description": "Reviews HTML, Templ, and Twig templates for WCAG 2.2 accessibility violations",
-        "tags": ["accessibility", "html", "semantic", "aria", "review"]
+        "tags": [
+          "accessibility",
+          "html",
+          "semantic",
+          "aria",
+          "review"
+        ]
       },
       {
         "id": "a11y-dynamic-content-reviewer",
         "name": "A11y Dynamic Content Reviewer",
         "category": "review",
         "description": "Reviews Datastar interactions and DOM updates for accessibility compliance",
-        "tags": ["accessibility", "datastar", "dynamic", "live-regions", "review"]
+        "tags": [
+          "accessibility",
+          "datastar",
+          "dynamic",
+          "live-regions",
+          "review"
+        ]
       },
       {
         "id": "a11y-audit-runner",
         "name": "A11y Audit Runner",
         "category": "workflow",
         "description": "Runs automated accessibility audits using Pa11y, axe-core, and Playwright",
-        "tags": ["accessibility", "audit", "automation", "pa11y", "axe-core"]
+        "tags": [
+          "accessibility",
+          "audit",
+          "automation",
+          "pa11y",
+          "axe-core"
+        ]
       },
       {
         "id": "a11y-project-setup",
         "name": "A11y Project Setup",
         "category": "workflow",
         "description": "Sets up accessibility testing infrastructure in new or existing projects",
-        "tags": ["accessibility", "setup", "ci-cd", "testing-infrastructure"]
+        "tags": [
+          "accessibility",
+          "setup",
+          "ci-cd",
+          "testing-infrastructure"
+        ]
       }
     ],
     "commands": [

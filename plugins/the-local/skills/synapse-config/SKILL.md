@@ -1,6 +1,6 @@
 ---
 name: synapse-config
-description: Synapse Matrix homeserver configuration, email setup via Resend SMTP, Jinja2 email/page template system, registration token management, and homeserver.yaml template pattern for The Local. Use when editing homeserver.yaml, adding or modifying email templates, configuring SMTP, managing registration tokens, working with Synapse's Jinja2 template system, or troubleshooting Synapse behaviour. Trigger for any mention of: homeserver.yaml, registration_requires_token, Resend, SMTP port 2587, email templates, Jinja2, _base.html, notif_mail, password_reset, synapse templates directory, or any Synapse server configuration concern.
+description: "Synapse Matrix homeserver configuration, email setup via Resend SMTP, Jinja2 email/page template system, registration token management, and homeserver.yaml template pattern for The Local. Use when editing homeserver.yaml, adding or modifying email templates, configuring SMTP, managing registration tokens, working with Synapse's Jinja2 template system, or troubleshooting Synapse behaviour. Trigger for any mention of: homeserver.yaml, registration_requires_token, Resend, SMTP port 2587, email templates, Jinja2, _base.html, notif_mail, password_reset, synapse templates directory, or any Synapse server configuration concern."
 ---
 
 # The Local — Synapse Configuration

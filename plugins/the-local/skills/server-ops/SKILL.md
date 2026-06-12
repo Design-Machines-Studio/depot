@@ -1,6 +1,6 @@
 ---
 name: server-ops
-description: Provides complete operational knowledge for The Local's self-hosted Matrix infrastructure — Docker Compose service management, SSH access, Matrix user creation, database backup, performance monitoring, and deployment methods. Use when SSH-ing into the server, managing Docker services, creating Matrix accounts, checking logs, backing up data, restarting Synapse or other services, or performing any operational task on the DigitalOcean droplet at 143.110.221.2. Trigger for any mention of: the droplet, docker compose, synapse restart, user creation, register_new_matrix_user, backup, logs, force-recreate, or server-side operations on thelocal.chat infrastructure.
+description: "Provides complete operational knowledge for The Local's self-hosted Matrix infrastructure — Docker Compose service management, SSH access, Matrix user creation, database backup, performance monitoring, and deployment methods. Use when SSH-ing into the server, managing Docker services, creating Matrix accounts, checking logs, backing up data, restarting Synapse or other services, or performing any operational task on the DigitalOcean droplet at 143.110.221.2. Trigger for any mention of: the droplet, docker compose, synapse restart, user creation, register_new_matrix_user, backup, logs, force-recreate, or server-side operations on thelocal.chat infrastructure."
 ---
 
 # The Local — Server Operations

@@ -1,7 +1,7 @@
 {
   "name": "live-wires",
   "description": "Live Wires CSS framework for editorial websites with layout primitives and baseline rhythm",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "author": {
     "name": "Design Machines"
   },
@@ -23,7 +23,14 @@
           "right Live Wires classes",
           "fluid typography setup"
         ],
-        "tags": ["css", "layout-primitives", "baseline-rhythm", "tokens", "cascade-layers", "responsive"]
+        "tags": [
+          "css",
+          "layout-primitives",
+          "baseline-rhythm",
+          "tokens",
+          "cascade-layers",
+          "responsive"
+        ]
       }
     ],
     "agents": [
@@ -32,7 +39,12 @@
         "name": "CSS Reviewer",
         "category": "review",
         "description": "Reviews CSS and HTML template changes for Live Wires framework compliance",
-        "tags": ["css", "review", "compliance", "live-wires"]
+        "tags": [
+          "css",
+          "review",
+          "compliance",
+          "live-wires"
+        ]
       }
     ],
     "commands": []
