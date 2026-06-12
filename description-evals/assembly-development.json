@@ -9,6 +9,9 @@
   {"query": "lets deploy this to production. whats the docker compose setup for the prod server again? I think we need to update the env vars too", "should_trigger": true},
   {"query": "I want to add a Datastar-powered modal for confirming vote submissions. When they click 'Submit Vote' it should show a confirmation dialog before posting to the handler", "should_trigger": true},
   {"query": "Can you create a new handler that serves the compliance dashboard? It needs to aggregate data from meetings, votes, and filings tables and pass it to the template as a ComplianceSummaryDTO", "should_trigger": true},
+  {"query": "I'm building the receiving ingress endpoint for the federation mutual-trust handshake between two Assembly installs. A known install presenting a new key should land in a TOFU-pending state with an audit event", "should_trigger": true},
+  {"query": "How should the background well-known re-fetch detect key rotation on a linked install? The federation link flow should flag a rotated key instead of auto-accepting it", "should_trigger": true},
+  {"query": "What SSRF and replay controls do we need on the federation link callback before trusting another install's handshake?", "should_trigger": true},
   {"query": "What voting threshold does the BC Co-op Act require for removing a director? Is it a special resolution or ordinary?", "should_trigger": false},
   {"query": "I need to write a blog post about why we chose Go over Rails for our governance platform. Can you help me draft it?", "should_trigger": false},
   {"query": "The baseline rhythm is off on the meetings page. The heading spacing doesn't align to the 4px grid. How do I fix the CSS?", "should_trigger": false},
@@ -18,5 +21,6 @@
   {"query": "Write me a Python script that generates fake member data for testing. 50 members with random names, emails, and join dates", "should_trigger": false},
   {"query": "my .serena/project.yml is ignoring node_modules but the LSP is still indexing them. How do I fix the gopls config?", "should_trigger": false},
   {"query": "I need to update the README for our open source CSS framework. Can you add a section about the new container query utilities?", "should_trigger": false},
-  {"query": "Can you help me write the acceptance criteria for the equity tracking feature? I need it formatted as user stories for the Notion board", "should_trigger": false}
+  {"query": "Can you help me write the acceptance criteria for the equity tracking feature? I need it formatted as user stories for the Notion board", "should_trigger": false},
+  {"query": "Can you check the color contrast on the proposals page heading against WCAG AA requirements?", "should_trigger": false}
 ]

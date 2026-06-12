@@ -128,6 +128,19 @@ Check federation-related code for security requirements:
 
 **Look for:** Code in `federation/`, `/.well-known/assembly` handler, link token generation/validation.
 
+### Cross-Install Trust Choreography (P1)
+
+The federation backend (Assembly Baseplate PR #252, Session 2.9a) introduced cross-install link/trust/consent flows. Review any code touching those flows against these checks. The open Baseplate issues cited are the live threat-model exercises -- treat them as open work, not solved patterns.
+
+- **Ingress endpoint hardening:** a receiving install's trust-request ingress endpoint must validate the sender, rate-limit, and emit an alert/audit/event for every inbound trust request -- silent acceptance is a finding (Baseplate #259, mutual-trust handshake).
+- **TOFU pinning:** the first-seen key for an install is pinned. A *known* install presenting a new key must enter a TOFU-pending state requiring explicit re-verification; flag any path that silently re-trusts a changed key (Baseplate #259).
+- **Server-side fingerprint attestation:** fingerprint verification must be recorded as an explicit attestation enforced server-side. Flag flows where verification status is client-asserted or inferable from UI state alone (Baseplate #254).
+- **Replay + SSRF controls:** handshake exchanges need nonce/timestamp replay protection; outbound well-known fetches need SSRF guards (scheme/host allowlisting, no redirects to private address ranges) (Baseplate #259).
+- **Key-rotation detection:** background well-known re-fetch should detect rotated keys proactively. A detected rotation is a flagged event requiring re-verification, never an auto-accept (Baseplate #255).
+- **Default-deny trust boundaries:** no resource is federation-accessible unless explicitly granted. Flag any handler reachable by a federated peer that does not check an explicit grant.
+
+**Look for:** ingress/handshake handlers in `federation/`, well-known fetch clients, key pinning/storage code, trust-state transitions, and any federation-reachable handler missing an explicit grant check.
+
 ### Hardcoded Member IDs (P2)
 
 Flag literal member ID strings (e.g., `"mem_001"`, `"mem_009"`) in non-test, non-seed code. These are prototype carryovers that must be replaced with dynamic lookups.

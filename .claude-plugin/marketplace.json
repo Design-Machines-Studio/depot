@@ -82,7 +82,7 @@
     {
       "name": "council",
       "source": "./plugins/council",
-      "version": "1.10.0",
+      "version": "1.10.1",
       "author": {
         "name": "Design Machines"
       },
@@ -128,7 +128,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.5.0",
+      "version": "3.6.0",
       "author": {
         "name": "Design Machines"
       },
@@ -147,7 +147,9 @@
           "nats",
           "jetstream",
           "production",
-          "testing"
+          "testing",
+          "federation",
+          "ci-security"
         ]
       }
     },
@@ -270,7 +272,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.32.0",
+      "version": "1.33.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -291,7 +293,8 @@
           "ui-standards",
           "playwright",
           "review-loop",
-          "migrations"
+          "migrations",
+          "issue-tracking"
         ]
       }
     },

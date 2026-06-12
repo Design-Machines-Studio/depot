@@ -1,6 +1,6 @@
 {
   "name": "council",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Worker cooperative governance and decolonial content strategy",
   "author": {
     "name": "Design Machines"
@@ -44,7 +44,9 @@
           "bylaw red flags",
           "member lifecycle stages",
           "board composition minimum directors",
-          "cooperative vs corporation"
+          "cooperative vs corporation",
+          "measurable membership requirement target vs achieved",
+          "track progress toward membership requirement"
         ],
         "tags": [
           "governance",
@@ -52,7 +54,8 @@
           "bc-act",
           "bylaws",
           "voting",
-          "compliance"
+          "compliance",
+          "membership"
         ]
       }
     ],
@@ -65,7 +68,8 @@
         "tags": [
           "governance",
           "compliance",
-          "review"
+          "review",
+          "domain-modeling"
         ]
       }
     ],

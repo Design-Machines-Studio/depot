@@ -9,6 +9,7 @@
   {"query": "What's the member lifecycle look like for a worker co-op? From application to full membership, what are the stages and what does the Act require at each step?", "should_trigger": true},
   {"query": "We need to design the board composition module for Assembly. How many directors does a BC co-op need at minimum? Can non-members serve on the board?", "should_trigger": true},
   {"query": "help me understand the difference between a cooperative and a regular corporation. One of our leads asked and I want to give them a clear answer", "should_trigger": true},
+  {"query": "Our membership requirements store a target -- attend 3 meetings, contribute $500 -- but completion is recorded as a boolean. How should we model measurable requirements that track progress toward the target?", "should_trigger": true},
   {"query": "I need to add a new Templ template for the meetings page. It should show a table of past meetings with date, attendance count, and links to minutes", "should_trigger": false},
   {"query": "Can you write a blog post about Design Machines' philosophy on technology and community?", "should_trigger": false},
   {"query": "The CSS grid on the member directory page isn't responsive. How do I make it collapse to a single column on mobile using Live Wires?", "should_trigger": false},

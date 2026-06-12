@@ -1,6 +1,6 @@
 ---
 name: golang-patterns
-description: Assembly-specific Go library patterns and conventions -- SQLite driver, migrations, session management, CSRF protection, rate limiting, CLI tooling, and testing. Use when choosing dependencies, configuring SQLite connection pools, setting up goose migrations, implementing SCS sessions, adding nosurf CSRF protection, building cobra CLI commands, or configuring httprate rate limiting for Assembly.
+description: Assembly-specific Go library patterns and conventions -- SQLite driver, migrations, session management, CSRF protection, rate limiting, CLI tooling, testing, and CI security scanner diagnosis. Use when choosing dependencies, configuring SQLite connection pools, setting up goose migrations, implementing SCS sessions, adding nosurf CSRF protection, building cobra CLI commands, configuring httprate rate limiting, or diagnosing gosec and gitleaks CI security scanner failures (scheduled scan event modes, false positives, narrow suppressions) for Assembly.
 ---
 
 # Go Library Patterns
@@ -347,7 +347,7 @@ SSE handlers use `http.ResponseController` to extend WriteTimeout per-connection
 
 ---
 
-## 13. CI Security Scanner Diagnosis (gosec)
+## 13. CI Security Scanner Diagnosis (gosec, gitleaks)
 
 CI runs `gosec` on every push. When it fails -- especially after a version bump -- diagnose it from the **exact failing step**. A scanner upgrade can surface new rules (true positives) and new false positives at the same time; treat them differently.
 
@@ -387,6 +387,18 @@ Rules for suppressions: one rule ID per annotation, on the specific line, with a
 ### Know which checks actually ran
 
 CI workflow `if:` conditions can skip jobs (race detector, container scan are commonly gated on labels, paths, or branch). A green run is not full coverage if those jobs were skipped. When relying on a check for sign-off, confirm it executed -- a skipped job is not a passing job.
+
+### Event-mode awareness
+
+The same scanner behaves differently per trigger event. On `pull_request`/`push` it typically scans the diff or current tree; on `schedule` it may scan full git history or run with different flags entirely. A scanner that passes on every PR can still fail the scheduled run -- and vice versa. Diagnose from the **exact run/job/step of the failing event mode**: open the failing run, identify which event triggered it (`gh run view <id> --json event`), and reproduce with that mode's config, not the PR mode you're used to. Baseplate PR #256 is the precedent: the scheduled gitleaks scan misbehaved while PR-triggered scans were fine, and the fix was scoped to the scheduled-event configuration.
+
+### gitleaks
+
+Same diagnosis discipline as gosec, secret-scanner flavored:
+
+- **Reproduce the exact failing step**: match the workflow's pinned gitleaks version and exact args/config (`gitleaks detect --config .gitleaks.toml ...`). Scheduled runs may scan full history (`--log-opts`) where PR runs scan the diff -- see event-mode above.
+- **Per-finding resolution**: a real leaked secret means rotate the credential and scrub it; never just allowlist the path. A false positive (test fixture, example key, high-entropy non-secret) gets a **narrow allowlist entry** -- exact path + rule ID + justification comment in `.gitleaks.toml`, mirroring the one-rule-one-line `#nosec` discipline above. A broad path glob or a disabled rule is itself a review finding.
+- The gosec precedent applies: Baseplate PRs #249/#251 handled a gosec upgrade with scanner-version matching and narrow, justified false-positive remediation rather than broad suppression. Hold gitleaks changes to the same bar.
 
 ---
 

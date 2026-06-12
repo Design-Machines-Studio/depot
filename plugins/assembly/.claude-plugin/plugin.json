@@ -1,7 +1,7 @@
 {
   "name": "assembly",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "3.5.0",
+  "version": "3.6.0",
   "author": {
     "name": "Design Machines"
   },
@@ -14,7 +14,7 @@
       {
         "id": "development",
         "name": "Assembly Development",
-        "description": "Go, Templ, and Datastar patterns -- handlers, migrations, CRUD flows, SSE endpoints, and Docker ops",
+        "description": "Go, Templ, and Datastar patterns -- handlers, migrations, CRUD flows, SSE endpoints, Docker ops, and federation trust choreography",
         "triggers": [
           "add a new page to Assembly",
           "docker container crashing",
@@ -25,7 +25,11 @@
           "DTO mapping issue",
           "deploy to production",
           "Datastar modal",
-          "compliance dashboard handler"
+          "compliance dashboard handler",
+          "federation mutual-trust handshake",
+          "TOFU pinning for a known install",
+          "well-known re-fetch key rotation",
+          "SSRF and replay controls on federation links"
         ],
         "tags": [
           "go",
@@ -34,7 +38,8 @@
           "assembly",
           "sse",
           "docker",
-          "handlers"
+          "handlers",
+          "federation"
         ]
       },
       {
@@ -63,7 +68,7 @@
       {
         "id": "golang-patterns",
         "name": "Go Ecosystem Patterns",
-        "description": "Assembly-specific Go library patterns -- SQLite, migrations, sessions, CSRF, CLI, rate limiting",
+        "description": "Assembly-specific Go library patterns -- SQLite, migrations, sessions, CSRF, CLI, rate limiting, CI security scanner diagnosis",
         "triggers": [
           "which SQLite driver to use",
           "set up migrations with goose",
@@ -71,7 +76,9 @@
           "CSRF protection",
           "rate limiting middleware",
           "cobra CLI setup",
-          "SCS session store"
+          "SCS session store",
+          "gosec failing in CI after upgrade",
+          "scheduled gitleaks scan failing"
         ],
         "tags": [
           "go",
@@ -80,7 +87,9 @@
           "sessions",
           "csrf",
           "cobra",
-          "rate-limiting"
+          "rate-limiting",
+          "gosec",
+          "ci-security"
         ]
       }
     ],

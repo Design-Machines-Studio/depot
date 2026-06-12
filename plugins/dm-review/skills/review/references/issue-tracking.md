@@ -168,3 +168,17 @@ Conventions for a batch cleanup PR:
 - Group the commits by finding or by surface, the same way feature PRs group by concern.
 - Run `/dm-review-loop` on the cleanup branch -- a cleanup PR is still subject to zero-deferral on any *new* findings it introduces.
 - Schedule cleanup passes around natural milestones (here: before federation work) so debt does not cross a major boundary.
+
+## Closure Reconciliation
+
+Before claiming any finding closed -- in a review report, a session summary, or a cleanup PR -- reconcile every artifact that carries review state. On Assembly Baseplate, formal GitHub PR review threads are mostly empty; the durable review signal lives in **PR bodies, issue state, and `review-finding` issues**. A PR review thread with no comments tells you nothing about whether findings were addressed -- never treat it as the source of truth.
+
+Reconcile all five before declaring closure:
+
+1. **PR body `Closes #X` references** -- the claim of closure.
+2. **Actual issue open/closed state** -- the verification. `gh issue view <n> --json state`. A `Closes` reference in an unmerged or reverted PR closes nothing.
+3. **Merge commits** -- confirm the PR that claims the closure actually merged (`gh pr view <n> --json state,mergedAt`).
+4. **Labels** -- `review-finding` / `p1` / `p2` labels must match the issue's real state; stale labels mislead the next cleanup pass.
+5. **`review-finding` issues** -- sweep for open ones the PR body never referenced.
+
+**Worked example:** Baseplate PR #252 (Session 2.9a federation backend) merged with green checks, but #253, #254, #255, #258, and #259 remain open follow-on issues from that work. "Federation backend merged" is true; "federation review findings closed" is false. Reconciliation is what keeps those two claims distinct.

@@ -1,6 +1,6 @@
 ---
 name: development
-description: Assembly governance application development with Go, Templ, and Datastar. Use when building pages, adding handlers, creating Templ templates, writing database queries, scaffolding CRUD flows, configuring Docker, deploying to production, or working on any Assembly feature. Also use when asking about page types, DTO patterns, component library, Datastar integration, migration files, or module architecture. Covers pages, components, handlers, database patterns, setup, and deployment across all project phases.
+description: Assembly governance application development with Go, Templ, and Datastar. Use when building pages, adding handlers, creating Templ templates, writing database queries, scaffolding CRUD flows, configuring Docker, deploying to production, or working on any Assembly feature. Also use when asking about page types, DTO patterns, component library, Datastar integration, migration files, or module architecture. Also use for federation and cross-install trust work -- mutual-trust handshake, link flows, TOFU key pinning, well-known endpoint and key rotation, SSRF and replay controls. Covers pages, components, handlers, database patterns, setup, deployment, and federation trust choreography across all project phases.
 ---
 
 # Assembly Development Skill
@@ -804,6 +804,8 @@ GET /.well-known/assembly
 ```
 
 Federation uses OAuth-style account linking with signed tokens: 5-minute TTL, single-use nonce, audience validation, HTTPS required in production. See ADR-006 for the full linking flow.
+
+**Federation trust choreography.** The federation backend (Baseplate PR #252, Session 2.9a) added cross-install link/trust/consent flows. New federation work must threat-model against the checklist in dm-review's security-auditor "Cross-Install Trust Choreography" section: ingress endpoint hardening with alert/audit/event emission, TOFU pinning (known install presenting a new key enters a TOFU-pending state), server-side fingerprint-verification attestation, replay/SSRF controls on handshakes and well-known fetches, key-rotation detection via background well-known re-fetch, and default-deny trust boundaries. These map to open Baseplate issues #259 (mutual-trust handshake + ingress), #254 (fingerprint attestation), #255 (key-rotation re-fetch), and #253 (consenter-side link UX framing + reverse-link affordance) -- open exercises, not shipped patterns. A good next exercise: implement the #259 receiving ingress endpoint with TOFU-pending handling for known installs, SSRF/replay controls, and audit events, then run it against the security-auditor federation checks.
 
 ### Cobra CLI
 

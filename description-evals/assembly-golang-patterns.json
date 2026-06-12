@@ -11,6 +11,8 @@
   {"query": "How do I set up the read/write connection pools for SQLite? I'm getting SQLITE_BUSY errors.", "should_trigger": true},
   {"query": "Where should passwords be passed in the CLI? Can I use environment variables for the admin create command?", "should_trigger": true},
   {"query": "What HTTP server timeouts should I configure? SSE connections keep timing out.", "should_trigger": true},
+  {"query": "gosec started failing in CI after the version upgrade. It flags G710 on a redirect that's already guarded -- true positive or false positive, and how narrow should the suppression be?", "should_trigger": true},
+  {"query": "The scheduled gitleaks scan is failing but the PR-triggered scans pass. How do I diagnose the scanner's event mode difference?", "should_trigger": true},
   {"query": "I need to add a new page to Assembly with filtering and SSE updates.", "should_trigger": false},
   {"query": "How do I publish NATS events after a mutation? What's the subject hierarchy?", "should_trigger": false},
   {"query": "What voting threshold does the BC Act require for special resolutions?", "should_trigger": false},

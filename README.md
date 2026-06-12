@@ -85,7 +85,7 @@ LT10 methodology and Notion-integrated sprint planning. 2 skills, 1 command.
 
 Worker cooperative governance and decolonial content strategy. 2 skills, 1 agent, 1 command.
 
-- **governance** -- BC Cooperative Association Act compliance, bylaw analysis, discovery processes, Co-op OS system design, voting thresholds, and financial governance
+- **governance** -- BC Cooperative Association Act compliance, bylaw analysis, discovery processes, Co-op OS system design, voting thresholds, financial governance, and measurable membership-requirement modeling (track progress toward a target, not a boolean done-flag -- the lesson of Assembly Baseplate issue #233)
 - **decolonial-language** -- Decolonial and anti-capitalist content strategy with terminology mappings between legal/regulatory language and solidarity economy alternatives
 - **governance-domain** (agent) -- Reviews and guides cooperative governance feature development
 - `/governance-check` -- Quick cooperative compliance check
@@ -98,11 +98,15 @@ Design Machines business strategy and product intelligence. 1 skill.
 
 ### assembly
 
-Assembly governance application development with Go, Templ, and Datastar. 1 skill, 2 agents, 1 command.
+Assembly governance application development with Go, Templ, and Datastar. 3 skills, 4 agents, 1 command.
 
-- **development** -- Docker-based Go development with Templ templates, Datastar reactivity, page-type workflows, component library, database patterns, and governance state machines
+- **development** -- Docker-based Go development with Templ templates, Datastar reactivity, page-type workflows, component library, database patterns, governance state machines, and federation trust choreography (mutual-trust handshake, TOFU pinning, key-rotation detection -- the open threat-model work behind Baseplate PR #252)
+- **nats-jetstream** -- Embedded NATS patterns: KV store, event bus, streams, consumers, and real-time SSE via KV Watch
+- **golang-patterns** -- SQLite, goose migrations, sessions, CSRF, rate limiting, cobra CLI, and CI security scanner diagnosis (gosec and gitleaks event modes, narrow false-positive remediation)
 - **templ-scaffolder** (agent) -- Scaffolds new Templ pages, handlers, routes, and SSE endpoints
 - **datastar-sse** (agent) -- Datastar reactivity and SSE endpoint patterns
+- **nats-reviewer** (agent) -- Reviews NATS usage for embedded safety, ScopedEventBus patterns, and event ordering
+- **go-test-runner** (agent) -- Runs Go tests with race detection, reports coverage
 - `/assembly-build` -- Build and test Assembly via Docker
 
 ### live-wires
@@ -154,11 +158,11 @@ WCAG 2.2 accessibility auditing and enforcement. 2 skills, 5 agents, 1 command.
 
 ### dm-review
 
-Code review orchestrator with parallel agents. 2 skills, 12 agents, 5 commands.
+Code review orchestrator with parallel agents. 2 skills, 14 agents, 5 commands.
 
-- **review** -- Single-command reviews launching up to 15 parallel agents tailored to Go+Templ+Datastar, Craft CMS, and Live Wires with issue tracking
+- **review** -- Single-command reviews launching up to 15 parallel agents tailored to Go+Templ+Datastar, Craft CMS, and Live Wires, with issue tracking, reorg-only PR verification for behavior-preserving file decomposition, and closure reconciliation across PR bodies, issue state, and review-finding issues
 - **visual-test** -- Standalone visual browser testing for rendered pages using Playwright
-- 7 review agents: security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer, go-build-verifier, craft-reviewer, test-coverage-reviewer, visual-browser-tester, ux-quality-reviewer
+- 12 review agents: security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer, go-build-verifier, craft-reviewer, test-coverage-reviewer, visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer, migration-validator
 - 2 workflow agents: review-consolidator, review-memory-recorder
 - `/dm-review` -- Full review with all applicable agents
 - `/dm-review-quick` -- Quick review with 5 core agents only

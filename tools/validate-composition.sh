@@ -86,6 +86,11 @@ print("| Need | Skill |")
 print("|------|-------|")
 needs = [
     ('"I need to review my code"', "dm-review/review"),
+    ('"Is this cross-install federation flow safe?"', "assembly/development"),
+    ('"Split this oversized file without changing behavior"', "dm-review/review"),
+    ('"Did we actually close those review findings?"', "dm-review/review"),
+    ('"Why is the CI security scanner failing?"', "assembly/golang-patterns"),
+    ('"Model a measurable membership requirement"', "council/governance"),
     ('"What font should I use?"', "design-practice/typography"),
     ('"How do I price this project?"', "project-manager/lt10"),
     ('"Is this accessible?"', "accessibility-compliance/wcag-audit-patterns"),

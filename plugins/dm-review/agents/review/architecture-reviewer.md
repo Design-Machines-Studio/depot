@@ -63,6 +63,15 @@ When reviewing Assembly production code (`internal/fixtures/` or `internal/basep
 
 **File Size Limits (P2):** Flag handler files exceeding 200 lines and service files exceeding 500 lines. Suggest splitting into focused files by domain area.
 
+**Reorg-Only PR Verification (P2):** When a PR's stated purpose is decomposing an oversized file (the fix for a File Size Limits finding), hold it to the behavior-preserving reorg contract:
+
+- The diff must be **move-only** -- code relocated between files with no logic edits. Flag any PR that mixes decomposition with behavior changes; the behavior change hides in the move noise and must ship separately.
+- File-size targets are stated up front in the PR body (which files, target line counts), so reviewers can verify the split achieved its goal.
+- Behavior proof is the **existing test suite green via the Docker-backed run** (assembly go-test-runner pattern), not new tests. A reorg-only PR that needs new tests to pass was not reorg-only.
+- Security-sensitive modules (auth, federation, membership) get extra scrutiny: confirm package visibility and import boundaries are unchanged after the move.
+
+Open Baseplate exercises for this check: **#258** (behavior-preserving decomposition of the federation file) and **#234** (split oversized membership service + admin handler files) -- both open, both security-sensitive. A good next exercise is executing #258 as a strict reorg-only PR with the Docker test suite as the behavior proof.
+
 **Service Layer Bypass (P2):** Flag handlers that call `ScopedDB` methods directly (`.Query()`, `.Exec()`, `.QueryRow()`) instead of going through a service layer. Handlers should be thin HTTP adapters that delegate to services.
 
 **Module Boundary Violations (P1):** Flag fixture code that imports from another fixture's package. For example, `internal/fixtures/governance/` must not import from `internal/fixtures/documents/`. Fixtures communicate via the event bus, not direct imports.

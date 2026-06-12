@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, and governance domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.32.0",
+  "version": "1.33.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -41,13 +41,15 @@
           "run a code review",
           "review before merging",
           "full review",
-          "quick review"
+          "quick review",
+          "reconcile review findings with issue state"
         ],
         "tags": [
           "code-review",
           "orchestrator",
           "multi-agent",
-          "parallel"
+          "parallel",
+          "issue-tracking"
         ]
       },
       {
@@ -83,7 +85,9 @@
         "tags": [
           "architecture",
           "solid",
-          "boundaries"
+          "boundaries",
+          "decomposition",
+          "reorg-only"
         ]
       },
       {
@@ -150,7 +154,9 @@
         "tags": [
           "security",
           "owasp",
-          "vulnerabilities"
+          "vulnerabilities",
+          "federation",
+          "trust"
         ]
       },
       {
@@ -207,7 +213,13 @@
         "name": "Migration Validator",
         "category": "review",
         "description": "Validates goose migration format, transaction safety, PII, table prefixes, and cross-fixture FK constraints",
-        "tags": ["migrations", "goose", "sql", "validation", "schema"]
+        "tags": [
+          "migrations",
+          "goose",
+          "sql",
+          "validation",
+          "schema"
+        ]
       },
       {
         "id": "review-consolidator",

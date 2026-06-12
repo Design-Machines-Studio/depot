@@ -11,6 +11,11 @@ Common questions mapped to the right skill:
 | Need | Skill |
 |------|-------|
 | "I need to review my code" | dm-review/review |
+| "Is this cross-install federation flow safe?" | assembly/development |
+| "Split this oversized file without changing behavior" | dm-review/review |
+| "Did we actually close those review findings?" | dm-review/review |
+| "Why is the CI security scanner failing?" | assembly/golang-patterns |
+| "Model a measurable membership requirement" | council/governance |
 | "What font should I use?" | design-practice/typography |
 | "How do I price this project?" | project-manager/lt10 |
 | "Is this accessible?" | accessibility-compliance/wcag-audit-patterns |
@@ -32,12 +37,12 @@ Common questions mapped to the right skill:
 |--------|-------|------|----------|----------|
 | accessibility-compliance | screen-reader-testing | accessibility, screen-reader, voiceover, nvda, testing | -- | "test with VoiceOver", "screen reader compatibility", "ARIA markup check", "live region announcement", "keyboard navigation test", ... |
 | accessibility-compliance | wcag-audit-patterns | accessibility, wcag, audit, compliance, remediation | -- | "WCAG violations", "color contrast check", "focus management", "ARIA attributes", "EAA compliance", ... |
-| assembly | development | go, templ, datastar, assembly, sse, docker, handlers | -- | "add a new page to Assembly", "docker container crashing", "scaffold CRUD flow", "how does the fixture system work", "write a migration", ... |
+| assembly | development | go, templ, datastar, assembly, sse, docker, handlers, federation | -- | "add a new page to Assembly", "docker container crashing", "scaffold CRUD flow", "how does the fixture system work", "write a migration", ... |
 | assembly | nats-jetstream | nats, jetstream, events, kv-store, real-time, messaging | -- | "set up NATS", "publish event after mutation", "KV Watch for real-time updates", "NATS stream configuration", "event bus pattern", ... |
-| assembly | golang-patterns | go, sqlite, goose, sessions, csrf, cobra, rate-limiting | -- | "which SQLite driver to use", "set up migrations with goose", "session management pattern", "CSRF protection", "rate limiting middleware", ... |
+| assembly | golang-patterns | go, sqlite, goose, sessions, csrf, cobra, rate-limiting, gosec, ci-security | -- | "which SQLite driver to use", "set up migrations with goose", "session management pattern", "CSRF protection", "rate limiting middleware", ... |
 | chef | cooking | cooking, recipes, nutrition, meal-planning, bali, mela, dietary | -- | "what should we eat tonight", "is this recipe healthy", "convert recipe to healthier", "ingredient substitution", "Bali grocery sourcing", ... |
 | council | decolonial-language | content-strategy, decolonial, terminology, cooperative, language | -- | "should I call this profit or surplus", "naming UI elements", "member-friendly language", "terminology for co-ops", "values-aligned language", ... |
-| council | governance | governance, cooperative, bc-act, bylaws, voting, compliance | -- | "quorum requirements", "voting threshold for special resolution", "patronage allocation", "co-op discovery questions", "compliance deadlines", ... |
+| council | governance | governance, cooperative, bc-act, bylaws, voting, compliance, membership | -- | "quorum requirements", "voting threshold for special resolution", "patronage allocation", "co-op discovery questions", "compliance deadlines", ... |
 | craft-developer | content-modeling | craft-cms, content-modeling, architecture, matrix, sections | -- | "sections vs channels", "Matrix nesting", "how should I structure this content", "field naming", "entry type sharing", ... |
 | craft-developer | craft-5-migration | craft-cms, migration, craft-5, upgrade, breaking-changes | -- | "upgrade to Craft 5", "empty array breaking change", "GraphQL types not found", "block.type.handle", "entrification", ... |
 | craft-developer | craft-development | craft-cms, twig, element-queries, graphql, development | -- | "craft.entries()", "Twig template", "eager loading", "relatedTo", "Matrix blocks", ... |
@@ -49,7 +54,7 @@ Common questions mapped to the right skill:
 | design-practice | identity | identity, logo, branding, marks, visual-identity | -- | "does this logo work", "what makes a good mark", "brand identity system", "favicon design", "color palette for brand", ... |
 | design-practice | layout | layout, grid, editorial, art-direction, hierarchy | -- | "how should I lay this out", "spacing feels wrong", "grid construction", "editorial spread", "visual hierarchy", ... |
 | design-practice | typography | typography, type-scale, fonts, rhythm, swiss-modernism | -- | "what font should I use", "heading sizes", "type scale", "this text feels off", "line-height", ... |
-| dm-review | review | code-review, orchestrator, multi-agent, parallel | -- | "review this code", "check my PR", "run a code review", "review before merging", "full review", ... |
+| dm-review | review | code-review, orchestrator, multi-agent, parallel, issue-tracking | -- | "review this code", "check my PR", "run a code review", "review before merging", "full review", ... |
 | dm-review | visual-test | visual-testing, browser, playwright, responsive, screenshots | playwright | "test this visually", "check in the browser", "test responsive layout", "visual QA", "check the page", ... |
 | gemini | gemini-delegate | gemini, delegation, search, large-context, subagent, citations, code-execution | -- | "search with gemini", "ask gemini", "delegate to gemini", "gemini search", "full diff analysis", ... |
 | ghostwriter | social-media | social-media, linkedin, instagram, bluesky, mastodon, content | -- | "write a LinkedIn post", "Instagram caption", "posting schedule", "hashtag strategy", "cross-platform content", ... |
@@ -81,7 +86,7 @@ Common questions mapped to the right skill:
 | assembly | nats-reviewer | review | nats, review, safety, events |
 | assembly | go-test-runner | workflow | go, testing, coverage, race-detection |
 | chef | recipe-analyzer | workflow | recipes, nutrition, dietary-analysis, health |
-| council | governance-domain | review | governance, compliance, review |
+| council | governance-domain | review | governance, compliance, review, domain-modeling |
 | craft-developer | content-modeler | workflow | craft-cms, content-modeling, workflow |
 | craft-developer | craft-debugger | workflow | craft-cms, debugging, mcp |
 | craft-developer | template-builder | workflow | craft-cms, twig, templates, performance |
@@ -90,13 +95,13 @@ Common questions mapped to the right skill:
 | deepseek | deepseek-agent-runner | workflow | delegation, runner, dm-review, offload, deepseek |
 | design-practice | design-critic | review | design, critique, review, evaluation |
 | design-practice | design-advisor | workflow | design, advisory, strategy, decisions |
-| dm-review | architecture-reviewer | review | architecture, solid, boundaries |
+| dm-review | architecture-reviewer | review | architecture, solid, boundaries, decomposition, reorg-only |
 | dm-review | code-simplicity-reviewer | review | simplicity, complexity, dead-code |
 | dm-review | craft-reviewer | review | craft-cms, twig, php |
 | dm-review | doc-sync-reviewer | review | documentation, sync, consistency |
 | dm-review | go-build-verifier | review | go, build, vet, templ |
 | dm-review | pattern-recognition-specialist | review | patterns, anti-patterns, conventions |
-| dm-review | security-auditor | review | security, owasp, vulnerabilities |
+| dm-review | security-auditor | review | security, owasp, vulnerabilities, federation, trust |
 | dm-review | test-coverage-reviewer | review | testing, coverage, quality |
 | dm-review | visual-browser-tester | review | visual-testing, browser, responsive, accessibility |
 | dm-review | ux-quality-reviewer | review | ux, design-quality, usability, playwright |
