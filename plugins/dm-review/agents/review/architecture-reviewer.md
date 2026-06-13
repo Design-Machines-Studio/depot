@@ -70,7 +70,7 @@ When reviewing Assembly production code (`internal/fixtures/` or `internal/basep
 - Behavior proof is the **existing test suite green via the Docker-backed run** (assembly go-test-runner pattern), not new tests. A reorg-only PR that needs new tests to pass was not reorg-only.
 - Security-sensitive modules (auth, federation, membership) get extra scrutiny: confirm package visibility and import boundaries are unchanged after the move.
 
-Open Baseplate exercises for this check: **#258** (behavior-preserving decomposition of the federation file) and **#234** (split oversized membership service + admin handler files) -- both open, both security-sensitive. A good next exercise is executing #258 as a strict reorg-only PR with the Docker test suite as the behavior proof.
+Open Baseplate exercises for this check: **#258** (decompose the federation file) and **#234** (split the membership service + admin handler files). A good next exercise is executing #258 as a strict reorg-only PR with the Docker test suite as the behavior proof.
 
 **Service Layer Bypass (P2):** Flag handlers that call `ScopedDB` methods directly (`.Query()`, `.Exec()`, `.QueryRow()`) instead of going through a service layer. Handlers should be thin HTTP adapters that delegate to services.
 

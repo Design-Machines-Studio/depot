@@ -394,9 +394,9 @@ The same scanner behaves differently per trigger event. On `pull_request`/`push`
 
 ### gitleaks
 
-Same diagnosis discipline as gosec, secret-scanner flavored:
+Same diagnosis discipline as gosec (reproduce the exact failing step at the pinned version), secret-scanner flavored:
 
-- **Reproduce the exact failing step**: match the workflow's pinned gitleaks version and exact args/config (`gitleaks detect --config .gitleaks.toml ...`). Scheduled runs may scan full history (`--log-opts`) where PR runs scan the diff -- see event-mode above.
+- **gitleaks-specific reproduction**: match the workflow's config (`gitleaks detect --config .gitleaks.toml ...`); scheduled runs may scan full history (`--log-opts`) where PR runs scan the diff -- see event-mode above.
 - **Per-finding resolution**: a real leaked secret means rotate the credential and scrub it; never just allowlist the path. A false positive (test fixture, example key, high-entropy non-secret) gets a **narrow allowlist entry** -- exact path + rule ID + justification comment in `.gitleaks.toml`, mirroring the one-rule-one-line `#nosec` discipline above. A broad path glob or a disabled rule is itself a review finding.
 - The gosec precedent applies: Baseplate PRs #249/#251 handled a gosec upgrade with scanner-version matching and narrow, justified false-positive remediation rather than broad suppression. Hold gitleaks changes to the same bar.
 

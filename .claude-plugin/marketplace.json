@@ -128,7 +128,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.6.1",
+      "version": "3.6.2",
       "author": {
         "name": "Design Machines"
       },
@@ -272,7 +272,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.33.0",
+      "version": "1.33.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
