@@ -152,6 +152,65 @@ PYEOF
 }
 
 # --------------------------------------------------------------------------
+# Detect dependency cycles across the whole graph (hard + optional edges)
+# A cycle means two plugins depend on each other (directly or transitively),
+# which the per-plugin existence/version checks cannot see. Returns nonzero
+# and prints the offending cycle if any is found.
+# --------------------------------------------------------------------------
+detect_cycles() {
+  GRAPH_DATA="$PLUGINS_DIR" python3 << 'PYEOF'
+import json, os, glob, sys
+
+plugins_dir = os.environ["GRAPH_DATA"]
+graph = {}
+
+for pj_path in sorted(glob.glob(os.path.join(plugins_dir, "*/.claude-plugin/plugin.json"))):
+    with open(pj_path) as f:
+        pj = json.load(f)
+    name = pj["name"]
+    deps = set()
+    deps.update(pj.get("pluginDependencies", {}).keys())
+    deps.update(pj.get("optionalPluginDependencies", {}).keys())
+    graph[name] = deps
+
+# DFS cycle detection with path reconstruction
+WHITE, GREY, BLACK = 0, 1, 2
+color = {n: WHITE for n in graph}
+stack = []
+cycles = []
+
+def visit(node):
+    color[node] = GREY
+    stack.append(node)
+    for dep in sorted(graph.get(node, ())):
+        if dep not in graph:
+            continue  # missing plugin handled by existence check
+        if color[dep] == GREY:
+            i = stack.index(dep)
+            cycles.append(stack[i:] + [dep])
+        elif color[dep] == WHITE:
+            visit(dep)
+    stack.pop()
+    color[node] = BLACK
+
+for n in sorted(graph):
+    if color[n] == WHITE:
+        visit(n)
+
+if cycles:
+    seen = set()
+    for cyc in cycles:
+        key = tuple(sorted(set(cyc)))
+        if key in seen:
+            continue
+        seen.add(key)
+        print("  CYCLE: " + " -> ".join(cyc))
+    sys.exit(1)
+sys.exit(0)
+PYEOF
+}
+
+# --------------------------------------------------------------------------
 # Validate all dependencies for one plugin
 # --------------------------------------------------------------------------
 validate_plugin() {
@@ -274,6 +333,16 @@ print('yes' if has else 'no')
 
   if [ "$checked" -eq 0 ]; then
     printf "  No plugins declare dependencies.\n"
+  fi
+
+  # Whole-graph acyclicity check (existence/version checks above are per-edge
+  # and cannot see a cycle formed across two plugins).
+  local cycle_output
+  if ! cycle_output=$(detect_cycles); then
+    printf "\n  ${RED}FAIL${RESET}  dependency cycle detected:\n%s\n" "$cycle_output"
+    any_failed=1
+  else
+    printf "  ${GREEN}OK${RESET}    dependency graph is acyclic\n"
   fi
 
   printf "\n${BOLD}%d plugins with dependencies checked${RESET}\n" "$checked"
