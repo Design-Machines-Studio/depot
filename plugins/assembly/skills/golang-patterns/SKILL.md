@@ -447,8 +447,7 @@ Register updater/release CLI commands through the same central registration path
 
 ### Release workflow constraints
 
-- **GoReleaser dry-run only in CI tests:** validate `.goreleaser.yaml` with `--snapshot` / `--skip-publish`. No real publish or signing in a non-release job; no signing keys baked into test jobs.
-- **Provider-agnostic:** the manifest origin is configurable. No hardcoded single registry/host in updater code or release docs, so the update channel can be self-hosted.
+Release-workflow constraints (GoReleaser dry-run only in CI -- `--snapshot` / `--skip-publish`, no real publish or signing keys in non-release jobs; provider-agnostic configurable manifest origin so the channel can be self-hosted) are review-gated. See the dm-review security-auditor "Release / Update Supply-Chain" checks for the per-control detail. Keep the build/runtime patterns above (verify-before-extract, archive extraction safety, snapshot/handoff, centralized command registration) here -- those are authoring guidance carrying code; the CI/config constraints belong to the review owner.
 
 ## Companion Skills
 

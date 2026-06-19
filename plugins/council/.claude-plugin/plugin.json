@@ -5,6 +5,9 @@
   "author": {
     "name": "Design Machines"
   },
+  "optionalPluginDependencies": {
+    "dm-review": ">=1.35.0"
+  },
   "capabilities": {
     "skills": [
       {

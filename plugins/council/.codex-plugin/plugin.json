@@ -82,6 +82,9 @@
       }
     ]
   },
+  "optionalPluginDependencies": {
+    "dm-review": ">=1.35.0"
+  },
   "interface": {
     "displayName": "Council",
     "shortDescription": "Worker cooperative governance and decolonial content strategy",
