@@ -73,6 +73,8 @@ When reviewing governance features, check:
 - Are cross-module references using `entity_references` (not direct FK to fixture tables)?
 - Are member references pointing to the baseplate `members` table (always present)?
 - Do DTOs live in `dto/governance.go`, not shared packages?
+- **Measurable requirements track progress, not a boolean (#233):** flag any membership/eligibility requirement that stores a numeric target (meetings to attend, hours to log, contribution to pay) but records completion as a lone boolean `met` flag. Such requirements must model `{ target, current }` (or a ledger of contributing events) and derive completion as `current >= target`, validated at the status transition against the live target. Plain booleans are correct only for genuinely binary requirements (e.g. "signed the membership agreement"). See governance-modules.md "Modeling Note: Measurable Requirements."
+- **Membership service / admin-handler size (#234):** if the membership service or its admin handler is already oversized and this change grows it, flag the split as needed and route it through the behavior-preserving reorg contract (dm-review `architecture-reviewer.md`) as a separate PR -- do not let progress-tracking logic pile onto an over-limit file.
 
 ### 3. Workflow Correctness
 - Proposal lifecycle: Draft -> Discussion -> Voting -> Passed/Failed -> Resolution (if passed)

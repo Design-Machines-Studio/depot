@@ -173,12 +173,17 @@ Conventions for a batch cleanup PR:
 
 Before claiming any finding closed -- in a review report, a session summary, or a cleanup PR -- reconcile every artifact that carries review state. On Assembly Baseplate, formal GitHub PR review threads are mostly empty; the durable review signal lives in **PR bodies, issue state, and `review-finding` issues**. A PR review thread with no comments tells you nothing about whether findings were addressed -- never treat it as the source of truth.
 
-Reconcile all five before declaring closure:
+Reconcile all eight before declaring closure:
 
 1. **PR body `Closes #X` references** -- the claim of closure.
 2. **Actual issue open/closed state** -- the verification. `gh issue view <n> --json state`. A `Closes` reference in an unmerged or reverted PR closes nothing.
 3. **Merge commits** -- confirm the PR that claims the closure actually merged (`gh pr view <n> --json state,mergedAt`).
 4. **Labels** -- `review-finding` / `p1` / `p2` labels must match the issue's real state; stale labels mislead the next cleanup pass.
-5. **`review-finding` issues** -- sweep for open ones the PR body never referenced.
+5. **`review-finding` issues** -- sweep for open ones the PR body never referenced (`gh issue list --label review-finding --state open`). An open finding the PR forgot to reference is still owed.
+6. **PR receipts** -- the evidence the PR claims it produced (browser screenshots, JSON receipts, Auth Boundary Map receipt, two-install proof) actually exist and match the claim. A PR body that says "verified via two-install proof" or "screenshot attached" with no artifact is an unverified claim, not a closure.
+7. **Changed-files vs claimed scope** -- diff the actual changed files (`gh pr view <n> --json files`) against what the PR body says it did. A "federation trust hardening" PR whose diff never touches `federation/` did not do what it claims; a reorg-only PR with logic edits in the diff broke its own contract.
+8. **Open-issue sweep on the surface** -- before claiming a *surface* (federation, install, membership) is done, list every open issue touching it, not just the ones this PR named. Closing the PR's three issues while five surface issues stay open is "this PR merged," not "this surface is done."
 
-**Worked example:** Baseplate PR #252 (Session 2.9a federation backend) merged with green checks, but #253, #254, #255, #258, and #259 remain open follow-on issues from that work. "Federation backend merged" is true; "federation review findings closed" is false. Reconciliation is what keeps those two claims distinct.
+**Formal review threads are not in this list on purpose.** On Assembly Baseplate they are mostly empty; an empty thread is not evidence of closure. Reconcile against the eight artifacts above, never against thread silence.
+
+**Worked example (federation):** Baseplate PR #252 (Session 2.9a federation backend) merged with green checks, but #253, #254, #255, #258, and #259 remain open follow-on issues. PR #271 (federation trust hardening / delivery repair) then merged but left #255 (key-rotation detection), #258 (federation file decomposition), and #270 (federation P3 review rollup) open. "Federation trust hardening merged" is true; "federation review findings closed" is false. **#270 specifically is the P3 rollup -- under the zero-deferral default it must be reconciled and burned down, not silently carried across the next milestone** (see `severity-mapping.md`). Reconciliation is what keeps "PR merged" and "surface done" distinct.

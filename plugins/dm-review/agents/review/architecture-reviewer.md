@@ -67,10 +67,12 @@ When reviewing Assembly production code (`internal/fixtures/` or `internal/basep
 
 - The diff must be **move-only** -- code relocated between files with no logic edits. Flag any PR that mixes decomposition with behavior changes; the behavior change hides in the move noise and must ship separately.
 - File-size targets are stated up front in the PR body (which files, target line counts), so reviewers can verify the split achieved its goal.
-- Behavior proof is the **existing test suite green via the Docker-backed run** (assembly go-test-runner pattern), not new tests. A reorg-only PR that needs new tests to pass was not reorg-only.
-- Security-sensitive modules (auth, federation, membership) get extra scrutiny: confirm package visibility and import boundaries are unchanged after the move.
+- Behavior proof is the **existing test suite green via the Docker-backed run** (assembly go-test-runner pattern), not new tests. A reorg-only PR that needs new tests to pass was not reorg-only. State the no-behavior-change acceptance criterion explicitly in the PR body: "same test suite, same pass set, before and after."
+- **Stable public contracts:** the package's exported symbol set and signatures are unchanged after the split. Flag any decomposition that renames, removes, or re-signatures an exported symbol -- that is a breaking change that ships as its own tracked PR, not smuggled into a reorg.
+- **Narrow DTOs at new boundaries:** when a split introduces a new interface or DTO between the extracted pieces, it must expose only the fields the caller actually uses -- no whole-struct ("God-struct") passing across the new seam just because it is convenient. Stamp coupling reintroduced by a decomposition defeats the point.
+- Security-sensitive modules (auth, federation, **share, repair, membership**) get extra scrutiny: confirm package visibility and import boundaries are unchanged after the move, and that no privileged path becomes reachable from a wider scope post-split.
 
-Open Baseplate exercises for this check: **#258** (decompose the federation file) and **#234** (split the membership service + admin handler files). A good next exercise is executing #258 as a strict reorg-only PR with the Docker test suite as the behavior proof.
+Open Baseplate exercises for this check: **#258** (decompose the federation file) and **#234** (split the membership service + admin handler files). The trust/share/repair services touched by PR #271 (trust hardening/delivery) and PR #275 (data-sharing permissions) are the same decomposition class -- when they grow past the file-size limits, split them under this contract. A good next exercise is executing #258 as a strict reorg-only PR with the Docker test suite as the behavior proof.
 
 **Service Layer Bypass (P2):** Flag handlers that call `ScopedDB` methods directly (`.Query()`, `.Exec()`, `.QueryRow()`) instead of going through a service layer. Handlers should be thin HTTP adapters that delegate to services.
 

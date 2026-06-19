@@ -402,6 +402,54 @@ Same diagnosis discipline as gosec (reproduce the exact failing step at the pinn
 
 ---
 
+## 14. Updater / Release Supply Chain
+
+Phase 1 distribution adds a self-updater (Baseplate PR #279: updater CLI, release manifests, pre-apply snapshots, release workflow; ADR-008, ADR-014). The updater crosses a trust boundary -- it fetches bytes from a network and then runs them -- so the build/runtime patterns below are non-negotiable, and the dm-review security-auditor "Release / Update Supply-Chain" checks gate the review.
+
+### Verify before extract, extract before run
+
+Order is the whole game. Fetch manifest -> verify manifest signature -> fetch artifact -> verify checksum + signature against a *pinned* key -> only then extract -> only then hand off. Never extract or exec an unverified artifact "to check it." A log line that says "verified" without a real cryptographic check is verification theater and is worse than no claim.
+
+```go
+// CORRECT order
+m, err := fetchManifest(ctx, cfg.ManifestURL) // HTTPS, pinned origin
+if err != nil { return err }
+if err := verifyManifestSig(m, cfg.PublicKey); err != nil { return err }
+art, err := fetchArtifact(ctx, m.ArtifactURL) // URL validated against allowlist
+if err != nil { return err }
+if err := verifyChecksumAndSig(art, m.SHA256, m.Sig, cfg.PublicKey); err != nil {
+    return err // abort BEFORE extraction
+}
+if err := safeExtract(art, destDir); err != nil { return err } // zip-slip guarded
+```
+
+### Archive extraction safety
+
+Treat every archive entry as hostile. Reject entries whose cleaned path escapes the destination (zip-slip), reject symlinks, and bound entry count and total size. This is the highest-stakes instance of the path-traversal rule -- a remote archive extracting outside its target dir is remote code execution.
+
+```go
+target := filepath.Join(destDir, entry.Name)
+if !strings.HasPrefix(target, filepath.Clean(destDir)+string(os.PathSeparator)) {
+    return fmt.Errorf("zip-slip: %s escapes %s", entry.Name, destDir)
+}
+if entry.Typeflag == tar.TypeSymlink || entry.Typeflag == tar.TypeLink {
+    return fmt.Errorf("refusing symlink entry %s", entry.Name)
+}
+```
+
+### Snapshot before apply, atomic handoff, recoverable partial-success
+
+Snapshot the current install (binary + DB state) before applying. Hand off to the new binary atomically (write to a temp path, then `os.Rename` into place -- never truncate-then-write). A partial-success apply must leave a recoverable state and a clear handoff, never a half-written binary or a migrated-but-unrunnable DB. Rollback restores the snapshot. PR #279's final review fixed exactly the archive-extraction and partial-success-handoff edges -- hold new updater work to those lessons.
+
+### Centralized command registration
+
+Register updater/release CLI commands through the same central registration path as the rest of the cobra commands (PR #279 final fix). Scattered `rootCmd.AddCommand` calls drift; one registration site keeps the command surface auditable.
+
+### Release workflow constraints
+
+- **GoReleaser dry-run only in CI tests:** validate `.goreleaser.yaml` with `--snapshot` / `--skip-publish`. No real publish or signing in a non-release job; no signing keys baked into test jobs.
+- **Provider-agnostic:** the manifest origin is configurable. No hardcoded single registry/host in updater code or release docs, so the update channel can be self-hosted.
+
 ## Companion Skills
 
 | Skill | Plugin | When to Load |

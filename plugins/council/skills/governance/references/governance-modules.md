@@ -120,6 +120,16 @@ Model measurable requirements as `{ target, current }` (or a ledger of contribut
 
 > This is the lesson behind Assembly Baseplate issue **#233** -- measurable membership requirements stored a target but recorded completion as a boolean, so progress was unrepresentable. New membership-requirement modeling should track progress against the target from the start.
 
+##### Execution guidance for the #233 fix
+
+When implementing or correcting a measurable requirement, the work spans schema, service, and UI -- plan all three:
+
+- **Achieved-value storage.** Pick the storage shape by what the cooperative needs to audit. A bare `current` counter is enough for "$300 of $500 contributed" when no one disputes the line items. Prefer a **ledger of contributing events** (each meeting attended, each contribution paid, with date + source) when the co-op needs an audit trail, partial-credit reversal, or to recompute `current` if the rule changes. Either way, `current` is derived or stored alongside `target`; never store only a boolean.
+- **Validation against target.** Completion is derived (`current >= target`), checked at the status transition that depends on it (candidate -> member), not cached at write time. The transition handler revalidates against the live `target` -- a target raised after a candidate "completed" must re-open the requirement, which a boolean cannot express.
+- **Migration from boolean.** Existing installs shipped the boolean model. Migrate forward: add `target` + `current` (or the ledger table), backfill `current = target` for rows already marked met (best available truth) and `current = 0` otherwise, then drop the boolean once the derived check is live. Document the backfill assumption -- backfilled `current` is an inference, not recorded history.
+- **Service + UI changes that follow.** The service exposes progress (`current`, `target`, `remaining`) not just `met`; the UI shows the progress ("2 of 3 meetings", "$300 of $500") and can drive reminders. The status-transition service method is the single place completion is evaluated.
+- **Service / admin-handler decomposition (#234).** The membership service and its admin handler are already oversized; adding progress tracking grows them further. Split under the behavior-preserving reorg contract (dm-review `architecture-reviewer.md` "Reorg-Only PR Verification") -- move-only, stable public contracts, the existing test suite as proof -- and ship the decomposition as its own PR separate from the #233 behavior change.
+
 ---
 
 ### Governance Module (MVP + Advanced)

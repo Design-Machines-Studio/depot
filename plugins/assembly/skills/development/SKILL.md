@@ -506,6 +506,8 @@ Fill one row per route, handler action, service mutation, or privileged UI capab
 5. **PII-safe logs** -- error responses and logs avoid account-existence disclosure and raw or reversible PII when a stable non-PII identifier is available. Service validation errors map to 400-class; auth failures to 403-class; storage failures to 500-class.
 6. **Post-commit events** -- events published only after `tx.Commit()` (per Mutation Invariant #6). The map should note which events each surface publishes and confirm none are inside the transaction.
 7. **Audit expectations** -- each mapped surface declares its audit log entry (actor, action, entity, changed fields) per the module's existing audit pattern.
+8. **Direct-request rejection (PR #278)** -- baseplate-only install endpoints reject direct, out-of-band, or stale requests not originating from the gated install flow. Default-deny a POST that arrives without the expected install-flow precondition (install not started, already completed, wrong step). A stale install-wizard session fails closed rather than resuming a privileged flow, and install completion invalidates the wizard session.
+9. **Async form defaults (#274)** -- forms that rely on async-populated defaults (a value fetched and filled client-side after load) must render a safe default server-side and validate the submitted value server-side. Never trust that the client applied the default; a form submitted before the async fill must not write an empty or attacker-chosen value.
 
 ### Test Expectations
 
@@ -515,8 +517,19 @@ For each mapped row, include at least one focused test for the failure mode:
 - Unauthorized actor denied before service mutation
 - Missing/nil current member does not panic and does not gain privilege
 - Stale operator or stale install-wizard session fails closed when applicable
+- Direct/out-of-band request to a baseplate-only install endpoint is rejected (PR #278)
+- A form relying on an async-populated default validates the value server-side and rejects an empty/premature submit (#274)
 - UI capability flags hide or disable privileged controls when Authorizer denies
 - Post-commit event/audit behavior covered for persistent mutations
+
+### Browser Proof (install / auth-boundary surfaces)
+
+For install-flow and auth-boundary surfaces, automated tests are necessary but not sufficient -- capture browser proof too (PR #278 set the precedent with screenshot + JSON receipts):
+
+- **No-JS pass:** the gated flow (install wizard, auth-required page) renders and enforces its boundary with JavaScript disabled. Default-deny must hold server-side, not depend on a client check.
+- **Mobile viewport pass:** the flow is operable and the boundary holds at a 375px viewport (no controls that bypass the gate only appear on mobile).
+- **Receipts:** attach a screenshot per state (allowed, denied, stale/direct-request rejected) and a JSON receipt capturing the request, the auth decision, and the HTTP status. These are the durable evidence the Closure Reconciliation step checks (see dm-review `issue-tracking.md`).
+- **UX coverage:** note which UX states changed (empty/error/denied) so the visual reviewers have a baseline.
 
 ### PR Review Receipt
 
@@ -529,6 +542,9 @@ Auth Boundary Map:
 - Authorizer action/resource pairs checked:
 - Default-deny UI capabilities checked:
 - Stale-session/operator/install edge cases checked:
+- Direct-request / stale-install rejection checked (PR #278):
+- Async form-default server-side validation checked (#274):
+- Browser proof (no-JS + 375px) + screenshot/JSON receipts attached:
 - Tests added or verified:
 - Residual risk:
 ```
@@ -662,7 +678,7 @@ Assembly uses a **Baseplate + Fixtures** architecture.
 Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` for the full specification and `docs/PILOT-SCOPE.md` for what ships first.
 
 1. **Phase 0 (Pilot)**: Single binary + runtime config toggles. Manual Docker deploy. No update mechanism.
-2. **Phase 1 (Self-Updating)**: Registry + update client. One-click updates in Admin UI. Lightweight Mothership.
+2. **Phase 1 (Self-Updating)**: Registry + update client. One-click updates in Admin UI. Lightweight Mothership. The updater CLI, release manifests, pre-apply snapshots, and release workflow landed in PR #279 (ADR-008, ADR-014). Review this work against the dm-review security-auditor "Release / Update Supply-Chain" checks (manifest/artifact URL boundaries, verify-before-extract, archive extraction safety, snapshot/handoff, GoReleaser dry-run, provider-agnostic) and the golang-patterns "Updater / Release Supply Chain" section.
 3. **Phase 2 (Platform)**: Builder service + fixture marketplace. Per-client binaries. License management.
 
 ---

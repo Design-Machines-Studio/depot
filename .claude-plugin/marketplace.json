@@ -84,7 +84,7 @@
     {
       "name": "council",
       "source": "./plugins/council",
-      "version": "1.10.2",
+      "version": "1.11.0",
       "author": {
         "name": "Design Machines"
       },
@@ -130,7 +130,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.6.2",
+      "version": "3.7.0",
       "author": {
         "name": "Design Machines"
       },
@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.34.0",
+      "version": "1.35.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.18.0",
+      "version": "1.19.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
