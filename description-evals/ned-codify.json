@@ -1,0 +1,58 @@
+[
+  {
+    "query": "Codify what we learned from this run",
+    "should_trigger": true
+  },
+  {
+    "query": "Let's compound the lessons from this session",
+    "should_trigger": true
+  },
+  {
+    "query": "Turn this mistake into a rule so it never happens again",
+    "should_trigger": true
+  },
+  {
+    "query": "Make sure this bug never happens again - encode it",
+    "should_trigger": true
+  },
+  {
+    "query": "What should we learn from this and make permanent?",
+    "should_trigger": true
+  },
+  {
+    "query": "This finding keeps recurring, turn it into a standing guardrail",
+    "should_trigger": true
+  },
+  {
+    "query": "Capture the lessons from this postmortem as enforceable changes",
+    "should_trigger": true
+  },
+  {
+    "query": "We hit this same problem last week - make it a default",
+    "should_trigger": true
+  },
+  {
+    "query": "What do you know about the Assembly project?",
+    "should_trigger": false
+  },
+  {
+    "query": "Capture this session and save it to Notion",
+    "should_trigger": false
+  },
+  {
+    "query": "Run a code review on this pull request",
+    "should_trigger": false
+  },
+  {
+    "query": "Who is the contact at Pixelcraft Studios?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a blog post in my voice",
+    "should_trigger": false
+  },
+  {
+    "query": "Add an observation to the Live Wires entity",
+    "should_trigger": false
+  }
+]

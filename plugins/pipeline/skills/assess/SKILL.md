@@ -1,6 +1,6 @@
 ---
 name: assess
-description: Reviews current codebase state and UX before planning changes, producing Current State and UX reports. Use when starting a feature, iterating on existing work, or needing a baseline understanding before making changes. Invoke with /pipeline-assess or as the first phase of /pipeline. Dispatches parallel code and UX assessment agents to evaluate what EXISTS, not what CHANGED.
+description: Current codebase state and UX baseline before planning changes -- architecture, patterns, tech debt, and UX quality. Use when starting a feature, iterating on existing work, or needing a baseline understanding before making changes. Evaluates what EXISTS, not what CHANGED. Invoke with /pipeline-assess or as the first phase of /pipeline.
 ---
 
 # Pre-Plan Assessment

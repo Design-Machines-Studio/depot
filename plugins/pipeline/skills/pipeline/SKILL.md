@@ -13,7 +13,9 @@ argument-hint: "[feature idea or feedback]"
 - When the embedded command body says `$ARGUMENTS`, substitute those user-supplied arguments.
 - Follow the embedded command body as the workflow source of truth.
 - Translate Claude-only tool names to Codex equivalents when needed: use `update_plan` for TodoWrite-style ledgers, `request_user_input` for AskUserQuestion-style gates when available, and normal chat questions when that tool is not available.
-- If the command body says to launch an agent but no direct subagent tool is available, use the best available Codex delegation tool or execute the referenced agent protocol yourself while clearly noting the degradation.
+- If the command body says to launch an agent and Codex exposes `multi_agent_v1.spawn_agent`, use that tool with a role-appropriate agent type and a self-contained prompt.
+- If the command body requires a nested `Skill(...)` call but Codex exposes no generic Skill tool, execute the referenced skill's documented protocol inline from its SKILL.md and clearly record the adapter mode.
+- If neither native tool invocation nor a documented Codex adapter can preserve the workflow's gates, stop and report the missing capability instead of manually approximating the workflow.
 
 ## Embedded Claude Command
 
@@ -345,6 +347,8 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 **You MUST launch the execution-orchestrator agent.** You MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles worktree isolation, input guardrails, Fix Philosophy injection, output validation, dm-review-loop after each chunk, merging, final full dm-review, and memory capture. If you skip it, all of those steps get skipped.
 
+**Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and replaces nested `Skill(skill="dm-review:review", ...)` calls with the dm-review inline protocol. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
+
 Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with:
 
 - The manifest path: `plans/<feature-slug>/manifest.json`
@@ -501,5 +505,6 @@ Before delivering to the user, verify your own compliance by answering these que
 12. **Curl-fallback audit:** If the orchestrator ran in `executionMode: curl_fallback`, did I complete the 3-item Caller Verification Checklist (screenshot, runtime eval, cardinality) with attached evidence? If the answer is "no" for any item, this self-audit FAILS LOUDLY -- I must not deliver until every check has evidence or the merge recommendation is set to `BLOCKED PENDING CALLER VERIFICATION`. "I ran curl and grep" is NOT visual verification.
 13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
 14. If the feature involved UI work beyond curl_fallback mode, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
+15. **Codify audit:** If the run had friction (findings, >1 review iteration, a resolved ambiguity, or a repeated guardrail trip), did the orchestrator run the codify loop (Step 5.2)? For any failure pattern not already in CLAUDE.md "Known Pipeline Failure Modes," did it surface a postmortem stub + candidate Known Failure Mode entry as a Codify Proposal, rather than silently swallowing a novel failure? A new failure that produces no codify proposal is a missed compounding opportunity.
 
 If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.

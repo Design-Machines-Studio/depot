@@ -1,6 +1,6 @@
 {
   "name": "ned",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Personal knowledge graph and session capture for Travis Gertz",
   "author": {
     "name": "Design Machines"
@@ -55,6 +55,31 @@
           "documentation",
           "conversation-logging"
         ]
+      },
+      {
+        "id": "codify",
+        "name": "Codify",
+        "description": "Turn a finished work session into permanent encoded improvements (rules, tests, guardrails, defaults)",
+        "mcpDependencies": [
+          "ai-memory"
+        ],
+        "triggers": [
+          "codify",
+          "compound",
+          "capture the lessons",
+          "what should we learn from this",
+          "turn this into a rule",
+          "make sure this never happens again",
+          "never again"
+        ],
+        "tags": [
+          "compounding",
+          "lessons",
+          "codify",
+          "guardrails",
+          "continuous-improvement",
+          "postmortem"
+        ]
       }
     ],
     "agents": [],
@@ -70,8 +95,17 @@
         "name": "Depot Metrics",
         "description": "Track and report plugin usage metrics via ai-memory",
         "argumentHint": "[record <skill> <outcome> | report | sync]"
+      },
+      {
+        "id": "compound",
+        "name": "Compound",
+        "description": "Run the codify loop over a session or run -- turn lessons into permanent encoded improvements",
+        "argumentHint": "[run-slug]"
       }
     ]
+  },
+  "optionalPluginDependencies": {
+    "superpowers": ">=1.0.0"
   },
   "interface": {
     "displayName": "Ned",

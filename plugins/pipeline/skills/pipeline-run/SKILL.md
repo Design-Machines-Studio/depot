@@ -13,7 +13,9 @@ argument-hint: "[path to manifest.json or prompts directory]"
 - When the embedded command body says `$ARGUMENTS`, substitute those user-supplied arguments.
 - Follow the embedded command body as the workflow source of truth.
 - Translate Claude-only tool names to Codex equivalents when needed: use `update_plan` for TodoWrite-style ledgers, `request_user_input` for AskUserQuestion-style gates when available, and normal chat questions when that tool is not available.
-- If the command body says to launch an agent but no direct subagent tool is available, use the best available Codex delegation tool or execute the referenced agent protocol yourself while clearly noting the degradation.
+- If the command body says to launch an agent and Codex exposes `multi_agent_v1.spawn_agent`, use that tool with a role-appropriate agent type and a self-contained prompt.
+- If the command body requires a nested `Skill(...)` call but Codex exposes no generic Skill tool, execute the referenced skill's documented protocol inline from its SKILL.md and clearly record the adapter mode.
+- If neither native tool invocation nor a documented Codex adapter can preserve the workflow's gates, stop and report the missing capability instead of manually approximating the workflow.
 
 ## Embedded Claude Command
 
@@ -42,12 +44,41 @@ Before executing, verify:
 
 If any check fails, report the issue and stop.
 
+## Codex Native Execution Adapter
+
+When this command runs in Codex and the session exposes `multi_agent_v1.spawn_agent`, use this adapter instead of stopping on Claude-only `Agent` or nested `Skill(...)` availability. This is the supported Codex execution path, not a manual workaround.
+
+**Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
+
+**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
+
+**Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
+
+- The worktree path as the only allowed write scope.
+- The complete chunk prompt content, not a path to the prompt.
+- The pipeline Fix Philosophy and ambiguity-trailer requirements.
+- A reminder that other workers may be active and the worker must not revert unrelated changes.
+- A requirement to commit its chunk changes before reporting completion.
+
+Wait for the worker result before validating that chunk. Do not dispatch overlapping chunks in parallel unless the manifest level grouping and file ownership are disjoint.
+
+**dm-review inline protocol:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Replace those nested calls with an inline execution of `plugins/dm-review/skills/review/SKILL.md` in the current orchestrator context:
+
+- For per-chunk gates, run the review skill's quick-mode protocol against the chunk worktree.
+- For the final gate, run the review skill's full-mode protocol against the feature branch.
+- Use `multi_agent_v1.spawn_agent` for the review agents selected by the dm-review protocol when available.
+- Preserve zero-deferral: fix all P1, P2, and P3 findings or record an explicit deferred-finding justification after the documented convergence limits.
+- Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
+
+Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
+
 ## Process
 
 1. Read the manifest
-2. Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`
-3. Pass the manifest path, prompts directory, and feature branch name
-4. The orchestrator handles everything autonomously:
+2. If running in Codex with `multi_agent_v1.spawn_agent`, run the **Codex Native Execution Adapter** above
+3. Otherwise, launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`
+4. Pass the manifest path, prompts directory, and feature branch name
+5. The orchestrator handles everything autonomously:
    - Branch creation
    - Worktree creation per chunk
    - Subagent dispatch with inlined prompt content
@@ -55,7 +86,7 @@ If any check fails, report the issue and stop.
    - Merge back to feature branch
    - Final full dm-review
    - ai-memory session recording
-5. Present the execution summary
+6. Present the execution summary
 
 ## After Execution
 

@@ -53,6 +53,28 @@ For each P1 finding that represents an architectural decision or pattern problem
 
 This helps track recurring architectural issues across reviews.
 
+### Step 4.5: Codify Recurring Finding Categories
+
+A finding that recurs across reviews should become a *default*, not a finding re-flagged every time.
+This is the "every code review updates the defaults" mechanic.
+
+1. Read the project entity's recent review observations (from Step 2) plus any
+   `[YYYY-MM-DD] Lesson:` observations.
+2. For each finding *category* in this review (e.g. "missing CSRF token", "text-muted anti-pattern",
+   "swallowed Go error", "unescaped LIKE wildcard"), check whether the same category appeared in a
+   prior review.
+3. **If a category has now recurred (>=2 reviews), emit a Codify Proposal** -- do not silently
+   re-record it. Propose the cheapest permanent encoding that would have caught it automatically:
+   - a new entry in `plugins/dm-review/skills/review/references/severity-mapping.md`,
+   - a Live Wires lint rule or anti-pattern scan entry (for mechanical/CSS recurrences), or
+   - a guardrail in the relevant agent's review criteria.
+4. Add one ai-memory observation recording the recurrence and the proposed encoding:
+   `[YYYY-MM-DD] Recurring finding: <category> seen in N reviews -> proposed default: <encoding target>.`
+5. Surface the Codify Proposal in the recorder's output (for human approval). Do **not** edit
+   severity-mapping.md, lint rules, or agent files yourself -- propose; the caller approves.
+
+If no category has recurred, skip this step silently.
+
 ### Step 5: Add Review Relationship (if applicable)
 
 If the review is for a specific feature or PR, and that feature has its own entity in ai-memory, add a relationship:

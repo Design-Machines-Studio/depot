@@ -13,7 +13,9 @@ argument-hint: "[optional: specific todo ID, priority like p1, or --allow-defer-
 - When the embedded command body says `$ARGUMENTS`, substitute those user-supplied arguments.
 - Follow the embedded command body as the workflow source of truth.
 - Translate Claude-only tool names to Codex equivalents when needed: use `update_plan` for TodoWrite-style ledgers, `request_user_input` for AskUserQuestion-style gates when available, and normal chat questions when that tool is not available.
-- If the command body says to launch an agent but no direct subagent tool is available, use the best available Codex delegation tool or execute the referenced agent protocol yourself while clearly noting the degradation.
+- If the command body says to launch an agent and Codex exposes `multi_agent_v1.spawn_agent`, use that tool with a role-appropriate agent type and a self-contained prompt.
+- If the command body requires a nested `Skill(...)` call but Codex exposes no generic Skill tool, execute the referenced skill's documented protocol inline from its SKILL.md and clearly record the adapter mode.
+- If neither native tool invocation nor a documented Codex adapter can preserve the workflow's gates, stop and report the missing capability instead of manually approximating the workflow.
 
 ## Embedded Claude Command
 
@@ -34,6 +36,13 @@ To opt out for a specific P3 (rare), pass `--allow-defer-p3`. Skipping requires:
 Generic reasons ("not enough time", "out of scope") are not valid. Zero-deferral exists because those reasons never translate into later fixes.
 
 ## Process
+
+**Disciplines.** When a finding is a behavioral bug (not a style/pattern nit), invoke
+`superpowers:systematic-debugging` to find the root cause before patching -- fix the source, not the
+symptom; after 3 failed fixes, stop and question the design rather than trying a 4th. Before renaming
+any todo `pending -> done`, invoke `superpowers:verification-before-completion`: run the verifying
+command fresh and read its output. A finding is resolved when evidence says so, not when the edit is
+written. See `docs/skill-authoring.md`.
 
 ### 1. Find Pending Findings
 

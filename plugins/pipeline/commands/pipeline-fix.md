@@ -103,6 +103,7 @@ In addition to `/pipeline`'s normal self-audit, verify:
 - Did I capture post-fix screenshots for every affected route?
 - Does every finding have a row in the Findings Resolution Table?
 - Are all `deferred` rows explicitly approved by the user?
+- For findings that were behavioral bugs, did the fix follow `superpowers:systematic-debugging` (root cause, not symptom)? Is each `resolved` row backed by fresh evidence per `superpowers:verification-before-completion`, not an assertion? See `docs/skill-authoring.md`.
 
 If any answer is "no," do not deliver. Fix-pass quality hinges on the 1:1 mapping from findings to fixes.
 

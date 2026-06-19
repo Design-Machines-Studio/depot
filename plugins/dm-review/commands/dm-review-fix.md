@@ -22,6 +22,13 @@ Generic reasons ("not enough time", "out of scope") are not valid. Zero-deferral
 
 ## Process
 
+**Disciplines.** When a finding is a behavioral bug (not a style/pattern nit), invoke
+`superpowers:systematic-debugging` to find the root cause before patching -- fix the source, not the
+symptom; after 3 failed fixes, stop and question the design rather than trying a 4th. Before renaming
+any todo `pending -> done`, invoke `superpowers:verification-before-completion`: run the verifying
+command fresh and read its output. A finding is resolved when evidence says so, not when the edit is
+written. See `docs/skill-authoring.md`.
+
 ### 1. Find Pending Findings
 
 ```bash

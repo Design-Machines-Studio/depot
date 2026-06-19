@@ -1,6 +1,6 @@
 ---
 name: promptcraft
-description: Takes a plan and generates self-contained execution prompts with overlap-aware dependency ordering and manifest. Use when breaking a plan into executable chunks for autonomous worktree-based execution. Invoke with /pipeline-prompts or as part of /pipeline. Analyzes file paths to determine parallel vs sequential execution strategy.
+description: Self-contained execution prompts and a manifest from a plan, with overlap-aware dependency ordering for parallel vs sequential worktree execution. Use when breaking a plan into executable chunks for autonomous worktree-based execution. Invoke with /pipeline-prompts or as part of /pipeline.
 ---
 
 # Execution Prompt Generator

@@ -233,6 +233,8 @@ Every skill has a corresponding eval file in `description-evals/<plugin>-<skill>
 
 When editing a SKILL.md `description:` field, run the eval for that skill to confirm trigger accuracy holds. Skills must stay above 70% accuracy. See `tools/README.md` for details on the heuristic, pre-commit hooks, and adding new eval cases.
 
+The eval covers only **trigger accuracy** (axis 1). Discipline skills -- those that enforce behavior under pressure (pipeline gates, zero-deferral, codify, council compliance) -- also need **compliance robustness** (axis 2): pressure-test them via the installed `superpowers:writing-skills` loop before shipping. Descriptions must state *triggers, not workflow steps* (SDO), or agents follow the summary instead of reading the skill. The full two-axis model, the SDO rule, and the cross-cutting compounding disciplines (`superpowers:systematic-debugging`, `superpowers:verification-before-completion`) are documented in `docs/skill-authoring.md`. The codify loop that turns each run's lessons into permanent encodings lives in the `ned:codify` skill and is wired into pipeline Step 5.2 and the dm-review memory recorder.
+
 ## Common Operations
 
 Install the marketplace and plugins:

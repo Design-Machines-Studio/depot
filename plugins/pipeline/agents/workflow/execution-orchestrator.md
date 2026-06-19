@@ -89,6 +89,21 @@ The stalled-convergence check is critical -- without it, the orchestrator can lo
 
 The 4-agent DeepSeek offload (pattern-recognition, code-simplicity, doc-sync, test-coverage) only fires when `dm-review:review` is invoked AND `DEEPSEEK_API_KEY` is set. If you skip the skill invocation (e.g., by reporting "slash command not callable" and moving on), the routing never engages and you forfeit the cost-shift. You MUST invoke the skill.
 
+## Codex Native Adapter Parity
+
+When this protocol is executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and nested `Skill(skill="dm-review:review", ...)` calls may not exist. In that host, the caller MUST use the Codex Native Execution Adapter from `plugins/pipeline/commands/pipeline-run.md` and record `executionMode: codex_native`.
+
+Adapter parity requirements:
+
+- The current Codex agent is the orchestrator and follows this file as the execution contract.
+- Implementation chunks are dispatched with `multi_agent_v1.spawn_agent` using worker agents after the worktree is created.
+- Worker prompts inline the complete chunk prompt and restrict writes to the chunk worktree.
+- Per-chunk review gates use the dm-review inline protocol from `plugins/dm-review/skills/review/SKILL.md` in quick mode.
+- The final review gate uses the same dm-review inline protocol in full mode against the feature branch.
+- Zero-deferral, convergence limits, pending/done todo receipts, final requirements cross-check, cleanup, memory capture, and summary reporting remain mandatory.
+
+Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names when the Codex adapter tools are available. Do stop if neither native tool invocation nor the Codex adapter can provide isolated worker dispatch and review gates.
+
 ---
 
 ## Chunk Classification
@@ -122,7 +137,7 @@ The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list 
 
 ## Progress Ledger
 
-Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the MCP pre-flight: `full_cli` (all tools available), `manual_walkthrough` (user is driving some steps), or `curl_fallback` (degraded -- no browser tools). Include the label in every chunk receipt and in the final Summary Report.
+Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), `manual_walkthrough` (user is driving some steps), or `curl_fallback` (degraded -- no browser tools). Include the label in every chunk receipt and in the final Summary Report.
 
 For each chunk, you MUST complete ALL applicable steps in order:
 
@@ -137,7 +152,7 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 8. Run Playwright browser check (UI and Integration chunks only)
 [chunk-id] 9. Merge back to feature branch
 [chunk-id] 10. Clean up worktree
-[chunk-id] executionMode: full_cli | manual_walkthrough | curl_fallback
+[chunk-id] executionMode: full_cli | codex_native | manual_walkthrough | curl_fallback
 ```
 
 After all chunks:
@@ -844,7 +859,7 @@ Template:
 Feature: <feature-slug>
 Date: <YYYY-MM-DD>
 Branch: <featureBranch>
-executionMode: <full_cli | manual_walkthrough | curl_fallback>
+executionMode: <full_cli | codex_native | manual_walkthrough | curl_fallback>
 
 | # | Requirement | Addressed In | Evidence |
 |---|-------------|--------------|----------|
@@ -874,7 +889,9 @@ Read `manifest.noMergeOnCompletion` (default `false` if the field is absent).
 
 Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
 
-## Step 5: Memory Capture
+## Step 5: Memory Capture + Codify
+
+### 5.1 Record the run
 
 Record the session to ai-memory (per `docs/plugin-memory-schema.md`):
 
@@ -883,6 +900,31 @@ Record the session to ai-memory (per `docs/plugin-memory-schema.md`):
 3. Call `save`
 
 If ai-memory unavailable, skip silently.
+
+### 5.2 Codify (run only if the run had friction)
+
+A clean run with zero findings, one review iteration per chunk, and no resolved ambiguities needs no
+codify -- skip to the mark below. Otherwise run the codify loop so this run's lessons harden the next
+one. **Trigger codify when ANY of:** a chunk took >1 review iteration, the final review surfaced
+findings, a subagent emitted an `ambiguity_resolved` receipt flag, or a guardrail/lint guard had to
+fire more than once.
+
+Run the **5-Minute Codify Checklist** (see the `ned:codify` skill) against this run: what broke, what
+rule prevents it, what automated check catches it earlier, what becomes the default. For each lesson:
+
+- **Situational lesson** -> add an observation to `DepotPlugin:pipeline` or the project entity, format
+  `[YYYY-MM-DD] Lesson: <what broke> -> <rule/check that prevents it>. Encoded in: <target or "proposed">.`
+- **Novel pipeline failure pattern** -> if the pattern is **not already** in CLAUDE.md "Known Pipeline
+  Failure Modes" (grep to confirm), draft both:
+  1. a `docs/post-mortems/YYYY-MM-DD-<slug>.md` stub (symptom, root cause, hardening proposal), and
+  2. a candidate "Known Pipeline Failure Modes" entry,
+  and surface both in the Step 6 Summary Report under **Codify Proposals** for human approval. Do NOT
+  edit CLAUDE.md or commit the postmortem yourself -- propose; the caller approves.
+
+This converts the previously reactive "someone remembers to write a postmortem" ritual into an
+automatic proposal emitted every time a novel failure occurs.
+
+If ai-memory is unavailable, still produce the Codify Proposals in the report; skip only the auto-write.
 
 Mark `FINAL 4. Record session to ai-memory` complete.
 
@@ -1000,7 +1042,7 @@ Present this report:
 - **Mode:** Full (all agents)
 - **Result:** Clean / N findings remaining
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
-- **executionMode:** full_cli / manual_walkthrough / curl_fallback
+- **executionMode:** full_cli / codex_native / manual_walkthrough / curl_fallback
 - **noMergeOnCompletion:** true/false
 
 ## Steps Completed
@@ -1013,6 +1055,7 @@ Present this report:
 - [x] final-requirements-crosscheck.md written: yes/no
 - [x] Merge policy honored (noMergeOnCompletion): yes/no
 - [x] ai-memory capture: yes/no
+- [x] Codify run (if run had friction): yes/no/n-a
 - [x] Artifact cleanup: yes/no
 - [x] Zero-deferral enforced: yes/no
 
@@ -1027,6 +1070,12 @@ Present this report:
 
 ## Deferred Findings
 [List every DEFERRED finding with its explicit justification. If none, state "None -- all findings resolved."]
+
+## Codify Proposals
+[From Step 5.2. List each lesson and where it should be encoded. For any NOVEL pipeline failure pattern,
+include the drafted postmortem stub path and the candidate "Known Pipeline Failure Modes" entry text,
+flagged AWAITING APPROVAL -- the caller approves before anything is committed to CLAUDE.md or
+docs/post-mortems/. If the run was clean, state "None -- clean run, nothing to codify."]
 
 ## Warnings
 [List any browser verification skips, degraded reviews, or anti-pattern findings that were fixed]

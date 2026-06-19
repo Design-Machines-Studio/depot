@@ -14,3 +14,4 @@ plans/*/brainstorm.md
 .worktrees/
 .claude/ux-review/
 todos/
+.playwright-mcp/

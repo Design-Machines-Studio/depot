@@ -13,7 +13,9 @@ argument-hint: "[skip phases: 'skip content', 'skip mail', 'just review and load
 - When the embedded command body says `$ARGUMENTS`, substitute those user-supplied arguments.
 - Follow the embedded command body as the workflow source of truth.
 - Translate Claude-only tool names to Codex equivalents when needed: use `update_plan` for TodoWrite-style ledgers, `request_user_input` for AskUserQuestion-style gates when available, and normal chat questions when that tool is not available.
-- If the command body says to launch an agent but no direct subagent tool is available, use the best available Codex delegation tool or execute the referenced agent protocol yourself while clearly noting the degradation.
+- If the command body says to launch an agent and Codex exposes `multi_agent_v1.spawn_agent`, use that tool with a role-appropriate agent type and a self-contained prompt.
+- If the command body requires a nested `Skill(...)` call but Codex exposes no generic Skill tool, execute the referenced skill's documented protocol inline from its SKILL.md and clearly record the adapter mode.
+- If neither native tool invocation nor a documented Codex adapter can preserve the workflow's gates, stop and report the missing capability instead of manually approximating the workflow.
 
 ## Embedded Claude Command
 
