@@ -124,7 +124,7 @@ Mark each item as you complete it. Do not mark a GATE as complete until AskUserQ
 
 After each phase's artifacts are saved -- that is, immediately after marking the Progress Ledger item for that phase complete (items 2, 4, 6, 8, 10, 12, and 13, covering all 7 phase boundaries: Assess, Research, Plan, Generate prompts, Adversarial review, Execute, Deliver) -- fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots the session into a portable `.airlift/` bundle so a usage cap, rate limit, or model switch becomes a non-event. See `plugins/pipeline/references/airlift-checkpoint.md` for the full contract.
 
-Airlift is an OPTIONAL dependency. The checkpoint is a guarded resolve-from-cache: if the engine resolves from the plugin cache AND is executable, run `airlift-engine.sh write --phase <phase>`; otherwise skip silently. Do NOT warn, block, or degrade any phase when airlift is absent.
+Airlift is an OPTIONAL dependency. The checkpoint is a guarded resolve-from-cache: if the engine resolves from the depot plugin cache directory AND is executable, run `airlift-engine.sh write --phase <phase>`; otherwise skip silently. Do NOT warn, block, or degrade any phase when airlift is absent.
 
 ```bash
 ENGINE=""
