@@ -1,0 +1,71 @@
+# Session handoff (checkpoint {{SEQ}})
+
+Generated {{TIMESTAMP}} by the airlift deterministic engine (tier 1). This is
+the safety-net handoff: objective state captured with zero model budget. A
+tier-2 pass may enrich each section below while budget remains.
+
+- Branch: `{{BRANCH}}`
+- HEAD: `{{HEAD}}`
+- Working tree: {{DIRTY}}
+- Phase: {{PHASE}}
+- Note: {{NOTE}}
+
+## Objective
+
+What this session is trying to accomplish. The deterministic engine records the
+phase and any note; the substance of the objective is filled by the working
+agent.
+
+<!-- tier-2: agent enrichment goes here -->
+
+## Status
+
+Where things stand right now. The recorded working-tree state is `{{DIRTY}}`.
+When the tree was clean at checkpoint time, there are no uncommitted changes and
+`uncommitted.patch` is empty -- this is expected, not a missing capture. When the
+tree was dirty, `uncommitted.patch` is lossless: it holds the tracked changes
+(`git diff HEAD`) followed by every untracked, non-ignored file as an added-file
+diff, so resume loses nothing. Reapply it on resume with `git apply`.
+
+<!-- tier-2: agent enrichment goes here -->
+
+## Next steps
+
+The concrete actions to take next, in order. The resume seed in
+`RESUME_PROMPT.md` directs the next session to continue from here.
+
+<!-- tier-2: agent enrichment goes here -->
+
+## Gotchas / traps
+
+Known pitfalls, fragile assumptions, and decisions that are easy to undo by
+mistake.
+
+<!-- tier-2: agent enrichment goes here -->
+
+## Key files & symbols
+
+The files, functions, and identifiers most relevant to the work in flight.
+
+<!-- tier-2: agent enrichment goes here -->
+
+## How to verify
+
+Commands to confirm the work is correct. Captured from the repository
+instruction file where available:
+
+{{VERIFY_COMMANDS}}
+
+<!-- tier-2: agent enrichment goes here -->
+
+## Environment notes
+
+Runtime and tooling constraints that affect how the verify commands run:
+
+{{ENV_NOTES}}
+
+<!-- tier-2: agent enrichment goes here -->
+
+## Bundle artifacts
+
+{{ARTIFACT_LIST}}

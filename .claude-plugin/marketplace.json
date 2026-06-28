@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.35.0",
+      "version": "1.36.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -367,6 +367,30 @@
           "prompt-generation",
           "review-loop",
           "fix-pass"
+        ]
+      }
+    },
+    {
+      "name": "airlift",
+      "source": "./plugins/airlift",
+      "version": "1.0.0",
+      "author": {
+        "name": "Design Machines",
+        "url": "https://designmachines.studio"
+      },
+      "description": "Model- and harness-agnostic session handoff for usage caps, rate limits, checkpoints, and resume workflows.",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 0,
+        "commands": 3,
+        "tags": [
+          "session-handoff",
+          "checkpoint",
+          "usage-cap",
+          "rate-limit",
+          "resume",
+          "multi-model",
+          "harness"
         ]
       }
     },

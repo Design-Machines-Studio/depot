@@ -105,6 +105,27 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 
 Mark each item as you complete it. Do not mark a GATE as complete until AskUserQuestion has returned a response from the user. If you find yourself proceeding past a GATE without an AskUserQuestion response, you have violated the gate.
 
+## Airlift Checkpoint (every phase boundary)
+
+After each phase's artifacts are saved -- that is, immediately after marking the Progress Ledger item for that phase complete (items 2, 4, 6, 8, 10, 12, and 13, covering all 7 phase boundaries: Assess, Research, Plan, Generate prompts, Adversarial review, Execute, Deliver) -- fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots the session into a portable `.airlift/` bundle so a usage cap, rate limit, or model switch becomes a non-event. See `plugins/pipeline/references/airlift-checkpoint.md` for the full contract.
+
+Airlift is an OPTIONAL dependency. The checkpoint is a guarded resolve-from-cache: if the engine resolves from the depot plugin cache directory AND is executable, run `airlift-engine.sh write --phase <phase>`; otherwise skip silently. Do NOT warn, block, or degrade any phase when airlift is absent.
+
+```bash
+ENGINE=""
+for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  ENGINE=$(ls -t "$CACHE"/airlift/*/skills/airlift/references/airlift-engine.sh 2>/dev/null | head -1)
+  [ -n "$ENGINE" ] && break
+done
+if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "<phase>"; fi
+```
+
+Use the phase name for `<phase>`: `assess`, `research`, `plan`, `prompts`, `review`, `execute`, `deliver`.
+
+This checkpoint is tier-1 deterministic: it requires NO model budget, NO network, and NO AI API call -- pure local file + git work. Never introduce a model call, agent dispatch, or LLM request into the checkpoint path.
+
+**Early-warning trip:** If an early-warning signal trips mid-run (e.g. a ccusage budget threshold crossed), do not wait for the next phase boundary. Force an immediate checkpoint with the current `--phase` and surface the resume banner so the operator knows the bundle is ready. The forced checkpoint uses the same tier-1 deterministic path -- still no model budget -- so it is safe to fire even when the session is nearly out of budget.
+
 ## Artifact Format (planning phase)
 
 The four planning-phase artifacts -- **brainstorm, assessment, research, plan** -- are written as self-contained **HTML carrying a JSON data island**, not markdown. Each links the target project's compiled CSS so it renders in the project's own skin, and embeds a `<script type="application/json" id="pipeline-data">` island that later phases read instead of grepping prose.
