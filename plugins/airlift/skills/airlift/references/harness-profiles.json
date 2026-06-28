@@ -1,0 +1,43 @@
+{
+  "_note": "This registry is extensible. Unknown target harnesses fall back to paste RESUME_PROMPT.md.",
+  "claude-code": {
+    "instructionsFile": "CLAUDE.md",
+    "sessionLog": "~/.claude/projects/**/*.jsonl",
+    "resume": "paste RESUME_PROMPT.md into a new session",
+    "agentsMd": false
+  },
+  "codex": {
+    "instructionsFile": "AGENTS.md",
+    "sessionLog": "~/.codex/sessions/**",
+    "resume": "paste RESUME_PROMPT.md (note: ~/.codex/prompts/ is deprecated)",
+    "agentsMd": true
+  },
+  "deepseek": {
+    "instructionsFile": "AGENTS.md",
+    "sessionLog": "n/a",
+    "resume": "seed via deepseek plugin delegate",
+    "agentsMd": true
+  },
+  "gemini": {
+    "instructionsFile": "GEMINI.md",
+    "instructionsFileAlt": ["AGENTS.md"],
+    "instructionsFileNote": "GEMINI.md by default; AGENTS.md when configured via context.fileName",
+    "sessionLog": "n/a",
+    "resume": "seed via gemini plugin delegate",
+    "agentsMd": true
+  },
+  "kiro": {
+    "instructionsFile": "AGENTS.md",
+    "instructionsFileAlt": [".kiro/steering/"],
+    "instructionsFileNote": "AGENTS.md or .kiro/steering/ directory",
+    "sessionLog": "n/a",
+    "resume": "paste RESUME_PROMPT.md",
+    "agentsMd": true
+  },
+  "opencode": {
+    "instructionsFile": "AGENTS.md",
+    "sessionLog": "local session store",
+    "resume": "paste RESUME_PROMPT.md",
+    "agentsMd": true
+  }
+}

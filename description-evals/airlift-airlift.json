@@ -1,0 +1,74 @@
+[
+  {
+    "query": "Create a session handoff before I switch machines.",
+    "should_trigger": true
+  },
+  {
+    "query": "I am close to the usage cap, checkpoint before I run out.",
+    "should_trigger": true
+  },
+  {
+    "query": "Help me resume in another model with enough context to continue.",
+    "should_trigger": true
+  },
+  {
+    "query": "Hand off to Codex and include the current git state.",
+    "should_trigger": true
+  },
+  {
+    "query": "Hand off to DeepSeek using the delegate path.",
+    "should_trigger": true
+  },
+  {
+    "query": "Hand off to Gemini so it can continue where I left off.",
+    "should_trigger": true
+  },
+  {
+    "query": "I hit a rate limit. Build a resume prompt and patch bundle.",
+    "should_trigger": true
+  },
+  {
+    "query": "Create a .airlift bundle for this worktree.",
+    "should_trigger": true
+  },
+  {
+    "query": "Install the airlift marker block into AGENTS.md.",
+    "should_trigger": true
+  },
+  {
+    "query": "Write HANDOFF.md and state.json for the next harness.",
+    "should_trigger": true
+  },
+  {
+    "query": "Run a code review on this pull request.",
+    "should_trigger": false
+  },
+  {
+    "query": "Generate Codex manifests for all plugins.",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me write a blog post in Travis's voice.",
+    "should_trigger": false
+  },
+  {
+    "query": "What does the BC Cooperative Act say about quorum?",
+    "should_trigger": false
+  },
+  {
+    "query": "Tail the Synapse logs on The Local server.",
+    "should_trigger": false
+  },
+  {
+    "query": "Convert this recipe for Bali grocery availability.",
+    "should_trigger": false
+  },
+  {
+    "query": "Run visual QA on the homepage at localhost.",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a Craft CMS section and field layout.",
+    "should_trigger": false
+  }
+]
