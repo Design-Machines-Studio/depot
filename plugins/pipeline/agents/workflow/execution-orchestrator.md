@@ -623,6 +623,17 @@ EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findin
 
 The `[type]` value uses the classification from the manifest's `kind` field when available (mapped per Step 3a), falling back to the runtime heuristic classification for older manifests. This receipt is consumed by the merge step. Without it, merge is blocked.
 
+**Airlift checkpoint (after the EVAL_GATE_PASSED receipt):** After emitting the `EVAL_GATE_PASSED` line for this chunk, fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots per-sub-agent/per-worktree completion state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
+
+```bash
+ENGINE=""
+for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  ENGINE=$(ls -t "$CACHE"/airlift/*/skills/airlift/references/airlift-engine.sh 2>/dev/null | head -1)
+  [ -n "$ENGINE" ] && break
+done
+if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "execute"; fi
+```
+
 Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 ### 3h: Visual Verification Protocol (UI and Integration chunks only)
@@ -828,6 +839,17 @@ If findings remain after 2 full review iterations, apply the same deferred-findi
 
 **Verification:** You MUST be able to state: "Final dm-review completed. Result: [CLEAN/N findings]."
 
+**Airlift checkpoint (after the final full review):** Once the final dm-review result is known, fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots post-review feature-branch state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
+
+```bash
+ENGINE=""
+for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  ENGINE=$(ls -t "$CACHE"/airlift/*/skills/airlift/references/airlift-engine.sh 2>/dev/null | head -1)
+  [ -n "$ENGINE" ] && break
+done
+if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "review"; fi
+```
+
 **Merge recommendation emission:** After the final review, emit ONE of these recommendation strings:
 
 - `CLEAN` -- zero findings at any severity, dev server verified, all chunks passed visual verification.
@@ -987,6 +1009,17 @@ done
 ### 4. Report
 
 Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, retained K feature-scoped files.`
+
+**Airlift checkpoint (after artifact cleanup):** After cleanup completes, fire a final tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots the delivered, cleaned-up state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
+
+```bash
+ENGINE=""
+for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  ENGINE=$(ls -t "$CACHE"/airlift/*/skills/airlift/references/airlift-engine.sh 2>/dev/null | head -1)
+  [ -n "$ENGINE" ] && break
+done
+if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deliver"; fi
+```
 
 Mark `FINAL 4b. Artifact cleanup` complete.
 
