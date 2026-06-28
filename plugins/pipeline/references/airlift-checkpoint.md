@@ -18,7 +18,7 @@ The engine gathers all of this with pure local file + git operations. It NEVER f
 
 ## The guarded cache-resolve one-liner
 
-Mirror the deepseek/live-wires dual-cache resolve idiom. Resolve the engine from the plugin cache, verify it is present AND executable, then fire `write`:
+Mirror the deepseek/live-wires dual-cache resolve idiom. Resolve the engine from the depot plugin cache directory, verify it is present AND executable, then fire `write`:
 
 ```bash
 ENGINE=""

@@ -27,6 +27,7 @@ PLUGINS_DIR = REPO_ROOT / "plugins"
 
 CATEGORY_BY_PLUGIN = {
     "accessibility-compliance": "Developer Tools",
+    "airlift": "Developer Tools",
     "assembly": "Developer Tools",
     "chef": "Lifestyle",
     "council": "Knowledge",
