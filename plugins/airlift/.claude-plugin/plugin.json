@@ -1,0 +1,72 @@
+{
+  "name": "airlift",
+  "description": "Model- and harness-agnostic session handoff for usage caps, rate limits, checkpoints, and resume workflows across Claude Code, Codex, DeepSeek, Gemini, Kiro, and OpenCode.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Design Machines"
+  },
+  "keywords": [
+    "session-handoff",
+    "usage-cap",
+    "rate-limit",
+    "checkpoint",
+    "resume",
+    "codex",
+    "deepseek",
+    "gemini"
+  ],
+  "optionalPluginDependencies": {
+    "deepseek": ">=1.1.6",
+    "gemini": ">=1.0.0"
+  },
+  "capabilities": {
+    "skills": [
+      {
+        "id": "airlift",
+        "name": "Airlift",
+        "description": "Model- and harness-agnostic session handoff for checkpoints, usage caps, rate limits, and resume in another model workflows.",
+        "triggers": [
+          "session handoff",
+          "usage cap",
+          "resume in another model",
+          "checkpoint before I run out",
+          "hand off to Codex",
+          "hand off to DeepSeek",
+          "hand off to Gemini",
+          "rate limit",
+          "continue where I left off"
+        ],
+        "tags": [
+          "session-handoff",
+          "checkpoint",
+          "usage-cap",
+          "rate-limit",
+          "resume",
+          "multi-model"
+        ],
+        "mcpDependencies": []
+      }
+    ],
+    "agents": [],
+    "commands": [
+      {
+        "id": "airlift-out",
+        "name": "Airlift Out",
+        "description": "Create or refresh a .airlift handoff bundle for another model or harness.",
+        "argumentHint": "[target-harness]"
+      },
+      {
+        "id": "airlift-in",
+        "name": "Airlift In",
+        "description": "Resume from an existing .airlift handoff bundle in the current harness.",
+        "argumentHint": "[bundle-path]"
+      },
+      {
+        "id": "airlift-install",
+        "name": "Airlift Install",
+        "description": "Install or refresh the idempotent airlift marker block in supported instruction files.",
+        "argumentHint": "[--all|instructions-file]"
+      }
+    ]
+  }
+}

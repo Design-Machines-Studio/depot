@@ -16,3 +16,6 @@ plans/*/brainstorm.md
 todos/
 .playwright-mcp/
 plans/*/brainstorm.html
+
+# Airlift handoff bundles are local by default; force-add explicit receipts when they should travel.
+.airlift/
