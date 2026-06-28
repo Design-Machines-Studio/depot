@@ -20,15 +20,17 @@ or unwire it, or report its status. The subcommand is `$ARGUMENTS` (default
   a reactive checkpoint when a turn ends in `rate_limit`, `overloaded`, or
   `billing_error`.
   - **The existing statusLine is PRESERVED.** Wiring backs up your current
-    statusLine to `.airlift/settings-backup.json` (only on the first wire, never
-    overwriting a prior backup) and the airlift statusLine CHAINS it -- your
-    existing (caveman) statusLine output is run with the same stdin and shown
-    alongside the airlift segment. Nothing is clobbered.
+    statusLine to `airlift-settings-backup.json` next to your `settings.json`
+    (only on the first wire, never overwriting a prior backup) and the airlift
+    statusLine CHAINS it -- the prior command is embedded into the global
+    statusLine command string and run with the same stdin, shown alongside the
+    airlift segment. Nothing is clobbered, and no repo-local file is ever
+    executed by the statusLine.
   - **Idempotent.** A second `wire` makes no further changes: the statusLine is
     not double-wrapped and the StopFailure hook is not duplicated.
-- **unwire** -- Restores the original statusLine byte-exact from
-  `.airlift/settings-backup.json` and removes every airlift hook entry. A second
-  `unwire` is a no-op.
+- **unwire** -- Restores the original statusLine byte-exact from the
+  `airlift-settings-backup.json` sidecar (next to `settings.json`) and removes
+  every airlift hook entry. A second `unwire` is a no-op.
 - **status** -- Reports wired/unwired, whether `ccusage` is detected, and a note
   on when the real `rate_limits` signal is available.
 
