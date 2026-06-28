@@ -6,7 +6,7 @@ Claude Code plugin for model- and harness-agnostic session handoff. Airlift turn
 
 One auto-activating skill for session handoff planning and three slash commands for creating, consuming, and installing handoff support.
 
-The core contract is a `.airlift/` bundle with deterministic files that any supported harness can read: `HANDOFF.md`, `state.json`, `uncommitted.patch`, and `RESUME_PROMPT.md`.
+The core contract is a `.airlift/` bundle with deterministic files that any supported harness can read: `HANDOFF.md`, `state.json`, `uncommitted.patch`, and `RESUME_PROMPT.md`. `uncommitted.patch` is lossless -- it captures `git diff HEAD` plus every untracked, non-ignored file -- and the bundle is gitignored by default.
 
 ## Skills (auto-activating)
 

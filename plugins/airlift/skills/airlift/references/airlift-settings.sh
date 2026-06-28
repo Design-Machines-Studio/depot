@@ -12,8 +12,10 @@
 #
 # WHAT THIS FIXES:
 #   - Preserves the existing statusLine by backing it up to a sidecar
-#     (.airlift/settings-backup.json) on the FIRST wire only, then recording the
-#     prior command so the wrapper can chain it.
+#     (airlift-settings-backup.json, co-located with the settings.json being
+#     wired -- NOT a repo-local file) on the FIRST wire only, then embedding the
+#     prior command into the global statusLine command string so the wrapper can
+#     chain it without reading any repo-local file at render time.
 #   - Adds a StopFailure hook that fires the reactive flush on rate_limit /
 #     overloaded / billing_error failures.
 #   - unwire restores the original statusLine byte-exact and removes every
