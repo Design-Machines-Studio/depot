@@ -41,6 +41,8 @@ export PATH
 
 # Resolve airlift-engine.sh via the dual-cache pattern: prefer ~/.claude, then
 # ~/.codex; newest version dir wins. Echo path on success, empty on failure.
+# DELIBERATE TRIPLICATION: copy-pasted in airlift-statusline.sh and (parameterized)
+# airlift-settings.sh -- standalone-robustness, no shared sourced helper. Keep in sync.
 airlift_flush_resolve_engine() {
   local _base _cand _verdir
   for _base in "$HOME/.claude" "$HOME/.codex"; do

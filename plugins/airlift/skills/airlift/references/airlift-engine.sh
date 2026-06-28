@@ -71,20 +71,22 @@ export PATH
 
 # ---------------------------------------------------------------------------
 # Temp-file cleanup. Every temp is minted under TMPDIR with the prefix
-# `airlift.` so a single glob sweep can remove them all. A per-process registry
-# is unreliable here: every call site is `x="$(airlift_mktemp)"`, a
+# `airlift.$$.` (PID-scoped) so a single glob sweep removes only THIS process's
+# temps -- a concurrent run (e.g. the statusLine-triggered early-warning engine
+# write firing while a manual /airlift-out write is mid-flight in the same
+# TMPDIR) cannot reap our in-flight temp. A per-process variable registry is
+# unreliable here: every call site is `x="$(airlift_mktemp)"`, a
 # command-substitution subshell, so a variable set inside it never reaches the
-# parent. The EXIT/INT/TERM trap therefore relies on the glob sweep, which is
-# the same pattern gemini-wrapper uses.
+# parent. The EXIT/INT/TERM trap therefore relies on the PID-scoped glob sweep.
 # ---------------------------------------------------------------------------
 airlift_cleanup() {
-  rm -f "${TMPDIR:-/tmp}"/airlift.* 2>/dev/null || true
+  rm -f "${TMPDIR:-/tmp}"/airlift."$$".* 2>/dev/null || true
 }
 
 # Create a 0600 temp file and echo its path. Mirrors the secure-temp idiom.
 airlift_mktemp() {
   local _t
-  _t="$(mktemp "${TMPDIR:-/tmp}/airlift.XXXXXX")" || return 1
+  _t="$(mktemp "${TMPDIR:-/tmp}/airlift.$$.XXXXXX")" || return 1
   chmod 600 "$_t" 2>/dev/null || true
   printf '%s\n' "$_t"
 }

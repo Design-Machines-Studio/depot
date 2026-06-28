@@ -66,15 +66,17 @@ export PATH
 # ---------------------------------------------------------------------------
 # Temp cleanup. Mirror the engine/gemini idiom: mint under TMPDIR with a fixed
 # prefix and sweep via glob on exit (command-substitution subshells make a
-# per-process registry unreliable).
+# per-process registry unreliable). The prefix includes this process's PID so a
+# concurrent run (e.g. a manual /airlift-out engine write firing while a
+# statusLine refresh is mid-flight in the same TMPDIR) cannot reap our temp.
 # ---------------------------------------------------------------------------
 airlift_sl_cleanup() {
-  rm -f "${TMPDIR:-/tmp}"/airlift-sl.* 2>/dev/null || true
+  rm -f "${TMPDIR:-/tmp}"/airlift-sl."$$".* 2>/dev/null || true
 }
 
 airlift_sl_mktemp() {
   local _t
-  _t="$(mktemp "${TMPDIR:-/tmp}/airlift-sl.XXXXXX")" || return 1
+  _t="$(mktemp "${TMPDIR:-/tmp}/airlift-sl.$$.XXXXXX")" || return 1
   chmod 600 "$_t" 2>/dev/null || true
   printf '%s\n' "$_t"
 }
@@ -82,6 +84,11 @@ airlift_sl_mktemp() {
 # Resolve airlift-engine.sh via the dual-cache pattern: prefer ~/.claude, then
 # ~/.codex; newest version dir wins (ls -t | head -1). Echo the path on success,
 # empty on failure. Guard with [ -n ] && [ -x ] at the call site.
+# DELIBERATE TRIPLICATION: this resolver is copy-pasted in airlift-hook-flush.sh
+# and (parameterized) airlift-settings.sh. A shared sourced helper would have to
+# resolve itself from the same cache first (chicken-and-egg), and each script is
+# wired into a different harness surface where standalone robustness is the goal.
+# Keep the three copies in sync.
 airlift_sl_resolve_engine() {
   local _base _cand
   for _base in "$HOME/.claude" "$HOME/.codex"; do
@@ -184,40 +191,26 @@ airlift_statusline_main() {
       if [ -n "$cc_pct" ]; then
         # Carry the raw derived value; integer normalization happens ONCE at the
         # single convergence point in step 5 (round for this estimate source).
+        # cc_pct is known non-empty here, so pct is too -- no inner guard needed.
         pct="$cc_pct"
-        if [ -n "$pct" ]; then
-          have_signal=1
-          signal_src="ccusage-estimate"
-          # ccusage has no reset timestamp we can rely on; leave resets_at empty.
-        fi
+        have_signal=1
+        signal_src="ccusage-estimate"
+        # ccusage has no reset timestamp we can rely on; leave resets_at empty.
       fi
     fi
   fi
 
-  # 4. CHAIN the prior statusLine. Source order: explicit env override, then the
-  #    sidecar backup recorded at wire time. Run it with the SAME stdin.
+  # 4. CHAIN the prior statusLine. The prior command is supplied ONLY via the
+  #    $AIRLIFT_PRIOR_STATUSLINE env var, which airlift-settings.sh embeds into
+  #    the GLOBAL statusLine.command string at wire time (trusted, user-owned
+  #    config). We deliberately do NOT read it from a repo-local
+  #    .airlift/settings-backup.json: this statusLine runs in EVERY repo, so a
+  #    cloned hostile repo could ship a crafted settings-backup.json and get its
+  #    `command` exec'd on the first prompt render. No repo-supplied value is
+  #    ever exec'd here. Run the prior command with the SAME stdin.
   local prior_cmd=""
   if [ -n "${AIRLIFT_PRIOR_STATUSLINE:-}" ]; then
     prior_cmd="$AIRLIFT_PRIOR_STATUSLINE"
-  else
-    local backup="$(airlift_sl_dir)/settings-backup.json"
-    if [ -f "$backup" ] && command -v python3 >/dev/null 2>&1; then
-      prior_cmd="$(AIRLIFT_BACKUP="$backup" python3 - <<'PY' 2>/dev/null
-import json, os
-p = os.environ.get("AIRLIFT_BACKUP", "")
-try:
-    with open(p) as fh:
-        data = json.load(fh)
-    sl = data.get("statusLine") or {}
-    cmd = sl.get("command") or ""
-    # Only chain a real command-type prior statusline.
-    if isinstance(cmd, str):
-        print(cmd)
-except Exception:
-    pass
-PY
-)"
-    fi
   fi
 
   local prior_out=""
