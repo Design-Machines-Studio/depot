@@ -182,8 +182,9 @@ airlift_statusline_main() {
         | (. | tonumber? // empty)
       ' 2>/dev/null | head -1)"
       if [ -n "$cc_pct" ]; then
-        # Round to an integer for display + comparison (awk; portable).
-        pct="$(awk -v p="$cc_pct" 'BEGIN { printf "%d", (p + 0.5) }' 2>/dev/null)"
+        # Carry the raw derived value; integer normalization happens ONCE at the
+        # single convergence point in step 5 (round for this estimate source).
+        pct="$cc_pct"
         if [ -n "$pct" ]; then
           have_signal=1
           signal_src="ccusage-estimate"
@@ -231,10 +232,14 @@ PY
   # 5. THRESHOLD monitor + trip. Only when we have a real or estimated percent.
   local airlift_segment=""
   if [ "$have_signal" -eq 1 ] && [ -n "$pct" ]; then
-    # Integer-compare pct >= threshold. pct may be a float string from
-    # rate_limits; coerce to an integer floor for the comparison via awk.
-    local pct_int
-    pct_int="$(awk -v p="$pct" 'BEGIN { printf "%d", (p + 0) }' 2>/dev/null)"
+    # SINGLE normalization point: both signal sources (rate_limits float and the
+    # ccusage estimate) converge here and pct is coerced to an integer exactly
+    # once. rate_limits is a real measured percent -> floor (p + 0). The ccusage
+    # estimate is a derived projection -> round half-up (p + 0.5). No source is
+    # normalized twice.
+    local pct_int round_bias=0
+    [ "$signal_src" = "ccusage-estimate" ] && round_bias="0.5"
+    pct_int="$(awk -v p="$pct" -v b="$round_bias" 'BEGIN { printf "%d", (p + b) }' 2>/dev/null)"
     [ -n "$pct_int" ] || pct_int=0
 
     local label="cap"

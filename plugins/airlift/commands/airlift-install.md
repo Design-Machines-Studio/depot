@@ -48,19 +48,19 @@ subcommand:
 
 ```bash
 SUB="${ARGUMENTS:-status}"
-ENGINE=""
+SETTINGS_SH=""
 for BASE in "$HOME/.claude" "$HOME/.codex"; do
   for VERDIR in $(ls -t -d "$BASE"/plugins/cache/depot/airlift/*/ 2>/dev/null); do
     CAND="${VERDIR}skills/airlift/references/airlift-settings.sh"
-    if [ -f "$CAND" ]; then ENGINE="$CAND"; break; fi
+    if [ -f "$CAND" ]; then SETTINGS_SH="$CAND"; break; fi
   done
-  [ -n "$ENGINE" ] && break
+  [ -n "$SETTINGS_SH" ] && break
 done
-if [ -z "$ENGINE" ]; then
+if [ -z "$SETTINGS_SH" ]; then
   echo "airlift-settings.sh not found in the plugin cache." >&2
   exit 1
 fi
-bash "$ENGINE" "$SUB"
+bash "$SETTINGS_SH" "$SUB"
 ```
 
 After `wire`, restart the harness (or trigger a statusLine re-render) so the new

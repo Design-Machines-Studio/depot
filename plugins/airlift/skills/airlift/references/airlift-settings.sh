@@ -58,7 +58,10 @@ airlift_settings_resolve_sibling() {
   local name="$1"
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
-  if [ -n "$script_dir" ] && [ -f "${script_dir}/${name}" ]; then
+  # Use [ -x ] (not [ -f ]) to match the sibling resolvers in airlift-statusline.sh
+  # and airlift-hook-flush.sh: an engine/script that lost its exec bit is treated
+  # as unresolved consistently across all three self-contained scripts.
+  if [ -n "$script_dir" ] && [ -x "${script_dir}/${name}" ]; then
     printf '%s\n' "${script_dir}/${name}"
     return 0
   fi
@@ -68,7 +71,7 @@ airlift_settings_resolve_sibling() {
     for _verdir in $(ls -t -d "$_base"/plugins/cache/depot/airlift/*/ 2>/dev/null); do
       [ -d "$_verdir" ] || continue
       _cand="${_verdir}skills/airlift/references/${name}"
-      if [ -f "$_cand" ]; then
+      if [ -x "$_cand" ]; then
         printf '%s\n' "$_cand"
         return 0
       fi
@@ -97,10 +100,14 @@ airlift_settings_dir() {
 
 # ---------------------------------------------------------------------------
 # Adversary schema check: before writing the StopFailure hook, READ the target
-# settings.json (and the local ~/.claude/settings.json if available) to confirm
-# the installed hook schema places `matcher` on the event-group object with a
-# nested `hooks` array -- the shape this tool assumes. If the installed schema
-# differs, SURFACE it as ambiguity rather than guessing.
+# settings.json (and the local ~/.claude/settings.json if available) and inspect
+# the StopFailure event SPECIFICALLY to confirm the installed hook schema groups
+# hooks under a nested `hooks` array (the group-matcher shape this tool assumes).
+# Other events (e.g. PreToolUse) are deliberately NOT inspected -- only the
+# StopFailure shape we are about to write matters. If StopFailure is absent there
+# is no installed shape to compare. If it exists in a FLAT (per-hook-matcher)
+# shape that differs from what we write, SURFACE it as ambiguity rather than
+# guessing.
 # ---------------------------------------------------------------------------
 airlift_settings_schema_check() {
   local target="$1"
@@ -115,29 +122,28 @@ def load(p):
         return None
 
 def shape_of(doc):
-    # Inspect any existing hook event group for the assumed shape:
-    #   { "<Event>": [ { "matcher": "...", "hooks": [ {type,command}, ... ] } ] }
+    # Inspect the StopFailure event SPECIFICALLY for the assumed group-matcher shape:
+    #   { "StopFailure": [ { "matcher": "...", "hooks": [ {type,command}, ... ] } ] }
+    # Scoping to StopFailure (rather than the first group of ANY event) is required:
+    # a pre-existing PreToolUse group-matcher entry must NOT short-circuit and mask a
+    # FLAT-shaped StopFailure entry. If StopFailure is absent there is no installed
+    # shape to compare against -> "absent" (proceed with the standard shape).
     if not isinstance(doc, dict):
         return "absent"
     hooks = doc.get("hooks")
     if not isinstance(hooks, dict) or not hooks:
         return "absent"
-    for event, groups in hooks.items():
-        if not isinstance(groups, list):
+    groups = hooks.get("StopFailure")
+    if not isinstance(groups, list):
+        return "absent"
+    for g in groups:
+        if not isinstance(g, dict):
             continue
-        for g in groups:
-            if not isinstance(g, dict):
-                continue
-            has_group_matcher = "matcher" in g
-            inner = g.get("hooks")
-            has_inner_array = isinstance(inner, list)
-            if has_group_matcher and has_inner_array:
-                return "group-matcher"  # assumed shape confirmed
-            if has_inner_array and not has_group_matcher:
-                # hooks nested but matcher absent at group level; ambiguous
-                return "group-matcher"  # still group-level grouping, matcher optional
-            if not has_inner_array and ("command" in g or "type" in g):
-                return "flat"  # per-hook entries directly in the event list
+        has_inner_array = isinstance(g.get("hooks"), list)
+        if has_inner_array:
+            return "group-matcher"  # nested hooks array == group-level grouping (matcher optional)
+        if "command" in g or "type" in g:
+            return "flat"  # per-hook entries directly in the StopFailure list
     return "absent"
 
 target_shape = shape_of(load(os.environ.get("AIRLIFT_TARGET", "")))
@@ -240,18 +246,21 @@ if not os.path.exists(backup_path):
     os.replace(btmp, backup_path)
 
 if not already_wired:
-    new_status = {}
-    # Preserve type and padding from the prior statusLine when present.
-    if isinstance(existing_status, dict):
-        if "type" in existing_status:
-            new_status["type"] = existing_status["type"]
-        if "padding" in existing_status:
-            new_status["padding"] = existing_status["padding"]
+    # Shallow-copy ALL prior statusLine keys so user-set fields beyond type/padding
+    # (e.g. a custom key) survive in the LIVE config, then override only `command`
+    # and ensure `type: command`. The sidecar backup preserves the true original
+    # for unwire; this preserves live-config fidelity too.
+    new_status = dict(existing_status) if isinstance(existing_status, dict) else {}
     new_status.setdefault("type", "command")
     new_status["command"] = desired_status_cmd
     doc["statusLine"] = new_status
 
-# --- StopFailure hook (group-matcher shape): check-before-add via sentinel.
+# --- StopFailure hook (group-matcher shape): check-before-add via the
+# AIRLIFT-AUTHORED command shape, NOT a bare "airlift" substring. Matching the
+# substring would falsely report "already wired" when an unrelated user hook
+# whose command path merely contains "airlift" (e.g. /home/airlift-dev/x.sh)
+# pre-exists, suppressing airlift's own install. This mirrors the unwire-side
+# scoping so wire/unwire agree on what counts as an airlift entry.
 hooks = doc.get("hooks")
 if not isinstance(hooks, dict):
     hooks = {}
@@ -259,15 +268,29 @@ sf = hooks.get("StopFailure")
 if not isinstance(sf, list):
     sf = []
 
-def group_contains_sentinel(group):
-    if not isinstance(group, dict):
+def is_airlift_authored_command(cmd):
+    if not isinstance(cmd, str):
         return False
-    for h in (group.get("hooks") or []):
-        if isinstance(h, dict) and sentinel in (h.get("command") or ""):
+    if hook_path and cmd == ("bash %s" % hook_path):
+        return True
+    # Fallback (hook_path unresolved): a `bash` command whose final token is a
+    # path to airlift-hook-flush.sh.
+    parts = cmd.split()
+    if len(parts) >= 2 and parts[0] == "bash":
+        last = parts[-1]
+        if last == "airlift-hook-flush.sh" or last.endswith("/airlift-hook-flush.sh"):
             return True
     return False
 
-has_airlift = any(group_contains_sentinel(g) for g in sf)
+def group_is_airlift(group):
+    if not isinstance(group, dict):
+        return False
+    for h in (group.get("hooks") or []):
+        if isinstance(h, dict) and is_airlift_authored_command(h.get("command")):
+            return True
+    return False
+
+has_airlift = any(group_is_airlift(g) for g in sf)
 
 if not has_airlift:
     sf.append({
@@ -313,15 +336,24 @@ airlift_settings_unwire() {
   dir="$(airlift_settings_dir)"
   local backup="${dir}/settings-backup.json"
 
+  # Resolve the airlift-hook-flush.sh path so unwire can scope deletion to
+  # airlift-authored StopFailure entries (commands that reference this exact
+  # script) instead of any command merely containing the substring "airlift".
+  # Best-effort: an empty resolution falls back to a path-shape match below.
+  local hook_path
+  hook_path="$(airlift_settings_resolve_sibling airlift-hook-flush.sh)"
+
   AIRLIFT_SETTINGS="$settings" \
   AIRLIFT_BACKUP="$backup" \
   AIRLIFT_SENTINEL="$AIRLIFT_SENTINEL" \
+  AIRLIFT_HOOK_PATH="$hook_path" \
   python3 - <<'PY'
 import json, os, sys, tempfile
 
 settings_path = os.environ["AIRLIFT_SETTINGS"]
 backup_path = os.environ["AIRLIFT_BACKUP"]
 sentinel = os.environ["AIRLIFT_SENTINEL"]
+hook_path = os.environ.get("AIRLIFT_HOOK_PATH", "")
 
 try:
     with open(settings_path) as fh:
@@ -367,18 +399,40 @@ if isinstance(backup, dict) and "statusLine" in backup:
                 doc["statusLine"] = orig
                 changed = True
 
-# --- Remove all StopFailure hook groups whose inner hooks reference the sentinel.
+# --- Remove only StopFailure hook groups AIRLIFT itself authored.
+# SECURITY: matching any command merely CONTAINING the substring "airlift" would
+# collaterally delete an unrelated user hook whose command path happens to include
+# "airlift" (e.g. /home/airlift-dev/hooks/x.sh). The wire side writes the literal
+# command `bash <.../airlift-hook-flush.sh>`, so we scope removal to that authored
+# shape: the command must invoke the resolved airlift-hook-flush.sh path (exact
+# match when resolvable) or, when the path cannot be resolved, end in the
+# airlift-hook-flush.sh script name. A bare "/home/airlift-dev/x.sh" matches
+# neither and survives.
+def is_airlift_authored_command(cmd):
+    if not isinstance(cmd, str):
+        return False
+    if hook_path and cmd == ("bash %s" % hook_path):
+        return True
+    # Fallback (hook_path unresolved): match the airlift-authored invocation shape
+    # -- a `bash` command whose final token is a path to airlift-hook-flush.sh.
+    parts = cmd.split()
+    if len(parts) >= 2 and parts[0] == "bash":
+        last = parts[-1]
+        if last == "airlift-hook-flush.sh" or last.endswith("/airlift-hook-flush.sh"):
+            return True
+    return False
+
 hooks = doc.get("hooks")
 if isinstance(hooks, dict) and isinstance(hooks.get("StopFailure"), list):
-    def group_has_sentinel(group):
+    def group_is_airlift(group):
         if not isinstance(group, dict):
             return False
         for h in (group.get("hooks") or []):
-            if isinstance(h, dict) and sentinel in (h.get("command") or ""):
+            if isinstance(h, dict) and is_airlift_authored_command(h.get("command")):
                 return True
         return False
     before = hooks["StopFailure"]
-    after = [g for g in before if not group_has_sentinel(g)]
+    after = [g for g in before if not group_is_airlift(g)]
     if len(after) != len(before):
         changed = True
     if after:
