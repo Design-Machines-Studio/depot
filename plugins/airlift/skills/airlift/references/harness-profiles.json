@@ -19,13 +19,17 @@
     "agentsMd": true
   },
   "gemini": {
-    "instructionsFile": "GEMINI.md or AGENTS.md via context.fileName",
+    "instructionsFile": "GEMINI.md",
+    "instructionsFileAlt": ["AGENTS.md"],
+    "instructionsFileNote": "GEMINI.md by default; AGENTS.md when configured via context.fileName",
     "sessionLog": "n/a",
     "resume": "seed via gemini plugin delegate",
     "agentsMd": true
   },
   "kiro": {
-    "instructionsFile": "AGENTS.md or .kiro/steering/",
+    "instructionsFile": "AGENTS.md",
+    "instructionsFileAlt": [".kiro/steering/"],
+    "instructionsFileNote": "AGENTS.md or .kiro/steering/ directory",
     "sessionLog": "n/a",
     "resume": "paste RESUME_PROMPT.md",
     "agentsMd": true

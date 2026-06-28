@@ -3,7 +3,8 @@
   "description": "Model- and harness-agnostic session handoff for usage caps, rate limits, checkpoints, and resume workflows across Claude Code, Codex, DeepSeek, Gemini, Kiro, and OpenCode.",
   "version": "1.0.0",
   "author": {
-    "name": "Design Machines"
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
   },
   "keywords": [
     "session-handoff",
