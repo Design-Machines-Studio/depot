@@ -18,8 +18,10 @@
 #   patch, verify commands, existing pipeline/dm-review artifacts) and renders
 #   a harness-neutral HANDOFF.md + RESUME_PROMPT.md from templates. It wires an
 #   idempotent pointer marker into the harness instruction file so the next
-#   session is told the bundle exists. Patch capture is lossless and NEVER
-#   forces a commit. The marker upsert NEVER clobbers an existing file.
+#   session is told the bundle exists. Patch capture is lossless -- it records
+#   the tracked changes (`git diff HEAD`) PLUS every untracked, non-ignored file
+#   as an added-file diff, so resume loses nothing -- and NEVER forces a commit.
+#   The marker upsert NEVER clobbers an existing file.
 #
 # DEPENDENCIES:
 #   - bash 3.2+ (macOS default; confirmed 3.2.57). NO bash-4 features:
@@ -45,12 +47,16 @@
 #     AIRLIFT_SOURCE_MODEL    source.model    (default: $AIRLIFT_MODEL or unknown)
 #     AIRLIFT_MODEL           fallback for source.model
 #     AIRLIFT_TARGETS         comma-separated targets (default: the 6 registry ids)
+#     AIRLIFT_TEMPLATE_DIR    template dir override (default: <script-dir>/templates)
 #
 # SECURITY NOTES:
 #   - PATH is reset to a fixed value at the top to prevent a caller-controlled
 #     PATH from hijacking git/python3/awk/mktemp/rm/date/grep.
 #   - Temp files are created with mktemp and immediately chmod 600, then moved
-#     atomically into place. A trap on EXIT/INT/TERM removes any in-flight temp.
+#     atomically into place. A trap on EXIT/INT/TERM runs a glob sweep that
+#     removes any leftover airlift.* temp in TMPDIR (command-substitution
+#     subshells make a parent-process temp registry unreliable, so the sweep is
+#     the authoritative cleanup).
 #   - state.json is emitted by python3 via os.environ + json.dump -- values are
 #     never interpolated into a hand-built JSON string, so notes/branch names
 #     containing quotes or braces cannot corrupt the document.
@@ -64,24 +70,15 @@ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
 # ---------------------------------------------------------------------------
-# Temp-file tracking + cleanup. Each helper that mints a temp registers its
-# path in AIRLIFT_TMP_FILES (newline-delimited; bash 3.2 has no assoc arrays).
+# Temp-file cleanup. Every temp is minted under TMPDIR with the prefix
+# `airlift.` so a single glob sweep can remove them all. A per-process registry
+# is unreliable here: every call site is `x="$(airlift_mktemp)"`, a
+# command-substitution subshell, so a variable set inside it never reaches the
+# parent. The EXIT/INT/TERM trap therefore relies on the glob sweep, which is
+# the same pattern gemini-wrapper uses.
 # ---------------------------------------------------------------------------
-AIRLIFT_TMP_FILES=""
-
-airlift_register_tmp() {
-  # $1 = temp path to track for cleanup
-  AIRLIFT_TMP_FILES="${AIRLIFT_TMP_FILES}${1}
-"
-}
-
 airlift_cleanup() {
-  local _f
-  printf '%s' "$AIRLIFT_TMP_FILES" | while IFS= read -r _f; do
-    if [ -n "$_f" ] && [ -e "$_f" ]; then
-      rm -f "$_f" 2>/dev/null || true
-    fi
-  done
+  rm -f "${TMPDIR:-/tmp}"/airlift.* 2>/dev/null || true
 }
 
 # Create a 0600 temp file and echo its path. Mirrors the secure-temp idiom.
@@ -89,7 +86,6 @@ airlift_mktemp() {
   local _t
   _t="$(mktemp "${TMPDIR:-/tmp}/airlift.XXXXXX")" || return 1
   chmod 600 "$_t" 2>/dev/null || true
-  airlift_register_tmp "$_t"
   printf '%s\n' "$_t"
 }
 
@@ -134,16 +130,39 @@ airlift_marker() {
     return 0
   fi
 
-  # Detect whether the start marker is present.
-  if grep -qF "$start" "$file" 2>/dev/null; then
-    # Case 2: markers present -> REPLACE content between markers in place,
-    # leaving every byte outside the pair byte-identical. awk range replace.
+  # Detect whether a WHOLE-LINE start marker is present. A line counts as a
+  # marker only if, after trimming trailing whitespace, it equals the marker
+  # string exactly. This avoids falsely matching prose or code fences that merely
+  # MENTION the marker string (e.g. documentation of this very mechanism).
+  local has_start has_end
+  has_start="$(awk -v s="$start" '
+    { line = $0; sub(/[ \t]+$/, "", line); if (line == s) { print "1"; exit } }
+  ' "$file" 2>/dev/null)"
+
+  if [ "$has_start" = "1" ]; then
+    # A whole-line start marker exists. Require a matching whole-line end marker;
+    # without one, replacing would consume everything to EOF. Safety bail: leave
+    # the file byte-identical, report the error, return non-zero.
+    has_end="$(awk -v e="$end" '
+      { line = $0; sub(/[ \t]+$/, "", line); if (line == e) { print "1"; exit } }
+    ' "$file" 2>/dev/null)"
+    if [ "$has_end" != "1" ]; then
+      echo "ERROR: airlift start marker found in $file with no matching end marker; refusing to rewrite (file left unchanged)" >&2
+      return 1
+    fi
+
+    # Case 2: markers present -> REPLACE content between the whole-line markers
+    # in place, leaving every byte outside the pair byte-identical. awk range
+    # replace keyed on whole-line equality (trailing whitespace trimmed).
     local out_tmp
     out_tmp="$(airlift_mktemp)" || return 1
     awk -v s="$start" -v e="$end" -v cl="$content_line" '
       BEGIN { inblock = 0 }
       {
-        if (inblock == 0 && index($0, s) > 0) {
+        line = $0
+        trimmed = line
+        sub(/[ \t]+$/, "", trimmed)
+        if (inblock == 0 && trimmed == s) {
           # Emit a fresh, normalized block. Replaces the old one entirely.
           print s
           print cl
@@ -153,20 +172,24 @@ airlift_marker() {
           next
         }
         if (inblock == 1) {
-          if (index($0, e) > 0) {
+          if (trimmed == e) {
             inblock = 0
           }
           next
         }
-        print $0
+        print line
       }
     ' "$file" > "$out_tmp" || return 1
-    cat "$out_tmp" > "$file" || return 1
+    # Atomic publish: move the temp into place (the header promises temp-then-mv).
+    # The temp is 0600; instruction files are not secret, so restore the typical
+    # world-readable mode after the move.
+    mv "$out_tmp" "$file" || return 1
+    chmod 644 "$file" 2>/dev/null || true
     return 0
   fi
 
-  # Case 3: file exists WITHOUT markers -> APPEND the block at EOF, preceded by
-  # exactly one blank line. Prior content stays byte-identical.
+  # Case 3: file exists WITHOUT a whole-line start marker -> APPEND the block at
+  # EOF, preceded by exactly one blank line. Prior content stays byte-identical.
   {
     printf '\n'
     cat "$block_tmp"
@@ -244,7 +267,7 @@ airlift_extract_env() {
   local out_tmp
   out_tmp="$(airlift_mktemp)" || return 1
   # Pull lines mentioning common environment constraints. Case-insensitive.
-  grep -iE 'docker|-tags=dev|tags=dev|devcontainer|air |\bgo build\b|environment|requires? ' "$md" 2>/dev/null \
+  grep -iE 'docker|tags=dev|devcontainer|air |\bgo build\b|environment|requires? ' "$md" 2>/dev/null \
     | grep -ivE '^[[:space:]]*```' \
     | sed -n '1,12p' > "$out_tmp" 2>/dev/null || true
   if [ -s "$out_tmp" ]; then
@@ -307,9 +330,35 @@ airlift_write() {
     dirty="true"
   fi
 
-  # Lossless patch: byte-for-byte `git diff HEAD`. Clean tree -> zero-length.
-  # NEVER commit. Write straight to the bundle path.
-  git -C "$repo_root" diff HEAD > "${airlift_dir}/uncommitted.patch" 2>/dev/null || true
+  # Lossless patch capture. NEVER commit. Two parts:
+  #   (a) tracked changes: byte-for-byte `git diff HEAD`.
+  #   (b) untracked, non-ignored files: each appended as a standard added-file
+  #       diff via `git diff --no-index /dev/null <file>`. `git status --porcelain`
+  #       (which drives `dirty`) counts these, but `git diff HEAD` does not -- so
+  #       without (b) an untracked file would make dirty=true with an empty patch
+  #       and the work would be silently lost on resume.
+  # The result is a single `git apply`-able patch with no index mutation.
+  local patch_path="${airlift_dir}/uncommitted.patch"
+  git -C "$repo_root" diff HEAD > "$patch_path" 2>/dev/null || true
+
+  local untracked_count=0
+  local untracked_captured="false"
+  # Enumerate untracked, non-ignored files (NUL-delimited for path safety).
+  # Process substitution keeps the NUL stream intact: piping into `while read`
+  # would run the loop in a subshell and lose the counter; `$(...)` would strip
+  # the NUL bytes. `read -d ''` splits on NUL so paths with spaces/newlines are
+  # safe. bash 3.2 supports both `read -d ''` and process substitution.
+  local _u
+  while IFS= read -r -d '' _u; do
+    [ -n "$_u" ] || continue
+    # `git diff --no-index` exits 1 when files differ -- EXPECTED here, not an
+    # error. Swallow the status so it never aborts the capture. Mutates no index.
+    git -C "$repo_root" diff --no-index -- /dev/null "$_u" >> "$patch_path" 2>/dev/null || true
+    untracked_count=$((untracked_count + 1))
+  done < <(git -C "$repo_root" ls-files --others --exclude-standard -z 2>/dev/null)
+  if [ "$untracked_count" -gt 0 ]; then
+    untracked_captured="true"
+  fi
 
   # 4. Verify commands + env notes from repo-root CLAUDE.md (best-effort).
   local root_md="${repo_root}/CLAUDE.md"
@@ -387,6 +436,8 @@ PY
   AIRLIFT_BRANCH="$branch" \
   AIRLIFT_HEAD="$head" \
   AIRLIFT_DIRTY="$dirty" \
+  AIRLIFT_UNTRACKED_CAPTURED="$untracked_captured" \
+  AIRLIFT_UNTRACKED_COUNT="$untracked_count" \
   AIRLIFT_PHASE="$phase" \
   AIRLIFT_NOTE="$note" \
   AIRLIFT_PIPELINE_LIST="$pipeline_list" \
@@ -414,6 +465,8 @@ state = {
         "branch": os.environ.get("AIRLIFT_BRANCH", "unknown"),
         "head": os.environ.get("AIRLIFT_HEAD", "unknown"),
         "dirty": os.environ.get("AIRLIFT_DIRTY", "false") == "true",
+        "untrackedCaptured": os.environ.get("AIRLIFT_UNTRACKED_CAPTURED", "false") == "true",
+        "untrackedCount": int(os.environ.get("AIRLIFT_UNTRACKED_COUNT", "0") or "0"),
     },
     "phase": os.environ.get("AIRLIFT_PHASE", "handoff"),
     "note": os.environ.get("AIRLIFT_NOTE", ""),
@@ -432,9 +485,12 @@ with open(os.environ["AIRLIFT_STATE_OUT"], "w") as fh:
 PY
 
   # 7. Render HANDOFF.md + RESUME_PROMPT.md from templates.
+  # Resolve the script dir from BASH_SOURCE (not $0): downstream callers invoke
+  # this engine through wrappers/symlinks where $0 is the wrapper, not the engine.
+  # AIRLIFT_TEMPLATE_DIR overrides the location entirely when set.
   local script_dir tmpl_dir
-  script_dir="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
-  tmpl_dir="${script_dir}/templates"
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+  tmpl_dir="${AIRLIFT_TEMPLATE_DIR:-${script_dir}/templates}"
 
   local handoff_tmpl="${tmpl_dir}/HANDOFF.md.tmpl"
   local resume_tmpl="${tmpl_dir}/RESUME_PROMPT.md.tmpl"
@@ -443,10 +499,16 @@ PY
     return 1
   fi
 
-  # Dirty-driven note for the rendered HANDOFF.
+  # Dirty-driven note for the rendered HANDOFF. The patch captures tracked
+  # changes (`git diff HEAD`) PLUS untracked, non-ignored files, so it is
+  # lossless whether the dirt is staged, unstaged, or brand-new files.
   local dirty_note
   if [ "$dirty" = "true" ]; then
-    dirty_note="dirty (uncommitted changes captured in .airlift/uncommitted.patch)"
+    if [ "$untracked_count" -gt 0 ]; then
+      dirty_note="dirty (tracked changes plus ${untracked_count} untracked non-ignored file(s) captured in .airlift/uncommitted.patch)"
+    else
+      dirty_note="dirty (tracked changes captured in .airlift/uncommitted.patch)"
+    fi
   else
     dirty_note="clean (no uncommitted changes at checkpoint time; uncommitted.patch is intentionally empty)"
   fi
@@ -485,7 +547,7 @@ PY
   R_ENV="$env_block" \
   R_ARTIFACTS="$artifact_render" \
   python3 - <<'PY' || { echo "ERROR: failed to render HANDOFF.md" >&2; return 1; }
-import os
+import os, re
 with open(os.environ["AIRLIFT_TMPL"]) as fh:
     text = fh.read()
 sub = {
@@ -500,8 +562,13 @@ sub = {
     "{{ENV_NOTES}}": os.environ.get("R_ENV", ""),
     "{{ARTIFACT_LIST}}": os.environ.get("R_ARTIFACTS", ""),
 }
-for k, v in sub.items():
-    text = text.replace(k, v)
+# Single-pass substitution. A sequential replace() loop would re-expand a value
+# that happened to contain another token (e.g. a note of "{{VERIFY_COMMANDS}}").
+# Build one alternation of all tokens and replace via a dict-lookup callback so
+# each match is taken from the template's ORIGINAL text exactly once; injected
+# values are inserted literally and never re-scanned.
+pattern = re.compile("|".join(re.escape(k) for k in sub))
+text = pattern.sub(lambda m: sub[m.group(0)], text)
 with open(os.environ["AIRLIFT_OUT"], "w") as out:
     out.write(text)
 PY
@@ -530,6 +597,26 @@ PY
   else
     target_md="${repo_root}/CLAUDE.md"
   fi
+
+  # Scope guard: the marker target must live inside repo_root. An absolute path
+  # or a `../` escape would let --instructions-file write outside the repo.
+  # Canonicalize the parent dir (it must already exist; the marker create-case
+  # mkdir is only meant for in-repo subdirs) and require a repo_root/ prefix.
+  local target_parent target_parent_real repo_root_real
+  target_parent="$(dirname "$target_md")"
+  target_parent_real="$(cd "$target_parent" 2>/dev/null && pwd)"
+  repo_root_real="$(cd "$repo_root" 2>/dev/null && pwd)"
+  if [ -z "$target_parent_real" ] || [ -z "$repo_root_real" ]; then
+    echo "ERROR: cannot resolve instructions-file target directory '$target_parent'" >&2
+    return 1
+  fi
+  case "${target_parent_real}/" in
+    "${repo_root_real}/"*) : ;;  # inside repo_root -- allowed
+    *)
+      echo "ERROR: --instructions-file resolves outside the repository ($target_md); refusing to write" >&2
+      return 1 ;;
+  esac
+
   airlift_marker "$target_md" "$seq" "$timestamp" || {
     echo "ERROR: marker upsert failed for $target_md" >&2
     return 1

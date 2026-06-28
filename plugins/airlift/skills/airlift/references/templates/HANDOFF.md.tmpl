@@ -23,8 +23,9 @@ agent.
 Where things stand right now. The recorded working-tree state is `{{DIRTY}}`.
 When the tree was clean at checkpoint time, there are no uncommitted changes and
 `uncommitted.patch` is empty -- this is expected, not a missing capture. When the
-tree was dirty, `uncommitted.patch` holds the full `git diff HEAD` and must be
-reapplied on resume.
+tree was dirty, `uncommitted.patch` is lossless: it holds the tracked changes
+(`git diff HEAD`) followed by every untracked, non-ignored file as an added-file
+diff, so resume loses nothing. Reapply it on resume with `git apply`.
 
 <!-- tier-2: agent enrichment goes here -->
 
