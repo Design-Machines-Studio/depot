@@ -1,0 +1,11 @@
+Read `.airlift/HANDOFF.md`.
+
+Before applying the patch, confirm `git rev-parse HEAD` equals {{HEAD}}
+(recorded in `.airlift/state.json`). If it differs, do NOT auto-apply -- check
+out {{HEAD}} first, or apply with `git apply --3way .airlift/uncommitted.patch`
+and resolve conflicts manually.
+
+If HEAD matches AND `.airlift/uncommitted.patch` is non-empty AND your working
+tree is clean, apply it with `git apply .airlift/uncommitted.patch`.
+
+Then continue from the Next steps section.
