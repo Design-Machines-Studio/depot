@@ -54,6 +54,9 @@ AIRLIFT_SENTINEL="airlift"
 # airlift-hook-flush.sh). Echo absolute path on success. Uses BASH_SOURCE so it
 # works through symlinks/wrappers. Falls back to the dual-cache if the sibling
 # is missing (e.g. invoked from an unusual location).
+# DELIBERATE TRIPLICATION: the dual-cache fallback mirrors the resolver copy-pasted
+# in airlift-statusline.sh and airlift-hook-flush.sh -- standalone-robustness, no
+# shared sourced helper (chicken-and-egg). Keep the three copies in sync.
 airlift_settings_resolve_sibling() {
   local name="$1"
   local script_dir
@@ -80,22 +83,14 @@ airlift_settings_resolve_sibling() {
   return 1
 }
 
-# Determine the .airlift dir (repo root if inside a git repo, else CWD). The
-# sidecar backup lives here so it travels with the project, matching where the
-# engine writes its bundle.
-airlift_settings_dir() {
-  if [ -n "${AIRLIFT_DIR:-}" ]; then
-    printf '%s\n' "$AIRLIFT_DIR"
-    return 0
-  fi
-  local _root
-  _root="$(git rev-parse --show-toplevel 2>/dev/null)"
-  if [ -n "$_root" ]; then
-    printf '%s\n' "${_root}/.airlift"
-  else
-    printf '%s\n' "$PWD/.airlift"
-  fi
-  return 0
+# The sidecar backup of the original statusLine lives NEXT TO the settings file
+# it backs up (the GLOBAL settings.json), NOT in any repo. The statusLine is
+# repo-independent: a repo-local backup would not survive a cwd change, and a
+# cloned hostile repo could ship a spoofed one. Co-locating with settings.json
+# makes wire, unwire, and restore agree regardless of cwd. Tests redirect it by
+# passing a temp `--settings` path (the backup follows alongside).
+airlift_backup_path() {
+  printf '%s\n' "$(dirname "$1")/airlift-settings-backup.json"
 }
 
 # ---------------------------------------------------------------------------
@@ -173,10 +168,9 @@ airlift_settings_wire() {
     return 1
   fi
 
-  local dir
-  dir="$(airlift_settings_dir)"
-  mkdir -p "$dir" 2>/dev/null || true
-  local backup="${dir}/settings-backup.json"
+  local backup
+  backup="$(airlift_backup_path "$settings")"
+  mkdir -p "$(dirname "$backup")" 2>/dev/null || true
 
   # ADVERSARY: schema check before writing the StopFailure hook.
   local schema_out target_shape local_shape
@@ -199,7 +193,7 @@ airlift_settings_wire() {
   AIRLIFT_HOOK_PATH="$hook_path" \
   AIRLIFT_SENTINEL="$AIRLIFT_SENTINEL" \
   python3 - <<'PY'
-import json, os, sys, tempfile
+import json, os, sys, tempfile, shlex
 
 settings_path = os.environ["AIRLIFT_SETTINGS"]
 backup_path = os.environ["AIRLIFT_BACKUP"]
@@ -222,10 +216,6 @@ if not isinstance(doc, dict):
     sys.stderr.write("ERROR: %s is not a JSON object\n" % settings_path)
     sys.exit(1)
 
-# The statusLine command we want to install. The wrapper chains the prior
-# command via the sidecar backup, so we only need to point at our script.
-desired_status_cmd = "bash %s" % statusline_path
-
 # --- statusLine: back up the ORIGINAL once, then install the airlift chainer.
 existing_status = doc.get("statusLine")
 already_wired = (
@@ -234,6 +224,26 @@ already_wired = (
     and sentinel in existing_status.get("command", "")
     and statusline_path in existing_status.get("command", "")
 )
+
+# The statusLine command we install points at our wrapper. The prior command
+# (if any, and not itself an airlift command) is EMBEDDED into this string via
+# an AIRLIFT_PRIOR_STATUSLINE env prefix so the wrapper can chain it WITHOUT
+# reading any repo-local file at render time (see airlift-statusline.sh step 4).
+# All paths/values are shell-quoted so a space in $HOME or a cache path cannot
+# break the command string or the idempotency/unwire match.
+prior_cmd = ""
+if (
+    isinstance(existing_status, dict)
+    and isinstance(existing_status.get("command"), str)
+    and sentinel not in existing_status.get("command", "")
+):
+    prior_cmd = existing_status["command"]
+
+if prior_cmd:
+    desired_status_cmd = "AIRLIFT_PRIOR_STATUSLINE=%s bash %s" % (
+        shlex.quote(prior_cmd), shlex.quote(statusline_path))
+else:
+    desired_status_cmd = "bash %s" % shlex.quote(statusline_path)
 
 # Sidecar backup: write ONLY on first wire (never overwrite -- that would lose
 # the true original). The backup stores the prior statusLine object verbatim.
@@ -271,7 +281,7 @@ if not isinstance(sf, list):
 def is_airlift_authored_command(cmd):
     if not isinstance(cmd, str):
         return False
-    if hook_path and cmd == ("bash %s" % hook_path):
+    if hook_path and cmd == ("bash %s" % shlex.quote(hook_path)):
         return True
     # Fallback (hook_path unresolved): a `bash` command whose final token is a
     # path to airlift-hook-flush.sh.
@@ -296,7 +306,7 @@ if not has_airlift:
     sf.append({
         "matcher": "rate_limit|overloaded|billing_error",
         "hooks": [
-            {"type": "command", "command": "bash %s" % hook_path},
+            {"type": "command", "command": "bash %s" % shlex.quote(hook_path)},
         ],
     })
 
@@ -332,9 +342,8 @@ PY
 # ---------------------------------------------------------------------------
 airlift_settings_unwire() {
   local settings="${1:-$HOME/.claude/settings.json}"
-  local dir
-  dir="$(airlift_settings_dir)"
-  local backup="${dir}/settings-backup.json"
+  local backup
+  backup="$(airlift_backup_path "$settings")"
 
   # Resolve the airlift-hook-flush.sh path so unwire can scope deletion to
   # airlift-authored StopFailure entries (commands that reference this exact
@@ -348,7 +357,7 @@ airlift_settings_unwire() {
   AIRLIFT_SENTINEL="$AIRLIFT_SENTINEL" \
   AIRLIFT_HOOK_PATH="$hook_path" \
   python3 - <<'PY'
-import json, os, sys, tempfile
+import json, os, sys, tempfile, shlex
 
 settings_path = os.environ["AIRLIFT_SETTINGS"]
 backup_path = os.environ["AIRLIFT_BACKUP"]
@@ -411,7 +420,7 @@ if isinstance(backup, dict) and "statusLine" in backup:
 def is_airlift_authored_command(cmd):
     if not isinstance(cmd, str):
         return False
-    if hook_path and cmd == ("bash %s" % hook_path):
+    if hook_path and cmd == ("bash %s" % shlex.quote(hook_path)):
         return True
     # Fallback (hook_path unresolved): match the airlift-authored invocation shape
     # -- a `bash` command whose final token is a path to airlift-hook-flush.sh.

@@ -27,6 +27,12 @@ tree was dirty, `uncommitted.patch` is lossless: it holds the tracked changes
 (`git diff HEAD`) followed by every untracked, non-ignored file as an added-file
 diff, so resume loses nothing. Reapply it on resume with `git apply`.
 
+**Caution:** `uncommitted.patch` captures the working tree verbatim and may
+contain secrets (`.env` values, tokens, keys). Review it before committing,
+force-adding, or sharing this bundle. The same applies to the verify and
+environment text below, which is copied verbatim from the repository
+instruction file.
+
 <!-- tier-2: agent enrichment goes here -->
 
 ## Next steps

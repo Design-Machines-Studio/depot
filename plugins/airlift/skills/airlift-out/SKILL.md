@@ -58,6 +58,10 @@ git commit -m "wip: airlift checkpoint"
 
 If there is nothing to commit on the `--commit` path, note that no checkpoint commit was created and continue to write the bundle.
 
+## Security note
+
+`.airlift/uncommitted.patch` captures the working tree verbatim and may contain secrets (`.env` values, tokens, keys) from uncommitted work. The bundle is gitignored by default. Before force-adding, committing, or sharing the bundle (for example for cross-machine resume), review `uncommitted.patch` for secrets. On the `--commit` path, `git add -A` also stages any such secrets into the checkpoint commit, so review `git status` first when the working tree may contain credentials.
+
 ## Write the bundle
 
 Run the engine with the parsed note:

@@ -17,5 +17,7 @@ todos/
 .playwright-mcp/
 plans/*/brainstorm.html
 
-# Airlift handoff bundles are local by default; force-add explicit receipts when they should travel.
+# Airlift handoff bundles are local by default. uncommitted.patch captures the
+# working tree verbatim and can contain secrets (.env values, tokens) -- review
+# it before force-adding, committing, or sharing any receipt that should travel.
 .airlift/

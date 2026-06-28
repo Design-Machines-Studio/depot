@@ -19,7 +19,7 @@ Use it when the user asks for session handoff, a checkpoint before they run out,
 - `Objective`
 - `Status`
 - `Next steps`
-- `Gotchas-traps`
+- `Gotchas / traps`
 - `Key files & symbols`
 - `How to verify`
 - `Environment notes`
@@ -39,16 +39,25 @@ Use it when the user asks for session handoff, a checkpoint before they run out,
   "git": {
     "branch": "feature/example",
     "head": "abcdef0",
-    "dirty": true
+    "dirty": true,
+    "untrackedCaptured": true,
+    "untrackedCount": 2
   },
   "phase": "handoff",
-  "artifacts": {}
+  "note": "optional checkpoint note",
+  "artifacts": {
+    "handoff": ".airlift/HANDOFF.md",
+    "resumePrompt": ".airlift/RESUME_PROMPT.md",
+    "patch": ".airlift/uncommitted.patch",
+    "pipeline": ["plans/<slug>/plan.html"],
+    "dmReview": ["todos/001-pending-p1-example.md"]
+  }
 }
 ```
 
-`uncommitted.patch` is `git diff HEAD`. If the tree is clean, write an empty patch file and note in `HANDOFF.md` that there were no uncommitted changes at checkpoint time.
+`uncommitted.patch` is a lossless capture of uncommitted work: `git diff HEAD` PLUS every untracked, non-ignored file rendered as an added-file diff (so untracked work is not silently lost). If the tree is clean, the engine writes an empty patch file, sets `git.dirty` to false, and notes in `HANDOFF.md` that there were no uncommitted changes at checkpoint time.
 
-`RESUME_PROMPT.md` is a harness-neutral seed prompt that tells the next model how to read `HANDOFF.md`, inspect `state.json`, apply or review `uncommitted.patch` if needed, and continue from the listed next steps.
+`RESUME_PROMPT.md` is a harness-neutral seed prompt that tells the next model how to read `HANDOFF.md`, inspect `state.json`, and continue from the listed next steps. Before applying `uncommitted.patch`, it requires confirming the local `git rev-parse HEAD` matches the recorded `git.head`; on a mismatch it does NOT auto-apply (check out the recorded sha, or apply with `git apply --3way` and resolve conflicts).
 
 ## Three tiers
 
@@ -58,7 +67,7 @@ Use it when the user asks for session handoff, a checkpoint before they run out,
 
 ## The marker block
 
-Airlift installs an idempotent marker block in harness instruction files:
+The deterministic engine (`airlift-engine.sh write`, run by `/airlift-out` and the pipeline/dm-review checkpoints) upserts an idempotent pointer marker block into the repo-root harness instruction file:
 
 ```markdown
 <!-- airlift:start -->
@@ -66,7 +75,7 @@ Airlift installs an idempotent marker block in harness instruction files:
 <!-- airlift:end -->
 ```
 
-Append the block to `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md` as appropriate. If the block already exists, replace it in place. Never clobber the rest of the instruction file.
+The block is appended to `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md` as appropriate. If the block already exists, it is replaced in place. The rest of the instruction file is never clobbered. (This marker upsert is part of the engine's checkpoint write -- it is NOT what `/airlift-install` does. `/airlift-install` is a separate command that wires the Tier-3 early-warning monitor into `settings.json`.)
 
 ## Harness profiles
 

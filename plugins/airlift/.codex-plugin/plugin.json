@@ -51,20 +51,20 @@
       {
         "id": "airlift-out",
         "name": "Airlift Out",
-        "description": "Create or refresh a .airlift handoff bundle for another model or harness.",
-        "argumentHint": "[target-harness]"
+        "description": "Create or refresh a .airlift handoff bundle from the current session (default no-commit patch capture).",
+        "argumentHint": "[--commit | --no-commit] [note]"
       },
       {
         "id": "airlift-in",
         "name": "Airlift In",
         "description": "Resume from an existing .airlift handoff bundle in the current harness.",
-        "argumentHint": "[bundle-path]"
+        "argumentHint": "[path]"
       },
       {
         "id": "airlift-install",
         "name": "Airlift Install",
-        "description": "Install or refresh the idempotent airlift marker block in supported instruction files.",
-        "argumentHint": "[--all|instructions-file]"
+        "description": "Wire, unwire, or check the airlift Tier-3 early-warning monitor in settings.json (statusLine chain + StopFailure hook). Preserves the existing statusLine; ccusage optional.",
+        "argumentHint": "[wire | unwire | status]"
       }
     ]
   },

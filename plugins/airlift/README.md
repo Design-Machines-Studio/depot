@@ -18,9 +18,9 @@ The core contract is a `.airlift/` bundle with deterministic files that any supp
 
 | Command | What it does |
 |---------|-------------|
-| `/airlift-out [target-harness]` | Create or refresh a `.airlift/` handoff bundle for another model or harness |
-| `/airlift-in [bundle-path]` | Resume from an existing `.airlift/` handoff bundle in the current harness |
-| `/airlift-install [--all|instructions-file]` | Install or refresh the idempotent marker block in supported instruction files |
+| `/airlift-out [--commit \| --no-commit] [note]` | Create or refresh a `.airlift/` handoff bundle from the current session (default no-commit patch capture) |
+| `/airlift-in [path]` | Resume from an existing `.airlift/` handoff bundle in the current harness |
+| `/airlift-install [wire \| unwire \| status]` | Wire/unwire the Tier-3 early-warning monitor in `settings.json` (statusLine chain + StopFailure hook), preserving the existing statusLine |
 
 ## Harness Profiles
 

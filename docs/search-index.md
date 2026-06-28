@@ -125,9 +125,9 @@ Common questions mapped to the right skill:
 | Plugin | Command | Argument | Description |
 |--------|---------|----------|-------------|
 | accessibility-compliance | /a11y-audit | [URL, file path, or 'all' for full site scan] | Run automated accessibility audit on a page or template |
-| airlift | /airlift-out | [target-harness] | Create or refresh a .airlift handoff bundle for another model or harness. |
-| airlift | /airlift-in | [bundle-path] | Resume from an existing .airlift handoff bundle in the current harness. |
-| airlift | /airlift-install | [--all|instructions-file] | Install or refresh the idempotent airlift marker block in supported instruction files. |
+| airlift | /airlift-out | [--commit | --no-commit] [note] | Create or refresh a .airlift handoff bundle from the current session (default no-commit patch capture). |
+| airlift | /airlift-in | [path] | Resume from an existing .airlift handoff bundle in the current harness. |
+| airlift | /airlift-install | [wire | unwire | status] | Wire, unwire, or check the airlift Tier-3 early-warning monitor in settings.json (statusLine chain + StopFailure hook). Preserves the existing statusLine; ccusage optional. |
 | assembly | /assembly-build | [optional: test, generate, or full] | Build and test Assembly via Docker |
 | chef | /meal-plan | [number of days, any constraints or preferences] | Generate a meal plan following Eve Persak's timing framework |
 | chef | /recipe-check | [paste recipe text, URL, or Mela recipe name] | Analyze a recipe against Eve Persak's dietary framework |
