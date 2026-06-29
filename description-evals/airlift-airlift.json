@@ -20,7 +20,7 @@
     "should_trigger": true
   },
   {
-    "query": "Hand off to Gemini so it can continue where I left off.",
+    "query": "Hand off to Codex so it can continue where I left off.",
     "should_trigger": true
   },
   {

@@ -45,8 +45,8 @@ Right-size effort per agent rather than running everything at the session defaul
 | Tier | Agents | Effort | Why |
 | :--- | :----- | :----- | :-- |
 | Decision-gate reasoning | `plan-adversary` (opus) | `xhigh` | Adversarial plan review gates whether expensive execution proceeds. Deepest reasoning pays off; runs once per pipeline, not per chunk. |
-| External-LLM wrappers / analysis | `deepseek-bulk-analyst`, `deepseek-code-analyst`, `gemini-diff-analyst`, `gemini-search-grounded` (sonnet) | `medium` | The Claude side constructs the prompt, invokes the CLI/API, and maps structured output for the consolidator. The real analysis happens in DeepSeek/Gemini -- Claude only needs enough care to not mangle the handoff. |
-| Pure command / sandbox runners | `gemini-code-executor`, `go-test-runner` (sonnet) | `low` | Run a command or delegate to a sandbox and report. Not intelligence-sensitive. |
+| External-LLM wrappers / analysis | `deepseek-bulk-analyst`, `deepseek-code-analyst`, `openrouter-bulk-analyst` (sonnet) | `medium` | The Claude side constructs the prompt, invokes the CLI/API, and maps structured output for the consolidator. The real analysis happens in DeepSeek/OpenRouter -- Claude only needs enough care to not mangle the handoff. |
+| Pure command runners | `go-test-runner` (sonnet) | `low` | Run a command and report. Not intelligence-sensitive. |
 | Mechanical validators | `nats-reviewer`, `migration-validator` (sonnet) | `medium` | Pattern-and-rule checks with light judgment (PII detection, FK constraints, subject naming). |
 | Deep Claude reviewers | `architecture-reviewer`, `security-auditor`, et al. (inherit) | session default | Inherit the session level (`high` on Opus 4.8). Raise the whole session to `xhigh` for high-stakes reviews rather than baking cost into every run. |
 | Haiku-tier | `go-build-verifier`, `deepseek-agent-runner` | n/a | Haiku ignores effort; left unset. |
@@ -59,4 +59,4 @@ For the pipeline, raise *session* effort (`/effort xhigh` or `ultracode`) for co
 
 ## Maintenance
 
-When a new flagship ships: the aliases auto-upgrade, so check (1) the effort matrix above against the model-config docs, (2) whether any new effort level changes the per-agent policy, and (3) the DeepSeek/Gemini comparison framing in `plugins/deepseek/skills/deepseek-delegate/references/model-selection.md` (position external models as Sonnet-class cost-offload, never as flagship-replacements).
+When a new flagship ships: the aliases auto-upgrade, so check (1) the effort matrix above against the model-config docs, (2) whether any new effort level changes the per-agent policy, and (3) the external-model comparison framing in the `model-selection.md` references under `plugins/deepseek/` and `plugins/openrouter/` (position external models as Sonnet-class cost-offload, never as flagship-replacements).

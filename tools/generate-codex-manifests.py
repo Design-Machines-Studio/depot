@@ -36,7 +36,6 @@ CATEGORY_BY_PLUGIN = {
     "design-machines": "Business",
     "design-practice": "Design",
     "dm-review": "Developer Tools",
-    "gemini": "Developer Tools",
     "ghostwriter": "Writing",
     "live-wires": "Developer Tools",
     "ned": "Knowledge",

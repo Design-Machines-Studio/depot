@@ -26,7 +26,6 @@ Then install individual plugins:
 /plugin install the-local@depot
 /plugin install chef@depot
 /plugin install pipeline@depot
-/plugin install gemini@depot
 /plugin install deepseek@depot
 ```
 
@@ -205,17 +204,6 @@ Autonomous feature development pipeline. 3 skills, 2 agents, 4 commands.
 - `/pipeline-assess` -- Pre-plan assessment of current state
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
 - `/pipeline-run` -- Execute prompts in worktrees with review-fix loops
-
-### gemini
-
-Gemini CLI delegation for grounded research, large-context diff analysis, and code execution. 1 skill, 3 agents, 2 commands.
-
-- **gemini-delegate** -- Delegates web-grounded search, 2M-context diff analysis, and sandboxed code execution to Gemini
-- **gemini-search-grounded** (agent) -- Runs search-grounded research with cited sources
-- **gemini-code-executor** (agent) -- Verifies algorithms and data transformations in Gemini's execution sandbox
-- **gemini-diff-analyst** (agent) -- Reviews large diffs that exceed normal truncation limits
-- `/gemini` -- Delegate a task to Gemini CLI
-- `/gemini-search` -- Run search-grounded Gemini research
 
 ### deepseek
 

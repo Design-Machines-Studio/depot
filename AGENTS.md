@@ -63,7 +63,7 @@ These aliases live at `plugins/<name>/skills/<command>/SKILL.md` so Codex can ex
 
 ## Runtime Cache Path Resolution
 
-Plugins that resolve paths at runtime (deepseek, gemini, openrouter, dm-review, pipeline) use a Claude-first/Codex-fallback loop:
+Plugins that resolve paths at runtime (deepseek, openrouter, dm-review, pipeline) use a Claude-first/Codex-fallback loop:
 
 ```bash
 WRAPPER_PATH=""
@@ -102,7 +102,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-19 plugins | 39 canonical skills + 36 generated Codex command-skill aliases | 42 agents | 36 commands
+18 plugins | 38 canonical skills + 34 generated Codex command-skill aliases | 39 agents | 34 commands
 
 | Plugin | Purpose |
 |---|---|
@@ -121,7 +121,6 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 | **the-local** | Self-hosted Matrix network — Element Web branding, Synapse config |
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
-| **gemini** | Gemini CLI subagent for search grounding, 2M context diff analysis, code execution |
 | **deepseek** | DeepSeek V4 API subagent for code review and bulk diff analysis |
 | **openrouter** | OpenRouter provider plugin (leaf): GLM-5.2 big-diff analysis + one-shot generation; pipeline cascade rail and dm-review big-diff fallback |
 

@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.11.2"
+    "version": "1.11.3"
   },
   "plugins": [
     {
@@ -391,30 +391,6 @@
           "resume",
           "multi-model",
           "harness"
-        ]
-      }
-    },
-    {
-      "name": "gemini",
-      "source": "./plugins/gemini",
-      "version": "1.2.0",
-      "author": {
-        "name": "Design Machines",
-        "url": "https://designmachines.studio"
-      },
-      "description": "Gemini CLI subagent for delegating tasks that benefit from Google search grounding, 2M token context, or code execution sandbox",
-      "capabilities_summary": {
-        "skills": 1,
-        "agents": 3,
-        "commands": 2,
-        "tags": [
-          "gemini",
-          "subagent",
-          "search-grounding",
-          "large-context",
-          "code-execution",
-          "citations",
-          "delegation"
         ]
       }
     },

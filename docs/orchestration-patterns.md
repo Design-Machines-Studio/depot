@@ -250,11 +250,11 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 ### Real example
 
-`plugins/gemini/` wraps Gemini CLI as a subagent. Three agents use this pattern:
+`plugins/deepseek/` and `plugins/openrouter/` wrap external model APIs as subagents. Agents using this pattern:
 
-- **gemini-diff-analyst** -- dm-review conditional agent. When diffs exceed 5000 lines, sends the full untruncated diff to Gemini's 2M token context for analysis alongside the truncated-diff core agents.
-- **gemini-search-grounded** -- pipeline research Agent 6. Delegates web research to Gemini's Google search grounding, which returns structured citations with URLs.
-- **gemini-code-executor** -- on-demand agent. Delegates algorithm verification to Gemini's Python sandbox.
+- **deepseek-bulk-analyst** / **openrouter-bulk-analyst** -- dm-review conditional agents. When diffs exceed 5000 lines, send the full untruncated diff to a 1M-token-context model (DeepSeek V4, or GLM-5.2 via OpenRouter) for analysis alongside the truncated-diff core agents.
+- **deepseek-agent-runner** -- routes dm-review's mechanical agents through DeepSeek V4 when `DEEPSEEK_API_KEY` is set.
+- The pipeline cascade (`cascade-dispatch.sh`) drives the OpenRouter wrapper as a one-shot rung for config/doc generation and second-opinion analysis.
 
 ### Failure modes
 

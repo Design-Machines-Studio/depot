@@ -1,12 +1,12 @@
 # Migration: OpenRouter Leaf Plugin + Usage-Aware Executor Cascade
 
-This note covers the `world-b-openrouter` changes: a shared `openrouter` provider plugin, a usage-aware model cascade wired into the pipeline executor handoff, and the removal of Gemini from pipeline and dm-review. **Everything is backward-compatible: with no new environment variables set, behavior is byte-for-byte identical to before.**
+This note covers the `world-b-openrouter` changes: a shared `openrouter` provider plugin, a usage-aware model cascade wired into the pipeline executor handoff, and the full removal of the Gemini plugin. **The cascade is backward-compatible: with no new environment variables set, executor behavior is byte-for-byte identical to before.**
 
 ## What changed
 
-1. **New leaf plugin `plugins/openrouter`** -- a provider primitive (no internal dependencies) that both pipeline and dm-review `optionalPluginDependencies` on. Owns `openrouter-wrapper.sh` (canonical home) and the `openrouter-bulk-analyst` review agent. Mirrors the `deepseek`/`gemini` provider-plugin shape.
+1. **New leaf plugin `plugins/openrouter`** -- a provider primitive (no internal dependencies) that both pipeline and dm-review `optionalPluginDependencies` on. Owns `openrouter-wrapper.sh` (canonical home) and the `openrouter-bulk-analyst` review agent. Mirrors the `deepseek` provider-plugin shape.
 2. **Cascade in `execution-orchestrator.md` Step 3d** -- the binary "Codex unavailable -> Claude" fallback is generalized into a usage-aware ladder (probe headroom -> on cap, Airlift checkpoint + descend). The prior block is preserved verbatim as **3d-LEGACY** and runs unchanged when the cascade is inactive.
-3. **Gemini removed** from pipeline (research Agent 6 -> Claude-native WebSearch/WebFetch) and dm-review (big-diff fallback -> `openrouter-bulk-analyst`). The standalone `plugins/gemini` is untouched.
+3. **Gemini removed entirely** -- from pipeline (research Agent 6 -> Claude-native WebSearch/WebFetch), dm-review (big-diff fallback -> `openrouter-bulk-analyst`), and airlift (dropped as a resume target). The `plugins/gemini` plugin is deleted.
 
 ## Environment variables
 

@@ -197,18 +197,6 @@
       "category": "Developer Tools"
     },
     {
-      "name": "gemini",
-      "source": {
-        "source": "local",
-        "path": "./plugins/gemini"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Developer Tools"
-    },
-    {
       "name": "deepseek",
       "source": {
         "source": "local",
