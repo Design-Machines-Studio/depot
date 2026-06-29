@@ -35,7 +35,7 @@ done
 ## How to Invoke
 
 ```bash
-# Default: GLM-5.2, 120s, with DeepSeek V4 as the rate-limit fallback
+# GLM-5.2, explicit 120s timeout, DeepSeek V4 rate-limit fallback (wrapper default timeout is 90s)
 bash "$WRAPPER_PATH" "z-ai/glm-5.2" "your prompt" 120 "deepseek/deepseek-v4-pro"
 
 # Custom system prompt (env), privacy-pinned, prompt via stdin (large content)

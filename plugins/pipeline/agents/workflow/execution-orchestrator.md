@@ -431,7 +431,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model`. **Re-dispatch IN-PROCESS through the 3d-LEGACY Claude subagent path**, passing the directive `model:` (e.g. `sonnet` when `opus` is capped). Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | WRAPPER/codex-companion rung already executed; stdout is the produced text. | Apply the **one-shot validity rule** below. |
 | `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
-| other | Bad args / engine error. | Treat as a 3d.3 failure; fall back to the 3d-LEGACY Claude subagent at the default model. |
+| other | Bad args / engine error. | Fall back to the 3d-LEGACY Claude subagent at the default model. Do NOT re-invoke the cascade (avoids a loop on a persistent engine error). |
 
 **One-shot validity rule (RC 0).** A wrapper rung returns single-turn text, not an agentic commit. It is acceptable ONLY for chunks whose deliverable IS pure text the orchestrator then writes to files:
 - `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR

@@ -54,7 +54,11 @@ openrouter_json() {
     bal="$(curl -sS --max-time 10 https://openrouter.ai/api/v1/credits \
       -H "Authorization: Bearer $OPENROUTER_API_KEY" 2>/dev/null \
       | jq -r '(.data.total_credits - .data.total_usage) // empty' 2>/dev/null)"
-    [ -n "$bal" ] && { awk "BEGIN{exit !($bal < 5)}" && state="low" || state="ok"; }
+    # Validate numeric before use: untrusted API output must never reach awk's
+    # program text (code injection) nor the unquoted JSON below (malformed output).
+    # Non-numeric -> unknown (fail-open: prefer dispatch + reactive cap detection).
+    case "$bal" in ''|*[!0-9.+-]*) bal="" ;; esac
+    [ -n "$bal" ] && { awk -v b="$bal" 'BEGIN{exit !(b < 5)}' && state="low" || state="ok"; }
   fi
   printf '{"state":"%s","balance_usd":%s}' "$state" "${bal:-null}"
 }

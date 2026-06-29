@@ -61,7 +61,7 @@ for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cach
 done
 if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] || [ -z "$TEMPLATES_PATH" ] || [ ! -f "$TEMPLATES_PATH" ]; then
   cat <<EOF
-## OpenRouter Bulk Analyst (glm-5.2)
+## OpenRouter Bulk Analyst (z-ai/glm-5.2)
 
 ### RUNNER FAILURE
 OpenRouter bulk analyst: wrapper or templates not found in plugin cache. Bulk diff review unavailable.

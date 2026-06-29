@@ -129,6 +129,9 @@ for role in $LADDER; do
             '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr}'
       exit 0
     fi
+    # Traversal intent per rung kind: native/codex_companion are single-model roles
+    # -> on failure `break` to the next ROLE; wrapper roles carry a model list
+    # -> on per-model failure `continue` to the next MODEL within the same role.
     case "$kind" in
       native)
         jq -n --arg m "$model" --arg role "$role" --arg pr "$prail" \

@@ -35,6 +35,8 @@
     "reentry": "highest_quality",
     "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again — prefer quality).",
     "on_cap_error": ["airlift_checkpoint", "mark_exhausted_until_resets_at", "descend"],
-    "privacy": "For cheap_api/frontier_api wrapper rows, pin a no-logging Western provider (Fireworks/Together) for any model whose first-party API trains on data (e.g. DeepSeek). Enforced per-call via OPENROUTER_ZDR=1 in openrouter-wrapper.sh."
+    "privacy": "For cheap_api/frontier_api wrapper rows, pin a no-logging Western provider (Fireworks/Together) for any model whose first-party API trains on data (e.g. DeepSeek). Enforced per-call via OPENROUTER_ZDR=1 in openrouter-wrapper.sh.",
+    "_comment_headroom_unknown": "usage-probe state 'unknown' is treated as HAS-headroom (fail-open): a stale/unverified parser prefers dispatch + reactive cap detection over a false 'capped' that needlessly skips a healthy rail. The codex rail has a reactive cap detector (usage-limit string match) in cascade-dispatch.sh; the claude native rail relies on the orchestrator's own cap handling.",
+    "_comment_agentic_seam": "One-shot vs agentic: wrapper rungs (cheap_api/frontier_api) return single-turn text. For one-shot kinds (config/doc) the orchestrator writes that text -- the cheap rung is a genuine cost win. For agentic kinds (logic/ui/integration) the orchestrator's RC-0 rule discards wrapper text and re-dispatches to Claude, so a capped agentic chunk may execute ONE wrapper call that is then discarded. This is the intentional Phase-B seam: the wrapper rung stays in the ladder so a future agentic openrouter-exec runner (Phase B) plugs in at the orchestrator without re-ordering the ladder. Until Phase B, that one discarded call is the accepted cost; teaching the engine to skip wrapper rungs for agentic kinds is the alternative if the cost matters."
   }
 }

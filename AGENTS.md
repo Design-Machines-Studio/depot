@@ -102,7 +102,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-17 plugins | 36 canonical skills + 31 generated Codex command-skill aliases | 41 agents | 31 commands
+19 plugins | 39 canonical skills + 36 generated Codex command-skill aliases | 42 agents | 36 commands
 
 | Plugin | Purpose |
 |---|---|
