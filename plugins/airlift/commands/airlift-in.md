@@ -67,20 +67,3 @@ One-line form:
 ```bash
 WRAPPER=""; for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do WRAPPER=$(ls -t "$CACHE"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1); [ -n "$WRAPPER" ] && break; done; bash "$WRAPPER" -m v4-pro -s "$(cat .airlift/RESUME_PROMPT.md)" -p "$(cat .airlift/HANDOFF.md)"
 ```
-
-For `resume-via-gemini`, require gemini CLI auth. Resolve the wrapper and invoke it with the combined resume prompt and handoff:
-
-```bash
-WRAPPER=""
-for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER=$(ls -t "$CACHE"/gemini/*/skills/gemini-delegate/references/gemini-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER" ] && break
-done
-bash "$WRAPPER" -m flash -p "$(cat .airlift/RESUME_PROMPT.md; printf '\n\n'; cat .airlift/HANDOFF.md)"
-```
-
-One-line form:
-
-```bash
-WRAPPER=""; for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do WRAPPER=$(ls -t "$CACHE"/gemini/*/skills/gemini-delegate/references/gemini-wrapper.sh 2>/dev/null | head -1); [ -n "$WRAPPER" ] && break; done; bash "$WRAPPER" -m flash -p "$(cat .airlift/RESUME_PROMPT.md; printf '\n\n'; cat .airlift/HANDOFF.md)"
-```

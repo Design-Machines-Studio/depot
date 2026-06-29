@@ -425,7 +425,7 @@ PY
   # Source + targets defaults / overrides.
   local src_harness="${AIRLIFT_SOURCE_HARNESS:-claude-code}"
   local src_model="${AIRLIFT_SOURCE_MODEL:-${AIRLIFT_MODEL:-unknown}}"
-  local targets_csv="${AIRLIFT_TARGETS:-claude-code,codex,deepseek,gemini,kiro,opencode}"
+  local targets_csv="${AIRLIFT_TARGETS:-claude-code,codex,deepseek,kiro,opencode}"
 
   # 6 (cont). Build state.json with python3 (NEVER hand-concatenate JSON).
   # Pass every dynamic value through the environment so embedded quotes/braces

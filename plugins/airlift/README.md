@@ -12,7 +12,7 @@ The core contract is a `.airlift/` bundle with deterministic files that any supp
 
 | Skill | Triggers when you're... |
 |-------|------------------------|
-| `airlift` | Preparing a session handoff, hitting a usage cap or rate limit, checkpointing before running out, or resuming in Claude Code, Codex, DeepSeek, Gemini, Kiro, or OpenCode |
+| `airlift` | Preparing a session handoff, hitting a usage cap or rate limit, checkpointing before running out, or resuming in Claude Code, Codex, DeepSeek, Kiro, or OpenCode |
 
 ## Commands
 
@@ -24,9 +24,9 @@ The core contract is a `.airlift/` bundle with deterministic files that any supp
 
 ## Harness Profiles
 
-Harness profiles live in `skills/airlift/references/harness-profiles.json`. The first registry includes Claude Code, Codex, DeepSeek, Gemini, Kiro, and OpenCode, with an explicit fallback for unknown targets: paste `RESUME_PROMPT.md` into a new session.
+Harness profiles live in `skills/airlift/references/harness-profiles.json`. The first registry includes Claude Code, Codex, DeepSeek, Kiro, and OpenCode, with an explicit fallback for unknown targets: paste `RESUME_PROMPT.md` into a new session.
 
-DeepSeek and Gemini are first-class resume targets through the existing delegate plugins when they are installed.
+DeepSeek is a first-class resume target through the existing delegate plugin when it is installed.
 
 ## Honest limits
 

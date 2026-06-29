@@ -1,6 +1,6 @@
 ---
 name: airlift
-description: Model- and harness-agnostic session handoff triggers for "session handoff", "usage cap", "resume in another model", "checkpoint before I run out", "hand off to Codex", "hand off to DeepSeek", "hand off to Gemini", "rate limit", "continue where I left off", and ".airlift bundle" requests.
+description: Model- and harness-agnostic session handoff triggers for "session handoff", "usage cap", "resume in another model", "checkpoint before I run out", "hand off to Codex", "hand off to DeepSeek", "rate limit", "continue where I left off", and ".airlift bundle" requests.
 argument-hint: "[out|in|install] [target-harness|bundle-path]"
 ---
 
@@ -10,7 +10,7 @@ argument-hint: "[out|in|install] [target-harness|bundle-path]"
 
 Airlift is a model- and harness-agnostic session handoff capability. Its goal is to make a usage cap, rate limit, or model switch a non-event by preserving objective state, next steps, verification commands, and local git context in a small `.airlift/` bundle.
 
-Use it when the user asks for session handoff, a checkpoint before they run out, resume in another model, hand off to Codex, DeepSeek, or Gemini, rate limit recovery, or continue where I left off.
+Use it when the user asks for session handoff, a checkpoint before they run out, resume in another model, hand off to Codex or DeepSeek, rate limit recovery, or continue where I left off.
 
 ## The .airlift/ bundle contract
 
@@ -75,7 +75,7 @@ The deterministic engine (`airlift-engine.sh write`, run by `/airlift-out` and t
 <!-- airlift:end -->
 ```
 
-The block is appended to `CLAUDE.md`, `AGENTS.md`, or `GEMINI.md` as appropriate. If the block already exists, it is replaced in place. The rest of the instruction file is never clobbered. (This marker upsert is part of the engine's checkpoint write -- it is NOT what `/airlift-install` does. `/airlift-install` is a separate command that wires the Tier-3 early-warning monitor into `settings.json`.)
+The block is appended to `CLAUDE.md` or `AGENTS.md` as appropriate. If the block already exists, it is replaced in place. The rest of the instruction file is never clobbered. (This marker upsert is part of the engine's checkpoint write -- it is NOT what `/airlift-install` does. `/airlift-install` is a separate command that wires the Tier-3 early-warning monitor into `settings.json`.)
 
 ## Harness profiles
 
@@ -83,7 +83,7 @@ Harness profile data lives in `${CLAUDE_SKILL_DIR}/references/harness-profiles.j
 
 The registry is keyed by harness id. Unknown targets fall back to the universal resume path: paste `RESUME_PROMPT.md` into a new session.
 
-`resume-via-deepseek` and `resume-via-gemini` are first-class paths through the existing DeepSeek and Gemini delegate plugins when they are installed.
+`resume-via-deepseek` is a first-class path through the existing DeepSeek delegate plugin when it is installed.
 
 ## Honest limits
 

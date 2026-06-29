@@ -18,14 +18,6 @@
     "resume": "seed via deepseek plugin delegate",
     "agentsMd": true
   },
-  "gemini": {
-    "instructionsFile": "GEMINI.md",
-    "instructionsFileAlt": ["AGENTS.md"],
-    "instructionsFileNote": "GEMINI.md by default; AGENTS.md when configured via context.fileName",
-    "sessionLog": "n/a",
-    "resume": "seed via gemini plugin delegate",
-    "agentsMd": true
-  },
   "kiro": {
     "instructionsFile": "AGENTS.md",
     "instructionsFileAlt": [".kiro/steering/"],

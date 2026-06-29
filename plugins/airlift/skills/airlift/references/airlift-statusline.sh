@@ -64,7 +64,7 @@ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
 # ---------------------------------------------------------------------------
-# Temp cleanup. Mirror the engine/gemini idiom: mint under TMPDIR with a fixed
+# Temp cleanup. Mirror the engine idiom: mint under TMPDIR with a fixed
 # prefix and sweep via glob on exit (command-substitution subshells make a
 # per-process registry unreliable). The prefix includes this process's PID so a
 # concurrent run (e.g. a manual /airlift-out engine write firing while a
