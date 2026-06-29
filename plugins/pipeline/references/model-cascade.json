@@ -1,0 +1,40 @@
+{
+  "_comment": "World B usage-aware cascade. EXTENDS the merged kind→executor routing (promptcraft/references/manifest-schema.md). A chunk's executor intent maps to a class here; cascade-dispatch.sh walks that class's role ladder, resolves roles per host via harness-profile.json, checks live headroom (usage-probe.sh) + the quality_floor, dispatches the best available rung, and on a cap error fires the Airlift Tier-1 checkpoint and DESCENDS — generalizing the orchestrator's single 'Codex unavailable -> Claude' fallback into a full ladder. DeepSeek mechanical-agent routing in dm-review is unaffected.",
+
+  "class_from_kind": {
+    "_comment": "kind (manifest) -> cascade class. Mirrors the merged Executor Mapping: logic/config default to the codex ladder, ui/integration to the claude ladder.",
+    "logic": "codex", "config": "codex", "ui": "claude", "integration": "claude"
+  },
+
+  "roles": ["premium_sub", "native_judgment", "frontier_api", "cheap_api", "bulk_api"],
+
+  "quality_rank": {
+    "_comment": "Global model->score; enforces quality_floor regardless of which role surfaced the model. Higher = better.",
+    "gpt-5.2-codex": 95, "anthropic/claude-opus-4.8": 95, "openai/gpt-5.5": 93,
+    "opus": 92, "z-ai/glm-5.2": 84, "deepseek/deepseek-v4-pro": 83,
+    "sonnet": 82, "deepseek/deepseek-v4-flash": 74, "qwen/qwen3-coder": 72,
+    "gpt-5.1-codex-mini": 70, "haiku": 60
+  },
+
+  "cascades": {
+    "codex": {
+      "_comment": "Primary executor = Codex (kind logic/config). Sub first; when Codex caps, descend to a cheap open model via OpenRouter BEFORE falling all the way to Claude — this is the key cost win and the generalization of the merged single fallback.",
+      "quality_floor": 70,
+      "ladder": ["premium_sub", "cheap_api", "native_judgment"]
+    },
+    "claude": {
+      "_comment": "Primary executor = Claude (kind ui/integration — needs visual/Live Wires judgment). Claude first; cross to a frontier API model only when the Max plan is capped. Never drops to a cheap model — quality floor 80 protects ui/integration work.",
+      "quality_floor": 80,
+      "ladder": ["native_judgment", "frontier_api"]
+    }
+  },
+
+  "policy": {
+    "headroom_threshold_pct": 8,
+    "_comment_headroom": "Treat a sub/native rail as exhausted once probed remaining quota drops below this — hand off BEFORE the hard wall (mirrors Airlift's early-warning trip).",
+    "reentry": "highest_quality",
+    "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again — prefer quality).",
+    "on_cap_error": ["airlift_checkpoint", "mark_exhausted_until_resets_at", "descend"],
+    "privacy": "For cheap_api/frontier_api wrapper rows, pin a no-logging Western provider (Fireworks/Together) for any model whose first-party API trains on data (e.g. DeepSeek). Enforced per-call via OPENROUTER_ZDR=1 in openrouter-wrapper.sh."
+  }
+}

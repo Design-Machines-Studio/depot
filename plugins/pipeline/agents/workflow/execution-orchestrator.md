@@ -391,6 +391,60 @@ Mark `[chunk-id] 3. Apply input guardrails` complete.
 
 ### 3d: Dispatch Implementation Subagent
 
+The cascade generalizes the binary "Codex unavailable -> Claude" fallback into a usage-aware ladder (probe headroom -> on cap, Airlift checkpoint + descend to the next rung), but ONLY when explicitly activated. **With no new env vars set, the legacy binary path (3d-LEGACY below) runs unchanged -- behavior is byte-for-byte identical to current main.** The `executor` field stays advisory throughout.
+
+**Step 3d.0 -- Cascade activation gate.** Resolve the decision engine from the pipeline plugin cache and decide whether the cascade is active:
+
+```bash
+CASCADE_DISPATCH=""
+for CACHE in "$HOME/.claude/plugins/cache/depot/pipeline" "$HOME/.codex/plugins/cache/depot/pipeline"; do
+  CASCADE_DISPATCH=$(ls -t "$CACHE"/*/references/cascade-dispatch.sh 2>/dev/null | head -1)
+  [ -n "$CASCADE_DISPATCH" ] && break
+done
+CASCADE_ACTIVE=0
+if [ -n "$CASCADE_DISPATCH" ] && [ -x "$CASCADE_DISPATCH" ] \
+   && { [ -n "${OPENROUTER_API_KEY:-}" ] || [ "${PIPELINE_CASCADE:-0}" = "1" ]; }; then
+  CASCADE_ACTIVE=1
+fi
+```
+
+`OPENROUTER_API_KEY` (the opt-in signal) or `PIPELINE_CASCADE=1` (manual override for testing the native-reroute/Airlift path without a key) activates the cascade. **If `CASCADE_ACTIVE=0`, execute 3d-LEGACY below EXACTLY as written and skip Steps 3d.1-3d.4.** This is the default.
+
+**Step 3d.1 -- Probe headroom (cascade active only).** Determine the chunk's primary rail from `kind`: `logic`/`config` -> the Codex rail; `ui`/`integration` -> the Claude (native) rail. You may consult `usage-probe.sh` (resolved from the same pipeline cache dir) to skip a known-capped primary; otherwise proceed to 3d.2 and let a cap error trigger the descent. `cascade-dispatch.sh` re-probes internally, so an orchestrator-level probe is an optimization, not a requirement.
+
+**Step 3d.2 -- Primary rail has headroom: dispatch AS TODAY.** Run the existing dispatch unchanged using the 3d-LEGACY path (codex-companion for `executor: codex`; the Claude implementation subagent for `executor: claude`/absent). On success -> proceed to **Step 3e** (the eval gate, `EVAL_GATE_PASSED` receipt, livewires-lint, and worktree merge are untouched -- the cascade changes only WHO produces the commit, never WHAT happens after). On a **cap/usage-limit/quota error or unavailability** (Codex auth error, plugin missing, rate-limit string in output, native quota wall) -> go to Step 3d.3. On a **non-cap quality failure** (build error in the subagent's own work, malformed output) -> this is NOT a cascade event; flag the chunk failed per the existing Step 3e logic. Do not descend the ladder for a quality failure.
+
+**Step 3d.3 -- Cap/unavailable: consult the cascade.** Log `"Primary rail capped for chunk [id]; consulting cascade."` then invoke the decision engine with the chunk's kind and prompt on stdin. The Airlift Tier-1 checkpoint on cap is fired INSIDE `cascade-dispatch.sh` (guarded resolve, no model budget) -- do not call Airlift directly here.
+
+```bash
+CASCADE_OUT=$(printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
+  --kind "<kind>" --prompt - --phase execute --timeout 120)
+CASCADE_RC=$?
+```
+
+Never parse model names yourself -- the script owns class->ladder->role->rail resolution (`model-cascade.json` + `harness-profile.json`).
+
+**Step 3d.4 -- Route the cascade result by exit code.**
+
+| `CASCADE_RC` | Meaning | Orchestrator action |
+|---|---|---|
+| `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model`. **Re-dispatch IN-PROCESS through the 3d-LEGACY Claude subagent path**, passing the directive `model:` (e.g. `sonnet` when `opus` is capped). Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
+| `0` | WRAPPER/codex-companion rung already executed; stdout is the produced text. | Apply the **one-shot validity rule** below. |
+| `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
+| other | Bad args / engine error. | Treat as a 3d.3 failure; fall back to the 3d-LEGACY Claude subagent at the default model. |
+
+**One-shot validity rule (RC 0).** A wrapper rung returns single-turn text, not an agentic commit. It is acceptable ONLY for chunks whose deliverable IS pure text the orchestrator then writes to files:
+- `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR
+- a cheap second-opinion that does not become the implementation.
+
+For `kind: logic`, `kind: ui`, or `kind: integration` (agentic chunks), a wrapper rung MUST fast-fail: do NOT pipe wrapper text in as the chunk implementation. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Claude."` and re-dispatch via the 3d-LEGACY Claude subagent path at the default model. (Phase B -- a true agentic openrouter-exec runner that writes the receipt shape -- is NOT built in this version; until it exists, wrapper output never substitutes for an agentic implementation.)
+
+After any valid RC-0 path or re-dispatched native/Claude path produces a commit in the worktree -> proceed to Step 3e. The eval gate and merge flow are identical.
+
+#### 3d-LEGACY: Binary executor path (preserved verbatim)
+
+> This block is the prior section 3d in full. It runs unchanged when `CASCADE_ACTIVE=0` (no `OPENROUTER_API_KEY`, no `PIPELINE_CASCADE=1`), and it is also the in-process dispatch target re-entered by Steps 3d.2 and 3d.4 (native re-route and wrapper fast-fail).
+
 **Executor routing:** Read the chunk's `executor` field from the manifest.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**

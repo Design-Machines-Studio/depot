@@ -1,0 +1,41 @@
+{
+  "_comment": "World B — resolves abstract cascade roles to concrete rails PER HOST. Extends the merged kind→executor routing (manifest-schema.md) with a usage-aware fallback ladder. The ONLY file holding host-specific knowledge; keep all harness lock-in here. kind values: native = host runs it in-process (cascade-dispatch emits a directive, exit 64, the orchestrator dispatches the Claude/Codex subagent); codex_companion = resolve CODEX_ROOT (dual-cache) and run codex-companion.mjs task --write (matches execution-orchestrator.md 3d); wrapper = run openrouter-wrapper.sh; none = role unavailable on this host (skipped). probe = which usage-probe.sh rail to gauge. models = ordered list tried within the role (best first); for codex_companion it is representative-only (Codex uses its own configured model, no --model flag).",
+
+  "active_host": "auto",
+  "_detect": "Resolution order: --host arg > $CASCADE_HOST env > auto. Auto: $CLAUDE_CODE/$CLAUDECODE => claude-code; $CODEX_SANDBOX/$CODEX_HOME => codex; else generic.",
+
+  "hosts": {
+    "claude-code": {
+      "_comment": "Cockpit = Claude Code on Max. Codex reachable via codex-companion.mjs on the ChatGPT sub. OpenRouter for open models.",
+      "roles": {
+        "premium_sub":     { "kind": "codex_companion", "probe": "codex",      "models": ["gpt-5.2-codex"] },
+        "native_judgment": { "kind": "native",          "probe": "claude",     "models": ["opus", "sonnet", "haiku"] },
+        "frontier_api":    { "kind": "wrapper",         "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
+        "cheap_api":       { "kind": "wrapper",         "probe": "openrouter", "models": ["z-ai/glm-5.2", "deepseek/deepseek-v4-pro", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] },
+        "bulk_api":        { "kind": "wrapper",         "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash", "qwen/qwen3-coder", "deepseek/deepseek-v4-pro"] }
+      }
+    },
+
+    "codex": {
+      "_comment": "Cockpit = Codex on the ChatGPT sub. GPT-Codex is the native model. Claude only via API/OpenRouter.",
+      "roles": {
+        "premium_sub":     { "kind": "native",  "probe": "codex",      "models": ["gpt-5.2-codex", "gpt-5.1-codex-mini"] },
+        "native_judgment": { "kind": "native",  "probe": "codex",      "models": ["gpt-5.2-codex"] },
+        "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
+        "cheap_api":       { "kind": "wrapper", "probe": "openrouter", "models": ["z-ai/glm-5.2", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] },
+        "bulk_api":        { "kind": "wrapper", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] }
+      }
+    },
+
+    "generic": {
+      "_comment": "Neutral harness (opencode, Pi, etc.) with no subscription rails. Everything is API via the wrapper. premium_sub absent => skipped; judgment maps to a frontier API model.",
+      "roles": {
+        "premium_sub":     { "kind": "none" },
+        "native_judgment": { "kind": "wrapper", "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
+        "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
+        "cheap_api":       { "kind": "wrapper", "probe": "openrouter", "models": ["z-ai/glm-5.2", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] },
+        "bulk_api":        { "kind": "wrapper", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] }
+      }
+    }
+  }
+}
