@@ -443,6 +443,31 @@
           "offload"
         ]
       }
+    },
+    {
+      "name": "openrouter",
+      "source": "./plugins/openrouter",
+      "version": "1.0.0",
+      "author": {
+        "name": "Design Machines",
+        "url": "https://designmachines.studio"
+      },
+      "description": "OpenRouter API provider plugin: delegates big-diff analysis, second-opinion review, and one-shot text generation to GLM-5.2 (z-ai/glm-5.2, 1M context) and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail and dm-review's big-diff fallback.",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 1,
+        "commands": 1,
+        "tags": [
+          "openrouter",
+          "glm",
+          "provider",
+          "bulk-diff",
+          "cost-optimization",
+          "multi-provider",
+          "delegation",
+          "model-cascade"
+        ]
+      }
     }
   ]
 }

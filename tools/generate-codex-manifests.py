@@ -40,6 +40,7 @@ CATEGORY_BY_PLUGIN = {
     "ghostwriter": "Writing",
     "live-wires": "Developer Tools",
     "ned": "Knowledge",
+    "openrouter": "Developer Tools",
     "pipeline": "Developer Tools",
     "project-manager": "Productivity",
     "project-scaffolder": "Developer Tools",

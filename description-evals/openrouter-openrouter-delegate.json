@@ -1,0 +1,22 @@
+[
+  {"query": "use openrouter to review this diff", "should_trigger": true},
+  {"query": "ask openrouter to analyze this big diff", "should_trigger": true},
+  {"query": "delegate to openrouter for code review", "should_trigger": true},
+  {"query": "cheaper big-diff review with glm", "should_trigger": true},
+  {"query": "offload this large diff to openrouter", "should_trigger": true},
+  {"query": "openrouter analysis of this architecture", "should_trigger": true},
+  {"query": "use glm-5.2 for this review", "should_trigger": true},
+  {"query": "send this diff to openrouter", "should_trigger": true},
+  {"query": "1M context diff analysis", "should_trigger": true},
+  {"query": "bulk diff review with openrouter", "should_trigger": true},
+  {"query": "reduce anthropic usage for big diffs", "should_trigger": true},
+  {"query": "second opinion via openrouter", "should_trigger": true},
+  {"query": "generate this config with a cheap model", "should_trigger": true},
+  {"query": "run the large diff through glm-5.2", "should_trigger": true},
+  {"query": "review my PR", "should_trigger": false},
+  {"query": "fix this CSS bug", "should_trigger": false},
+  {"query": "write a Go handler", "should_trigger": false},
+  {"query": "check my Craft CMS templates", "should_trigger": false},
+  {"query": "run the pipeline", "should_trigger": false},
+  {"query": "commit and push", "should_trigger": false}
+]

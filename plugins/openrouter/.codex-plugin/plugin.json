@@ -1,0 +1,95 @@
+{
+  "name": "openrouter",
+  "version": "1.0.0",
+  "description": "OpenRouter API provider plugin for delegating big-diff analysis, second-opinion review, and one-shot text generation to cost-efficient frontier and open models (GLM-5.2, DeepSeek V4) over a single OpenAI-compatible endpoint. Default z-ai/glm-5.2 (1M context) for quality-per-dollar. Use when offloading large-diff review or config/doc generation from Anthropic quota, or when a diff exceeds Claude's truncation threshold. Powers the pipeline cascade's OpenRouter rail and dm-review's big-diff fallback. Invoke with /openrouter for direct delegation.",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
+  },
+  "keywords": [
+    "openrouter",
+    "glm",
+    "provider",
+    "subagent",
+    "delegation",
+    "bulk-diff",
+    "cost-optimization",
+    "multi-provider",
+    "model-cascade"
+  ],
+  "skills": "./skills/",
+  "commands": "./commands/",
+  "agents": "./agents/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "openrouter-delegate",
+        "name": "OpenRouter Delegation",
+        "description": "Delegate big-diff analysis, second-opinion review, and one-shot text generation to OpenRouter models (GLM-5.2, DeepSeek V4) at lower cost. Use when offloading large-diff review or config/doc generation from Anthropic quota.",
+        "triggers": [
+          "use openrouter",
+          "ask openrouter",
+          "delegate to openrouter",
+          "openrouter review",
+          "cheaper big-diff review",
+          "offload to openrouter",
+          "openrouter analysis",
+          "use glm-5.2",
+          "1M context diff analysis",
+          "reduce anthropic usage"
+        ],
+        "tags": [
+          "openrouter",
+          "glm",
+          "delegation",
+          "bulk-diff",
+          "code-review",
+          "cost-optimization",
+          "subagent"
+        ]
+      }
+    ],
+    "agents": [
+      {
+        "id": "openrouter-bulk-analyst",
+        "name": "OpenRouter Bulk Diff Analyst",
+        "category": "review",
+        "description": "Analyzes full diffs using GLM-5.2 (DeepSeek V4 fallback) 1M token context when diffs exceed Claude's truncation threshold. Produces P1/P2/P3 findings compatible with the dm-review consolidator.",
+        "tags": [
+          "diff",
+          "review",
+          "large-context",
+          "glm",
+          "openrouter"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "openrouter",
+        "name": "OpenRouter",
+        "description": "Direct OpenRouter invocation with model selection",
+        "argumentHint": "<prompt> [--model <slug>]"
+      }
+    ]
+  },
+  "pluginDependencies": {},
+  "optionalPluginDependencies": {},
+  "interface": {
+    "displayName": "Openrouter",
+    "shortDescription": "OpenRouter API provider plugin for delegating big-diff analysis, second-opinion review, and one-shot text generation to ",
+    "longDescription": "OpenRouter API provider plugin for delegating big-diff analysis, second-opinion review, and one-shot text generation to cost-efficient frontier and open models (GLM-5.2, DeepSeek V4) over a single OpenAI-compatible endpoint. Default z-ai/glm-5.2 (1M context) for quality-per-dollar. Use when offloading large-diff review or config/doc generation from Anthropic quota, or when a diff exceeds Claude's truncation threshold. Powers the pipeline cascade's OpenRouter rail and dm-review's big-diff fallback. Invoke with /openrouter for direct delegation.",
+    "developerName": "Design Machines",
+    "category": "Developer Tools",
+    "capabilities": [
+      "openrouter",
+      "glm",
+      "provider",
+      "bulk-diff",
+      "cost-optimization",
+      "multi-provider",
+      "delegation",
+      "model-cascade"
+    ]
+  }
+}
