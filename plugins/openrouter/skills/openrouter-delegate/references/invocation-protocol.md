@@ -4,7 +4,7 @@ Complete reference for invoking the OpenRouter API from Claude Code via the Bash
 
 ## The Wrapper
 
-`openrouter-wrapper.sh` is a single-turn completion runner -- a drop-in sibling of `deepseek-wrapper.sh` (same exit codes) so callers can swap providers with a one-line path change. It centralizes provider preferences, rate-limit fallback, JSON body construction, and timeout enforcement.
+`openrouter-wrapper.sh` is a single-turn completion runner. Its exit-code semantics match `deepseek-wrapper.sh` (0/28/1/2) so results slot into the same consolidator path, but its arg shape is POSITIONAL (`<model> <prompt|-> [timeout] [fallback]`) whereas `deepseek-wrapper.sh` is flag-based (`-m`/`-s`/`-p`) -- a caller built for deepseek's flags needs an adapter, not just a path swap. It centralizes provider preferences, rate-limit fallback, JSON body construction, and timeout enforcement.
 
 **Argument shape (positional):**
 

@@ -129,9 +129,11 @@ for role in $LADDER; do
             '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr}'
       exit 0
     fi
-    # Traversal intent per rung kind: native/codex_companion are single-model roles
-    # -> on failure `break` to the next ROLE; wrapper roles carry a model list
-    # -> on per-model failure `continue` to the next MODEL within the same role.
+    # Traversal intent per rung kind: codex_companion is single-attempt per role
+    # -> `break` to the next ROLE on any failure; native emits a directive and
+    # `exit 64`s on the first qualifying model (the orchestrator owns the in-process
+    # model descent, e.g. opus->sonnet); wrapper roles iterate their model list
+    # -> `continue` to the next MODEL on a per-model error.
     case "$kind" in
       native)
         jq -n --arg m "$model" --arg role "$role" --arg pr "$prail" \
