@@ -26,7 +26,6 @@ Determine which research sources are available. Check each and note availability
 | Web search | WebSearch tool available | No -- graceful skip |
 | Context7 | `mcp__plugin_context7_context7__resolve-library-id` available | No -- graceful skip |
 | compound-engineering | Check if repo-research-analyst agent is available | No -- graceful skip |
-| Gemini CLI | Run `timeout 10 gemini -p "test" -m flash-lite --yolo --output-format json --raw-output 2>/dev/null` and check for valid JSON | No -- graceful skip |
 
 ### Phase 2: Project Type Detection
 
@@ -96,26 +95,16 @@ If compound-engineering is not installed, perform basic codebase research direct
 - Read CLAUDE.md files for conventions
 - Check git log for related recent changes
 
-**Agent 6: Gemini Search Researcher** (if Gemini CLI available)
+**Agent 6: Web Search Researcher** (Claude-native grounding, if WebSearch available)
 
-Search with Google grounding for current, cited results:
+Use native web tools for current, cited results:
 
 1. Formulate 2-3 search queries from the feature description targeting current best practices, recent framework changes, and community patterns
-2. Resolve the gemini template and protocol paths via the plugin cache (pipeline runs in worktrees):
-   ```bash
-   TEMPLATES_PATH=""
-   PROTOCOL_PATH=""
-   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-     TEMPLATES_PATH=$(ls -t "$CACHE_ROOT"/gemini/*/skills/gemini-delegate/references/prompt-templates.md 2>/dev/null | head -1)
-     PROTOCOL_PATH=$(ls -t "$CACHE_ROOT"/gemini/*/skills/gemini-delegate/references/invocation-protocol.md 2>/dev/null | head -1)
-     [ -n "$TEMPLATES_PATH" ] && [ -n "$PROTOCOL_PATH" ] && break
-   done
-   ```
-   Load the **Search Grounding Template** from `$TEMPLATES_PATH`. Fill in the topic queries and project context, then invoke per `$PROTOCOL_PATH` (which itself resolves the gemini-wrapper.sh via the cache). Use `flash` model with 60s timeout.
-3. Parse the `response` field from JSON output. Verify `stats.tools.byName.google_web_search` is present (confirms search grounding was used).
+2. Run `WebSearch` for each query. From the results, select the most authoritative sources (official docs, maintainer posts, recognized practitioners)
+3. `WebFetch` the top sources to extract specifics and capture exact URLs for citation
 4. Extract: authoritative sources with URLs, recent changes or deprecations, community consensus, version-specific guidance
 
-**Advantage over Agent 4 (Web + Context7):** Gemini's search grounding returns structured citations with URLs automatically. Context7 is better for framework API docs; Gemini is better for current best practices, recent changes, and community patterns. They complement each other.
+**Relationship to Agent 4 (Web + Context7):** Agent 4 leans on Context7 for framework API docs; this agent leans on WebSearch + WebFetch for current best practices, recent changes, and community patterns with cited URLs. They complement each other. If WebSearch is unavailable, skip gracefully.
 
 ### Phase 3b: Verify-Don't-Trust Checks
 

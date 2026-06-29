@@ -153,7 +153,6 @@
     "accessibility-compliance": ">=1.2.0",
     "ghostwriter": ">=3.7.0",
     "superpowers": ">=1.0.0",
-    "gemini": ">=1.0.0",
     "airlift": ">=1.0.0",
     "openrouter": ">=1.0.0"
   },
