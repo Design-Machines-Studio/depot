@@ -22,7 +22,7 @@ If all 5 complete, the review is valid regardless of conditional agent status. I
 
 ### External LLM Fallback (pre-classification)
 
-Before classifying an agent failure as "Review Compromised" or "Safe to Skip," check whether the agent was routed to an external LLM (DeepSeek, Gemini) in Phase 4. If so, Phase 4.5 retries it on Claude first. Only classify the failure after the Claude fallback has also been attempted.
+Before classifying an agent failure as "Review Compromised" or "Safe to Skip," check whether the agent was routed to an external LLM (DeepSeek, OpenRouter) in Phase 4. If so, Phase 4.5 retries it on Claude first. Only classify the failure after the Claude fallback has also been attempted.
 
 Agents that succeed via Claude fallback are reported as "Completed (fallback)" in the Agent Summary. They do not affect the merge recommendation -- their findings are treated identically to primary-run findings, tagged with `[claude-fallback/{agent-name}]` for traceability.
 
@@ -53,7 +53,7 @@ Multiple core failures compound: "REVIEW INCOMPLETE -- security-auditor, archite
 | voice-editor | Voice/tone unreviewed. | "Skipped" |
 | visual-browser-tester | Visual testing skipped. | "Skipped -- has its own fallback chain" |
 | ux-quality-reviewer | UX/design quality unreviewed. | "Skipped" |
-| gemini-diff-analyst | Full diff analysis unavailable. Review uses truncated diff. | "Skipped -- Gemini unavailable" |
+| openrouter-bulk-analyst | Full diff analysis unavailable. Review uses truncated diff. | "Skipped -- OpenRouter unavailable" |
 
 ### All Conditional Agents Failed
 
@@ -109,7 +109,7 @@ Full degradation priority from guardrails.md. Agents are dropped in this order w
 | 10 | a11y-dynamic-content-reviewer | MEDIUM | Yes |
 | 11 | governance-domain | MEDIUM | Yes |
 | 12 | craft-reviewer | MEDIUM | Yes |
-| 13 | gemini-diff-analyst | MEDIUM | Yes (requires gemini plugin) |
+| 13 | openrouter-bulk-analyst | MEDIUM | Yes (requires openrouter plugin + OPENROUTER_API_KEY) |
 | 14 | test-coverage-reviewer | LOW | Yes |
 | 15 | voice-editor | LOW | Yes |
 | 16 | visual-browser-tester | LOW | Yes |

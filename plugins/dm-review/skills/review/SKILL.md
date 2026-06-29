@@ -187,8 +187,8 @@ Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` p
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
-| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set | **deepseek-bulk-analyst** | `deepseek/*/agents/review/deepseek-bulk-analyst.md` |
-| Diff >5000 lines AND gemini plugin installed AND (`DEEPSEEK_API_KEY` not set OR deepseek plugin not installed) | **gemini-diff-analyst** | `gemini/*/agents/review/gemini-diff-analyst.md` |
+| Diff >5000 lines AND openrouter plugin installed AND `OPENROUTER_API_KEY` set | **openrouter-bulk-analyst** | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
+| Diff >5000 lines AND deepseek plugin installed AND `DEEPSEEK_API_KEY` set AND `OPENROUTER_API_KEY` not set | **deepseek-bulk-analyst** | `deepseek/*/agents/review/deepseek-bulk-analyst.md` |
 
 #### Report Selection
 
@@ -236,7 +236,7 @@ This context is injected ONLY into the browser-based agents (ux-quality-reviewer
 
 Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (deepseek-bulk-analyst or gemini-diff-analyst), it receives the full untruncated diff separately.
+1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (openrouter-bulk-analyst or deepseek-bulk-analyst), it receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
 3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
 
@@ -413,7 +413,7 @@ After all Phase 4 agents complete, scan their results for `### RUNNER FAILURE` m
 
 #### When to trigger
 
-Only applies to agents that were routed to an external LLM (DeepSeek, Gemini) in Phase 4 Branch A. Claude-native agents that fail do NOT get retried -- their failure policies in guardrails.md apply immediately.
+Only applies to agents that were routed to an external LLM (DeepSeek, OpenRouter) in Phase 4 Branch A. Claude-native agents that fail do NOT get retried -- their failure policies in guardrails.md apply immediately.
 
 #### Retry procedure
 
