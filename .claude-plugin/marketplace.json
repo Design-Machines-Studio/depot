@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.11.4"
+    "version": "1.11.5"
   },
   "plugins": [
     {
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.21.2",
+      "version": "1.21.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -423,7 +423,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

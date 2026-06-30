@@ -28,10 +28,10 @@ Decision table for choosing the right OpenRouter model for each delegation task.
 The wrapper accepts a `[fallback-slug]` (4th positional arg). On HTTP 429/503 from the primary, it retries the fallback:
 
 ```
-z-ai/glm-5.2 -> deepseek/deepseek-v4-pro -> skip
+z-ai/glm-5.2 -> minimax/minimax-m3 -> deepseek/deepseek-v4-pro -> deepseek/deepseek-v4-flash -> qwen/qwen3-coder -> skip
 ```
 
-Pass `deepseek/deepseek-v4-pro` as the fallback for big-diff work so GLM-5.2 rate limits do not lose the review.
+For direct wrapper calls, pass `minimax/minimax-m3` as the immediate fallback when cost-per-action matters, or `deepseek/deepseek-v4-pro` when quality is more important than price. The pipeline cascade owns the full ladder and will continue walking through later models on per-model failures.
 
 ## Privacy
 

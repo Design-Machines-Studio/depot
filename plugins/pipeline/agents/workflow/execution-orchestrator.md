@@ -417,10 +417,18 @@ fi
 **Step 3d.3 -- Cap/unavailable: consult the cascade.** Log `"Primary rail capped for chunk [id]; consulting cascade."` then invoke the decision engine with the chunk's kind and prompt on stdin. The Airlift Tier-1 checkpoint on cap is fired INSIDE `cascade-dispatch.sh` (guarded resolve, no model budget) -- do not call Airlift directly here.
 
 ```bash
+case "<kind>" in
+  logic|config) PRIMARY_RAIL="codex" ;;
+  ui|integration) PRIMARY_RAIL="claude" ;;
+  *) PRIMARY_RAIL="codex" ;;
+esac
 CASCADE_OUT=$(printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-  --kind "<kind>" --prompt - --phase execute --timeout 120)
+  --kind "<kind>" --prompt - --phase execute --timeout 120 \
+  --exhausted-rail "$PRIMARY_RAIL")
 CASCADE_RC=$?
 ```
+
+Always pass the observed exhausted primary rail. The proactive `usage-probe.sh` signal may be unknown or stale; the runtime cap/unavailable event is stronger evidence and prevents the cascade from selecting the same rail that just failed.
 
 Never parse model names yourself -- the script owns class->ladder->role->rail resolution (`model-cascade.json` + `harness-profile.json`).
 

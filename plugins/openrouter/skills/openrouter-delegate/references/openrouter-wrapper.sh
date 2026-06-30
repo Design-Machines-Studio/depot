@@ -47,7 +47,7 @@ build_provider() {
     --arg zdr "${OPENROUTER_ZDR:-0}" \
     --arg sort "${OPENROUTER_PROVIDER_SORT:-}" '
     {require_parameters: $req}
-    + (if $zdr == "1" then {data_collection: "deny"} else {} end)
+    + (if $zdr == "1" then {data_collection: "deny", zdr: true} else {} end)
     + (if $sort != "" then {sort: $sort} else {} end)'
 }
 

@@ -10,7 +10,8 @@
 # Usage:
 #   cascade-dispatch.sh --class <codex|claude> --prompt <text|-> \
 #       [--kind <ui|logic|integration|config>] [--phase <p>] [--host H] \
-#       [--timeout N] [--dry-run] [--probe-file <json>]
+#       [--timeout N] [--dry-run] [--probe-file <json>] \
+#       [--exhausted-rail <codex|claude|openrouter>]
 #   (--kind is an alternative to --class; mapped via cascade.class_from_kind)
 #
 # Exit codes:
@@ -30,6 +31,7 @@ PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
 # openrouter-wrapper is owned by the openrouter leaf plugin — resolved at call time (resolve_wrapper)
 
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="120"; DRYRUN=0; PROBE_FILE=""
+EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --class) CLASS="$2"; shift 2;;
@@ -40,6 +42,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="$2"; shift 2;;
     --dry-run) DRYRUN=1; shift;;
     --probe-file) PROBE_FILE="$2"; shift 2;;
+    --exhausted-rail) EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -103,9 +106,18 @@ LADDER="$(jq -r --arg c "$CLASS" '.cascades[$c].ladder[]?' "$CASCADE")"
 [ -z "$LADDER" ] && { echo "cascade-dispatch: unknown class '$CLASS'" >&2; exit 2; }
 THRESH="$(jq -r '.policy.headroom_threshold_pct // 8' "$CASCADE")"
 
+rail_is_exhausted() {
+  # bash 3.2 safe: avoid read -a + "${arr[@]}" (empty array + set -u is fatal on 3.2).
+  # Comma-wrap both sides so a substring match is an exact rail match.
+  [ -z "$EXHAUSTED_RAILS" ] && return 1
+  case ",$EXHAUSTED_RAILS," in *",$1,"*) return 0 ;; esac
+  return 1
+}
+
 rail_has_headroom() {
   local rail="$1" state pct
   [ "$rail" = "none" ] && return 0
+  rail_is_exhausted "$rail" && return 1
   state="$(printf '%s' "$PROBES" | jq -r --arg r "$rail" '.[$r].state // "unknown"')"
   case "$state" in limited|low) return 1;; esac
   pct="$(printf '%s' "$PROBES" | jq -r --arg r "$rail" '.[$r].remaining_pct // empty')"
