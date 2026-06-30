@@ -1,6 +1,6 @@
 {
   "name": "openrouter",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "OpenRouter API provider plugin for delegating big-diff analysis, second-opinion review, and one-shot text generation to cost-efficient frontier and open models (GLM-5.2, DeepSeek V4) over a single OpenAI-compatible endpoint. Default z-ai/glm-5.2 (1M context) for quality-per-dollar. Use when offloading large-diff review or config/doc generation from Anthropic quota, or when a diff exceeds Claude's truncation threshold. Powers the pipeline cascade's OpenRouter rail and dm-review's big-diff fallback. Invoke with /openrouter for direct delegation.",
   "author": {
     "name": "Design Machines",

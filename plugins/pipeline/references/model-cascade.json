@@ -12,7 +12,7 @@
     "_comment": "Global model->score; enforces quality_floor regardless of which role surfaced the model. Higher = better.",
     "gpt-5.2-codex": 95, "anthropic/claude-opus-4.8": 95, "openai/gpt-5.5": 93,
     "opus": 92, "z-ai/glm-5.2": 84, "deepseek/deepseek-v4-pro": 83,
-    "sonnet": 82, "deepseek/deepseek-v4-flash": 74, "qwen/qwen3-coder": 72,
+    "sonnet": 82, "minimax/minimax-m3": 79, "deepseek/deepseek-v4-flash": 74, "qwen/qwen3-coder": 72,
     "gpt-5.1-codex-mini": 70, "haiku": 60
   },
 
