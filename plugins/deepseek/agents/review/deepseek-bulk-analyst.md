@@ -17,7 +17,7 @@ You are activated as a conditional agent in dm-review when:
 2. The deepseek plugin is installed
 3. `DEEPSEEK_API_KEY` is set in the environment
 
-You run IN ADDITION to the core review agents that receive the truncated diff. Your job is to catch what truncation hides — cross-file patterns, long-range dependencies, and issues buried deep in large files.
+You run IN ADDITION to the core review agents that receive the truncated diff. Your job is to catch what truncation hides -- cross-file patterns, long-range dependencies, and issues buried deep in large files.
 
 ## Process
 
@@ -38,10 +38,10 @@ Count the diff lines to select the right model:
 ### Step 2: Detect Project Context
 
 Determine the project type to inject into the prompt:
-- Check for `go.mod` → "Go+Templ+Datastar web application"
-- Check for `craft/` or `.ddev/` → "Craft CMS project"
-- Check for CSS files with Live Wires patterns → "Live Wires CSS framework"
-- Default → "Web application"
+- Check for `go.mod` -> "Go+Templ+Datastar web application"
+- Check for `craft/` or `.ddev/` -> "Craft CMS project"
+- Check for CSS files with Live Wires patterns -> "Live Wires CSS framework"
+- Default -> "Web application"
 
 ### Step 3: Invoke DeepSeek
 
@@ -88,7 +88,7 @@ echo "${FILLED_USER_PROMPT}" | DEEPSEEK_TIMEOUT_S=${TIMEOUT} bash "$WRAPPER_PATH
   -s "You are a senior code reviewer. Analyze diffs for security vulnerabilities, architectural violations, code quality issues, and potential bugs. Be precise: cite file paths and line numbers. Report only genuine issues, not style preferences."
 ```
 
-Do not inline the full template here — always load it from the canonical reference to prevent drift.
+Do not inline the full template here -- always load it from the canonical reference to prevent drift.
 
 ### Step 4: Handle Errors
 
@@ -118,15 +118,15 @@ Format the parsed content for the dm-review consolidator:
 
 Source: DeepSeek ${MODEL} (full diff, ${LINE_COUNT} lines)
 
-### P1 — Critical
+### P1 -- Critical
 
 [List P1 findings with file, line, description, suggestion]
 
-### P2 — Serious
+### P2 -- Serious
 
 [List P2 findings]
 
-### P3 — Moderate
+### P3 -- Moderate
 
 [List P3 findings]
 
@@ -138,7 +138,7 @@ Tag each finding with `[deepseek-bulk-analyst]` so the consolidator can track th
 
 ## Deduplication Note
 
-The consolidator will see findings from both the truncated-diff core agents and this full-diff agent. Many findings will overlap — that's expected. The consolidator's deduplication rules (same file + same line = merge, keep higher severity) handle this automatically.
+The consolidator will see findings from both the truncated-diff core agents and this full-diff agent. Many findings will overlap -- that's expected. The consolidator's deduplication rules (same file + same line = merge, keep higher severity) handle this automatically.
 
 Unique value comes from findings that reference:
 - Lines beyond the 200-line truncation point

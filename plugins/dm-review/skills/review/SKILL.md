@@ -25,26 +25,26 @@ Every review agent dispatched by this skill operates under a terse-output contra
 
 ## Usage
 
-- `/dm-review` — Full review: all applicable agents + memory capture
-- `/dm-review quick` — Quick review: 5 core agents (6 when UI files changed), no other conditional agents, no memory capture
+- `/dm-review` -- Full review: all applicable agents + memory capture
+- `/dm-review quick` -- Quick review: 5 core agents (6 when UI files changed), no other conditional agents, no memory capture
 
 ## Fix Philosophy
 
 All review agents and fix workflows must follow these principles:
 
-1. **Right approach over quick fix** — Always recommend the architecturally correct solution, not the fastest patch. Technical debt introduced by band-aids costs more than doing it properly now.
-2. **Best practices first** — Fixes must follow framework conventions and best practices (Live Wires for CSS, Go idioms for Go, Craft patterns for Craft). Never recommend workarounds that bypass established patterns.
-3. **Replace, don't preserve** — When old code is the problem, recommend replacing it. Don't wrap broken patterns in compatibility layers.
-4. **Especially during prototyping** — Prototypes must be built on the cleanest possible foundation. A prototype that ships with hacks becomes production code that ships with hacks.
+1. **Right approach over quick fix** -- Always recommend the architecturally correct solution, not the fastest patch. Technical debt introduced by band-aids costs more than doing it properly now.
+2. **Best practices first** -- Fixes must follow framework conventions and best practices (Live Wires for CSS, Go idioms for Go, Craft patterns for Craft). Never recommend workarounds that bypass established patterns.
+3. **Replace, don't preserve** -- When old code is the problem, recommend replacing it. Don't wrap broken patterns in compatibility layers.
+4. **Especially during prototyping** -- Prototypes must be built on the cleanest possible foundation. A prototype that ships with hacks becomes production code that ships with hacks.
 
 ### Prototype Hygiene
 
 When reviewing prototype or early-stage code:
 
 - **Always recommend new migrations** when the data model needs to change. Never suggest patching existing migrations or working around schema issues.
-- **Never preserve example/seed data** — prototypes should always have a clean install path. If seed data needs to change, regenerate it.
-- **Clean model is the goal** — the prototype's data model should be the best possible starting point for production engineering. Optimize for the cleanest schema, not for preserving existing dev data.
-- **Drop and recreate > migrate around** — in prototype phase, a clean `docker compose down -v && docker compose up` is always acceptable. Recommend it over incremental migration hacks.
+- **Never preserve example/seed data** -- prototypes should always have a clean install path. If seed data needs to change, regenerate it.
+- **Clean model is the goal** -- the prototype's data model should be the best possible starting point for production engineering. Optimize for the cleanest schema, not for preserving existing dev data.
+- **Drop and recreate > migrate around** -- in prototype phase, a clean `docker compose down -v && docker compose up` is always acceptable. Recommend it over incremental migration hacks.
 
 ---
 
@@ -96,10 +96,10 @@ Count diff lines from Phase 1. Classify:
 | Diff lines | Classification |
 |---|---|
 | < 100 | `lightweight` |
-| 100–500 | `standard` |
+| 100-500 | `standard` |
 | > 500 | `extended` |
 
-This classification scales agent count in Phase 3. Only applies to quick mode — full mode ignores this and always dispatches all applicable agents.
+This classification scales agent count in Phase 3. Only applies to quick mode -- full mode ignores this and always dispatches all applicable agents.
 
 ---
 
@@ -133,11 +133,11 @@ OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && echo true || echo fa
 
 Run only these 3 agents:
 
-1. **security-auditor** — `dm-review/*/agents/review/security-auditor.md` — **Claude** (security judgment, never offload)
-2. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md` — **→ routing-policy.json** (DeepSeek primary, OpenRouter fallback when available)
-3. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md` — **→ routing-policy.json** (DeepSeek primary, OpenRouter fallback when available)
+1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Claude** (security judgment, never offload)
+2. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback when available)
+3. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback when available)
 
-Skip architecture-reviewer and doc-sync-reviewer — small diffs rarely have architectural or documentation-sync impact. Net: 1 Claude agent + 2 DeepSeek agents (or 3 Claude if DeepSeek unavailable).
+Skip architecture-reviewer and doc-sync-reviewer -- small diffs rarely have architectural or documentation-sync impact. Net: 1 Claude agent + 2 DeepSeek agents (or 3 Claude if DeepSeek unavailable).
 
 Skip to Phase 4 with these 3 agents.
 
@@ -145,11 +145,11 @@ Skip to Phase 4 with these 3 agents.
 
 These 5 agents always run in standard+ quick mode and all full-mode reviews:
 
-1. **security-auditor** — `dm-review/*/agents/review/security-auditor.md` — **Claude** (never offload)
-2. **architecture-reviewer** — `dm-review/*/agents/review/architecture-reviewer.md` — **Claude** (multi-file SOLID reasoning)
-3. **pattern-recognition-specialist** — `dm-review/*/agents/review/pattern-recognition-specialist.md` — **→ routing-policy.json** (DeepSeek primary, OpenRouter fallback)
-4. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md` — **→ routing-policy.json** (DeepSeek primary, OpenRouter fallback)
-5. **doc-sync-reviewer** — `dm-review/*/agents/review/doc-sync-reviewer.md` — **→ routing-policy.json** (OpenRouter primary, DeepSeek fallback)
+1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Claude** (never offload)
+2. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Claude** (multi-file SOLID reasoning)
+3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback)
+4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback)
+5. **doc-sync-reviewer** -- `dm-review/*/agents/review/doc-sync-reviewer.md` -- **-> routing-policy.json** (OpenRouter primary, DeepSeek fallback)
 
 #### Configurable Codex Perspective
 
@@ -169,7 +169,7 @@ Resolve its agent file at `dm-review/*/agents/review/codex-perspective.md` via t
 
 **If mode is "quick" AND UI files changed** (`.templ`, `.twig`, `.html`, or `.css` in the diff), add one more agent:
 
-6. **ui-standards-reviewer** — `dm-review/*/agents/review/ui-standards-reviewer.md`
+6. **ui-standards-reviewer** -- `dm-review/*/agents/review/ui-standards-reviewer.md`
 
 This ensures per-chunk pipeline reviews catch design quality issues, not just code quality. Skip to Phase 4 with these 6 agents.
 
@@ -177,7 +177,7 @@ This ensures per-chunk pipeline reviews catch design quality issues, not just co
 
 Add these agents based on which file extensions appear in the changed files:
 
-**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve each via the plugin cache before dispatch — pipeline runs in worktrees outside the depot where these paths do not exist. The canonical resolver:
+**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve each via the plugin cache before dispatch -- pipeline runs in worktrees outside the depot where these paths do not exist. The canonical resolver:
 
 ```bash
 AGENT_PATH=""
@@ -197,7 +197,7 @@ Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` p
 | `.css` changed | **css-reviewer** | `live-wires/*/agents/review/css-reviewer.md` |
 | `.templ`, `.js`, or `.ts` changed AND project is Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `accessibility-compliance/*/agents/review/a11y-dynamic-content-reviewer.md` |
 | `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `ghostwriter/*/agents/review/voice-editor.md` |
-| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** — **→ DeepSeek v4-flash** (60s) when available | `dm-review/*/agents/review/test-coverage-reviewer.md` |
+| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- **-> DeepSeek v4-flash** (60s) when available | `dm-review/*/agents/review/test-coverage-reviewer.md` |
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
@@ -218,7 +218,7 @@ Launching X agents for [project type] review ([Full/Quick] mode):
 - ...
 
 Skipping Y agents:
-- [agent-name] — reason (e.g., "no .css files changed")
+- [agent-name] -- reason (e.g., "no .css files changed")
 ```
 
 ---
@@ -283,7 +283,7 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 All run with `thinking: disabled` (set by wrapper). V4-Pro for code analysis, V4-Flash for mechanical checks.
 
-**Routing report** — print before Phase 4:
+**Routing report** -- print before Phase 4:
 
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}, DEEPSEEK_AVAILABLE={true|false}):
@@ -296,7 +296,7 @@ Provider routing (OPENROUTER_AVAILABLE={true|false}, DEEPSEEK_AVAILABLE={true|fa
 
 ### Phase 4: Parallel Agent Launch
 
-Launch ALL selected agents simultaneously using multiple Agent tool calls in a single message. This is critical for performance — agents must run in parallel, not sequentially.
+Launch ALL selected agents simultaneously using multiple Agent tool calls in a single message. This is critical for performance -- agents must run in parallel, not sequentially.
 
 #### How to launch each agent
 
@@ -304,13 +304,13 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
 
 **A. If the agent is routed to DeepSeek** (in the offload table AND `DEEPSEEK_API_KEY` is set):
 
-1. **Read the deepseek-agent-runner definition** from `$RUNNER_PATH` (resolved in Phase 3.75 condition #2). If `$RUNNER_PATH` was not preserved between phases, recompute it using the same Claude-first/Codex-fallback cache-root loop from Phase 3. Never use a depot-relative path here — pipeline runs in worktrees outside the depot.
+1. **Read the deepseek-agent-runner definition** from `$RUNNER_PATH` (resolved in Phase 3.75 condition #2). If `$RUNNER_PATH` was not preserved between phases, recompute it using the same Claude-first/Codex-fallback cache-root loop from Phase 3. Never use a depot-relative path here -- pipeline runs in worktrees outside the depot.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
-   - `target_agent_path` — path to the original agent's definition file
-   - `target_agent_name` — bare ID (e.g., `pattern-recognition-specialist`)
-   - `target_model` — `v4-pro` or `v4-flash` per the offload table
-   - `target_timeout` — `90` (v4-pro agents) or `60` (v4-flash agents) per the offload table
+   - `target_agent_path` -- path to the original agent's definition file
+   - `target_agent_name` -- bare ID (e.g., `pattern-recognition-specialist`)
+   - `target_model` -- `v4-pro` or `v4-flash` per the offload table
+   - `target_timeout` -- `90` (v4-pro agents) or `60` (v4-flash agents) per the offload table
    - The list of changed files
    - The diff content
    - Project context
@@ -318,7 +318,7 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    - `subagent_type`: "general-purpose"
    - `description`: e.g., "DeepSeek-routed: pattern-recognition"
    - `prompt`: the combined runner prompt from step 2
-   - `model`: "haiku" (per deepseek-agent-runner frontmatter — mechanical orchestration only)
+   - `model`: "haiku" (per deepseek-agent-runner frontmatter -- mechanical orchestration only)
 
 **B. Otherwise, dispatch normally on Claude:**
 
@@ -333,7 +333,7 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    [ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ] || { echo "ERROR: agent not found in plugin cache: <plugin>/<agent-id>"; exit 1; }
    ```
 
-   Substitute `<plugin>`, `<category>`, and `<agent-id>` per the table row. Never use depot-relative paths — pipeline runs in worktrees.
+   Substitute `<plugin>`, `<category>`, and `<agent-id>` per the table row. Never use depot-relative paths -- pipeline runs in worktrees.
 
 2. **Build the agent prompt** by combining:
    - The full content of the agent definition file (this is the agent's system prompt)
@@ -346,7 +346,7 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    - `prompt`: the combined prompt from step 2
    - `model`: use the agent's frontmatter `model:` field if declared (e.g., "haiku" for mechanical agents), otherwise "sonnet"
 
-Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime — the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
+Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime -- the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
 
 **C. If the selected agent is `codex-perspective`:**
 
@@ -359,7 +359,7 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
 5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
-**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, do not classify the failure yet — Phase 4.5 retries external-LLM failures on Claude before applying failure policies from `guardrails.md`. Do NOT mark the run clean until Phase 4.5 completes.
+**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, do not classify the failure yet -- Phase 4.5 retries external-LLM failures on Claude before applying failure policies from `guardrails.md`. Do NOT mark the run clean until Phase 4.5 completes.
 
 **Example prompt structure for each agent:**
 
@@ -542,12 +542,12 @@ The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE"
 
 ### Phase 5.5: Simplification Pass
 
-After outputting the review report, perform a simplification pass on the changed files. This catches complexity, redundancy, and over-engineering that the code-simplicity-reviewer identified — and applies fixes automatically rather than just reporting them.
+After outputting the review report, perform a simplification pass on the changed files. This catches complexity, redundancy, and over-engineering that the code-simplicity-reviewer identified -- and applies fixes automatically rather than just reporting them.
 
 **Execution:**
 
 1. Review each changed file for simplification opportunities: dead code removal, redundant abstractions, overly complex logic, unused imports/variables, unnecessary indirection, functions that can be inlined, and patterns that can be consolidated. Focus on the specific findings from the code-simplicity-reviewer agent, but also look for anything it missed.
-2. Apply simplification edits directly — this is not a report, it's an active refactoring pass. Make the code simpler, clearer, and shorter while preserving behavior.
+2. Apply simplification edits directly -- this is not a report, it's an active refactoring pass. Make the code simpler, clearer, and shorter while preserving behavior.
 3. After making changes, verify the build still passes:
    - Go projects: `docker compose exec app templ generate && docker compose exec app go build ./cmd/api`
    - CSS projects: `npm run build` (or equivalent)
@@ -571,9 +571,9 @@ This phase mirrors Claude Code's built-in `/simplify` command. If `/simplify` is
 
 After outputting the report, determine tracking method automatically:
 
-**1. If `todos/` directory exists** in the project root — use text file tracking automatically. Do NOT ask the user. Create todo files for all P1, P2, and P3 findings.
+**1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for all P1, P2, and P3 findings.
 
-**2. If `todos/` does not exist** — ask the user:
+**2. If `todos/` does not exist** -- ask the user:
 
 ```
 No todos/ directory found. How should I track these findings?
@@ -697,12 +697,12 @@ If ai-memory tools are not available, skip silently.
 
 After the project-level memory capture, record depot-level metrics. This tracks which agents fire across reviews, feeding back into marketplace analytics.
 
-1. Search for `DepotMetrics` entity — create if missing (type: System)
+1. Search for `DepotMetrics` entity -- create if missing (type: System)
 2. Add ONE batched observation summarizing the agent dispatch:
    `[YYYY-MM-DD] Review session: X/Y agents completed, Z skipped (<agent>: <reason>, ...)`
    - Example: `[2026-03-25] Review session: 9/11 agents completed, 2 skipped (visual-browser-tester: no dev server, craft-reviewer: no .twig files)`
-3. Search for `DepotPlugin:dm-review` entity — create if missing (type: PluginMetrics)
-4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review — correct`
+3. Search for `DepotPlugin:dm-review` entity -- create if missing (type: PluginMetrics)
+4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
 5. Call `save` to persist
 
 If ai-memory tools are not available, skip silently. See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
@@ -716,7 +716,7 @@ After ai-memory capture, write a structured row to the Agent Activity Log databa
 3. Create a page in the Agent Activity Log database using `notion-create-pages`:
    - **Entry:** "Review: [project-name] [branch-or-scope]"
    - **Type:** "Code Review"
-   - **Status:** Map from merge recommendation — CLEAN → "Clean", APPROVE WITH FIXES → "Needs Attention", BLOCKS MERGE → "Blocked"
+   - **Status:** Map from merge recommendation -- CLEAN -> "Clean", APPROVE WITH FIXES -> "Needs Attention", BLOCKS MERGE -> "Blocked"
    - **Date:** Today's date
    - **Findings:** Total finding count from the report
    - **P1 Count:** P1 finding count
@@ -726,7 +726,7 @@ After ai-memory capture, write a structured row to the Agent Activity Log databa
 4. Update the created page with `notion-update-page` to set relations:
    - **Project:** Link to the project's Notion page (from `memory/project-notion.md` if available)
    - **Sprint:** Link to the current "In progress" sprint (query Sprints DB)
-5. If any Notion MCP call fails, skip silently — ai-memory is the primary record
+5. If any Notion MCP call fails, skip silently -- ai-memory is the primary record
 
 See `${CLAUDE_SKILL_DIR}/../../../project-manager/skills/planner/references/databases.md` for the Agent Activity Log schema.
 
@@ -736,15 +736,15 @@ See `${CLAUDE_SKILL_DIR}/../../../project-manager/skills/planner/references/data
 
 These files are loaded on demand during the review process:
 
-- `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` — P1/P2/P3 mapping rules per agent
-- `${CLAUDE_SKILL_DIR}/references/agent-registry.md` — Complete agent catalog with trigger conditions
-- `${CLAUDE_SKILL_DIR}/references/output-format.md` — Unified report template
-- `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` — Todo file template and GitHub Issue conventions
-- `${CLAUDE_SKILL_DIR}/references/guardrails.md` — Input/output validation rules, failure policies, deduplication precision
-- `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` — Failure classification, degradation priority, merge recommendation overrides
-- `${CLAUDE_SKILL_DIR}/references/ai-slop-detector.md` — 25-point AI output quality checklist (used by ux-quality-reviewer and ui-standards-reviewer)
-- `${CLAUDE_SKILL_DIR}/references/ui-design-patterns.md` — Practical UI patterns with Live Wires vocabulary
-- `${CLAUDE_SKILL_DIR}/references/token-discovery.md` — CSS token discovery protocol for review agents
+- `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` -- P1/P2/P3 mapping rules per agent
+- `${CLAUDE_SKILL_DIR}/references/agent-registry.md` -- Complete agent catalog with trigger conditions
+- `${CLAUDE_SKILL_DIR}/references/output-format.md` -- Unified report template
+- `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` -- Todo file template and GitHub Issue conventions
+- `${CLAUDE_SKILL_DIR}/references/guardrails.md` -- Input/output validation rules, failure policies, deduplication precision
+- `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` -- Failure classification, degradation priority, merge recommendation overrides
+- `${CLAUDE_SKILL_DIR}/references/ai-slop-detector.md` -- 25-point AI output quality checklist (used by ux-quality-reviewer and ui-standards-reviewer)
+- `${CLAUDE_SKILL_DIR}/references/ui-design-patterns.md` -- Practical UI patterns with Live Wires vocabulary
+- `${CLAUDE_SKILL_DIR}/references/token-discovery.md` -- CSS token discovery protocol for review agents
 
 ## Agent Definition Paths
 
@@ -759,4 +759,4 @@ See `${CLAUDE_SKILL_DIR}/references/agent-registry.md` for the complete agent ca
 - Agent definition files are read at runtime from the depot. If the exact path is not accessible (e.g., installed as a remote plugin), search for the file by name.
 - The maximum number of parallel agents is 16 (full mode, all triggers hit). The minimum is 5 (quick mode, no UI files) or 6 (quick mode with UI files).
 - Agents default to `sonnet`. Agents that declare `model:` in their frontmatter use that model instead (e.g., go-build-verifier uses `haiku` for mechanical build checks).
-- The consolidator and memory recorder run after all review agents complete — they are not launched in parallel with the review agents.
+- The consolidator and memory recorder run after all review agents complete -- they are not launched in parallel with the review agents.

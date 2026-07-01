@@ -32,13 +32,13 @@ These agents launch based on which file types were changed.
 
 | # | Agent | Source Plugin | Trigger (file extensions) | Additional condition |
 |---|-------|-------------|--------------------------|---------------------|
-| 6 | a11y-html-reviewer | accessibility-compliance | `.templ`, `.twig`, `.html` | — |
-| 7 | a11y-css-reviewer | accessibility-compliance | `.css` | — |
-| 8 | css-reviewer | live-wires | `.css` | — |
+| 6 | a11y-html-reviewer | accessibility-compliance | `.templ`, `.twig`, `.html` | -- |
+| 7 | a11y-css-reviewer | accessibility-compliance | `.css` | -- |
+| 8 | css-reviewer | live-wires | `.css` | -- |
 | 9 | a11y-dynamic-content-reviewer | accessibility-compliance | `.templ`, `.js`, `.ts` | Project is Go+Templ+Datastar |
 | 10 | voice-editor | ghostwriter | `.md`, `.txt` | Or user-facing text in templates |
 | 11 | test-coverage-reviewer | dm-review | Any source file | Test infrastructure exists in project |
-| 12 | governance-domain | council | Paths containing: `governance`, `proposal`, `voting`, `member`, `resolution`, `bylaw` | — |
+| 12 | governance-domain | council | Paths containing: `governance`, `proposal`, `voting`, `member`, `resolution`, `bylaw` | -- |
 | 13 | go-build-verifier | dm-review | `.go`, `.templ` | Project has `go.mod` + `docker-compose.yml` |
 | 14 | craft-reviewer | dm-review | `.twig`, `.php` | Project has `craft/` or `.ddev/` |
 | 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Six phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), Live Wires CSS Compliance (F). UX design and visual design quality review moved to ux-quality-reviewer. |
@@ -104,13 +104,13 @@ All dm-review agents use this structure:
 ## [Agent Name] Review
 
 ### Critical (P1)
-- [file:line] Description — reference (WCAG SC / OWASP / etc.)
+- [file:line] Description -- reference (WCAG SC / OWASP / etc.)
 
 ### Serious (P2)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Moderate (P3)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Approved
 - [file] Description of what passes checks

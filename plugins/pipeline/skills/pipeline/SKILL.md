@@ -83,9 +83,9 @@ If you are tempted to skip a phase, STOP and re-read this section.
 
 ## CRITICAL: Do Not Manually Replicate
 
-When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand — launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
+When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand -- launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
 
-The pipeline enforces gates, review loops, visual verification, memory capture, and sprint contracts that manual execution silently skips. "I already understand the code" is not a reason to bypass the pipeline — the pipeline exists precisely because self-confidence is unreliable.
+The pipeline enforces gates, review loops, visual verification, memory capture, and sprint contracts that manual execution silently skips. "I already understand the code" is not a reason to bypass the pipeline -- the pipeline exists precisely because self-confidence is unreliable.
 
 **What happens when you bypass the pipeline:**
 

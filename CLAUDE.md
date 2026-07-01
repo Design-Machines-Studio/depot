@@ -4,39 +4,39 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace — a collection of knowledge-as-code plugins that give Claude specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material.
+Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material.
 
 ## Repository Structure
 
 ```
-.claude-plugin/marketplace.json  — Marketplace manifest (lists all plugins)
+.claude-plugin/marketplace.json  -- Marketplace manifest (lists all plugins)
 plugins/<name>/
-  .claude-plugin/plugin.json     — Plugin metadata and Agent Card capabilities
+  .claude-plugin/plugin.json     -- Plugin metadata and Agent Card capabilities
   skills/<skill-name>/
-    SKILL.md                     — Primary skill definition (loaded on skill invocation)
-    references/                  — Supporting reference docs (loaded on demand)
-    *.md                         — Additional skill pages (components, patterns, etc.)
+    SKILL.md                     -- Primary skill definition (loaded on skill invocation)
+    references/                  -- Supporting reference docs (loaded on demand)
+    *.md                         -- Additional skill pages (components, patterns, etc.)
   agents/<category>/
-    <agent-name>.md              — Agent definitions (review, workflow categories)
+    <agent-name>.md              -- Agent definitions (review, workflow categories)
   commands/
-    <command-name>.md            — Slash command definitions (user-invocable actions)
-description-evals/               — Trigger evaluation datasets (query + should_trigger pairs)
-tools/                           — Eval runner and development utilities
-docs/                            — Design specs and architecture docs
+    <command-name>.md            -- Slash command definitions (user-invocable actions)
+description-evals/               -- Trigger evaluation datasets (query + should_trigger pairs)
+tools/                           -- Eval runner and development utilities
+docs/                            -- Design specs and architecture docs
 ```
 
 ## Plugin Anatomy
 
 Each plugin under `plugins/` follows the same structure:
 
-- **`.claude-plugin/plugin.json`** — Required. Contains `name`, `description`, `version`, `author`, and `capabilities` (Agent Card metadata).
-- **`skills/`** — Each subdirectory is a skill. `SKILL.md` is the entry point; `references/` holds supplementary material that the skill can pull in.
-- **`agents/`** — Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
-- **`commands/`** — Optional. Slash command definitions. Each `.md` file defines a command that can be invoked directly.
+- **`.claude-plugin/plugin.json`** -- Required. Contains `name`, `description`, `version`, `author`, and `capabilities` (Agent Card metadata).
+- **`skills/`** -- Each subdirectory is a skill. `SKILL.md` is the entry point; `references/` holds supplementary material that the skill can pull in.
+- **`agents/`** -- Optional. Agent definitions organized by category (`review/`, `workflow/`). Each `.md` file defines a specialized agent.
+- **`commands/`** -- Optional. Slash command definitions. Each `.md` file defines a command that can be invoked directly.
 
 ## Plugin Discovery (Agent Cards)
 
-Each `plugin.json` serves as an **Agent Card** — machine-readable metadata that makes plugin discovery reliable instead of vibes-based. Inspired by the A2A protocol's Agent Card concept, the `capabilities` object declares what each plugin can do:
+Each `plugin.json` serves as an **Agent Card** -- machine-readable metadata that makes plugin discovery reliable instead of vibes-based. Inspired by the A2A protocol's Agent Card concept, the `capabilities` object declares what each plugin can do:
 
 ```json
 {
@@ -141,9 +141,9 @@ Individual validators: `eval-descriptions.sh` (description accuracy), `check-dep
 
 When you modify a plugin's skills, agents, or references, **bump the version** in its `.claude-plugin/plugin.json` before committing. Follow semver:
 
-- **Patch** (1.0.0 → 1.0.1) — reference fixes, typo corrections, description enrichment
-- **Minor** (1.0.0 → 1.1.0) — new references, new agents, additional patterns, new skill content
-- **Major** (1.0.0 → 2.0.0) — skill renamed/restructured, breaking changes to how the plugin works
+- **Patch** (1.0.0 -> 1.0.1) -- reference fixes, typo corrections, description enrichment
+- **Minor** (1.0.0 -> 1.1.0) -- new references, new agents, additional patterns, new skill content
+- **Major** (1.0.0 -> 2.0.0) -- skill renamed/restructured, breaking changes to how the plugin works
 
 Never commit plugin changes without also bumping the version.
 

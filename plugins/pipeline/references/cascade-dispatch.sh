@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# cascade-dispatch.sh — World B usage-aware model-cascade decision engine.
+# cascade-dispatch.sh -- World B usage-aware model-cascade decision engine.
 # Harness-neutral (Claude Code / Codex / opencode / Pi). Generalizes the merged
 # execution-orchestrator 3d fallback ("Codex unavailable -> Claude") into a full
-# usage-gauged ladder. Reads model-cascade.json (executor-intent classes →
-# role ladders) + routing-policy.json + harness-profile.json (role→rail per host) + usage-probe.sh
+# usage-gauged ladder. Reads model-cascade.json (executor-intent classes ->
+# role ladders) + routing-policy.json + harness-profile.json (role->rail per host) + usage-probe.sh
 # (live headroom). Picks the best rung above the class quality_floor; on a cap
 # error fires the Airlift Tier-1 checkpoint and descends.
 #
@@ -16,9 +16,9 @@
 #
 # Exit codes:
 #   0   a wrapper/codex_companion/openrouter_exec rung executed -- output on stdout
-#   64  chosen rung is NATIVE — directive JSON on stdout; the HOST orchestrator
+#   64  chosen rung is NATIVE -- directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
-#   75  ladder exhausted — no rung had headroom above the floor
+#   75  ladder exhausted -- no rung had headroom above the floor
 #   2   bad args
 #
 # Deps: bash, jq. Optional: airlift engine (guarded; no-op if absent), node + Codex plugin.
@@ -32,7 +32,7 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASCADE="${CASCADE_FILE:-$DIR/model-cascade.json}"
 PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"
 PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
-# openrouter-wrapper is owned by the openrouter leaf plugin — resolved at call time (resolve_wrapper)
+# openrouter-wrapper is owned by the openrouter leaf plugin -- resolved at call time (resolve_wrapper)
 
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="120"; DRYRUN=0; PROBE_FILE=""
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
@@ -87,7 +87,7 @@ resolve_codex_root() {
 }
 dispatch_codex() {
   local root; root="$(resolve_codex_root)"
-  [ -z "$root" ] && return 127                       # Codex not installed → unavailable
+  [ -z "$root" ] && return 127                       # Codex not installed -> unavailable
   node "${root}/scripts/codex-companion.mjs" task --write "$PROMPT" 2>&1
 }
 # openrouter-wrapper lives in the openrouter leaf plugin (dual-cache resolve, like CODEX_ROOT/airlift).
@@ -171,17 +171,17 @@ for role in $LADDER; do
               '{dispatch:"native",model:$m,role:$role,probe_rail:$pr}'; exit 64;;
       codex_companion)
         out="$(dispatch_codex)"; rc=$?
-        [ $rc -eq 127 ] && break                       # Codex absent → next role
+        [ $rc -eq 127 ] && break                       # Codex absent -> next role
         if printf '%s' "$out" | grep -qiE 'usage limit|rate.?limit|quota'; then
-          checkpoint; break                            # CAP → handoff, next role
+          checkpoint; break                            # CAP -> handoff, next role
         fi
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
-        break;;                                        # other codex failure → next role (Claude)
+        break;;                                        # other codex failure -> next role (Claude)
       wrapper)
         fb="$(printf '%s' "$models" | awk -v m="$model" 'f{print;exit} $0==m{f=1}')"
         out="$(dispatch_wrapper "$model" "$fb")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
-        continue;;                                     # wrapper error → next model
+        continue;;                                     # wrapper error -> next model
       openrouter_exec)
         out="$(dispatch_openrouter_exec "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }

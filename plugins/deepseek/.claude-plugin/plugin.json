@@ -1,7 +1,7 @@
 {
   "name": "deepseek",
   "description": "DeepSeek V4 API subagent for policy-routed code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro delivers Sonnet-class code reasoning; V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"

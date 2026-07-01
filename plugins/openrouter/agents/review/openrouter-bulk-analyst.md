@@ -112,15 +112,15 @@ Format the content for the dm-review consolidator:
 
 Source: OpenRouter z-ai/glm-5.2 (full diff, ${LINE_COUNT} lines)
 
-### P1 — Critical
+### P1 -- Critical
 
 [List P1 findings with file, line, description, suggestion]
 
-### P2 — Serious
+### P2 -- Serious
 
 [List P2 findings]
 
-### P3 — Moderate
+### P3 -- Moderate
 
 [List P3 findings]
 

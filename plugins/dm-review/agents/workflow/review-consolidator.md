@@ -15,13 +15,13 @@ You receive the raw output from every review agent that ran. Each agent's output
 ## [Agent Name] Review
 
 ### Critical (P1)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Serious (P2)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Moderate (P3)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Approved
 - [file] Description
@@ -47,7 +47,7 @@ When multiple agents flag the same file and line:
 - List all source agents: `**Source:** agent-1, agent-2`
 - Merge descriptions if they add different context
 
-Example: Both `security-auditor` and `a11y-html-reviewer` flag an XSS issue on the same line → keep as one P1 finding with both agents listed.
+Example: Both `security-auditor` and `a11y-html-reviewer` flag an XSS issue on the same line -> keep as one P1 finding with both agents listed.
 
 ### Step 3: Apply Severity Mapping
 
@@ -55,7 +55,7 @@ Apply the severity mapping rules from `${CLAUDE_SKILL_DIR}/references/severity-m
 
 ### Step 4: Determine Merge Recommendation
 
-Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` — see the "Merge Recommendation Logic" section.
+Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` -- see the "Merge Recommendation Logic" section.
 
 ### Step 5: Generate Report
 
@@ -63,14 +63,14 @@ Follow the exact template in `references/output-format.md`. Include all required
 
 ## Rules
 
-1. Every finding from every agent must appear in the report — don't drop anything
+1. Every finding from every agent must appear in the report -- don't drop anything
 2. Deduplication merges findings, it doesn't remove them
-3. The merge recommendation is mechanical — follow the logic exactly
+3. The merge recommendation is mechanical -- follow the logic exactly
 4. Full agent outputs go in collapsible `<details>` sections at the bottom
 5. Sort P1 findings by impact: security first, then accessibility, then architecture, then others
 6. Include agents that found nothing in the summary table with "Clean" status
 7. Include skipped agents in the summary table with "Skipped" status and reason
 8. Count deduplicated findings, not raw findings (don't double-count)
-9. **P3 findings get full detail blocks** — same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
-10. **Flag band-aid recommendations** — if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended — replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
-11. **Dual-perspective findings are additive** — `codex-perspective` and Claude-family reviewers are peers. Dedup overlapping findings; never discard a unique Codex or Claude finding merely because the other perspective did not mention it.
+9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
+10. **Flag band-aid recommendations** -- if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended -- replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
+11. **Dual-perspective findings are additive** -- `codex-perspective` and Claude-family reviewers are peers. Dedup overlapping findings; never discard a unique Codex or Claude finding merely because the other perspective did not mention it.

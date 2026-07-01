@@ -20,7 +20,7 @@
 
   "cascades": {
     "codex": {
-      "_comment": "Primary executor = Codex (kind logic/config). Sub first; when Codex caps, descend to a cheap open model via OpenRouter BEFORE falling all the way to Claude — this is the key cost win and the generalization of the merged single fallback.",
+      "_comment": "Primary executor = Codex (kind logic/config). Sub first; when Codex caps, descend to a cheap open model via OpenRouter BEFORE falling all the way to Claude -- this is the key cost win and the generalization of the merged single fallback.",
       "quality_floor": 70,
       "ladder": ["premium_sub", "openrouter_exec", "cheap_api", "native_judgment"]
     },
@@ -30,7 +30,7 @@
       "ladder": ["openrouter_exec", "premium_sub", "native_judgment"]
     },
     "claude": {
-      "_comment": "Primary executor = Claude (kind ui/integration — needs visual/Live Wires judgment). Claude first; cross to a frontier API model only when the Max plan is capped. Never drops to a cheap model — quality floor 80 protects ui/integration work.",
+      "_comment": "Primary executor = Claude (kind ui/integration -- needs visual/Live Wires judgment). Claude first; cross to a frontier API model only when the Max plan is capped. Never drops to a cheap model -- quality floor 80 protects ui/integration work.",
       "quality_floor": 80,
       "ladder": ["native_judgment", "frontier_api"]
     }
@@ -38,9 +38,9 @@
 
   "policy": {
     "headroom_threshold_pct": 8,
-    "_comment_headroom": "Treat a sub/native rail as exhausted once probed remaining quota drops below this — hand off BEFORE the hard wall (mirrors Airlift's early-warning trip).",
+    "_comment_headroom": "Treat a sub/native rail as exhausted once probed remaining quota drops below this -- hand off BEFORE the hard wall (mirrors Airlift's early-warning trip).",
     "reentry": "highest_quality",
-    "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again — prefer quality).",
+    "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again -- prefer quality).",
     "on_cap_error": ["airlift_checkpoint", "mark_exhausted_until_resets_at", "descend"],
     "privacy": "For cheap_api/frontier_api wrapper rows, pin a no-logging Western provider (Fireworks/Together) for any model whose first-party API trains on data (e.g. DeepSeek). Enforced per-call via OPENROUTER_ZDR=1 in openrouter-wrapper.sh.",
     "_comment_headroom_unknown": "usage-probe state 'unknown' is treated as HAS-headroom (fail-open): a stale/unverified parser prefers dispatch + reactive cap detection over a false 'capped' that needlessly skips a healthy rail. The codex rail has a reactive cap detector (usage-limit string match) in cascade-dispatch.sh; the claude native rail relies on the orchestrator's own cap handling.",

@@ -733,7 +733,7 @@ The evaluation depth depends on the chunk classification from Step 3a.
 cd .worktrees/pipeline/<feature>/<chunk-id>
 ```
 
-Run `/codex:review` on the worktree. This delegates code review to OpenAI's Codex — runs on OpenAI quota, NOT Claude tokens. If findings:
+Run `/codex:review` on the worktree. This delegates code review to OpenAI's Codex -- runs on OpenAI quota, NOT Claude tokens. If findings:
 
 1. Apply fixes via Edit/Write
 2. Re-run `/codex:review`
@@ -791,7 +791,7 @@ Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 **Skip this step for Logic and Trivial chunks.**
 
-For UI and Integration chunks, verify the rendered output in a browser against the design spec and visual acceptance criteria. A screenshot without evaluation is theatre — every screenshot must be compared against something.
+For UI and Integration chunks, verify the rendered output in a browser against the design spec and visual acceptance criteria. A screenshot without evaluation is theatre -- every screenshot must be compared against something.
 
 **If Playwright MCP tools are unavailable,** STOP and ask the user: "Playwright browser tools are unavailable. Visual verification cannot be performed for this UI chunk. Proceed without visual check, or fix the tool issue first?" Do NOT silently continue.
 
@@ -801,9 +801,9 @@ For UI and Integration chunks, verify the rendered output in a browser against t
 
 Before taking screenshots, check for design specifications:
 
-1. `plans/<feature-slug>/brainstorm.html` — pipeline brainstorm output (read the `visualDecisions` island with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
-2. `docs/superpowers/specs/*.md` — formal design specs (use most recent)
-3. `.superpowers/brainstorm/` — brainstorm mockups (HTML files with inline styles)
+1. `plans/<feature-slug>/brainstorm.html` -- pipeline brainstorm output (read the `visualDecisions` island with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
+2. `docs/superpowers/specs/*.md` -- formal design specs (use most recent)
+3. `.superpowers/brainstorm/` -- brainstorm mockups (HTML files with inline styles)
 
 If found, read the spec and extract visual decisions relevant to this chunk's files:
 
@@ -829,9 +829,9 @@ Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
 
 For each acceptance criterion in the chunk prompt that describes a **visual outcome** (not just a structural criterion like "uses class X"), take a targeted screenshot of the relevant element:
 
-- If the criterion says "buttons are visually lighter" → screenshot the button group
-- If the criterion says "sidebar headings create clear hierarchy" → screenshot the sidebar
-- If the criterion says "card spacing is consistent" → screenshot 2-3 adjacent cards
+- If the criterion says "buttons are visually lighter" -> screenshot the button group
+- If the criterion says "sidebar headings create clear hierarchy" -> screenshot the sidebar
+- If the criterion says "card spacing is consistent" -> screenshot 2-3 adjacent cards
 
 Use Playwright's element targeting (`browser_take_screenshot` with a CSS selector or coordinates) when possible. If element-level targeting is unavailable, take a cropped area screenshot or annotate which area of the full-page screenshot to evaluate.
 
@@ -841,20 +841,20 @@ If a design spec was found in Step 1, compare each screenshot against the spec's
 
 ```text
 Visual Spec Check:
-- Spec: "Block button uses outline-danger variant, visually smaller than position buttons" → MATCH / MISMATCH (actual: [describe what you see])
-- Spec: "Sidebar headings use h4 with muted color, not competing with page heading" → MATCH / MISMATCH (actual: [describe])
-- Spec: "Natural-width buttons, not full-width" → MATCH / MISMATCH (actual: [describe])
+- Spec: "Block button uses outline-danger variant, visually smaller than position buttons" -> MATCH / MISMATCH (actual: [describe what you see])
+- Spec: "Sidebar headings use h4 with muted color, not competing with page heading" -> MATCH / MISMATCH (actual: [describe])
+- Spec: "Natural-width buttons, not full-width" -> MATCH / MISMATCH (actual: [describe])
 ```
 
-Spec deviations are P1 findings — the implementation does not match the approved design. Add them to the review fix queue.
+Spec deviations are P1 findings -- the implementation does not match the approved design. Add them to the review fix queue.
 
 #### Step 5: Visual Evaluation Against Acceptance Criteria
 
 Even without a design spec, evaluate each **visual acceptance criterion** from the chunk prompt. These criteria describe the IMPRESSION, not the implementation:
 
-- "Block and Abstain buttons are visually lighter than position buttons" → requires visual judgment
-- "Return to drafting is barely visible — a text link, not a button" → requires visual judgment
-- "Sidebar zones are visually distinct without excessive borders" → requires visual judgment
+- "Block and Abstain buttons are visually lighter than position buttons" -> requires visual judgment
+- "Return to drafting is barely visible -- a text link, not a button" -> requires visual judgment
+- "Sidebar zones are visually distinct without excessive borders" -> requires visual judgment
 
 For each visual criterion, state: PASS (describe what you see and why it matches) or FAIL (describe the gap). Visual criterion failures are P2.
 

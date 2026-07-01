@@ -463,7 +463,7 @@ check_skill_frontmatter() {
 #
 # Note: we do NOT use `xmllint --html` here. libxml2's HTML parser is HTML4-era
 # and emits false "Tag header/main/footer invalid" errors on HTML5 semantic
-# elements while still exiting 0 — useless as a gate. We use deterministic
+# elements while still exiting 0 -- useless as a gate. We use deterministic
 # structural checks (slot presence, balanced comments/script tags) instead.
 # --------------------------------------------------------------------------
 validate_html_templates() {
