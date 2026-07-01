@@ -324,16 +324,17 @@ Present the manifest summary: chunk count, parallel groups, overlap risk, requir
 
 ## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
-Use `/codex:adversarial-review` to review the prompts (runs on OpenAI quota, saves Claude tokens). Pass the plan, prompts, manifest, and `original-prompt.md` as context.
+Default to dual-perspective review: run `/codex:adversarial-review` and the Claude `plan-adversary` agent in parallel on the same plan, prompts, manifest, and `original-prompt.md`. This is a quality gate, not a fallback ladder.
 
-If Codex is unavailable (plugin not installed, auth failure, or OpenAI quota exhausted), fall back to launching the plan-adversary agent from `plugins/pipeline/agents/workflow/plan-adversary.md`.
+If Codex is unavailable (plugin not installed, auth failure, or OpenAI quota exhausted), continue with the Claude `plan-adversary` agent and record `codex-perspective: unavailable` in the Phase 5 receipt. If Claude agent dispatch is unavailable, continue with Codex and record `claude-perspective: unavailable`. If both are unavailable, block.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
-2. The adversary reviews for feasibility, completeness, and DM standards
-3. The adversary also produces **sprint contract addendums** -- additional acceptance criteria per chunk that the promptcraft may have missed (edge cases, error states, browser-verifiable criteria)
-4. Merge the adversary's proposed criteria into the chunk prompts
-5. If verdict is REVISE: apply revisions and re-submit (max 3 rounds)
-6. If verdict is APPROVED: proceed
+2. Both adversaries review for feasibility, completeness, and DM standards
+3. Both adversaries produce **sprint contract addendums** -- additional acceptance criteria per chunk that promptcraft may have missed (edge cases, error states, browser-verifiable criteria)
+4. Merge findings from both outputs; deduplicate by chunk/file/acceptance criterion; a finding from either perspective is in-scope and must be addressed unless code or prompt evidence disproves it
+5. Merge the adversaries' proposed criteria into the chunk prompts
+6. If either verdict is REVISE: apply revisions and re-submit to both available perspectives (max 3 rounds)
+7. If both available perspectives are APPROVED: proceed
 
 Mark ledger item 10 as complete.
 
@@ -348,8 +349,8 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 **Pre-flight check:**
 
 1. Confirm bypass permissions mode is active
-2. Confirm git working tree is clean (`git status --porcelain`)
-3. Confirm on main branch with latest changes
+2. Confirm git working tree has no blocking user-file changes (pipeline-owned artifacts may be committed/gitignored/force-added per the orchestrator)
+3. Confirm on `manifest.baseBranch` with latest changes, defaulting to `main` only when the field is absent
 
 **You MUST launch the execution-orchestrator agent.** You MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles worktree isolation, input guardrails, Fix Philosophy injection, output validation, dm-review-loop after each chunk, merging, final full dm-review, and memory capture. If you skip it, all of those steps get skipped.
 

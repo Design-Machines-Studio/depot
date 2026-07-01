@@ -278,18 +278,28 @@ If any requirement is uncovered, either add it to an existing chunk's acceptance
 
 ### Phase 6b: Prompt Quality Parity Check
 
-Compare prompt detail levels against classification-specific floors (primary) and against same-classification siblings (secondary) to catch both context fatigue and category-level under-specification.
+Compare prompt detail levels against classification- and complexity-specific floors (primary) and against same-classification siblings (secondary) to catch both context fatigue and category-level under-specification without punishing legitimately surgical chunks.
 
-**Classification-specific floors (BLOCKERS -- must be met before handoff):**
+**Classification + `estimatedComplexity` floors (BLOCKERS -- must be met before handoff):**
 
-| Classification | Min acceptance criteria | Min prompt lines | Min visual ACs |
-|----------------|-------------------------|------------------|----------------|
-| Trivial        | 3                       | 40               | n/a            |
-| Logic          | 5                       | 100              | n/a            |
-| Integration    | 10                      | 200              | 1 (if UI surface) |
-| UI             | 15                      | 250              | 2              |
+| Classification | `estimatedComplexity` | Min acceptance criteria | Min prompt lines | Min visual ACs |
+|----------------|-----------------------|-------------------------|------------------|----------------|
+| Trivial        | small                 | 2                       | 25               | n/a            |
+| Trivial        | medium                | 3                       | 40               | n/a            |
+| Trivial        | large                 | 5                       | 70               | n/a            |
+| Logic          | small                 | 3                       | 60               | n/a            |
+| Logic          | medium                | 5                       | 100              | n/a            |
+| Logic          | large                 | 8                       | 160              | n/a            |
+| Integration    | small                 | 5                       | 100              | 1 (if UI surface) |
+| Integration    | medium                | 10                      | 200              | 1 (if UI surface) |
+| Integration    | large                 | 14                      | 280              | 2 (if UI surface) |
+| Small UI       | small                 | 5                       | 80               | 2              |
+| UI             | medium                | 10                      | 160              | 2              |
+| UI             | large                 | 15                      | 250              | 2              |
 
-A prompt below any floor for its classification is a BLOCKER, not a warning. Expand it before handoff -- missing context, missing acceptance criteria, missing visual specifications.
+A prompt below any floor for its classification and `estimatedComplexity` is a BLOCKER, not a warning. Expand it before handoff -- missing context, missing acceptance criteria, missing visual specifications. If the prompt is genuinely a two-line surgical templ fix, keep it `kind: ui`, set `estimatedComplexity: small`, and meet the Small UI floor; do not inflate the task or reclassify it as config just to satisfy the old UI floor. The visual acceptance criteria requirement remains: every UI chunk gets at least 2 visual ACs regardless of size.
+
+**Commit text guidance for chunk prompts:** When instructing subagents to summarize verification in commit messages, use phrases such as "module build/tests pass in Docker" or "Docker-backed verification passed". Avoid literal bare command phrases like `go build ./...`, `go test ./...`, or `vet` in commit prose because some projects use hooks that block bare-Go claims outside Docker.
 
 **Sibling parity (secondary signal -- flags context fatigue within a classification):**
 
@@ -305,13 +315,13 @@ A prompt below any floor for its classification is a BLOCKER, not a warning. Exp
 ```text
 Prompt Quality Parity:
   Classification floors:
-    UI chunks: chunk-01 (252 lines, 18 ACs, 3 visual) PASS, chunk-03 (120 lines, 8 ACs, 1 visual) BLOCKER (below UI floor)
+    UI chunks: chunk-01 (large, 252 lines, 18 ACs, 3 visual) PASS, chunk-03 (small, 120 lines, 8 ACs, 2 visual) PASS
     Logic chunks: chunk-02 (115 lines, 6 ACs) PASS, chunk-04 (98 lines, 4 ACs) BLOCKER (below Logic floor)
   Sibling parity:
     UI group avg 186 lines. chunk-03 at 65% -- under-specified relative to siblings.
 ```
 
-**Fix BLOCKERs** by expanding under-specified prompts. Classification floors are non-negotiable -- if a prompt genuinely cannot be expanded to the floor, the chunk is misclassified (reclassify it). Do not proceed to handoff with BLOCKER-class parity violations.
+**Fix BLOCKERs** by expanding under-specified prompts or correcting `estimatedComplexity`. The floors are non-negotiable for the chosen size -- if a prompt genuinely cannot be expanded to the small floor, the chunk is misclassified or underspecified. Do not proceed to handoff with BLOCKER-class parity violations.
 
 ### Phase 7: Handoff
 

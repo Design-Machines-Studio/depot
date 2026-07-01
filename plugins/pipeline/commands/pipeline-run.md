@@ -23,8 +23,8 @@ Before executing, verify:
 1. **Manifest exists and is valid JSON**
 2. **All prompt files referenced in manifest exist and resolve within `plans/`** -- reject any path that escapes the project's `plans/<feature>/prompts/` directory after canonical resolution
 3. **Branch names are safe** -- `featureBranch` and all chunk IDs match `^[a-z0-9][a-z0-9\-\/]*$`
-4. **Git working tree is clean** (`git status --porcelain` is empty)
-5. **On the base branch** (usually main) with latest changes
+4. **Git working tree has no blocking user-file changes** -- classify dirty paths as pipeline-owned artifacts (`plans/<feature>/`, generated prompts/manifests/receipts) versus unrelated user files. Commit/gitignore/force-add pipeline-owned artifacts as directed by the orchestrator; block only on unrelated user files.
+5. **On the manifest base branch** with latest changes -- use `manifest.baseBranch` when present, defaulting to `main`. The base may be any existing ref, including an unmerged PR branch, stacked branch, or hotfix branch.
 6. **Bypass permissions active** -- If not, warn: "Autonomous execution requires bypass permissions mode. Enable it and re-run."
 
 If any check fails, report the issue and stop.
@@ -35,7 +35,7 @@ When this command runs in Codex and the session exposes `multi_agent_v1.spawn_ag
 
 **Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
 
-**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
+**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation or documented `sequential-on-branch` mode for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
 
 **Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
 

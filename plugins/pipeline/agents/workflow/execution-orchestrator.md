@@ -25,6 +25,8 @@ You MUST execute every step for every chunk. Specifically:
 - You MUST record the session to ai-memory
 - You MUST report what you actually did in the summary, honestly
 
+Exception: use `sequential-on-branch` mode instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification.
+
 ## CRITICAL: How to Run dm-review (skill, not slash command)
 
 You are a subagent. **Slash commands like `/dm-review-loop`, `/dm-review-quick`, `/dm-review`, and `/dm-review-fix` are NOT callable from a subagent context** -- they are user-input only. References elsewhere in this document that say "Run /dm-review-quick" mean "execute the review-fix-loop pattern below using the `Skill` tool to invoke the underlying review skill."
@@ -240,12 +242,15 @@ Log: `MCP Pre-Flight: Playwright=[available/unavailable], Chrome DevTools=[avail
 
 If browser tools are available and UI chunks exist, verify the dev server is reachable. Try these URLs in order:
 
-1. `http://localhost:8080` (Go+Templ+Datastar)
-2. `http://localhost:3000` (Node/general)
+1. `manifest.devServerURL` when present.
+2. Host URLs derived from `docker compose ps` port mappings (for example, `0.0.0.0:8091->8090/tcp` becomes `http://localhost:8091`).
+3. `http://localhost:8080` (Go+Templ+Datastar)
+4. `http://localhost:3000` (Node/general)
+5. Project-specific local domains documented in the manifest, README, or compose labels.
 
 Use `browser_navigate` to test. If none respond:
 
-STOP and use AskUserQuestion: "No dev server detected at localhost:8080 or :3000. Visual verification requires a running application. Start the dev server, or proceed without visual checks?"
+Do not hard-stop. Record `browser proof deferred to caller` with the attempted URLs, mark visual verification as `curl_fallback` for this run, and ask the caller to start the application in Phase 7. The final merge recommendation MUST be `BLOCKED PENDING CALLER VERIFICATION` until browser proof is completed.
 
 ## Step 0c: Module-Loader Pre-Flight
 
@@ -307,6 +312,23 @@ fi
 
 If `.gitignore` was modified, the commit happens before any pipeline artifacts are created. Log: `Gitignore enforcement: added N entries` or `Gitignore enforcement: all entries present`.
 
+### Receipt trackability guard
+
+Before relying on a receipt as a durable record, detect ignored `plans/` patterns:
+
+```bash
+if git check-ignore -q plans/<feature-slug>/receipt.md 2>/dev/null || git check-ignore -q plans/ 2>/dev/null; then
+  log "receipt tracking: plans receipt is ignored"
+fi
+```
+
+If `plans/<feature-slug>/receipt.md` is ignored, choose one of two explicit paths and report it in the Summary Report:
+
+1. `git add -f plans/<feature-slug>/receipt.md` when the caller wants the receipt tracked with the branch.
+2. Write a duplicate receipt to a tracked location such as `docs/pipeline-receipts/<feature-slug>.md` when forced adds are not acceptable.
+
+Never call an ignored, untracked receipt "durable" without surfacing which path was chosen.
+
 ## Step 1: Setup
 
 ### 1a: Git Safety Check
@@ -317,25 +339,52 @@ Before ANY git operations, check for uncommitted work:
 git status --porcelain
 ```
 
-If the output is non-empty, STOP and report:
+If the output is non-empty, classify the changes before blocking:
 
-"BLOCKED: Uncommitted changes detected in the working tree. Commit or stash your changes before running the pipeline. Changes found:"
+1. **Pipeline-owned artifacts:** files under `plans/<feature-slug>/`, generated prompt packs, manifests, receipts, `.gitignore` entries added by Step 0d, and pipeline scratch screenshots/baselines.
+2. **User files:** source, config, docs, or unrelated files outside the current pipeline artifact set.
 
-Then show the output of `git status --short`.
+Pipeline-owned artifacts do not dead-end the run. Either commit/gitignore the pipeline-owned artifacts before branch setup, or force-add the durable receipt when Step 0d says it is ignored. User files still block branch checkout. Report:
 
-Do NOT proceed. Do NOT stash automatically. Do NOT checkout another branch. The user's uncommitted work takes priority -- they must handle it themselves.
+```text
+Git safety:
+- pipeline-owned artifacts: <list> -> <committed|ignored|force-added receipt>
+- user files: <list> -> BLOCKED until caller commits/stashes
+```
+
+Do NOT stash automatically. Do NOT checkout another branch while user files are dirty. The user's unrelated work takes priority.
 
 ### 1b: Branch Setup
 
-Only after confirming a clean working tree:
+Only after confirming there are no blocking user-file changes:
 
 ```bash
-git checkout main && git pull origin main
+BASE_BRANCH="${manifest.baseBranch:-main}"
+git checkout "$BASE_BRANCH" && git pull origin "$BASE_BRANCH"
 git checkout -b <featureBranch from manifest>
 git push -u origin <featureBranch>
 ```
 
+`manifest.baseBranch` may be any existing local or remote ref, including an unmerged feature branch, a stacked branch, or a hotfix base. Default to `main` only when the field is absent.
+
 Create the progress ledger with TodoWrite. One set of 7 sub-steps per chunk, plus 4 final steps.
+
+### 1c: Execution Mode Selection
+
+Detect whether the project test harness runs against the checked-out repo root instead of arbitrary worktrees. Use `sequential-on-branch` mode when any of these are true:
+
+- `docker compose run ... go test`, `docker compose exec ... go test`, or a Makefile target wraps tests in Docker with the repo root mounted.
+- A devcontainer or compose service bind-mounts the repository root and the test command runs inside that mount.
+- A repo hook such as `block-bare-go` requires Docker-only Go verification, making bare worktree `go test` invalid.
+
+In `sequential-on-branch` mode:
+
+1. Do not create per-chunk worktrees.
+2. Execute chunks sequentially on `<featureBranch>` in manifest order, even if the manifest has parallel groups.
+3. Preserve every other gate: input guardrails, implementation dispatch, build/test validation, anti-pattern scan, evaluation gate, final full review, requirements cross-check, receipt, and cleanup.
+4. Record `executionMode: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report.
+
+Tradeoff: no parallel isolation. This is acceptable for sequential manifests and required when Docker-mounted verification would otherwise test the wrong checkout.
 
 ## Step 2: Execute by Level
 
@@ -371,13 +420,19 @@ Log: "Chunk [chunk-id] classified as: [type] (source: manifest kind | file-exten
 
 Mark `[chunk-id] 1. Classify chunk` complete.
 
-### 3b: Create Worktree
+### 3b: Create Worktree or Select Branch
 
 ```bash
 git worktree add .worktrees/pipeline/<feature>/<chunk-id> -b pipeline/<feature>/<chunk-id> <featureBranch>
 ```
 
-Mark `[chunk-id] 2. Create worktree` complete.
+In `sequential-on-branch` mode, replace the worktree command with:
+
+```bash
+git checkout <featureBranch>
+```
+
+Mark `[chunk-id] 2. Create worktree` complete, or `branch selected` for `sequential-on-branch`.
 
 ### 3c: Apply Input Guardrails
 
@@ -522,8 +577,15 @@ Your implementation MUST satisfy the requirements relevant to this chunk.
 When done:
 1. Verify all acceptance criteria are met
 2. State which Key Requirements from the original prompt this chunk addresses
-3. Stage and commit your changes with a descriptive message
+3. Stage and commit your changes using the commit protocol below
 4. Report: what you built, files changed, any concerns
+
+## Commit Protocol
+
+- Stage each explicit file or directory independently so one missing pathspec does not abort the whole staging operation. Prefer `git add -A -- <dir>` for directories affected by renames, or loop over files and tolerate paths that were removed by `git mv`.
+- Verify `git diff --cached --stat` covers the chunk's `filesToModify` before committing. If an expected file is absent because it was renamed or deleted, record the replacement path in the receipt.
+- Write the commit message to a temp file and commit with `git commit -F <file>`.
+- In commit text, describe verification as "module build/tests pass in Docker" or "Docker-backed verification passed". Avoid literal bare command phrases such as `go build ./...`, `go test ./...`, or `vet` in prose because some repository hooks scan commit messages for bare-Go verification claims.
 ```
 
 Mark `[chunk-id] 4. Dispatch subagent` complete.
@@ -893,7 +955,7 @@ The review output follows the unified format (per `plugins/dm-review/skills/revi
 If issues found:
 
 1. Fix directly on feature branch
-2. Commit: `git commit -m "pipeline: fix final review findings"`
+2. Stage each changed path independently or with `git add -A -- <dir>`, verify `git diff --cached --stat`, write the message to a file, and commit with `git commit -F <file>`
 3. Re-run a full-mode review (`Skill(skill="dm-review:review", args="full <feature-branch>")`) to verify
 4. Max 2 full review iterations
 
@@ -1025,6 +1087,7 @@ Create `plans/<feature-slug>/receipt.md`:
 
 - Date: YYYY-MM-DD
 - Branch: <featureBranch>
+- Base: <baseBranch from manifest.baseBranch, default main>
 - Merge: <merge recommendation from Step 4>
 - Chunks: <N> executed, <M> parallel
 - Mode: <executionMode>
@@ -1127,6 +1190,7 @@ Present this report:
 ## Feature: <feature-name>
 **Branch:** <featureBranch>
 **Base:** <baseBranch>
+Base may be any existing ref from `manifest.baseBranch`; `main` is only the absent-field default.
 
 ## Chunks Executed
 | Chunk | Status | dm-review-loop Result | Notes |
