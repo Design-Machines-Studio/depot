@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
-  "version": "1.38.0",
-  "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, governance, and Codex second-opinion domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
+  "version": "1.38.1",
+  "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, governance, Codex second-opinion, OpenRouter, and DeepSeek policy-routed domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -297,7 +297,7 @@
   "interface": {
     "displayName": "DM Review",
     "shortDescription": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, ",
-    "longDescription": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, governance, and Codex second-opinion domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
+    "longDescription": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, governance, Codex second-opinion, OpenRouter, and DeepSeek policy-routed domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [
