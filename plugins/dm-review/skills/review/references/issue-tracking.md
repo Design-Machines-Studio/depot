@@ -24,12 +24,12 @@ Clear description of what's wrong and why it matters.
 
 ## Location
 
-- `path/to/file.ext:line` — specific location
-- `path/to/related-file.ext:line` — related code (if applicable)
+- `path/to/file.ext:line` -- specific location
+- `path/to/related-file.ext:line` -- related code (if applicable)
 
 ## Evidence
 
-What the agent found — include code snippets, patterns, or data that demonstrate the issue.
+What the agent found -- include code snippets, patterns, or data that demonstrate the issue.
 
 ## Fix
 
@@ -78,8 +78,8 @@ Examples:
 
 | Review Severity | Todo Priority | Tracked? |
 |----------------|---------------|----------|
-| P1 — Critical | `p1` | Yes — always |
-| P2 — Should Fix | `p2` | Yes — always |
+| P1 -- Critical | `p1` | Yes -- always |
+| P2 -- Should Fix | `p2` | Yes -- always |
 | P3 -- Fix Before Merge | `p3` | Yes -- always |
 
 ---
@@ -87,7 +87,7 @@ Examples:
 ## Status Lifecycle
 
 ```
-pending → done → (deleted after commit)
+pending -> done -> (deleted after commit)
 ```
 
 Rename the file when the fix is complete:

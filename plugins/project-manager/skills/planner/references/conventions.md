@@ -28,7 +28,7 @@ Use bare URL strings when setting relations via `update-page`:
 
 ### Limit-1 relations
 
-Sprint relations on Todos and Time Tracking entries are limit-1 — they accept only one sprint. Setting a new value replaces the old one.
+Sprint relations on Todos and Time Tracking entries are limit-1 -- they accept only one sprint. Setting a new value replaces the old one.
 
 ---
 
@@ -59,7 +59,7 @@ Status is a special property type. Set it with the status name as a string:
 "Status": "In progress"
 ```
 
-Valid values are defined per database — see databases.md for each.
+Valid values are defined per database -- see databases.md for each.
 
 ---
 

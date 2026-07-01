@@ -4,9 +4,9 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## What This Is
 
-Depot (DM-013/WORKS) is Design Machines' AI plugin marketplace — a collection of knowledge-as-code plugins that give AI coding assistants specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON consumed as skills, agents, and reference material.
+Depot (DM-013/WORKS) is Design Machines' AI plugin marketplace -- a collection of knowledge-as-code plugins that give AI coding assistants specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON consumed as skills, agents, and reference material.
 
-**This marketplace was built for Claude Code.** Codex compatibility is provided via generated manifest shims. CLAUDE.md is the canonical reference for the full documentation — everything below covers only what differs for Codex.
+**This marketplace was built for Claude Code.** Codex compatibility is provided via generated manifest shims. CLAUDE.md is the canonical reference for the full documentation -- everything below covers only what differs for Codex.
 
 ## Dual-Platform Architecture
 
@@ -24,26 +24,26 @@ Claude Code is the primary consumer. Codex support is an adapter layer:
 ## Repository Structure
 
 ```
-.claude-plugin/marketplace.json     — Canonical marketplace manifest
-.agents/plugins/marketplace.json    — Generated Codex marketplace manifest
+.claude-plugin/marketplace.json     -- Canonical marketplace manifest
+.agents/plugins/marketplace.json    -- Generated Codex marketplace manifest
 plugins/<name>/
-  .claude-plugin/plugin.json        — Canonical plugin metadata
-  .codex-plugin/plugin.json         — Generated Codex plugin metadata
+  .claude-plugin/plugin.json        -- Canonical plugin metadata
+  .codex-plugin/plugin.json         -- Generated Codex plugin metadata
   skills/<skill-name>/
-    SKILL.md                        — Primary skill definition
-    references/                     — Supporting reference docs
+    SKILL.md                        -- Primary skill definition
+    references/                     -- Supporting reference docs
   agents/<category>/
-    <agent-name>.md                 — Agent definitions (review/, workflow/)
+    <agent-name>.md                 -- Agent definitions (review/, workflow/)
   commands/
-    <command-name>.md               — Slash command definitions
-description-evals/                  — Trigger evaluation datasets
-tools/                              — Eval runner and development utilities
-docs/                               — Design specs and architecture docs
+    <command-name>.md               -- Slash command definitions
+description-evals/                  -- Trigger evaluation datasets
+tools/                              -- Eval runner and development utilities
+docs/                               -- Design specs and architecture docs
 ```
 
 ## Codex Manifest Generation
 
-Claude manifests are the source of truth. Never hand-edit Codex manifest files — they are generated:
+Claude manifests are the source of truth. Never hand-edit Codex manifest files -- they are generated:
 
 ```shell
 ./tools/generate-codex-manifests.py          # regenerate all Codex manifests
@@ -52,7 +52,7 @@ Claude manifests are the source of truth. Never hand-edit Codex manifest files �
 
 ## Codex Command Skill Aliases
 
-Claude slash commands are also the source of truth for Codex workflow aliases. Never hand-edit generated command-skill aliases — edit `plugins/<name>/commands/<command>.md`, then regenerate:
+Claude slash commands are also the source of truth for Codex workflow aliases. Never hand-edit generated command-skill aliases -- edit `plugins/<name>/commands/<command>.md`, then regenerate:
 
 ```shell
 ./tools/generate-codex-command-skills.py          # regenerate command aliases
@@ -98,7 +98,7 @@ When editing cache lookups, always include both roots. Validate with:
 
 ## Full Documentation
 
-For plugin anatomy, Agent Card capabilities schema, dependency declarations, orchestration patterns, versioning rules, pipeline enforcement, known failure modes, and the post-implementation checklist, see CLAUDE.md. All of that applies identically to Codex — only the manifest paths differ as documented above.
+For plugin anatomy, Agent Card capabilities schema, dependency declarations, orchestration patterns, versioning rules, pipeline enforcement, known failure modes, and the post-implementation checklist, see CLAUDE.md. All of that applies identically to Codex -- only the manifest paths differ as documented above.
 
 ## The Plugins
 
@@ -118,7 +118,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 | **project-scaffolder** | Project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement |
 | **dm-review** | Code review orchestrator with parallel agents and visual browser testing |
-| **the-local** | Self-hosted Matrix network — Element Web branding, Synapse config |
+| **the-local** | Self-hosted Matrix network -- Element Web branding, Synapse config |
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
 | **deepseek** | DeepSeek V4 API subagent for code review and bulk diff analysis |

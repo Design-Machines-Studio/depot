@@ -85,7 +85,7 @@ templ PageLayout(meta PageMeta) {
   <!DOCTYPE html>
   <html lang="en">
     <head>
-      <title>{meta.Title} — {meta.SiteName}</title>
+      <title>{meta.Title} -- {meta.SiteName}</title>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
     </head>
@@ -184,7 +184,7 @@ When SSE pushes content updates, screen readers don't announce them unless you u
 </div>
 ```
 
-**Important:** The `aria-live` attribute must be on an element that EXISTS before the first update. Don't add `aria-live` to the morphed content — it needs to be on a stable parent.
+**Important:** The `aria-live` attribute must be on an element that EXISTS before the first update. Don't add `aria-live` to the morphed content -- it needs to be on a stable parent.
 
 ### Challenge 3: Loading States
 
@@ -228,7 +228,7 @@ Datastar makes it easy to add `data-on-click` to any element. Only put click han
 
 ### Challenge 5: Conditional Rendering
 
-Use `data-show` carefully — it sets `display: none` which removes elements from the accessibility tree.
+Use `data-show` carefully -- it sets `display: none` which removes elements from the accessibility tree.
 
 ```html
 <!-- This is correct for truly hidden content -->
@@ -319,11 +319,11 @@ When writing HTTP handlers that serve HTML:
 
 Because Datastar operates via SSE and DOM morphing, automated tools may miss issues. Manual testing protocol:
 
-1. **Tab to the interactive element** — is it reachable?
-2. **Activate it** — does Enter/Space work?
-3. **Wait for SSE response** — does the screen reader announce the change?
-4. **Check focus** — is focus on a logical element after the morph?
-5. **Check state** — are `aria-expanded`, `aria-selected`, etc. updated?
+1. **Tab to the interactive element** -- is it reachable?
+2. **Activate it** -- does Enter/Space work?
+3. **Wait for SSE response** -- does the screen reader announce the change?
+4. **Check focus** -- is focus on a logical element after the morph?
+5. **Check state** -- are `aria-expanded`, `aria-selected`, etc. updated?
 
 Use Playwright for automated checks of the rendered state:
 

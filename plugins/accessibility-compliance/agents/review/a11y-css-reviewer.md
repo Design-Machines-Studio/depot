@@ -28,13 +28,13 @@ Visual accessibility ensures that users with low vision, color blindness, vestib
 **Check for:**
 ```css
 /* RED FLAG: Hardcoded colors without contrast verification */
-color: #999;                    /* Gray text — verify against background */
-background: #f0f0f0;           /* Light bg — verify text contrast */
-border-color: #ddd;            /* Light border — 3:1 against bg? */
+color: #999;                    /* Gray text -- verify against background */
+background: #f0f0f0;           /* Light bg -- verify text contrast */
+border-color: #ddd;            /* Light border -- 3:1 against bg? */
 
 /* RED FLAG: Opacity reducing effective contrast */
 opacity: 0.6;                  /* Reduces contrast of text within */
-color: rgba(0, 0, 0, 0.5);    /* 50% black — likely fails contrast */
+color: rgba(0, 0, 0, 0.5);    /* 50% black -- likely fails contrast */
 ```
 
 **Live Wires projects:** Verify that `.scheme-*` classes maintain contrast for all text colors within the scheme. Dark schemes need `--vf-grad` adjustment.
@@ -66,7 +66,7 @@ a:focus-visible {
 }
 ```
 
-**WCAG 2.4.11 — Focus Not Obscured:**
+**WCAG 2.4.11 -- Focus Not Obscured:**
 Check that sticky headers, fixed footers, or overlays don't cover focused elements:
 ```css
 /* Potential obscuring */
@@ -175,10 +175,10 @@ Tooltip and hover content must be:
 
 ## Severity Levels
 
-- **Critical** — `outline: none` without replacement, below-minimum contrast on primary text
-- **Serious** — animations without motion preference check, reflow broken at 320px
-- **Moderate** — low contrast on secondary text, fixed heights that may clip
-- **Minor** — missing forced-colors fallback, suboptimal but functional
+- **Critical** -- `outline: none` without replacement, below-minimum contrast on primary text
+- **Serious** -- animations without motion preference check, reflow broken at 320px
+- **Moderate** -- low contrast on secondary text, fixed heights that may clip
+- **Minor** -- missing forced-colors fallback, suboptimal but functional
 
 ## Output Format
 
@@ -186,13 +186,13 @@ Tooltip and hover content must be:
 ## Accessibility CSS Review
 
 ### Critical
-- [file:line] Description — WCAG SC reference
+- [file:line] Description -- WCAG SC reference
 
 ### Serious
-- [file:line] Description — WCAG SC reference
+- [file:line] Description -- WCAG SC reference
 
 ### Moderate
-- [file:line] Description — WCAG SC reference
+- [file:line] Description -- WCAG SC reference
 
 ### Approved
 - [file] CSS meets WCAG 2.2 AA visual requirements

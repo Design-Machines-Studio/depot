@@ -1,6 +1,6 @@
 # Estimation Framework
 
-> **Related sections:** → Risk Management (`risk.md`) → Change Control (`change-control.md`) → Pricing (`pricing.md`) → Scoping (`scoping.md`)
+> **Related sections:** -> Risk Management (`risk.md`) -> Change Control (`change-control.md`) -> Pricing (`pricing.md`) -> Scoping (`scoping.md`)
 
 ## Core Estimation Principles
 
@@ -16,7 +16,7 @@ The less certain you are, the wider the range should be. A range you can hit 9/1
 
 ### 2. Share Your Confidence Level With the Range
 
-Don't just give a range—tell stakeholders how confident you are:
+Don't just give a range--tell stakeholders how confident you are:
 > "We're 50% confident we can deliver in 4 weeks, but we're 90% confident we can in 6 weeks."
 
 This builds trust and helps stakeholders make informed decisions about risk.
@@ -37,7 +37,7 @@ Not executives, not salespeople, not project managers alone. Why:
 
 | Type | Example | Purpose |
 |------|---------|---------|
-| **Estimate** | $20,000–$25,000 | Range with wiggle room for planning |
+| **Estimate** | $20,000-$25,000 | Range with wiggle room for planning |
 | **Budget** | $24,350 | Fixed hard stop for accounting |
 
 When uncertain about scope, share the estimate (range). Lock in a budget only when scope is firm.
@@ -64,7 +64,7 @@ For detailed project planning using 90th percentile technique.
 
 ## The 90th Percentile Estimation Technique
 
-This is a **conversation technique** for pulling realistic estimates from the people doing the work. It's not a formula—it's a process of challenging assumptions until you find a range you'd bet money on.
+This is a **conversation technique** for pulling realistic estimates from the people doing the work. It's not a formula--it's a process of challenging assumptions until you find a range you'd bet money on.
 
 **The goal:** Find a range (low to high) that the person is 90% confident they'd hit 9 times out of 10 if they did the task repeatedly.
 
@@ -88,7 +88,7 @@ Designer: "Yes."
 
 ### Key Insight
 
-The 90th percentile gives you a confident LOW-HIGH range. This is your internal foundation—but it's NOT what you quote to clients. You use red flags to calculate a midpoint, then present that midpoint with the range and red flags as justification.
+The 90th percentile gives you a confident LOW-HIGH range. This is your internal foundation--but it's NOT what you quote to clients. You use red flags to calculate a midpoint, then present that midpoint with the range and red flags as justification.
 
 ### Questions to Model 90th Percentile
 
@@ -97,7 +97,7 @@ The 90th percentile gives you a confident LOW-HIGH range. This is your internal 
 - What happens if you adjust/change/remove/add [Y]?
 - What could make that number higher?
 - When do things get complicated? What adds to complexity?
-- Looking back at similar work, what went wrong? Add those up—what did we miss?
+- Looking back at similar work, what went wrong? Add those up--what did we miss?
 
 ---
 
@@ -127,7 +127,7 @@ For team-based consensus on story points/effort. Use Fibonacci: 0, 0.5, 1, 2, 3,
 
 ## The Red Flags System
 
-Red flags are observable warning signs that indicate risks. They're not the risks themselves—they're clues that help you predict which risks will manifest and how severely.
+Red flags are observable warning signs that indicate risks. They're not the risks themselves--they're clues that help you predict which risks will manifest and how severely.
 
 ### What Red Flags Look Like
 
@@ -233,7 +233,7 @@ Share the **midpoint** (~68% confidence) as your target estimate, with the full 
 | **Internal** | Full 90th percentile range (low to high) |
 | **Contract** | Midpoint as target, high end as "not to exceed" with change control |
 
-**Key insight:** The 90th percentile high is your "if everything goes wrong" ceiling. You don't quote that—you quote the midpoint, supported by visible red flags that explain why you're where you are on the curve.
+**Key insight:** The 90th percentile high is your "if everything goes wrong" ceiling. You don't quote that--you quote the midpoint, supported by visible red flags that explain why you're where you are on the curve.
 
 ---
 

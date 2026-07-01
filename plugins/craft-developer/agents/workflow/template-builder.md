@@ -166,23 +166,23 @@ Always eager load relations accessed in loops:
 When the Craft MCP server is connected:
 
 **Understanding structure:**
-- `list_sections` — Available sections
-- `list_fields` — Field types and handles
-- `list_entry_types` — Entry type configurations
+- `list_sections` -- Available sections
+- `list_fields` -- Field types and handles
+- `list_entry_types` -- Entry type configurations
 
 **Debugging templates:**
-- `get_entry` — Inspect entry data
-- `run_query` — Test queries directly
-- `explain_query` — Optimize slow queries
+- `get_entry` -- Inspect entry data
+- `run_query` -- Test queries directly
+- `explain_query` -- Optimize slow queries
 
 **GraphQL development:**
-- `list_graphql_schemas` — Available schemas
-- `execute_graphql` — Test queries
+- `list_graphql_schemas` -- Available schemas
+- `execute_graphql` -- Test queries
 
 ## Output Format
 
 Provide:
-1. **Working code** — Complete, tested Twig templates
-2. **Performance notes** — Eager loading, caching recommendations
-3. **Flexibility** — Component props, optional parameters
-4. **Explanation** — Why this approach works
+1. **Working code** -- Complete, tested Twig templates
+2. **Performance notes** -- Eager loading, caching recommendations
+3. **Flexibility** -- Component props, optional parameters
+4. **Explanation** -- Why this approach works

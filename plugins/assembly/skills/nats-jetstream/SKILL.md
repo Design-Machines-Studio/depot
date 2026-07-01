@@ -17,7 +17,7 @@ All NATS communication is in-process. No external TCP port. Uses `github.com/del
 ns, err := embeddednats.New(ctx, embeddednats.WithNATSServerOptions(&natsserver.Options{
     JetStream:  true,
     NoSigs:     true,
-    DontListen: true,  // IN-PROCESS ONLY — critical for security
+    DontListen: true,  // IN-PROCESS ONLY -- critical for security
     StoreDir:   "data/nats",
 }))
 ```
@@ -117,7 +117,7 @@ if entry, err := kv.Get(ctx, key); err != nil {
     if err != jetstream.ErrKeyNotFound {
         return fmt.Errorf("kv get: %w", err)
     }
-    // Key doesn't exist — initialize default
+    // Key doesn't exist -- initialize default
 } else {
     if err := json.Unmarshal(entry.Value(), &state); err != nil {
         return fmt.Errorf("unmarshal: %w", err)
@@ -242,7 +242,7 @@ err := db.WithTx(ctx, func(tx *sql.Tx) error {
 if err != nil { return err }
 deps.Events.Publish("assembly.gov.proposal.created", envelope)
 
-// WRONG — publishes even if tx rolls back
+// WRONG -- publishes even if tx rolls back
 err := db.WithTx(ctx, func(tx *sql.Tx) error {
     deps.Events.Publish(...)  // too early
     return nil

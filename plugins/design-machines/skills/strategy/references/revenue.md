@@ -25,7 +25,7 @@ Writing, YouTube (Gifted Hater energy), speaking, courses
 
 ## Assembly Pricing
 
-Project-based engagements covering Discovery + Design, Implementation, Training, and optional maintenance retainers. Pricing details are stored in ai-memory — search for "Assembly" or "Design Machines OÜ" for current figures.
+Project-based engagements covering Discovery + Design, Implementation, Training, and optional maintenance retainers. Pricing details are stored in ai-memory -- search for "Assembly" or "Design Machines OÜ" for current figures.
 
 ## Live Wires Pricing (Market-Validated)
 

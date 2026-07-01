@@ -12,7 +12,7 @@ UX vocabulary inherits from growth-hacking and surveillance capitalism: "users,"
 
 ### Navigation & Structure
 
-| Conventional | → Use Instead | Rationale |
+| Conventional | -> Use Instead | Rationale |
 |-------------|---------------|-----------|
 | Dashboard | **Overview** or **Pulse** | Less surveillance, more rhythm |
 | Admin Panel | **Coordination Hub** or **Steward Tools** | Service, not control |
@@ -24,7 +24,7 @@ UX vocabulary inherits from growth-hacking and surveillance capitalism: "users,"
 
 ### Actions & Buttons
 
-| Conventional | → Use Instead | Rationale |
+| Conventional | -> Use Instead | Rationale |
 |-------------|---------------|-----------|
 | Submit | **Share** or **Propose** | Invitation, not subordination |
 | Approve / Reject | **Consent** / **Raise Concern** | Sociocratic, non-binary |
@@ -36,7 +36,7 @@ UX vocabulary inherits from growth-hacking and surveillance capitalism: "users,"
 
 ### Status Labels
 
-| Conventional | → Use Instead | Rationale |
+| Conventional | -> Use Instead | Rationale |
 |-------------|---------------|-----------|
 | Pending Approval | **Awaiting Consent** | Sociocratic process |
 | Approved | **Consented** or **Agreed** | Collective action |
@@ -62,7 +62,7 @@ UX vocabulary inherits from growth-hacking and surveillance capitalism: "users,"
 
 **Meeting reminders:**
 - ✗ "You are required to attend the Board Meeting on Thursday"
-- ✓ "Stewardship Circle gathers Thursday at 3pm — your voice matters"
+- ✓ "Stewardship Circle gathers Thursday at 3pm -- your voice matters"
 
 **Decision updates:**
 - ✗ "Resolution #2026-04 has been passed by majority vote"
@@ -70,11 +70,11 @@ UX vocabulary inherits from growth-hacking and surveillance capitalism: "users,"
 
 **Compliance reminders:**
 - ✗ "URGENT: Annual report filing deadline approaching. Failure to comply may result in penalties."
-- ✓ "Our annual report is due by March 15 — here's what we need to finish up"
+- ✓ "Our annual report is due by March 15 -- here's what we need to finish up"
 
 **Financial updates:**
 - ✗ "Q4 profit statement is available for review"
-- ✓ "Our Q4 surplus report is ready — see how we did"
+- ✓ "Our Q4 surplus report is ready -- see how we did"
 
 **Member lifecycle:**
 - ✗ "New employee onboarded: Jane Smith"
@@ -92,7 +92,7 @@ Empty states are an opportunity to educate and invite rather than just display "
 
 **Proposals page (empty):**
 - ✗ "No proposals found."
-- ✓ "No proposals yet — when someone has an idea for how we can improve, it'll show up here. Ready to start one?"
+- ✓ "No proposals yet -- when someone has an idea for how we can improve, it'll show up here. Ready to start one?"
 
 **Meeting records (empty):**
 - ✗ "No meetings recorded."
@@ -109,13 +109,13 @@ Empty states are an opportunity to educate and invite rather than just display "
 Errors should be honest, helpful, and never blame the user.
 
 - ✗ "Error: Invalid input"
-- ✓ "That doesn't look quite right — could you check the date format?"
+- ✓ "That doesn't look quite right -- could you check the date format?"
 
 - ✗ "Access denied"
-- ✓ "This area is for stewardship circle members — reach out to your facilitator if you need access"
+- ✓ "This area is for stewardship circle members -- reach out to your facilitator if you need access"
 
 - ✗ "Operation failed"
-- ✓ "Something went wrong on our end — try again, and if it persists, let us know"
+- ✓ "Something went wrong on our end -- try again, and if it persists, let us know"
 
 ---
 
@@ -123,7 +123,7 @@ Errors should be honest, helpful, and never blame the user.
 
 When writing about the product itself (documentation, changelogs, internal communications), the same principles apply.
 
-| Tech/Startup Term | → Use Instead | Notes |
+| Tech/Startup Term | -> Use Instead | Notes |
 |-------------------|---------------|-------|
 | Users | **Members** or **People** | They own this tool |
 | User stories | **Member needs** or **Scenarios** | |
@@ -162,7 +162,7 @@ terminology:
   member: "Compañero"             # cooperative override (Spanish-speaking co-op)
 ```
 
-This supports the pluriversal principle — multiple valid ways of naming the same concept, defined by each community for themselves.
+This supports the pluriversal principle -- multiple valid ways of naming the same concept, defined by each community for themselves.
 
 ---
 
@@ -173,4 +173,4 @@ Decolonial language must also be accessible language.
 - **Plain language always wins.** If a decolonial alternative is harder to understand than the conventional term, the conventional term is better. The goal is clarity in service of democracy.
 - **Define unfamiliar terms.** If using "consent round" instead of "vote," provide a brief definition on first encounter.
 - **Translation considerations.** Some alternative terms may not translate well. "Stewardship Circle" works in English; test with multilingual cooperatives.
-- **Screen reader friendliness.** Ensure alternative labels work well with assistive technology — avoid special characters or unusual punctuation in label text.
+- **Screen reader friendliness.** Ensure alternative labels work well with assistive technology -- avoid special characters or unusual punctuation in label text.

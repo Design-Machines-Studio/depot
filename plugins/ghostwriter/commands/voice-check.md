@@ -19,7 +19,7 @@ Quick check of text against Travis Gertz's writing voice guidelines.
 ### 2. Load Voice Reference
 
 Read the voice skill's kill list and style markers:
-- `plugins/ghostwriter/skills/voice/SKILL.md` — vocabulary kills, rhythm patterns, register rules
+- `plugins/ghostwriter/skills/voice/SKILL.md` -- vocabulary kills, rhythm patterns, register rules
 
 ### 3. Check Against Voice
 
@@ -47,22 +47,22 @@ delve, tapestry, landscape (metaphorical), navigate (metaphorical), leverage (ve
 ### 4. Report
 
 ```
-Voice Check — [source]
+Voice Check -- [source]
 
 Kill words found: X
 AI patterns found: Y
 Rhythm issues: Z
 
 KILLS:
-- Line N: "leverage" → try "use" or "exploit"
-- Line N: "robust" → try "solid" or "tough"
+- Line N: "leverage" -> try "use" or "exploit"
+- Line N: "robust" -> try "solid" or "tough"
 
 AI PATTERNS:
 - Para 2: Three consecutive "Additionally/Furthermore/Moreover" transitions
 - Para 4: Em-dash cluster (4 in one paragraph)
 
 RHYTHM:
-- All sentences 15-25 words — needs variety (fragments + longer builds)
+- All sentences 15-25 words -- needs variety (fragments + longer builds)
 - No gear shifts between registers
 
 REWRITES:

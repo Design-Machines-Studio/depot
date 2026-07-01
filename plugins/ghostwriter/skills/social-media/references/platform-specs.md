@@ -15,7 +15,7 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 
 ### Carousel Specs
 - Format: PDF upload
-- Dimensions: 1080×1350px (portrait preferred — takes more mobile screen space)
+- Dimensions: 1080×1350px (portrait preferred -- takes more mobile screen space)
 - DPI: 300 for crisp text
 - Typography: 40-60pt headers, 24-36pt body
 - Slides: 8-12 optimal
@@ -99,7 +99,7 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 ### Caption Strategy
 - First 125 characters before "more" truncation = hook
 - 150-300 word captions perform well (reading time = positive signal)
-- Structure: Hook → Value → CTA
+- Structure: Hook -> Value -> CTA
 - Keyword-optimized captions: ~30% more reach, 2x more likes vs hashtag-heavy
 - Weave searchable phrases into captions, bio, alt text, Reel subtitles
 
@@ -114,7 +114,7 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 - Best days: Tuesday, Wednesday, Thursday
 - Peak: 11 AM-6 PM weekdays; 6-10 PM for deeper engagement
 - Professional/intellectual content: weekday mornings 7-9 AM
-- 93.5% of accounts post once a week or less → moderate consistency puts you ahead
+- 93.5% of accounts post once a week or less -> moderate consistency puts you ahead
 
 ---
 
@@ -128,22 +128,22 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 - Average engagement rate: 4.2% (significantly higher than X)
 
 ### Engagement Mechanics
-- Default Following feed is chronological → posting time matters more
+- Default Following feed is chronological -> posting time matters more
 - Discover feed surfaces popular content based on network engagement
 - Replies > likes for community signal (50 replies + 10 likes > 100 likes + 2 replies)
 - Quote posts = powerful discovery mechanism across follower networks
-- 50,000+ custom feeds built on AT Protocol — primary discovery beyond followers
+- 50,000+ custom feeds built on AT Protocol -- primary discovery beyond followers
 
 ### Media Specs
 - Images: **1200×675px (16:9)** or **1080×1080px (1:1)**
 - **1MB maximum per image** (compress to 75-80% quality)
 - Up to 4 images per post in grid layout
 - Video: up to 3 minutes (expanded from 60s in 2025), 100MB max, MP4/MOV
-- No native carousel format — multi-image posts approximate it
+- No native carousel format -- multi-image posts approximate it
 - Alt text strongly expected by community
 
 ### Key Features
-- **Link cards**: Paste URL → "Add Link Card" → delete raw URL text (saves characters)
+- **Link cards**: Paste URL -> "Add Link Card" -> delete raw URL text (saves characters)
 - **Starter Packs**: Curated follow lists. Keep 70%+ non-promotional.
 - **Custom domain handle**: @yourbrand.com replaces blue check verification (free)
 - **300-character limit** per post (counts hashtags)
@@ -166,7 +166,7 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 - "Viral" threshold: 50-100 favorites (dramatically lower than corporate platforms)
 
 ### Distribution Mechanics
-- No algorithm — strictly chronological
+- No algorithm -- strictly chronological
 - Boosts (reposts) = ONLY distribution mechanism
 - Favorites/likes do NOT distribute content
 - Hashtags = only reliable discovery for non-followers
@@ -178,13 +178,13 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 - Default: 500 characters (instance-dependent, can be 5,000+)
 - Links always count as 23 characters regardless of actual length
 - URL shorteners discouraged (community wants to see destinations)
-- Polls natively supported (more flexible than Twitter — multi-option, multi-select)
+- Polls natively supported (more flexible than Twitter -- multi-option, multi-select)
 - Video: 99MB max, 1920×1200 max resolution, transcoded to H.264 at 1300kbps, one per post
 - Video recommendation: link to PeerTube/YouTube rather than native upload (resource-heavy)
 
 ### Hashtag Strategy
 - 3-5 per post at footer (screen readers handle inline hashtags poorly)
-- Only work on Public posts (globe icon) — Unlisted posts excluded from hashtag search
+- Only work on Public posts (globe icon) -- Unlisted posts excluded from hashtag search
 - CamelCase mandatory for accessibility (#WorkplaceDemocracy)
 - Users can follow hashtags (appears in Home timeline)
 - Feature up to 5 hashtags on profile to signal content areas
@@ -193,7 +193,7 @@ Detailed specifications and extended data for each platform. Loaded on demand wh
 
 ### Content Warnings (CWs)
 - Expected for: politics, violence, mental health, spoilers, often long posts
-- Functions like email subject line — body collapses until clicked
+- Functions like email subject line -- body collapses until clicked
 - Strategic: put hashtags in CW text ("Thoughts on AI labor #AIEthics #LaborRights")
 - For DM's political commentary: CW use is essentially mandatory on most instances
 
@@ -210,4 +210,4 @@ Travis posts from Bali. Audience is primarily North America (UTC-5 to -8) and Eu
 | Bluesky | Wed 10AM ET peak | Wed ~10 PM peak, 9 PM - 3 AM range |
 | Mastodon | European business hours UTC+1/2 | ~4-6 PM (catches EU morning) |
 
-LinkedIn and Bluesky work well as late-evening Bali posts. Mastodon catches European mornings in Bali late afternoon. Instagram is the hardest timezone fit — consider scheduling tools.
+LinkedIn and Bluesky work well as late-evening Bali posts. Mastodon catches European mornings in Bali late afternoon. Instagram is the hardest timezone fit -- consider scheduling tools.

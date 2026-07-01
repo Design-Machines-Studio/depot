@@ -11,8 +11,8 @@ Design Machines works the same way. Every product, template, essay, talk, and to
 Every release gets a **DM** code with a sequential three-digit number: DM-001, DM-002, etc.
 
 - Numbering is chronological by when something enters the catalog, not grouped by type
-- DM-000 is the origin essay — the prequel release
-- Codes are always public — on product pages, slides, invoices, packaging
+- DM-000 is the origin essay -- the prequel release
+- Codes are always public -- on product pages, slides, invoices, packaging
 - Printed small, monospaced, consistent position
 - The code is part of the artifact, not hidden metadata
 
@@ -43,8 +43,8 @@ Marker is always optional. DM-003 works alone. DM-003/WORKS adds clarity. The nu
 ## Reserved Numbers
 
 Like Factory reserving FAC 51 for the Haçienda, significant milestones can claim a number:
-- **DM-051** — First co-op running entirely on the Assembly stack
-- **DM-100** — Milestone release
+- **DM-051** -- First co-op running entirely on the Assembly stack
+- **DM-100** -- Milestone release
 
 Storytelling device, not just bookkeeping.
 
@@ -67,4 +67,4 @@ Storytelling device, not just bookkeeping.
 
 ## LT10 IP in the Catalog
 
-LT10 intellectual property entering the catalog keeps its Louder Than Ten attribution. The connection between Design Machines and LT10 is an asset — it grounds the work in real operational history. Revenue distribution details are tracked in ai-memory.
+LT10 intellectual property entering the catalog keeps its Louder Than Ten attribution. The connection between Design Machines and LT10 is an asset -- it grounds the work in real operational history. Revenue distribution details are tracked in ai-memory.

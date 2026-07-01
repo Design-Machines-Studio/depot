@@ -64,7 +64,7 @@ add_entity(name: "DepotPlugin:<plugin>", entityType: "Tool", observations: ["[YY
 ##### 3. Add Invocation Observation
 
 ```
-add_observation(entityName: "DepotPlugin:<plugin>", contents: ["[YYYY-MM-DD] Invocation: <skill> — <outcome>"])
+add_observation(entityName: "DepotPlugin:<plugin>", contents: ["[YYYY-MM-DD] Invocation: <skill> -- <outcome>"])
 ```
 
 ##### 4. Record Corrections to DepotMetrics
@@ -84,13 +84,13 @@ add_entity(name: "DepotMetrics", entityType: "System", observations: ["[YYYY-MM-
 Add the observation:
 
 ```
-add_observation(entityName: "DepotMetrics", contents: ["[YYYY-MM-DD] Skill invocation: <plugin>/<skill> — <outcome>"])
+add_observation(entityName: "DepotMetrics", contents: ["[YYYY-MM-DD] Skill invocation: <plugin>/<skill> -- <outcome>"])
 ```
 
 ##### 5. Confirm
 
 ```
-Recorded to DepotPlugin:<plugin>: "<skill> — <outcome>"
+Recorded to DepotPlugin:<plugin>: "<skill> -- <outcome>"
 ```
 
 ---
@@ -136,7 +136,7 @@ Any skill with >10% false positive rate gets flagged for description review.
 | dm-review/review | 8 | 8 | 0 | 0 | 100% |
 
 ### Flagged for Description Review
-- ghostwriter/voice — 17% false positive rate (2/12)
+- ghostwriter/voice -- 17% false positive rate (2/12)
 
 ### DepotMetrics Status
 - X total observations (rollup recommended if >50)
@@ -177,8 +177,8 @@ For each skill that has both eval data and real-world data:
 
 | Skill | Eval Accuracy | Real Accuracy | Divergence | Action |
 |---|---|---|---|---|
-| ghostwriter/voice | 70% | 83% | +13% | Real-world outperforms eval — add harder eval cases |
-| council/governance | 95% | 60% | -35% | Description needs work — failing on real queries |
+| ghostwriter/voice | 70% | 83% | +13% | Real-world outperforms eval -- add harder eval cases |
+| council/governance | 95% | 60% | -35% | Description needs work -- failing on real queries |
 ```
 
 Skills with no real-world data are listed separately as "No usage data yet."

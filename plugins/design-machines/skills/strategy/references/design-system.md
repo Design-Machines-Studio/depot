@@ -10,7 +10,7 @@ The visual identity system for Design Machines and its product family. Built in 
 
 | Weight/Style | Use |
 |---|---|
-| **GT Standard VF** (variable) | Body text, UI, headings — full weight axis from Thin to Black |
+| **GT Standard VF** (variable) | Body text, UI, headings -- full weight axis from Thin to Black |
 | **GT Standard Mono VF** (variable) | Code, data, catalog codes (DM-003), technical UI |
 
 **Font files:** Variable WOFF2 format (`GT-Standard-VF.woff2`, `GT-Standard-Mono-VF.woff2`).
@@ -41,11 +41,11 @@ The visual identity system for Design Machines and its product family. Built in 
 
 ### Character
 
-GT Standard is a neo-grotesque sans-serif with warm, humanist details — systematic and precise without feeling cold or clinical. Opinionated tools built with care, not sterile corporate infrastructure.
+GT Standard is a neo-grotesque sans-serif with warm, humanist details -- systematic and precise without feeling cold or clinical. Opinionated tools built with care, not sterile corporate infrastructure.
 
 **Do:** Use the full weight axis for typographic contrast. Pair light weights at display size with medium/bold at body size. Use the mono cut for all code, data tables, and catalog codes.
 
-**Don't:** Use decorative or script typefaces for any DM property. Don't pair GT Standard with another sans-serif — use weight contrast within the family instead.
+**Don't:** Use decorative or script typefaces for any DM property. Don't pair GT Standard with another sans-serif -- use weight contrast within the family instead.
 
 ---
 
@@ -274,7 +274,7 @@ Each DM product has a primary color treatment derived from the shared palette.
 
 - **Hero scheme:** `.scheme-purple` or `.scheme-dark` (governance = authority)
 - **Primary surfaces:** Purple-800 for navigation and brand areas
-- **Data/feedback:** Full spectrum — green (approved), red (danger), orange (warning), blue (info)
+- **Data/feedback:** Full spectrum -- green (approved), red (danger), orange (warning), blue (info)
 - **Neutral UI:** Iron ramp for tables, forms, card surfaces
 - **Gold accent:** For highlights, active states, and member equity indicators
 
@@ -287,7 +287,7 @@ Each DM product has a primary color treatment derived from the shared palette.
 
 ### The Local (Matrix network)
 
-- **Hero scheme:** `.scheme-blue` (blue-800 bg) — communication/infrastructure
+- **Hero scheme:** `.scheme-blue` (blue-800 bg) -- communication/infrastructure
 - **Primary accent:** Blue-500 for links and interactive elements
 - **Neutral surfaces:** Iron ramp
 - **Shares the same palette** but emphasizes blue family
@@ -315,7 +315,7 @@ The iron ramp has a deliberate lightness cliff between 500 and 600 (compressed l
 - iron-500: mid-tone boundary
 - iron-600 through iron-950: darker values with larger spacing (text, borders, dark modes)
 
-This distribution is intentional — it gives more nuance in the light surface range where most reading happens.
+This distribution is intentional -- it gives more nuance in the light surface range where most reading happens.
 
 ---
 

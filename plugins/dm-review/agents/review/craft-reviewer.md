@@ -13,14 +13,14 @@ This agent only runs when:
 1. `.twig` or `.php` files were changed
 2. The project has a `craft/` directory or `.ddev/` directory
 
-If neither condition is met, skip and report "Skipped — not a Craft CMS project."
+If neither condition is met, skip and report "Skipped -- not a Craft CMS project."
 
 ## Review Checks
 
 ### Element Query Performance
 
 **N+1 Detection (P1)**
-- Queries inside `{% for %}` loops — always flag
+- Queries inside `{% for %}` loops -- always flag
 - `.one()` calls inside loops instead of batch-loading with `.all()` before the loop
 - Relation field access inside loops without eager loading
 
@@ -32,12 +32,12 @@ If neither condition is met, skip and report "Skipped — not a Craft CMS projec
 **Query Optimization**
 - `.all()` when `.exists()` or `.count()` would suffice
 - Unnecessary `.status('live')` (already the default)
-- Repeated identical queries — should query once and reuse
+- Repeated identical queries -- should query once and reuse
 
 ### Template Security
 
 **Raw Output (P1)**
-- `|raw` on user-submitted content — always P1
+- `|raw` on user-submitted content -- always P1
 - `|raw` on Entry fields that users can edit
 - Check that `|raw` is only used on trusted markup (Redactor/CKEditor fields from admins)
 
@@ -89,13 +89,13 @@ If neither condition is met, skip and report "Skipped — not a Craft CMS projec
 ## Craft CMS Review
 
 ### Critical (P1)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Serious (P2)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Moderate (P3)
-- [file:line] Description — reference
+- [file:line] Description -- reference
 
 ### Approved
 - [file] Description of what follows Craft best practices
@@ -103,10 +103,10 @@ If neither condition is met, skip and report "Skipped — not a Craft CMS projec
 
 ## Rules
 
-1. Only review changed files — don't audit the entire Craft project
-2. N+1 queries in template loops are always P1 — they cause real performance issues
-3. `|raw` on user content is always P1 — XSS vector
+1. Only review changed files -- don't audit the entire Craft project
+2. N+1 queries in template loops are always P1 -- they cause real performance issues
+3. `|raw` on user content is always P1 -- XSS vector
 4. Don't flag Craft's own conventions as anti-patterns (e.g., chained Element Query methods)
-5. Null checks on `entry` are important — Craft preview mode can send null entries
+5. Null checks on `entry` are important -- Craft preview mode can send null entries
 6. Suggest the specific Craft API pattern for each fix (eager loading syntax, proper transforms, etc.)
-7. Check for Craft 4 vs Craft 5 patterns — note which version the code targets if detectable
+7. Check for Craft 4 vs Craft 5 patterns -- note which version the code targets if detectable

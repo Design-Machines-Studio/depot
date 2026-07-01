@@ -1,4 +1,4 @@
-# Design Machines — Audience Research
+# Design Machines -- Audience Research
 ## Co-op developers, federations, and incubators (primary) + existing worker co-ops (secondary)
 
 Prepared: April 22, 2026 · For internal strategy use
@@ -11,11 +11,11 @@ Sources: DM project RAG · past DM chats (Dec 2025 Live Wires research, Jan 2026
 Worker co-ops outlast conventional businesses. This is the single most underused fact in pro-co-op messaging, and it completely inverts the frame most software sales pitches assume.
 
 - **United Kingdom:** 76% of co-ops survive five years vs. ~42% of all new companies (Co-operatives UK, drawing on UK business demography data).
-- **France:** Three-year survival for worker co-ops is 80–90% vs. ~66% for conventional businesses (Review of Industrial Organisation, 2015; La Scop data).
+- **France:** Three-year survival for worker co-ops is 80-90% vs. ~66% for conventional businesses (Review of Industrial Organisation, 2015; La Scop data).
 - **Italy:** Worker-buyout co-ops have 87% three-year survival vs. 48% for all Italian businesses (CECOP/CICOPA research).
 - **During the 2008 crash:** Worker-owned employment in France *grew* 4.2% while non-co-op employment shrank 0.7%.
 
-The standard pitch to co-ops assumes fragility ("build resilience," "don't fail," "avoid the 5-year curse"). It's backwards. Assembly should be pitched as *amplifying an existing competitive advantage* — "you already last longer; governance infrastructure is how you compound that lead" — not as a life-support system for a fragile organizational form.
+The standard pitch to co-ops assumes fragility ("build resilience," "don't fail," "avoid the 5-year curse"). It's backwards. Assembly should be pitched as *amplifying an existing competitive advantage* -- "you already last longer; governance infrastructure is how you compound that lead" -- not as a life-support system for a fragile organizational form.
 
 This reframe belongs in Assembly's homepage, in propaganda for the movement, and in every Design Machines talk that touches the politics of work. It will also land with every co-op developer, who lives with the exhausting stereotype that they're managing decline.
 
@@ -27,7 +27,7 @@ This reframe belongs in Assembly's homepage, in propaganda for the movement, and
 
 ### Segment A · US co-op developers (USFWC / CooperationWorks! / DAWI orbit)
 
-Who they are: Professional technical assistance (TA) providers whose work is called "co-op dev." Staff at 2–15 person orgs like The Industrial Commons, Project Equity, ICA Group, Democracy at Work Institute, Cooperation Jackson, CoFED, Start.coop. Racially and gender diverse, with a visible contingent of Black, Latine, and immigrant-serving organizations that foreground racial and economic justice framing. Many come from labor organizing, community economic development, or worked inside a co-op that either thrived or failed.
+Who they are: Professional technical assistance (TA) providers whose work is called "co-op dev." Staff at 2-15 person orgs like The Industrial Commons, Project Equity, ICA Group, Democracy at Work Institute, Cooperation Jackson, CoFED, Start.coop. Racially and gender diverse, with a visible contingent of Black, Latine, and immigrant-serving organizations that foreground racial and economic justice framing. Many come from labor organizing, community economic development, or worked inside a co-op that either thrived or failed.
 
 Funded by: USDA Rural Cooperative Development Grants ($11.8M/year Congressional allocation), Robert Wood Johnson, Ford, Cooperative Development Foundation, city-level worker ownership funds (NYC, Madison, Cleveland, LA).
 
@@ -49,9 +49,9 @@ Self-presentation: "Social economy," "social and solidarity economy (SSE)," "co-
 
 ### Segment D · Existing worker-co-op members (the ultimate payer, mediated by A/B/C)
 
-Who they are: 5–50 person co-ops in cleaning, home care, translation, childcare, food (bakeries, groceries, cafés), tech, creative services (design agencies, animation studios like TACO, translation), construction, and manufacturing. Membership ranges from highly educated tech-worker co-ops to immigrant-led service co-ops where English is a second language.
+Who they are: 5-50 person co-ops in cleaning, home care, translation, childcare, food (bakeries, groceries, cafés), tech, creative services (design agencies, animation studios like TACO, translation), construction, and manufacturing. Membership ranges from highly educated tech-worker co-ops to immigrant-led service co-ops where English is a second language.
 
-Identity labels they use for themselves: "Worker-owner" (dominant in US), "member" (dominant in Europe and Canada), "co-op member," "workers' co-operative" (UK). Rarely "employee" — this is a real sensitivity. Not "stakeholder." Not "collaborator" (feels consultancy-brained).
+Identity labels they use for themselves: "Worker-owner" (dominant in US), "member" (dominant in Europe and Canada), "co-op member," "workers' co-operative" (UK). Rarely "employee" -- this is a real sensitivity. Not "stakeholder." Not "collaborator" (feels consultancy-brained).
 
 **Confidence:** High. Segment composition is well documented across CooperationWorks! member directory, USFWC membership criteria, CWCF member list, Cooperatives Europe membership.
 
@@ -63,10 +63,10 @@ Identity labels they use for themselves: "Worker-owner" (dominant in US), "membe
 
 ### Co-op developer's "good year" (realistic, not aspirational)
 
-- 2–4 new co-ops successfully launched or converted under their TA.
-- Earlier-stage co-ops they've worked with for 2–3 years hitting revenue sustainability and member stability.
+- 2-4 new co-ops successfully launched or converted under their TA.
+- Earlier-stage co-ops they've worked with for 2-3 years hitting revenue sustainability and member stability.
 - Grant funded for next year before Q3 panic.
-- A piece of their curriculum, template, or tool gets picked up by another developer org — their work compounds.
+- A piece of their curriculum, template, or tool gets picked up by another developer org -- their work compounds.
 - At least one speaking or teaching engagement where they meet new developer peers.
 - Leaves their year feeling like the sector is bigger than they found it.
 
@@ -75,7 +75,7 @@ Identity labels they use for themselves: "Worker-owner" (dominant in US), "membe
 - AGM prep takes a couple weeks, not a frantic month.
 - Decisions they made six months ago are still findable, still being applied.
 - New members onboard in days, not "shadow-follow-Sarah-for-three-months."
-- Equity statements are accurate and understandable — members can explain their own internal capital accounts.
+- Equity statements are accurate and understandable -- members can explain their own internal capital accounts.
 - Proposals get decided instead of endlessly relitigated.
 - Meetings are shorter than they used to be.
 - The block is used rarely and constructively, not as a weapon or an extinction event.
@@ -89,7 +89,7 @@ This is exactly the framing you've already landed on in the DM strategy skill ("
 
 ### The sectoral-density frame, not the scale frame
 
-One precision worth naming: this audience doesn't want "scale." They want **sectoral density** — more co-ops per region, more co-op-to-co-op trade, more federation infrastructure, more new co-ops started per year. This is a native-movement term (Highlander Center, New Economy Coalition, ICA) that explicitly rejects the VC growth frame.
+One precision worth naming: this audience doesn't want "scale." They want **sectoral density** -- more co-ops per region, more co-op-to-co-op trade, more federation infrastructure, more new co-ops started per year. This is a native-movement term (Highlander Center, New Economy Coalition, ICA) that explicitly rejects the VC growth frame.
 
 The companion distinction: **scale out**, not **scale up**. Scale-out means *replicate the model in many places*. Scale-up means *grow one organization huge*. Co-op developers use this distinction fluently; most tech-sector people have never heard it. Getting it right in DM copy is a fast trust signal.
 
@@ -99,9 +99,9 @@ The companion distinction: **scale out**, not **scale up**. Scale-out means *rep
 
 ## 3. WHAT'S STOPPING THEM
 
-**Key finding:** Everyone names "software" as a surface problem, but underneath are four structural frustrations that no product has cleanly addressed. Order matters — #1 is the one nobody sells to.
+**Key finding:** Everyone names "software" as a surface problem, but underneath are four structural frustrations that no product has cleanly addressed. Order matters -- #1 is the one nobody sells to.
 
-**A useful umbrella term: admin debt.** The same way software engineers talk about technical debt — shortcuts taken under time pressure that accumulate into systems nobody can maintain — co-ops accumulate *admin debt*: the bylaws drift that never gets reconciled, the equity spreadsheet only one person understands, the decision that "we made last year but I can't find the email." It's the materialist language this audience actually responds to. The phrase sits comfortably inside DM's factory/labor/publishing triangle (debt is something you carry, something that has a balance, something you pay down). Use it.
+**A useful umbrella term: admin debt.** The same way software engineers talk about technical debt -- shortcuts taken under time pressure that accumulate into systems nobody can maintain -- co-ops accumulate *admin debt*: the bylaws drift that never gets reconciled, the equity spreadsheet only one person understands, the decision that "we made last year but I can't find the email." It's the materialist language this audience actually responds to. The phrase sits comfortably inside DM's factory/labor/publishing triangle (debt is something you carry, something that has a balance, something you pay down). Use it.
 
 ### 3.1 · The tyranny of structurelessness
 
@@ -117,7 +117,7 @@ Universal private complaint. A co-op of 12 people has dozens of Google Docs, non
 
 ### 3.3 · Grant-writing fatigue and underfunded operations
 
-This is the developer/federation burnout issue. Nonprofit-sector surveys put burnout rates above 90% among staff. Co-op developers in particular are running 2–10 person orgs on competitively-awarded federal grants, municipal worker-ownership funds, and fee-for-service TA revenue that is always under-scoped. Every tool they procure is scrutinized against "could I write this into the next RCDG application as a line item?" This is why pricing Assembly around grant-procurable scopes matters more than pricing it against SaaS comps.
+This is the developer/federation burnout issue. Nonprofit-sector surveys put burnout rates above 90% among staff. Co-op developers in particular are running 2-10 person orgs on competitively-awarded federal grants, municipal worker-ownership funds, and fee-for-service TA revenue that is always under-scoped. Every tool they procure is scrutinized against "could I write this into the next RCDG application as a line item?" This is why pricing Assembly around grant-procurable scopes matters more than pricing it against SaaS comps.
 
 ### 3.4 · Software built for VC-backed startups bolted onto democratic governance
 
@@ -147,22 +147,22 @@ The phrase that shows up across GEO, Loomio customers, and Reddit threads: tools
 
 ### Tourist language (avoid or reframe)
 
-- "Users" → *members* (people in a co-op are not consumers of it).
-- "Customers" → *member-workplaces* (for developers) or *co-ops* (in general).
-- "Onboarding user flow" → *member onboarding* or *welcoming new members*.
-- "Scaling the platform" → *building sectoral density* or *supporting more co-ops*. And specifically: *scale out* (replicate the model) is fine; *scale up* (grow one org) is the wrong frame for this audience.
-- "Community" in the sense of a marketing funnel — nope. Use *movement*, *sector*, or *federation*.
-- "Engagement" in the web-analytics sense — avoid entirely. Member participation is governance, not a metric.
-- "Best-in-class" · "enterprise-grade" · "cutting-edge" — immediate tourist markers.
-- "Thought leader" — used almost ironically within the sector.
-- "Stakeholder" — workable in Europe, suspect in North America. "Worker-owner" or "member" is safer.
-- "Ecosystem" — okay in limited doses (your "the emerging stack" framing in the business plan is fine). Avoid if it starts doing marketing-deck work.
-- "Empower" — overused to the point of meaninglessness. Co-op members already have power. What they want is infrastructure, not empowerment.
-- "Drive adoption" · "unlock value" · "key performance indicator" — full refusal.
+- "Users" -> *members* (people in a co-op are not consumers of it).
+- "Customers" -> *member-workplaces* (for developers) or *co-ops* (in general).
+- "Onboarding user flow" -> *member onboarding* or *welcoming new members*.
+- "Scaling the platform" -> *building sectoral density* or *supporting more co-ops*. And specifically: *scale out* (replicate the model) is fine; *scale up* (grow one org) is the wrong frame for this audience.
+- "Community" in the sense of a marketing funnel -- nope. Use *movement*, *sector*, or *federation*.
+- "Engagement" in the web-analytics sense -- avoid entirely. Member participation is governance, not a metric.
+- "Best-in-class" · "enterprise-grade" · "cutting-edge" -- immediate tourist markers.
+- "Thought leader" -- used almost ironically within the sector.
+- "Stakeholder" -- workable in Europe, suspect in North America. "Worker-owner" or "member" is safer.
+- "Ecosystem" -- okay in limited doses (your "the emerging stack" framing in the business plan is fine). Avoid if it starts doing marketing-deck work.
+- "Empower" -- overused to the point of meaninglessness. Co-op members already have power. What they want is infrastructure, not empowerment.
+- "Drive adoption" · "unlock value" · "key performance indicator" -- full refusal.
 
 ### The "decolonizing language" lane (per Chris Galloway's Apr 21 note)
 
-Chris flagged that governance terminology is itself a barrier — "Board decision" is understandable, but other proposal-type labels are confusing even to insiders. This is a real sector-wide pattern: a lot of co-op governance vocabulary was written by lawyers in the 1970s and then imported wholesale by co-op developers without translation. Plain-language alternatives tested well in your January persona work. This is also an opportunity: Assembly could ship with opinionated plain-language defaults ("let the co-op decide" instead of "put to a member vote"; "we're deciding as a board" instead of "Board Resolution").
+Chris flagged that governance terminology is itself a barrier -- "Board decision" is understandable, but other proposal-type labels are confusing even to insiders. This is a real sector-wide pattern: a lot of co-op governance vocabulary was written by lawyers in the 1970s and then imported wholesale by co-op developers without translation. Plain-language alternatives tested well in your January persona work. This is also an opportunity: Assembly could ship with opinionated plain-language defaults ("let the co-op decide" instead of "put to a member vote"; "we're deciding as a board" instead of "Board Resolution").
 
 This is propaganda terrain. Every Assembly install that replaces "Patronage Allocation Subject to Qualified Written Notice of Allocation" with "how we're splitting this year's surplus" is one more co-op made more accessible to new members.
 
@@ -176,9 +176,9 @@ This is propaganda terrain. Every Assembly install that replaces "Patronage Allo
 
 ### Phrases to retire or redeploy carefully
 
-- "Sell one co-op, it sells a bunch" — great internal shorthand, but don't put it externally. Sounds transactional in a sector that isn't.
-- "Assembly customer" — prefer "Assembly member-workplace" or "co-op using Assembly."
-- "Go-to-market" — internal only.
+- "Sell one co-op, it sells a bunch" -- great internal shorthand, but don't put it externally. Sounds transactional in a sector that isn't.
+- "Assembly customer" -- prefer "Assembly member-workplace" or "co-op using Assembly."
+- "Go-to-market" -- internal only.
 
 **Confidence:** High. Corroborated across USFWC membership criteria doc, Cultivate.Coop wiki, Cooperatives Europe publications, the ICA Group sample bylaws, GEO archives, and your own voice skill.
 
@@ -190,21 +190,21 @@ This is propaganda terrain. Every Assembly install that replaces "Patronage Allo
 
 ### Observed price points in the sector
 
-- **Loomio subscriptions:** Community groups get heavily discounted one-time payments; commercial/organization plans are in the ~$10–50/month range for small teams and up to a few hundred per month for larger deployments. Loomio deliberately subsidizes co-ops and community orgs — this is market context, not directly competitive.
-- **Decidim:** Self-hosted free; typical public-sector deployment budgets for setup and hosting are €10K–€50K project, sometimes more for larger municipalities. Rarely used by small worker co-ops because hosting Ruby on Rails is too much lift.
-- **USFWC membership dues:** Sliding-scale by size. Small worker co-ops pay $200–$1,000/year. Federation Partners' dues are optional, informally guided at 0.1% of org budget.
+- **Loomio subscriptions:** Community groups get heavily discounted one-time payments; commercial/organization plans are in the ~$10-50/month range for small teams and up to a few hundred per month for larger deployments. Loomio deliberately subsidizes co-ops and community orgs -- this is market context, not directly competitive.
+- **Decidim:** Self-hosted free; typical public-sector deployment budgets for setup and hosting are €10K-€50K project, sometimes more for larger municipalities. Rarely used by small worker co-ops because hosting Ruby on Rails is too much lift.
+- **USFWC membership dues:** Sliding-scale by size. Small worker co-ops pay $200-$1,000/year. Federation Partners' dues are optional, informally guided at 0.1% of org budget.
 - **CWCF membership:** Similar sliding scale, tops out in low thousands for large co-ops.
-- **Typical governance consulting engagements (ICA Group, DAWI, Project Equity):** $5,000–$25,000 for a bylaws review or governance design engagement. $50K+ for full conversion support.
-- **Co-op insurance, retirement, health plan access** (via USFWC/Shared Capital partnerships): These are bigger line items than software in most co-ops' budgets. Software rarely exceeds 2–5% of operating expenses.
+- **Typical governance consulting engagements (ICA Group, DAWI, Project Equity):** $5,000-$25,000 for a bylaws review or governance design engagement. $50K+ for full conversion support.
+- **Co-op insurance, retirement, health plan access** (via USFWC/Shared Capital partnerships): These are bigger line items than software in most co-ops' budgets. Software rarely exceeds 2-5% of operating expenses.
 
-### Your existing pricing (DM strategy skill): $5K–$50K project-based Assembly engagements.
+### Your existing pricing (DM strategy skill): $5K-$50K project-based Assembly engagements.
 
 This fits the sector's consulting-engagement logic perfectly. It sits below full conversion support and above a Loomio subscription. The positioning should lean into "this is a governance consulting engagement that leaves you with working infrastructure" rather than "this is software with a setup fee."
 
 ### What they consider "worth it"
 
 - Tools that reduce one person's invisible labor (the "ask Sarah" labor, the AGM-prep labor, the member-equity-statement labor).
-- Tools that survive staff turnover — the #1 private fear is that the person who knows the tool leaves.
+- Tools that survive staff turnover -- the #1 private fear is that the person who knows the tool leaves.
 - Tools whose politics are legible and aligned. Loomio's worker co-op status is genuinely a purchasing factor. Your Estonian OÜ registration is neutral-to-mildly-negative (sounds like a shell); your LT10 conversion credential and partnership with Slate/Co-Active is strongly positive.
 - Anything USFWC or their federation explicitly recommends. A single USFWC Co-op Clinic endorsement is worth more than ten conference talks.
 
@@ -227,7 +227,7 @@ This fits the sector's consulting-engagement logic perfectly. It sits below full
 - **Decidim:** admired, rarely deployed by small co-ops. "Beautiful for cities, too much for us."
 - **Cobot (coworking software):** sometimes repurposed for co-ops. Works poorly.
 - **Co-op Cloud:** DIY Docker hosting stack from the UK/EU tech-co-op scene. Used by IWW, Vermont Real Estate Co-op, ruangrupa, UTAW. Appeals to technical co-ops, not to cleaning or care co-ops.
-- **Spreadsheets + an AGM folder full of PDFs:** the actual baseline. This is what Assembly is competing against — remember Brian at TACO building governance in Google Sheets is your real benchmark, not Salesforce.
+- **Spreadsheets + an AGM folder full of PDFs:** the actual baseline. This is what Assembly is competing against -- remember Brian at TACO building governance in Google Sheets is your real benchmark, not Salesforce.
 
 **Confidence:** High on the procurement logic and "worth it / waste" distinctions; medium on specific numeric price points (extrapolated from several sources).
 
@@ -239,54 +239,54 @@ This fits the sector's consulting-engagement logic perfectly. It sits below full
 
 ### Publications they actually read
 
-- **GEO Magazine / Grassroots Economic Organizing (geo.coop)** — the canonical movement-practitioner magazine. Articles are long, earnest, and cited.
-- **Shelterforce** — community development; overlaps heavily with the co-op dev audience.
-- **NonProfit Quarterly** — specifically their cooperative and solidarity-economy coverage.
-- **Yes! Magazine** — broader progressive outlet; useful for entry-level audiences.
-- **Cooperative Business Journal** (NCBA CLUSA) — more establishment / agricultural co-op inflected but read by federations.
-- **Review of International Co-operation** (ICA) — academic but read by senior federation staff.
-- **Journal of Co-operative Organization and Management** — peer-reviewed, read by researchers and some developers.
-- **Next System Project** publications and **The Democracy Collaborative** — preferred for theory-to-practice bridging.
+- **GEO Magazine / Grassroots Economic Organizing (geo.coop)** -- the canonical movement-practitioner magazine. Articles are long, earnest, and cited.
+- **Shelterforce** -- community development; overlaps heavily with the co-op dev audience.
+- **NonProfit Quarterly** -- specifically their cooperative and solidarity-economy coverage.
+- **Yes! Magazine** -- broader progressive outlet; useful for entry-level audiences.
+- **Cooperative Business Journal** (NCBA CLUSA) -- more establishment / agricultural co-op inflected but read by federations.
+- **Review of International Co-operation** (ICA) -- academic but read by senior federation staff.
+- **Journal of Co-operative Organization and Management** -- peer-reviewed, read by researchers and some developers.
+- **Next System Project** publications and **The Democracy Collaborative** -- preferred for theory-to-practice bridging.
 
 ### Newsletters
 
 - **USFWC member bulletin** (internal, but alumnni carry habits)
 - **CWCF newsletter**
 - **Cooperative Economy** roundups
-- **Nathan Schneider's substack/blog and platform.coop dispatches** — influential in the platform-coop subsegment.
+- **Nathan Schneider's substack/blog and platform.coop dispatches** -- influential in the platform-coop subsegment.
 
 ### Podcasts
 
-- **Upstream** — probably the biggest single podcast in the solidarity-economy orbit.
-- **Laura Flanders Show** — broader left podcast but does substantial co-op coverage.
-- **Economic Update with Richard Wolff** — Marxist economics; audience overlaps.
-- **The Next System Podcast** — from The Democracy Collaborative.
-- **The Majority Report / Chapo Trap House / Citations Needed** — broader left; your voice skill's humor influences sit here.
+- **Upstream** -- probably the biggest single podcast in the solidarity-economy orbit.
+- **Laura Flanders Show** -- broader left podcast but does substantial co-op coverage.
+- **Economic Update with Richard Wolff** -- Marxist economics; audience overlaps.
+- **The Next System Podcast** -- from The Democracy Collaborative.
+- **The Majority Report / Chapo Trap House / Citations Needed** -- broader left; your voice skill's humor influences sit here.
 
 ### Events (in rough order of pipeline value for Assembly)
 
-1. **CoopCon (USFWC biennial)** — US movement's central gathering. Speaking here is the biggest single content lever.
-2. **CWCF AGM + Summit** — Canadian movement's central gathering.
-3. **Platform Cooperativism Consortium (PCC) conferences** — Nathan Schneider's orbit; tech-coop-heavy.
-4. **Cooperative Impact Conference (NCBA CLUSA)** — more establishment but federation-heavy.
-5. **NASCO Cooperative Education and Training Institute** — student co-op focus; pipeline for future developers.
-6. **ICA Global Cooperative Conference** — international, every few years.
-7. **Mondragon University and their visiting-scholar programs** — prestige; your June 2026 Porto trip could extend here.
-8. **Cooperatives Europe events** — smaller, useful for the European segment.
+1. **CoopCon (USFWC biennial)** -- US movement's central gathering. Speaking here is the biggest single content lever.
+2. **CWCF AGM + Summit** -- Canadian movement's central gathering.
+3. **Platform Cooperativism Consortium (PCC) conferences** -- Nathan Schneider's orbit; tech-coop-heavy.
+4. **Cooperative Impact Conference (NCBA CLUSA)** -- more establishment but federation-heavy.
+5. **NASCO Cooperative Education and Training Institute** -- student co-op focus; pipeline for future developers.
+6. **ICA Global Cooperative Conference** -- international, every few years.
+7. **Mondragon University and their visiting-scholar programs** -- prestige; your June 2026 Porto trip could extend here.
+8. **Cooperatives Europe events** -- smaller, useful for the European segment.
 
 ### Social platforms where this audience actually is
 
-- **Mastodon, particularly social.coop** — unusually high concentration of the movement. Nathan Schneider, Matthew Cropp, and a sizable chunk of platform-coop theorists are active there. Social.coop itself is a cooperatively-governed Mastodon instance, which is meta in exactly the way this audience appreciates.
-- **LinkedIn** — higher presence than you'd expect, especially among developer-staff posting about their TA work. This is where sector-adjacent funders (CDFI staff, impact investors) also read.
-- **Bluesky** — growing. Good for tech-coop-adjacent voices. Not yet the core channel.
-- **Twitter/X** — mostly abandoned by the movement post-2022.
-- **Instagram** — mixed. Your Founding Document carousel series plan is probably the right register.
-- **Reddit** — r/cooperatives (small, ~25K) is active and useful for direct member language. r/SolidarityEconomy, r/WorkersCoop, r/AntiWork tangentially.
-- **Closed Slacks/Matrix** — Loomio's customer Slack, USFWC peer networks, regional dev networks. Hard to access without an introduction, high signal.
+- **Mastodon, particularly social.coop** -- unusually high concentration of the movement. Nathan Schneider, Matthew Cropp, and a sizable chunk of platform-coop theorists are active there. Social.coop itself is a cooperatively-governed Mastodon instance, which is meta in exactly the way this audience appreciates.
+- **LinkedIn** -- higher presence than you'd expect, especially among developer-staff posting about their TA work. This is where sector-adjacent funders (CDFI staff, impact investors) also read.
+- **Bluesky** -- growing. Good for tech-coop-adjacent voices. Not yet the core channel.
+- **Twitter/X** -- mostly abandoned by the movement post-2022.
+- **Instagram** -- mixed. Your Founding Document carousel series plan is probably the right register.
+- **Reddit** -- r/cooperatives (small, ~25K) is active and useful for direct member language. r/SolidarityEconomy, r/WorkersCoop, r/AntiWork tangentially.
+- **Closed Slacks/Matrix** -- Loomio's customer Slack, USFWC peer networks, regional dev networks. Hard to access without an introduction, high signal.
 
 ### Trusted individual voices (not comprehensive)
 
-Nathan Schneider, Melissa Hoover (DAWI), Esteban Kelly (USFWC), Tim Huet (Arizmendi), Jessica Gordon Nembhard (Collective Courage), Trebor Scholz (platform cooperativism), Noemí Giszpenc (ICA Group). Plus your own partners — Chris Galloway, Mario Cimet, Ben Croker — who carry real credibility in their subsegments.
+Nathan Schneider, Melissa Hoover (DAWI), Esteban Kelly (USFWC), Tim Huet (Arizmendi), Jessica Gordon Nembhard (Collective Courage), Trebor Scholz (platform cooperativism), Noemí Giszpenc (ICA Group). Plus your own partners -- Chris Galloway, Mario Cimet, Ben Croker -- who carry real credibility in their subsegments.
 
 **Confidence:** High on publications, events, and platforms. Medium-high on specific influencer list (inevitably incomplete).
 
@@ -315,11 +315,11 @@ Nathan Schneider, Melissa Hoover (DAWI), Esteban Kelly (USFWC), Tim Huet (Arizme
 | **Slack / Discord / Matrix** | Governance drift into channels. No record. No decision surface. |
 | **Monday / Asana / ClickUp** | Task-management framing. Wrong primitive. |
 | **BoardEffect, Diligent Boards** | Corporate-board software. Assumes 7 directors and an executive team. Inverts the worker co-op's power structure. |
-| **Carta, Ledgy, Qapita** | Equity management built for investor-owned startups. Wrong model entirely — cap tables, vesting, stock options. Does not handle patronage or internal capital accounts. |
+| **Carta, Ledgy, Qapita** | Equity management built for investor-owned startups. Wrong model entirely -- cap tables, vesting, stock options. Does not handle patronage or internal capital accounts. |
 
 ### Consulting alternatives
 
-The real "competitor" for a new co-op is: *hiring a co-op developer for a $15K–25K bylaws + governance engagement, then running it in Google Docs for the next five years.* Assembly is not replacing the consulting engagement — it is replacing the Google Docs aftermath. This positioning keeps developers aligned rather than threatened.
+The real "competitor" for a new co-op is: *hiring a co-op developer for a $15K-25K bylaws + governance engagement, then running it in Google Docs for the next five years.* Assembly is not replacing the consulting engagement -- it is replacing the Google Docs aftermath. This positioning keeps developers aligned rather than threatened.
 
 ### The gap nobody is covering
 
@@ -337,7 +337,7 @@ This is your moat. It is larger than "a better Loomio."
 
 ### The second moat: bylaws become operational, not aspirational
 
-There is a separate, related moat that deserves its own line. Every existing tool treats bylaws as *reference documents* — a PDF in a folder, a page in Notion, a printed booklet at the AGM. Assembly can treat them as *operational rules that the system enforces*.
+There is a separate, related moat that deserves its own line. Every existing tool treats bylaws as *reference documents* -- a PDF in a folder, a page in Notion, a printed booklet at the AGM. Assembly can treat them as *operational rules that the system enforces*.
 
 Concrete examples from the BC Act and your own co-op-governance skill:
 
@@ -396,45 +396,45 @@ Emotional outcome: *I own where I work, and my ownership feels real on a Tuesday
 
 ### Maya, Co-op Developer (Vancouver, 8 years in the sector, Co-Active-adjacent)
 
-7:00 AM — Coffee. Scrolls Mastodon while her partner reads. Boosts a GEO article about a worker-buyout in Oakland. Sees a toot from social.coop about a new platform-coop in Brussels.
+7:00 AM -- Coffee. Scrolls Mastodon while her partner reads. Boosts a GEO article about a worker-buyout in Oakland. Sees a toot from social.coop about a new platform-coop in Brussels.
 
-8:30 AM — Standing call with her two co-developers at the meta-coop. One hour, structured, the meta-coop uses Loomio for async; meeting is for the messy human stuff. This week: which of the three co-ops in formation they prioritize, because grant reporting is due in ten days.
+8:30 AM -- Standing call with her two co-developers at the meta-coop. One hour, structured, the meta-coop uses Loomio for async; meeting is for the messy human stuff. This week: which of the three co-ops in formation they prioritize, because grant reporting is due in ten days.
 
-10:00 AM — Discovery call with a five-person cleaning co-op that's been operating for two years and wants to formalize. She walks them through the Cooperative Association Act requirements. She has said these things 400 times. Each time still matters to each new co-op.
+10:00 AM -- Discovery call with a five-person cleaning co-op that's been operating for two years and wants to formalize. She walks them through the Cooperative Association Act requirements. She has said these things 400 times. Each time still matters to each new co-op.
 
-11:30 AM — Writes half a grant application. Co-operators grant. Quarter-done. Hates every minute. Will do the rest tomorrow.
+11:30 AM -- Writes half a grant application. Co-operators grant. Quarter-done. Hates every minute. Will do the rest tomorrow.
 
-1:00 PM — Lunch, alone, with a book. Reads Jessica Gordon Nembhard.
+1:00 PM -- Lunch, alone, with a book. Reads Jessica Gordon Nembhard.
 
-2:00 PM — Governance workshop for an existing 14-member animation co-op, by Zoom. Walks them through bylaws gaps. They are defensive at first; by the end they are mapping their actual practices against the bylaws and seeing where they've drifted. She explains the block vs. stand-aside distinction for the third time this month.
+2:00 PM -- Governance workshop for an existing 14-member animation co-op, by Zoom. Walks them through bylaws gaps. They are defensive at first; by the end they are mapping their actual practices against the bylaws and seeing where they've drifted. She explains the block vs. stand-aside distinction for the third time this month.
 
-4:00 PM — Back on Loomio catching up on async threads across three co-ops.
+4:00 PM -- Back on Loomio catching up on async threads across three co-ops.
 
-5:00 PM — Writes a short blog for the org newsletter. Makes tea.
+5:00 PM -- Writes a short blog for the org newsletter. Makes tea.
 
-7:00 PM — Book club with five other co-op developers from across the province. They read The Next System. They vent about grant timing. Someone mentions Assembly. She makes a note.
+7:00 PM -- Book club with five other co-op developers from across the province. They read The Next System. They vent about grant timing. Someone mentions Assembly. She makes a note.
 
-10:00 PM — Reads an academic paper on patronage taxation. Falls asleep.
+10:00 PM -- Reads an academic paper on patronage taxation. Falls asleep.
 
 ---
 
 ### Andre, Member of a 15-Person Creative Worker Co-op (Year 6)
 
-7:30 AM — Opens laptop. Dashboard of the co-op's governance tool shows three things: "Decision about the Thursday client pitch" (his to vote on, due today), "Minute book entry from last Tuesday's meeting" (for review), "New hire onboarding started — can you be a buddy?"
+7:30 AM -- Opens laptop. Dashboard of the co-op's governance tool shows three things: "Decision about the Thursday client pitch" (his to vote on, due today), "Minute book entry from last Tuesday's meeting" (for review), "New hire onboarding started -- can you be a buddy?"
 
-7:45 AM — Reads the proposal. Agrees. Leaves a two-sentence comment with his position. Closes the tab.
+7:45 AM -- Reads the proposal. Agrees. Leaves a two-sentence comment with his position. Closes the tab.
 
-9:00 AM — Client work. Four hours of head-down design.
+9:00 AM -- Client work. Four hours of head-down design.
 
-1:00 PM — Lunch with a colleague who joined three months ago. They're still figuring out the patronage system. He explains internal capital accounts using the example of the co-op's internal statement he gets once a quarter. She thanks him. He thinks: *this explanation got easier when we started sending the statements.*
+1:00 PM -- Lunch with a colleague who joined three months ago. They're still figuring out the patronage system. He explains internal capital accounts using the example of the co-op's internal statement he gets once a quarter. She thanks him. He thinks: *this explanation got easier when we started sending the statements.*
 
-2:30 PM — Brief meeting with two other members about a compensation-framework proposal they're co-authoring. Twenty minutes. They open the draft proposal in the governance tool, add a point, assign it for next week's working meeting.
+2:30 PM -- Brief meeting with two other members about a compensation-framework proposal they're co-authoring. Twenty minutes. They open the draft proposal in the governance tool, add a point, assign it for next week's working meeting.
 
-4:00 PM — Sees a notification that the board has decided on the Q2 budget. Reads the one-paragraph summary. Moves on.
+4:00 PM -- Sees a notification that the board has decided on the Q2 budget. Reads the one-paragraph summary. Moves on.
 
-6:30 PM — Sends a Slack message to his partner: "Leaving early, governance stuff all done." Actually leaves on time for once.
+6:30 PM -- Sends a Slack message to his partner: "Leaving early, governance stuff all done." Actually leaves on time for once.
 
-9:00 PM — Reads a GEO article someone shared. Feels proud of the work. Doesn't think about the tool at all.
+9:00 PM -- Reads a GEO article someone shared. Feels proud of the work. Doesn't think about the tool at all.
 
 ---
 
@@ -444,7 +444,7 @@ Emotional outcome: *I own where I work, and my ownership feels real on a Tuesday
 
 Your "sell one, it sells a bunch" instinct is correct, and it matches how every successful movement infrastructure tool (Loomio, Decidim, ICA Group's bylaws templates) has reached small co-ops. Direct sales to a 12-person cleaning co-op is inefficient and misses the trust structure. Federation and developer endorsement is worth an order of magnitude more than any ad spend. Treat developer partnerships as the distribution layer, not as "nice-to-have."
 
-Practical implication: the developer/federation pitch is a different product from the co-op pitch. The developer cares about pipeline economics, client retention, curriculum embedding, co-branded artifacts, and whether Assembly makes *their* consulting engagement more valuable. The co-op cares about governance that works. Two decks, two landing pages, two sales motions — not one.
+Practical implication: the developer/federation pitch is a different product from the co-op pitch. The developer cares about pipeline economics, client retention, curriculum embedding, co-branded artifacts, and whether Assembly makes *their* consulting engagement more valuable. The co-op cares about governance that works. Two decks, two landing pages, two sales motions -- not one.
 
 ### 2. The survival reframe is a propaganda weapon you aren't using.
 
@@ -460,7 +460,7 @@ Practical implication: resist the temptation to compete head-to-head on any sing
 
 ### 4. Bylaws become operational, not aspirational. This is a standalone selling line.
 
-Every existing tool in the sector treats bylaws as reference material. Assembly treats them as rules the system enforces. Quorum thresholds, special-resolution majorities, AGM timing, director-change deadlines, block-with-mandatory-comment, new-member approval paths — these aren't features, they're the product.
+Every existing tool in the sector treats bylaws as reference material. Assembly treats them as rules the system enforces. Quorum thresholds, special-resolution majorities, AGM timing, director-change deadlines, block-with-mandatory-comment, new-member approval paths -- these aren't features, they're the product.
 
 Practical implication: on the Assembly marketing site, this should be a first-fold line, not buried. On a developer-federation pitch, this is the answer to "why not just use Loomio and Notion?" Chris's April 21 feedback ("verify this is enforced in code") is a reminder that enforcement is product, not a compliance afterthought.
 
@@ -476,7 +476,7 @@ Build a "plain language co-op glossary" as a free DM release (/PRESS, maybe DM-0
 
 This is the one uncomfortable finding. For this specific audience, an Estonian e-residency company registration reads mildly crypto-tax-avoidant, even though it isn't. It's not a deal-breaker, but it's noticeable. Your LT10 conversion credential and your active partnerships with Co-Active (Chris), Slate (Mario), and your TACO pilot are far more load-bearing for credibility than the DM registration itself. Lead with those. Keep the OÜ in the small print; lead with the movement work.
 
-Over time, a second credential — being accepted into USFWC as a Cooperative Developer class member, or being a formal partner of a North American federation — would substantially shift this. Worth pursuing in 2026.
+Over time, a second credential -- being accepted into USFWC as a Cooperative Developer class member, or being a formal partner of a North American federation -- would substantially shift this. Worth pursuing in 2026.
 
 ---
 
@@ -486,7 +486,7 @@ Over time, a second credential — being accepted into USFWC as a Cooperative De
 
 **Use carefully:** ecosystem (only in context of partner stack), engagement (only in the participation sense, never the metric sense), platform (okay for Assembly, dangerous if it sounds Big Tech), stakeholder (European-friendly, US-ambivalent), empowerment (overused).
 
-**Avoid:** users, customers, SaaS, scale the platform, scale up (as a virtue), go-to-market (externally), drive adoption, unlock value, best-in-class, cutting-edge, thought leader, enterprise-grade, engagement (metric sense), solopreneur, ICP, persona (in the marketing sense), TAM, CAC, MRR, churn, runway (externally), pivot, disrupt, synergy, bandwidth (as a metaphor for capacity), ping (as a verb), deck (externally), compliance-as-code (too SaaS-brained — use *operationalizing the bylaws* instead).
+**Avoid:** users, customers, SaaS, scale the platform, scale up (as a virtue), go-to-market (externally), drive adoption, unlock value, best-in-class, cutting-edge, thought leader, enterprise-grade, engagement (metric sense), solopreneur, ICP, persona (in the marketing sense), TAM, CAC, MRR, churn, runway (externally), pivot, disrupt, synergy, bandwidth (as a metaphor for capacity), ping (as a verb), deck (externally), compliance-as-code (too SaaS-brained -- use *operationalizing the bylaws* instead).
 
 **Phrases that already land:** governance is a rhythm, not homework · inhabited interfaces, not archived snapshots · governance is infrastructure · solidarity is the business model · built for the movement, in the movement · bylaws become operational, not aspirational · the rules run the system.
 
@@ -494,10 +494,10 @@ Over time, a second credential — being accepted into USFWC as a Cooperative De
 
 ## Process notes and what's missing
 
-**Gemini CLI second opinion:** Pro was rate-limited (10 retry attempts, all 429). Flash ran clean in 23 seconds — output at `/tmp/dm-audience-research/gemini-flash-out.json`. The delta was modest and confirmatory: ~70% overlap with this report. The four useful additions — sectoral density, scale-out-vs-scale-up, admin debt, and the enforcement angle as standalone insight #4 — have been folded into this document. Gemini's synthesized "quotes" were invented, not captured, and it ran without web searches; this report's citations are the verified ones. Note also: the `gemini-delegate` skill's documented `pro → flash → flash-lite → skip` fallback chain is aspirational — the CLI doesn't auto-fall-back on 429. Worth patching the skill.
+**Gemini CLI second opinion:** Pro was rate-limited (10 retry attempts, all 429). Flash ran clean in 23 seconds -- output at `/tmp/dm-audience-research/gemini-flash-out.json`. The delta was modest and confirmatory: ~70% overlap with this report. The four useful additions -- sectoral density, scale-out-vs-scale-up, admin debt, and the enforcement angle as standalone insight #4 -- have been folded into this document. Gemini's synthesized "quotes" were invented, not captured, and it ran without web searches; this report's citations are the verified ones. Note also: the `gemini-delegate` skill's documented `pro -> flash -> flash-lite -> skip` fallback chain is aspirational -- the CLI doesn't auto-fall-back on 429. Worth patching the skill.
 
 **Knowledge gaps I'd close next:**
-1. **Direct USFWC member interviews.** I have second-hand language. First-hand interviews with 3–5 USFWC member workplaces and 2 federation staff would sharpen sections 2, 3, and 8 considerably.
+1. **Direct USFWC member interviews.** I have second-hand language. First-hand interviews with 3-5 USFWC member workplaces and 2 federation staff would sharpen sections 2, 3, and 8 considerably.
 2. **Loomio customer churn patterns.** Specifically, what do co-ops that leave Loomio go to? This directly bears on Assembly's positioning.
 3. **CWCF and BCCA funding landscape in 2026.** I relied on general sector knowledge plus your own briefing; the specific grant program windows for the year ahead need a fresh sweep.
 4. **Spanish-language co-op developer segment.** Mondragon orbit, Latin American worker co-op movement. Currently underweighted. Worth its own pass if Latin America becomes a priority.
@@ -505,6 +505,6 @@ Over time, a second credential — being accepted into USFWC as a Cooperative De
 **Recommended next moves this document enables:**
 1. Update the ghostwriter voice skill's "audience" section to reference this doc.
 2. Build (or update) a "co-op developer pitch" DM plugin or artifact distinct from the general Assembly pitch.
-3. Draft a short (500-word) "The survival reframe" essay for /PRESS publication — cornerstone propaganda.
+3. Draft a short (500-word) "The survival reframe" essay for /PRESS publication -- cornerstone propaganda.
 4. Write a plain-language co-op governance glossary as a free release, positioned as DM-020 or similar.
 5. Build a one-page "Why Assembly" sheet targeted at federation staff (not at co-op members).

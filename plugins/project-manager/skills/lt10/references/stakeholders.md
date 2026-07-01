@@ -1,6 +1,6 @@
 # Stakeholder Management
 
-> **Related sections:** → Communication Scripts (`scripts.md`) → Change Control (`change-control.md`) → Risk Management (`risk.md`)
+> **Related sections:** -> Communication Scripts (`scripts.md`) -> Change Control (`change-control.md`) -> Risk Management (`risk.md`)
 
 ## Stakeholder Types
 
@@ -154,9 +154,9 @@ For each deliverable/decision:
 
 ## Communication Channels
 
-### By Touch Level (low → high)
+### By Touch Level (low -> high)
 
-Letters/docs → Email → Text/IM → Phone → Video → Face-to-face
+Letters/docs -> Email -> Text/IM -> Phone -> Video -> Face-to-face
 
 ### Increase Touch When
 
@@ -187,7 +187,7 @@ Makes unspoken nuances visible. Reduces blameshifting and accountability-skippin
 
 People respond to change like Kubler-Ross grief model:
 
-**Denial → Anger → Fear → Bargaining → Depression → Acceptance**
+**Denial -> Anger -> Fear -> Bargaining -> Depression -> Acceptance**
 
 Go easy on folks - change is tough and takes time. This applies to internal process changes too.
 

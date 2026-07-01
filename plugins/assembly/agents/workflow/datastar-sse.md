@@ -178,7 +178,7 @@ For real-time updates (e.g., voting results):
 </form>
 ```
 
-## NATS KV Watch → SSE Pattern (Production)
+## NATS KV Watch -> SSE Pattern (Production)
 
 In the production architecture, SSE endpoints use NATS KV Watch instead of polling or custom hubs.
 
@@ -193,7 +193,7 @@ In the production architecture, SSE endpoints use NATS KV Watch instead of polli
 
 ```go
 func (h *Handlers) ProposalSSE(w http.ResponseWriter, r *http.Request) {
-    // Session validation — required before streaming
+    // Session validation -- required before streaming
     memberID := session.GetMemberID(r.Context())
     if memberID == "" {
         http.Error(w, "Unauthorized", http.StatusUnauthorized)

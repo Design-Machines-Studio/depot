@@ -1,6 +1,6 @@
 ---
 name: lt10
-description: Project management methodology based on Louder Than Ten (LT10) principles for client services, creative agencies, and construction projects. Use when the user needs guidance on estimation (ROM, 90th percentile, red flags), scoping (product vs project scope, scope creep management), pricing (burn rate, rate calculations), scheduling (buffers, Gantt, timeboxing), risk management (red flags, mitigation), stakeholder alignment (communication plans, RACI), change control, methodology selection (Waterfall, Agile, Scrum, Kanban, Hybrid/Agifall), team dynamics, and professional development. Trigger this skill for ANY project management question — how to estimate, how to price a project, how to handle scope creep, when to use agile vs waterfall, how to run meetings, how to deal with a difficult stakeholder, how to write a SOW, or how to protect scope. Also trigger when Travis is scoping Assembly pilot engagements, pricing co-op work, planning sprints, estimating house construction phases, or asks about any project management concept even casually. Applies to digital projects, house construction, and any complex multi-stakeholder initiative.
+description: Project management methodology based on Louder Than Ten (LT10) principles for client services, creative agencies, and construction projects. Use when the user needs guidance on estimation (ROM, 90th percentile, red flags), scoping (product vs project scope, scope creep management), pricing (burn rate, rate calculations), scheduling (buffers, Gantt, timeboxing), risk management (red flags, mitigation), stakeholder alignment (communication plans, RACI), change control, methodology selection (Waterfall, Agile, Scrum, Kanban, Hybrid/Agifall), team dynamics, and professional development. Trigger this skill for ANY project management question -- how to estimate, how to price a project, how to handle scope creep, when to use agile vs waterfall, how to run meetings, how to deal with a difficult stakeholder, how to write a SOW, or how to protect scope. Also trigger when Travis is scoping Assembly pilot engagements, pricing co-op work, planning sprints, estimating house construction phases, or asks about any project management concept even casually. Applies to digital projects, house construction, and any complex multi-stakeholder initiative.
 ---
 
 # Louder Than Ten Project Management Methodology
@@ -25,7 +25,7 @@ Human-centered PM approach emphasizing realistic estimation, stakeholder alignme
 | Sprints/Weeks | Project length | ✅ Yes (to clients) |
 | Hourly | ❌ No | ❌ Avoid |
 
-**Workflow:** Estimate in days → Convert to sprints → Present sprints to client
+**Workflow:** Estimate in days -> Convert to sprints -> Present sprints to client
 
 ### Four Types of Scope Creep
 | Type | What It Is | Fix |
@@ -51,7 +51,7 @@ Human-centered PM approach emphasizing realistic estimation, stakeholder alignme
 ### Key Scripts (Use These)
 
 **When scope creep appears:**
-> "I'll check with the team on impact. This may add time and budget—are you okay with that?"
+> "I'll check with the team on impact. This may add time and budget--are you okay with that?"
 
 **When rejecting a request:**
 > "Looking at the data, I don't think X makes sense. Want to discuss alternatives?"
@@ -134,7 +134,7 @@ Load specific reference files based on user needs:
 ### Project/Client Alignment Matrix
 ```
                     Goal Alignment
-           Misaligned ←────────→ Aligned
+           Misaligned <-────────-> Aligned
                 │
     Low Risk    │   Can Develop  │   NURTURE
     (top)       │   (not bad)    │   (seek these)
@@ -228,7 +228,7 @@ Legal document outlining all pieces of project including product scope.
 ## Team Dynamics (Summary)
 
 ### Team Development Stages (Tuckman)
-**Forming → Storming → Norming → Performing → Adjourning**
+**Forming -> Storming -> Norming -> Performing -> Adjourning**
 
 ### Preventing Burnout
 PM is accountable to team for time, budget, and resources they need. **Don't throw team under bus for impossible deadlines.**
@@ -281,11 +281,11 @@ Top priority: Physical, mental, emotional health. **If you come last, you cannot
 
 | Topic | Related Sections |
 |-------|------------------|
-| Estimation | → Red Flags, → Change Control, → Pricing |
-| Scope Creep | → Change Control, → Stakeholder Management, → Scripts |
-| Methodology | → Scheduling, → Estimation, → Team Dynamics |
-| Capacity | → Scheduling, → Resourcing, → Project Health |
-| Risk | → Red Flags, → Estimation, → Buffer Guidelines |
+| Estimation | -> Red Flags, -> Change Control, -> Pricing |
+| Scope Creep | -> Change Control, -> Stakeholder Management, -> Scripts |
+| Methodology | -> Scheduling, -> Estimation, -> Team Dynamics |
+| Capacity | -> Scheduling, -> Resourcing, -> Project Health |
+| Risk | -> Red Flags, -> Estimation, -> Buffer Guidelines |
 
 ---
 

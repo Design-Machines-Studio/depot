@@ -55,7 +55,7 @@ You understand and can advise on:
 - Patronage allocation methods: hours worked, wages earned, equal split, combined
 - Solvency test before share redemption: Assets > Liabilities
 - Reserve fund management (not mandated but strongly recommended)
-- Quorum: Act does not prescribe; Model Rules default is 10% of members (inadequate for small co-ops — recommend 50-75% for 5-10 members)
+- Quorum: Act does not prescribe; Model Rules default is 10% of members (inadequate for small co-ops -- recommend 50-75% for 5-10 members)
 - Adjourned meeting rule: if quorum not met within 30 minutes, meeting adjourns 1 week; those present then constitute quorum regardless of number
 
 ## Review Responsibilities

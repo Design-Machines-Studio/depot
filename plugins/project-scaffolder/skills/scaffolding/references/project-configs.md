@@ -7,7 +7,7 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
   - go-templ-datastar (line 9), go-library (line 113), css-framework (line 148), craft-cms (line 183)
 - [CLAUDE.md Templates](#claudemd-templates) (line 234)
   - go-templ-datastar (line 236), go-library (line 345), css-framework (line 405), craft-cms (line 477)
-- [Starter Files](#starter-files) (line 558) — todo.md, lessons.md, project-notion.md, sessions.md
+- [Starter Files](#starter-files) (line 558) -- todo.md, lessons.md, project-notion.md, sessions.md
 
 ---
 
@@ -265,8 +265,8 @@ At the **start of every session**, read the planner skill and follow its session
 Planner skill: Invoke `/planner` (installed from the depot's project-manager plugin).
 
 Key files:
-- `memory/project-notion.md` — maps this repo to the Notion project
-- `memory/sessions.md` — append-only session log
+- `memory/project-notion.md` -- maps this repo to the Notion project
+- `memory/sessions.md` -- append-only session log
 
 After completing: `touch /tmp/{{PROJECT_PREFIX}}-session-$(date +%Y-%m-%d)`
 
@@ -297,9 +297,9 @@ After completing: `touch /tmp/{{PROJECT_PREFIX}}-session-$(date +%Y-%m-%d)`
 - **The commit-push-reminder hook insists at 3+ files.** Obey immediately.
 
 ### Task Management
-1. Plan first → `tasks/todo.md`
+1. Plan first -> `tasks/todo.md`
 2. Track progress: mark items complete as you go
-3. Capture lessons → `tasks/lessons.md`
+3. Capture lessons -> `tasks/lessons.md`
 
 ## Critical Rules
 
@@ -439,9 +439,9 @@ This file is the routing document for Claude Code.
 - Feature branches for work touching 3+ files.
 
 ### Task Management
-1. Plan first → `tasks/todo.md`
+1. Plan first -> `tasks/todo.md`
 2. Track progress: mark items complete as you go
-3. Capture lessons → `tasks/lessons.md`
+3. Capture lessons -> `tasks/lessons.md`
 
 ## Critical Rules
 
@@ -523,9 +523,9 @@ This file is the routing document for Claude Code.
 - Feature branches for work touching 3+ files.
 
 ### Task Management
-1. Plan first → `tasks/todo.md`
+1. Plan first -> `tasks/todo.md`
 2. Track progress: mark items complete as you go
-3. Capture lessons → `tasks/lessons.md`
+3. Capture lessons -> `tasks/lessons.md`
 
 ## Critical Rules
 
@@ -539,7 +539,7 @@ This file is the routing document for Claude Code.
 - **Component modifiers**: double-dash (`button--accent`, `table--bordered`)
 
 ### Token-Based Spacing
-All spacing derives from the foundational unit. Use tokens — never arbitrary pixel values.
+All spacing derives from the foundational unit. Use tokens -- never arbitrary pixel values.
 
 ### [ADD PROJECT-SPECIFIC RULES HERE]
 
@@ -624,9 +624,9 @@ This file is the routing document for Claude Code.
 - Feature branches for work touching 3+ files.
 
 ### Task Management
-1. Plan first → `tasks/todo.md`
+1. Plan first -> `tasks/todo.md`
 2. Track progress: mark items complete as you go
-3. Capture lessons → `tasks/lessons.md`
+3. Capture lessons -> `tasks/lessons.md`
 
 ## Critical Rules
 
@@ -728,7 +728,7 @@ Patterns and corrections from development sessions. Review at session start.
 <!-- Project conventions discovered during work -->
 
 ## Mistakes to Avoid
-<!-- Errors and their corrections — write rules to prevent repeats -->
+<!-- Errors and their corrections -- write rules to prevent repeats -->
 
 ## Gotchas
 <!-- Non-obvious behaviors, edge cases, workarounds -->
@@ -752,7 +752,7 @@ Patterns and corrections from development sessions. Review at session start.
 Append-only log for continuity between sessions.
 
 <!-- Format:
-## YYYY-MM-DD — Brief description
+## YYYY-MM-DD -- Brief description
 **Sprint:** Sprint name
 **Done:** Bullets
 **Pending:** Bullets

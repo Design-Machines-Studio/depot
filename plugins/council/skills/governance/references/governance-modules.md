@@ -1,10 +1,10 @@
 # Co-op OS Governance Modules
 
-> **Related sections:** → BC Act Requirements (`bc-cooperative-act.md`) → Discovery Framework (`discovery-framework.md`) → UX Testing (`ux-testing.md`)
+> **Related sections:** -> BC Act Requirements (`bc-cooperative-act.md`) -> Discovery Framework (`discovery-framework.md`) -> UX Testing (`ux-testing.md`)
 
 ## Contents
 - [Module Architecture Overview](#module-architecture-overview) (line 13)
-- [Tier Structure](#tier-structure) (line 19) — MVP, Core, Advanced tiers
+- [Tier Structure](#tier-structure) (line 19) -- MVP, Core, Advanced tiers
 - [Module Specifications](#module-specifications) (line 48)
   - [Members Module (MVP)](#members-module-mvp) (line 50)
   - [Governance Module (MVP + Advanced)](#governance-module-mvp--advanced) (line 102)
@@ -15,13 +15,13 @@
   - [Compensation Module (Advanced)](#compensation-module-advanced) (line 279)
 - [Module Dependencies](#module-dependencies) (line 313)
 - [Configuration by Client](#configuration-by-client) (line 337)
-- [Implementation Approach](#implementation-approach) (line 349) — Phase 1 (MVP), Phase 2 (Core), Phase 3 (Advanced)
+- [Implementation Approach](#implementation-approach) (line 349) -- Phase 1 (MVP), Phase 2 (Core), Phase 3 (Advanced)
 
 ## Module Architecture Overview
 
-Co-op OS uses a tiered module architecture. Clients don't see "modules"—they get a bespoke system built from these building blocks.
+Co-op OS uses a tiered module architecture. Clients don't see "modules"--they get a bespoke system built from these building blocks.
 
-**Positioning**: "Your [Co-op Name] OS"—not "an installation of Co-op OS"
+**Positioning**: "Your [Co-op Name] OS"--not "an installation of Co-op OS"
 
 ---
 
@@ -76,8 +76,8 @@ Member
 
 | Feature | Description | Statutory Basis |
 |---------|-------------|-----------------|
-| Member directory | Searchable list with contact info | — |
-| Lifecycle tracking | Application → Candidacy → Active → Exit | Rules of Association |
+| Member directory | Searchable list with contact info | -- |
+| Lifecycle tracking | Application -> Candidacy -> Active -> Exit | Rules of Association |
 | Class assignment | Worker, community, investment shareholder | s.48, Rules |
 | Role management | Directors, officers, committee membership | s.72 |
 | Residency tracking | Canadian/BC for director requirements | s.99 |
@@ -140,7 +140,7 @@ When implementing or correcting a measurable requirement, the work spans schema,
 
 ```
 Decision Chain
-Proposal → Discussion → Vote/Consent → Resolution → Minutes
+Proposal -> Discussion -> Vote/Consent -> Resolution -> Minutes
 ```
 
 #### MVP Features
@@ -157,21 +157,21 @@ Proposal → Discussion → Vote/Consent → Resolution → Minutes
 
 | Feature | Description |
 |---------|-------------|
-| Proposal workflow | Draft → Review → Present → Decide |
+| Proposal workflow | Draft -> Review -> Present -> Decide |
 | Ballot management | Named vs. anonymous, proxy assignment |
 | Conflict of interest | Disclosure tracking, automatic abstention |
 | Async voting | Time-boxed decisions between meetings |
 | Consent resolutions | 100% written consent tracking |
-| Modified consensus | Consent → Stand Aside → Block workflow |
+| Modified consensus | Consent -> Stand Aside -> Block workflow |
 
 #### Decision Types & Configuration
 
 | Decision Type | Default Threshold | Override Source |
 |---------------|-------------------|-----------------|
-| Ordinary | 50% + 1 | — |
+| Ordinary | 50% + 1 | -- |
 | Special | ≥ 2/3 of votes cast | Rules may specify 75% |
 | Director removal | 75% (3/4 of all directors) | Act |
-| Consent | 100% | — |
+| Consent | 100% | -- |
 
 #### Meeting Types
 
@@ -303,7 +303,7 @@ END
 | Feature | Description |
 |---------|-------------|
 | Version control | Track changes, who changed, when |
-| Approval workflow | Draft → Review → Approve → Publish |
+| Approval workflow | Draft -> Review -> Approve -> Publish |
 | Search | Full-text search across all documents |
 | Access control | Member vs. board vs. public |
 

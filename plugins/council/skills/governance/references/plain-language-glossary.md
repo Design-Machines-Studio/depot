@@ -27,8 +27,8 @@ This is a deliberate Design Machines product move. Per Chris Galloway (April 21,
 | Special resolution | Big decision requiring 2/3 of the votes cast (abstentions don't count against it) | Bylaws; meeting minutes for resolutions filed with BC Registries |
 | Ordinary resolution | Decision requiring more than half of the votes cast | Bylaws; resolution texts |
 | Patronage allocation / refund | Your share of the year's surplus, paid based on your work in the co-op (your bylaws define how, usually hours worked or wages earned), not on capital invested | Tax filings; BC Co-op Act § references. **Note: never use "patronage dividend"** (see `plugins/council/skills/decolonial-language/references/terminology-finance.md` for the rationale: dividends flow to investors based on capital; patronage refunds flow to member-owners based on contribution). |
-| Quorum | The minimum number of members who need to show up for the meeting to count (a meeting can hit quorum and still fail a vote if not enough members vote yes) | Rules of Association — the BC Act does not prescribe quorum; the Model Rules default is 10% of members |
-| Internal capital account (ICA) | Your ownership account in the co-op (tracks contributions you have made and your share of surplus allocated to you, paid out per the bylaws — usually on departure, sometimes on a schedule) | Annual financial statements; tax filings |
+| Quorum | The minimum number of members who need to show up for the meeting to count (a meeting can hit quorum and still fail a vote if not enough members vote yes) | Rules of Association -- the BC Act does not prescribe quorum; the Model Rules default is 10% of members |
+| Internal capital account (ICA) | Your ownership account in the co-op (tracks contributions you have made and your share of surplus allocated to you, paid out per the bylaws -- usually on departure, sometimes on a schedule) | Annual financial statements; tax filings |
 | Indivisible reserve | The shared kitty we can't pay out | Bylaws; financial statements |
 | Consent resolution | Everyone signs off without a meeting | Bylaws (where defined as a permitted decision form) |
 | Subchapter T | The co-op tax rules (US federal). BC co-ops follow the Canadian Income Tax Act and CRA guidance on patronage allocations; talk to a co-op-friendly accountant before quoting Subchapter T in a BC context. | Tax filings; legal advice contexts (US co-ops) |
@@ -53,10 +53,10 @@ When a plain-language version loses precision the legal term carried (for exampl
 
 ## Cross-references
 
-- `bc-cooperative-act.md` — when each legal term is statutorily required
-- `bylaw-analysis.md` — patterns for spotting when legal terms drift from member understanding
-- `voting-decisions.md` — sociocracy vs majority vs consent decision-making
-- `plugins/council/skills/decolonial-language/references/terminology-finance.md` — finance-side terminology positions (patronage refunds, surpluses, member capital)
-- `plugins/council/skills/decolonial-language/references/terminology-governance.md` — governance-side terminology positions
-- `plugins/council/skills/decolonial-language/references/terminology-membership.md` — membership-side terminology positions
-- `plugins/council/skills/decolonial-language/references/terminology-ux.md` — UI-copy guidance
+- `bc-cooperative-act.md` -- when each legal term is statutorily required
+- `bylaw-analysis.md` -- patterns for spotting when legal terms drift from member understanding
+- `voting-decisions.md` -- sociocracy vs majority vs consent decision-making
+- `plugins/council/skills/decolonial-language/references/terminology-finance.md` -- finance-side terminology positions (patronage refunds, surpluses, member capital)
+- `plugins/council/skills/decolonial-language/references/terminology-governance.md` -- governance-side terminology positions
+- `plugins/council/skills/decolonial-language/references/terminology-membership.md` -- membership-side terminology positions
+- `plugins/council/skills/decolonial-language/references/terminology-ux.md` -- UI-copy guidance

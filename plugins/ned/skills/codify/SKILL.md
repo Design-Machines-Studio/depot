@@ -21,7 +21,7 @@ lesson instead of relearning it. This is the **compounding step**: every run sho
 a little better than it found it.
 
 `recorder` captures *what happened* (decisions, todos, facts). `codify` captures *what to change* so
-it doesn't happen again — rules, tests, guardrails, defaults. Use `recorder` to remember a session;
+it doesn't happen again -- rules, tests, guardrails, defaults. Use `recorder` to remember a session;
 use `codify` to make the system smarter because of it.
 
 ## When to run
@@ -29,7 +29,7 @@ use `codify` to make the system smarter because of it.
 - After a pipeline run, dm-review, debugging session, or any task where something was harder than it
   should have been.
 - When a mistake or review finding shows up that you have seen before.
-- After a postmortem — to make sure its lessons land as enforceable changes, not just prose.
+- After a postmortem -- to make sure its lessons land as enforceable changes, not just prose.
 - Whenever Travis says "codify", "compound", "make this a rule", or "never again".
 
 A session where nothing was confusing and nothing recurred does **not** need codify. Say so and stop.
@@ -37,7 +37,7 @@ Do not invent lessons to fill the checklist.
 
 ## The 5-Minute Codify Checklist
 
-Review the session (or the named run) and answer four questions. Be concrete — vague answers produce
+Review the session (or the named run) and answer four questions. Be concrete -- vague answers produce
 useless encodings.
 
 1. **What confused us, broke, or surprised us?** The friction. A wrong turn, a silent failure, a
@@ -46,7 +46,7 @@ useless encodings.
 2. **What instruction prevents recurrence?** The rule that, had it existed, would have avoided #1.
    Phrase it as a directive an agent would follow.
 3. **What automated check catches it earlier?** A test, a lint rule, a grep guard, a hook, a
-   pre-flight check. Automation beats instruction — prefer it when one exists.
+   pre-flight check. Automation beats instruction -- prefer it when one exists.
 4. **What pattern becomes a new default?** If the right approach should be the standing default going
    forward, name the default and where it lives.
 
@@ -57,13 +57,13 @@ Every lesson maps to exactly one durable home. Route it there.
 | Lesson type | Encoding target | Applied how |
 |---|---|---|
 | Situational / project fact, one-off context | ai-memory observation | **Auto-write** (see below) |
-| Pipeline failure pattern (novel) | `CLAUDE.md` "Known Pipeline Failure Modes" + `docs/post-mortems/` stub | **Propose** — draft, human approves |
-| Process / discipline fix | the relevant `SKILL.md` rule or agent instruction | **Propose** — draft the edit, human approves |
-| Mechanical / recurring defect | new guardrail, Live Wires lint rule, or anti-pattern scan entry | **Propose** — draft, human approves |
+| Pipeline failure pattern (novel) | `CLAUDE.md` "Known Pipeline Failure Modes" + `docs/post-mortems/` stub | **Propose** -- draft, human approves |
+| Process / discipline fix | the relevant `SKILL.md` rule or agent instruction | **Propose** -- draft the edit, human approves |
+| Mechanical / recurring defect | new guardrail, Live Wires lint rule, or anti-pattern scan entry | **Propose** -- draft, human approves |
 
 **Auto-write vs propose:** durable *situational* lessons go straight to ai-memory (low risk, additive).
 Everything that edits `CLAUDE.md`, a `SKILL.md`, an agent file, or a guardrail is **proposed, not
-applied** — present it as an approval checklist and apply with Edit only after Travis approves.
+applied** -- present it as an approval checklist and apply with Edit only after Travis approves.
 
 ### Recurrence check (do this before classifying)
 
@@ -129,7 +129,7 @@ record. Do not apply edits Travis has not approved.
 When a proposal is a new *rule* meant to enforce behavior under pressure (a pipeline gate, a
 zero-deferral clause, a discipline directive), the wording itself can be ignored or rationalized
 away. Before treating it as done, pressure-test it via the **`superpowers:writing-skills`**
-RED-GREEN-REFACTOR loop — establish the rationalizations an agent uses without the rule, then confirm
+RED-GREEN-REFACTOR loop -- establish the rationalizations an agent uses without the rule, then confirm
 the rule's wording actually closes them. See `docs/skill-authoring.md` for the two-axis testing model.
 A guardrail that has not been pressure-tested is a guess, not a guarantee.
 
@@ -138,7 +138,7 @@ A guardrail that has not been pressure-tested is a guess, not a guarantee.
 1. No invented lessons. If the session was clean, report "Nothing to codify" and stop.
 2. Auto-write only situational ai-memory observations. Everything that edits a tracked doc, skill,
    agent, or guardrail is proposed and human-gated.
-3. Always run the recurrence check before classifying — strengthen existing entries over duplicating.
+3. Always run the recurrence check before classifying -- strengthen existing entries over duplicating.
 4. Prefer an automated check (#3) over an instruction (#2) when both would work.
 5. Keep observations under 300 characters, ISO dates, one lesson each.
 6. If ai-memory is unavailable, skip the auto-write, still produce the report, and note the skip.

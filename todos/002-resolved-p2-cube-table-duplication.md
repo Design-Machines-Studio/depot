@@ -1,6 +1,6 @@
 # P2: CUBE CSS Table Duplicated in SKILL.md and code-style.md
 
-**Priority:** P2 — Should Fix
+**Priority:** P2 -- Should Fix
 **Source:** pattern-recognition-specialist, code-simplicity-reviewer
 **Plugin:** live-wires
 **Files:** plugins/live-wires/skills/livewires/SKILL.md, plugins/live-wires/skills/livewires/code-style.md

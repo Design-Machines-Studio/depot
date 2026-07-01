@@ -6,9 +6,9 @@ Philosophical grounding for the terminology choices in this skill. Load this ref
 
 ### Frantz Fanon: Language as Colonial Infrastructure
 
-Fanon argued in *Black Skin, White Masks* (1952) that colonial languages embed colonized peoples in structures of subjugation. Speaking the colonizer's language means adopting the colonizer's worldview — "to speak a language is to take on a world, a culture." He described this as a kind of psychic violence that operates beneath conscious awareness.
+Fanon argued in *Black Skin, White Masks* (1952) that colonial languages embed colonized peoples in structures of subjugation. Speaking the colonizer's language means adopting the colonizer's worldview -- "to speak a language is to take on a world, a culture." He described this as a kind of psychic violence that operates beneath conscious awareness.
 
-**Application to cooperatives:** When worker-owners use corporate terminology — "board of directors," "profit," "human resources" — they unconsciously reproduce the power structures those terms were designed to serve. The language of capitalism is not neutral infrastructure; it shapes how people think about their own labor and their relationship to each other.
+**Application to cooperatives:** When worker-owners use corporate terminology -- "board of directors," "profit," "human resources" -- they unconsciously reproduce the power structures those terms were designed to serve. The language of capitalism is not neutral infrastructure; it shapes how people think about their own labor and their relationship to each other.
 
 **Key work:** *Black Skin, White Masks* (1952), *The Wretched of the Earth* (1961). Adam Shatz's *The Rebel's Clinic* (2024) is the recommended contemporary biography.
 
@@ -22,21 +22,21 @@ Ngũgĩ extended Fanon's argument specifically to language and culture: "Languag
 
 ### Walter Mignolo: Epistemic Disobedience
 
-Mignolo argues that decolonization must happen at the level of knowledge production itself — "changing the terms of the conversation, not only its content." Simply substituting words within the same conceptual framework perpetuates colonial logic. True decolonization requires thinking from the margins, from the experience of those subjected to colonial power.
+Mignolo argues that decolonization must happen at the level of knowledge production itself -- "changing the terms of the conversation, not only its content." Simply substituting words within the same conceptual framework perpetuates colonial logic. True decolonization requires thinking from the margins, from the experience of those subjected to colonial power.
 
-**Application:** Swapping "profit" for "surplus" while maintaining identical extractive financial structures is cosmetic. The terminology shift must accompany (or at minimum, point toward) actual structural change. Co-op OS exists because the structures are genuinely different — the language should reflect that genuine difference, not paper over sameness.
+**Application:** Swapping "profit" for "surplus" while maintaining identical extractive financial structures is cosmetic. The terminology shift must accompany (or at minimum, point toward) actual structural change. Co-op OS exists because the structures are genuinely different -- the language should reflect that genuine difference, not paper over sameness.
 
-**Key concept: Border thinking** — creating knowledge that works from the margins, neither fully inside nor outside dominant systems. This is exactly Co-op OS's position: operating within legal frameworks while maintaining fundamentally different internal logic.
+**Key concept: Border thinking** -- creating knowledge that works from the margins, neither fully inside nor outside dominant systems. This is exactly Co-op OS's position: operating within legal frameworks while maintaining fundamentally different internal logic.
 
 **Key works:** *The Darker Side of Western Modernity* (2011), "Epistemic Disobedience" (2009)
 
 ### Silvia Rivera Cusicanqui: Ch'ixi and the Refusal of Synthesis
 
-Cusicanqui (Bolivian Aymara sociologist) offers perhaps the most useful framework for Co-op OS's specific tension. **Ch'ixi** describes something composed of distinct elements that coexist without blending — unlike mestizaje (cultural mixing/synthesis), ch'ixi insists on "the irreducible presence of contradiction."
+Cusicanqui (Bolivian Aymara sociologist) offers perhaps the most useful framework for Co-op OS's specific tension. **Ch'ixi** describes something composed of distinct elements that coexist without blending -- unlike mestizaje (cultural mixing/synthesis), ch'ixi insists on "the irreducible presence of contradiction."
 
-**Application to the three-layer architecture:** Co-op OS doesn't need to synthesize legal language and solidarity language into one smooth hybrid. It can hold both, acknowledge the contradiction, and let each serve its purpose. The legal layer and the cultural layer are ch'ixi — distinct elements that coexist productively without pretending to be one thing.
+**Application to the three-layer architecture:** Co-op OS doesn't need to synthesize legal language and solidarity language into one smooth hybrid. It can hold both, acknowledge the contradiction, and let each serve its purpose. The legal layer and the cultural layer are ch'ixi -- distinct elements that coexist productively without pretending to be one thing.
 
-Cusicanqui also warns against "an empire within an empire" — adopting decolonial language while maintaining colonial structures. She insists on practice over theory: decolonization happens through doing, not through correct terminology.
+Cusicanqui also warns against "an empire within an empire" -- adopting decolonial language while maintaining colonial structures. She insists on practice over theory: decolonization happens through doing, not through correct terminology.
 
 **Key concept:** "Words that do not name practice become a screen for not-doing." The language shift in Co-op OS must accompany genuine cooperative practice.
 
@@ -44,15 +44,15 @@ Cusicanqui also warns against "an empire within an empire" — adopting decoloni
 
 ### Glen Coulthard: Grounded Normativity
 
-Coulthard (Yellowknives Dene) argues in *Red Skin, White Masks* that indigenous resistance must be grounded in place-based practices and relationships rather than seeking recognition from the colonial state. He calls this "grounded normativity" — ethical frameworks generated by place-based practices and associated knowledges.
+Coulthard (Yellowknives Dene) argues in *Red Skin, White Masks* that indigenous resistance must be grounded in place-based practices and relationships rather than seeking recognition from the colonial state. He calls this "grounded normativity" -- ethical frameworks generated by place-based practices and associated knowledges.
 
-**Application:** Cooperative terminology should be grounded in actual cooperative practice — what people do when they govern together — rather than derived from state-defined categories. When the BC Act says "director" and the cooperative says "steward," the cooperative's term describes what actually happens in the room. The state's term describes a legal abstraction.
+**Application:** Cooperative terminology should be grounded in actual cooperative practice -- what people do when they govern together -- rather than derived from state-defined categories. When the BC Act says "director" and the cooperative says "steward," the cooperative's term describes what actually happens in the room. The state's term describes a legal abstraction.
 
 **Key work:** *Red Skin, White Masks: Rejecting the Colonial Politics of Recognition* (2014)
 
 ### Arturo Escobar: Designs for the Pluriverse
 
-Escobar argues for "a world where many worlds fit" — pluriversal design that supports multiple ways of knowing and being rather than imposing a single universal framework. This directly challenges the tech industry's tendency toward one-size-fits-all solutions.
+Escobar argues for "a world where many worlds fit" -- pluriversal design that supports multiple ways of knowing and being rather than imposing a single universal framework. This directly challenges the tech industry's tendency toward one-size-fits-all solutions.
 
 **Application:** Co-op OS should support multiple valid terminologies, not impose one "correct" decolonial vocabulary. A Māori cooperative may use different terms than a Basque cooperative than a Black cooperative in Mississippi. The system should be configurable, with good defaults and room for community self-determination.
 
@@ -66,13 +66,13 @@ Escobar argues for "a world where many worlds fit" — pluriversal design that s
 
 "Life with dignity, plenitude, balance, and harmony." From Kichwa/Quechua traditions, now constitutionally recognized in Ecuador (2008) and Bolivia (2009). Centers relationality, complementarity, reciprocity, and cyclicality. The wellbeing subject is not the individual but "the individual within a community in relation to a specific cultural-natural environment."
 
-**Application:** Frames cooperative success not as financial surplus but as collective flourishing. Financial health is one dimension among many — member wellbeing, community impact, environmental stewardship, cultural vitality.
+**Application:** Frames cooperative success not as financial surplus but as collective flourishing. Financial health is one dimension among many -- member wellbeing, community impact, environmental stewardship, cultural vitality.
 
 ### Ubuntu (Southern African)
 
-"Umuntu ngumuntu ngabantu" — I am because we are. In organizational contexts: participative leadership, collective decision-making, caring and sharing among members, corporate responsibility to local communities. Firms are understood as communities, not collections of competing individuals.
+"Umuntu ngumuntu ngabantu" -- I am because we are. In organizational contexts: participative leadership, collective decision-making, caring and sharing among members, corporate responsibility to local communities. Firms are understood as communities, not collections of competing individuals.
 
-**Application:** Decision-making in Co-op OS should always be framed as collective — "we decided" not "the board decided." Individual contributions matter within collective context. Financial reporting should show community-level outcomes.
+**Application:** Decision-making in Co-op OS should always be framed as collective -- "we decided" not "the board decided." Individual contributions matter within collective context. Financial reporting should show community-level outcomes.
 
 ### Horizontalidad (Argentine)
 
@@ -84,13 +84,13 @@ Emerged from the 2001 economic crisis. Flat, non-hierarchical relationships wher
 
 Ceremonial redistribution through gift-giving. Status through giving rather than keeping. Banned by Canadian colonial authorities from 1884-1951 precisely because it contradicted capitalist accumulation logic.
 
-**Application:** Frames surplus distribution as returning wealth to community — the natural and desirable outcome of collective work, not a grudging obligation. The act of redistribution strengthens the community.
+**Application:** Frames surplus distribution as returning wealth to community -- the natural and desirable outcome of collective work, not a grudging obligation. The act of redistribution strengthens the community.
 
-### Ayni (Quechua — Reciprocity)
+### Ayni (Quechua -- Reciprocity)
 
 Ongoing cycles of reciprocal exchange where obligations are recorded in human terms rather than monetary ones. "Rejection of money is a refusal to bypass human reciprocity."
 
-**Application:** Member contributions, patronage, and mutual support are relational — not transactional. Co-op OS should make these reciprocal relationships visible and valued.
+**Application:** Member contributions, patronage, and mutual support are relational -- not transactional. Co-op OS should make these reciprocal relationships visible and valued.
 
 ---
 
@@ -106,7 +106,7 @@ Drawing from all these frameworks:
 
 4. **Support multiple worlds.** (Escobar) Build for pluriversal use. Good defaults, configurable terminology, room for community self-determination.
 
-5. **Change the terms, not just the content.** (Mignolo) The goal isn't swapping words within the same framework — it's building interfaces that make democratic governance feel natural, inevitable, and joyful.
+5. **Change the terms, not just the content.** (Mignolo) The goal isn't swapping words within the same framework -- it's building interfaces that make democratic governance feel natural, inevitable, and joyful.
 
 ---
 

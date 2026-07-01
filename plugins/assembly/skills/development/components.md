@@ -45,7 +45,7 @@ CSS provides a grey fallback for unrecognized variants so badges always render v
 Dashboard statistic card within a semantic `<dl>` wrapper. Templates control sizing and layout via the `Class` field; the component handles content structure.
 
 ```templ
-// Full API — use StatCardData struct for maximum control
+// Full API -- use StatCardData struct for maximum control
 @components.StatCard(components.StatCardData{
     Label:     "Total Members",    // Metric label
     Value:     "24",               // Primary value
@@ -450,7 +450,7 @@ helpers.PtrVal(ptr, defaultVal)  // Generic pointer dereference with default
 
 1. **Check if existing component can be extended**
 2. **Create in `backend/internal/components/`**
-3. **Follow the pattern** — use a `Data` struct for 3+ fields, convenience wrappers for common cases:
+3. **Follow the pattern** -- use a `Data` struct for 3+ fields, convenience wrappers for common cases:
 
 ```templ
 package components

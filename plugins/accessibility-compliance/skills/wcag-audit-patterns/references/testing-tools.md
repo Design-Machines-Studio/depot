@@ -285,17 +285,17 @@ For Assembly-style projects, the CI pipeline should:
 
 ### Chrome DevTools
 
-- **Lighthouse tab** — quick accessibility audit
-- **Elements panel** — Accessibility pane shows ARIA tree, computed name/role
-- **Rendering tab** — emulate vision deficiencies (protanopia, deuteranopia, etc.)
-- **Rendering tab** — emulate `prefers-reduced-motion`, `forced-colors`
-- **CSS Overview** — shows contrast issues across the page
+- **Lighthouse tab** -- quick accessibility audit
+- **Elements panel** -- Accessibility pane shows ARIA tree, computed name/role
+- **Rendering tab** -- emulate vision deficiencies (protanopia, deuteranopia, etc.)
+- **Rendering tab** -- emulate `prefers-reduced-motion`, `forced-colors`
+- **CSS Overview** -- shows contrast issues across the page
 
 ### Firefox DevTools
 
-- **Accessibility panel** — full accessibility tree with issue highlighting
-- **Contrast checker** — inline in the color picker
-- **Tab order overlay** — visualizes keyboard navigation order
+- **Accessibility panel** -- full accessibility tree with issue highlighting
+- **Contrast checker** -- inline in the color picker
+- **Tab order overlay** -- visualizes keyboard navigation order
 
 ---
 

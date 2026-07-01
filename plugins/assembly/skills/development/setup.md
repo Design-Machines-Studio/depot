@@ -16,14 +16,14 @@ npm install                # Frontend dev dependencies
 ./scripts/start.sh         # Auto-detects ddev-router vs standalone
 ```
 
-Visit `http://assembly.coop.site` — the app should be running.
+Visit `http://assembly.coop.site` -- the app should be running.
 
 ## How It Works
 
 `scripts/start.sh` auto-detects your environment:
 
-- **ddev mode** — if ddev-router is running, installs Traefik config to `~/.ddev/traefik/config/assembly.yaml` and connects to the `ddev_default` network
-- **Standalone mode** — creates `ddev_default` network and starts its own Traefik container
+- **ddev mode** -- if ddev-router is running, installs Traefik config to `~/.ddev/traefik/config/assembly.yaml` and connects to the `ddev_default` network
+- **Standalone mode** -- creates `ddev_default` network and starts its own Traefik container
 
 The Go backend runs inside Docker with Air for hot reload. Templ files are regenerated and the binary rebuilt automatically on save.
 
@@ -45,14 +45,14 @@ Vite runs on port 3000 for CSS/JS hot module replacement:
 
 ```bash
 npm run dev    # Start Vite dev server (HMR)
-npm run build  # Production build → public/dist/
+npm run build  # Production build -> public/dist/
 ```
 
 Build uses lightningcss for CSS bundling/minification and esbuild for JS.
 
 ## Backend Development
 
-All Go commands run inside Docker — never on the host:
+All Go commands run inside Docker -- never on the host:
 
 ```bash
 docker compose exec app templ generate              # Regenerate Templ files
@@ -67,8 +67,8 @@ Air handles this automatically on file save. Manual commands are for troubleshoo
 
 No `.env` files needed. Configuration lives in YAML:
 
-- `backend/config/coop.yaml` — Co-op identity (name, jurisdiction, founded date)
-- `backend/config/modules.yaml` — Feature toggles (members, proposals, meetings, etc.)
+- `backend/config/coop.yaml` -- Co-op identity (name, jurisdiction, founded date)
+- `backend/config/modules.yaml` -- Feature toggles (members, proposals, meetings, etc.)
 
 ## Database
 

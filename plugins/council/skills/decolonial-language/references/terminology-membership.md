@@ -1,6 +1,6 @@
 # Membership Terminology: Decolonial Alternatives
 
-Detailed guidance for membership language — how we describe people, their journey into the cooperative, their roles, and their departure.
+Detailed guidance for membership language -- how we describe people, their journey into the cooperative, their roles, and their departure.
 
 ## The Core Shift: From Employment to Belonging
 
@@ -12,7 +12,7 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Worker-Owner / Cooperator / Member (not Employee)
 
-**Why it matters:** "Employee" implies someone employed by another — a power relationship. Worker-owners employ themselves collectively. "Cooperator" (Mondragon's term) emphasizes active participation in the cooperative project.
+**Why it matters:** "Employee" implies someone employed by another -- a power relationship. Worker-owners employ themselves collectively. "Cooperator" (Mondragon's term) emphasizes active participation in the cooperative project.
 
 **Usage by context:**
 - General UI: "Member" (simple, universal)
@@ -24,12 +24,12 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Pathway to Membership / Orientation Period (not Probationary Period)
 
-**Why it matters:** "Probation" implies suspicion — you're being watched to see if you fail. "Pathway" implies journey and growth — you're being supported toward full membership. "Orientation" implies learning and integration.
+**Why it matters:** "Probation" implies suspicion -- you're being watched to see if you fail. "Pathway" implies journey and growth -- you're being supported toward full membership. "Orientation" implies learning and integration.
 
 **Implementation:**
 - UI label: "Orientation Period" or "Pathway to Membership"
 - Status: "Orienting Member" or "Prospective Member" (not "Probationary Member")
-- Milestone framing: "You're on your pathway to full membership — here's what's ahead"
+- Milestone framing: "You're on your pathway to full membership -- here's what's ahead"
 - Progress tracking: Frame as achievements unlocked, not tests passed
 - Legal documents: "Probationary period" if bylaws use this term; recommend bylaw amendment
 
@@ -45,7 +45,7 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Departure / Separation (not Termination)
 
-**Why it matters:** "Termination" is violent language — something is ended, killed, destroyed. "Departure" is neutral and dignified. "Separation" acknowledges that a relationship is changing.
+**Why it matters:** "Termination" is violent language -- something is ended, killed, destroyed. "Departure" is neutral and dignified. "Separation" acknowledges that a relationship is changing.
 
 **Types of departure in Co-op OS:**
 - **Voluntary departure**: Member chooses to leave
@@ -56,18 +56,18 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Peer Reflection / Growth Conversation (not Performance Review)
 
-**Why it matters:** "Performance review" implies judgment from above — a manager evaluating a subordinate. In cooperatives, accountability is mutual. Peer reflection centers collective growth.
+**Why it matters:** "Performance review" implies judgment from above -- a manager evaluating a subordinate. In cooperatives, accountability is mutual. Peer reflection centers collective growth.
 
 **Implementation:**
 - UI label: "Peer Reflection" or "Growth Conversation"
 - Frame as: Mutual, bilateral, focused on development
-- Structure: What's going well → What needs attention → Support needed → Goals ahead
+- Structure: What's going well -> What needs attention -> Support needed -> Goals ahead
 - Not: Rating scales, numerical scores, rankings, stack-ranking
 - Legal/tax context: If required for CRA documentation, generate compliant records from peer reflection data
 
 ### People & Culture / Member Support (not Human Resources)
 
-**Why it matters:** "Human Resources" reduces people to resources to be extracted — a term with explicitly capitalist origins. It frames people as inputs to production.
+**Why it matters:** "Human Resources" reduces people to resources to be extracted -- a term with explicitly capitalist origins. It frames people as inputs to production.
 
 **Usage:**
 - UI section: "People & Culture" or "Member Support"
@@ -91,7 +91,7 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Stages
 
-| Corporate Term | → Use Instead | Description |
+| Corporate Term | -> Use Instead | Description |
 |----------------|---------------|-------------|
 | Applicant | **Prospective Member** | Someone exploring membership |
 | Probationary Employee | **Orienting Member** | On their pathway to full membership |
@@ -102,11 +102,11 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Lifecycle Events
 
-| Corporate Event | → Use Instead |
+| Corporate Event | -> Use Instead |
 |-----------------|---------------|
 | Hiring | **Welcoming** or **Admitting** a new member |
 | Promotion | **Role transition** or **Expanded stewardship** |
-| Demotion | **Role adjustment** (co-ops shouldn't have demotions — roles shift) |
+| Demotion | **Role adjustment** (co-ops shouldn't have demotions -- roles shift) |
 | Firing | **Involuntary separation** (with due process) |
 | Layoff | **Workforce adjustment** (extremely rare in co-ops; Mondragon redeploys) |
 | Exit interview | **Departure conversation** or **Transition reflection** |
@@ -127,7 +127,7 @@ Corporate membership/employment language frames people as resources to be manage
 
 ### Common Role Mappings
 
-| Corporate Title | → Cooperative Alternative |
+| Corporate Title | -> Cooperative Alternative |
 |-----------------|--------------------------|
 | CEO | **General Coordinator** |
 | CFO | **Financial Steward** |
@@ -160,13 +160,13 @@ Avoid corporate formality. Cooperatives are workplaces of equals.
 Co-op OS should speak to members as peers, not as subjects of administration.
 
 **Instead of:** "Your probationary review is due"
-**Use:** "Time for your next growth conversation — here's what to prepare"
+**Use:** "Time for your next growth conversation -- here's what to prepare"
 
 **Instead of:** "Your leave request has been approved"
-**Use:** "Your time away has been confirmed — enjoy!"
+**Use:** "Your time away has been confirmed -- enjoy!"
 
 **Instead of:** "Performance metrics indicate..."
 **Use:** "Here's how things are going..."
 
 **Instead of:** "You are required to attend the AGM"
-**Use:** "Our annual gathering is coming up — your voice matters"
+**Use:** "Our annual gathering is coming up -- your voice matters"

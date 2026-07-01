@@ -4,21 +4,21 @@
 
 ## Contents
 - [The Red Flag Philosophy](#the-red-flag-philosophy) (line 7)
-- [Critical Red Flags](#critical-red-flags-immediate-action-required) (line 15) — Membership below minimum, director residency, AGM overdue, financial insolvency
-- [High-Priority Red Flags](#high-priority-red-flags-action-required-within-30-days) (line 138) — Quorum failures, late filings, audit non-compliance, meeting dysfunction
-- [Medium-Priority Red Flags](#medium-priority-red-flags-monitor-and-plan) (line 245) — Policy gaps, training deficits, committee issues, documentation drift
-- [Low-Priority Red Flags](#low-priority-red-flags-track-for-patterns) (line 334) — Communication patterns, engagement, cultural indicators
-- [Red Flag Dashboard Concept](#red-flag-dashboard-concept) (line 390) — UI design for governance health monitoring
-- [Housing Cooperative Additional Red Flags](#housing-cooperative-additional-red-flags) (line 424) — Housing-specific indicators
+- [Critical Red Flags](#critical-red-flags-immediate-action-required) (line 15) -- Membership below minimum, director residency, AGM overdue, financial insolvency
+- [High-Priority Red Flags](#high-priority-red-flags-action-required-within-30-days) (line 138) -- Quorum failures, late filings, audit non-compliance, meeting dysfunction
+- [Medium-Priority Red Flags](#medium-priority-red-flags-monitor-and-plan) (line 245) -- Policy gaps, training deficits, committee issues, documentation drift
+- [Low-Priority Red Flags](#low-priority-red-flags-track-for-patterns) (line 334) -- Communication patterns, engagement, cultural indicators
+- [Red Flag Dashboard Concept](#red-flag-dashboard-concept) (line 390) -- UI design for governance health monitoring
+- [Housing Cooperative Additional Red Flags](#housing-cooperative-additional-red-flags) (line 424) -- Housing-specific indicators
 - [Red Flag Integration with Nimber](#red-flag-integration-with-nimber) (line 475)
-- [Response Workflow](#response-workflow) (line 491) — How to act on flagged issues
+- [Response Workflow](#response-workflow) (line 491) -- How to act on flagged issues
 - [Quick Reference: Severity Guide](#quick-reference-red-flag-severity-guide) (line 515)
 
 ---
 
 ## The Red Flag Philosophy
 
-Red flags aren't just compliance issues—they're early warning signs that governance is drifting. Every issue starts small. A missed filing becomes a pattern. A quorum problem becomes meeting dysfunction. An unclear bylaw becomes a contested decision.
+Red flags aren't just compliance issues--they're early warning signs that governance is drifting. Every issue starts small. A missed filing becomes a pattern. A quorum problem becomes meeting dysfunction. An unclear bylaw becomes a contested decision.
 
 Co-op OS should surface these signals before they become crises.
 
@@ -119,10 +119,10 @@ red_flag:
 ```
 
 **Escalation Timeline:**
-- 3 months before deadline → Yellow warning
-- 1 month before → Orange warning  
-- 7 days before → Red warning
-- Past deadline → Critical, all directors notified
+- 3 months before deadline -> Yellow warning
+- 1 month before -> Orange warning  
+- 7 days before -> Red warning
+- Past deadline -> Critical, all directors notified
 
 ---
 
@@ -486,7 +486,7 @@ red_flag:
 
 ## Red Flag Integration with Nimber
 
-The red flag framework in Co-op OS mirrors the estimation red flags in Nimber—both are early warning systems:
+The red flag framework in Co-op OS mirrors the estimation red flags in Nimber--both are early warning systems:
 
 | Nimber Red Flag | Co-op OS Equivalent |
 |-----------------|---------------------|
@@ -515,11 +515,11 @@ The red flag framework in Co-op OS mirrors the estimation red flags in Nimber—
 ### Escalation Path
 
 ```
-Detection → Auto-alert → Director review → Board agenda → Resolution → Documentation
+Detection -> Auto-alert -> Director review -> Board agenda -> Resolution -> Documentation
      ↓
  If unresolved
      ↓
-Escalate to → Chair/President → External advisor → Legal counsel
+Escalate to -> Chair/President -> External advisor -> Legal counsel
 ```
 
 ---

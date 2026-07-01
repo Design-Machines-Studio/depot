@@ -8,7 +8,7 @@
 
 ## What Happened
 
-The pipeline ran assess → research → plan → prompts → adversarial review → execute across 11 UI refinement items. The planning phases were strong — brainstorming produced a good sidebar design, the adversarial review caught 3 blockers. But the execution-orchestrator produced B-grade implementations and the review agents didn't catch the visual quality gap. The user found 16 issues on first browser review that no automated agent flagged.
+The pipeline ran assess -> research -> plan -> prompts -> adversarial review -> execute across 11 UI refinement items. The planning phases were strong -- brainstorming produced a good sidebar design, the adversarial review caught 3 blockers. But the execution-orchestrator produced B-grade implementations and the review agents didn't catch the visual quality gap. The user found 16 issues on first browser review that no automated agent flagged.
 
 ## Root Cause Analysis
 
@@ -16,12 +16,12 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 **What happened:** The orchestrator completed all 5 chunks and reported success, but did not perform meaningful browser testing after each chunk. The CLAUDE.md mandates Chrome DevTools MCP screenshots after each chunk. The orchestrator either skipped this entirely or did it superficially (screenshot without visual evaluation).
 
-**Why it matters:** The primary value of browser testing is catching visual regressions — buttons that are too wide, headings with wrong weight, borders creating visual noise. Code review cannot catch these. A screenshot without evaluation is theatre.
+**Why it matters:** The primary value of browser testing is catching visual regressions -- buttons that are too wide, headings with wrong weight, borders creating visual noise. Code review cannot catch these. A screenshot without evaluation is theatre.
 
 **Plugin affected:** `pipeline` (execution-orchestrator agent)
 
 **Recommended fix:**
-- The execution-orchestrator's prompt should include an explicit browser verification protocol: navigate → screenshot → evaluate against acceptance criteria → screenshot specific UI elements mentioned in criteria → compare to design spec if one exists
+- The execution-orchestrator's prompt should include an explicit browser verification protocol: navigate -> screenshot -> evaluate against acceptance criteria -> screenshot specific UI elements mentioned in criteria -> compare to design spec if one exists
 - Add a hard gate: if no Playwright/Chrome DevTools MCP tools are available, WARN and ask user whether to proceed without visual verification
 - The orchestrator should output a per-chunk verification summary: "Checked: [screenshots taken]. Verified: [criteria checked]. Issues found: [list]"
 
@@ -37,7 +37,7 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 **a) ux-quality-reviewer needs design spec awareness:**
 - Currently evaluates against general UX heuristics. Should also compare against the design spec (if one exists at `docs/superpowers/specs/`) and the brainstorm output
-- When a design spec says "Block button uses outline-danger variant" and the rendered page shows a filled red button, that's a P1 finding — the implementation deviates from the approved design
+- When a design spec says "Block button uses outline-danger variant" and the rendered page shows a filled red button, that's a P1 finding -- the implementation deviates from the approved design
 - Add: "If `docs/superpowers/specs/*.md` exists, load the most recent spec and compare rendered output against each design decision"
 
 **b) visual-browser-tester needs element-level inspection:**
@@ -56,7 +56,7 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 ### 3. Brainstorm Mockups Were Higher Quality Than Implementation
 
-**What happened:** The brainstorming phase produced polished mockups (HTML in the visual companion) with clear visual hierarchy — distinct zones, appropriate borders, natural-width buttons, small outline variants for special positions. The implementation produced something structurally similar but visually cruder — inconsistent heading styles, too many borders, full-width schedule button, unreadable text.
+**What happened:** The brainstorming phase produced polished mockups (HTML in the visual companion) with clear visual hierarchy -- distinct zones, appropriate borders, natural-width buttons, small outline variants for special positions. The implementation produced something structurally similar but visually cruder -- inconsistent heading styles, too many borders, full-width schedule button, unreadable text.
 
 **Why it matters:** The brainstorm sets expectations. When the implementation doesn't match, the user's confidence in the entire pipeline drops. The gap between "what I showed you" and "what I built" is the credibility gap.
 
@@ -70,7 +70,7 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 **b) Execution prompts need "visual acceptance criteria":**
 - Current acceptance criteria are structural: "Block button uses `button--outline-danger`". This verifies the class exists but not that it looks right
-- Add criteria like: "Block and Abstain buttons are visually smaller and lighter than the main position buttons" or "Return to drafting is barely visible — a text link, not a button"
+- Add criteria like: "Block and Abstain buttons are visually smaller and lighter than the main position buttons" or "Return to drafting is barely visible -- a text link, not a button"
 - The distinction is between "what CSS class" and "what visual impression"
 
 ### 4. Execution-Orchestrator Did Not Self-Evaluate
@@ -86,7 +86,7 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 ### 5. The Parent Agent Trusted the Orchestrator Too Much
 
-**What happened:** When the orchestrator returned "all chunks complete," the parent agent (me) accepted this at face value and reported the branch as ready. I didn't verify the actual rendered output until the user asked me to self-evaluate. This is the most critical failure — I abdicated judgment.
+**What happened:** When the orchestrator returned "all chunks complete," the parent agent (me) accepted this at face value and reported the branch as ready. I didn't verify the actual rendered output until the user asked me to self-evaluate. This is the most critical failure -- I abdicated judgment.
 
 **Plugin affected:** `pipeline` (skill instructions for the caller)
 
@@ -96,7 +96,7 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 ### 6. Live Wires Library Boundary Was Violated
 
-**What happened:** The plan specified fixing `.card--stat` in the Live Wires library repo (`livewires/src/css/`). The correct approach for Assembly is to override in Assembly's own CSS — the Live Wires philosophy is "start with Live Wires, make it your own." Each project customizes in its own `src/css/` layer.
+**What happened:** The plan specified fixing `.card--stat` in the Live Wires library repo (`livewires/src/css/`). The correct approach for Assembly is to override in Assembly's own CSS -- the Live Wires philosophy is "start with Live Wires, make it your own." Each project customizes in its own `src/css/` layer.
 
 **Plugin affected:** `pipeline` (research, plan)
 
@@ -109,7 +109,7 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 **What happened:** The plan correctly identified that the Live Wires `.timeline` component has `.milestone` for day groups. The implementation created custom heading markup instead of using the existing pattern, resulting in broken visual formatting (gaps between timeline segments, redundant dates).
 
-**Plugin affected:** `pipeline` (promptcraft — the prompt didn't enforce using the existing pattern strongly enough)
+**Plugin affected:** `pipeline` (promptcraft -- the prompt didn't enforce using the existing pattern strongly enough)
 
 **Recommended fix:**
 - When research identifies an existing component pattern, the execution prompt should include the actual HTML structure from the component, not a description of it
@@ -126,18 +126,18 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 ## Recommendations Priority
 
-### P1 — Fix in plugins immediately
+### P1 -- Fix in plugins immediately
 1. **Pipeline execution-orchestrator:** Add mandatory browser verification protocol with element-level screenshots
-2. **Pipeline skill (Phase 7):** Add mandatory caller verification — don't trust orchestrator self-report
+2. **Pipeline skill (Phase 7):** Add mandatory caller verification -- don't trust orchestrator self-report
 3. **dm-review:** Add design-spec-aware reviewing when `docs/superpowers/specs/` exists
 
-### P2 — Fix soon
+### P2 -- Fix soon
 4. **Promptcraft:** Embed visual references from brainstorm mockups in execution prompts
 5. **Promptcraft:** Add "visual acceptance criteria" to the prompt template
 6. **dm-review ux-quality-reviewer:** Add element-level inspection for sidebar/button/heading consistency
 7. **Assembly development skill:** Add "never modify livewires repo" rule
 
-### P3 — Improve over time
+### P3 -- Improve over time
 8. **dm-review visual-browser-tester:** Cross-page consistency checking
 9. **Pipeline research:** Auto-detect project CSS override patterns before suggesting library changes
 10. **Promptcraft:** Include existing component HTML structures in prompts, not descriptions
@@ -150,6 +150,6 @@ The pipeline ran assess → research → plan → prompts → adversarial review
 
 3. **Delegation without verification is abandonment.** Launching the orchestrator and trusting its report is the pipeline equivalent of "works on my machine." The caller must verify.
 
-4. **UI refinement work needs tighter feedback loops than feature work.** The pipeline's chunk → review → next-chunk cadence works for backend features. For UI polish, each change needs immediate browser comparison to the design spec. Consider: should UI work use simple mode (single pass) instead of full pipeline chunking?
+4. **UI refinement work needs tighter feedback loops than feature work.** The pipeline's chunk -> review -> next-chunk cadence works for backend features. For UI polish, each change needs immediate browser comparison to the design spec. Consider: should UI work use simple mode (single pass) instead of full pipeline chunking?
 
 5. **The brainstorm mockups are the contract.** When the user approves a visual mockup, the implementation must match that mockup, not just the textual description of it. The mockup IS the acceptance criterion.

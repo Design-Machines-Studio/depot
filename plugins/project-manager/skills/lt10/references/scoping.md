@@ -1,6 +1,6 @@
 # Scoping Framework
 
-> **Related sections:** → Estimation (`estimation.md`) → Change Control (`change-control.md`) → Stakeholders (`stakeholders.md`)
+> **Related sections:** -> Estimation (`estimation.md`) -> Change Control (`change-control.md`) -> Stakeholders (`stakeholders.md`)
 
 ## Contents
 
@@ -303,9 +303,9 @@ Adding unnecessary features even when nobody requested them. Desire for perfecti
 | Action | When |
 |--------|------|
 | **Dismiss** | Not aligned with project goals |
-| **Downgrade** | High effort, low impact → backlog or dismiss |
-| **Defer** | High effort, high impact → future phase (unless central to functionality) |
-| **Prioritize** | Low effort, high impact → do now (highest value, least disruption) |
+| **Downgrade** | High effort, low impact -> backlog or dismiss |
+| **Defer** | High effort, high impact -> future phase (unless central to functionality) |
+| **Prioritize** | Low effort, high impact -> do now (highest value, least disruption) |
 
 ---
 

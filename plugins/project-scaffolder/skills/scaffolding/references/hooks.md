@@ -1,6 +1,6 @@
 # Hook Templates
 
-All hook scripts for Claude Code project scaffolding. Each template uses `{{PROJECT_PREFIX}}` as a placeholder — replace with the lowercase project directory name before writing.
+All hook scripts for Claude Code project scaffolding. Each template uses `{{PROJECT_PREFIX}}` as a placeholder -- replace with the lowercase project directory name before writing.
 
 ## Contents
 
@@ -31,7 +31,7 @@ Prevents Go and Templ commands from running outside Docker. Forces `docker compo
 
 ```bash
 #!/bin/bash
-# block-bare-go.sh — Prevent Go/Templ commands from running outside Docker
+# block-bare-go.sh -- Prevent Go/Templ commands from running outside Docker
 #
 # Exit code 2 = block the command and feed error to Claude
 
@@ -53,7 +53,7 @@ exit 0
 ```
 
 ### Customization
-- No placeholders needed — this hook is universal for Docker-based Go projects
+- No placeholders needed -- this hook is universal for Docker-based Go projects
 - For projects using a different Docker service name, change `docker compose` to the appropriate command
 - For `go-library` projects without Docker, skip this hook entirely
 
@@ -67,7 +67,7 @@ Blocks file modifications until the planner session start workflow completes (sp
 
 ```bash
 #!/bin/bash
-# session-start-gate.sh — Block file changes until session workflow runs
+# session-start-gate.sh -- Block file changes until session workflow runs
 #
 # Marker: /tmp/{{PROJECT_PREFIX}}-session-YYYY-MM-DD
 # To manually clear: rm /tmp/{{PROJECT_PREFIX}}-session-$(date +%Y-%m-%d)
@@ -110,11 +110,11 @@ Nudges toward frequent commits and pushes. Fires after every file edit.
 
 ```bash
 #!/bin/bash
-# commit-push-reminder.sh — Nudge toward frequent commits and pushes
+# commit-push-reminder.sh -- Nudge toward frequent commits and pushes
 #
 # Checks:
-# 1. Uncommitted file count → suggest commit at 2+ files, insist at 3+
-# 2. Unpushed commit count → suggest push at 2+ commits
+# 1. Uncommitted file count -> suggest commit at 2+ files, insist at 3+
+# 2. Unpushed commit count -> suggest push at 2+ commits
 #
 # Uses HEAD-keyed markers so nudges reset after each commit.
 
@@ -136,11 +136,11 @@ UNPUSHED=$(git -C "${CLAUDE_PROJECT_DIR}" log @{u}..HEAD --oneline 2>/dev/null |
 
 MSG=""
 
-# Strong nudge at 3+ files — fires every time
+# Strong nudge at 3+ files -- fires every time
 if [ "$TOTAL" -ge 3 ]; then
   MSG="You have $TOTAL uncommitted file changes. Run /simplify on the changed files, then stop and commit with a focused message. Keep commits to 1-4 files."
 
-# Gentle nudge at 2+ files — fires once per HEAD (resets after each commit)
+# Gentle nudge at 2+ files -- fires once per HEAD (resets after each commit)
 elif [ "$TOTAL" -ge 2 ]; then
   MARKER="/tmp/{{PROJECT_PREFIX}}-commit-nudge-${HEAD}"
   if [ ! -f "$MARKER" ]; then
@@ -149,12 +149,12 @@ elif [ "$TOTAL" -ge 2 ]; then
   fi
 fi
 
-# Push nudge at 2+ unpushed commits — fires once per count
+# Push nudge at 2+ unpushed commits -- fires once per count
 if [ "$UNPUSHED" -ge 2 ]; then
   PUSH_MARKER="/tmp/{{PROJECT_PREFIX}}-push-nudge-${UNPUSHED}"
   if [ ! -f "$PUSH_MARKER" ]; then
     touch "$PUSH_MARKER"
-    PUSH_MSG="You have $UNPUSHED unpushed commits — push to remote."
+    PUSH_MSG="You have $UNPUSHED unpushed commits -- push to remote."
     if [ -n "$MSG" ]; then
       MSG="$MSG $PUSH_MSG"
     else
@@ -173,7 +173,7 @@ exit 0
 
 ### Customization
 - Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name
-- Adjust thresholds (2/3) if needed — these match the Assembly defaults
+- Adjust thresholds (2/3) if needed -- these match the Assembly defaults
 - The gentle nudge fires once per HEAD (resets after each commit); the strong nudge fires every time
 
 ---
@@ -182,11 +182,11 @@ exit 0
 
 **Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** ALL projects (content varies by type)
 
-Provides context-aware agent reminders after file edits. The template includes all possible blocks — remove the ones that don't apply to your project type.
+Provides context-aware agent reminders after file edits. The template includes all possible blocks -- remove the ones that don't apply to your project type.
 
 ```bash
 #!/bin/bash
-# post-edit-context.sh — After file edits, inject agent reminders
+# post-edit-context.sh -- After file edits, inject agent reminders
 #
 # Returns systemMessage JSON that reminds Claude to use the right agents.
 
@@ -199,25 +199,25 @@ fi
 
 # --- GO PROJECTS: Keep for go-templ-datastar, go-library ---
 
-# Token file changes → theming skill reminder
+# Token file changes -> theming skill reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '1_tokens/'; then
   echo "{\"systemMessage\": \"Design tokens modified: Reference livewires theming.md for token guidelines. Run css-reviewer to verify compliance.\"}"
   exit 0
 fi
 
-# CSS file changes → css-reviewer reminder
+# CSS file changes -> css-reviewer reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE 'src/css/|\.css$'; then
   echo "{\"systemMessage\": \"CSS modified: Consider running the css-reviewer agent to verify Live Wires compliance (cascade layers, naming, tokens).\"}"
   exit 0
 fi
 
-# Templ template changes → go-builder + doc-sync reminder
+# Templ template changes -> go-builder + doc-sync reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.templ$'; then
   echo "{\"systemMessage\": \"Templ template modified: Run templ generate + go build via the go-builder agent. Check documentation via doc-sync.\"}"
   exit 0
 fi
 
-# Go source changes → go-builder reminder
+# Go source changes -> go-builder reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.go$'; then
   echo "{\"systemMessage\": \"Go source modified: Rebuild via the go-builder agent (docker compose exec app go build).\"}"
   exit 0
@@ -227,13 +227,13 @@ fi
 
 # --- CRAFT CMS PROJECTS: Keep for craft-cms ---
 
-# Twig template changes → doc-sync reminder
+# Twig template changes -> doc-sync reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.twig$|\.html\.twig$'; then
   echo "{\"systemMessage\": \"Twig template modified: Check if documentation needs updating via doc-sync.\"}"
   exit 0
 fi
 
-# PHP changes → rebuild reminder
+# PHP changes -> rebuild reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.php$'; then
   echo "{\"systemMessage\": \"PHP modified: Clear caches if needed (ddev craft clear-caches/all). Run security-auditor for handler/controller changes.\"}"
   exit 0
@@ -243,7 +243,7 @@ fi
 
 # --- CSS FRAMEWORK PROJECTS: Keep for css-framework ---
 
-# CSS file changes (standalone framework) → css-reviewer + build reminder
+# CSS file changes (standalone framework) -> css-reviewer + build reminder
 # Note: The CSS block above (under GO PROJECTS) covers css-framework too.
 # Only keep this block if you DON'T have the Go CSS block above.
 # if printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
@@ -255,13 +255,13 @@ fi
 
 # --- UNIVERSAL: Keep for all project types ---
 
-# SQL migration changes → doc-sync + security reminder
+# SQL migration changes -> doc-sync + security reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.sql$|migrations/'; then
   echo "{\"systemMessage\": \"Migration/SQL modified: Run security-auditor to check for injection risks. Update documentation via doc-sync.\"}"
   exit 0
 fi
 
-# Config file changes → doc-sync reminder
+# Config file changes -> doc-sync reminder
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.(yaml|yml|json|toml)$'; then
   echo "{\"systemMessage\": \"Config file modified: Check if CLAUDE.md or other documentation needs updating via doc-sync.\"}"
   exit 0
@@ -288,13 +288,13 @@ Add project-specific blocks as needed (e.g., governance code detection for Assem
 
 ## 5. pre-stop-check.sh
 
-**Event:** Stop | **Matcher:** — (fires on all stops) | **Applies to:** ALL projects
+**Event:** Stop | **Matcher:** -- (fires on all stops) | **Applies to:** ALL projects
 
 Checks for uncommitted work before stopping. Reminds about agent compliance and session end workflow.
 
 ```bash
 #!/bin/bash
-# pre-stop-check.sh — Before stopping, verify work is committed and agents ran
+# pre-stop-check.sh -- Before stopping, verify work is committed and agents ran
 #
 # Uses a diff-hash marker to prevent infinite loops.
 
@@ -305,9 +305,9 @@ INPUT=$(cat)
 # Format: "file_pattern:agent_name:description"
 AGENT_CHECKS=(
   '\.css$:css-reviewer:CSS files changed'
-  '\.(go|templ)$:go-builder:Go/Templ files changed — verify build succeeded'
+  '\.(go|templ)$:go-builder:Go/Templ files changed -- verify build succeeded'
   '(handlers/|middleware/|auth|migrations/):security-auditor:Handler/auth/data code changed'
-  '\.(go|templ|css|js|sql|yaml|yml|html|twig|php)$:doc-sync:Code changed — verify documentation is fresh'
+  '\.(go|templ|css|js|sql|yaml|yml|html|twig|php)$:doc-sync:Code changed -- verify documentation is fresh'
 )
 # --- END CONFIGURATION ---
 
@@ -322,7 +322,7 @@ COMMITTED_TODAY=$(git -C "${CLAUDE_PROJECT_DIR}" log --since="$TODAY" --name-onl
 ALL_CHANGES=$(printf "%s\n%s" "$CHANGES" "$COMMITTED_TODAY" | sort -u | grep -v '^$')
 
 if [ -z "$ALL_CHANGES" ]; then
-  # No changes at all — just remind about session end
+  # No changes at all -- just remind about session end
   TODAY_MARKER="/tmp/{{PROJECT_PREFIX}}-session-${TODAY}"
   if [ -f "$TODAY_MARKER" ]; then
     echo "{\"systemMessage\": \"Session end: Append session summary to memory/sessions.md.\"}"
@@ -330,7 +330,7 @@ if [ -z "$ALL_CHANGES" ]; then
   exit 0
 fi
 
-# Prevent infinite loops — hash the changes and check if we already reminded
+# Prevent infinite loops -- hash the changes and check if we already reminded
 find /tmp -name "{{PROJECT_PREFIX}}-stop-review-*" -type f -mmin +60 -delete 2>/dev/null
 DIFF_HASH=$(echo "$ALL_CHANGES" | md5 -q 2>/dev/null || echo "$ALL_CHANGES" | md5sum | cut -d' ' -f1)
 REVIEW_MARKER="/tmp/{{PROJECT_PREFIX}}-stop-review-${DIFF_HASH}"
@@ -350,7 +350,7 @@ for check in "${AGENT_CHECKS[@]}"; do
 done
 
 FILE_COUNT=$(echo "$ALL_CHANGES" | wc -l | tr -d ' ')
-MSG="STOP — ${FILE_COUNT} files changed this session. Before finishing:"
+MSG="STOP -- ${FILE_COUNT} files changed this session. Before finishing:"
 
 if [ -n "$AGENT_REMINDERS" ]; then
   MSG="${MSG}\n\nAgents to run (if not already done):${AGENT_REMINDERS}"
@@ -399,7 +399,7 @@ Triggers accessibility agent reminders after template, CSS, or JavaScript file m
 
 ```bash
 #!/bin/bash
-# a11y-check.sh — Remind about accessibility after frontend file changes
+# a11y-check.sh -- Remind about accessibility after frontend file changes
 #
 # Returns systemMessage JSON that reminds Claude to run a11y review agents.
 
@@ -410,19 +410,19 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-# Template files → HTML accessibility review
+# Template files -> HTML accessibility review
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.(templ|twig|html)$'; then
   echo "{\"systemMessage\": \"Template modified: Run the a11y-html-reviewer agent to check WCAG 2.2 compliance (landmarks, headings, forms, ARIA, alt text).\"}"
   exit 0
 fi
 
-# CSS files → Visual accessibility review
+# CSS files -> Visual accessibility review
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
   echo "{\"systemMessage\": \"CSS modified: Run the a11y-css-reviewer agent to verify contrast, focus visibility, motion safety, and touch targets.\"}"
   exit 0
 fi
 
-# JavaScript/Datastar files → Dynamic content review
+# JavaScript/Datastar files -> Dynamic content review
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.(js|ts)$'; then
   echo "{\"systemMessage\": \"JavaScript modified: Run the a11y-dynamic-content-reviewer agent to check live regions, focus management, and keyboard operability.\"}"
   exit 0
@@ -433,10 +433,10 @@ exit 0
 
 ### Customization
 
-- No placeholders needed — this hook is universal for frontend projects
+- No placeholders needed -- this hook is universal for frontend projects
 - For go-library projects (no frontend): skip this hook entirely
 - For projects using Datastar heavily, the JS check will fire on Datastar signal files too
-- **Note:** This hook fires alongside `post-edit-context.sh` on `.css` and template files. That's intentional — post-edit-context reminds about build/CSS agents while this hook reminds about accessibility agents. Both systemMessages are useful.
+- **Note:** This hook fires alongside `post-edit-context.sh` on `.css` and template files. That's intentional -- post-edit-context reminds about build/CSS agents while this hook reminds about accessibility agents. Both systemMessages are useful.
 
 ---
 

@@ -4,13 +4,13 @@
 
 ## Contents
 - [Testing Philosophy](#testing-philosophy) (line 7)
-- [Primary Personas](#primary-personas) (line 18) — Maria (engaged worker), James (compliance officer), Aisha (new member)
-- [Secondary Personas](#secondary-personas) (line 199) — Chen (departing), David (administrator)
-- [Test Scenario Library](#test-scenario-library) (line 233) — 30+ scenarios across governance, members, equity, AGM, mobile
-- [Testing Protocol](#testing-protocol) (line 562) — How to run tests
-- [Scoring Framework](#scoring-framework) (line 591) — Rating criteria and thresholds
-- [Testing Cadence](#testing-cadence) (line 627) — When to test what
-- [Accessibility Requirements](#accessibility-requirements) (line 649) — WCAG compliance for governance UIs
+- [Primary Personas](#primary-personas) (line 18) -- Maria (engaged worker), James (compliance officer), Aisha (new member)
+- [Secondary Personas](#secondary-personas) (line 199) -- Chen (departing), David (administrator)
+- [Test Scenario Library](#test-scenario-library) (line 233) -- 30+ scenarios across governance, members, equity, AGM, mobile
+- [Testing Protocol](#testing-protocol) (line 562) -- How to run tests
+- [Scoring Framework](#scoring-framework) (line 591) -- Rating criteria and thresholds
+- [Testing Cadence](#testing-cadence) (line 627) -- When to test what
+- [Accessibility Requirements](#accessibility-requirements) (line 649) -- WCAG compliance for governance UIs
 - [Quick Reference: What to Test When](#quick-reference-what-to-test-when) (line 662)
 
 ---
@@ -69,7 +69,7 @@ Every feature must work for both. Testing validates this dual-audience design.
 **Profile:**
 - Role: Worker-member, 8 months at co-op
 - Tech comfort: Low (prefers phone calls, minimal app use)
-- Co-op knowledge: Minimal—joined for the job, not the structure
+- Co-op knowledge: Minimal--joined for the job, not the structure
 - Engagement: Attends required meetings only
 - Pain points: Sees governance as bureaucracy, doesn't understand why it matters
 
@@ -104,7 +104,7 @@ Every feature must work for both. Testing validates this dual-audience design.
 **Profile:**
 - Role: Board Secretary, 5 years at co-op
 - Tech comfort: High (comfortable with databases, spreadsheets)
-- Co-op knowledge: Deep—has read the bylaws, understands the Act
+- Co-op knowledge: Deep--has read the bylaws, understands the Act
 - Engagement: Manages much of the administrative work
 - Pain points: Tracking everything is manual, worries about missing deadlines
 
@@ -177,7 +177,7 @@ Every feature must work for both. Testing validates this dual-audience design.
 **Profile:**
 - Role: Just approved for membership, hasn't completed onboarding
 - Tech comfort: Variable (test with low, medium, high)
-- Co-op knowledge: Nearly zero—knows they're joining a co-op, that's about it
+- Co-op knowledge: Nearly zero--knows they're joining a co-op, that's about it
 - Pain points: Confused about what they've signed up for
 
 **Goals:**
@@ -466,7 +466,7 @@ personas: [Maria (withdrawing), Kenji]
 steps:
   1. Withdrawal notice received
   2. Share redemption amount calculated
-  3. Solvency test performed → marginal result
+  3. Solvency test performed -> marginal result
   4. System flags for board review
   5. Board considers redemption timeline
   6. Member notified of timeline per rules

@@ -27,7 +27,7 @@ Read the WCAG audit skill for the full checklist:
 
 Launch the a11y-html-reviewer agent to check:
 - Landmark regions (header, nav, main, footer)
-- Heading hierarchy (h1 → h2 → h3, no skips)
+- Heading hierarchy (h1 -> h2 -> h3, no skips)
 - Form labeling (every input has a label)
 - Image alt text (meaningful, not decorative defaults)
 - Link text quality (no "click here" or "read more")
@@ -55,18 +55,18 @@ Navigate to the URL and check:
 ### 4. Report
 
 ```
-Accessibility Audit — [target] — [date]
+Accessibility Audit -- [target] -- [date]
 
 Violations: X
 Warnings: Y
 
 VIOLATIONS:
-- [file:line] Missing alt text on <img> — WCAG 1.1.1
-- [file:line] Form input without label — WCAG 1.3.1
+- [file:line] Missing alt text on <img> -- WCAG 1.1.1
+- [file:line] Form input without label -- WCAG 1.3.1
 
 WARNINGS:
-- [file:line] Generic link text "Learn more" — WCAG 2.4.4
-- [file:line] Heading level skipped (h2 → h4) — WCAG 1.3.1
+- [file:line] Generic link text "Learn more" -- WCAG 2.4.4
+- [file:line] Heading level skipped (h2 -> h4) -- WCAG 1.3.1
 
 PASSED:
 - Landmark regions present

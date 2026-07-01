@@ -9,18 +9,18 @@ Help diagnose and fix Craft CMS issues using systematic debugging techniques.
 
 ## Debugging Process
 
-1. **Clarify the problem** — What's happening vs. what should happen?
-2. **Gather context** — Craft version, PHP version, relevant code
-3. **Identify the category** — Query issue, template error, config problem, performance?
-4. **Investigate systematically** — Use appropriate tools and techniques
-5. **Propose solutions** — Explain the fix and why it works
+1. **Clarify the problem** -- What's happening vs. what should happen?
+2. **Gather context** -- Craft version, PHP version, relevant code
+3. **Identify the category** -- Query issue, template error, config problem, performance?
+4. **Investigate systematically** -- Use appropriate tools and techniques
+5. **Propose solutions** -- Explain the fix and why it works
 
 ## Common Issue Categories
 
 ### Query Returns Nothing
-- Check `.status()` — drafts and disabled entries excluded by default
-- Check `.site()` — multi-site queries need explicit site
-- Check field handles — case-sensitive
+- Check `.status()` -- drafts and disabled entries excluded by default
+- Check `.site()` -- multi-site queries need explicit site
+- Check field handles -- case-sensitive
 - Check `relatedTo` with empty arrays (Craft 5 returns nothing)
 - Log the SQL: `{% dd query.getRawSql() %}`
 
@@ -43,12 +43,12 @@ Help diagnose and fix Craft CMS issues using systematic debugging techniques.
 
 If the Craft MCP server is available:
 
-- `get_last_error` — See the most recent error
-- `read_logs` — Search application logs
-- `get_deprecations` — Check for deprecated code
-- `run_query` — Test database queries directly
-- `explain_query` — Analyze query performance
-- `get_config` — Verify configuration values
+- `get_last_error` -- See the most recent error
+- `read_logs` -- Search application logs
+- `get_deprecations` -- Check for deprecated code
+- `run_query` -- Test database queries directly
+- `explain_query` -- Analyze query performance
+- `get_config` -- Verify configuration values
 
 ## Output
 

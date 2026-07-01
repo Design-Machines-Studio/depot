@@ -196,7 +196,7 @@ func init() {
 }
 ```
 
-### Handler → Service → ScopedDB
+### Handler -> Service -> ScopedDB
 
 Production handlers are thin HTTP adapters. They parse the request, call a service method, and render the response. **Handlers never touch the database directly.**
 

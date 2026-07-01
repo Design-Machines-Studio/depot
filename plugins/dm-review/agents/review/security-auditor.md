@@ -14,15 +14,15 @@ Only review changed files. Read each file fully before reporting findings.
 ## Vulnerability Categories
 
 ### Injection (OWASP A03:2021)
-- SQL injection — string concatenation in queries, unsanitized user input in raw SQL
-- Template injection — user input rendered without escaping
-- Command injection — user input passed to shell commands
+- SQL injection -- string concatenation in queries, unsanitized user input in raw SQL
+- Template injection -- user input rendered without escaping
+- Command injection -- user input passed to shell commands
 - LDAP/XPath injection if applicable
 
 ### Cross-Site Scripting (XSS)
-- Reflected XSS — user input echoed back without encoding
-- Stored XSS — database content rendered without escaping
-- DOM-based XSS — client-side rendering of untrusted data
+- Reflected XSS -- user input echoed back without encoding
+- Stored XSS -- database content rendered without escaping
+- DOM-based XSS -- client-side rendering of untrusted data
 
 ### Authentication & Authorization (OWASP A01:2021, A07:2021)
 - Missing authentication on endpoints that modify data
@@ -52,7 +52,7 @@ Only review changed files. Read each file fully before reporting findings.
 ## Stack-Specific Checks
 
 ### Go + Templ
-- `@templ.Raw()` on user-supplied content — P1 always
+- `@templ.Raw()` on user-supplied content -- P1 always
 - SQL queries built with `fmt.Sprintf` instead of parameterized queries
 - `http.ListenAndServe` without TLS in production config
 - Missing rate limiting on public endpoints
@@ -66,7 +66,7 @@ Only review changed files. Read each file fully before reporting findings.
 - Missing origin checks on SSE connections
 
 ### Craft CMS + Twig
-- `|raw` filter on user-submitted content — P1 always
+- `|raw` filter on user-submitted content -- P1 always
 - Craft permissions not checked in custom modules
 - GraphQL queries exposing more fields than intended
 - Asset URLs constructed from user input
@@ -84,13 +84,13 @@ Only review changed files. Read each file fully before reporting findings.
 ## Security Audit
 
 ### Critical (P1)
-- [file:line] Description — OWASP reference
+- [file:line] Description -- OWASP reference
 
 ### Serious (P2)
-- [file:line] Description — OWASP reference
+- [file:line] Description -- OWASP reference
 
 ### Moderate (P3)
-- [file:line] Description — OWASP reference
+- [file:line] Description -- OWASP reference
 
 ### Approved
 - [file] Description of what passes security checks
@@ -245,7 +245,7 @@ A redirect already constrained by a `safeRelativeRedirect`-style guard (rejects 
 
 ## Rules
 
-1. Security P1 findings always block merge — no exceptions
+1. Security P1 findings always block merge -- no exceptions
 2. Every finding must reference the relevant OWASP category or CWE
 3. Include the specific line where the vulnerability exists
 4. Describe the attack vector, not just the code smell

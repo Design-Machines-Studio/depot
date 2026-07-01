@@ -19,8 +19,8 @@
 
 | Stage | Base | Work |
 |-------|------|------|
-| Frontend | node:20-alpine | `npm ci`, lightningcss + esbuild → `public/dist/` |
-| Backend | golang:1.25-alpine | `templ generate`, `go build` → binary |
+| Frontend | node:20-alpine | `npm ci`, lightningcss + esbuild -> `public/dist/` |
+| Backend | golang:1.25-alpine | `templ generate`, `go build` -> binary |
 | Runtime | alpine:3.19 | Binary + migrations + config + static assets |
 
 The runtime image includes a healthcheck on `/health` with a 30-second start period.

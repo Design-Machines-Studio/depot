@@ -52,8 +52,8 @@ The developer / federation pitch and the co-op pitch are different products from
 
 ## Cross-reference
 
-- `references/language-card.md` — full vocabulary discipline.
-- `references/survival-reframe-citations.md` — verifiable URLs for the survival numbers.
-- `references/coop-pitch.md` — the companion pitch for the member co-ops the federation refers in.
-- `plugins/council/skills/governance/references/plain-language-glossary.md` — concrete demo of the decolonizing-language product move.
-- `plugins/design-machines/skills/strategy/references/two-moats.md` — full two-moats positioning with BC Act enforcement examples.
+- `references/language-card.md` -- full vocabulary discipline.
+- `references/survival-reframe-citations.md` -- verifiable URLs for the survival numbers.
+- `references/coop-pitch.md` -- the companion pitch for the member co-ops the federation refers in.
+- `plugins/council/skills/governance/references/plain-language-glossary.md` -- concrete demo of the decolonizing-language product move.
+- `plugins/design-machines/skills/strategy/references/two-moats.md` -- full two-moats positioning with BC Act enforcement examples.

@@ -24,9 +24,9 @@ Create a new Matrix user account on The Local's Synapse server.
 ## Process
 
 1. Ask the user for:
-   - **Username** (Matrix local part — will become `@username:thelocal.chat`)
+   - **Username** (Matrix local part -- will become `@username:thelocal.chat`)
    - **Password** (or offer to generate a secure one)
-   - **Admin?** (usually no — only for The Local administrators)
+   - **Admin?** (usually no -- only for The Local administrators)
 
 2. Run the registration command on the server:
 

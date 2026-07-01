@@ -99,7 +99,7 @@ Tracks the next available PK for each entity type. Relevant entries:
 
 ## Current Tags
 
-As of March 2026 (Z_PK → name):
+As of March 2026 (Z_PK -> name):
 
 | Z_PK | Tag Name | Notes |
 |------|----------|-------|

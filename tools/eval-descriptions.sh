@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# eval-descriptions.sh — Evaluate skill description trigger accuracy
+# eval-descriptions.sh -- Evaluate skill description trigger accuracy
 #
 # For each JSON eval file in description-evals/, checks whether the
 # corresponding SKILL.md description would plausibly trigger for each
@@ -11,8 +11,8 @@
 #   ./tools/eval-descriptions.sh <name>.json  # run one eval file
 #
 # Exit codes:
-#   0 — all skills above accuracy threshold (default 70%)
-#   1 — one or more skills below accuracy threshold
+#   0 -- all skills above accuracy threshold (default 70%)
+#   1 -- one or more skills below accuracy threshold
 
 set -euo pipefail
 
@@ -86,7 +86,7 @@ resolve_skill_path() {
       echo "$found_path"
       return 0
     elif [ "$skill_count" -gt 1 ]; then
-      echo "ERROR: $basename has $skill_count skills — use <plugin>-<skill>.json naming" >&2
+      echo "ERROR: $basename has $skill_count skills -- use <plugin>-<skill>.json naming" >&2
       return 1
     fi
   fi

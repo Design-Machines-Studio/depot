@@ -29,7 +29,7 @@ Ready-to-use scripts for common PM situations. These are embedded throughout the
 > "Got it. Let me check with the team on how this impacts our timeline and budget. I'll get back to you by [date]."
 
 ### When scope creep appears
-> "I'll check with the team on impact. This may add time and budget—are you okay with that?"
+> "I'll check with the team on impact. This may add time and budget--are you okay with that?"
 
 ### When you need to say no
 > "This is a great idea for the future. Let's add it to the backlog for phase two so we can stay focused on our current goals."
@@ -41,7 +41,7 @@ Ready-to-use scripts for common PM situations. These are embedded throughout the
 > "There's no such thing as 'just' in project work. Let me estimate what this actually involves and get back to you."
 
 ### When change is out of scope
-> "This is outside our agreed scope. I can quote it as an addition—it would be approximately [X days/$X]. Want me to proceed with a formal quote?"
+> "This is outside our agreed scope. I can quote it as an addition--it would be approximately [X days/$X]. Want me to proceed with a formal quote?"
 
 ### When pushing back on a change
 > "I understand why you want this, but adding it now would [delay launch by X / require cutting Y / cost Z more]. Is that trade-off worth it, or should we defer to phase two?"
@@ -110,7 +110,7 @@ Ready-to-use scripts for common PM situations. These are embedded throughout the
 > "I'm concerned we're not being realistic about the timeline. Can we look at what's actually left and adjust expectations now rather than miss the deadline?"
 
 ### Addressing missed deadlines
-> "We missed the deadline on [X]. No blame—let's understand what happened so we can adjust our approach going forward."
+> "We missed the deadline on [X]. No blame--let's understand what happened so we can adjust our approach going forward."
 
 ---
 
@@ -143,7 +143,7 @@ Ready-to-use scripts for common PM situations. These are embedded throughout the
 > "We have [X] minutes. Our goal today is [specific outcome]. Let's make sure we leave with [decision/action items]."
 
 ### Keeping meetings on track
-> "Great point—let's capture that for a separate discussion. For now, let's stay focused on [agenda item]."
+> "Great point--let's capture that for a separate discussion. For now, let's stay focused on [agenda item]."
 
 ### Ending a meeting
 > "To summarize: we decided [X], and the next steps are [Y]. I'll send notes within 24 hours."

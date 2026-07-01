@@ -52,7 +52,7 @@ NVDA has two modes:
 - **Browse mode:** Arrow keys navigate through content (headings, links, text). Used for reading.
 - **Focus mode:** Arrow keys are passed to the focused element. Used inside form fields, widgets.
 
-NVDA switches automatically when you Tab into a form field. This is important for testing — if arrow keys don't navigate content, you're in focus mode.
+NVDA switches automatically when you Tab into a form field. This is important for testing -- if arrow keys don't navigate content, you're in focus mode.
 
 ---
 
@@ -62,10 +62,10 @@ This does NOT require a screen reader. Test with the screen reader OFF to verify
 
 ### Checklist
 
-1. **Start from the address bar** — press Tab to enter the page
-2. **Tab through the entire page** — note every element that receives focus
+1. **Start from the address bar** -- press Tab to enter the page
+2. **Tab through the entire page** -- note every element that receives focus
 3. **Verify tab order** matches visual reading order (left-to-right, top-to-bottom)
-4. **Check skip links** — first Tab should reveal "Skip to main content"
+4. **Check skip links** -- first Tab should reveal "Skip to main content"
 5. **Test interactive elements:**
 
 | Element | Expected Keyboard Behavior |
@@ -80,9 +80,9 @@ This does NOT require a screen reader. Test with the screen reader OFF to verify
 | Dialog | Tab cycles within, Escape closes |
 | Accordion | Enter/Space toggles, Arrows move between headers |
 
-6. **Check for keyboard traps** — can focus always escape every element?
-7. **Check focus visibility** — is there a clear indicator on every focused element?
-8. **Test without mouse** — can you complete every task using only keyboard?
+6. **Check for keyboard traps** -- can focus always escape every element?
+7. **Check focus visibility** -- is there a clear indicator on every focused element?
+8. **Test without mouse** -- can you complete every task using only keyboard?
 
 ---
 

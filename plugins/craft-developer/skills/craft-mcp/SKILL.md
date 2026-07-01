@@ -1,6 +1,6 @@
 ---
 name: craft-mcp
-description: Craft CMS MCP server tools for direct database and schema access. Use when querying Craft entries, inspecting field layouts, checking section configurations, listing assets, debugging content relationships, validating content model structure, creating or updating entries, browsing asset volumes, or diagnosing plugin issues through the MCP server. Trigger this skill when the user has the craft-mcp plugin installed and wants to inspect their Craft installation programmatically — listing sections, checking entry types, running database queries, viewing deprecation warnings, debugging errors via logs, auditing content architecture, or testing GraphQL queries. Also trigger when verifying that template code matches the actual content model, when the user says "check my Craft setup" or "what sections do I have," or during any migration planning that needs schema inspection.
+description: Craft CMS MCP server tools for direct database and schema access. Use when querying Craft entries, inspecting field layouts, checking section configurations, listing assets, debugging content relationships, validating content model structure, creating or updating entries, browsing asset volumes, or diagnosing plugin issues through the MCP server. Trigger this skill when the user has the craft-mcp plugin installed and wants to inspect their Craft installation programmatically -- listing sections, checking entry types, running database queries, viewing deprecation warnings, debugging errors via logs, auditing content architecture, or testing GraphQL queries. Also trigger when verifying that template code matches the actual content model, when the user says "check my Craft setup" or "what sections do I have," or during any migration planning that needs schema inspection.
 ---
 
 # Craft MCP Server Guide
@@ -85,11 +85,11 @@ GraphQL API access.
 Understand an existing Craft installation:
 
 ```
-1. get_system_info → Craft version, environment
-2. list_sections → Sections and entry types
-3. list_fields → Field architecture
-4. list_entry_types → Entry type details
-5. list_volumes → Asset configuration
+1. get_system_info -> Craft version, environment
+2. list_sections -> Sections and entry types
+3. list_fields -> Field architecture
+4. list_entry_types -> Entry type details
+5. list_volumes -> Asset configuration
 ```
 
 ### Debugging an Issue
@@ -97,11 +97,11 @@ Understand an existing Craft installation:
 Systematic debugging workflow:
 
 ```
-1. get_last_error → Most recent error
-2. read_logs → Search for related errors
-3. get_config → Verify configuration
-4. get_deprecations → Check for deprecated code
-5. run_query / explain_query → Test database queries
+1. get_last_error -> Most recent error
+2. read_logs -> Search for related errors
+3. get_config -> Verify configuration
+4. get_deprecations -> Check for deprecated code
+5. run_query / explain_query -> Test database queries
 ```
 
 ### Template Development
@@ -109,11 +109,11 @@ Systematic debugging workflow:
 Understand structure for template queries:
 
 ```
-1. list_sections → Find section handles
-2. list_fields → Find field handles
-3. list_entry_types → Understand entry types
-4. get_entry → Inspect actual content
-5. run_query → Test raw queries
+1. list_sections -> Find section handles
+2. list_fields -> Find field handles
+3. list_entry_types -> Understand entry types
+4. get_entry -> Inspect actual content
+5. run_query -> Test raw queries
 ```
 
 ### Migration Planning
@@ -121,11 +121,11 @@ Understand structure for template queries:
 Assess before migration:
 
 ```
-1. get_system_info → Current versions
-2. list_plugins → Plugin compatibility
-3. get_deprecations → Code to update
-4. get_database_schema → Schema complexity
-5. get_project_config_diff → Pending changes
+1. get_system_info -> Current versions
+2. list_plugins -> Plugin compatibility
+3. get_deprecations -> Code to update
+4. get_database_schema -> Schema complexity
+5. get_project_config_diff -> Pending changes
 ```
 
 ### Performance Analysis
@@ -133,10 +133,10 @@ Assess before migration:
 Diagnose performance issues:
 
 ```
-1. explain_query → Analyze slow queries
-2. get_queue_jobs → Check queue backlog
-3. get_table_counts → Database size
-4. read_logs → Error patterns
+1. explain_query -> Analyze slow queries
+2. get_queue_jobs -> Check queue backlog
+3. get_table_counts -> Database size
+4. read_logs -> Error patterns
 ```
 
 ## Tool Selection Guide
@@ -191,9 +191,9 @@ list_graphql_schemas + execute_graphql
 }
 ```
 
-- `handle` — Use in queries: `.section('blog')`
-- `type` — Determines behavior (single/channel/structure)
-- `entryTypes` — Available entry types in this section
+- `handle` -- Use in queries: `.section('blog')`
+- `type` -- Determines behavior (single/channel/structure)
+- `entryTypes` -- Available entry types in this section
 
 ### Field Output
 
@@ -208,9 +208,9 @@ list_graphql_schemas + execute_graphql
 }
 ```
 
-- `handle` — Use in templates: `entry.featureImage`
-- `type` — Field class, indicates capabilities
-- `settings` — Configuration affecting behavior
+- `handle` -- Use in templates: `entry.featureImage`
+- `type` -- Field class, indicates capabilities
+- `settings` -- Configuration affecting behavior
 
 ### Entry Type Output
 
@@ -229,8 +229,8 @@ list_graphql_schemas + execute_graphql
 }
 ```
 
-- `handle` — Use in queries: `.type('article')`
-- `fieldLayout` — Fields available in this entry type
+- `handle` -- Use in queries: `.type('article')`
+- `fieldLayout` -- Fields available in this entry type
 
 ## Best Practices
 
@@ -238,12 +238,12 @@ list_graphql_schemas + execute_graphql
 
 Begin with overview tools:
 ```
-get_system_info → list_sections → list_fields
+get_system_info -> list_sections -> list_fields
 ```
 
 Then drill into specifics:
 ```
-get_entry → specific content inspection
+get_entry -> specific content inspection
 ```
 
 ### Combine Tools for Context
@@ -268,7 +268,7 @@ get_last_error + read_logs = full error context
 Craft::$app->sections->getAllSections()
 ```
 
-Powerful but use carefully — executes arbitrary PHP in the Craft context. Only use in local DDEV environments, never in production.
+Powerful but use carefully -- executes arbitrary PHP in the Craft context. Only use in local DDEV environments, never in production.
 
 Good for:
 - Testing Craft API calls
@@ -281,26 +281,26 @@ Good for:
 
 Use MCP to understand current state before making recommendations:
 ```
-list_sections → existing structure
-list_fields → available fields
-list_entry_types → current entry types
+list_sections -> existing structure
+list_fields -> available fields
+list_entry_types -> current entry types
 ```
 
 ### Debugger Agent
 
 Use MCP for systematic diagnosis:
 ```
-get_last_error → start point
-read_logs → context
-get_config → verify settings
-run_query → test fixes
+get_last_error -> start point
+read_logs -> context
+get_config -> verify settings
+run_query -> test fixes
 ```
 
 ### Template Builder Agent
 
 Use MCP to understand what's available:
 ```
-list_sections → query targets
-list_fields → available data
-get_entry → example content
+list_sections -> query targets
+list_fields -> available data
+get_entry -> example content
 ```

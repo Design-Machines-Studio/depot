@@ -1,6 +1,6 @@
 ---
 name: decolonial-language
-description: Decolonial and anti-capitalist content strategy for cooperative software, governance documents, and member-facing communications. Use when naming UI elements, writing labels, button text, navigation items, seeding database values, drafting member communications, generating legal documents, writing onboarding copy, or making any content decision in Assembly, Live Wires, or Design Machines. Trigger this skill whenever writing or reviewing any text that co-op members will read — UI microcopy, email templates, notification messages, help text, status labels, form labels, error messages, tooltips. Also trigger when the user asks about terminology choices like "should I call this profit or surplus," when translating legal concepts into member-friendly language, or when building any Assembly interface that uses governance, financial, or membership terminology. Provides terminology mappings between legal/regulatory language and values-aligned alternatives, plus a three-layer compliance architecture (legal → bridge → cultural) for maintaining legal validity while centering solidarity economy language.
+description: Decolonial and anti-capitalist content strategy for cooperative software, governance documents, and member-facing communications. Use when naming UI elements, writing labels, button text, navigation items, seeding database values, drafting member communications, generating legal documents, writing onboarding copy, or making any content decision in Assembly, Live Wires, or Design Machines. Trigger this skill whenever writing or reviewing any text that co-op members will read -- UI microcopy, email templates, notification messages, help text, status labels, form labels, error messages, tooltips. Also trigger when the user asks about terminology choices like "should I call this profit or surplus," when translating legal concepts into member-friendly language, or when building any Assembly interface that uses governance, financial, or membership terminology. Provides terminology mappings between legal/regulatory language and values-aligned alternatives, plus a three-layer compliance architecture (legal -> bridge -> cultural) for maintaining legal validity while centering solidarity economy language.
 user-invocable: false
 ---
 
@@ -28,7 +28,7 @@ Every piece of content in Co-op OS exists in one of three layers:
 
 ```
 UI Label:        "Surplus"
-Tooltip:         "Net income remaining after expenses — your co-op's collective gain"
+Tooltip:         "Net income remaining after expenses -- your co-op's collective gain"
 Legal document:  "Net Income" or "Surplus" (both legally recognized)
 Bridge context:  "Surplus (Net Income)"
 ```
@@ -39,7 +39,7 @@ Bridge context:  "Surplus (Net Income)"
 
 ### Financial Terms
 
-| Legal/Capitalist | → Use Instead | Notes |
+| Legal/Capitalist | -> Use Instead | Notes |
 |------------------|---------------|-------|
 | Profit / Loss | **Surplus / Deficit** | ICA Principle 3; IRS-recognized for co-ops |
 | Shareholders | **Members** or **Worker-owners** | Universal cooperative standard |
@@ -57,7 +57,7 @@ Bridge context:  "Surplus (Net Income)"
 
 ### Governance Terms
 
-| Legal/Corporate | → Use Instead | Notes |
+| Legal/Corporate | -> Use Instead | Notes |
 |-----------------|---------------|-------|
 | Board of Directors | **Stewardship Circle** or **Guidance Council** | Note legal equivalence in bylaws |
 | Chairman/Chairperson | **Facilitator** or **Convenor** | Non-hierarchical; from sociocracy |
@@ -76,7 +76,7 @@ Bridge context:  "Surplus (Net Income)"
 
 ### Membership Terms
 
-| Corporate/Legal | → Use Instead | Notes |
+| Corporate/Legal | -> Use Instead | Notes |
 |-----------------|---------------|-------|
 | Employee | **Worker-owner** or **Cooperator** | Mondragon uses "cooperator" |
 | Probationary Period | **Orientation Period** or **Pathway to Membership** | Less punitive |
@@ -87,7 +87,7 @@ Bridge context:  "Surplus (Net Income)"
 
 ### Interface/UX Language
 
-| Extractive Framing | → Use Instead | Notes |
+| Extractive Framing | -> Use Instead | Notes |
 |--------------------|---------------|-------|
 | User | **Member** or **Person** | They own this, they're not being used |
 | User pain points | **Community needs** | |
@@ -136,13 +136,13 @@ Frame everything in terms of relationships between people, not transactions betw
 Members do things together. "The circle decided" not "a resolution was passed." "Members agreed" not "the motion carried." Agency belongs to people, not procedures.
 
 ### 3. Accessible, Not Simplified
-Use clear, direct language without dumbing down concepts. A "consent round" is not simpler than a "vote" — it's a different and more precise concept. Explain, don't reduce.
+Use clear, direct language without dumbing down concepts. A "consent round" is not simpler than a "vote" -- it's a different and more precise concept. Explain, don't reduce.
 
 ### 4. Pluriversal, Not Universal
 Allow different cooperatives to use different terminology for the same concepts. Some may prefer indigenous terms from their own traditions. Co-op OS should support configurable terminology where possible.
 
 ### 5. Honest About the Tension
-Don't pretend the legal framework doesn't exist. Name it: "The BC Act calls this a 'special resolution' — we call it a 'major consent decision' because that better describes what's actually happening: your whole community agreeing on something important."
+Don't pretend the legal framework doesn't exist. Name it: "The BC Act calls this a 'special resolution' -- we call it a 'major consent decision' because that better describes what's actually happening: your whole community agreeing on something important."
 
 ### 6. Grounded in Practice
 Terminology should emerge from what cooperators actually do, not from academic theory. If a term doesn't make immediate sense to a cleaning co-op member or an animation studio worker-owner, it needs more work.
@@ -166,5 +166,5 @@ Load these for deeper context:
 
 ## Cross-References
 
-- **governance skill** (in this plugin): Domain knowledge for BC Act requirements — this skill provides the language layer on top
-- **assembly plugin**: Technical implementation — use this skill when naming components, writing labels, seeding data
+- **governance skill** (in this plugin): Domain knowledge for BC Act requirements -- this skill provides the language layer on top
+- **assembly plugin**: Technical implementation -- use this skill when naming components, writing labels, seeding data

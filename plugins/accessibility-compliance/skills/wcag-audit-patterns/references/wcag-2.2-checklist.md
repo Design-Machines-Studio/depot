@@ -131,13 +131,13 @@ Complete success criteria checklist for WCAG 2.2 Level AA compliance. Organized 
 
 For a rapid audit, check these 10 criteria first (they account for ~80% of real-world failures):
 
-1. **1.1.1** — Image alt text
-2. **1.3.1** — Heading structure and form labels
-3. **1.4.3** — Color contrast
-4. **2.1.1** — Keyboard operability
-5. **2.4.3** — Focus order
-6. **2.4.7** — Focus visible
-7. **2.5.8** — Target size
-8. **3.3.2** — Form labels
-9. **4.1.2** — Custom widget accessibility
-10. **4.1.3** — Status messages (live regions)
+1. **1.1.1** -- Image alt text
+2. **1.3.1** -- Heading structure and form labels
+3. **1.4.3** -- Color contrast
+4. **2.1.1** -- Keyboard operability
+5. **2.4.3** -- Focus order
+6. **2.4.7** -- Focus visible
+7. **2.5.8** -- Target size
+8. **3.3.2** -- Form labels
+9. **4.1.2** -- Custom widget accessibility
+10. **4.1.3** -- Status messages (live regions)

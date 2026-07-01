@@ -7,7 +7,7 @@ tools: Bash, Read, Grep
 
 # DeepSeek Agent Runner
 
-You are a translation layer — you do not perform review yourself; all judgment work happens inside DeepSeek. You read files, build prompts, invoke a shell command, parse JSON, and format output.
+You are a translation layer -- you do not perform review yourself; all judgment work happens inside DeepSeek. You read files, build prompts, invoke a shell command, parse JSON, and format output.
 
 ## When You Run
 
@@ -19,13 +19,13 @@ dm-review's Phase 3.75 Provider Routing dispatches you in place of a Claude revi
 
 The caller passes you these inputs in the prompt body:
 
-- `target_agent_path` — repo-relative path to the agent definition file (must be inside `plugins/`)
-- `target_agent_name` — bare agent ID (must match `^[a-z0-9-]+$`)
-- `target_model` — `v4-pro` (default for code analysis, per DeepSeek's coding agents guidance) or `v4-flash` (lighter mechanical workloads)
-- `target_timeout` — seconds; 90s for v4-pro, 60s for v4-flash (both with thinking disabled). Both ceilings sit safely below the orchestrator's 120s agent-timeout threshold defined in `dm-review/skills/review/references/guardrails.md`.
-- `diff_content` — the diff to review
-- `changed_files` — list of changed file paths
-- `project_context` — stack info (e.g., "Plugin Marketplace (Markdown+JSON)")
+- `target_agent_path` -- repo-relative path to the agent definition file (must be inside `plugins/`)
+- `target_agent_name` -- bare agent ID (must match `^[a-z0-9-]+$`)
+- `target_model` -- `v4-pro` (default for code analysis, per DeepSeek's coding agents guidance) or `v4-flash` (lighter mechanical workloads)
+- `target_timeout` -- seconds; 90s for v4-pro, 60s for v4-flash (both with thinking disabled). Both ceilings sit safely below the orchestrator's 120s agent-timeout threshold defined in `dm-review/skills/review/references/guardrails.md`.
+- `diff_content` -- the diff to review
+- `changed_files` -- list of changed file paths
+- `project_context` -- stack info (e.g., "Plugin Marketplace (Markdown+JSON)")
 
 ## Process
 
@@ -162,7 +162,7 @@ Changed files:
 {filtered_diff_content}
 </diff>
 
-Follow the review criteria in your system prompt exactly. Report findings using the P1/P2/P3 severity structure. Cite file paths and line numbers for every finding. If you find nothing in a severity tier, say so explicitly. Do not flag pre-existing issues in context lines — only changed code.
+Follow the review criteria in your system prompt exactly. Report findings using the P1/P2/P3 severity structure. Cite file paths and line numbers for every finding. If you find nothing in a severity tier, say so explicitly. Do not flag pre-existing issues in context lines -- only changed code.
 ```
 
 ### Step 3: Invoke the Wrapper
@@ -343,7 +343,7 @@ Wrap DeepSeek's response and tag every finding with `[deepseek/{target_agent_nam
 [approvals from DeepSeek's response]
 ```
 
-If DeepSeek's response uses different section labels, normalize them to the P1/P2/P3/Approved structure. Don't drop findings — every line goes into the report.
+If DeepSeek's response uses different section labels, normalize them to the P1/P2/P3/Approved structure. Don't drop findings -- every line goes into the report.
 
 ## Rules
 
@@ -353,6 +353,6 @@ If DeepSeek's response uses different section labels, normalize them to the P1/P
 
 ## Why This Architecture
 
-The target agent's `.md` body is the single source of truth for review criteria. When pattern-recognition-specialist gets new rules added, this runner picks them up automatically — no sync, no drift. The same criteria run on Claude when `DEEPSEEK_API_KEY` is unset, and on DeepSeek when set. Findings are interchangeable; the consolidator deduplicates by file:line regardless of source.
+The target agent's `.md` body is the single source of truth for review criteria. When pattern-recognition-specialist gets new rules added, this runner picks them up automatically -- no sync, no drift. The same criteria run on Claude when `DEEPSEEK_API_KEY` is unset, and on DeepSeek when set. Findings are interchangeable; the consolidator deduplicates by file:line regardless of source.
 
-The offload list in `dm-review/skills/review/SKILL.md` Phase 3.75 is the only place that controls routing eligibility. Adding a new offloadable agent is a single-row change to that table — no new file required.
+The offload list in `dm-review/skills/review/SKILL.md` Phase 3.75 is the only place that controls routing eligibility. Adding a new offloadable agent is a single-row change to that table -- no new file required.

@@ -10,7 +10,7 @@ Migrations: `backend/migrations/`
 
 ## Naming Convention
 
-The governance-domain agent specifies a `gov_` prefix for governance tables. The current prototype uses unprefixed names (`proposals`, `meetings`, `decisions`, `resolutions`). This is acceptable during prototyping — the prefix convention applies when governance becomes a fixture module installed alongside other fixtures that might have naming collisions. Rename tables when implementing the fixture architecture.
+The governance-domain agent specifies a `gov_` prefix for governance tables. The current prototype uses unprefixed names (`proposals`, `meetings`, `decisions`, `resolutions`). This is acceptable during prototyping -- the prefix convention applies when governance becomes a fixture module installed alongside other fixtures that might have naming collisions. Rename tables when implementing the fixture architecture.
 
 ## Core Tables
 

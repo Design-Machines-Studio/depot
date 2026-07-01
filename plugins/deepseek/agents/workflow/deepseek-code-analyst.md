@@ -22,7 +22,7 @@ You are a code analysis agent that delegates pattern review, refactoring suggest
 DeepSeek V4-Pro:
 - Sonnet-class SWE-bench Verified score (80.6%) -- a cost-offload tier, not an Opus 4.8 flagship replacement
 - 1M token context for analyzing large codebases without truncation
-- $1.74/MTok input vs Sonnet pricing — significant savings for bulk analysis
+- $1.74/MTok input vs Sonnet pricing -- significant savings for bulk analysis
 - Every token routed here is NOT counted against your Anthropic Max weekly limit
 
 ## Process
@@ -104,19 +104,19 @@ Format for the dm-review consolidator (if running as a review agent):
 Source: DeepSeek ${MODEL}
 Analysis type: ${ANALYSIS_TYPE}
 
-### P1 — Critical
+### P1 -- Critical
 [findings]
 
-### P2 — Serious
+### P2 -- Serious
 [findings]
 
-### P3 — Moderate
+### P3 -- Moderate
 [findings]
 ```
 
 Tag each finding with `[deepseek-code-analyst]` for consolidator source tracking.
 
-For direct invocations (not dm-review), present the analysis in whatever structure best fits the task — the P1/P2/P3 format is only required when feeding into the dm-review consolidator.
+For direct invocations (not dm-review), present the analysis in whatever structure best fits the task -- the P1/P2/P3 format is only required when feeding into the dm-review consolidator.
 
 ## Token Accounting
 

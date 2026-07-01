@@ -1,6 +1,6 @@
 ---
 name: craft-development
-description: Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Trigger this skill for ANY Craft CMS question — entry queries, Matrix nesting, relatedTo directions, GraphQL mutations, template debugging, CP issues, `.all()` vs `.one()`, conditional field layouts, or "why does my query return nothing." Also trigger when helping in Craft Discord or Stack Exchange, when the user pastes Twig code with `craft.entries()`, or when debugging N+1 queries or cache invalidation. Covers Craft 4 and Craft 5 patterns including all breaking changes between versions and features through 5.9.
+description: Craft CMS development expertise for building sites, debugging issues, and providing community support. Use when working with Craft CMS templates (Twig), element queries, GraphQL API, Matrix fields, relational fields, eager loading, caching, plugins, or answering Craft CMS technical questions. Trigger this skill for ANY Craft CMS question -- entry queries, Matrix nesting, relatedTo directions, GraphQL mutations, template debugging, CP issues, `.all()` vs `.one()`, conditional field layouts, or "why does my query return nothing." Also trigger when helping in Craft Discord or Stack Exchange, when the user pastes Twig code with `craft.entries()`, or when debugging N+1 queries or cache invalidation. Covers Craft 4 and Craft 5 patterns including all breaking changes between versions and features through 5.9.
 ---
 
 # Craft CMS Developer
@@ -159,7 +159,7 @@ Entry types exist in a global pool. The same entry type can be used in:
 - Multiple Matrix fields
 - Both sections and Matrix fields simultaneously
 
-This eliminates duplication — define an entry type once, use it everywhere.
+This eliminates duplication -- define an entry type once, use it everywhere.
 
 ## GraphQL Patterns
 
@@ -217,7 +217,7 @@ mutation SaveRecipe {
 }
 ```
 
-## Craft 4 → 5 Breaking Changes (Quick Reference)
+## Craft 4 -> 5 Breaking Changes (Quick Reference)
 
 > For the full migration guide with upgrade checklists, load the `craft-5-migration` skill.
 
@@ -237,10 +237,10 @@ mutation SaveRecipe {
   .all() %}
 ```
 
-### Matrix Block → Entry Terminology
+### Matrix Block -> Entry Terminology
 - "Blocks" are now "nested entries"
-- `blocks` parameter → `entries` in GraphQL mutations
-- Block types → Entry types
+- `blocks` parameter -> `entries` in GraphQL mutations
+- Block types -> Entry types
 
 ### GraphQL Type Names
 **Craft 4:** `news_article_Entry`
@@ -272,7 +272,7 @@ Check what triggers invalidation:
 ### Conditional Field Layouts (Craft 5)
 Field tabs and individual fields can be shown/hidden based on conditions (entry type, status, user group, custom field values). If fields seem missing in the CP, check the field layout conditions before assuming a bug.
 
-## Recent Features (5.5–5.9)
+## Recent Features (5.5-5.9)
 
 ### New Twig Functions and Filters
 
@@ -313,7 +313,7 @@ Field tabs and individual fields can be shown/hidden based on conditions (entry 
   .andWhere(['>', 'price', 100])
   .all() %}
 
-{# Nested field values in orderBy (5.6) — e.g. date time zones #}
+{# Nested field values in orderBy (5.6) -- e.g. date time zones #}
 {% set entries = craft.entries()
   .orderBy('myDateField.tz ASC')
   .all() %}
@@ -327,8 +327,8 @@ Field tabs and individual fields can be shown/hidden based on conditions (entry 
 ### Fallback Element Partial Templates (5.6)
 
 Craft now supports fallback templates for element rendering:
-- `_partials/entry/articleType.twig` — specific to entry type
-- `_partials/entry.twig` — fallback for any entry type
+- `_partials/entry/articleType.twig` -- specific to entry type
+- `_partials/entry.twig` -- fallback for any entry type
 
 ### Redirects in Config (5.6)
 
@@ -344,7 +344,7 @@ return [
 
 Specify the current site via `X-Craft-Site` header (set to site ID or handle) instead of query params.
 
-### GraphQL Updates (5.7–5.9)
+### GraphQL Updates (5.7-5.9)
 
 ```graphql
 # Singles get dedicated queries (5.8)
@@ -357,11 +357,11 @@ query {
 }
 ```
 
-- **Singles queries** (5.8) — `<handle>Entry` queries resolve directly (e.g. `homepageEntry`)
-- **Unpublished drafts** (5.9) — Can create unpublished drafts via GraphQL mutations
-- **Search options** (5.7) — `searchTermOptions` argument for fine-tuned search
-- **Provisional drafts** (5.7) — `withProvisionalDrafts` argument
-- **Preview tokens** (5.9) — `X-Craft-Preview-Token` header for preview requests
+- **Singles queries** (5.8) -- `<handle>Entry` queries resolve directly (e.g. `homepageEntry`)
+- **Unpublished drafts** (5.9) -- Can create unpublished drafts via GraphQL mutations
+- **Search options** (5.7) -- `searchTermOptions` argument for fine-tuned search
+- **Provisional drafts** (5.7) -- `withProvisionalDrafts` argument
+- **Preview tokens** (5.9) -- `X-Craft-Preview-Token` header for preview requests
 
 ## Reference Files
 

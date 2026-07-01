@@ -1,9 +1,9 @@
 ---
 name: server-ops
-description: "Provides complete operational knowledge for The Local's self-hosted Matrix infrastructure — Docker Compose service management, SSH access, Matrix user creation, database backup, performance monitoring, and deployment methods. Use when SSH-ing into the server, managing Docker services, creating Matrix accounts, checking logs, backing up data, restarting Synapse or other services, or performing any operational task on the DigitalOcean droplet at 143.110.221.2. Trigger for any mention of: the droplet, docker compose, synapse restart, user creation, register_new_matrix_user, backup, logs, force-recreate, or server-side operations on thelocal.chat infrastructure."
+description: "Provides complete operational knowledge for The Local's self-hosted Matrix infrastructure -- Docker Compose service management, SSH access, Matrix user creation, database backup, performance monitoring, and deployment methods. Use when SSH-ing into the server, managing Docker services, creating Matrix accounts, checking logs, backing up data, restarting Synapse or other services, or performing any operational task on the DigitalOcean droplet at 143.110.221.2. Trigger for any mention of: the droplet, docker compose, synapse restart, user creation, register_new_matrix_user, backup, logs, force-recreate, or server-side operations on thelocal.chat infrastructure."
 ---
 
-# The Local — Server Operations
+# The Local -- Server Operations
 
 Self-hosted Matrix infrastructure on a DigitalOcean droplet. All commands run from `/opt/thelocal` as root.
 
@@ -27,7 +27,7 @@ Six services on a shared `thelocal` Docker network:
 | livekit | WebRTC SFU for calls | 7880, 7881, 50100-50200/udp |
 | lk-jwt | JWT auth bridge for LiveKit | 8080 |
 
-**Caddy routes**: `thelocal.chat` → Element + `.well-known`, `matrix.thelocal.chat` → Synapse, `/livekit/jwt/*` → JWT service, `/livekit/sfu/*` → LiveKit WebSocket.
+**Caddy routes**: `thelocal.chat` -> Element + `.well-known`, `matrix.thelocal.chat` -> Synapse, `/livekit/jwt/*` -> JWT service, `/livekit/sfu/*` -> LiveKit WebSocket.
 
 ## Common Commands
 
@@ -53,7 +53,7 @@ docker stats --no-stream
 
 **Two deployment methods depending on change type:**
 
-### Method 1: scp (preserves inode — no container recreate needed)
+### Method 1: scp (preserves inode -- no container recreate needed)
 
 Use for: `assets/custom.css`, `assets/index.html`, `element-config.json`, `welcome/index.html`, `templates/*`
 
@@ -64,9 +64,9 @@ scp assets/index.html root@143.110.221.2:/opt/thelocal/assets/index.html
 scp templates/*.html root@143.110.221.2:/opt/thelocal/templates/
 ```
 
-**Why scp**: Docker bind mounts track inodes (not filenames). `scp` overwrites in-place, preserving the inode — the container sees the change immediately without restart.
+**Why scp**: Docker bind mounts track inodes (not filenames). `scp` overwrites in-place, preserving the inode -- the container sees the change immediately without restart.
 
-### Method 2: git pull (replaces inodes — requires --force-recreate)
+### Method 2: git pull (replaces inodes -- requires --force-recreate)
 
 Use for: `docker-compose.yml`, `homeserver.yaml`, `Caddyfile`, or bulk changes.
 
@@ -85,7 +85,7 @@ ssh root@143.110.221.2 'cd /opt/thelocal && source .env && sed -e "s|%%POSTGRES_
 ## Matrix User Management
 
 ```bash
-# Create a new user (CLI — no email required)
+# Create a new user (CLI -- no email required)
 docker compose exec synapse register_new_matrix_user \
   -u USERNAME -p PASSWORD --no-admin \
   -c /data/homeserver.yaml http://localhost:8008
@@ -96,7 +96,7 @@ docker compose exec synapse register_new_matrix_user \
   -c /data/homeserver.yaml http://localhost:8008
 ```
 
-**User ID format**: `@username:thelocal.chat` (permanent — cannot change domain)
+**User ID format**: `@username:thelocal.chat` (permanent -- cannot change domain)
 
 **Naming convention**:
 - Spaces: "The Local [Co-op Name]" or "The Local [Number]" (union local style)
@@ -122,9 +122,9 @@ DigitalOcean weekly automated backups are enabled on the droplet.
 DigitalOcean built-in metrics dashboard covers: CPU, RAM, disk, network.
 
 **Watch for**:
-- RAM consistently above 80% → resize droplet ($12/mo → $24/mo for 4GB)
-- CPU spikes during calls → normal (LiveKit transcoding)
-- Unexpected disk growth → media uploads accumulating in `/data/media_store`
+- RAM consistently above 80% -> resize droplet ($12/mo -> $24/mo for 4GB)
+- CPU spikes during calls -> normal (LiveKit transcoding)
+- Unexpected disk growth -> media uploads accumulating in `/data/media_store`
 
 **Tuning applied** (in `homeserver.yaml`):
 - Cache factor: 0.3 (conservative for 2GB RAM)
@@ -135,13 +135,13 @@ DigitalOcean built-in metrics dashboard covers: CPU, RAM, disk, network.
 ## Rollout Phases
 
 - **Circle 1** (current): DM + collaborators, 5-10 people. Federation disabled, CLI-only accounts.
-- **Circle 2** (3-6mo): Solid State co-ops, Slate, TACO — 30-50 people.
+- **Circle 2** (3-6mo): Solid State co-ops, Slate, TACO -- 30-50 people.
 - **Circle 3** (6-12mo): Broader movement. Enable federation: remove `federation_domain_whitelist` from `homeserver.yaml`.
 
 ## Known Issues
 
-- **Element X mobile** repeatedly prompts for recovery key — widespread Element bug. Workaround: reset Secure Backup, skip encryption prompts on mobile.
+- **Element X mobile** repeatedly prompts for recovery key -- widespread Element bug. Workaround: reset Secure Backup, skip encryption prompts on mobile.
 - **Element desktop app** requires direct homeserver URL `matrix.thelocal.chat` (not root domain) for login.
 - **DigitalOcean blocks SMTP ports** 25/465/587. Resend SMTP uses port 2587.
-- **QR code login** requires Matrix Authentication Service — not implemented in Circle 1.
-- **Phone verification** requires Sydent + Twilio — not worth it for this scale.
+- **QR code login** requires Matrix Authentication Service -- not implemented in Circle 1.
+- **Phone verification** requires Sydent + Twilio -- not worth it for this scale.

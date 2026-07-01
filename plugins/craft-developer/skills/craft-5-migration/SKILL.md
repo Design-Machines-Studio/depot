@@ -1,6 +1,6 @@
 ---
 name: craft-5-migration
-description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, updating code for Craft 5 patterns, or debugging migration problems. Trigger this skill when the user mentions upgrading Craft, when queries return empty results unexpectedly (the empty array breaking change), when GraphQL types aren't found (section prefix removal), when Matrix blocks aren't rendering (block.type → block.type.handle), or when planning an entrification strategy for categories/tags/globals. Also trigger when checking plugin compatibility for Craft 5 or asking about new features in 5.5–5.9. Covers Matrix changes, empty array behavior, GraphQL updates, entrification, conditional field layouts, and all features through 5.9.
+description: Patterns and breaking changes for Craft CMS 4 to 5 migrations. Use when upgrading Craft versions, fixing Craft 5 compatibility issues, updating code for Craft 5 patterns, or debugging migration problems. Trigger this skill when the user mentions upgrading Craft, when queries return empty results unexpectedly (the empty array breaking change), when GraphQL types aren't found (section prefix removal), when Matrix blocks aren't rendering (block.type -> block.type.handle), or when planning an entrification strategy for categories/tags/globals. Also trigger when checking plugin compatibility for Craft 5 or asking about new features in 5.5-5.9. Covers Matrix changes, empty array behavior, GraphQL updates, entrification, conditional field layouts, and all features through 5.9.
 argument-hint: "[file or section to migrate]"
 ---
 
@@ -10,7 +10,7 @@ Key changes, breaking patterns, and migration strategies for Craft 5. Current la
 
 ## Major Conceptual Changes
 
-### Matrix: Blocks → Entries
+### Matrix: Blocks -> Entries
 
 Matrix fields no longer contain "blocks." They contain nested entries.
 
@@ -29,10 +29,10 @@ Matrix fields no longer contain "blocks." They contain nested entries.
 
 Everything is becoming entries:
 
-- Matrix blocks → Nested entries
-- Categories → Entry types in sections (recommended)
-- Tags → Entry types in sections (recommended)
-- Globals → Singles (recommended)
+- Matrix blocks -> Nested entries
+- Categories -> Entry types in sections (recommended)
+- Tags -> Entry types in sections (recommended)
+- Globals -> Singles (recommended)
 
 This simplifies the system: one pattern for everything.
 
@@ -179,7 +179,7 @@ Note: `block.type` is now an object. Use `block.type.handle` for comparisons.
 
 Use MCP if available:
 ```
-list_plugins → versions and status
+list_plugins -> versions and status
 ```
 
 Or check manually:
@@ -195,7 +195,7 @@ Or check manually:
 
 ## Entrification Strategy
 
-### Categories → Entries
+### Categories -> Entries
 
 **Create replacement:**
 1. Create a Structure section "Categories"
@@ -209,19 +209,19 @@ Or check manually:
 3. Update relational fields
 4. Update templates
 
-### Tags → Entries
+### Tags -> Entries
 
 **Create replacement:**
 1. Create a Channel section "Tags"
 2. Create "Tag" entry type
 3. Create Entries field limited to Tags section
 
-### Globals → Singles
+### Globals -> Singles
 
 **Create replacement:**
 1. Create Singles for each global set
 2. Move field configurations
-3. Update templates: `globalSet.field` → `entry.field`
+3. Update templates: `globalSet.field` -> `entry.field`
 
 **CLI entrify commands** (improved in 5.9):
 - `entrify/categories`, `entrify/tags`, `entrify/global-set` no longer require handles
@@ -233,23 +233,23 @@ If Craft MCP is installed:
 
 ### Assessment
 ```
-get_system_info → Current versions
-list_plugins → Plugin compatibility
-get_deprecations → Code to update
+get_system_info -> Current versions
+list_plugins -> Plugin compatibility
+get_deprecations -> Code to update
 ```
 
 ### Verification
 ```
-list_sections → Verify structure
-list_fields → Verify fields migrated
-list_entry_types → Verify entry types
+list_sections -> Verify structure
+list_fields -> Verify fields migrated
+list_entry_types -> Verify entry types
 ```
 
 ### Debugging
 ```
-get_last_error → Migration errors
-read_logs → Full error context
-run_query → Verify data integrity
+get_last_error -> Migration errors
+read_logs -> Full error context
+run_query -> Verify data integrity
 ```
 
 ## Common Migration Issues
@@ -273,7 +273,7 @@ run_query → Verify data integrity
 ### "GraphQL query fails"
 
 - Update type names (remove section prefix)
-- Update mutations (blocks → entries)
+- Update mutations (blocks -> entries)
 - Check schema permissions
 
 ## Performance Improvements
@@ -297,10 +297,10 @@ Review and optimize cache strategies with new caching behavior.
 ### Entry Type Independence
 
 Entry types in global pool means:
-- Less duplication — define once, use in multiple sections and Matrix fields
-- Better organization — entry types are first-class objects, not buried in section config
-- Easier maintenance — change an entry type's fields and it updates everywhere
-- Cross-pollination — a "Quote" block in Matrix can also be a standalone entry in a section
+- Less duplication -- define once, use in multiple sections and Matrix fields
+- Better organization -- entry types are first-class objects, not buried in section config
+- Easier maintenance -- change an entry type's fields and it updates everywhere
+- Cross-pollination -- a "Quote" block in Matrix can also be a standalone entry in a section
 
 ### Conditional Field Layouts
 
@@ -320,8 +320,8 @@ The Matrix field's "Add" button can organize entry types into groups:
 
 Key features added after the initial Craft 5 release:
 
-**5.5** — Range field, card view attributes, element partial template fallbacks, `encodeUrl()` Twig function
-**5.6** — Link field advanced options (ARIA, target, rel), entry type name overrides per section/Matrix, `primarySite` Twig variable, custom field handles in `where`/`orderBy`/`select` params, `config/redirects.php`, `X-Craft-Site` header
-**5.7** — Button Group and JSON field types, editability conditions (read-only fields), `canonicalsOnly` query param, Matrix entry versioning, icons/colors for option fields, `searchTermOptions` GraphQL argument
-**5.8** — Content Block field, Generated Fields, Matrix entry type groups with search, `<handle>Entry` GraphQL queries for Singles, "Validate" element actions, entry type descriptions
-**5.9** — Multi-page index sources, `randomString()`/`uuid()` Twig functions, `hash` filter algorithm support, inline list/card grid view modes for relational fields, Matrix bulk selection actions, unpublished drafts via GraphQL, UI Label Format and line breaks in titles, field editability conditions based on element, XLSX/YAML export
+**5.5** -- Range field, card view attributes, element partial template fallbacks, `encodeUrl()` Twig function
+**5.6** -- Link field advanced options (ARIA, target, rel), entry type name overrides per section/Matrix, `primarySite` Twig variable, custom field handles in `where`/`orderBy`/`select` params, `config/redirects.php`, `X-Craft-Site` header
+**5.7** -- Button Group and JSON field types, editability conditions (read-only fields), `canonicalsOnly` query param, Matrix entry versioning, icons/colors for option fields, `searchTermOptions` GraphQL argument
+**5.8** -- Content Block field, Generated Fields, Matrix entry type groups with search, `<handle>Entry` GraphQL queries for Singles, "Validate" element actions, entry type descriptions
+**5.9** -- Multi-page index sources, `randomString()`/`uuid()` Twig functions, `hash` filter algorithm support, inline list/card grid view modes for relational fields, Matrix bulk selection actions, unpublished drafts via GraphQL, UI Label Format and line breaks in titles, field editability conditions based on element, XLSX/YAML export

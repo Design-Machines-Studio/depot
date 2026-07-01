@@ -6,20 +6,20 @@ argument-hint: "[url or file path to audit]"
 
 # WCAG Audit Patterns
 
-Accessibility is not a feature — it is a constraint that shapes every design decision. This skill provides the methodology, checklists, and stack-specific patterns for auditing and building accessible interfaces across all Design Machines projects.
+Accessibility is not a feature -- it is a constraint that shapes every design decision. This skill provides the methodology, checklists, and stack-specific patterns for auditing and building accessible interfaces across all Design Machines projects.
 
 ## Philosophy
 
 Accessibility compliance follows the same progressive refinement approach as Live Wires:
 
-1. **Semantic HTML first** — correct elements, heading hierarchy, landmark regions
-2. **Keyboard operability** — tab order, focus management, skip links
-3. **ARIA enhancement** — only when native semantics are insufficient
-4. **Visual compliance** — contrast, motion, spacing, reflow
+1. **Semantic HTML first** -- correct elements, heading hierarchy, landmark regions
+2. **Keyboard operability** -- tab order, focus management, skip links
+3. **ARIA enhancement** -- only when native semantics are insufficient
+4. **Visual compliance** -- contrast, motion, spacing, reflow
 
 If you get Step 1 right, most of the work is done. ARIA is a repair tool, not a construction material.
 
-## WCAG 2.2 Level AA — The Compliance Target
+## WCAG 2.2 Level AA -- The Compliance Target
 
 All Design Machines projects target **WCAG 2.2 Level AA**. This is the legal baseline for ADA (US), EAA (EU, enforceable since June 2025), and Section 508 (US government).
 
@@ -68,13 +68,13 @@ These are the criteria most commonly failed. Check these first:
 Run automated tools against rendered HTML. They catch ~30-40% of issues.
 
 ```bash
-# Pa11y — quick scan of a single page
+# Pa11y -- quick scan of a single page
 npx pa11y http://localhost:8080/page --standard WCAG2AA
 
-# Pa11y-CI — scan multiple pages from a sitemap or list
+# Pa11y-CI -- scan multiple pages from a sitemap or list
 npx pa11y-ci --config .pa11yci.json
 
-# Lighthouse — broader audit including performance
+# Lighthouse -- broader audit including performance
 npx lighthouse http://localhost:8080 --only-categories=accessibility --output=json
 ```
 
@@ -97,32 +97,32 @@ test('page has no a11y violations', async ({ page }) => {
 
 Test every page manually:
 
-1. **Tab through** — Can you reach every interactive element?
-2. **Activate** — Do Enter/Space trigger buttons and links?
-3. **Escape** — Do modals, dropdowns, and dialogs close?
-4. **Arrow keys** — Do composite widgets (tabs, menus, radio groups) support arrow navigation?
-5. **Focus trap** — Is focus trapped inside modals when open?
-6. **Skip links** — Does Tab from page top reveal a "Skip to main content" link?
-7. **Focus visible** — Is there a clear focus indicator on every element?
+1. **Tab through** -- Can you reach every interactive element?
+2. **Activate** -- Do Enter/Space trigger buttons and links?
+3. **Escape** -- Do modals, dropdowns, and dialogs close?
+4. **Arrow keys** -- Do composite widgets (tabs, menus, radio groups) support arrow navigation?
+5. **Focus trap** -- Is focus trapped inside modals when open?
+6. **Skip links** -- Does Tab from page top reveal a "Skip to main content" link?
+7. **Focus visible** -- Is there a clear focus indicator on every element?
 
 ### Phase 3: Screen Reader Testing
 
 See the `screen-reader-testing` skill for detailed protocols. Quick checks:
 
-1. **Landmarks** — Are `<header>`, `<nav>`, `<main>`, `<footer>` present?
-2. **Headings** — Does the heading hierarchy make sense when read in sequence?
-3. **Images** — Are alt texts meaningful (not "image.png" or "photo")?
-4. **Forms** — Are labels announced when focusing inputs?
-5. **Dynamic content** — Are live regions announcing updates?
+1. **Landmarks** -- Are `<header>`, `<nav>`, `<main>`, `<footer>` present?
+2. **Headings** -- Does the heading hierarchy make sense when read in sequence?
+3. **Images** -- Are alt texts meaningful (not "image.png" or "photo")?
+4. **Forms** -- Are labels announced when focusing inputs?
+5. **Dynamic content** -- Are live regions announcing updates?
 
 ### Phase 4: Visual Compliance
 
-1. **Color contrast** — Test with browser DevTools or WebAIM Contrast Checker
-2. **200% zoom** — Does the layout still work at 200% browser zoom?
-3. **400% zoom** — Is content still usable at 400%?
-4. **Reduced motion** — Enable `prefers-reduced-motion` and verify animations stop
-5. **Forced colors** — Test in Windows High Contrast Mode (or emulate in DevTools)
-6. **Text spacing** — Apply WCAG text spacing overrides and verify no content is clipped
+1. **Color contrast** -- Test with browser DevTools or WebAIM Contrast Checker
+2. **200% zoom** -- Does the layout still work at 200% browser zoom?
+3. **400% zoom** -- Is content still usable at 400%?
+4. **Reduced motion** -- Enable `prefers-reduced-motion` and verify animations stop
+5. **Forced colors** -- Test in Windows High Contrast Mode (or emulate in DevTools)
+6. **Text spacing** -- Apply WCAG text spacing overrides and verify no content is clipped
 
 ## Stack-Specific Patterns
 
@@ -152,7 +152,7 @@ See `${CLAUDE_SKILL_DIR}/references/templ-datastar-a11y.md` for patterns. Key co
 
 - **Templ components** should enforce accessible props (require `alt` on image components, `label` on form components)
 - **Datastar partial updates** need `aria-live` regions for dynamic content
-- **SSE-driven morphing** can break focus — manage focus explicitly after DOM updates
+- **SSE-driven morphing** can break focus -- manage focus explicitly after DOM updates
 - **`data-on-click`** must only be used on natively interactive elements (`<button>`, `<a>`)
 
 ### Craft CMS + Twig
@@ -223,10 +223,10 @@ Use these tags to match your compliance target:
 
 When an audit finds violations, fix in this order:
 
-1. **Critical** — blocks access entirely (missing form labels, keyboard traps, zero-contrast text)
-2. **Serious** — significant barriers (missing alt text, broken focus order, no skip links)
-3. **Moderate** — degraded experience (low contrast on secondary text, missing landmarks)
-4. **Minor** — polish items (redundant ARIA, suboptimal heading levels)
+1. **Critical** -- blocks access entirely (missing form labels, keyboard traps, zero-contrast text)
+2. **Serious** -- significant barriers (missing alt text, broken focus order, no skip links)
+3. **Moderate** -- degraded experience (low contrast on secondary text, missing landmarks)
+4. **Minor** -- polish items (redundant ARIA, suboptimal heading levels)
 
 ## Reference Files
 

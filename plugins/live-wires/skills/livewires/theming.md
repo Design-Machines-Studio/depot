@@ -18,23 +18,23 @@ Before writing any CSS, extract the visual DNA from your source design.
 
 ### Colors
 
-1. **Identify the primary brand color** — The dominant color used for key UI elements
-2. **Find the secondary palette** — Supporting colors for accents, CTAs, backgrounds
-3. **Note background/foreground pairs** — Light and dark combinations used
-4. **Capture specific hex values** — Use browser dev tools, color picker, or PDF inspector
+1. **Identify the primary brand color** -- The dominant color used for key UI elements
+2. **Find the secondary palette** -- Supporting colors for accents, CTAs, backgrounds
+3. **Note background/foreground pairs** -- Light and dark combinations used
+4. **Capture specific hex values** -- Use browser dev tools, color picker, or PDF inspector
 
 ### Typography
 
-1. **Font family** — Identify the typeface(s) used (check Google Fonts, Adobe Fonts)
-2. **Weights in use** — Note which weights appear (light, regular, bold, etc.)
-3. **Heading sizes** — Observe the visual hierarchy (h1 vs h2 vs body)
-4. **Body text size** — The base reading size
+1. **Font family** -- Identify the typeface(s) used (check Google Fonts, Adobe Fonts)
+2. **Weights in use** -- Note which weights appear (light, regular, bold, etc.)
+3. **Heading sizes** -- Observe the visual hierarchy (h1 vs h2 vs body)
+4. **Body text size** -- The base reading size
 
 ### Other Visual Details
 
-1. **Border radius** — Sharp corners, subtle rounding, or pill shapes
-2. **Spacing patterns** — Tight, comfortable, or generous whitespace
-3. **Shadows** — Flat, subtle elevation, or dramatic shadows
+1. **Border radius** -- Sharp corners, subtle rounding, or pill shapes
+2. **Spacing patterns** -- Tight, comfortable, or generous whitespace
+3. **Shadows** -- Flat, subtle elevation, or dramatic shadows
 
 ---
 
@@ -57,16 +57,16 @@ Don't invent new color names. Update the existing scales in `color.css`:
 
 Position your primary brand color at the **500** level. This gives you:
 
-- **100-400** — Lighter shades for backgrounds, hover states, subtle accents
-- **600-900** — Darker shades for text, borders, dark mode, depth
+- **100-400** -- Lighter shades for backgrounds, hover states, subtle accents
+- **600-900** -- Darker shades for text, borders, dark mode, depth
 
 ### Brand Positioning
 
 Some brands naturally sit in different parts of the scale:
 
-- **Light brands** (pastels, bright colors) — Anchor at 300-400
-- **Standard brands** — Anchor at 500
-- **Dark brands** (forest greens, navy blues) — Anchor at 600-700
+- **Light brands** (pastels, bright colors) -- Anchor at 300-400
+- **Standard brands** -- Anchor at 500
+- **Dark brands** (forest greens, navy blues) -- Anchor at 600-700
 
 This is fine. Just ensure you have headroom above and below.
 
@@ -75,11 +75,11 @@ This is fine. Just ensure you have headroom above and below.
 Avoid jarring jumps between adjacent values:
 
 ```css
-/* BAD — Jumps from light to dark */
+/* BAD -- Jumps from light to dark */
 --color-green-300: #88CEBA;  /* Light mint */
 --color-green-400: #2A7A5E;  /* Suddenly dark! */
 
-/* GOOD — Smooth progression */
+/* GOOD -- Smooth progression */
 --color-green-300: #88CEBA;
 --color-green-400: #5FB89E;
 --color-green-500: #3D9A7E;
@@ -168,10 +168,10 @@ Schemes override semantic colors for specific sections.
 
 ### Scheme Naming
 
-- **`.scheme-{color}`** — Primary variant (e.g., `.scheme-green`)
-- **`.scheme-{color}-light`** — Light background variant
-- **`.scheme-{color}-dark`** — Dark background variant
-- **`.scheme-subtle`** — Subtle/muted variant
+- **`.scheme-{color}`** -- Primary variant (e.g., `.scheme-green`)
+- **`.scheme-{color}-light`** -- Light background variant
+- **`.scheme-{color}-dark`** -- Dark background variant
+- **`.scheme-subtle`** -- Subtle/muted variant
 
 ### Light-on-Dark Schemes
 
@@ -301,13 +301,13 @@ Only use these. Don't create new size variables.
 Muted/secondary text often fails contrast. Check `--color-muted` carefully:
 
 ```css
-/* BAD — ~2.2:1 on medium background */
+/* BAD -- ~2.2:1 on medium background */
 .scheme-green {
   --color-bg: var(--color-green-400);
   --color-muted: var(--color-green-600);
 }
 
-/* GOOD — ~5.5:1 on medium background */
+/* GOOD -- ~5.5:1 on medium background */
 .scheme-green {
   --color-bg: var(--color-green-400);
   --color-muted: var(--color-green-800);
@@ -332,8 +332,8 @@ After updating tokens, review and update the Manual documentation.
 
 If your theme uses greens, remove unused color schemes from:
 
-1. `src/css/1_tokens/color.css` — Delete the scheme definitions
-2. `/manual/components/schemes.html` — Remove the examples
+1. `src/css/1_tokens/color.css` -- Delete the scheme definitions
+2. `/manual/components/schemes.html` -- Remove the examples
 
 Keep the codebase clean. Don't ship unused CSS.
 
@@ -344,10 +344,10 @@ Keep the codebase clean. Don't ship unused CSS.
 ### Never Edit Component CSS
 
 ```css
-/* WRONG — Don't do this */
+/* WRONG -- Don't do this */
 .button { background: #17362D; }
 
-/* RIGHT — Use semantic tokens */
+/* RIGHT -- Use semantic tokens */
 .button { background: var(--color-accent); }
 ```
 
@@ -569,16 +569,16 @@ Look for:
 Use these when documenting issues:
 
 ```
-THEME-MISMATCH   — Section scheme doesn't match source
-THEME-MISSING    — Section has no scheme applied (should have one)
-THEME-WRONG      — Wrong scheme applied (e.g., dark instead of light)
-THEME-CONTRAST   — Contrast fails after theming
-THEME-STATE      — Interactive state doesn't match source
-THEME-COMPONENT  — Component styling doesn't match source
-THEME-DARK       — Dark mode doesn't match source dark mode
-THEME-HEADER     — Header scheme incorrect
-THEME-FOOTER     — Footer scheme incorrect
-THEME-SIDEBAR    — Sidebar scheme incorrect
+THEME-MISMATCH   -- Section scheme doesn't match source
+THEME-MISSING    -- Section has no scheme applied (should have one)
+THEME-WRONG      -- Wrong scheme applied (e.g., dark instead of light)
+THEME-CONTRAST   -- Contrast fails after theming
+THEME-STATE      -- Interactive state doesn't match source
+THEME-COMPONENT  -- Component styling doesn't match source
+THEME-DARK       -- Dark mode doesn't match source dark mode
+THEME-HEADER     -- Header scheme incorrect
+THEME-FOOTER     -- Footer scheme incorrect
+THEME-SIDEBAR    -- Sidebar scheme incorrect
 ```
 
 ---

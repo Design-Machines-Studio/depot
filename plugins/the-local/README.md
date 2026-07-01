@@ -1,6 +1,6 @@
 # the-local
 
-Claude Code plugin for The Local — a self-hosted Matrix communication network for the workplace democracy movement, built on Synapse + Element Web.
+Claude Code plugin for The Local -- a self-hosted Matrix communication network for the workplace democracy movement, built on Synapse + Element Web.
 
 ## What This Plugin Provides
 

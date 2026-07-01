@@ -106,10 +106,10 @@ Each block has specific templates.
 
 ```
 [Section block]
-  [Content block] ← CKEditor with embeds here
+  [Content block] <- CKEditor with embeds here
   [Image block]
 [Section block]
-  [Content block] ← CKEditor with embeds here
+  [Content block] <- CKEditor with embeds here
 ```
 
 ## Style Presets

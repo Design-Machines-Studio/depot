@@ -1,10 +1,10 @@
 # BC Cooperative Association Act Requirements
 
-> **Related sections:** → Compliance Calendar (`compliance-calendar.md`) → Bylaw Analysis (`bylaw-analysis.md`) → Red Flags (`red-flags.md`)
+> **Related sections:** -> Compliance Calendar (`compliance-calendar.md`) -> Bylaw Analysis (`bylaw-analysis.md`) -> Red Flags (`red-flags.md`)
 
 ## Overview
 
-The British Columbia Cooperative Association Act (SBC 1999, Chapter 28) governs all cooperatives in BC. Unlike Quebec, BC has no dedicated worker cooperative framework—worker co-ops incorporate as standard cooperatives and customize their Rules of Association.
+The British Columbia Cooperative Association Act (SBC 1999, Chapter 28) governs all cooperatives in BC. Unlike Quebec, BC has no dedicated worker cooperative framework--worker co-ops incorporate as standard cooperatives and customize their Rules of Association.
 
 **Key principle**: Operate on a "cooperative basis":
 - Open membership
@@ -57,7 +57,7 @@ The British Columbia Cooperative Association Act (SBC 1999, Chapter 28) governs 
 | Director removal | Special resolution | s.82 |
 | Bylaw amendments | Special resolution | s.45 |
 
-**One member, one vote** — voting rights derive from membership, not shares held.
+**One member, one vote** -- voting rights derive from membership, not shares held.
 
 ### Investment Shareholder Voting (if applicable)
 
@@ -94,7 +94,7 @@ The British Columbia Cooperative Association Act (SBC 1999, Chapter 28) governs 
 | Minimum 3 directors | s.72 | Mandatory |
 | Majority Canadian residents | s.72 | Mandatory |
 | At least 1 BC resident | s.72 | Mandatory |
-| Maximum 20% non-member directors | s.72 | Conditional—only if rules allow |
+| Maximum 20% non-member directors | s.72 | Conditional--only if rules allow |
 
 ### Director Duties
 
@@ -134,11 +134,11 @@ The British Columbia Cooperative Association Act (SBC 1999, Chapter 28) governs 
 | Special resolution meeting | 14 days |
 | AGM | 14 days |
 
-**Electronic meetings explicitly permitted** — telephone or other communication means.
+**Electronic meetings explicitly permitted** -- telephone or other communication means.
 
 ### Quorum
 
-**The Act does not prescribe quorum** — set in Rules of Association.
+**The Act does not prescribe quorum** -- set in Rules of Association.
 
 Model Rules default: 10% of members (inadequate for small co-ops)
 

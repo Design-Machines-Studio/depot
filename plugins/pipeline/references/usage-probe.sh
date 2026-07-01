@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# usage-probe.sh — gauge remaining headroom per rail for the model cascade.
+# usage-probe.sh -- gauge remaining headroom per rail for the model cascade.
 # Emits JSON the orchestrator reads to pick the highest available rung.
 #
 #   { "codex":  {"state":"ok|limited|unknown","resets_at":"<iso|null>","remaining_pct":<int|null>},
@@ -8,7 +8,7 @@
 #
 # SKETCH: the three probes shell out to ccusage / codex / OpenRouter. The exact
 # stdout shapes of `ccusage` and `codex` shift between versions, so the parsers
-# below are marked TODO — verify the field names against YOUR installed versions
+# below are marked TODO -- verify the field names against YOUR installed versions
 # once and pin them. The contract (the JSON above) is what the cascade depends on.
 set -uo pipefail
 

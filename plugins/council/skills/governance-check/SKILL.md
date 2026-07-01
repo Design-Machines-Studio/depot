@@ -73,7 +73,7 @@ If an argument was given, check only that area. Otherwise check all:
 Output a status table:
 
 ```
-Governance Compliance Status — [date]
+Governance Compliance Status -- [date]
 
 | Check              | Status | Detail                    |
 |--------------------|--------|---------------------------|
@@ -88,6 +88,6 @@ Overall: COMPLIANT (1 warning)
 ```
 
 Flag items as:
-- **PASS** — compliant
-- **WARN** — approaching deadline or needs attention
-- **FAIL** — non-compliant, action required
+- **PASS** -- compliant
+- **WARN** -- approaching deadline or needs attention
+- **FAIL** -- non-compliant, action required

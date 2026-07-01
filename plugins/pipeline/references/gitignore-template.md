@@ -24,12 +24,12 @@ todos/
 
 Feature-scoped files (Tier 3) inside `plans/<feature>/` remain trackable:
 
-- `original-prompt.md` — user's verbatim input (markdown)
-- `assessment.html` — current state report (HTML + island)
-- `research.html` — research findings (HTML + island)
-- `plan.html` — implementation plan (HTML + island)
-- `final-requirements-crosscheck.md` — delivery proof
-- `receipt.md` — post-cleanup summary
+- `original-prompt.md` -- user's verbatim input (markdown)
+- `assessment.html` -- current state report (HTML + island)
+- `research.html` -- research findings (HTML + island)
+- `plan.html` -- implementation plan (HTML + island)
+- `final-requirements-crosscheck.md` -- delivery proof
+- `receipt.md` -- post-cleanup summary
 
 These files are available for the user to commit if they choose. They are not committed automatically.
 
@@ -59,4 +59,4 @@ if [ "$ADDED" -gt 0 ]; then
 fi
 ```
 
-This is idempotent — safe to run on repos that already have the entries.
+This is idempotent -- safe to run on repos that already have the entries.

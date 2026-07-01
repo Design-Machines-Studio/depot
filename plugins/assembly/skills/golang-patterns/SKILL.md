@@ -202,7 +202,7 @@ r.With(httprate.LimitByIP(10, time.Minute)).Get("/sse/*", handleSSE)
 Events must publish AFTER `tx.Commit()`, never inside the transaction. If the transaction rolls back, a pre-commit event is a lie that corrupts downstream state (KV cache, SSE clients, audit trail).
 
 ```go
-// CORRECT — publish after commit
+// CORRECT -- publish after commit
 err := db.WithTx(ctx, func(tx *sql.Tx) error {
     // ... mutations and audit write ...
     return nil
@@ -212,7 +212,7 @@ if err != nil {
 }
 deps.Events.Publish("assembly.gov.proposal.status_changed", envelope)
 
-// WRONG — publish inside transaction
+// WRONG -- publish inside transaction
 err := db.WithTx(ctx, func(tx *sql.Tx) error {
     // ... mutations ...
     deps.Events.Publish(...)  // fires even if tx rolls back

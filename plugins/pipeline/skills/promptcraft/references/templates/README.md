@@ -72,7 +72,7 @@ extract-json-island.sh    # prints an artifact's island JSON
 `{{SIBLING_NAV}}` `{{BODY}}` `{{WIDGET_SCRIPTS}}` `{{DATA_ISLAND}}`
 
 `{{SIBLING_NAV}}` is a `<ul>` of links to the run's other artifacts
-(`assessment.html`, `research.html`, and `prompts/` for a plan) — relative links
+(`assessment.html`, `research.html`, and `prompts/` for a plan) -- relative links
 within the same `plans/<feature-slug>/` directory.
 
 ## Data island schemas

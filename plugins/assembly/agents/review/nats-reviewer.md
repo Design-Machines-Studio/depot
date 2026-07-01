@@ -66,14 +66,14 @@ Flag service methods that perform create/update/delete operations on the databas
 For each finding:
 
 ```
-**[P1/P2/P3]** {file}:{line} — {issue}
-  → {specific fix}
+**[P1/P2/P3]** {file}:{line} -- {issue}
+  -> {specific fix}
 ```
 
 If all checks pass:
 
 ```
-**APPROVED** — NATS patterns follow ADR-003 and ADR-007 conventions.
+**APPROVED** -- NATS patterns follow ADR-003 and ADR-007 conventions.
 ```
 
 ## Rules
@@ -82,4 +82,4 @@ If all checks pass:
 - Always provide specific file:line references
 - Suggest the exact fix, not just "fix this"
 - Only flag patterns in changed files (diff-aware review)
-- Baseplate code has different rules than fixture code — don't flag raw NATS usage in baseplate
+- Baseplate code has different rules than fixture code -- don't flag raw NATS usage in baseplate

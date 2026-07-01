@@ -22,13 +22,13 @@ Example of what to test:
 ```
 ✓ /index.html
 ✓ /about.html
-✓ /users/index.html      ← Don't skip!
-✓ /users/show.html       ← Don't skip!
-✓ /users/edit.html       ← Don't skip!
-✓ /articles/index.html   ← Don't skip!
-✓ /articles/show.html    ← Don't skip!
-✓ /dashboard/index.html  ← Don't skip!
-✓ /dashboard/settings.html ← Don't skip!
+✓ /users/index.html      <- Don't skip!
+✓ /users/show.html       <- Don't skip!
+✓ /users/edit.html       <- Don't skip!
+✓ /articles/index.html   <- Don't skip!
+✓ /articles/show.html    <- Don't skip!
+✓ /dashboard/index.html  <- Don't skip!
+✓ /dashboard/settings.html <- Don't skip!
 ```
 
 **Excluded directories** (framework docs, not prototype):
@@ -67,8 +67,8 @@ Example of what to test:
 
 **Check browser console on EVERY page for:**
 
-- JavaScript errors (red) — must fix
-- JavaScript warnings (yellow) — should review
+- JavaScript errors (red) -- must fix
+- JavaScript warnings (yellow) -- should review
 - Failed network requests (404s for scripts, styles, images)
 - Web component initialization errors
 - Uncaught exceptions or promise rejections
@@ -124,7 +124,7 @@ Example of what to test:
 
 ### Typography Audit
 
-- Check heading hierarchy: each page has exactly ONE `<h1>`, headings follow h1→h2→h3 order
+- Check heading hierarchy: each page has exactly ONE `<h1>`, headings follow h1->h2->h3 order
 - Verify font weights and families are consistent per heading level
 - Flag excessive utility class usage for typography that should be handled by defaults
 - No orphaned text (text outside proper containers)
@@ -229,10 +229,10 @@ Example of what to test:
 
 ### Key Rules
 
-- NO BEM `__` syntax for child elements—use CSS nesting
+- NO BEM `__` syntax for child elements--use CSS nesting
 - NO class prefixes like `.c-`, `.m-`, `.u-`
-- NO invented class names—use existing primitives
-- NO inline styles—use utility classes
+- NO invented class names--use existing primitives
+- NO inline styles--use utility classes
 - State uses `data-*` attributes, not classes
 
 **Class Order in HTML** (general to specific):
@@ -249,40 +249,40 @@ Example of what to test:
 Use these for efficient documentation:
 
 ```
-LINK-BROKEN   — Link leads to 404 or non-existent page
-LINK-EMPTY    — Empty href="" or href="#" placeholder
-LINK-ANCHOR   — Anchor link doesn't scroll to target
-LINK-EXTERNAL — External link missing target/rel attributes
-NAV-DEADEND   — Page has no outbound navigation
+LINK-BROKEN   -- Link leads to 404 or non-existent page
+LINK-EMPTY    -- Empty href="" or href="#" placeholder
+LINK-ANCHOR   -- Anchor link doesn't scroll to target
+LINK-EXTERNAL -- External link missing target/rel attributes
+NAV-DEADEND   -- Page has no outbound navigation
 
-FORM-ACTION   — Form action points to non-existent page
-FORM-LABEL    — Input missing associated label
-FORM-METHOD   — Form missing method attribute
-FORM-SUBMIT   — Submit button outside form without form attribute
+FORM-ACTION   -- Form action points to non-existent page
+FORM-LABEL    -- Input missing associated label
+FORM-METHOD   -- Form missing method attribute
+FORM-SUBMIT   -- Submit button outside form without form attribute
 
-JS-ERROR      — JavaScript error in console
-JS-NETWORK    — Failed network request (404 for asset)
-JS-COMPONENT  — Web component failed to initialize
+JS-ERROR      -- JavaScript error in console
+JS-NETWORK    -- Failed network request (404 for asset)
+JS-COMPONENT  -- Web component failed to initialize
 
-IMG-BROKEN    — Image returns 404
-IMG-ALT       — Image missing alt attribute
+IMG-BROKEN    -- Image returns 404
+IMG-ALT       -- Image missing alt attribute
 
-TYP-HIERARCHY — Heading level skipped (h1→h3)
-TYP-DUPLICATE — Multiple h1 elements on page
-TYP-UTILITY   — Excessive utility classes for typography
+TYP-HIERARCHY -- Heading level skipped (h1->h3)
+TYP-DUPLICATE -- Multiple h1 elements on page
+TYP-UTILITY   -- Excessive utility classes for typography
 
-A11Y-FOCUS    — Missing visible focus state
-A11Y-KEYBOARD — Element not keyboard accessible
-A11Y-LABEL    — Interactive element missing accessible name
+A11Y-FOCUS    -- Missing visible focus state
+A11Y-KEYBOARD -- Element not keyboard accessible
+A11Y-LABEL    -- Interactive element missing accessible name
 
-LW-INLINE     — Inline style attribute
-LW-INVENTED   — Invented class name (not in Live Wires)
-LW-BEM        — BEM syntax used (should use CSS nesting)
-LW-STATE      — State class used (should use data-*)
-LW-VARIANT    — Wrong variant syntax (single vs double dash)
+LW-INLINE     -- Inline style attribute
+LW-INVENTED   -- Invented class name (not in Live Wires)
+LW-BEM        -- BEM syntax used (should use CSS nesting)
+LW-STATE      -- State class used (should use data-*)
+LW-VARIANT    -- Wrong variant syntax (single vs double dash)
 
-LAYOUT-BREAK  — Layout breaks at specific viewport
-LAYOUT-SCROLL — Unexpected horizontal scroll
+LAYOUT-BREAK  -- Layout breaks at specific viewport
+LAYOUT-SCROLL -- Unexpected horizontal scroll
 ```
 
 ---
@@ -292,13 +292,13 @@ LAYOUT-SCROLL — Unexpected horizontal scroll
 **For each page in the prototype:**
 
 1. **Open browser DevTools** before navigating to the page
-2. **Check Console tab** — note any errors or warnings
-3. **Check Network tab** — note any failed requests (404s)
-4. **Click every link** on the page — verify destination exists
-5. **Test every form** — submit and verify action page exists
-6. **Tab through the page** — verify focus states and keyboard access
-7. **Resize viewport** — check 320px, 768px, 1024px, 1440px
-8. **Inspect the HTML** — check for compliance issues
+2. **Check Console tab** -- note any errors or warnings
+3. **Check Network tab** -- note any failed requests (404s)
+4. **Click every link** on the page -- verify destination exists
+5. **Test every form** -- submit and verify action page exists
+6. **Tab through the page** -- verify focus states and keyboard access
+7. **Resize viewport** -- check 320px, 768px, 1024px, 1440px
+8. **Inspect the HTML** -- check for compliance issues
 
 **Do not move to the next page until current page passes all checks.**
 
@@ -306,7 +306,7 @@ LAYOUT-SCROLL — Unexpected horizontal scroll
 
 ## The Three Questions for Every Element
 
-1. **Is this semantic HTML styled by default?** If adding typography utilities to `<p>`, `<h1-h6>`, `<ul>`, `<blockquote>`—that's likely a violation.
+1. **Is this semantic HTML styled by default?** If adding typography utilities to `<p>`, `<h1-h6>`, `<ul>`, `<blockquote>`--that's likely a violation.
 
 2. **Are inline styles used?** Any `style="..."` should be replaced with existing utility classes.
 

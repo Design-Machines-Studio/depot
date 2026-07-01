@@ -120,7 +120,7 @@ Create `.claude/hooks/a11y-check.sh`:
 
 ```bash
 #!/bin/bash
-# a11y-check.sh — Remind about accessibility after template changes
+# a11y-check.sh -- Remind about accessibility after template changes
 #
 # PostToolUse hook: fires after Edit/Write on template files
 
@@ -231,9 +231,9 @@ Add accessibility agents to the AGENT_CHECKS array in `pre-stop-check.sh`:
 ```bash
 AGENT_CHECKS=(
   # ... existing checks ...
-  '\.(templ|twig|html)$:a11y-html-reviewer:Template files changed — verify accessibility'
-  '\.css$:a11y-css-reviewer:CSS files changed — verify visual accessibility'
-  '\.(js|ts)$:a11y-dynamic-content-reviewer:JS files changed — verify dynamic content accessibility'
+  '\.(templ|twig|html)$:a11y-html-reviewer:Template files changed -- verify accessibility'
+  '\.css$:a11y-css-reviewer:CSS files changed -- verify visual accessibility'
+  '\.(js|ts)$:a11y-dynamic-content-reviewer:JS files changed -- verify dynamic content accessibility'
 )
 ```
 
@@ -245,15 +245,15 @@ After setup, print what was created:
 Accessibility testing infrastructure created:
 
 Files:
-  .pa11yci.json                    — Pa11y-CI configuration
-  tests/a11y/pages.spec.js         — Playwright accessibility tests
-  .claude/hooks/a11y-check.sh      — PostToolUse hook for template/CSS changes
-  .claude/agents/a11y-*.md         — Review agents (3 agents)
+  .pa11yci.json                    -- Pa11y-CI configuration
+  tests/a11y/pages.spec.js         -- Playwright accessibility tests
+  .claude/hooks/a11y-check.sh      -- PostToolUse hook for template/CSS changes
+  .claude/agents/a11y-*.md         -- Review agents (3 agents)
 
 Scripts:
-  npm run a11y                     — Scan all pages
-  npm run a11y:single URL          — Scan a single page
-  npm run test:a11y                — Run Playwright a11y tests
+  npm run a11y                     -- Scan all pages
+  npm run a11y:single URL          -- Scan a single page
+  npm run test:a11y                -- Run Playwright a11y tests
 
 Next steps:
   1. Add your project's URLs to .pa11yci.json

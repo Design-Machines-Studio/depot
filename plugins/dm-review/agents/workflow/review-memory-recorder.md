@@ -87,20 +87,20 @@ Only add this if the feature/PR entity already exists. Don't create entities for
 
 ## ai-memory Tools Used
 
-- `search_entities` — find the project entity
-- `get_entity` — check existing observations
-- `add_entity` — create project entity if it doesn't exist (type: "Project")
-- `add_observation` — add review summary and P1 architectural observations
-- `add_relationship` — link to PR/feature entities if they exist
-- `save` — persist changes after all operations
+- `search_entities` -- find the project entity
+- `get_entity` -- check existing observations
+- `add_entity` -- create project entity if it doesn't exist (type: "Project")
+- `add_observation` -- add review summary and P1 architectural observations
+- `add_relationship` -- link to PR/feature entities if they exist
+- `save` -- persist changes after all operations
 
 ## Rules
 
 1. Always call `save` after making changes
 2. Keep all observations under 300 characters
 3. Check for existing today's review observation before adding a duplicate
-4. Only create the project entity if it truly doesn't exist — search first
+4. Only create the project entity if it truly doesn't exist -- search first
 5. P1 architectural observations are separate from the review summary
-6. Don't create entities for PRs or branches — only use existing ones
-7. If ai-memory tools are not available, skip this step and report "Skipped — ai-memory not available"
+6. Don't create entities for PRs or branches -- only use existing ones
+7. If ai-memory tools are not available, skip this step and report "Skipped -- ai-memory not available"
 8. Use ISO date format (YYYY-MM-DD) in all observations

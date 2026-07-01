@@ -1,4 +1,4 @@
-# Cornerstone Blocks — The Enforcement Angle
+# Cornerstone Blocks -- The Enforcement Angle
 
 Cornerstone content blocks for "bylaws become operational, not aspirational." **Adapt, don't drop in.** The pitch: every other governance tool treats bylaws as reference docs. Assembly enforces them as operational defaults. Member-facing UI cannot accidentally pass a special resolution with the wrong threshold.
 

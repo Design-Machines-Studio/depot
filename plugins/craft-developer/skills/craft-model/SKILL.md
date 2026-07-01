@@ -24,10 +24,10 @@ Help the user design a content model for their Craft CMS project using the three
 
 ## Your Approach
 
-1. **Understand the project** — Ask about the type of site, content needs, and team structure
-2. **Identify content types** — What kinds of content exist? Pages, articles, products, team members?
-3. **Map relationships** — How does content connect? Categories, authors, related items?
-4. **Plan the architecture** — Sections, entry types, Matrix fields, CKEditor configuration
+1. **Understand the project** -- Ask about the type of site, content needs, and team structure
+2. **Identify content types** -- What kinds of content exist? Pages, articles, products, team members?
+3. **Map relationships** -- How does content connect? Categories, authors, related items?
+4. **Plan the architecture** -- Sections, entry types, Matrix fields, CKEditor configuration
 
 ## Methodology
 
@@ -54,10 +54,10 @@ Use the three-layer approach:
 
 If the Craft MCP server is available, use these tools to understand the current state:
 
-- `list_sections` — See existing sections and entry types
-- `list_fields` — Understand the current field architecture
-- `list_entry_types` — Review entry type configurations
-- `get_database_schema` — Inspect the underlying structure
+- `list_sections` -- See existing sections and entry types
+- `list_fields` -- Understand the current field architecture
+- `list_entry_types` -- Review entry type configurations
+- `get_database_schema` -- Inspect the underlying structure
 
 ## Output
 

@@ -1,4 +1,4 @@
-# Cornerstone Blocks — Plain-Language Defaults
+# Cornerstone Blocks -- Plain-Language Defaults
 
 Cornerstone content blocks for the decolonizing-language product move. **Adapt, don't drop in.** Per Chris Galloway (April 21, 2026 conversation): governance terminology was overwhelmingly written by lawyers in the 1970s and absorbed wholesale by software developers. Co-ops inherit a dialect that doesn't sound like them. Assembly ships plain-language defaults.
 
@@ -24,7 +24,7 @@ That's the legal term for a chunk of money the co-op is paying you out of this y
 
 Most worker co-op governance language was written by lawyers in the 1970s. Then the first generation of governance software imported it wholesale. Co-ops inherited a dialect that does not sound like them. The dialect runs through every member-facing screen of every tool they use.
 
-Chris Galloway named this for me in a conversation last week. The fix is not to remove legal precision. Bylaws and statutory filings still need the legal terms because that's the audience for those documents — regulators, lawyers, the future board that has to interpret the language under stress. The fix is to stop forcing the legal terms into the places members actually live.
+Chris Galloway named this for me in a conversation last week. The fix is not to remove legal precision. Bylaws and statutory filings still need the legal terms because that's the audience for those documents -- regulators, lawyers, the future board that has to interpret the language under stress. The fix is to stop forcing the legal terms into the places members actually live.
 
 Assembly ships plain-language defaults. The bylaws keep the legal terms. The dashboard reads "your share of this year's surplus." The full translation glossary lives in our council/governance plugin and is open for any co-op to adapt.
 

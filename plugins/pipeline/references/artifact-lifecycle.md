@@ -6,10 +6,10 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 
 | Tier | Lifecycle | Gitignored | Cleanup |
 |------|-----------|------------|---------|
-| **1 — Ephemeral** | Auto-deleted on run completion (success or failure) | Yes | Orchestrator Step 5b |
-| **2 — Run-scoped** | Deleted after successful run; preserved on failure for debugging | Yes | Orchestrator Step 5b |
-| **3 — Feature-scoped** | Persist until user disposes via delivery gate | No | User choice at Phase 7 GATE |
-| **4 — Durable** | Permanent (ai-memory, committed code, Notion) | N/A | Never |
+| **1 -- Ephemeral** | Auto-deleted on run completion (success or failure) | Yes | Orchestrator Step 5b |
+| **2 -- Run-scoped** | Deleted after successful run; preserved on failure for debugging | Yes | Orchestrator Step 5b |
+| **3 -- Feature-scoped** | Persist until user disposes via delivery gate | No | User choice at Phase 7 GATE |
+| **4 -- Durable** | Permanent (ai-memory, committed code, Notion) | N/A | Never |
 
 ## Artifact Inventory
 
@@ -24,7 +24,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `prompts/*.md` | 2 | Chunk execution prompts consumed by orchestrator |
 | `manifest.json` | 2 | Chunk ordering and dependency metadata |
 | `brainstorm.html` | 2 | Design decisions (HTML + `visualDecisions` island) |
-| `original-prompt.md` | 3 | User's verbatim input — ground truth (markdown) |
+| `original-prompt.md` | 3 | User's verbatim input -- ground truth (markdown) |
 | `assessment.html` | 3 | Current state report (HTML + cached Key Requirements island) |
 | `research.html` | 3 | Findings from research phase (HTML + island) |
 | `plan.html` | 3 | Implementation plan (HTML + `chunks`/`decisions` island) |
@@ -43,9 +43,9 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 |------|------|-------|
 | `.claude/ux-review/screenshots/<date>/*.png` | 1 | Rotated: only today's date kept |
 | `.claude/ux-review/manifest.json` | 2 | Overwritten each run |
-| `todos/*-pending-*.md` | 3 | Active findings — persist until resolved |
-| `todos/*-done-*.md` | 1 | Resolved findings — auto-cleaned before next review |
-| `todos/*-deferred-*.md` | 3 | Tracked debt with justifications — never auto-cleaned |
+| `todos/*-pending-*.md` | 3 | Active findings -- persist until resolved |
+| `todos/*-done-*.md` | 1 | Resolved findings -- auto-cleaned before next review |
+| `todos/*-deferred-*.md` | 3 | Tracked debt with justifications -- never auto-cleaned |
 
 ### Durable records (Tier 4)
 
@@ -69,7 +69,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 1. Write `plans/<feature-slug>/receipt.md` with failure details
 2. Delete Tier 1 only (screenshots valueless after failure)
 3. Preserve Tier 2 (prompts/manifest useful for retry/debugging)
-4. Report: `Artifact cleanup (partial — run failed): removed N ephemeral files, preserved prompts for debugging`
+4. Report: `Artifact cleanup (partial -- run failed): removed N ephemeral files, preserved prompts for debugging`
 
 ### On user "Done" at Phase 7 GATE
 
@@ -83,7 +83,7 @@ Before creating today's screenshot directory, delete all previous date directori
 ### dm-review todo lifecycle
 
 - `*-done-*.md` files auto-cleaned before creating new todos (Phase 6 pre-cleanup)
-- `*-deferred-*.md` files never auto-cleaned — represent tracked debt
+- `*-deferred-*.md` files never auto-cleaned -- represent tracked debt
 - `*-pending-*.md` files persist until resolved via `/dm-review-fix`
 
 ## Receipt Format
@@ -117,4 +117,4 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 
 ## Gitignore Enforcement
 
-See `gitignore-template.md` for canonical entries. The execution-orchestrator's Step 0d enforces these entries at the start of every run — no passive suggestions.
+See `gitignore-template.md` for canonical entries. The execution-orchestrator's Step 0d enforces these entries at the start of every run -- no passive suggestions.

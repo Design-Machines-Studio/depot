@@ -12,11 +12,11 @@ Claude Code loses context between sessions. Travis plans work in Notion (Project
 
 ## Goals
 
-1. **Time tracking** — Claude automatically logs session time to Notion for every project
-2. **Sprint awareness** — Claude knows what's in the current sprint across all projects
-3. **Todo visibility** — Claude can see assigned tasks and update their status when done
-4. **Context continuity** — Claude maintains robust internal memory across sessions without polluting Notion
-5. **Minimal Notion writes** — Claude reads freely but only writes time entries and status updates. Never creates todos unsolicited.
+1. **Time tracking** -- Claude automatically logs session time to Notion for every project
+2. **Sprint awareness** -- Claude knows what's in the current sprint across all projects
+3. **Todo visibility** -- Claude can see assigned tasks and update their status when done
+4. **Context continuity** -- Claude maintains robust internal memory across sessions without polluting Notion
+5. **Minimal Notion writes** -- Claude reads freely but only writes time entries and status updates. Never creates todos unsolicited.
 
 ## Non-Goals
 
@@ -33,7 +33,7 @@ Claude Code loses context between sessions. Travis plans work in Notion (Project
 ```
 ┌─────────────────────────────────────────────────────┐
 │  Layer 1: Plugin Skill (notion-workspace)            │
-│  Universal Notion knowledge — schemas, rules,        │
+│  Universal Notion knowledge -- schemas, rules,        │
 │  workflows. Lives in project-manager plugin.         │
 │  Loaded by any project that installs the plugin.     │
 ├─────────────────────────────────────────────────────┤
@@ -50,7 +50,7 @@ Claude Code loses context between sessions. Travis plans work in Notion (Project
 
 ### Why memory files, not CLAUDE.md, for per-project config
 
-CLAUDE.md is version-controlled and shared across all instances of a codebase. Assembly will become a template app — each co-op gets the same repo but maps to a different Notion project. Memory files are per-machine, per-directory-path, making them the right place for instance-specific config.
+CLAUDE.md is version-controlled and shared across all instances of a codebase. Assembly will become a template app -- each co-op gets the same repo but maps to a different Notion project. Memory files are per-machine, per-directory-path, making them the right place for instance-specific config.
 
 ---
 
@@ -69,13 +69,13 @@ Travis's Notion workspace has four interconnected databases. These are **persona
 | Name | title | Project name |
 | Status | status | Not started, In progress, No go, Done |
 | Area | select | WORKS, COMPANY, FLOOR, PLATE, PRESS |
-| Client | relation | → Clients DB |
+| Client | relation | -> Clients DB |
 | Team | person | Assigned people |
 | Project code | text | e.g., DM-006/WORKS |
 | Start Date | date | Project start |
 | End Date | date | Project end |
-| Todos | relation | → Todos DB |
-| Notes | relation | → Notes DB |
+| Todos | relation | -> Todos DB |
+| Notes | relation | -> Notes DB |
 
 ### Todos Database
 
@@ -88,13 +88,13 @@ Travis's Notion workspace has four interconnected databases. These are **persona
 | Name | title | Task name |
 | Status | status | Someday maybe, Inbox, In progress, Waiting on, Blocked, Done |
 | Priority | select | Low, Medium, High |
-| Project | relation | → Projects DB |
-| Sprint | relation | → Sprints DB (limit 1) |
+| Project | relation | -> Projects DB |
+| Sprint | relation | -> Sprints DB (limit 1) |
 | Person | person | Assigned to |
 | Deadline | date | Due date |
-| Blocked by | relation | → self (Todos DB) |
-| Blocking | relation | → self (Todos DB) |
-| Notes | relation | → Notes DB |
+| Blocked by | relation | -> self (Todos DB) |
+| Blocking | relation | -> self (Todos DB) |
+| Notes | relation | -> Notes DB |
 
 **Views:** This sprint (board), Quarter plan (board), Yearly plan (board), By project (board)
 
@@ -110,8 +110,8 @@ Travis's Notion workspace has four interconnected databases. These are **persona
 | Days | number (float) | Quarter-day blocks: 0.25 (~2hrs), 0.5 (~4hrs), 0.75 (~6hrs), 1.0 (full day) |
 | Date | date | Date of work |
 | Role | select | Project Management, Research, Strategy, Production |
-| Project | relation | → Projects DB |
-| Sprint | relation | → Sprints DB (limit 1) |
+| Project | relation | -> Projects DB |
+| Sprint | relation | -> Sprints DB (limit 1) |
 
 ### Sprints Database
 
@@ -122,11 +122,11 @@ Travis's Notion workspace has four interconnected databases. These are **persona
 | Property | Type | Values/Notes |
 |----------|------|-------------|
 | Name | title | e.g., "Sprint 3" |
-| Dates | date (range) | Start → End |
-| Quarter | relation | → Quarters DB |
+| Dates | date (range) | Start -> End |
+| Quarter | relation | -> Quarters DB |
 | Status | status | Not started, In progress, Done |
-| Time entries | relation | → Time Tracking DB |
-| Todos | relation | → Todos DB |
+| Time entries | relation | -> Time Tracking DB |
+| Todos | relation | -> Todos DB |
 
 **Cadence:** Biweekly sprints.
 
@@ -140,7 +140,7 @@ When setting relations via `notion-update-page`, use bare URL strings:
 "Project": "https://www.notion.so/{page-id}"
 ```
 
-Do NOT wrap in JSON arrays — the API rejects `["url"]` syntax.
+Do NOT wrap in JSON arrays -- the API rejects `["url"]` syntax.
 
 When creating pages via `notion-create-pages`, relations cannot be set inline. Create the page first, then update with relations in a second call.
 
@@ -152,19 +152,19 @@ When creating pages via `notion-create-pages`, relations cannot be set inline. C
 
 ### Skill responsibilities
 
-1. **Teach Claude the database schemas** — property names, types, valid values
-2. **Define read/write rules** — what Claude can read, what it can write, and when
-3. **Session workflow** — what to do at session start and end
-4. **Sprint planning support** — how to help Travis plan sprints
-5. **Per-project config convention** — how to find and use the project mapping
+1. **Teach Claude the database schemas** -- property names, types, valid values
+2. **Define read/write rules** -- what Claude can read, what it can write, and when
+3. **Session workflow** -- what to do at session start and end
+4. **Sprint planning support** -- how to help Travis plan sprints
+5. **Per-project config convention** -- how to find and use the project mapping
 
 ### Read/write rules (CRITICAL)
 
 | Action | Permission | When |
 |--------|-----------|------|
 | Query any database | Always allowed | Anytime Claude needs context |
-| Create time entry | Auto — do it every session | Session start |
-| Update time entry Days | Auto — do it every session | Session end |
+| Create time entry | Auto -- do it every session | Session start |
+| Update time entry Days | Auto -- do it every session | Session end |
 | Update todo status to "In progress" | Auto | When Claude starts working on an assigned todo |
 | Update todo status to "Done" | Auto | When Claude finishes an assigned todo |
 | Create new todo | Only when Travis explicitly asks | "Add a todo for X" |
@@ -193,7 +193,7 @@ When Travis asks for sprint planning help:
 2. Query todos with Status not in ("Done", "Someday maybe") grouped by project
 3. Show current sprint status (what's done, what's still open)
 4. Suggest candidates for next sprint based on priority and blocking relationships
-5. Travis decides — Claude does not assign things to sprints
+5. Travis decides -- Claude does not assign things to sprints
 
 ### Per-project config convention
 
@@ -217,8 +217,8 @@ This file is created once per project, manually or with Claude's help.
 
 ### Reference files
 
-- `references/databases.md` — Full database schemas (the tables from above)
-- `references/conventions.md` — Relation formatting, API quirks, error handling
+- `references/databases.md` -- Full database schemas (the tables from above)
+- `references/conventions.md` -- Relation formatting, API quirks, error handling
 
 ---
 
@@ -277,14 +277,14 @@ Notion Time Tracking database.
 
 ## Deliverable 3: Session Memory Convention
 
-**Not a plugin file** — this is a convention documented in the skill.
+**Not a plugin file** -- this is a convention documented in the skill.
 
 ### `memory/sessions.md`
 
 Append-only log. Claude writes a brief summary at the end of each session:
 
 ```markdown
-## 2026-02-13 — Workflow planning
+## 2026-02-13 -- Workflow planning
 
 **Duration:** 0.25 days
 **Sprint:** Sprint 3
@@ -345,4 +345,4 @@ Created once per project. Example for Assembly:
 1. **Sprint planning as a skill or workflow?** Could be a `/lt10:sprint-plan` command that queries across projects. Needs design.
 2. **Session start/end automation?** Currently manual ("log my time"). Could eventually be triggered by hooks.
 3. **Multi-person future?** When Travis adds collaborators, the Person field on todos and time entries becomes important. Current design assumes solo.
-4. **Userback integration?** Bug tracking flows through Userback → GitHub/Notion. Does Claude need to interact with Userback, or is it purely Travis's tool?
+4. **Userback integration?** Bug tracking flows through Userback -> GitHub/Notion. Does Claude need to interact with Userback, or is it purely Travis's tool?

@@ -1,6 +1,6 @@
 # Project Methodologies
 
-> **Related sections:** → Scheduling (`scheduling.md`) → Estimation (`estimation.md`) → Scoping (`scoping.md`)
+> **Related sections:** -> Scheduling (`scheduling.md`) -> Estimation (`estimation.md`) -> Scoping (`scoping.md`)
 
 ## Contents
 
@@ -30,7 +30,7 @@
 
 **What it is:** Linear approach where one step must complete before next begins. Dependencies drive everything.
 
-**Flow:** Plan → Build → Test → Launch (Discovery → Design → Development → QA → Launch)
+**Flow:** Plan -> Build -> Test -> Launch (Discovery -> Design -> Development -> QA -> Launch)
 
 ### When to Use Waterfall
 
@@ -126,7 +126,7 @@
 7. Working software is primary measure of progress
 8. Sustainable pace indefinitely
 9. Continuous attention to technical excellence
-10. Simplicity—maximize work not done
+10. Simplicity--maximize work not done
 11. Best designs emerge from self-organizing teams
 12. Regular reflection and adjustment
 
@@ -209,7 +209,7 @@ Max 5 tasks per person in "Doing" column. Forces focus.
 
 ### Basic Columns
 
-To Do → Doing → Done (can add Waiting, In Review)
+To Do -> Doing -> Done (can add Waiting, In Review)
 
 ### When to Use Kanban
 
@@ -285,7 +285,7 @@ To Do → Doing → Done (can add Waiting, In Review)
 
 | Pitfall | Solution |
 |---------|----------|
-| **Overestimating sprint capacity** | First 2 sprints will be off—leave wiggle room |
+| **Overestimating sprint capacity** | First 2 sprints will be off--leave wiggle room |
 | **Tasks too general** | If can't complete in sprint or estimate, too big |
 | **Tasks too specific** | If takes longer to write than complete, too granular |
 | **No process clarity** | Align team before starting each project |
@@ -303,7 +303,7 @@ To Do → Doing → Done (can add Waiting, In Review)
 
 ### Explaining Agile
 
-> "We'll work in short cycles—usually two weeks—where we build, test, and get your feedback. This lets us adjust direction quickly based on what we learn. You'll see working software every sprint."
+> "We'll work in short cycles--usually two weeks--where we build, test, and get your feedback. This lets us adjust direction quickly based on what we learn. You'll see working software every sprint."
 
 ### Explaining Waterfall
 

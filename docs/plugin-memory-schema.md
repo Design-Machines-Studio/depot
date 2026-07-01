@@ -13,17 +13,17 @@ Only receives non-correct invocations and review session summaries. Correct invo
 **Observation formats:**
 
 ```
-[YYYY-MM-DD] Skill invocation: <plugin>/<skill> — <outcome>
+[YYYY-MM-DD] Skill invocation: <plugin>/<skill> -- <outcome>
 [YYYY-MM-DD] Review session: X/Y agents completed, Z skipped (<reasons>)
 [YYYY-MM-DD] Accuracy alert: <plugin>/<skill> false-positive rate >10%
 ```
 
-Outcomes recorded here: `false-positive`, `false-negative` (not `correct` — those go to `DepotPlugin:<name>` only).
+Outcomes recorded here: `false-positive`, `false-negative` (not `correct` -- those go to `DepotPlugin:<name>` only).
 
 **Example observations:**
 
 ```
-[2026-03-25] Skill invocation: ghostwriter/voice — false-positive
+[2026-03-25] Skill invocation: ghostwriter/voice -- false-positive
 [2026-03-25] Review session: 9/11 agents completed, 2 skipped (visual-browser-tester: no dev server, craft-reviewer: no .twig files)
 [2026-03-25] Accuracy alert: ghostwriter/voice false-positive rate 15%
 ```
@@ -36,8 +36,8 @@ Per-plugin entities. One entity per plugin that has been invoked (e.g. `DepotPlu
 
 ```
 [YYYY-MM-DD] Version: X.Y.Z
-[YYYY-MM-DD] Invocation: <skill> — <outcome>
-[YYYY-MM-DD] User correction: <skill> — false-positive, query was about <domain-label>
+[YYYY-MM-DD] Invocation: <skill> -- <outcome>
+[YYYY-MM-DD] User correction: <skill> -- false-positive, query was about <domain-label>
 ```
 
 `<domain-label>` must be a generic category (e.g. "social media scheduling"), not a paraphrase or excerpt of the user's actual query. Avoid capturing client names, project details, or sensitive context.
@@ -46,9 +46,9 @@ Per-plugin entities. One entity per plugin that has been invoked (e.g. `DepotPlu
 
 ```
 [2026-03-25] Version: 3.8.0
-[2026-03-25] Invocation: voice — correct
-[2026-03-25] User correction: voice — false-positive, query was about social media scheduling
-[2026-03-25] Invocation: review — correct
+[2026-03-25] Invocation: voice -- correct
+[2026-03-25] User correction: voice -- false-positive, query was about social media scheduling
+[2026-03-25] Invocation: review -- correct
 ```
 
 ## Conventions

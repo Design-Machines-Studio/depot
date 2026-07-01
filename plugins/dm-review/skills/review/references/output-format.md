@@ -25,7 +25,7 @@ The canonical unified report format produced by the review-consolidator after al
 
 ---
 
-### P1 — Critical (Blocks Merge)
+### P1 -- Critical (Blocks Merge)
 
 #### [Finding Title]
 - **Source:** [agent-name]
@@ -38,7 +38,7 @@ The canonical unified report format produced by the review-consolidator after al
 
 ---
 
-### P2 — Important (Should Fix)
+### P2 -- Important (Should Fix)
 
 #### [Finding Title]
 - **Source:** [agent-name]
@@ -58,7 +58,7 @@ The canonical unified report format produced by the review-consolidator after al
 - **Issue:** Description
 - **Fix:** Remediation
 
-[Repeat for each P3 finding — same detail format as P1/P2]
+[Repeat for each P3 finding -- same detail format as P1/P2]
 
 ---
 
@@ -70,7 +70,7 @@ The canonical unified report format produced by the review-consolidator after al
 | security-auditor | 0 | 0 | 0 | 0 | Clean |
 | a11y-html-reviewer | 3 | 1 | 2 | 0 | Done |
 | css-reviewer | 1 | 0 | 0 | 1 | Done |
-| voice-editor | — | — | — | — | Skipped (no .md files changed) |
+| voice-editor | -- | -- | -- | -- | Skipped (no .md files changed) |
 | ... | | | | | |
 
 **Total:** X findings (Y P1, Z P2, W P3)
@@ -104,15 +104,15 @@ The canonical unified report format produced by the review-consolidator after al
 
 Agents use different citation styles depending on whether they analyze code or rendered pages:
 
-- **Code agents:** `path/to/file.ext:line` — file path and line number
-- **Browser agents (visual-browser-tester):** `[url @ breakpoint]` — page URL and viewport width
+- **Code agents:** `path/to/file.ext:line` -- file path and line number
+- **Browser agents (visual-browser-tester):** `[url @ breakpoint]` -- page URL and viewport width
 
 Browser agent citation examples:
 
-- `[/proposals @ 320px]` — issue at a specific viewport
-- `[/proposals @ all]` — issue at all viewports
-- `[/proposals > button.submit]` — issue with a specific element
-- `[/proposals > dialog#confirm]` — issue with a specific component
+- `[/proposals @ 320px]` -- issue at a specific viewport
+- `[/proposals @ all]` -- issue at all viewports
+- `[/proposals > button.submit]` -- issue with a specific element
+- `[/proposals > dialog#confirm]` -- issue with a specific component
 
 The consolidator preserves the original citation format from each agent.
 
@@ -120,14 +120,14 @@ The consolidator preserves the original citation format from each agent.
 
 ## Rules
 
-1. **P1 findings get full detail blocks** — file, issue, fix, reference
-2. **P2 findings get detail blocks** — same format as P1
-3. **P3 findings get full detail blocks** — same format as P1/P2. P3 issues must be fixed, not glossed over.
+1. **P1 findings get full detail blocks** -- file, issue, fix, reference
+2. **P2 findings get detail blocks** -- same format as P1
+3. **P3 findings get full detail blocks** -- same format as P1/P2. P3 issues must be fixed, not glossed over.
 4. **Clean agents are noted** in the summary table but don't get detail sections
 5. **Skipped agents are listed** with the reason (file type not changed, project type mismatch)
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
 7. **Full agent reports** are always included in collapsible sections for reference
-8. **No sugar-coating** — if the code has problems, say so directly
+8. **No sugar-coating** -- if the code has problems, say so directly
 
 ## Merge Recommendation Logic (zero-deferral default)
 

@@ -1,6 +1,6 @@
 # Change Control System
 
-> **Related sections:** → Scoping (`scoping.md`) → Stakeholders (`stakeholders.md`) → Risk Management (`risk.md`)
+> **Related sections:** -> Scoping (`scoping.md`) -> Stakeholders (`stakeholders.md`) -> Risk Management (`risk.md`)
 
 ## What Is Change Control?
 
@@ -27,7 +27,7 @@ The process of minimizing disruptive changes that impact team, stakeholders, goa
 | Type | Description |
 |------|-------------|
 | **Change request** | Declarative statement of what should change (e.g., "make logo bigger") |
-| **Bug report** | Error, flaw, failure—behaves differently than intended |
+| **Bug report** | Error, flaw, failure--behaves differently than intended |
 | **Feedback/comment** | Vague response with no clear request |
 | **Revision** | Changes made in response to request |
 | **Approval** | Written confirmation to move forward |
@@ -144,7 +144,7 @@ You learn the most about project requirements during the first half. The more yo
 
 When executives unexpectedly drop feedback that could derail the project:
 
-1. Press pause—don't react immediately
+1. Press pause--don't react immediately
 2. Evaluate impact on budget and timeline
 3. Request written documentation of change
 4. Present options with trade-offs
@@ -164,7 +164,7 @@ When executives unexpectedly drop feedback that could derail the project:
 > "Got it. Let me determine if this is in scope or requires additional time/budget. I'll get back to you by [date]."
 
 **When change is out of scope:**
-> "This is outside our agreed scope. I can quote it as an addition—it would be approximately [X days/$X]. Want me to proceed with a formal quote?"
+> "This is outside our agreed scope. I can quote it as an addition--it would be approximately [X days/$X]. Want me to proceed with a formal quote?"
 
 **When pushing back on a change:**
 > "I understand why you want this, but adding it now would [delay launch by X / require cutting Y / cost Z more]. Is that trade-off worth it, or should we defer to phase two?"
@@ -211,7 +211,7 @@ When executives unexpectedly drop feedback that could derail the project:
 - "Great question. Let me put together a great answer for you."
 
 **Say "Yes, and...":**
-- "If we do X, it will add time and budget—let's look at how much."
+- "If we do X, it will add time and budget--let's look at how much."
 - "This will add time/budget and we'll need to re-prioritize. Add to ideas list?"
 - "Tentative yes if you're open to more budget/time. What do you think?"
 

@@ -5,7 +5,7 @@ State machines and workflows for Assembly governance.
 ## The Governance Chain
 
 ```
-PROPOSAL → DECISION → RESOLUTION
+PROPOSAL -> DECISION -> RESOLUTION
               ↑
            VOTING
               ↑
@@ -28,7 +28,7 @@ PROPOSAL → DECISION → RESOLUTION
 ### Status Flow
 
 ```
-DRAFT → DISCUSSION → VOTING → PASSED/FAILED
+DRAFT -> DISCUSSION -> VOTING -> PASSED/FAILED
   ↓         ↓           ↓
 WITHDRAWN  DEFERRED   DEFERRED
 ```
@@ -48,16 +48,16 @@ WITHDRAWN  DEFERRED   DEFERRED
 ### Handler Actions
 
 ```go
-// Submit proposal (draft → discussion)
+// Submit proposal (draft -> discussion)
 POST /governance/proposals/{id}/submit
 
-// Schedule for meeting (discussion → voting at meeting)
+// Schedule for meeting (discussion -> voting at meeting)
 POST /governance/proposals/{id}/schedule
 
 // Start voting
 POST /governance/proposals/{id}/start-voting
 
-// Close voting (→ passed/failed)
+// Close voting (-> passed/failed)
 POST /governance/proposals/{id}/close-voting
 
 // Defer
@@ -74,7 +74,7 @@ POST /governance/proposals/{id}/withdraw
 ### Status Flow
 
 ```
-DRAFT → SCHEDULED → IN_PROGRESS → COMPLETED
+DRAFT -> SCHEDULED -> IN_PROGRESS -> COMPLETED
   ↓         ↓
 CANCELLED CANCELLED
 ```
@@ -120,7 +120,7 @@ Per the BC Act: if quorum is not achieved within 30 minutes of the scheduled sta
 ### Status Flow
 
 ```
-PENDING → PASSED/FAILED
+PENDING -> PASSED/FAILED
     ↓
 DEFERRED
 ```
@@ -186,7 +186,7 @@ func calculateOutcome(votesFor, votesAgainst int, thresholdType string) string {
 ### Status Flow
 
 ```
-ACTIVE → SUPERSEDED/RESCINDED/EXPIRED
+ACTIVE -> SUPERSEDED/RESCINDED/EXPIRED
 ```
 
 ### Resolution Numbering

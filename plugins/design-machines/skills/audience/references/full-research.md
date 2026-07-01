@@ -110,7 +110,7 @@ The `gemini-delegate` skill's documented `pro -> flash -> flash-lite -> skip` fa
 
 **Knowledge gaps to close next:**
 
-1. **Direct USFWC member interviews.** Second-hand language only so far. First-hand interviews with 3–5 USFWC member workplaces and 2 federation staff would sharpen the audience research considerably.
+1. **Direct USFWC member interviews.** Second-hand language only so far. First-hand interviews with 3-5 USFWC member workplaces and 2 federation staff would sharpen the audience research considerably.
 2. **Loomio customer churn patterns.** Specifically: what do co-ops that leave Loomio go to? Directly bears on Assembly's positioning.
 3. **CWCF and BCCA funding landscape in 2026.** Relied on general sector knowledge plus the briefing; the specific grant program windows for the year ahead need a fresh sweep.
 4. **Spanish-language co-op developer segment.** Mondragon orbit, Latin American worker co-op movement. Currently underweighted. Worth its own pass if Latin America becomes a priority.

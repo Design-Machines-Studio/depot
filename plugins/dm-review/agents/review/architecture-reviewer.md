@@ -45,11 +45,11 @@ Read the changed files and their surrounding context (imports, package structure
 
 #### Go + Templ + Datastar Projects
 Expected layers (top to bottom):
-1. **Handlers** — HTTP handlers, route registration, request/response
-2. **Services** — Business logic, orchestration
-3. **Repositories** — Data access, database queries
-4. **Models/DTOs** — Data structures
-5. **Templates** — Templ components, view rendering
+1. **Handlers** -- HTTP handlers, route registration, request/response
+2. **Services** -- Business logic, orchestration
+3. **Repositories** -- Data access, database queries
+4. **Models/DTOs** -- Data structures
+5. **Templates** -- Templ components, view rendering
 
 Violations:
 - Templates calling repository functions
@@ -100,10 +100,10 @@ Open Baseplate exercises for this check: **#258** (decompose the federation file
 
 #### Craft CMS Projects
 Expected layers:
-1. **Templates** (Twig) — Presentation only
-2. **Modules/Plugins** — Business logic, custom functionality
-3. **Config** — Environment and Craft configuration
-4. **Migrations** — Database schema changes
+1. **Templates** (Twig) -- Presentation only
+2. **Modules/Plugins** -- Business logic, custom functionality
+3. **Config** -- Environment and Craft configuration
+4. **Migrations** -- Database schema changes
 
 Violations:
 - Templates executing complex Element Queries that should be in modules
@@ -112,11 +112,11 @@ Violations:
 
 #### CSS Framework Projects
 Expected layers:
-1. **Tokens** — Design tokens (custom properties)
-2. **Reset/Base** — Element defaults
-3. **Layout Primitives** — Grid, stack, cluster, etc.
-4. **Components** — Scoped component styles
-5. **Utilities** — Single-purpose classes
+1. **Tokens** -- Design tokens (custom properties)
+2. **Reset/Base** -- Element defaults
+3. **Layout Primitives** -- Grid, stack, cluster, etc.
+4. **Components** -- Scoped component styles
+5. **Utilities** -- Single-purpose classes
 
 Violations:
 - Components overriding tokens directly instead of using them
@@ -124,10 +124,10 @@ Violations:
 - Layout primitives containing visual styling (colors, fonts)
 
 ### Coupling
-- Temporal coupling — operations that must happen in a specific order but nothing enforces it
-- Content coupling — one module modifying the internals of another
-- Stamp coupling — passing entire structs when only one field is needed
-- Excessive fan-out — one module depending on many others
+- Temporal coupling -- operations that must happen in a specific order but nothing enforces it
+- Content coupling -- one module modifying the internals of another
+- Stamp coupling -- passing entire structs when only one field is needed
+- Excessive fan-out -- one module depending on many others
 
 ### API Surface Area
 - New public exports that seem like they should be internal
@@ -140,13 +140,13 @@ Violations:
 ## Architecture Review
 
 ### Critical (P1)
-- [file:line] Description — principle/rule violated
+- [file:line] Description -- principle/rule violated
 
 ### Serious (P2)
-- [file:line] Description — principle/rule violated
+- [file:line] Description -- principle/rule violated
 
 ### Moderate (P3)
-- [file:line] Description — principle/rule violated
+- [file:line] Description -- principle/rule violated
 
 ### Approved
 - [file] Description of what follows good architecture
@@ -154,12 +154,12 @@ Violations:
 
 ## Rules
 
-1. Understand the project's architecture before flagging violations — read the directory structure and imports
-2. Don't enforce textbook architecture on small projects — pragmatism over purity
+1. Understand the project's architecture before flagging violations -- read the directory structure and imports
+2. Don't enforce textbook architecture on small projects -- pragmatism over purity
 3. Layer violations are P1 when they create circular dependencies, P2 otherwise
 4. Every finding must name the specific principle or rule being violated
 5. Suggest where the code should live instead, not just "this is in the wrong place"
 6. If the project doesn't have clear layers yet, note it as P3 and suggest the target architecture
 7. Don't penalize Go projects for not having a service layer if handlers are simple CRUD
-8. Never recommend band-aid fixes — always recommend the proper architectural solution
+8. Never recommend band-aid fixes -- always recommend the proper architectural solution
 9. For prototypes, recommend new migrations and clean installs over patching around schema issues

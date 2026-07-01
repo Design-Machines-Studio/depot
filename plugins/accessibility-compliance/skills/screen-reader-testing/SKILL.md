@@ -9,7 +9,7 @@ Automated tools catch ~30-40% of accessibility issues. The rest requires manual 
 
 ## Philosophy
 
-Screen reader testing is not about making the screen reader say the right words. It is about verifying that the **information architecture** — headings, landmarks, labels, relationships — communicates the same meaning to a non-visual user as the visual design communicates to a sighted user.
+Screen reader testing is not about making the screen reader say the right words. It is about verifying that the **information architecture** -- headings, landmarks, labels, relationships -- communicates the same meaning to a non-visual user as the visual design communicates to a sighted user.
 
 The question is never "Does the screen reader read this?" but "Does a screen reader user understand the page structure, current state, and available actions?"
 
@@ -37,7 +37,7 @@ VoiceOver is the primary testing tool for Design Machines projects.
 
 ### VoiceOver + Safari
 
-Always test in Safari first — it has the best VoiceOver integration on macOS. Chrome and Firefox have quirks with certain ARIA patterns.
+Always test in Safari first -- it has the best VoiceOver integration on macOS. Chrome and Firefox have quirks with certain ARIA patterns.
 
 ## Testing Protocol
 
@@ -46,11 +46,11 @@ Always test in Safari first — it has the best VoiceOver integration on macOS. 
 Open the VoiceOver Rotor (VO + U) and navigate to the Landmarks list.
 
 **Expected landmarks for a typical page:**
-- `banner` — site header
-- `navigation` — primary nav (may have multiple, each labeled)
-- `main` — primary content area
-- `complementary` — sidebar content (if applicable)
-- `contentinfo` — site footer
+- `banner` -- site header
+- `navigation` -- primary nav (may have multiple, each labeled)
+- `main` -- primary content area
+- `complementary` -- sidebar content (if applicable)
+- `contentinfo` -- site footer
 
 **Failures to catch:**
 - Missing `<main>` element (most common)
@@ -64,7 +64,7 @@ Open the Rotor and navigate to the Headings list.
 
 **Check:**
 - One `<h1>` per page (the page title)
-- No skipped levels (h1 → h3 without h2)
+- No skipped levels (h1 -> h3 without h2)
 - Headings create a meaningful outline
 - Section headings accurately describe their content
 
@@ -105,8 +105,8 @@ Tab through every form on the page.
 For pages that update without full page reload:
 
 1. **Trigger an update** (form submission, button click, SSE event)
-2. **Listen for announcement** — Did VoiceOver announce the change?
-3. **Check focus** — Is focus on a logical element after the update?
+2. **Listen for announcement** -- Did VoiceOver announce the change?
+3. **Check focus** -- Is focus on a logical element after the update?
 
 **Live region requirements:**
 - Status messages: `role="status"` or `aria-live="polite"`

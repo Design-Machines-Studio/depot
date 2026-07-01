@@ -4,9 +4,9 @@
 
 Every name, code, and piece of marketing must feel like it belongs to at least one of:
 
-1. **Factories** — how things are made
-2. **Labor** — who makes them and under what conditions
-3. **Publishing** — how ideas spread
+1. **Factories** -- how things are made
+2. **Labor** -- who makes them and under what conditions
+3. **Publishing** -- how ideas spread
 
 If something sounds like it could come from a tech startup pitch deck, it's wrong.
 
@@ -18,12 +18,12 @@ Before naming anything: **Can I picture this in a factory, a union hall, or a pr
 
 | Name | Source | Why It Works |
 |------|--------|-------------|
-| Design Machines | The thesis — tools are machines | Factory + meta |
+| Design Machines | The thesis -- tools are machines | Factory + meta |
 | Live Wires | Electrical infrastructure carrying current | Factory |
 | Assembly | Factory assembly + democratic assembly | Factory + Labor |
 | Baseplate | Machinery mounting plate | Factory |
 | Fixtures | Manufacturing jigs for specific work | Factory |
-| The Northern Star | Luddite newspaper (1837–1852) | Labor + Publishing |
+| The Northern Star | Luddite newspaper (1837-1852) | Labor + Publishing |
 
 ## Word Banks
 

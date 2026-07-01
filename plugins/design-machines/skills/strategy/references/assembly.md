@@ -1,4 +1,4 @@
-# Assembly — Product Architecture Reference
+# Assembly -- Product Architecture Reference
 
 ## What Assembly Is
 
@@ -7,12 +7,12 @@ A bespoke operations system for worker cooperatives. Custom-built for each organ
 ## Architecture
 
 ```
-Assembly (product line — DM-005/WORKS)
-├── Baseplate — the core application starter
+Assembly (product line -- DM-005/WORKS)
+├── Baseplate -- the core application starter
 │   Every co-op starts from the same Baseplate.
 │   Authentication, navigation, member profiles, basic settings.
 │
-├── Fixtures — the modules that bolt on
+├── Fixtures -- the modules that bolt on
 │   No two co-ops have the same Fixtures configuration.
 │   ├── Governance
 │   │   Meeting minutes, resolutions, proposals, decision tracking.
@@ -25,18 +25,18 @@ Assembly (product line — DM-005/WORKS)
 │   └── Documentation
 │       SOPs, manuals, knowledge base, policy version control.
 │
-└── [Client Name] — whatever the co-op calls theirs
+└── [Client Name] -- whatever the co-op calls theirs
     The co-op names their finished system. The name is theirs, not ours.
     Each co-op names their own install.
 ```
 
 ## Naming Logic
 
-**Assembly** — Factory assembly (making things) + democratic assembly (deciding things). Both meanings describe the product. As a product line, it's literally correct — you assemble Fixtures onto a Baseplate.
+**Assembly** -- Factory assembly (making things) + democratic assembly (deciding things). Both meanings describe the product. As a product line, it's literally correct -- you assemble Fixtures onto a Baseplate.
 
-**Baseplate** — The mounting plate in machinery. Everything bolts to it. A /PLATE in the catalog — a reusable form that produces many unique outputs.
+**Baseplate** -- The mounting plate in machinery. Everything bolts to it. A /PLATE in the catalog -- a reusable form that produces many unique outputs.
 
-**Fixtures** — In manufacturing, fixtures attach to a baseplate to configure it for specific work. Same baseplate, different fixtures, different capabilities.
+**Fixtures** -- In manufacturing, fixtures attach to a baseplate to configure it for specific work. Same baseplate, different fixtures, different capabilities.
 
 ## Internal vs Client Language
 
@@ -94,7 +94,7 @@ Co-op governance isn't a dashboard you check occasionally. It's a rhythm.
 | What Others Do | What Assembly Does |
 |----------------|-------------------|
 | Generic tools forced into co-op shapes | Purpose-built for cooperative governance |
-| Enterprise solutions priced for large co-ops | Accessible to small co-ops ($5K–50K) |
+| Enterprise solutions priced for large co-ops | Accessible to small co-ops ($5K-50K) |
 | Software you install and figure out | Consultation + training + bespoke system |
 | Compliance-feeling bureaucratic interfaces | Designed to feel good, simple, expressive |
 | Static request-response interfaces | Real-time collaboration, live voting, instant updates |
@@ -103,7 +103,7 @@ Co-op governance isn't a dashboard you check occasionally. It's a rhythm.
 
 | Asset | Status |
 |-------|--------|
-| Notion prototype (14 database tables) | Complete — ran a real co-op for 4 years |
+| Notion prototype (14 database tables) | Complete -- ran a real co-op for 4 years |
 | Video walkthroughs (4 Loom recordings) | Complete |
 | Module architecture (tiers defined) | Complete |
 | Live Wires frontend CSS | Beta |
@@ -119,7 +119,7 @@ Co-op governance isn't a dashboard you check occasionally. It's a rhythm.
 
 ## Distribution Model
 
-Assembly follows the **ONCE model** (37signals) — clients buy and own their install. Three-phase rollout:
+Assembly follows the **ONCE model** (37signals) -- clients buy and own their install. Three-phase rollout:
 
 1. **Phase 0 (Pilot)**: Manual Docker deploy. All fixtures compiled in, toggled at runtime. Design Machines deploys directly.
 2. **Phase 1 (Self-Updating)**: Static registry with signed binaries. One-click updates. Lightweight Mothership dashboard.

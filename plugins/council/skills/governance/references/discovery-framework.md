@@ -1,16 +1,16 @@
 # Co-op OS Discovery Framework
 
-> **Related sections:** → Governance Modules (`governance-modules.md`) → Red Flags (`red-flags.md`) → Bylaw Analysis (`bylaw-analysis.md`)
+> **Related sections:** -> Governance Modules (`governance-modules.md`) -> Red Flags (`red-flags.md`) -> Bylaw Analysis (`bylaw-analysis.md`)
 
 ### Contents
 - [Overview](#overview) (line 5)
-- [Statutory Compliance Pre-Check](#statutory-compliance-pre-check) (line 13) — Critical checks and quick compliance questions
+- [Statutory Compliance Pre-Check](#statutory-compliance-pre-check) (line 13) -- Critical checks and quick compliance questions
 - [Three Engagement Scenarios](#three-engagement-scenarios) (line 47)
-  - Scenario A: New Co-op (line 49) — 4-6 week discovery, governance from scratch
-  - Scenario B: Business Conversion (line 144) — 6-8 week discovery, migration + new governance
-  - Scenario C: Existing Co-op (line 235) — 4-6 week discovery, enhancement + consolidation
+  - Scenario A: New Co-op (line 49) -- 4-6 week discovery, governance from scratch
+  - Scenario B: Business Conversion (line 144) -- 6-8 week discovery, migration + new governance
+  - Scenario C: Existing Co-op (line 235) -- 4-6 week discovery, enhancement + consolidation
 - [Standard Discovery Deliverables](#standard-discovery-deliverables) (line 342)
-- [Document Homework for Clients](#document-homework-for-clients) (line 357) — What to request, bylaw extraction
+- [Document Homework for Clients](#document-homework-for-clients) (line 357) -- What to request, bylaw extraction
 - [Discovery Pricing](#discovery-pricing) (line 400)
 - [Success Metrics by Scenario](#success-metrics-by-scenario) (line 412)
 
@@ -176,9 +176,9 @@ Ask early in first conversation:
    - Readiness for democratic governance
 
 3. **Data audit**
-   - Employee records → member records
-   - Financial history → patronage basis
-   - HR policies → cooperative policies
+   - Employee records -> member records
+   - Financial history -> patronage basis
+   - HR policies -> cooperative policies
 
 **Deliverables**:
 - Current state map
@@ -192,8 +192,8 @@ Ask early in first conversation:
 **Activities**:
 1. **Conversion-specific workshops**
    - "What changes, what stays the same?"
-   - Role transition: employees → worker-members
-   - Authority transition: owners → board + members
+   - Role transition: employees -> worker-members
+   - Authority transition: owners -> board + members
 
 2. **Hybrid integration planning**
    - Which existing systems integrate?

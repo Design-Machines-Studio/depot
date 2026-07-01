@@ -218,10 +218,10 @@ Create component custom properties only when needed for scheme overrides or exte
 
 Body classes for prototyping and QA:
 
-- `show-baseline` — baseline grid overlay (vertical rhythm check)
-- `show-columns-2`, `show-columns-3`, `show-columns-4` — column grid overlays
-- `redact` — placeholder text rendering (shows type hierarchy without readable content)
-- `dark-mode` — forces dark mode regardless of system preference
+- `show-baseline` -- baseline grid overlay (vertical rhythm check)
+- `show-columns-2`, `show-columns-3`, `show-columns-4` -- column grid overlays
+- `redact` -- placeholder text rendering (shows type hierarchy without readable content)
+- `dark-mode` -- forces dark mode regardless of system preference
 
 **Design toolbar:** Press `T` to show/hide. All settings persist in localStorage across page loads and navigation. Source: `src/js/prototyping.js`.
 

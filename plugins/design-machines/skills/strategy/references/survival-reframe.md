@@ -7,7 +7,7 @@ Worker co-ops outlast conventional businesses. This is the single most underused
 | Region | Worker co-op survival | Conventional business survival | Source |
 |---|---|---|---|
 | United Kingdom | 76% at 5 years | ~42% at 5 years (all new companies) | Co-operatives UK, drawing on UK Office for National Statistics business demography data |
-| France | 80–90% at 3 years (worker co-ops, SCOP) | ~66% at 3 years (conventional) | CG Scop / Review of Industrial Organisation 2015 |
+| France | 80-90% at 3 years (worker co-ops, SCOP) | ~66% at 3 years (conventional) | CG Scop / Review of Industrial Organisation 2015 |
 | Italy | 87% at 3 years (worker-buyout co-ops) | 48% at 3 years (all Italian businesses) | CECOP / CICOPA research |
 
 (Full citations and verified URLs live at `plugins/design-machines/skills/audience/references/survival-reframe-citations.md`.)

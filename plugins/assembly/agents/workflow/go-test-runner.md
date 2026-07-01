@@ -49,7 +49,7 @@ Check for Go source files that should have tests but don't:
 - `package/path`: error message at file:line
 
 ### Missing Test Files (if any)
-- `internal/fixtures/governance/handlers.go` — no corresponding test file
+- `internal/fixtures/governance/handlers.go` -- no corresponding test file
 
 ### Coverage by Package
 | Package | Coverage |
@@ -59,12 +59,12 @@ Check for Go source files that should have tests but don't:
 
 ## Verdict
 
-- **PASS** — All tests pass
-- **FAIL** — One or more tests failed (include failure details)
+- **PASS** -- All tests pass
+- **FAIL** -- One or more tests failed (include failure details)
 
 ## Rules
 
-- Always use Docker (`docker compose exec app`) — never run Go commands on the host
+- Always use Docker (`docker compose exec app`) -- never run Go commands on the host
 - Use `-race` flag for race condition detection
 - Use `-count=1` to prevent test caching
 - Report actual test output, don't summarize away failures

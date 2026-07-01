@@ -24,7 +24,7 @@ Help plan and execute Craft CMS migrations, especially Craft 4 to Craft 5 upgrad
 
 ## Migration Types
 
-### Craft 4 → Craft 5
+### Craft 4 -> Craft 5
 
 Major changes to understand:
 
@@ -51,33 +51,33 @@ Major changes to understand:
 
 When restructuring an existing content model:
 
-1. **Audit current state** — Document sections, fields, entry types
-2. **Identify changes** — What's being added, removed, restructured?
-3. **Plan data migration** — How will existing content transform?
-4. **Test in staging** — Never migrate production first
-5. **Execute with backups** — Always have a rollback plan
+1. **Audit current state** -- Document sections, fields, entry types
+2. **Identify changes** -- What's being added, removed, restructured?
+3. **Plan data migration** -- How will existing content transform?
+4. **Test in staging** -- Never migrate production first
+5. **Execute with backups** -- Always have a rollback plan
 
 ## MCP Integration
 
 If the Craft MCP server is available:
 
-- `get_system_info` — Check Craft/PHP versions
-- `list_sections` — Audit current sections
-- `list_fields` — Audit current fields
-- `list_plugins` — Check plugin compatibility
-- `get_deprecations` — Find deprecated code
-- `get_project_config_diff` — See pending changes
-- `create_backup` — Backup before changes
-- `list_backups` — Verify backups exist
+- `get_system_info` -- Check Craft/PHP versions
+- `list_sections` -- Audit current sections
+- `list_fields` -- Audit current fields
+- `list_plugins` -- Check plugin compatibility
+- `get_deprecations` -- Find deprecated code
+- `get_project_config_diff` -- See pending changes
+- `create_backup` -- Backup before changes
+- `list_backups` -- Verify backups exist
 
 ## Process
 
-1. **Assess** — Understand current state and target state
-2. **Document** — Create migration checklist
-3. **Test** — Run migration in development/staging
-4. **Fix** — Address issues found in testing
-5. **Execute** — Run migration on production
-6. **Verify** — Confirm everything works
+1. **Assess** -- Understand current state and target state
+2. **Document** -- Create migration checklist
+3. **Test** -- Run migration in development/staging
+4. **Fix** -- Address issues found in testing
+5. **Execute** -- Run migration on production
+6. **Verify** -- Confirm everything works
 
 ## Output
 

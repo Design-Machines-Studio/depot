@@ -13,7 +13,7 @@ The co-op sector doesn't operate on zero-sum competition. We're all working to m
 | Real-time Collaboration | Live state sync, SSE for voting and dashboards |
 | Design System | Typography-first CSS, editorial design (Live Wires) |
 
-**The moat**: First integrated operating system for worker cooperatives — financial literacy + democratic governance + modern real-time collaboration — distributed through co-op incubation pipelines.
+**The moat**: First integrated operating system for worker cooperatives -- financial literacy + democratic governance + modern real-time collaboration -- distributed through co-op incubation pipelines.
 
 ## Key Partner Roles
 
@@ -21,20 +21,20 @@ Current partner details (names, organizations, meeting schedules, relationship s
 
 **Partner archetypes in the stack:**
 
-- **Co-op developer / connector** — Brings in new co-ops, knows funding landscape, makes introductions
-- **Financial systems specialist** — Bookkeeping and financial tools for co-ops, integration point for governance workflows
-- **Framework developer** — Real-time UI technology for live voting, collaborative decisions
-- **PM/ops trainer** — Process training that complements systems work
+- **Co-op developer / connector** -- Brings in new co-ops, knows funding landscape, makes introductions
+- **Financial systems specialist** -- Bookkeeping and financial tools for co-ops, integration point for governance workflows
+- **Framework developer** -- Real-time UI technology for live voting, collaborative decisions
+- **PM/ops trainer** -- Process training that complements systems work
 
 ## Federation & Sector Relationships
 
-**Provincial co-op associations** — Grant money available, referral networks, board connections.
+**Provincial co-op associations** -- Grant money available, referral networks, board connections.
 
-**National co-op federations** — Broader reach, policy connections.
+**National co-op federations** -- Broader reach, policy connections.
 
-**International federations** — Unexplored markets (Australia: The Co-op Federation, 208 members).
+**International federations** -- Unexplored markets (Australia: The Co-op Federation, 208 members).
 
-**Credit unions** — They're cooperatives too. Community development mandates could fund Assembly implementations. Dual role: funders AND potential clients.
+**Credit unions** -- They're cooperatives too. Community development mandates could fund Assembly implementations. Dual role: funders AND potential clients.
 
 ## AI / Labor Network
 

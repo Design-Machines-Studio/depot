@@ -1,6 +1,6 @@
 ---
 name: dm-review-visual
-description: Run visual browser testing on rendered pages — responsive layouts, interactive states, and accessibility
+description: Run visual browser testing on rendered pages -- responsive layouts, interactive states, and accessibility
 argument-hint: "[optional: URL to test, --states, or --a11y]"
 ---
 

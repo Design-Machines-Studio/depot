@@ -1,6 +1,6 @@
 ---
 name: dm-review-visual
-description: Codex skill alias for /dm-review-visual. Run visual browser testing on rendered pages — responsive layouts, interactive states, and accessibility
+description: Codex skill alias for /dm-review-visual. Run visual browser testing on rendered pages -- responsive layouts, interactive states, and accessibility
 argument-hint: "[optional: URL to test, --states, or --a11y]"
 ---
 

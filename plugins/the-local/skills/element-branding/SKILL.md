@@ -3,7 +3,7 @@ name: element-branding
 description: "Provides Element Web branding knowledge including custom CSS injection methodology, welcome page customization, auth page styling, service worker caching behaviour, and all visual override patterns for thelocal.chat. Use when editing custom.css, index.html, welcome/index.html, or element-config.json. Trigger for any mention of: Element Web appearance, auth page styling, logo replacement, welcome page, mx_AuthPage, mx_Login_submit, custom_css_url, welcomePageUrl, service worker, brand purple, or any visual change to thelocal.chat's Element Web interface. Also trigger when investigating CSS not applying, button styling issues, font overrides, or layout problems on the sign-in or welcome screens."
 ---
 
-# The Local — Element Web Branding
+# The Local -- Element Web Branding
 
 Element Web runs at `thelocal.chat`, branded as "The Local". This skill documents the working CSS injection method, key gotchas, and all CSS class targets discovered through implementation.
 
@@ -18,9 +18,9 @@ Element's `custom_css_url` config field and `welcomeBackgroundUrl` are unreliabl
 3. `custom.css` is served by Caddy from the host bind-mounted `assets/` directory.
 
 **Key files**:
-- `assets/index.html` — custom entry point, injects the CSS link tag
-- `assets/custom.css` — all brand overrides (version-bumped on each deploy)
-- `docker-compose.yml` — contains `- ./assets/index.html:/app/index.html:ro`
+- `assets/index.html` -- custom entry point, injects the CSS link tag
+- `assets/custom.css` -- all brand overrides (version-bumped on each deploy)
+- `docker-compose.yml` -- contains `- ./assets/index.html:/app/index.html:ro`
 
 **Cache-busting**: Increment `?v=N` on the CSS link when deploying style changes so browsers bypass their cache.
 
@@ -39,33 +39,33 @@ Element's `custom_css_url` config field and `welcomeBackgroundUrl` are unreliabl
 
 **Correct pattern**:
 ```css
-.tlw .heading { font-size: 1.5rem; }   /* good — scoped */
-h1 { font-size: 1.5rem; }              /* bad — leaks globally */
+.tlw .heading { font-size: 1.5rem; }   /* good -- scoped */
+h1 { font-size: 1.5rem; }              /* bad -- leaks globally */
 ```
 
-**SW cache bypass**: Use `welcome.html?v=2` (not just `welcome.html`) as the `welcomePageUrl`. The service worker precaches `welcome.html` at build time — any different URL won't be in the precache manifest and will be fetched fresh.
+**SW cache bypass**: Use `welcome.html?v=2` (not just `welcome.html`) as the `welcomePageUrl`. The service worker precaches `welcome.html` at build time -- any different URL won't be in the precache manifest and will be fetched fresh.
 
 ## Auth Page CSS Targets
 
 Discovered class targets for `/#/login` and `/#/register`:
 
 ```css
-/* Full-page wrapper — background must use !important (Element sets it inline via JS) */
+/* Full-page wrapper -- background must use !important (Element sets it inline via JS) */
 .mx_AuthPage { background: #220D46 !important; }
 
-/* Frosted card overlay — filter and background set inline; override with !important */
+/* Frosted card overlay -- filter and background set inline; override with !important */
 .mx_AuthPage_modalBlur { background: rgba(249, 245, 240, 0.96) !important; filter: none !important; }
 
-/* Auth modal card — rounded corners */
+/* Auth modal card -- rounded corners */
 .mx_AuthPage_modal { border-radius: 24px !important; overflow: hidden !important; }
 
 /* Right panel content area */
 .mx_AuthPage_modalContent { background: #F9F5F0 !important; }
 
-/* Left panel — Element logo image */
+/* Left panel -- Element logo image */
 .mx_AuthHeaderLogo img { display: none !important; }
 
-/* Left panel — replace with The Local logo */
+/* Left panel -- replace with The Local logo */
 .mx_AuthHeaderLogo {
     background-image: url('/assets/the-local-logo.png');
     background-size: 140px auto;
@@ -88,10 +88,10 @@ Discovered class targets for `/#/login` and `/#/register`:
 ## Submit Button Override (Critical)
 
 Element's `.mx_DialogButton` mixin is applied to `.mx_Login_submit` and `.mx_Register_submit`. It sets:
-- `height: 32px` — fixed height that compresses the button
-- `font: var(--cpd-font-body-md-regular)` — a CSS `font` shorthand that resets ALL font properties in one declaration, overriding individually-set `font-size`, `font-weight`, `font-family`
+- `height: 32px` -- fixed height that compresses the button
+- `font: var(--cpd-font-body-md-regular)` -- a CSS `font` shorthand that resets ALL font properties in one declaration, overriding individually-set `font-size`, `font-weight`, `font-family`
 
-**The fix — must override in this exact order**:
+**The fix -- must override in this exact order**:
 ```css
 .mx_Login_submit,
 .mx_Register_submit {
@@ -112,7 +112,7 @@ Element's `.mx_DialogButton` mixin is applied to `.mx_Login_submit` and `.mx_Reg
 
 ## Welcome Page Structure
 
-`welcome/index.html` — injected inline into `.mx_WelcomePage`:
+`welcome/index.html` -- injected inline into `.mx_WelcomePage`:
 
 ```html
 <div class="tlw">
@@ -134,7 +134,7 @@ Element's `.mx_DialogButton` mixin is applied to `.mx_Login_submit` and `.mx_Reg
 </div>
 ```
 
-**Note**: `target="_top"` on links is required because Element intercepts navigation — `_top` breaks out of any parent context.
+**Note**: `target="_top"` on links is required because Element intercepts navigation -- `_top` breaks out of any parent context.
 
 ## Brand Palette
 
@@ -152,12 +152,12 @@ Element's `.mx_DialogButton` mixin is applied to `.mx_Login_submit` and `.mx_Reg
 
 Element Web registers a service worker that aggressively precaches assets from the build manifest. This causes stale versions to persist for returning visitors.
 
-**Do NOT add a `<script>` tag to `assets/index.html` to unregister the SW**. This approach breaks Element's JavaScript bundle loading in some browsers (tested: Vivaldi Private mode — only 6 network requests instead of ~47, Element never initializes).
+**Do NOT add a `<script>` tag to `assets/index.html` to unregister the SW**. This approach breaks Element's JavaScript bundle loading in some browsers (tested: Vivaldi Private mode -- only 6 network requests instead of ~47, Element never initializes).
 
 **Safe workarounds**:
 - Version-bump `?v=N` on the CSS href (bypasses browser cache for the CSS file itself)
 - Use `welcome.html?v=2` as `welcomePageUrl` (bypasses SW precache for welcome content)
-- Users with stale SW: DevTools → Application → Service Workers → Unregister, then reload
+- Users with stale SW: DevTools -> Application -> Service Workers -> Unregister, then reload
 
 ## Element Config (element-config.json)
 

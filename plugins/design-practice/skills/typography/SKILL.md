@@ -1,6 +1,6 @@
 ---
 name: typography
-description: Design Machines typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice. Use when critiquing typographic decisions, advising on typeface selection, evaluating rhythm and hierarchy, building type scales, choosing fonts for any project, setting up CSS typography, or reviewing typography in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Trigger this skill whenever the user asks about font sizes, line-height, leading, measure, type scales, modular scales, baseline grids, vertical rhythm, letter-spacing, font pairing, fluid type, clamp(), or any typographic system decision — even casually like "what size should my headings be" or "this text feels off." Also trigger when building or reviewing Live Wires type tokens, setting up Assembly page typography, or evaluating any design where type hierarchy matters. Draws on Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig.
+description: Design Machines typography philosophy rooted in Swiss modernism, systematic thinking, and web-native practice. Use when critiquing typographic decisions, advising on typeface selection, evaluating rhythm and hierarchy, building type scales, choosing fonts for any project, setting up CSS typography, or reviewing typography in HTML/CSS, Figma, InDesign, Illustrator, or Affinity. Trigger this skill whenever the user asks about font sizes, line-height, leading, measure, type scales, modular scales, baseline grids, vertical rhythm, letter-spacing, font pairing, fluid type, clamp(), or any typographic system decision -- even casually like "what size should my headings be" or "this text feels off." Also trigger when building or reviewing Live Wires type tokens, setting up Assembly page typography, or evaluating any design where type hierarchy matters. Draws on Müller-Brockmann, Gerstner, Bringhurst, Vignelli, Spiekermann, Santa Maria, Brown, Rutter, Latin, and Craig.
 ---
 
 # Typography
@@ -104,7 +104,7 @@ Bringhurst's classical scale (6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 21, 24, 36, 48
 Mortensen identified historical errors in the traditional sequence:
 
 - 11pt doesn't belong (extra note in the first interval)
-- 42pt is missing (should complete the 10→21→42→84 progression)
+- 42pt is missing (should complete the 10->21->42->84 progression)
 - 30pt and 60pt are semitones (halfway between proper notes)
 - 72pt has a rounding error (mathematically 73pt)
 
@@ -112,7 +112,7 @@ Mortensen identified historical errors in the traditional sequence:
 
 ### Why Three Properties, Not Two
 
-Two-property tools (modularscale.com, type-scale.com) use only f₀ and a step ratio. This conflates two independent concerns. The Golden Ratio (1.618) produces: 1em → 1.618em → 2.618em -- three sizes total before doubling, with huge jumps. A Minor Second (1.067) produces many sizes but they're too close together. You can't independently control hierarchy impact and palette density.
+Two-property tools (modularscale.com, type-scale.com) use only f₀ and a step ratio. This conflates two independent concerns. The Golden Ratio (1.618) produces: 1em -> 1.618em -> 2.618em -- three sizes total before doubling, with huge jumps. A Minor Second (1.067) produces many sizes but they're too close together. You can't independently control hierarchy impact and palette density.
 
 Three properties separate these concerns:
 
@@ -152,7 +152,7 @@ The physical medium generates the system, not the other way around. Page dimensi
 
 **Print (bottom-up derivation):**
 
-1. Page dimensions → fitted baseline (page height ÷ whole number of rows)
+1. Page dimensions -> fitted baseline (page height ÷ whole number of rows)
 2. Fitted baseline = body leading
 3. Body size = leading ÷ target line-height ratio (e.g., ÷1.4 for serif, ÷1.5 for sans)
 4. Body size = f₀

@@ -12,7 +12,7 @@ ecosystem (only in context of partner stack), engagement (only in the participat
 
 ## Avoid
 
-users, customers, SaaS, scale the platform, scale up (as a virtue), go-to-market (externally), drive adoption, unlock value, best-in-class, cutting-edge, thought leader, enterprise-grade, engagement (metric sense), solopreneur, ICP, persona (in the marketing sense), TAM, CAC, MRR, churn, runway (externally), pivot, disrupt, synergy, bandwidth (as a metaphor for capacity), ping (as a verb), deck (externally), compliance-as-code (too SaaS-brained — use *operationalizing the bylaws* instead).
+users, customers, SaaS, scale the platform, scale up (as a virtue), go-to-market (externally), drive adoption, unlock value, best-in-class, cutting-edge, thought leader, enterprise-grade, engagement (metric sense), solopreneur, ICP, persona (in the marketing sense), TAM, CAC, MRR, churn, runway (externally), pivot, disrupt, synergy, bandwidth (as a metaphor for capacity), ping (as a verb), deck (externally), compliance-as-code (too SaaS-brained -- use *operationalizing the bylaws* instead).
 
 ## Phrases that already land
 

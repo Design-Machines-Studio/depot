@@ -94,10 +94,10 @@ Think like a rapid prototyper. Build **reusable page templates**, not a page for
 **GOOD approach:**
 
 ```
-/users/show.html        ← User profile template
-/users/edit.html        ← User edit template
-/articles/show.html     ← Article template
-/articles/index.html    ← Article listing template
+/users/show.html        <- User profile template
+/users/edit.html        <- User edit template
+/articles/show.html     <- Article template
+/articles/index.html    <- Article listing template
 ```
 
 When building a prototype:
@@ -111,10 +111,10 @@ When building a prototype:
 
 Before adding any class, ask:
 
-1. Does semantic HTML already handle this? → Use no class
-2. Does a layout primitive handle this? → Use `.stack`, `.grid`, `.section`, etc.
-3. Is this a scheme/theme concern? → Use `.scheme-*`
-4. Is this specific art direction? → Only then use utilities
+1. Does semantic HTML already handle this? -> Use no class
+2. Does a layout primitive handle this? -> Use `.stack`, `.grid`, `.section`, etc.
+3. Is this a scheme/theme concern? -> Use `.scheme-*`
+4. Is this specific art direction? -> Only then use utilities
 
 **Goal: The cleanest possible HTML that's ready for styling later.**
 
@@ -122,7 +122,7 @@ Before adding any class, ask:
 
 ## The Design Process
 
-Live Wires follows a sculptural approach—start with raw material, shape the form, refine the details, add expression.
+Live Wires follows a sculptural approach--start with raw material, shape the form, refine the details, add expression.
 
 ### Step 1: Prototype in HTML
 
@@ -148,13 +148,13 @@ Connect your templates to your CMS or framework. Your prototype becomes the prod
 
 For detailed reference, see these files in the same directory:
 
-- **[layouts.md](layouts.md)** — Stack, Grid, Cluster, Sidebar, Center, Section, Cover, Box, Reel, Imposter
-- **[components.md](components.md)** — Dialogs, Popups, Status Indicators, Badges, Progress Bars
-- **[utilities.md](utilities.md)** — Typography, Spacing, Color Schemes, Container Queries
-- **[patterns.md](patterns.md)** — Article Structure, Hero, Statistics Grid, Responsive Picture
-- **[theming.md](theming.md)** — Visual transformation workflow, color scales, typography, accessibility
-- **[code-style.md](code-style.md)** — CUBE CSS mapping, data-* state patterns, class/attribute ordering, inline styles, schemes, placeholders
-- **[qa-testing.md](qa-testing.md)** — QA testing system for prototypes
+- **[layouts.md](layouts.md)** -- Stack, Grid, Cluster, Sidebar, Center, Section, Cover, Box, Reel, Imposter
+- **[components.md](components.md)** -- Dialogs, Popups, Status Indicators, Badges, Progress Bars
+- **[utilities.md](utilities.md)** -- Typography, Spacing, Color Schemes, Container Queries
+- **[patterns.md](patterns.md)** -- Article Structure, Hero, Statistics Grid, Responsive Picture
+- **[theming.md](theming.md)** -- Visual transformation workflow, color scales, typography, accessibility
+- **[code-style.md](code-style.md)** -- CUBE CSS mapping, data-* state patterns, class/attribute ordering, inline styles, schemes, placeholders
+- **[qa-testing.md](qa-testing.md)** -- QA testing system for prototypes
 
 ---
 
@@ -196,11 +196,11 @@ All spacing derives from `--line`. Use `--line-*` tokens for spacing:
 
 ## CUBE CSS Methodology
 
-Live Wires uses **[CUBE CSS](https://cube.fyi/)** by Andy Bell — a methodology that embraces the cascade rather than fighting it.
+Live Wires uses **[CUBE CSS](https://cube.fyi/)** by Andy Bell -- a methodology that embraces the cascade rather than fighting it.
 
 **CUBE** stands for **Composition, Utility, Block, Exception**. Compositions are layout primitives (single-dash variants). Blocks are components (double-dash variants). Utilities are single-purpose classes. Exceptions are state changes via `data-*` attributes. See [code-style.md](code-style.md) for the full layer mapping table.
 
-**The key insight:** Most styling is handled by global defaults and utilities. By the time you reach "blocks" (components), there's minimal work left. This is why inventing new component classes is almost always wrong — the answer is usually a layout primitive, a utility, or a scheme.
+**The key insight:** Most styling is handled by global defaults and utilities. By the time you reach "blocks" (components), there's minimal work left. This is why inventing new component classes is almost always wrong -- the answer is usually a layout primitive, a utility, or a scheme.
 
 ## CSS Cascade Layers
 
@@ -208,11 +208,11 @@ Live Wires uses **[CUBE CSS](https://cube.fyi/)** by Andy Bell — a methodology
 @layer tokens, reset, base, layouts, components, utilities;
 ```
 
-Utilities always win over components, components over layouts, etc. No `!important` needed — cascade layers handle specificity.
+Utilities always win over components, components over layouts, etc. No `!important` needed -- cascade layers handle specificity.
 
 ## Modern CSS Features
 
-Live Wires uses native CSS only — no preprocessors. Key features: cascade layers, native nesting (`&` syntax), container queries, logical properties (`margin-block-start` not `margin-top`), fluid typography via `clamp()`, and custom properties throughout. PostCSS config is autoprefixer only.
+Live Wires uses native CSS only -- no preprocessors. Key features: cascade layers, native nesting (`&` syntax), container queries, logical properties (`margin-block-start` not `margin-top`), fluid typography via `clamp()`, and custom properties throughout. PostCSS config is autoprefixer only.
 
 ---
 
@@ -237,7 +237,7 @@ Live Wires uses native CSS only — no preprocessors. Key features: cascade laye
 Double-dash modifiers (`--variant`) are still correct for component variants:
 ```css
 .card--featured { border: 2px solid var(--color-accent); }  /* correct */
-.card__featured { }  /* wrong — this is a child selector, not a variant */
+.card__featured { }  /* wrong -- this is a child selector, not a variant */
 ```
 
 **In HTML templates:** Child elements don't need the parent class prefix. CSS nesting scopes them. Keep names short:
@@ -264,11 +264,11 @@ Double-dash modifiers (`--variant`) are still correct for component variants:
 
 Before writing any CSS, work through this decision tree in order:
 
-1. **Layout/flow problem?** → Use a primitive (`.stack`, `.cluster`, `.grid`, `.sidebar`, `.box`)
-2. **Color/theme problem?** → Use a scheme (`.scheme-accent`, `.scheme-subtle`)
-3. **One-off override?** → Use a utility (`.text-sm`, `.font-semibold`, `.text-muted`)
-4. **State change?** → Use a data attribute (`data-state="active"`, `data-open`)
-5. **Truly unique structure that repeats 3+ times?** → Write a minimal CSS component
+1. **Layout/flow problem?** -> Use a primitive (`.stack`, `.cluster`, `.grid`, `.sidebar`, `.box`)
+2. **Color/theme problem?** -> Use a scheme (`.scheme-accent`, `.scheme-subtle`)
+3. **One-off override?** -> Use a utility (`.text-sm`, `.font-semibold`, `.text-muted`)
+4. **State change?** -> Use a data attribute (`data-state="active"`, `data-open`)
+5. **Truly unique structure that repeats 3+ times?** -> Write a minimal CSS component
 
 ```html
 <!-- WRONG: Writing custom CSS for what's already a primitive -->

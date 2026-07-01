@@ -33,7 +33,7 @@ Each agent runs in its own context. They don't share a budget.
 
 **Threshold:** If per-agent input exceeds ~80K tokens, start dropping the lowest-priority conditional agents to reduce wall-clock time and cost. Core agents are never dropped.
 
-**Drop order** (first dropped → last dropped):
+**Drop order** (first dropped -> last dropped):
 
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)

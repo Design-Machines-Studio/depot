@@ -1,6 +1,6 @@
 ---
 name: recorder
-description: Captures conversation sessions into structured summaries, pushes observations to ai-memory entities, creates Notion todos, and creates Notion notes. Use when Travis says "capture this session", "log this", "save this conversation", "capture this", "remember this", or any variation requesting session documentation. Also trigger proactively when a long strategic conversation naturally concludes and significant decisions, new information, or action items emerged — offer to capture even if Travis hasn't explicitly asked. Trigger when the conversation produced naming decisions, pricing changes, partnership updates, architecture decisions, client insights, or any information that should persist beyond this session.
+description: Captures conversation sessions into structured summaries, pushes observations to ai-memory entities, creates Notion todos, and creates Notion notes. Use when Travis says "capture this session", "log this", "save this conversation", "capture this", "remember this", or any variation requesting session documentation. Also trigger proactively when a long strategic conversation naturally concludes and significant decisions, new information, or action items emerged -- offer to capture even if Travis hasn't explicitly asked. Trigger when the conversation produced naming decisions, pricing changes, partnership updates, architecture decisions, client insights, or any information that should persist beyond this session.
 disable-model-invocation: true
 allowed-tools:
   - mcp__ai-memory__search_entities
@@ -32,12 +32,12 @@ When triggered, execute these three phases in order.
 
 Review the full conversation and extract:
 
-1. **Session title** — A descriptive name (e.g., "Assembly Architecture Naming Session", "Pilot Prep Call Notes")
-2. **Key decisions** — Things that were decided or agreed upon. Be specific. "Renamed Co-op OS to Assembly" not "discussed naming."
-3. **New information** — Facts, data, or context that emerged. People mentioned, dates confirmed, prices quoted.
-4. **Todos** — Concrete next-step tasks that emerged. These are actionable items, not vague intentions. Each todo needs: a clear name, a suggested Notion project to link it to (if identifiable), and optionally a priority (Low/Medium/High). Default status is "Inbox" unless context suggests otherwise.
-5. **Open questions** — Things raised but not resolved.
-6. **Entities affected** — Which ai-memory entities need new observations. Think about: people, projects, companies, products, events.
+1. **Session title** -- A descriptive name (e.g., "Assembly Architecture Naming Session", "Pilot Prep Call Notes")
+2. **Key decisions** -- Things that were decided or agreed upon. Be specific. "Renamed Co-op OS to Assembly" not "discussed naming."
+3. **New information** -- Facts, data, or context that emerged. People mentioned, dates confirmed, prices quoted.
+4. **Todos** -- Concrete next-step tasks that emerged. These are actionable items, not vague intentions. Each todo needs: a clear name, a suggested Notion project to link it to (if identifiable), and optionally a priority (Low/Medium/High). Default status is "Inbox" unless context suggests otherwise.
+5. **Open questions** -- Things raised but not resolved.
+6. **Entities affected** -- Which ai-memory entities need new observations. Think about: people, projects, companies, products, events.
 
 Present this analysis to Travis for review before proceeding. Format it as a concise summary he can scan and approve or adjust. **For todos specifically**, list them with suggested project links so Travis can confirm, adjust, or remove before creation.
 
@@ -50,7 +50,7 @@ For each affected entity, add observations using the `add_observation` MCP tool.
 - Be factual and specific, not vague
 - One observation per distinct fact or decision
 - Keep under 300 characters when possible (hard limit: 500)
-- Don't duplicate existing observations — check the entity first with `get_entity`
+- Don't duplicate existing observations -- check the entity first with `get_entity`
 
 **If an entity doesn't exist yet**, create it with `add_entity` before adding observations. Include entity_type (Person, Project, Company, Product, Event, etc.).
 
@@ -76,7 +76,7 @@ For each confirmed todo, create a page in the Todos database.
 
 | Property | How to set |
 |----------|-----------|
-| Name | Todo title — clear, actionable (e.g., "Update session-capture skill with todo extraction") |
+| Name | Todo title -- clear, actionable (e.g., "Update session-capture skill with todo extraction") |
 | Status | "Inbox" by default. Use "In progress" only if Travis explicitly said he's starting it now. |
 | Priority | "Medium" by default. Use "High" if urgent/blocking, "Low" if someday/nice-to-have. |
 | Project | Link to the relevant project page URL. Look up project URLs from the `DM Notion Workspace` entity in ai-memory. |
@@ -86,7 +86,7 @@ If the todo doesn't clearly belong to a project, skip the Project link. If a new
 **Todo writing rules:**
 - Start with a verb: "Update...", "Research...", "Schedule...", "Draft...", "Build..."
 - Be specific enough to act on without re-reading the session
-- One todo per distinct action — don't combine multiple steps
+- One todo per distinct action -- don't combine multiple steps
 - If a todo has a deadline mentioned in conversation, set the Deadline property
 
 ### Phase 4: Create Notion Note
@@ -103,8 +103,8 @@ Create a page in the Notes database with the session summary.
 |----------|-----------|
 | Name | Session title (e.g., "Session: Assembly Architecture Naming") |
 | Type | "Document" |
-| Tags | Match to available options: "Design Machines", "Work", "Brainstorming", "Writing", "AI Prompts" — pick what fits |
-| Topics | Match to available options: "Design", "Development", "AI", "Capitalism", "Employment", "Craft" — pick what fits |
+| Tags | Match to available options: "Design Machines", "Work", "Brainstorming", "Writing", "AI Prompts" -- pick what fits |
+| Topics | Match to available options: "Design", "Development", "AI", "Capitalism", "Employment", "Craft" -- pick what fits |
 
 **Page content structure (Notion markdown):**
 
@@ -120,8 +120,8 @@ Create a page in the Notes database with the session summary.
 - [Fact or context that emerged]
 
 ## Todos Created
-- [ ] [Todo 1] → [Project name if linked]
-- [ ] [Todo 2] → [Project name if linked]
+- [ ] [Todo 1] -> [Project name if linked]
+- [ ] [Todo 2] -> [Project name if linked]
 
 ## Open Questions
 - [Unresolved question]

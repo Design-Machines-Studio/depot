@@ -25,10 +25,10 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 
 ## Usage
 
-- `/dm-review-visual` — auto-detect dev server, test all discoverable pages
-- `/dm-review-visual <url>` — test a specific URL
-- `/dm-review-visual --states` — focus on interactive state testing only
-- `/dm-review-visual --a11y` — focus on runtime accessibility checks only
+- `/dm-review-visual` -- auto-detect dev server, test all discoverable pages
+- `/dm-review-visual <url>` -- test a specific URL
+- `/dm-review-visual --states` -- focus on interactive state testing only
+- `/dm-review-visual --a11y` -- focus on runtime accessibility checks only
 
 ## Process
 
@@ -65,9 +65,9 @@ Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` for viewport dimensions and 
 
 **Flag handling:**
 
-- `--states` — run Phase C (State Testing) only
-- `--a11y` — run Phase D (Accessibility Runtime) only
-- No flag — run all eight phases
+- `--states` -- run Phase C (State Testing) only
+- `--a11y` -- run Phase D (Accessibility Runtime) only
+- No flag -- run all eight phases
 
 ### Phase 3: Report
 
@@ -90,13 +90,13 @@ Output findings using the standard P1/P2/P3 format:
 ---
 
 ### Critical (P1)
-- [url @ breakpoint] Description — reference
+- [url @ breakpoint] Description -- reference
 
 ### Serious (P2)
-- [url @ breakpoint] Description — reference
+- [url @ breakpoint] Description -- reference
 
 ### Moderate (P3)
-- [url @ breakpoint] Description — reference
+- [url @ breakpoint] Description -- reference
 
 ### Approved
 - [url] Description of what passes
@@ -112,8 +112,8 @@ After the report, suggest next steps:
 
 ## Reference Files
 
-- `${CLAUDE_SKILL_DIR}/references/breakpoints.md` — Responsive breakpoint definitions and testing rationale
-- `${CLAUDE_SKILL_DIR}/references/state-testing.md` — Interactive element state matrix by component type
+- `${CLAUDE_SKILL_DIR}/references/breakpoints.md` -- Responsive breakpoint definitions and testing rationale
+- `${CLAUDE_SKILL_DIR}/references/state-testing.md` -- Interactive element state matrix by component type
 
 ## Playwright MCP Tools
 

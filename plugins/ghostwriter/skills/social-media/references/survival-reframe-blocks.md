@@ -4,12 +4,12 @@ Cornerstone content blocks for the survival statistics. **Adapt, don't drop in.*
 
 The headline statistics and the inversion (rescue framing to strength framing) stay constant. Everything else flexes.
 
-The canonical phrasing is **"the data inverts the frame"** — use it consistently across files. Drift between files reads as the AI-tell pattern the voice avoid list calls out.
+The canonical phrasing is **"the data inverts the frame"** -- use it consistently across files. Drift between files reads as the AI-tell pattern the voice avoid list calls out.
 
 ## The headline statistics (always lead with these)
 
 - **United Kingdom:** 76% of co-ops survive 5 years. About 42% of all new companies make it. Source: Co-operatives UK.
-- **France:** 80–90% of worker co-ops survive 3 years. Around 66% of conventional firms do. Source: CG Scop / *Review of Industrial Organisation* 2015.
+- **France:** 80-90% of worker co-ops survive 3 years. Around 66% of conventional firms do. Source: CG Scop / *Review of Industrial Organisation* 2015.
 - **Italy:** 87% of worker buyouts survive 3 years. 48% of all Italian businesses do. Source: CECOP / CICOPA.
 
 ## LinkedIn long-form (~150-300 words)

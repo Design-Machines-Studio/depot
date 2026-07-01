@@ -18,7 +18,7 @@ Detailed examples demonstrating LT10 methodology application.
 
 ### Scenario
 
-Client wants homepage redesign. You've worked with them before—slow feedback, multiple stakeholders who disagree.
+Client wants homepage redesign. You've worked with them before--slow feedback, multiple stakeholders who disagree.
 
 ### Step 1: 90th Percentile Ranges (from team conversations)
 
@@ -109,7 +109,7 @@ Client wants a new e-commerce site. They have a fixed budget, a hard launch dead
 ### Decision: Agifall (Hybrid)
 
 **Why:**
-- Use **Waterfall structure** for phases: Discovery → Design → Development → QA → Launch
+- Use **Waterfall structure** for phases: Discovery -> Design -> Development -> QA -> Launch
 - Use **Agile execution** within Development: 2-week sprints, prioritized backlog, daily standups
 - **Fixed gates** between phases require client sign-off (protects scope)
 - **Sprint flexibility** allows requirements to emerge during build
@@ -121,7 +121,7 @@ Client wants a new e-commerce site. They have a fixed budget, a hard launch dead
 ### What Goes in Contract
 
 - Scope: E-commerce site (defined in discovery)
-- Phases: Discovery (2 weeks) → Design (3 weeks) → Development (6 weeks) → QA (2 weeks)
+- Phases: Discovery (2 weeks) -> Design (3 weeks) -> Development (6 weeks) -> QA (2 weeks)
 - Investment: $50,000
 - Gate approvals: Written sign-off required between phases
 - Change control: Features added after Discovery quoted separately
@@ -332,7 +332,7 @@ Week 4 of an 8-week project. Time for a health check.
 
 > "I want to give you a mid-project check-in. We're at week 4 of 8, and I'm seeing some patterns I want to address.
 >
-> We've done 4 rounds of revisions so far—double what we planned. Each round has added new requirements that weren't in our original scope.
+> We've done 4 rounds of revisions so far--double what we planned. Each round has added new requirements that weren't in our original scope.
 >
 > The impact: We've used 65% of budget but completed only 35% of deliverables.
 >

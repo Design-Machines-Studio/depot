@@ -33,12 +33,12 @@ The broader labor and solidarity-economy public. Door-opening content via the su
 
 ## The six findings (one-line version)
 
-1. **Survival reframe** — co-ops outlast conventional businesses; pitch from strength, not rescue.
-2. **Two moats** — integration across fixtures + bylaws become operational.
-3. **Sectoral density, not scale** — scale out (replicate), not scale up (grow huge).
-4. **Channel-first GTM** — co-op developers, federations, and incubators are primary; existing co-ops are secondary.
-5. **Admin debt** — governance equivalent of technical debt; the problem Assembly solves daily.
-6. **Decolonizing governance language** — plain-language defaults; bylaws stay legal, members read English.
+1. **Survival reframe** -- co-ops outlast conventional businesses; pitch from strength, not rescue.
+2. **Two moats** -- integration across fixtures + bylaws become operational.
+3. **Sectoral density, not scale** -- scale out (replicate), not scale up (grow huge).
+4. **Channel-first GTM** -- co-op developers, federations, and incubators are primary; existing co-ops are secondary.
+5. **Admin debt** -- governance equivalent of technical debt; the problem Assembly solves daily.
+6. **Decolonizing governance language** -- plain-language defaults; bylaws stay legal, members read English.
 
 ## Audience vs strategy boundary
 
@@ -50,8 +50,8 @@ If the question is about *what to say to someone*, this skill. If the question i
 
 ## Companion skills
 
-- `design-machines:strategy` — DM business strategy this audience research informs.
-- `ghostwriter:voice` — voice rules that apply to all audience-aware drafting.
-- `ghostwriter:social-media` — platform-specific cornerstone content blocks.
-- `council:governance` — plain-language glossary for governance terminology; BC Co-op Act references for two-moats enforcement examples.
-- `council:decolonial-language` — the framing for finding #6.
+- `design-machines:strategy` -- DM business strategy this audience research informs.
+- `ghostwriter:voice` -- voice rules that apply to all audience-aware drafting.
+- `ghostwriter:social-media` -- platform-specific cornerstone content blocks.
+- `council:governance` -- plain-language glossary for governance terminology; BC Co-op Act references for two-moats enforcement examples.
+- `council:decolonial-language` -- the framing for finding #6.

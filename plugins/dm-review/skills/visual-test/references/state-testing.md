@@ -1,6 +1,6 @@
 # Interactive State Testing Matrix
 
-For each element type, test the listed states using the specified Playwright MCP tools. Use `browser_snapshot` to discover interactive elements by ARIA role — never hardcode selectors.
+For each element type, test the listed states using the specified Playwright MCP tools. Use `browser_snapshot` to discover interactive elements by ARIA role -- never hardcode selectors.
 
 ---
 
@@ -80,8 +80,8 @@ A second or duplicate request here is a P2 (race / double-write), matching the m
 
 1. Open the dialog
 2. `browser_snapshot` to find all focusable elements inside
-3. Tab through all elements — count matches
-4. Tab one more time — focus should return to first focusable element inside dialog
+3. Tab through all elements -- count matches
+4. Tab one more time -- focus should return to first focusable element inside dialog
 
 ---
 
@@ -139,9 +139,9 @@ After a Datastar morph:
 
 ## General Rules
 
-1. **Discover elements via `browser_snapshot`** — use ARIA roles (button, link, textbox, tab, dialog, etc.) to find elements, not CSS selectors
-2. **Screenshot each state** — take a `browser_take_screenshot` after triggering each state for visual evidence
-3. **Test keyboard before mouse** — if an element can't be reached via Tab, that's a P1 finding regardless of mouse behavior
-4. **Reset between tests** — `browser_navigate` back to the page URL before testing a different component to ensure clean state
-5. **Skip states that don't apply** — if there are no dialogs on the page, skip the dialog tests entirely
-6. **Time-dependent states** — for loading and toast states, use `browser_wait_for` with reasonable timeouts (5 seconds default)
+1. **Discover elements via `browser_snapshot`** -- use ARIA roles (button, link, textbox, tab, dialog, etc.) to find elements, not CSS selectors
+2. **Screenshot each state** -- take a `browser_take_screenshot` after triggering each state for visual evidence
+3. **Test keyboard before mouse** -- if an element can't be reached via Tab, that's a P1 finding regardless of mouse behavior
+4. **Reset between tests** -- `browser_navigate` back to the page URL before testing a different component to ensure clean state
+5. **Skip states that don't apply** -- if there are no dialogs on the page, skip the dialog tests entirely
+6. **Time-dependent states** -- for loading and toast states, use `browser_wait_for` with reasonable timeouts (5 seconds default)

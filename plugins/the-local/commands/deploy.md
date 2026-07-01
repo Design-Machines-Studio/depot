@@ -13,12 +13,12 @@ Determine from context what has changed. The user may specify a file, service, o
 
 ## Deployment Methods
 
-**Use scp** for files served via Docker bind mounts (preserves inode — container sees change immediately, no restart needed):
-- `assets/custom.css` → `/opt/thelocal/assets/custom.css`
-- `assets/index.html` → `/opt/thelocal/assets/index.html`
-- `welcome/index.html` → `/opt/thelocal/welcome/index.html`
-- `element-config.json` → `/opt/thelocal/element-config.json`
-- `templates/*.html`, `templates/*.txt` → `/opt/thelocal/templates/`
+**Use scp** for files served via Docker bind mounts (preserves inode -- container sees change immediately, no restart needed):
+- `assets/custom.css` -> `/opt/thelocal/assets/custom.css`
+- `assets/index.html` -> `/opt/thelocal/assets/index.html`
+- `welcome/index.html` -> `/opt/thelocal/welcome/index.html`
+- `element-config.json` -> `/opt/thelocal/element-config.json`
+- `templates/*.html`, `templates/*.txt` -> `/opt/thelocal/templates/`
 
 **Use git pull + force-recreate** when `docker-compose.yml`, `Caddyfile`, `homeserver.yaml`, or multiple files have changed:
 ```bash
@@ -60,4 +60,4 @@ scp element-config.json root@143.110.221.2:/opt/thelocal/element-config.json
 scp welcome/index.html root@143.110.221.2:/opt/thelocal/welcome/index.html
 ```
 
-After deploying `assets/index.html` (which contains the CSS version number), also restart element to ensure the bind mount inode is correct — or use `--force-recreate` if the file was previously git-pulled.
+After deploying `assets/index.html` (which contains the CSS version number), also restart element to ensure the bind mount inode is correct -- or use `--force-recreate` if the file was previously git-pulled.

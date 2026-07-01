@@ -15,8 +15,8 @@ Build cooperative governance applications with Go, Templ, and Datastar. Build pa
 **Prototype toward production.** Every page you build is real code. Use mockup data in SQLite, but structure your handlers and DTOs for real queries. The prototype becomes the product.
 
 **Optional companion plugins:**
-- **council** — Governance domain knowledge and decolonial language for UI labels
-- **design-machines** — Business strategy and product positioning context
+- **council** -- Governance domain knowledge and decolonial language for UI labels
+- **design-machines** -- Business strategy and product positioning context
 
 This skill focuses on the **Assembly workflow** for building pages and features.
 
@@ -61,10 +61,10 @@ This follows the Live Wires philosophy: "Start with Live Wires, make it your own
 Think in **page types**, not individual pages. One template serves many instances.
 
 ```
-/members/               → index.templ (list)
-/members/{id}           → show.templ (detail)
-/members/new            → new.templ (create form)
-/governance/proposals/  → index.templ, show.templ, new.templ
+/members/               -> index.templ (list)
+/members/{id}           -> show.templ (detail)
+/members/new            -> new.templ (create form)
+/governance/proposals/  -> index.templ, show.templ, new.templ
 ```
 
 ### 2. Define DTOs First
@@ -213,7 +213,7 @@ func (h *Handlers) getProposal(id string) (*dto.ProposalResponse, error) {
 Prefer static SQL with optional predicates over dynamic `fmt.Sprintf` query building. Dynamic SQL triggers gosec G202 and risks injection.
 
 ```go
-// CORRECT — static SQL with conditional append
+// CORRECT -- static SQL with conditional append
 query := `SELECT id, title, status FROM $TABLE WHERE 1=1`
 args := []any{}
 if status != "" {
@@ -226,7 +226,7 @@ if memberID != "" {
 }
 rows, err := db.QueryContext(ctx, query, args...)
 
-// WRONG — dynamic SQL via fmt.Sprintf (gosec G202)
+// WRONG -- dynamic SQL via fmt.Sprintf (gosec G202)
 query := fmt.Sprintf(`SELECT * FROM %s WHERE status = '%s'`, table, status)
 ```
 
@@ -289,11 +289,11 @@ func rowFilter(p dto.ProposalResponse) string {
 Use explicit string comparisons (`$filter === 'all'`) when CSS classes or visibility depend on exact values. Boolean signals (`$showDrafts`) work for simple show/hide but break when `data-class` needs to match one of several states. When in doubt, use string signals with `===` matching.
 
 ```templ
-// CORRECT — string signal with exact matching
+// CORRECT -- string signal with exact matching
 data-signals="{ view: 'grid' }"
 data-class:active="$view === 'grid'"
 
-// RISKY — boolean loses which state is active
+// RISKY -- boolean loses which state is active
 data-signals="{ isGrid: true }"
 data-class:active="$isGrid"  // Can't distinguish grid vs list vs table
 ```
@@ -430,7 +430,7 @@ Each fixture owns its code in `internal/fixtures/{name}/`:
 ```
 internal/fixtures/governance/
 ├── routes.go           # Chi route registration
-├── handlers.go         # Thin HTTP adapters (parse → call service → render)
+├── handlers.go         # Thin HTTP adapters (parse -> call service -> render)
 ├── services/           # Business logic
 │   ├── proposals.go
 │   └── meetings.go
@@ -452,10 +452,10 @@ Baseplate code (members, admin, auth, groups) lives in `internal/baseplate/`.
 Shared components in `internal/components/` accept **primitive props only** (strings, ints, bools). They never import fixture-specific DTOs or model packages. If a component needs fixture data, the caller maps it to primitives before passing.
 
 ```go
-// CORRECT — primitive props
+// CORRECT -- primitive props
 components.Avatar(member.Name, "md", member.ImageURL)
 
-// WRONG — importing fixture model
+// WRONG -- importing fixture model
 components.ProposalCard(governance.Proposal{...})
 ```
 
@@ -685,7 +685,7 @@ Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` fo
 
 ## Production Architecture (DM-021)
 
-The production backend lives in a separate repo (`assembly-baseplate`, DM-021) and is built from first principles. The prototype (`assembly`, DM-006) is the design workspace — patterns are validated there, then implemented properly in production. Neither blocks the other. See ADR-002.
+The production backend lives in a separate repo (`assembly-baseplate`, DM-021) and is built from first principles. The prototype (`assembly`, DM-006) is the design workspace -- patterns are validated there, then implemented properly in production. Neither blocks the other. See ADR-002.
 
 ### Two-Repo Model
 
@@ -694,7 +694,7 @@ The production backend lives in a separate repo (`assembly-baseplate`, DM-021) a
 | `assembly/` | DM-006 | Prototype, UI/UX design, persona testing, mockup data |
 | `assembly-baseplate/` | DM-021 | Production platform, auth, NATS, SQLite, install, CLI |
 
-Design in the prototype → extract validated pattern → implement in production.
+Design in the prototype -> extract validated pattern -> implement in production.
 
 ### Module Interface
 
@@ -738,12 +738,12 @@ type Dependencies struct {
 
 ### ScopedDB
 
-Wraps `*sql.DB` with table-prefix enforcement. Fixtures never bypass ScopedDB — this is the core data isolation contract.
+Wraps `*sql.DB` with table-prefix enforcement. Fixtures never bypass ScopedDB -- this is the core data isolation contract.
 
 - Baseplate tables: no prefix (`members`, `groups`, `permissions`, `audit_log`)
 - Fixture tables: prefixed (`gov_proposals`, `doc_documents`, `eq_shares`, `health_metrics`)
 
-Fixtures use `$TABLE` and `$PREFIX_` placeholders in queries — ScopedDB substitutes the correct prefix at runtime. See ADR-003 (in the `assembly-baseplate` repo at `docs/adr/`).
+Fixtures use `$TABLE` and `$PREFIX_` placeholders in queries -- ScopedDB substitutes the correct prefix at runtime. See ADR-003 (in the `assembly-baseplate` repo at `docs/adr/`).
 
 ### ScopedNATS / ScopedEventBus
 
@@ -763,7 +763,7 @@ type ScopedEventBus struct {
 
 ### Service Layer Pattern
 
-Handlers → Services → ScopedDB. Services contain business logic. Handlers are thin HTTP adapters (parse request, call service, render response).
+Handlers -> Services -> ScopedDB. Services contain business logic. Handlers are thin HTTP adapters (parse request, call service, render response).
 
 **Size limits:** No handler file over 200 lines. No service file over 500 lines. Split into focused files if needed.
 
@@ -788,20 +788,20 @@ func (s *GovernanceService) ListProposals(ctx context.Context) ([]Proposal, erro
 
 Three-layer authorization (ADR-004):
 
-**Layer 1 — Route middleware:**
-- `RequireAuth` — session exists
-- `RequirePermission("governance.view")` — role-based
-- `RequireModule("governance")` — fixture enabled
-- `RequireAdmin` — board/officer/super_admin
+**Layer 1 -- Route middleware:**
+- `RequireAuth` -- session exists
+- `RequirePermission("governance.view")` -- role-based
+- `RequireModule("governance")` -- fixture enabled
+- `RequireAdmin` -- board/officer/super_admin
 
-**Layer 2 — Object-level (core):**
+**Layer 2 -- Object-level (core):**
 ```go
 func (a *Authorizer) Authorize(ctx context.Context, action string, resource Resource) error
 ```
 
 Default-deny switch on action strings (`proposal.edit`, `meeting.manage`, `vote.cast`). The `Resource` struct carries `ID`, `AuthorID`, `Status`, `GroupID` for ownership/visibility checks.
 
-**Layer 3 — Template conditional rendering:** Delegates to `Authorize()` internally. UX concern, not a security boundary.
+**Layer 3 -- Template conditional rendering:** Delegates to `Authorize()` internally. UX concern, not a security boundary.
 
 ### Install Identity & Federation
 
@@ -837,7 +837,7 @@ Federation uses OAuth-style account linking with signed tokens: 5-minute TTL, si
 | `assembly version` | Show version and install ID |
 | `assembly backup` | Manual SQLite backup |
 
-Passwords only via `--password-file` or `--password-stdin` — never env vars or CLI flags. See ADR-005.
+Passwords only via `--password-file` or `--password-stdin` -- never env vars or CLI flags. See ADR-005.
 
 ### Build & Test (Production)
 
@@ -920,5 +920,5 @@ Official and third-party Claude Code plugins that complement this skill:
 
 ## Cross-References
 
-- **council plugin** (`decolonial-language` skill): For values-aligned terminology when naming components, writing UI labels, seeding mock data, and writing microcopy. Provides the three-layer architecture (legal → bridge → cultural) for mapping BC Act terms to solidarity economy language. Default to cultural layer in member-facing templates; use legal layer only in generated compliance documents.
+- **council plugin** (`decolonial-language` skill): For values-aligned terminology when naming components, writing UI labels, seeding mock data, and writing microcopy. Provides the three-layer architecture (legal -> bridge -> cultural) for mapping BC Act terms to solidarity economy language. Default to cultural layer in member-facing templates; use legal layer only in generated compliance documents.
 - **Distribution docs** (in Assembly repo): `docs/DISTRIBUTION.md` (deployment model), `docs/PILOT-SCOPE.md` (pilot checklist), `docs/UPDATE-FLOW.md` (update sequence)

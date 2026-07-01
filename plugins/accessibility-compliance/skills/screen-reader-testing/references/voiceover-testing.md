@@ -21,7 +21,7 @@ Detailed VoiceOver commands, Safari integration, and macOS configuration for acc
 
 ### Test in Safari
 
-Always test VoiceOver in Safari first — it has the best integration on macOS. Then verify in Chrome and Firefox for cross-browser issues.
+Always test VoiceOver in Safari first -- it has the best integration on macOS. Then verify in Chrome and Firefox for cross-browser issues.
 
 ---
 
@@ -85,7 +85,7 @@ VO = Control + Option (the "VoiceOver keys")
 4. **Navigate to Landmarks** (Left/Right arrows until "Landmarks" list)
 5. **Verify expected landmarks:**
    - banner (header)
-   - navigation (nav — check aria-label if multiple)
+   - navigation (nav -- check aria-label if multiple)
    - main
    - contentinfo (footer)
    - complementary (sidebar, if applicable)
@@ -129,11 +129,11 @@ For each custom widget (tabs, accordions, dialogs, menus):
 
 1. **Position VoiceOver on or near the dynamic area**
 2. **Trigger the update** (click button, submit form)
-3. **Listen for announcement** — does VoiceOver speak the new content?
+3. **Listen for announcement** -- does VoiceOver speak the new content?
 4. **Check the live region:**
    - `aria-live="polite"` for non-urgent updates
    - `aria-live="assertive"` for errors/alerts
-5. **Verify focus** — where is focus after the update?
+5. **Verify focus** -- where is focus after the update?
 
 ---
 
@@ -158,9 +158,9 @@ VoiceOver only announces `role="region"` if it has an `aria-label` or `aria-labe
 ### Issue: Live Regions Not Firing
 
 Common causes:
-1. The `aria-live` element was added to the DOM at the same time as its content — it must exist BEFORE content is injected
-2. The element was replaced entirely (including the `aria-live` attribute) — keep the live region wrapper stable
-3. Content was updated via `innerHTML` on the live region itself — update a child element instead
+1. The `aria-live` element was added to the DOM at the same time as its content -- it must exist BEFORE content is injected
+2. The element was replaced entirely (including the `aria-live` attribute) -- keep the live region wrapper stable
+3. Content was updated via `innerHTML` on the live region itself -- update a child element instead
 
 ### Issue: `<dialog>` Focus Not Trapped
 
@@ -193,8 +193,8 @@ Native `<dialog>` with `showModal()` handles this automatically in most cases.
 For thorough testing, enable these in Safari:
 
 1. **Safari > Settings > Advanced > Show Develop menu**
-2. **Develop > Experimental Features** — check for accessibility-related flags
-3. **Safari > Settings > Advanced > Accessibility** — "Press Tab to highlight each item on a webpage" (this enables Tab key for links, not just form controls)
+2. **Develop > Experimental Features** -- check for accessibility-related flags
+3. **Safari > Settings > Advanced > Accessibility** -- "Press Tab to highlight each item on a webpage" (this enables Tab key for links, not just form controls)
 
 Without step 3, Safari only tabs to form controls by default, which can give a false impression of keyboard accessibility.
 

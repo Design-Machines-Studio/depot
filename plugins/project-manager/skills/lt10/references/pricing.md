@@ -1,6 +1,6 @@
 # Pricing and Financial Health
 
-> **Related sections:** → Estimation (`estimation.md`) → Scheduling (`scheduling.md`) → Capacity Planning (`scheduling.md`)
+> **Related sections:** -> Estimation (`estimation.md`) -> Scheduling (`scheduling.md`) -> Capacity Planning (`scheduling.md`)
 
 ## Contents
 

@@ -1,6 +1,6 @@
 # Scheduling & Capacity Planning
 
-> **Related sections:** → Estimation (`estimation.md`) → Pricing (`pricing.md`) → Methodology (`methodology.md`)
+> **Related sections:** -> Estimation (`estimation.md`) -> Pricing (`pricing.md`) -> Methodology (`methodology.md`)
 
 ## Contents
 
@@ -59,10 +59,10 @@ Day rate: $800/day/person
 
 | Type | Use Case |
 |------|----------|
-| **Phase-based** | Discovery → Design → Development → QA → Launch |
+| **Phase-based** | Discovery -> Design -> Development -> QA -> Launch |
 | **Resource-based** | Design team, Developer team |
 | **Task-based with dependencies** | Granular task tracking |
-| **Sprint-based** | Sprint 1 → Sprint 2 → Sprint 3 |
+| **Sprint-based** | Sprint 1 -> Sprint 2 -> Sprint 3 |
 
 ---
 
@@ -323,7 +323,7 @@ Creates impossible targets. Team cups overflow, can't accommodate changes. Aim f
 
 - How many hats are you wearing?
 - Different project types with different priorities?
-- Historic project data—where do you get bogged down?
+- Historic project data--where do you get bogged down?
 - Calculate your minimum project setup requirements
 
 ---

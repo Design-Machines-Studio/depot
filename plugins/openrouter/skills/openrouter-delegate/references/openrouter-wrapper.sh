@@ -36,11 +36,11 @@ if [ "$PROMPT_ARG" = "-" ]; then PROMPT="$(cat)"; else PROMPT="$PROMPT_ARG"; fi
 TO=""; command -v gtimeout >/dev/null 2>&1 && TO="gtimeout ${TIMEOUT}s"
 [ -z "$TO" ] && command -v timeout >/dev/null 2>&1 && TO="timeout ${TIMEOUT}s"
 
-# Provider preferences (per-request — portable, beats relying on dashboard defaults):
-#   OPENROUTER_REQUIRE_PARAMS=1 (default) → skip providers that don't support the
+# Provider preferences (per-request -- portable, beats relying on dashboard defaults):
+#   OPENROUTER_REQUIRE_PARAMS=1 (default) -> skip providers that don't support the
 #       requested params (e.g. tool calling) so agentic calls don't silently degrade.
-#   OPENROUTER_ZDR=1 → only providers that do NOT train on / retain data (privacy).
-#   OPENROUTER_PROVIDER_SORT=throughput|latency|price → bias provider choice.
+#   OPENROUTER_ZDR=1 -> only providers that do NOT train on / retain data (privacy).
+#   OPENROUTER_PROVIDER_SORT=throughput|latency|price -> bias provider choice.
 build_provider() {
   jq -n \
     --argjson req "$([ "${OPENROUTER_REQUIRE_PARAMS:-1}" = "1" ] && echo true || echo false)" \

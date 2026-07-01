@@ -27,8 +27,8 @@ Run a fast code review using the core agents plus ui-standards-reviewer for UI f
 
 Quick mode scales agent count by diff size:
 
-- **< 100 lines (lightweight):** 3 agents — security-auditor, pattern-recognition-specialist, code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer (small diffs rarely have architectural or doc-sync impact). With DeepSeek routing, this is 1 Claude + 2 DeepSeek agents.
-- **100–500 lines (standard):** 5 core agents (all below).
+- **< 100 lines (lightweight):** 3 agents -- security-auditor, pattern-recognition-specialist, code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer (small diffs rarely have architectural or doc-sync impact). With DeepSeek routing, this is 1 Claude + 2 DeepSeek agents.
+- **100-500 lines (standard):** 5 core agents (all below).
 - **> 500 lines (extended):** 5 core + applicable classification-aware agents.
 
 ## Core Agents (standard+ mode)

@@ -21,7 +21,7 @@ Every Craft CMS layout template should include landmarks and skip links:
 <!DOCTYPE html>
 <html lang="{{ currentSite.language }}">
 <head>
-  <title>{{ title ?? entry.title ?? siteName }} — {{ siteName }}</title>
+  <title>{{ title ?? entry.title ?? siteName }} -- {{ siteName }}</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>

@@ -98,8 +98,8 @@ Specialized hero variations:
 ### Configuration
 
 Create separate Matrix fields:
-- `sidebarContent` — limited entry types
-- `heroOptions` — specialized entry types
+- `sidebarContent` -- limited entry types
+- `heroOptions` -- specialized entry types
 
 Same entry types can appear in multiple Matrix fields.
 

@@ -38,9 +38,9 @@ ls todos/*-pending-*.md 2>/dev/null
 If no pending findings exist, tell the user and stop.
 
 If an argument was provided:
-- Number (e.g., `001`) — resolve only that finding
-- Priority (e.g., `p1`) — resolve all findings of that priority
-- No argument — resolve all pending findings, P1 first
+- Number (e.g., `001`) -- resolve only that finding
+- Priority (e.g., `p1`) -- resolve all findings of that priority
+- No argument -- resolve all pending findings, P1 first
 
 ### 2. Plan Fixes
 
@@ -50,7 +50,7 @@ For each pending finding:
 3. Read the affected source file(s)
 4. Plan the fix
 
-Group related findings that touch the same files — fix them together.
+Group related findings that touch the same files -- fix them together.
 
 ### 3. Implement Fixes
 
@@ -121,4 +121,4 @@ Cleaned up N completed todos. Remaining:
 - 003-pending-p2-description
 ```
 
-Always clean up after fixes are committed — don't leave completed todo files accumulating.
+Always clean up after fixes are committed -- don't leave completed todo files accumulating.

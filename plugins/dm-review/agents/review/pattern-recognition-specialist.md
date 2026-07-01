@@ -14,19 +14,19 @@ Only review changed files. Read each file fully before reporting. Also scan near
 ## Anti-Pattern Detection
 
 ### Structural Anti-Patterns
-- **God Object** — struct/class/module doing too many things (more than one clear responsibility)
-- **Feature Envy** — function/method that uses more data from another module than its own
-- **Shotgun Surgery** — a single logical change requires modifying many unrelated files
-- **Divergent Change** — one file is changed for many different reasons
-- **Data Clumps** — same group of variables/fields always appearing together (should be a struct/type)
-- **Primitive Obsession** — using strings/ints where a domain type would be safer
+- **God Object** -- struct/class/module doing too many things (more than one clear responsibility)
+- **Feature Envy** -- function/method that uses more data from another module than its own
+- **Shotgun Surgery** -- a single logical change requires modifying many unrelated files
+- **Divergent Change** -- one file is changed for many different reasons
+- **Data Clumps** -- same group of variables/fields always appearing together (should be a struct/type)
+- **Primitive Obsession** -- using strings/ints where a domain type would be safer
 
 ### Behavioral Anti-Patterns
-- **Long Parameter Lists** — more than 4 parameters (use a config struct/options object)
-- **Flag Arguments** — boolean parameters that switch behavior (split into two functions)
-- **Message Chains** — `a.B().C().D()` deep chains coupling to internal structure
-- **Middle Man** — a function/type that only delegates to another
-- **Speculative Generality** — abstractions built for hypothetical future needs
+- **Long Parameter Lists** -- more than 4 parameters (use a config struct/options object)
+- **Flag Arguments** -- boolean parameters that switch behavior (split into two functions)
+- **Message Chains** -- `a.B().C().D()` deep chains coupling to internal structure
+- **Middle Man** -- a function/type that only delegates to another
+- **Speculative Generality** -- abstractions built for hypothetical future needs
 
 ### Concurrency Anti-Patterns (Go-specific)
 - Shared mutable state without synchronization
@@ -79,13 +79,13 @@ Only review changed files. Read each file fully before reporting. Also scan near
 ## Pattern Recognition Review
 
 ### Critical (P1)
-- [file:line] Description — pattern name
+- [file:line] Description -- pattern name
 
 ### Serious (P2)
-- [file:line] Description — pattern name
+- [file:line] Description -- pattern name
 
 ### Moderate (P3)
-- [file:line] Description — pattern name
+- [file:line] Description -- pattern name
 
 ### Approved
 - [file] Description of what follows good patterns
@@ -94,9 +94,9 @@ Only review changed files. Read each file fully before reporting. Also scan near
 ## Rules
 
 1. Only review changed files, but check neighboring files for consistency
-2. Name the specific anti-pattern — don't just say "this is bad"
+2. Name the specific anti-pattern -- don't just say "this is bad"
 3. Explain why the pattern is problematic in this context
 4. Suggest the refactoring that would fix it
 5. Don't flag idiomatic patterns as anti-patterns (e.g., Go's verbose error handling is intentional)
-6. Duplication under 5 lines is usually fine — don't flag trivial repetition
+6. Duplication under 5 lines is usually fine -- don't flag trivial repetition
 7. If the codebase consistently uses a pattern, don't flag individual files for breaking a convention the project doesn't follow

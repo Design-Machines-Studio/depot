@@ -1,6 +1,6 @@
 ---
 name: governance
-description: Worker cooperative governance expertise for BC Cooperative Association Act compliance, bylaw analysis, discovery processes, and Assembly system design. Use when working with cooperatives, analyzing bylaws, designing governance systems, conducting discovery for Assembly projects, interpreting voting thresholds, patronage allocation, member equity, compliance requirements, or any worker cooperative governance questions. While it specializes in BC, Canada (5-50 member worker co-ops), the decision-making models, red flags, discovery framework, and governance module architecture apply to cooperatives in any jurisdiction. Trigger this skill for ANY cooperative governance question — voting mechanics, quorum rules, AGM prep, member lifecycle, membership requirements (including measurable requirements that track progress toward a target rather than a boolean done-flag), equity structures, consent-based decisions, board composition — even if the user doesn't mention BC specifically. Also trigger when discussing TACO, Solid State, or any Assembly pilot, when the user asks about co-op compliance deadlines, or when designing governance UI flows.
+description: Worker cooperative governance expertise for BC Cooperative Association Act compliance, bylaw analysis, discovery processes, and Assembly system design. Use when working with cooperatives, analyzing bylaws, designing governance systems, conducting discovery for Assembly projects, interpreting voting thresholds, patronage allocation, member equity, compliance requirements, or any worker cooperative governance questions. While it specializes in BC, Canada (5-50 member worker co-ops), the decision-making models, red flags, discovery framework, and governance module architecture apply to cooperatives in any jurisdiction. Trigger this skill for ANY cooperative governance question -- voting mechanics, quorum rules, AGM prep, member lifecycle, membership requirements (including measurable requirements that track progress toward a target rather than a boolean done-flag), equity structures, consent-based decisions, board composition -- even if the user doesn't mention BC specifically. Also trigger when discussing TACO, Solid State, or any Assembly pilot, when the user asks about co-op compliance deadlines, or when designing governance UI flows.
 ---
 
 # Co-op Governance Skill
@@ -52,7 +52,7 @@ Comprehensive worker cooperative governance expertise for designing, testing, an
 | 11-25 members | 33-50% |
 | 26-50 members | 25-33% |
 
-**Warning**: If quorum not achieved, meeting adjourns 1 week → those present become quorum regardless of number.
+**Warning**: If quorum not achieved, meeting adjourns 1 week -> those present become quorum regardless of number.
 
 ---
 
@@ -180,7 +180,7 @@ Co-op governance is a rhythm, not a dashboard. Co-op OS guides members through:
 **Order of precedence**: Act > Rules > Policies > Custom
 
 When bylaws conflict with the BC Act:
-1. Act always wins—bylaws cannot override statutory requirements
+1. Act always wins--bylaws cannot override statutory requirements
 2. Document the conflict in discovery findings
 3. Advise bylaw amendment to avoid confusion
 4. Configure Co-op OS to enforce Act requirements
@@ -304,7 +304,7 @@ When bylaws conflict with the BC Act:
 
 ## Systems Thinking for Governance Design
 
-When designing or reviewing Assembly governance features, apply these lenses. The goal is to build governance structures that create healthy feedback loops — not just comply with the BC Act.
+When designing or reviewing Assembly governance features, apply these lenses. The goal is to build governance structures that create healthy feedback loops -- not just comply with the BC Act.
 
 ### Every Governance Feature Creates a Feedback Loop
 
@@ -312,7 +312,7 @@ Before building a feature, identify:
 
 1. **What behavior does this reinforce?** A voting UI that shows live position distribution reinforces participation (people see their input matters). A voting UI that only shows a final tally reinforces passivity (people check the result, not the process).
 
-2. **Is the loop reinforcing or balancing?** Reinforcing loops compound: participation → better decisions → trust → more participation. Balancing loops stabilize: complexity → member fatigue → low participation → poor decisions → more governance problems. Design for reinforcing loops. Watch for balancing loops that create governance debt.
+2. **Is the loop reinforcing or balancing?** Reinforcing loops compound: participation -> better decisions -> trust -> more participation. Balancing loops stabilize: complexity -> member fatigue -> low participation -> poor decisions -> more governance problems. Design for reinforcing loops. Watch for balancing loops that create governance debt.
 
 3. **Where are the delays?** Senge: delays between action and consequence are where systems thinking falls apart. If a member submits a proposal and gets no feedback for two weeks, the delay kills the reinforcing loop. Assembly's real-time features (Datastar SSE, live positions, presence indicators) are delay-reduction tools.
 
@@ -326,7 +326,7 @@ Before building a feature, identify:
 
 ### The Kelly Test (from *Owning Our Future*)
 
-Marjorie Kelly's core insight: **system structure is the source of system behavior.** The governance rules encoded in Assembly will determine how co-ops behave — not their stated values, not their bylaws on paper, but the actual feedback loops the software creates.
+Marjorie Kelly's core insight: **system structure is the source of system behavior.** The governance rules encoded in Assembly will determine how co-ops behave -- not their stated values, not their bylaws on paper, but the actual feedback loops the software creates.
 
 Ask: "If a co-op used Assembly exactly as designed, with no workarounds, would the resulting governance be healthy?" If the answer requires members to route around the tool (vote in Slack, discuss in DMs, track decisions in spreadsheets), the tool is failing.
 
@@ -334,15 +334,15 @@ Ask: "If a co-op used Assembly exactly as designed, with no workarounds, would t
 
 Search the RAG for deeper material when designing governance features:
 
-- `"feedback loops governance"` → Kelly on generative vs extractive design
-- `"systems archetypes"` → Senge on Growth and Underinvestment, Shifting the Burden
-- `"leverage points"` → Meadows' 12-point hierarchy for system intervention
-- `"democratic workplace participation"` → Nightingale and Wolff on formal structure as prerequisite for real participation
-- `"feedback thought social science"` → Weinberg on general systems thinking applied to organizations
+- `"feedback loops governance"` -> Kelly on generative vs extractive design
+- `"systems archetypes"` -> Senge on Growth and Underinvestment, Shifting the Burden
+- `"leverage points"` -> Meadows' 12-point hierarchy for system intervention
+- `"democratic workplace participation"` -> Nightingale and Wolff on formal structure as prerequisite for real participation
+- `"feedback thought social science"` -> Weinberg on general systems thinking applied to organizations
 
 ---
 
-## Governance → Production Architecture Mapping
+## Governance -> Production Architecture Mapping
 
 How governance domain concepts map to Assembly's production backend (assembly-baseplate, DM-021).
 
@@ -385,7 +385,7 @@ err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
 })
 ```
 
-### BC Act Fields → Database Columns
+### BC Act Fields -> Database Columns
 
 Statutory requirements map to specific database columns and validation rules:
 
@@ -398,15 +398,15 @@ Statutory requirements map to specific database columns and validation rules:
 | Financial statements 10 days pre-AGM | `doc_documents WHERE type='financial'` | Date comparison |
 | Annual report within 2 months post-AGM | `doc_documents WHERE type='annual_report'` | Date comparison |
 
-### Audit Trail → NATS AUDIT Stream
+### Audit Trail -> NATS AUDIT Stream
 
 Every governance action publishes to the NATS `AUDIT` stream (90-day retention):
 
-- Vote cast → `assembly.audit.action` (type: `vote.cast`)
-- Resolution passed → `assembly.audit.action` (type: `resolution.passed`)
-- Meeting called → `assembly.audit.action` (type: `meeting.called`)
-- Member status change → `assembly.audit.action` (type: `member.status_changed`)
-- Proposal status change → `assembly.audit.action` (type: `proposal.status_changed`)
+- Vote cast -> `assembly.audit.action` (type: `vote.cast`)
+- Resolution passed -> `assembly.audit.action` (type: `resolution.passed`)
+- Meeting called -> `assembly.audit.action` (type: `meeting.called`)
+- Member status change -> `assembly.audit.action` (type: `member.status_changed`)
+- Proposal status change -> `assembly.audit.action` (type: `proposal.status_changed`)
 
 The NATS event envelope includes `actor_id`, `entity_id`, `timestamp`, and a `data` payload with the specific change details. This creates the statutory audit trail required by the BC Cooperative Association Act.
 
@@ -441,11 +441,11 @@ The glossary is the source of truth that backs Assembly's UI copy, member statem
 
 | Topic | Related Sections |
 |-------|------------------|
-| Voting thresholds | → Bylaw Analysis, → Decision Models, → BC Act |
-| Member equity | → Financial Governance, → ICAs, → Patronage |
-| Compliance | → BC Act Requirements, → Compliance Calendar, → Red Flags |
-| Discovery | → Three Scenarios, → Deliverables, → Red Flags |
-| System design | → Module Architecture, → Journey Paradigm, → UX Principles |
+| Voting thresholds | -> Bylaw Analysis, -> Decision Models, -> BC Act |
+| Member equity | -> Financial Governance, -> ICAs, -> Patronage |
+| Compliance | -> BC Act Requirements, -> Compliance Calendar, -> Red Flags |
+| Discovery | -> Three Scenarios, -> Deliverables, -> Red Flags |
+| System design | -> Module Architecture, -> Journey Paradigm, -> UX Principles |
 
 ---
 
@@ -454,11 +454,11 @@ The glossary is the source of truth that backs Assembly's UI copy, member statem
 | Skill | Plugin | When to Load |
 |-------|--------|--------------|
 | **decolonial-language** | council | Values-aligned terminology for UI labels, member communications, and content decisions |
-| **development** | assembly | Technical implementation — Docker-based Go development, Templ templates, Datastar reactivity |
+| **development** | assembly | Technical implementation -- Docker-based Go development, Templ templates, Datastar reactivity |
 | **strategy** | design-machines | Business context, pricing, partnerships, pipeline status |
 
 ## Cross-References
 
-- **decolonial-language skill** (in this plugin): For values-aligned terminology, content strategy, and the three-layer architecture (legal → bridge → cultural) for member-facing communications. Use when naming UI elements, writing labels, or drafting member documents.
-- **assembly plugin**: Technical implementation — Docker-based Go development, Templ templates, Datastar reactivity.
-- **Assembly repo distribution docs**: `docs/DISTRIBUTION.md` (phased distribution — pilot → self-updating → platform), `docs/PILOT-SCOPE.md` (first client scope — governance Simple Mode, no proposals/async/proxy), `docs/UPDATE-FLOW.md` (update/rollback sequence).
+- **decolonial-language skill** (in this plugin): For values-aligned terminology, content strategy, and the three-layer architecture (legal -> bridge -> cultural) for member-facing communications. Use when naming UI elements, writing labels, or drafting member documents.
+- **assembly plugin**: Technical implementation -- Docker-based Go development, Templ templates, Datastar reactivity.
+- **Assembly repo distribution docs**: `docs/DISTRIBUTION.md` (phased distribution -- pilot -> self-updating -> platform), `docs/PILOT-SCOPE.md` (first client scope -- governance Simple Mode, no proposals/async/proxy), `docs/UPDATE-FLOW.md` (update/rollback sequence).

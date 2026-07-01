@@ -1,5 +1,5 @@
 // Copy-back round-trip for decision-table widgets.
-// Self-contained HTML artifacts open via file:// — relative <script src> to the
+// Self-contained HTML artifacts open via file:// -- relative <script src> to the
 // templates dir would not resolve next to the artifact. So agents INLINE this
 // file's contents into the base.html WIDGET_SCRIPTS slot inside a
 // <script defer> ... </script> block. Include it once per artifact.

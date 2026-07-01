@@ -47,8 +47,8 @@ Always also take a `fullPage: true` screenshot to capture below-the-fold content
 
 Live Wires uses container queries rather than media queries for component-level responsive behavior. The breakpoints above are **viewport widths** for `browser_resize`, but the actual CSS breakpoints are container-based:
 
-- `@container (min-width: 40rem)` — mapped via `@md` suffix
-- `@container (min-width: 60rem)` — mapped via `@lg` suffix
+- `@container (min-width: 40rem)` -- mapped via `@md` suffix
+- `@container (min-width: 60rem)` -- mapped via `@lg` suffix
 
 At viewport width 320px, most containers will be below 40rem, triggering the narrowest layout. At 1024px+, containers in the main content area will typically exceed 60rem.
 
@@ -57,7 +57,7 @@ At viewport width 320px, most containers will be below 40rem, triggering the nar
 At each breakpoint, check for horizontal overflow by running:
 
 ```javascript
-// browser_evaluate — check for horizontal overflow
+// browser_evaluate -- check for horizontal overflow
 document.documentElement.scrollWidth > document.documentElement.clientWidth
 ```
 

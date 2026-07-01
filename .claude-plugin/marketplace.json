@@ -12,7 +12,7 @@
     {
       "name": "ned",
       "source": "./plugins/ned",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "author": {
         "name": "Design Machines"
       },
@@ -38,7 +38,7 @@
     {
       "name": "craft-developer",
       "source": "./plugins/craft-developer",
-      "version": "2.5.0",
+      "version": "2.5.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -62,7 +62,7 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.8.0",
+      "version": "1.8.1",
       "author": {
         "name": "Design Machines"
       },
@@ -84,7 +84,7 @@
     {
       "name": "council",
       "source": "./plugins/council",
-      "version": "1.11.0",
+      "version": "1.11.1",
       "author": {
         "name": "Design Machines"
       },
@@ -106,7 +106,7 @@
     {
       "name": "design-machines",
       "source": "./plugins/design-machines",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "author": {
         "name": "Design Machines"
       },
@@ -130,7 +130,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.7.0",
+      "version": "3.7.1",
       "author": {
         "name": "Design Machines"
       },
@@ -158,7 +158,7 @@
     {
       "name": "live-wires",
       "source": "./plugins/live-wires",
-      "version": "1.7.1",
+      "version": "1.7.2",
       "author": {
         "name": "Design Machines"
       },
@@ -180,7 +180,7 @@
     {
       "name": "ghostwriter",
       "source": "./plugins/ghostwriter",
-      "version": "3.9.0",
+      "version": "3.9.1",
       "author": {
         "name": "Design Machines"
       },
@@ -202,7 +202,7 @@
     {
       "name": "design-practice",
       "source": "./plugins/design-practice",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "author": {
         "name": "Design Machines"
       },
@@ -225,7 +225,7 @@
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "version": "1.8.0",
+      "version": "1.8.1",
       "author": {
         "name": "Design Machines"
       },
@@ -249,7 +249,7 @@
     {
       "name": "accessibility-compliance",
       "source": "./plugins/accessibility-compliance",
-      "version": "1.5.1",
+      "version": "1.5.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.38.3",
+      "version": "1.38.4",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -303,7 +303,7 @@
     {
       "name": "the-local",
       "source": "./plugins/the-local",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "author": {
         "name": "Design Machines"
       },
@@ -325,7 +325,7 @@
     {
       "name": "chef",
       "source": "./plugins/chef",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "author": {
         "name": "Design Machines"
       },
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.22.1",
+      "version": "1.22.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -397,7 +397,7 @@
     {
       "name": "deepseek",
       "source": "./plugins/deepseek",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -423,7 +423,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.0.6",
+      "version": "1.0.7",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

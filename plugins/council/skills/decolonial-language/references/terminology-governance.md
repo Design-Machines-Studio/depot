@@ -6,7 +6,7 @@ Detailed guidance for governance language in cooperative software, meeting facil
 
 Corporate governance language embeds command-and-control assumptions: boards "direct," chairs "preside," officers "execute." Cooperative governance language should reflect collective decision-making, shared stewardship, and democratic participation.
 
-The most successful alternative models — sociocracy, indigenous governance, horizontalidad — share a common pattern: circles instead of pyramids, facilitation instead of authority, consent instead of command.
+The most successful alternative models -- sociocracy, indigenous governance, horizontalidad -- share a common pattern: circles instead of pyramids, facilitation instead of authority, consent instead of command.
 
 ---
 
@@ -14,18 +14,18 @@ The most successful alternative models — sociocracy, indigenous governance, ho
 
 ### Stewardship Circle (not Board of Directors)
 
-**Why it matters:** "Board of Directors" implies a group that directs others — a hierarchical relationship. "Stewardship Circle" implies a group that cares for something on behalf of the community — a service relationship.
+**Why it matters:** "Board of Directors" implies a group that directs others -- a hierarchical relationship. "Stewardship Circle" implies a group that cares for something on behalf of the community -- a service relationship.
 
 **Legal requirement:** The BC Cooperative Association Act requires "directors." Legal documents must use this term. Internal operations can use any term.
 
 **Implementation:**
 - UI navigation: "Stewardship Circle"
-- Meeting headers: "Stewardship Circle Meeting — February 2026"
+- Meeting headers: "Stewardship Circle Meeting -- February 2026"
 - Legal documents: "Directors (referred to internally as the Stewardship Circle)"
 - Bylaw bridge: "The Stewardship Circle shall serve as the Board of Directors as defined in the BC Cooperative Association Act"
 - Member communication: "Your stewards met on Tuesday..."
 
-**Sociocratic equivalent:** "Top Circle" — functions identically to a board but uses consent-based decision-making and double-linking.
+**Sociocratic equivalent:** "Top Circle" -- functions identically to a board but uses consent-based decision-making and double-linking.
 
 ### Facilitator / Convenor (not Chairman/Chairperson)
 
@@ -42,32 +42,32 @@ The most successful alternative models — sociocracy, indigenous governance, ho
 
 ### Proposal (not Motion)
 
-**Why it matters:** "Motion" is parliamentary procedure — formal, intimidating, associated with Robert's Rules. "Proposal" is accessible and action-oriented. Someone proposes something; others respond.
+**Why it matters:** "Motion" is parliamentary procedure -- formal, intimidating, associated with Robert's Rules. "Proposal" is accessible and action-oriented. Someone proposes something; others respond.
 
 **Legal requirement:** BC Act uses "resolution" for formal decisions. "Proposal" describes the pre-decision stage.
 
 **Implementation:**
-- UI flow: Proposal → Discussion → Consent Decision
+- UI flow: Proposal -> Discussion -> Consent Decision
 - Status labels: "Draft," "In Discussion," "Seeking Consent," "Decided," "Implemented"
 - Member communication: "A new proposal has been shared for discussion"
 - Not: "A motion has been tabled" (parliamentary jargon)
 
 ### Consent Decision / Working Agreement (not Resolution)
 
-**Why it matters:** "Resolution" sounds final and bureaucratic. "Consent decision" describes what actually happens — the group consents to move forward. "Working agreement" emphasizes that decisions can be revisited.
+**Why it matters:** "Resolution" sounds final and bureaucratic. "Consent decision" describes what actually happens -- the group consents to move forward. "Working agreement" emphasizes that decisions can be revisited.
 
 **Legal requirement:** BC Act requires "ordinary resolutions" and "special resolutions" with specific voting thresholds. Use these terms in legal documents and compliance tracking.
 
 **Implementation:**
 - UI label: "Consent Decision"
 - Types: "Consent Decision" (ordinary), "Major Consent Decision" (special/2/3 threshold)
-- Bridge tooltip on "Major Consent Decision": "Requires 2/3 consent — the Act calls this a 'special resolution'"
+- Bridge tooltip on "Major Consent Decision": "Requires 2/3 consent -- the Act calls this a 'special resolution'"
 - Meeting record: "The circle reached consent on..."
 - Legal filing: "Special Resolution passed on [date]"
 
 ### Consent Round (not Vote)
 
-**Why it matters:** Voting creates winners and losers. Consent rounds ask "can you live with this?" — a fundamentally different question than "do you agree?" Consent means no paramount objections, not unanimous enthusiasm.
+**Why it matters:** Voting creates winners and losers. Consent rounds ask "can you live with this?" -- a fundamentally different question than "do you agree?" Consent means no paramount objections, not unanimous enthusiasm.
 
 **Implementation:**
 - UI label: "Consent Round"
@@ -79,13 +79,13 @@ The most successful alternative models — sociocracy, indigenous governance, ho
 
 ### Participation Threshold (not Quorum)
 
-**Why it matters:** "Quorum" is Latin parliamentary terminology that creates unnecessary formality. "Participation threshold" describes the concept directly — enough people need to be present for decisions to be valid.
+**Why it matters:** "Quorum" is Latin parliamentary terminology that creates unnecessary formality. "Participation threshold" describes the concept directly -- enough people need to be present for decisions to be valid.
 
 **Legal requirement:** BC Act requires quorum. Use the term in legal documents.
 
 **Implementation:**
 - UI label: "Participation Threshold"
-- Status indicator: "12 of 15 members present — threshold met ✓"
+- Status indicator: "12 of 15 members present -- threshold met ✓"
 - Warning: "We need 3 more members to reach our participation threshold"
 - Legal documents: "Quorum (Participation Threshold)"
 
@@ -93,7 +93,7 @@ The most successful alternative models — sociocracy, indigenous governance, ho
 
 **Why it matters:** "Bylaws" sound like rules imposed from above. "Community agreements" frames them as collectively created and owned.
 
-**Legal requirement:** BC Act uses "rules" (not "bylaws" — that's actually a US term). Filed documents should reference "Rules of Association."
+**Legal requirement:** BC Act uses "rules" (not "bylaws" -- that's actually a US term). Filed documents should reference "Rules of Association."
 
 **Implementation:**
 - UI navigation: "Our Agreements" or "Community Agreements"
@@ -106,15 +106,15 @@ The most successful alternative models — sociocracy, indigenous governance, ho
 **Why it matters:** "Officer" implies rank and authority. "Steward" implies care and responsibility. "Coordinator" implies facilitation.
 
 **Implementation:**
-- Secretary → "Records Steward" or "Keeper of Records"
-- Treasurer → "Financial Steward" or "Finance Coordinator"
-- President → "Lead Facilitator" or "General Coordinator"
-- Vice-President → "Alternate Facilitator" or "Support Coordinator"
+- Secretary -> "Records Steward" or "Keeper of Records"
+- Treasurer -> "Financial Steward" or "Finance Coordinator"
+- President -> "Lead Facilitator" or "General Coordinator"
+- Vice-President -> "Alternate Facilitator" or "Support Coordinator"
 - Legal documents: Use statutory officer titles with internal equivalences noted
 
 ### Meeting Record (not Minutes)
 
-**Why it matters:** "Minutes" implies bureaucratic obligation. "Meeting record" or "decision record" emphasizes capturing what matters — what was decided and why.
+**Why it matters:** "Minutes" implies bureaucratic obligation. "Meeting record" or "decision record" emphasizes capturing what matters -- what was decided and why.
 
 **Implementation:**
 - UI label: "Meeting Record" or "Decision Record"
@@ -134,11 +134,11 @@ The most successful alternative models — sociocracy, indigenous governance, ho
 
 ### Meeting Flow
 
-**Instead of:** "Call to order → Roll call → Approval of minutes → Old business → New business → Adjournment"
+**Instead of:** "Call to order -> Roll call -> Approval of minutes -> Old business -> New business -> Adjournment"
 
-**Use:** "Opening → Check-in → Review previous decisions → Current proposals → New proposals → Closing"
+**Use:** "Opening -> Check-in -> Review previous decisions -> Current proposals -> New proposals -> Closing"
 
-Or even simpler: "Gather → Reflect → Decide → Plan → Close"
+Or even simpler: "Gather -> Reflect -> Decide -> Plan -> Close"
 
 ### Escalation Language
 
@@ -170,7 +170,7 @@ Co-op OS should generate both from the same underlying data.
 
 ## Models That Have Done This Well
 
-**Sociocracy** provides the most complete alternative governance vocabulary — circles, consent, facilitators, double-linking — all legally defensible and operationally proven. Sociocratic bylaws explicitly state board/circle equivalence.
+**Sociocracy** provides the most complete alternative governance vocabulary -- circles, consent, facilitators, double-linking -- all legally defensible and operationally proven. Sociocratic bylaws explicitly state board/circle equivalence.
 
 **Loomio Cooperative** uses accessible decision language in their software: Proposals, Agree/Abstain/Disagree/Block. Their brand guidelines require non-gendered and non-violent language throughout.
 

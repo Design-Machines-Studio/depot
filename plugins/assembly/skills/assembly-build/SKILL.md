@@ -34,7 +34,7 @@ Run the Assembly build pipeline inside Docker.
 
 ## Commands
 
-All commands run inside Docker — never bare on the host.
+All commands run inside Docker -- never bare on the host.
 
 ### Full Build (default)
 

@@ -45,7 +45,7 @@ This tree ensures that a missing error state on a critical form (user stranded =
 | **architecture-reviewer** | Layer violations (templates calling DB), broken module boundaries | SOLID violations, excessive coupling, wrong package | Minor cohesion issues, suboptimal but functional structure |
 | **doc-sync-reviewer** | API docs contradict implementation, CLAUDE.md has wrong paths | README outdated, missing docs for new features | Minor formatting, stale examples |
 | **test-coverage-reviewer** | Existing tests now fail | Changed code has no tests (when project has test infrastructure) | Missing edge case tests |
-| **go-build-verifier** | Compilation failure | `go vet` warnings | — |
+| **go-build-verifier** | Compilation failure | `go vet` warnings | -- |
 | **craft-reviewer** | N+1 queries in loops, `\|raw` on user input | Missing eager loading, no null checks on relations | Suboptimal query patterns, minor template issues |
 | **visual-browser-tester** | Layout completely broken at any breakpoint, keyboard trap in browser, axe-core critical violations, focus indicators missing entirely, JS exceptions preventing render | Layout degraded at mobile (content cut off, overlapping, horizontal scroll), interactive states not visually distinct, axe-core serious violations, console JS errors, contrast failures, missing scheme tokens | Minor spacing inconsistencies, axe-core moderate violations, responsive polish, baseline rhythm misalignment |
 | **ux-quality-reviewer** | Navigation dead ends, missing error states that strand users, primary action invisible or unreachable, voting interface ambiguous enough to cause wrong votes | Missing feedback states (loading, empty, success), inconsistent interaction patterns, poor hierarchy burying content, missing empty states on lists/tables, AI slop score below 20/25 | Spacing inconsistencies, minor alignment drift, suboptimal typography, missing hover states, orphaned headings, edge case overflow |
@@ -58,8 +58,8 @@ This tree ensures that a missing error state on a critical form (user stranded =
 | **a11y-html-reviewer** | accessibility-compliance | Missing form labels, keyboard traps, no alt on functional images | Broken heading hierarchy, missing landmarks, generic link text | Missing aria-describedby, suboptimal ARIA |
 | **a11y-css-reviewer** | accessibility-compliance | `outline: none` without replacement, failing contrast on primary text | Animations without motion check, reflow broken at 320px | Low contrast on secondary text, missing forced-colors |
 | **a11y-dynamic-content-reviewer** | accessibility-compliance | Click handlers on non-interactive elements, no live regions for state changes | Focus lost after morph, loading states silent | ARIA states not synced, suboptimal focus target |
-| **css-reviewer** | live-wires | — (errors) | Cascade layer violations, class invention, naming rule breaks | Token recommendations, container query suggestions |
-| **voice-editor** | ghostwriter | — | Spine failure (no point of view), AI pattern detected | Rhythm issues, minor register drift |
+| **css-reviewer** | live-wires | -- (errors) | Cascade layer violations, class invention, naming rule breaks | Token recommendations, container query suggestions |
+| **voice-editor** | ghostwriter | -- | Spine failure (no point of view), AI pattern detected | Rhythm issues, minor register drift |
 | **governance-domain** | council | Legal compliance failure (wrong voting threshold) | Architecture violation (fixture boundaries) | Naming recommendations, values alignment |
 
 ---
@@ -68,7 +68,7 @@ This tree ensures that a missing error state on a critical form (user stranded =
 
 | Agent | Phase | Critical/P1 | Serious/P2 | Moderate/P3 |
 |-------|-------|------------|------------|-------------|
-| **visual-browser-tester** | Live Wires CSS Compliance | — | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, alternative primitive patterns (mandatory -- zero-deferral applies) |
+| **visual-browser-tester** | Live Wires CSS Compliance | -- | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, alternative primitive patterns (mandatory -- zero-deferral applies) |
 
 UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer** (see dm-review Agents table above).
 

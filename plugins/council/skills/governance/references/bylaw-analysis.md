@@ -1,10 +1,10 @@
 # Bylaw Analysis Guide
 
-> **Related sections:** → BC Act Requirements (`bc-cooperative-act.md`) → Discovery Framework (`discovery-framework.md`) → Financial Governance (`financial-governance.md`)
+> **Related sections:** -> BC Act Requirements (`bc-cooperative-act.md`) -> Discovery Framework (`discovery-framework.md`) -> Financial Governance (`financial-governance.md`)
 
 ## Overview
 
-Bylaw analysis extracts configuration requirements for Co-op OS. The goal isn't to understand every rule—it's to identify what the system must enforce, track, and support.
+Bylaw analysis extracts configuration requirements for Co-op OS. The goal isn't to understand every rule--it's to identify what the system must enforce, track, and support.
 
 **Key insight**: Bylaws tell you what's required. Actual practice tells you what's working.
 
@@ -14,11 +14,11 @@ Bylaw analysis extracts configuration requirements for Co-op OS. The goal isn't 
 
 **Order of precedence (highest to lowest):**
 
-1. **BC Cooperative Association Act** — Cannot be overridden
-2. **Memorandum of Association** — Foundational document
-3. **Rules of Association (Bylaws)** — Governance framework
-4. **Board Policies** — Operational guidelines
-5. **Custom Practice** — How things actually work
+1. **BC Cooperative Association Act** -- Cannot be overridden
+2. **Memorandum of Association** -- Foundational document
+3. **Rules of Association (Bylaws)** -- Governance framework
+4. **Board Policies** -- Operational guidelines
+5. **Custom Practice** -- How things actually work
 
 **When bylaws conflict with the Act**: Act always wins. Document the conflict and recommend bylaw amendment.
 

@@ -3,14 +3,14 @@
   Use in plan.html / research.html for dependency graphs and flows.
   Slot: MERMAID_SOURCE (Mermaid text). HTML-escape `&`, `<`, and `>` in the
   source. The browser decodes those entities back to literal characters in
-  the element's textContent — which is what Mermaid reads — so escaping is
+  the element's textContent -- which is what Mermaid reads -- so escaping is
   transparent to Mermaid yet prevents breaking out of the pre element with an
   injected script tag if the source ever carries untrusted text.
   The CDN loader goes into the base.html WIDGET_SCRIPTS slot ONCE per artifact, as two
   deferred script tags: one with
     src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"
   and one inline that calls mermaid.initialize({startOnLoad:true}) on window load.
-  When offline (no CDN), the <pre> degrades to readable diagram source — acceptable.
+  When offline (no CDN), the <pre> degrades to readable diagram source -- acceptable.
 -->
 <figure class="diagram">
   <pre class="mermaid">{{MERMAID_SOURCE}}</pre>

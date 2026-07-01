@@ -1,6 +1,6 @@
 # Pitch: Existing worker co-ops directly
 
-The secondary audience. The Tuesday-morning member; the small-to-mid co-op (5–30 members) that knows what governance is supposed to feel like and is currently making it work despite their tools, not because of them.
+The secondary audience. The Tuesday-morning member; the small-to-mid co-op (5-30 members) that knows what governance is supposed to feel like and is currently making it work despite their tools, not because of them.
 
 ## The Tuesday morning frame
 
@@ -67,8 +67,8 @@ This also calms new members nervous about whether the form is "real." It is not 
 
 ## Cross-reference
 
-- `references/language-card.md` — discipline on what to never say in this audience.
-- `references/developer-federation-pitch.md` — different register; useful when the same prospect is on a sales call with a federation in the room.
-- `references/survival-reframe-citations.md` — citations for the survival numbers if a member asks for sources.
-- `plugins/council/skills/governance/references/plain-language-glossary.md` — what to point at when the prospect asks "but my bylaws say 'patronage allocation,' what does that mean to a new member?"
-- `plugins/design-machines/skills/strategy/references/two-moats.md` — full two-moats positioning if the prospect wants the deeper version.
+- `references/language-card.md` -- discipline on what to never say in this audience.
+- `references/developer-federation-pitch.md` -- different register; useful when the same prospect is on a sales call with a federation in the room.
+- `references/survival-reframe-citations.md` -- citations for the survival numbers if a member asks for sources.
+- `plugins/council/skills/governance/references/plain-language-glossary.md` -- what to point at when the prospect asks "but my bylaws say 'patronage allocation,' what does that mean to a new member?"
+- `plugins/design-machines/skills/strategy/references/two-moats.md` -- full two-moats positioning if the prospect wants the deeper version.

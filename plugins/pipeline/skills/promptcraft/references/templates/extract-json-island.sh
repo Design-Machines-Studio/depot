@@ -10,7 +10,7 @@
 #
 # WHAT THIS FIXES:
 #   A single, dependency-light extractor agents can call regardless of whether the
-#   artifact is .html (new) — replaces ad-hoc markdown grepping in promptcraft,
+#   artifact is .html (new) -- replaces ad-hoc markdown grepping in promptcraft,
 #   plan-adversary, and the execution-orchestrator.
 #
 # DEPENDENCIES:

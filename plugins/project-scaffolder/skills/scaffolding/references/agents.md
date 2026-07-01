@@ -134,7 +134,7 @@ Check that new CSS is placed in the correct layer file and uses `@layer` declara
 - All spacing must use `--line-*` tokens (never arbitrary pixel values)
 - All typography must use `--text-*` tokens
 - All colors must use `--color-*` tokens or color-scheme variables
-- The foundational unit is `--line` — everything derives from it
+- The foundational unit is `--line` -- everything derives from it
 
 ### 4. Class Invention Detection
 
@@ -311,13 +311,13 @@ Check every database query call for parameterized queries.
 ## Security Audit Report
 
 ### Critical (fix before merge)
-- [category] file:line — Description and remediation
+- [category] file:line -- Description and remediation
 
 ### High (fix soon)
-- [category] file:line — Description and remediation
+- [category] file:line -- Description and remediation
 
 ### Medium (track for later)
-- [category] file:line — Description and remediation
+- [category] file:line -- Description and remediation
 
 ### Positive Findings
 - Good practices already in place
@@ -361,7 +361,7 @@ You are an accessibility reviewer for the {{PROJECT_NAME}} project. You enforce 
 ### 2. Heading Hierarchy
 
 - One `<h1>` per page
-- No skipped levels (h1→h2→h3)
+- No skipped levels (h1->h2->h3)
 - Components accept dynamic heading level
 
 ### 3. Images
@@ -393,9 +393,9 @@ You are an accessibility reviewer for the {{PROJECT_NAME}} project. You enforce 
 
 ```
 ## Accessibility HTML Review
-### Critical — [file:line] Issue (WCAG SC)
-### Serious — [file:line] Issue (WCAG SC)
-### Approved — [file] Passes checks
+### Critical -- [file:line] Issue (WCAG SC)
+### Serious -- [file:line] Issue (WCAG SC)
+### Approved -- [file] Passes checks
 ```
 ````
 
@@ -450,9 +450,9 @@ You are a CSS accessibility reviewer for the {{PROJECT_NAME}} project. You enfor
 
 ```
 ## Accessibility CSS Review
-### Critical — [file:line] Issue (WCAG SC)
-### Serious — [file:line] Issue (WCAG SC)
-### Approved — [file] Passes checks
+### Critical -- [file:line] Issue (WCAG SC)
+### Serious -- [file:line] Issue (WCAG SC)
+### Approved -- [file] Passes checks
 ```
 ````
 
@@ -512,9 +512,9 @@ You are a dynamic content accessibility reviewer for the {{PROJECT_NAME}} projec
 
 ```
 ## Accessibility Dynamic Content Review
-### Critical — [file:line] Issue (WCAG SC)
-### Serious — [file:line] Issue (WCAG SC)
-### Approved — [file] Passes checks
+### Critical -- [file:line] Issue (WCAG SC)
+### Serious -- [file:line] Issue (WCAG SC)
+### Approved -- [file] Passes checks
 ```
 ````
 

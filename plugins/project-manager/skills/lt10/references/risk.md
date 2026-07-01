@@ -1,6 +1,6 @@
 # Risk Management
 
-> **Related sections:** → Estimation (`estimation.md`) → Change Control (`change-control.md`) → Stakeholders (`stakeholders.md`)
+> **Related sections:** -> Estimation (`estimation.md`) -> Change Control (`change-control.md`) -> Stakeholders (`stakeholders.md`)
 
 ## Red Flags vs Risks
 
@@ -105,7 +105,7 @@
 | **Severe Impact** | MODERATE (Avoid/Mitigate) | EXTREME (Mitigate/Manage) |
 | **Insignificant Impact** | MINOR (Accept/Monitor) | MAJOR (Mitigate/Monitor) |
 
-**Visibility line:** If seeing red flags → risks are in top two quadrants (certain)
+**Visibility line:** If seeing red flags -> risks are in top two quadrants (certain)
 
 ---
 
@@ -134,14 +134,14 @@
 
 ## The Cassandra Effect
 
-You will predict problems and be ignored. Work to get buy-in on risk analysis—it's worth it.
+You will predict problems and be ignored. Work to get buy-in on risk analysis--it's worth it.
 
 ---
 
 ## Vicious Risk Cycle
 
 ```
-Red flag → Risk → More related risks → More red flags → Snowball effect
+Red flag -> Risk -> More related risks -> More red flags -> Snowball effect
 ```
 
 Best time to halt risk is BEFORE it happens.
