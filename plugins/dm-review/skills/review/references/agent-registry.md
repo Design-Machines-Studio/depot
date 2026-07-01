@@ -16,6 +16,14 @@ These 5 agents run on every review regardless of file types changed.
 | 4 | architecture-reviewer | dm-review | sonnet | Component boundaries, SOLID, coupling, layer violations |
 | 5 | doc-sync-reviewer | dm-review | sonnet | CLAUDE.md, README, manual pages, docs, references, CHANGELOG |
 
+### Configurable Parallel Reviewer
+
+| Agent | Source | Provider | Trigger |
+|---|---|---|---|
+| codex-perspective | dm-review | `codex exec -s read-only -c service_tier=fast --skip-git-repo-check` | Enabled by default when `codex` is installed; set `DM_REVIEW_CODEX_PERSPECTIVE=0` to disable |
+
+`codex-perspective` runs in parallel with the selected Claude/DeepSeek/OpenRouter agents and reports in the same P1/P2/P3 shape. It is a second-opinion lane, not a replacement for security-auditor or architecture-reviewer.
+
 ---
 
 ## Conditional Agents (Full Mode Only)
@@ -81,6 +89,7 @@ These paths are relative to the depot root. When the depot is installed as a plu
 plugins/dm-review/agents/review/visual-browser-tester.md
 plugins/dm-review/agents/review/ux-quality-reviewer.md
 plugins/dm-review/agents/review/ui-standards-reviewer.md
+plugins/dm-review/agents/review/codex-perspective.md
 ```
 
 The visual-browser-tester, ux-quality-reviewer, and ui-standards-reviewer all use Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) and require a running dev server. The **visual-browser-tester** runs six phases (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, Live Wires CSS Compliance). The **ux-quality-reviewer** runs nine phases focused on design quality and usability (Information Hierarchy, Spacing, State Completeness, Navigation, Content, Typography, Layout, Edge Cases, Interaction Polish), uses the RAG knowledge library, and saves screenshots to `.claude/ux-review/`. If Playwright fails, visual-browser-tester follows a fallback chain; ux-quality-reviewer reports "Skipped."

@@ -148,6 +148,20 @@ These 5 agents always run in standard+ quick mode and all full-mode reviews:
 4. **code-simplicity-reviewer** — `dm-review/*/agents/review/code-simplicity-reviewer.md` — **→ DeepSeek v4-pro** (90s) when available
 5. **doc-sync-reviewer** — `dm-review/*/agents/review/doc-sync-reviewer.md` — **→ DeepSeek v4-flash** (60s) when available
 
+#### Configurable Codex Perspective
+
+When `DM_REVIEW_CODEX_PERSPECTIVE` is not `0` and the `codex` CLI is installed, add **codex-perspective** as a parallel read-only reviewer in both quick and full mode. This is the default dual-perspective review lane; it caught distinct blockers in real pipeline closeout runs and should not be treated as an emergency fallback.
+
+Invocation:
+
+```bash
+codex exec -s read-only -c service_tier=fast --skip-git-repo-check "<prompt>"
+```
+
+Use `-c service_tier=fast` even when a user config sets another tier. A stale `~/.codex/config.toml` with `service_tier = "default"` can prevent startup, and `flex` may be API-rejected; retry once with the known-good `service_tier=fast` override before recording `codex-perspective: unavailable`. For write-capable Codex fix workflows outside review, the known-good form is `codex exec -s workspace-write -c service_tier=fast --skip-git-repo-check`.
+
+Resolve its agent file at `dm-review/*/agents/review/codex-perspective.md` via the same Claude-first/Codex-fallback cache loop as other agents. The output is normalized to P1/P2/P3 and the consolidator merges it with all other findings; a finding from either perspective is in-scope.
+
 **If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with only these 5 agents.**
 
 **If mode is "quick" AND UI files changed** (`.templ`, `.twig`, `.html`, or `.css` in the diff), add one more agent:
@@ -282,7 +296,7 @@ Launch ALL selected agents simultaneously using multiple Agent tool calls in a s
 
 #### How to launch each agent
 
-For each selected agent, check the Phase 3.75 routing decision first:
+For each selected agent, check whether it is `codex-perspective` first. Use Branch C for that reviewer. For all other agents, check the Phase 3.75 routing decision:
 
 **A. If the agent is routed to DeepSeek** (in the offload table AND `DEEPSEEK_API_KEY` is set):
 
@@ -329,6 +343,17 @@ For each selected agent, check the Phase 3.75 routing decision first:
    - `model`: use the agent's frontmatter `model:` field if declared (e.g., "haiku" for mechanical agents), otherwise "sonnet"
 
 Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime — the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
+
+**C. If the selected agent is `codex-perspective`:**
+
+1. Read `plugins/dm-review/agents/review/codex-perspective.md`.
+2. Build a read-only prompt with the changed files, diff content, project context, and the standard Fix Philosophy.
+3. Run:
+   ```bash
+   codex exec -s read-only -c service_tier=fast --skip-git-repo-check "<prompt>"
+   ```
+4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
+5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
 **Failure handling:** If a routed agent emits `### RUNNER FAILURE`, do not classify the failure yet — Phase 4.5 retries external-LLM failures on Claude before applying failure policies from `guardrails.md`. Do NOT mark the run clean until Phase 4.5 completes.
 
@@ -483,6 +508,18 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
 
 Output the full report to the user.
+
+#### Verify-before-close gate
+
+Before any stale, already-fixed, already fixed, or close disposition is applied to an existing finding, require code-evidence re-verification at HEAD. A single-pass assessment scan is not enough.
+
+Acceptable evidence:
+
+- `grep` or `rg` proving the cited vulnerable pattern is gone or the expected guard now exists.
+- A focused test/build command that exercises the cited path.
+- Direct file inspection at the current `HEAD` showing the finding no longer applies.
+
+If evidence is missing or points the other way, keep the finding open and route it through the normal P1/P2/P3 fix flow. Record the command or file evidence in the report when marking anything stale or already fixed.
 
 **Airlift checkpoint (`dm-review-consolidation`):** Fire a tier-1 airlift checkpoint once the consolidated report exists so partially-complete review findings survive a usage cap, rate limit, or model switch. This is a guarded resolve-from-cache: it is tier-1 deterministic (pure local file + git work, NO model budget, no agent call, no network) and is skipped silently when airlift is absent (OPTIONAL dependency). On an early-warning trip (e.g. a budget threshold crossed mid-run), do not wait for the next phase boundary -- flush this checkpoint immediately so the consolidated findings are not lost.
 

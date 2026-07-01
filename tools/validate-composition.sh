@@ -591,6 +591,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}dm-review Codex perspective:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-dm-review-codex-perspective.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}OpenRouter model cascade:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-cascade.sh"; then
     any_failed=1

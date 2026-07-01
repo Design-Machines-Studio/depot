@@ -39,6 +39,8 @@ Extract every finding from every agent. For each finding, record:
 - Description
 - Reference (OWASP, WCAG, pattern name, etc.)
 
+When both Claude-family reviewers and `codex-perspective` ran, merge findings from both before applying severity mapping; a finding from either is in-scope unless direct code evidence at HEAD disproves it.
+
 ### Step 2: Deduplicate
 When multiple agents flag the same file and line:
 - Keep the finding at the **higher** severity
@@ -71,3 +73,4 @@ Follow the exact template in `references/output-format.md`. Include all required
 8. Count deduplicated findings, not raw findings (don't double-count)
 9. **P3 findings get full detail blocks** — same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
 10. **Flag band-aid recommendations** — if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended — replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
+11. **Dual-perspective findings are additive** — `codex-perspective` and Claude-family reviewers are peers. Dedup overlapping findings; never discard a unique Codex or Claude finding merely because the other perspective did not mention it.

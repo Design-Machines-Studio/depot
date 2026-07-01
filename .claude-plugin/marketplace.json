@@ -274,15 +274,15 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.37.0",
+      "version": "1.38.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
+      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, Codex second-opinion review, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
       "capabilities_summary": {
         "skills": 2,
-        "agents": 14,
+        "agents": 15,
         "commands": 5,
         "tags": [
           "code-review",
