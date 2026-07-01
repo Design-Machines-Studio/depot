@@ -45,9 +45,10 @@ Read the plan and identify discrete chunks of work. A chunk is:
    - `integration`: prompt contains wiring verbs ("wire," "integrate," "connect") OR modifies route files / `main.go`
    - `config`: `.md`, `.json`, `.yaml`, `.toml`, docs
 
-   Then derive `executor` from `kind`:
-   - `logic` -> `codex`
-   - `config` -> `codex`
+   Then derive `executor` from the shared routing policy at `plugins/pipeline/references/routing-policy.json`, not from hardcoded local rules:
+   - `config` / docs / pure prose -> `openrouter`
+   - mechanical `logic` (rename follow-through, test tables, seed/migration edits) -> `openrouter` or `codex` per policy
+   - complex `logic` (new service methods, refactors, multi-file behavior) -> `codex`
    - `ui` -> `claude`
    - `integration` -> `claude`
 
@@ -238,7 +239,7 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk
 
 Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
-Each chunk object in the manifest MUST include `kind` and `executor` fields (classified in Phase 1, step 6). Example:
+Each chunk object in the manifest MUST include `kind` and `executor` fields (classified in Phase 1, step 6 from `routing-policy.json`). Example:
 
 ```json
 {
@@ -252,7 +253,7 @@ Each chunk object in the manifest MUST include `kind` and `executor` fields (cla
   "companionSkills": ["assembly:development"],
   "estimatedComplexity": "small",
   "kind": "logic",
-  "executor": "codex"
+  "executor": "openrouter"
 }
 ```
 

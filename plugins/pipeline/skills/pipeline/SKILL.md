@@ -339,9 +339,9 @@ Present the manifest summary: chunk count, parallel groups, overlap risk, requir
 
 ## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
-Default to dual-perspective review: run `/codex:adversarial-review` and the Claude `plan-adversary` agent in parallel on the same plan, prompts, manifest, and `original-prompt.md`. This is a quality gate, not a fallback ladder.
+Default to two non-Claude lenses: Codex + OpenRouter. Run `/codex:adversarial-review` and an OpenRouter adversarial-review prompt in parallel on the same plan, prompts, manifest, and `original-prompt.md`. This is a quality gate, not a fallback ladder.
 
-If Codex is unavailable (plugin not installed, auth failure, or OpenAI quota exhausted), continue with the Claude `plan-adversary` agent and record `codex-perspective: unavailable` in the Phase 5 receipt. If Claude agent dispatch is unavailable, continue with Codex and record `claude-perspective: unavailable`. If both are unavailable, block.
+Claude `plan-adversary` is an optional third lens/tiebreak only when `PIPELINE_CLAUDE_ADVERSARY=1` or when both non-Claude lenses disagree on a blocker. If Codex is unavailable, continue with OpenRouter and record `codex-perspective: unavailable`. If OpenRouter is unavailable, continue with Codex and record `openrouter-perspective: unavailable`. If both are unavailable, block or explicitly enable `PIPELINE_CLAUDE_ADVERSARY=1`.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
 2. Both adversaries review for feasibility, completeness, and DM standards
@@ -349,7 +349,7 @@ If Codex is unavailable (plugin not installed, auth failure, or OpenAI quota exh
 4. Merge findings from both outputs; deduplicate by chunk/file/acceptance criterion; a finding from either perspective is in-scope and must be addressed unless code or prompt evidence disproves it
 5. Merge the adversaries' proposed criteria into the chunk prompts
 6. If either verdict is REVISE: apply revisions and re-submit to both available perspectives (max 3 rounds)
-7. If both available perspectives are APPROVED: proceed
+7. If both available non-Claude perspectives are APPROVED: proceed
 
 Mark ledger item 10 as complete.
 
@@ -528,5 +528,6 @@ Before delivering to the user, verify your own compliance by answering these que
 13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
 14. If the feature involved UI work beyond curl_fallback mode, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
 15. **Codify audit:** If the run had friction (findings, >1 review iteration, a resolved ambiguity, or a repeated guardrail trip), did the orchestrator run the codify loop (Step 5.2)? For any failure pattern not already in CLAUDE.md "Known Pipeline Failure Modes," did it surface a postmortem stub + candidate Known Failure Mode entry as a Codify Proposal, rather than silently swallowing a novel failure? A new failure that produces no codify proposal is a missed compounding opportunity.
+16. **Run economics audit:** Did the orchestrator write `plans/<feature-slug>/run-postmortem.md`, report measured `providerSplit`, append `docs/pipeline-metrics/ledger.md`, and label recommendations `AWAITING APPROVAL`? A run that skips the post-mortem FAILS the self-audit.
 
 If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.

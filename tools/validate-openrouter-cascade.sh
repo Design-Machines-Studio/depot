@@ -40,10 +40,10 @@ else
   role="$(printf '%s' "$out" | jq -r '.role // empty' 2>/dev/null || true)"
   kind="$(printf '%s' "$out" | jq -r '.kind // empty' 2>/dev/null || true)"
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
-  if [ "$role" = "cheap_api" ] && [ "$kind" = "wrapper" ] && [ "$model" = "z-ai/glm-5.2" ]; then
-    pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter"
+  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "z-ai/glm-5.2" ]; then
+    pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter exec"
   else
-    fail "cascade should descend to cheap_api z-ai/glm-5.2 when --exhausted-rail codex is set"
+    fail "cascade should descend to openrouter_exec z-ai/glm-5.2 when --exhausted-rail codex is set"
     printf "  ${YELLOW}GOT${RESET}   %s\n" "${out:-<empty>}"
     any_failed=1
   fi

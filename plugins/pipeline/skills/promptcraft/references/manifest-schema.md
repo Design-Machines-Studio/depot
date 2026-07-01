@@ -28,7 +28,7 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development"],
       "estimatedComplexity": "small",
       "kind": "logic",
-      "executor": "codex"
+      "executor": "openrouter"
     },
     {
       "id": "02a-vote-handler",
@@ -140,7 +140,7 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `companionSkills` | string[] | Skills to load in format "plugin:skill" |
 | `estimatedComplexity` | enum | "small" (1-2 files), "medium" (3-5 files), "large" (6+ files) |
 | `kind` | enum | Chunk type classification: `"ui"`, `"logic"`, `"integration"`, or `"config"`. Inferred from `filesToModify` during prompt generation. Used by the execution-orchestrator for evaluation depth and by the `executor` field for tool routing. See Classification Rules below. |
-| `executor` | enum | Execution tool: `"codex"` or `"claude"`. Derived from `kind`. Determines whether the chunk is dispatched to Codex (OpenAI) or Claude for implementation. See Executor Mapping below. |
+| `executor` | enum | Execution tool: `"codex" | "claude" | "openrouter"`. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. Determines whether the chunk is dispatched to Codex, Claude, or OpenRouter for implementation. See Executor Mapping below. |
 
 ### Execution Plan
 
@@ -171,18 +171,19 @@ When a chunk's files span multiple categories, classify up: `ui` > `integration`
 
 ## Executor Mapping
 
-The `executor` field is derived from `kind`:
+The `executor` field is derived from `kind`, `estimatedComplexity`, and `routing-policy.json`:
 
 | Kind | Executor | Rationale |
 |------|----------|-----------|
-| `logic` | `codex` | Backend-only work doesn't need Claude's visual reasoning |
-| `config` | `codex` | Documentation and configuration edits are mechanical |
+| `config` / docs | `openrouter` | Documentation and configuration edits are text-heavy and fit cheap large-context models |
+| mechanical `logic` | `openrouter` or `codex` | Rename follow-through, test tables, seed data, and migration edits can run on OpenRouter when bounded; Codex is secondary |
+| complex `logic` | `codex` | New service methods and refactors need agentic code execution before falling back |
 | `ui` | `claude` | Visual verification and Live Wires judgment require Claude |
 | `integration` | `claude` | Cross-chunk wiring and route verification require Claude's broader context |
 
 ## Graceful Fallback
 
-If Codex auth is absent or the Codex plugin is not installed, all chunks execute on Claude regardless of the `executor` field. The orchestrator logs: `"Codex unavailable for chunk [id], falling back to Claude execution."` and proceeds with the existing Claude subagent dispatch path. The `executor` field is advisory -- it never blocks execution.
+If a non-Claude executor is unavailable, the orchestrator falls back through the cascade in `model-cascade.json` and records the fallback in the chunk receipt. The `executor` field is no longer advisory for `codex` or `openrouter` chunks: the orchestrator MUST dispatch to a provider and MUST NOT silently implement the chunk in-process.
 
 ## Naming Conventions
 

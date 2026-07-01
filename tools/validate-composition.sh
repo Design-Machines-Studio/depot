@@ -601,6 +601,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}Routing economics:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-routing-economics.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}SKILL.md frontmatter integrity:${RESET}\n"
   if ! check_skill_frontmatter; then
     any_failed=1

@@ -39,6 +39,8 @@ Produce a file list of 5-20 key files to examine. Prioritize:
 
 Launch two agents simultaneously:
 
+**Executor routing:** Read `plugins/pipeline/references/routing-policy.json`. Set `ASSESS_EXECUTOR` from the environment when present; otherwise default to `openrouter` when `OPENROUTER_API_KEY` is set, else `claude`. Use this executor for read-heavy assessment fan-out. Keep Phase 3 consolidation/synthesis on Claude because it feeds pipeline gates.
+
 **Agent 1: Code Assessment**
 
 Read the `references/code-assessment-protocol.md` for the full protocol. In summary:

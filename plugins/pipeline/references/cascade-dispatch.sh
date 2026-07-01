@@ -3,7 +3,7 @@
 # Harness-neutral (Claude Code / Codex / opencode / Pi). Generalizes the merged
 # execution-orchestrator 3d fallback ("Codex unavailable -> Claude") into a full
 # usage-gauged ladder. Reads model-cascade.json (executor-intent classes →
-# role ladders) + harness-profile.json (role→rail per host) + usage-probe.sh
+# role ladders) + routing-policy.json + harness-profile.json (role→rail per host) + usage-probe.sh
 # (live headroom). Picks the best rung above the class quality_floor; on a cap
 # error fires the Airlift Tier-1 checkpoint and descends.
 #
@@ -15,7 +15,7 @@
 #   (--kind is an alternative to --class; mapped via cascade.class_from_kind)
 #
 # Exit codes:
-#   0   a wrapper/codex_companion rung executed — output on stdout
+#   0   a wrapper/codex_companion/openrouter_exec rung executed -- output on stdout
 #   64  chosen rung is NATIVE — directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
 #   75  ladder exhausted — no rung had headroom above the floor
@@ -98,6 +98,21 @@ resolve_wrapper() {
   printf '%s' "$w"
 }
 dispatch_wrapper() { local w; w="$(resolve_wrapper)"; [ -z "$w" ] && return 1; "$w" "$1" "$PROMPT" "$TIMEOUT" "${2:-}"; }
+resolve_openrouter_exec() {
+  [ -n "${OPENROUTER_EXEC_CMD:-}" ] && { printf '%s' "$OPENROUTER_EXEC_CMD"; return; }
+  local runner=""
+  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+    runner="$(ls -t "$cache"/pipeline/*/references/openrouter-exec.sh 2>/dev/null | head -1)"
+    [ -n "$runner" ] && break
+  done
+  [ -z "$runner" ] && [ -x "$DIR/openrouter-exec.sh" ] && runner="$DIR/openrouter-exec.sh"
+  printf '%s' "$runner"
+}
+dispatch_openrouter_exec() {
+  local runner; runner="$(resolve_openrouter_exec)"
+  [ -z "$runner" ] && return 1
+  printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT" 2>&1
+}
 
 probe_json() { [ -n "$PROBE_FILE" ] && cat "$PROBE_FILE" || { [ -x "$PROBE" ] && "$PROBE" || echo '{}'; }; }
 PROBES="$(probe_json)"
@@ -163,6 +178,10 @@ for role in $LADDER; do
         out="$(dispatch_wrapper "$model" "$fb")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
         continue;;                                     # wrapper error → next model
+      openrouter_exec)
+        out="$(dispatch_openrouter_exec "$model")"; rc=$?
+        [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
+        continue;;
     esac
   done
 done

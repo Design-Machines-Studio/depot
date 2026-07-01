@@ -8,6 +8,7 @@
     "claude-code": {
       "_comment": "Cockpit = Claude Code on Max. Codex reachable via codex-companion.mjs on the ChatGPT sub. OpenRouter for open models.",
       "roles": {
+        "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro"] },
         "premium_sub":     { "kind": "codex_companion", "probe": "codex",      "models": ["gpt-5.2-codex"] },
         "native_judgment": { "kind": "native",          "probe": "claude",     "models": ["opus", "sonnet", "haiku"] },
         "frontier_api":    { "kind": "wrapper",         "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
@@ -19,6 +20,7 @@
     "codex": {
       "_comment": "Cockpit = Codex on the ChatGPT sub. GPT-Codex is the native model. Claude only via API/OpenRouter.",
       "roles": {
+        "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro"] },
         "premium_sub":     { "kind": "native",  "probe": "codex",      "models": ["gpt-5.2-codex", "gpt-5.1-codex-mini"] },
         "native_judgment": { "kind": "native",  "probe": "codex",      "models": ["gpt-5.2-codex"] },
         "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
@@ -30,6 +32,7 @@
     "generic": {
       "_comment": "Neutral harness (opencode, Pi, etc.) with no subscription rails. Everything is API via the wrapper. premium_sub absent => skipped; judgment maps to a frontier API model.",
       "roles": {
+        "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro"] },
         "premium_sub":     { "kind": "none" },
         "native_judgment": { "kind": "wrapper", "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },
         "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["anthropic/claude-opus-4.8", "openai/gpt-5.5"] },

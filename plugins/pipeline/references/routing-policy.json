@@ -1,0 +1,102 @@
+{
+  "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
+  "targets": {
+    "providerSplit": {
+      "claude": 50,
+      "codex": 35,
+      "openrouter": 15
+    },
+    "rationale": "Typical full pipeline runs should land near 50/50 Codex/Claude or lower Claude share, with OpenRouter carrying config, docs, mechanical checks, and large-context synthesis."
+  },
+  "chunkKind": {
+    "config": {
+      "provider": "openrouter",
+      "cascadeClass": "openrouter",
+      "rationale": "Docs, receipts, JSON/YAML/TOML, and pure-prose edits fit cheap large-context text models."
+    },
+    "docs": {
+      "provider": "openrouter",
+      "cascadeClass": "openrouter",
+      "rationale": "Documentation generation and cleanup is text-heavy and usually low visual-risk."
+    },
+    "mechanical-logic": {
+      "provider": "openrouter",
+      "cascadeClass": "openrouter",
+      "rationale": "Rename follow-through, test tables, seed data, and migration edits are bounded mechanical code changes."
+    },
+    "logic": {
+      "provider": "codex",
+      "cascadeClass": "codex",
+      "rationale": "Complex service and handler logic benefits from Codex agentic coding before falling back to OpenRouter or Claude."
+    },
+    "ui": {
+      "provider": "claude",
+      "cascadeClass": "claude",
+      "rationale": "UI work needs visual judgment, browser verification, and Live Wires design quality review."
+    },
+    "integration": {
+      "provider": "claude",
+      "cascadeClass": "claude",
+      "rationale": "Cross-chunk wiring and route verification need stronger orchestration judgment."
+    }
+  },
+  "agentType": {
+    "pattern-recognition-specialist": {
+      "provider": "deepseek",
+      "fallbackProvider": "openrouter",
+      "rationale": "Pattern checks are mechanical code analysis and do not need Claude unless external providers fail."
+    },
+    "code-simplicity-reviewer": {
+      "provider": "deepseek",
+      "fallbackProvider": "openrouter",
+      "rationale": "Simplification review is mechanical enough for cheaper review models."
+    },
+    "doc-sync-reviewer": {
+      "provider": "openrouter",
+      "fallbackProvider": "deepseek",
+      "rationale": "Documentation consistency benefits from large context and cheap prose analysis at any diff size."
+    },
+    "test-coverage-reviewer": {
+      "provider": "openrouter",
+      "fallbackProvider": "deepseek",
+      "rationale": "Coverage gap detection is read-heavy and works well on large-context models."
+    },
+    "openrouter-bulk-analyst": {
+      "provider": "openrouter",
+      "rationale": "Bulk/large-context analysis is OpenRouter-primary whenever OPENROUTER_API_KEY is present, not only over a line-count threshold."
+    },
+    "security-auditor": {
+      "provider": "claude",
+      "rationale": "Security remains Claude-native for high-stakes judgment."
+    },
+    "architecture-reviewer": {
+      "provider": "claude",
+      "rationale": "Architecture remains Claude-native for cross-cutting judgment."
+    }
+  },
+  "phase": {
+    "assessFanout": {
+      "provider": "openrouter",
+      "env": "ASSESS_EXECUTOR",
+      "fallbackProvider": "claude",
+      "rationale": "Assessment fan-out is read-heavy summarization; keep final synthesis on Claude."
+    },
+    "researchFanout": {
+      "provider": "openrouter",
+      "env": "RESEARCH_EXECUTOR",
+      "fallbackProvider": "claude",
+      "rationale": "Research fan-out is read-heavy summarization; keep final synthesis on Claude."
+    },
+    "adversarialReview": {
+      "providers": ["codex", "openrouter"],
+      "optionalProvider": "claude",
+      "optionalEnv": "PIPELINE_CLAUDE_ADVERSARY",
+      "rationale": "Default adversarial review uses two non-Claude lenses; Claude plan-adversary is an optional third lens or tiebreak."
+    }
+  },
+  "invariants": {
+    "crossProviderVerification": true,
+    "finalReviewDifferentProvider": true,
+    "proposalOnlyEconomics": true
+  }
+}

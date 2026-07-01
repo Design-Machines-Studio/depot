@@ -43,6 +43,8 @@ Detect the project type to determine which domain plugins to load as companions.
 
 Launch all available research agents simultaneously. Each agent gets the feature description and assessment brief (if available).
 
+**Executor routing:** Read `plugins/pipeline/references/routing-policy.json`. Set `RESEARCH_EXECUTOR` from the environment when present; otherwise default to `openrouter` when `OPENROUTER_API_KEY` is set, else `claude`. Use this executor for read-heavy research fan-out. Keep Phase 4 consolidation/synthesis on Claude because it feeds planning gates.
+
 **Agent 1: ai-memory Researcher**
 
 Search the knowledge graph for everything related to the feature area:

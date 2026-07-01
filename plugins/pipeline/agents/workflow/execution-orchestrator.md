@@ -164,8 +164,9 @@ FINAL 1. Run full dm-review on feature branch
 FINAL 2. Requirements cross-check against original-prompt.md (write final-requirements-crosscheck.md)
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
 FINAL 4. Record session to ai-memory
-FINAL 4b. Artifact cleanup (write receipt, delete ephemeral/run-scoped artifacts)
-FINAL 4c. Campaign state write (when campaignSlug present)
+FINAL 5. Run Post-Mortem (measured providerSplit, misroutes, quality ledger, proposals)
+FINAL 5b. Artifact cleanup (write receipt, delete ephemeral/run-scoped artifacts)
+FINAL 5c. Campaign state write (when campaignSlug present)
 FINAL 5. Present summary report
 ```
 
@@ -446,7 +447,9 @@ Mark `[chunk-id] 3. Apply input guardrails` complete.
 
 ### 3d: Dispatch Implementation Subagent
 
-The cascade generalizes the binary "Codex unavailable -> Claude" fallback into a usage-aware ladder (probe headroom -> on cap, Airlift checkpoint + descend to the next rung), but ONLY when explicitly activated. **With no new env vars set, the legacy binary path (3d-LEGACY below) runs unchanged -- behavior is byte-for-byte identical to current main.** The `executor` field stays advisory throughout.
+Read `plugins/pipeline/references/routing-policy.json` before dispatch. The cascade generalizes the binary "Codex unavailable -> Claude" fallback into a usage-aware ladder: task-fit primary provider, headroom probe, Airlift checkpoint on cap, then descent to the next rung.
+
+Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orchestrator MUST dispatch to that provider or through the cascade and MUST NOT implement it in-process. If dispatch is unavailable, fall back per the cascade and log the fallback provider in the chunk receipt. A silently inline-implemented `executor:{codex,openrouter}` chunk is a run-postmortem misroute.
 
 **Step 3d.0 -- Cascade activation gate.** Resolve the decision engine from the pipeline plugin cache and decide whether the cascade is active:
 
@@ -463,19 +466,32 @@ if [ -n "$CASCADE_DISPATCH" ] && [ -x "$CASCADE_DISPATCH" ] \
 fi
 ```
 
-`OPENROUTER_API_KEY` (the opt-in signal) or `PIPELINE_CASCADE=1` (manual override for testing the native-reroute/Airlift path without a key) activates the cascade. **If `CASCADE_ACTIVE=0`, execute 3d-LEGACY below EXACTLY as written and skip Steps 3d.1-3d.4.** This is the default.
+`OPENROUTER_API_KEY` (OpenRouter execution/review available) or `PIPELINE_CASCADE=1` (manual override for testing native-reroute/Airlift behavior without a key) activates the cascade. **If `CASCADE_ACTIVE=0`, execute 3d-LEGACY below for `codex`/`claude`; `executor: openrouter` must be recorded as unavailable and routed to the next provider, not implemented inline.**
 
-**Step 3d.1 -- Probe headroom (cascade active only).** Determine the chunk's primary rail from `kind`: `logic`/`config` -> the Codex rail; `ui`/`integration` -> the Claude (native) rail. You may consult `usage-probe.sh` (resolved from the same pipeline cache dir) to skip a known-capped primary; otherwise proceed to 3d.2 and let a cap error trigger the descent. `cascade-dispatch.sh` re-probes internally, so an orchestrator-level probe is an optimization, not a requirement.
+**Step 3d.1 -- Select task-fit primary (cascade active only).** Determine the chunk's primary rail from `routing-policy.json`, not kind alone:
+
+- `config` / docs / pure prose -> `openrouter`
+- mechanical `logic` -> `openrouter` or `codex` according to policy
+- complex `logic` -> `codex`
+- `ui` / `integration` -> `claude`
+
+You may consult `usage-probe.sh` (resolved from the same pipeline cache dir) to skip a known-capped primary; otherwise proceed to 3d.2 and let a cap error trigger descent. `cascade-dispatch.sh` re-probes internally, so an orchestrator-level probe is an optimization, not a requirement.
 
 **Step 3d.2 -- Primary rail has headroom: dispatch AS TODAY.** Run the existing dispatch unchanged using the 3d-LEGACY path (codex-companion for `executor: codex`; the Claude implementation subagent for `executor: claude`/absent). On success -> proceed to **Step 3e** (the eval gate, `EVAL_GATE_PASSED` receipt, livewires-lint, and worktree merge are untouched -- the cascade changes only WHO produces the commit, never WHAT happens after). On a **cap/usage-limit/quota error or unavailability** (Codex auth error, plugin missing, rate-limit string in output, native quota wall) -> go to Step 3d.3. On a **non-cap quality failure** (build error in the subagent's own work, malformed output) -> this is NOT a cascade event; flag the chunk failed per the existing Step 3e logic. Do not descend the ladder for a quality failure.
 
 **Step 3d.3 -- Cap/unavailable: consult the cascade.** Log `"Primary rail capped for chunk [id]; consulting cascade."` then invoke the decision engine with the chunk's kind and prompt on stdin. The Airlift Tier-1 checkpoint on cap is fired INSIDE `cascade-dispatch.sh` (guarded resolve, no model budget) -- do not call Airlift directly here.
 
 ```bash
-case "<kind>" in
-  logic|config) PRIMARY_RAIL="codex" ;;
-  ui|integration) PRIMARY_RAIL="claude" ;;
-  *) PRIMARY_RAIL="codex" ;;
+case "<executor>" in
+  openrouter) PRIMARY_RAIL="openrouter" ;;
+  codex) PRIMARY_RAIL="codex" ;;
+  claude) PRIMARY_RAIL="claude" ;;
+  *) case "<kind>" in
+    config) PRIMARY_RAIL="openrouter" ;;
+    logic) PRIMARY_RAIL="codex" ;;
+    ui|integration) PRIMARY_RAIL="claude" ;;
+    *) PRIMARY_RAIL="codex" ;;
+  esac ;;
 esac
 CASCADE_OUT=$(printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
   --kind "<kind>" --prompt - --phase execute --timeout 120 \
@@ -492,7 +508,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `CASCADE_RC` | Meaning | Orchestrator action |
 |---|---|---|
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model`. **Re-dispatch IN-PROCESS through the 3d-LEGACY Claude subagent path**, passing the directive `model:` (e.g. `sonnet` when `opus` is capped). Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
-| `0` | WRAPPER/codex-companion rung already executed; stdout is the produced text. | Apply the **one-shot validity rule** below. |
+| `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
 | other | Bad args / engine error. | Fall back to the 3d-LEGACY Claude subagent at the default model. Do NOT re-invoke the cascade (avoids a loop on a persistent engine error). |
 
@@ -500,15 +516,23 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 - `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR
 - a cheap second-opinion that does not become the implementation.
 
-For `kind: logic`, `kind: ui`, or `kind: integration` (agentic chunks), a wrapper rung MUST fast-fail: do NOT pipe wrapper text in as the chunk implementation. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Claude."` and re-dispatch via the 3d-LEGACY Claude subagent path at the default model. (Phase B -- a true agentic openrouter-exec runner that writes the receipt shape -- is NOT built in this version; until it exists, wrapper output never substitutes for an agentic implementation.)
+For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail: do NOT pipe wrapper text in as the chunk implementation. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex/Claude."` and re-dispatch through the next cascade provider. The agentic OpenRouter path is `openrouter-exec.sh`, which is valid only when it writes files, verifies the worktree, commits, and emits `implementedBy: openrouter` plus API `usage`.
 
-After any valid RC-0 path or re-dispatched native/Claude path produces a commit in the worktree -> proceed to Step 3e. The eval gate and merge flow are identical.
+After any valid RC-0 path or re-dispatched native/Claude path produces a commit in the worktree, write a chunk receipt containing `implementedBy: {codex|openrouter|claude}`, fallback source/target when applicable, verification result, and token/API `usage` if available -> proceed to Step 3e. The eval gate and merge flow are identical.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
 > This block is the prior section 3d in full. It runs unchanged when `CASCADE_ACTIVE=0` (no `OPENROUTER_API_KEY`, no `PIPELINE_CASCADE=1`), and it is also the in-process dispatch target re-entered by Steps 3d.2 and 3d.4 (native re-route and wrapper fast-fail).
 
 **Executor routing:** Read the chunk's `executor` field from the manifest.
+
+**When `executor: openrouter` (or derived from `kind: config` / docs / mechanical logic):**
+
+1. Resolve `plugins/pipeline/references/openrouter-exec.sh` via the dual-cache resolver.
+2. Pipe the full chunk prompt to the runner from the chunk worktree.
+3. Require a committed change and receipt with `implementedBy: openrouter`.
+4. Parse the runner receipt for files changed, verification result, and OpenRouter API `usage`.
+5. On runner failure or quality failure, descend through the cascade to Codex before Claude. Log every fallback.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**
 
@@ -521,7 +545,7 @@ After any valid RC-0 path or re-dispatched native/Claude path produces a commit 
    done
    ```
 2. If `CODEX_ROOT` is found, invoke: `node "${CODEX_ROOT}/scripts/codex-companion.mjs" task --write "<chunk prompt>"`
-3. Parse task output for completion (exit code 0 + commit present in worktree)
+3. Parse task output for completion (exit code 0 + commit present in worktree) and Codex `tokens used` when present
 4. On success: proceed to eval gate (Step 3e onward)
 5. On failure (auth error, plugin not installed, timeout): log `"Codex unavailable for chunk [id], falling back to Claude execution."` and dispatch via the existing Claude subagent path below
 
@@ -597,6 +621,7 @@ You MUST verify these before proceeding:
 1. **Completion check:** The subagent reported completion (not an error or question)
 2. **Commit check:** Run `git log <featureBranch>..<chunk-branch> --oneline` -- there MUST be at least one commit
 3. **Build check:** If available (Go: `go build ./...`, CSS: `npm run build`), run it
+4. **Provider receipt check:** The chunk receipt includes `implementedBy:`. If the manifest executor was `codex` or `openrouter` and `implementedBy: claude`, log the fallback reason; if no dispatch/fallback evidence exists, mark it as a misroute.
 
 If any check fails:
 
@@ -744,6 +769,8 @@ Run `/codex:review` once. If zero findings, proceed. If findings, fix and re-run
 ```text
 EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | deferred: [N]
 ```
+
+Append `implementedBy: <provider>` and `fallback: <from>-><to>|none` to the chunk receipt adjacent to the eval gate line.
 
 The `[type]` value uses the classification from the manifest's `kind` field when available (mapped per Step 3a), falling back to the runtime heuristic classification for older manifests. This receipt is consumed by the merge step. Without it, merge is blocked.
 
@@ -924,6 +951,8 @@ Mark `[chunk-id] 10. Clean up worktree` complete.
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
 
+Verification invariant: retain an independent Claude or cross-provider verification gate for each dispatched chunk, and the final review must run on a different provider than the provider that implemented the majority of code. Do not trade tokens for regressions. If OpenRouter implemented a chunk, Codex or Claude must review it. If Codex implemented a chunk, OpenRouter or Claude must review it. If Claude implemented a chunk, Codex/OpenRouter perspective review must run before a clean recommendation.
+
 ```text
 Run a full-mode review on the feature branch using the helper pattern above:
 `Skill(skill="dm-review:review", args="full <feature-branch>")`
@@ -1074,6 +1103,30 @@ If ai-memory is unavailable, still produce the Codify Proposals in the report; s
 
 Mark `FINAL 4. Record session to ai-memory` complete.
 
+## Step 5a: Run Post-Mortem
+
+Write `plans/<feature-slug>/run-postmortem.md` following `plugins/pipeline/references/run-postmortem-schema.md`. This is mandatory for every full pipeline run and must be completed before artifact cleanup.
+
+Measurement requirements:
+
+1. **Claude JSONL delta:** Snapshot cumulative Claude tokens at the start of Phase 6 and again here by parsing the current Claude session transcript JSONL. Sum `message.usage.{input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens}` grouped by `model`. Report the DELTA as this run's Claude main-loop spend.
+2. If `ccusage` is on PATH, run `ccusage blocks --json` as a cost/pricing cross-check. Prefer ccusage cost and the Claude JSONL delta for run-scoped token counts.
+3. **Codex:** sum each exec's `tokens used` lines from chunk receipts.
+4. **OpenRouter/DeepSeek:** sum each API `usage` object from `openrouter-exec.sh`, OpenRouter reviewer, and DeepSeek runner receipts.
+5. Record shell-proxy or rtk savings separately as input-avoidance context. Do not mix them into providerSplit.
+
+Post-mortem content:
+
+- `providerSplit:` measured tokens and cost by provider.
+- Target comparison against `plugins/pipeline/references/routing-policy.json`.
+- Misroutes: every Claude task classified as `necessary` or `misrouted`; an inline-implemented `executor:{codex,openrouter}` chunk is always `misrouted`.
+- Quality ledger: which provider found each issue, regressions shipped by cheaper models, retries, and cap descents.
+- Ranked recommendations for plugins exercised by this run only. Each recommendation includes exact file/policy edit, expected token/cost delta, confidence, and evidence.
+- Proposal-only status: every recommendation is labeled `AWAITING APPROVAL`. NEVER auto-edit plugin sources or routing policy from the post-mortem.
+- Recurrence promotion: if the same recommendation appears in at least `N` runs (default `3`) in `docs/pipeline-metrics/ledger.md`, promote it to a Standing Recommendation with citations.
+
+Append one line to `docs/pipeline-metrics/ledger.md` with date, feature, providerSplit, tokens/cost by provider, top recommendation, and status. Add an ai-memory `DepotPlugin` observation if ai-memory is available.
+
 ## Step 5b: Artifact Cleanup
 
 Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`).
@@ -1091,6 +1144,7 @@ Create `plans/<feature-slug>/receipt.md`:
 - Merge: <merge recommendation from Step 4>
 - Chunks: <N> executed, <M> parallel
 - Mode: <executionMode>
+- providerSplit: {claude: N, codex: N, openrouter: N, deepseek: N}
 
 ## Evidence
 | # | Requirement | Evidence |
@@ -1202,6 +1256,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - **Result:** Clean / N findings remaining
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
 - **executionMode:** full_cli / codex_native / manual_walkthrough / curl_fallback
+- **providerSplit:** `{claude: N, codex: N, openrouter: N, deepseek: N}` measured from run receipts/postmortem
 - **noMergeOnCompletion:** true/false
 
 ## Steps Completed
@@ -1215,6 +1270,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - [x] Merge policy honored (noMergeOnCompletion): yes/no
 - [x] ai-memory capture: yes/no
 - [x] Codify run (if run had friction): yes/no/n-a
+- [x] Run Post-Mortem written and measured providerSplit reported: yes/no
 - [x] Artifact cleanup: yes/no
 - [x] Zero-deferral enforced: yes/no
 
@@ -1235,6 +1291,14 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 include the drafted postmortem stub path and the candidate "Known Pipeline Failure Modes" entry text,
 flagged AWAITING APPROVAL -- the caller approves before anything is committed to CLAUDE.md or
 docs/post-mortems/. If the run was clean, state "None -- clean run, nothing to codify."]
+
+## Run Economics
+- Post-mortem: plans/<feature-slug>/run-postmortem.md
+- providerSplit: <measured split>
+- Claude share target: <from routing-policy.json>
+- Misroutes: <N>
+- Top recommendation: <title or none -- optimal>
+- Recommendation status: AWAITING APPROVAL
 
 ## Warnings
 [List any browser verification skips, degraded reviews, or anti-pattern findings that were fixed]
