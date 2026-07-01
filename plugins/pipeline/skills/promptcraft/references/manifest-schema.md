@@ -140,7 +140,7 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `companionSkills` | string[] | Skills to load in format "plugin:skill" |
 | `estimatedComplexity` | enum | "small" (1-2 files), "medium" (3-5 files), "large" (6+ files) |
 | `kind` | enum | Chunk type classification: `"ui"`, `"logic"`, `"integration"`, or `"config"`. Inferred from `filesToModify` during prompt generation. Used by the execution-orchestrator for evaluation depth and by the `executor` field for tool routing. See Classification Rules below. |
-| `executor` | enum | Execution tool: `"codex" | "claude" | "openrouter"`. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. Determines whether the chunk is dispatched to Codex, Claude, or OpenRouter for implementation. See Executor Mapping below. |
+| `executor` | enum | Execution tool: `"codex"`, `"claude"`, or `"openrouter"`. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. Determines whether the chunk is dispatched to Codex, Claude, or OpenRouter for implementation. See Executor Mapping below. |
 
 ### Execution Plan
 

@@ -38,15 +38,15 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 `openrouter-wrapper.sh` is a **single-turn completion call**. It returns text; it cannot read/write files or run a tool loop.
 
 - **Valid wrapper uses:** big-diff analysis, code review, second opinions, and config/doc text the orchestrator then writes to disk.
-- **Invalid:** autonomously implementing a code chunk. For `kind: logic|ui|integration`, a wrapper rung **fast-fails and the orchestrator descends to Claude** -- wrapper text is never piped in as an implementation.
-- **Phase B (not built):** a true cheap-open-model *agentic* executor would need a headless opencode/aider runner that writes the Step 3d receipt shape. Until that exists, the cheap rung for agentic chunks is a fast-fail-to-Claude.
+- **Invalid (wrapper):** autonomously implementing a code chunk with the *single-turn wrapper*. For `kind: ui|integration` and complex `logic`, a wrapper rung **fast-fails and the orchestrator descends Codex -> Claude** -- wrapper text is never piped in as an implementation.
+- **Phase B (built):** the agentic OpenRouter executor now exists as `plugins/pipeline/references/openrouter-exec.sh`, dispatched via the `openrouter_exec` rung in `cascade-dispatch.sh` / `harness-profile.json`. It asks OpenRouter for a unified diff, applies it, runs the verify command, commits, and emits the `implementedBy: openrouter` receipt shape. It is the primary rung for `config`/`docs`/mechanical-`logic` chunks; the single-turn wrapper remains for analysis and text-generation only.
 
 ## How to enable
 
 Default (no env) = current behavior, unchanged. To opt in:
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-..."   # activates the cascade + dm-review big-diff
+export OPENROUTER_API_KEY="sk-or-..."   # activates the cascade + dm-review external routing
 # optional: export PIPELINE_CASCADE=1   # force cascade path without a key (testing)
 ```
 

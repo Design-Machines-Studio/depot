@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.38.1",
+      "version": "1.38.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.21.5",
+      "version": "1.22.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -397,7 +397,7 @@
     {
       "name": "deepseek",
       "source": "./plugins/deepseek",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -423,7 +423,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -8,7 +8,7 @@ Opus 4.8 (released 2026-05-28, model ID `claude-opus-4-8`) is the current Anthro
 
 - **Effort levers replace version branches.** The model decides whether and how much to think per step (adaptive reasoning). You steer that with an effort level, not by detecting which model version is running. Hardcoded "if Opus 4.6 / if Sonnet" branches are stale -- tune by effort instead.
 - **Adaptive-reasoning only.** Fixed thinking budgets (`MAX_THINKING_TOKENS`, `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`) do not apply to Opus 4.7+. Effort level is the primary control.
-- **Aliases auto-upgrade.** `opus`/`sonnet`/`haiku` resolve to the latest release for the provider. On the Anthropic API `opus` is Opus 4.8 and `sonnet` is Sonnet 4.6. Depot agents use aliases, so there are no literal model IDs to bump when a new flagship ships.
+- **Aliases auto-upgrade.** `opus`/`sonnet`/`haiku` resolve to the latest release for the provider. On the Anthropic API `opus` is Opus 4.8 and `sonnet` is Sonnet 5. Depot agents use aliases, so there are no literal model IDs to bump when a new flagship ships.
 - **No breaking changes from 4.7.** Same tools, same API surface. 1M context is the default on Max/Team/Enterprise.
 
 ## Effort Matrix (which levels each model supports)
@@ -16,6 +16,7 @@ Opus 4.8 (released 2026-05-28, model ID `claude-opus-4-8`) is the current Anthro
 | Model                     | Levels                                  | Default |
 | :------------------------ | :-------------------------------------- | :------ |
 | Opus 4.8 and Opus 4.7     | `low`, `medium`, `high`, `xhigh`, `max` | `high` (4.8), `xhigh` (4.7) |
+| Sonnet 5                  | `low`, `medium`, `high`, `xhigh`, `max` | `high`  |
 | Opus 4.6 and Sonnet 4.6   | `low`, `medium`, `high`, `max`          | `high`  |
 | Haiku 4.5                 | not supported (effort is ignored)       | --      |
 

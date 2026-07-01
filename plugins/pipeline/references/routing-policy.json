@@ -6,9 +6,10 @@
       "codex": 35,
       "openrouter": 15
     },
-    "rationale": "Typical full pipeline runs should land near 50/50 Codex/Claude or lower Claude share, with OpenRouter carrying config, docs, mechanical checks, and large-context synthesis."
+    "rationale": "Execution-provider target: typical full pipeline runs should land near 50/50 Codex/Claude or lower Claude share, with OpenRouter carrying config, docs, mechanical checks, and large-context synthesis. These three sum to 100 across the chunk-implementation providers. DeepSeek is review-only (mechanical dm-review agents), so it has no execution target here; the post-mortem measures a fourth deepseek providerSplit bucket and compares it against the combined external-provider (openrouter + deepseek) envelope, not against a standalone deepseek target."
   },
   "chunkKind": {
+    "_comment_kinds": "config/docs/mechanical-logic/logic/ui/integration are ROUTING buckets, not manifest kind enum values. The manifest kind enum stays {ui, logic, integration, config}; docs and mechanical-logic are refinements carried by the manifest `executor` field (derived from kind + estimatedComplexity per manifest-schema.md Executor Mapping), not first-class kinds. model-cascade.class_from_kind bridges only the manifest kinds (logic/config/docs/ui/integration); mechanical-logic routes via `executor: openrouter` set at prompt-generation time, so it needs no class_from_kind entry.",
     "config": {
       "provider": "openrouter",
       "cascadeClass": "openrouter",

@@ -12,8 +12,8 @@ You are a review agent that delegates full-diff analysis to DeepSeek V4 API via 
 
 ## When You Run
 
-You are activated as a conditional agent in dm-review Phase 3 when:
-1. The diff exceeds 5000 lines (the truncation threshold)
+You are activated as a conditional agent in dm-review when:
+1. `routing-policy.json` selects DeepSeek for bulk/large-context read (as primary, or as OpenRouter's fallback when `OPENROUTER_API_KEY` is unset) -- a large diff (>5000 lines) is one sufficient trigger, not the only one
 2. The deepseek plugin is installed
 3. `DEEPSEEK_API_KEY` is set in the environment
 

@@ -252,7 +252,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 `plugins/deepseek/` and `plugins/openrouter/` wrap external model APIs as subagents. Agents using this pattern:
 
-- **deepseek-bulk-analyst** / **openrouter-bulk-analyst** -- dm-review conditional agents. When diffs exceed 5000 lines, send the full untruncated diff to a 1M-token-context model (DeepSeek V4, or GLM-5.2 via OpenRouter) for analysis alongside the truncated-diff core agents.
+- **deepseek-bulk-analyst** / **openrouter-bulk-analyst** -- dm-review conditional agents. When `routing-policy.json` selects OpenRouter or DeepSeek for bulk/large-context read (whenever the key is set, not only above a 5000-line diff), send the full untruncated diff to a 1M-token-context model (DeepSeek V4, or GLM-5.2 via OpenRouter) for analysis alongside the truncated-diff core agents.
 - **deepseek-agent-runner** -- routes dm-review's mechanical agents through DeepSeek V4 when `DEEPSEEK_API_KEY` is set.
 - The pipeline cascade (`cascade-dispatch.sh`) drives the OpenRouter wrapper as a one-shot rung for config/doc generation and second-opinion analysis.
 

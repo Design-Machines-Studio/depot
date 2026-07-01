@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+# Fixed PATH reset -- prevent caller-controlled hijack of git/sed/mktemp/bash during
+# autonomous execution (matches openrouter-wrapper.sh). Depot shell-script convention.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
 MODE="run"
 MODEL="${OPENROUTER_EXEC_MODEL:-z-ai/glm-5.2}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-180}"
@@ -55,7 +59,9 @@ RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-1}" "$W
 
 TMPDIR="${TMPDIR:-/tmp}"
 PATCH_FILE="$(mktemp "$TMPDIR/openrouter-exec.XXXXXX.patch")"
-RECEIPT_FILE="$(mktemp "$TMPDIR/openrouter-exec.XXXXXX.receipt")"
+MSG_FILE=""
+# Remove the run's temp files on any exit path (patch/msg diffs should not linger in TMPDIR).
+trap 'rm -f "$PATCH_FILE" "$MSG_FILE"' EXIT
 printf '%s\n' "$RAW_OUT" | sed -n '/^diff --git /,$p' > "$PATCH_FILE"
 
 if [ ! -s "$PATCH_FILE" ]; then
@@ -73,7 +79,9 @@ else
   VERIFY_RESULT="skipped: no OPENROUTER_EXEC_VERIFY_CMD"
 fi
 
-git add -A
+# Stage only the paths the model patch touched, not the whole tree -- an
+# incidental/pre-existing worktree change must not be folded into this commit.
+git apply --numstat "$PATCH_FILE" | awk -F'\t' '{print $3}' | git add --pathspec-from-file=-
 if git diff --cached --quiet; then
   echo "openrouter-exec: patch produced no staged changes" >&2
   exit 1
@@ -84,14 +92,16 @@ printf '%s\n\nImplementedBy: openrouter\nVerification: %s\n' "$COMMIT_MSG" "$VER
 git commit -F "$MSG_FILE" >/dev/null
 
 FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')"
-cat > "$RECEIPT_FILE" <<JSON
+# usage: the single-turn wrapper prints only model text (the diff), no usage envelope,
+# so exec-lane token spend is not measurable here. Emit null; the post-mortem treats the
+# OpenRouter exec bucket as best-effort/estimated (see run-postmortem-schema.md).
+cat <<JSON
 {
   "implementedBy": "openrouter",
   "status": "committed",
   "commit": "$(git rev-parse --short HEAD)",
   "filesChanged": "${FILES_CHANGED}",
   "verification": "${VERIFY_RESULT}",
-  "usage": "see OpenRouter API usage object from wrapper output when available"
+  "usage": null
 }
 JSON
-cat "$RECEIPT_FILE"

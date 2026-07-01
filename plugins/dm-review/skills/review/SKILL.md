@@ -107,9 +107,9 @@ This classification scales agent count in Phase 3. Only applies to quick mode â€
 
 Select which agents to launch based on mode, diff classification, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern).
 
-#### MANDATORY: Routing Policy for Mechanical Agents
+#### Routing Policy for Mechanical Agents
 
-Read `plugins/pipeline/references/routing-policy.json` before selecting providers. Mechanical agents default to external providers when keys are present: OpenRouter for docs/coverage/bulk synthesis, DeepSeek for pattern/simplicity code analysis, with fallbacks defined by policy. Security, architecture, and visual/UI reviewers stay Claude-native.
+Read `plugins/pipeline/references/routing-policy.json` before selecting providers **when it is present**. That file is owned by the `pipeline` plugin; when dm-review is installed standalone (no pipeline), it is absent. In that case fall back to the inline provider annotations in the agent lists below -- DeepSeek primary / OpenRouter fallback for pattern-recognition and code-simplicity, OpenRouter primary / DeepSeek fallback for doc-sync and test-coverage, Claude-native for security, architecture, and visual/UI. The policy read is an enrichment that keeps routing in one shared source when pipeline is installed, never a hard prerequisite: do NOT add a `pipeline` dependency to dm-review -- pipeline already depends on dm-review, so that edge would be a cycle. Mechanical agents default to external providers when keys are present; security, architecture, and visual/UI reviewers stay Claude-native either way.
 
 **Before selecting agents, check external routing availability:**
 

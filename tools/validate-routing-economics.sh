@@ -58,7 +58,7 @@ if [ -f "$routing" ]; then
   jq -e '.targets.providerSplit.claude <= 50' "$routing" >/dev/null || { printf "  FAIL  routing policy records Claude share target\n"; failures=1; }
 fi
 
-require_text "$schema" '"codex" | "claude" | "openrouter"' "manifest schema includes openrouter executor"
+require_text "$schema" '`"openrouter"`' "manifest schema includes openrouter executor"
 require_text "$promptcraft" "routing-policy.json" "promptcraft reads shared routing policy"
 require_text "$orchestrator" "MUST NOT implement it in-process" "orchestrator forbids absorbing non-Claude chunks"
 require_text "$orchestrator" "implementedBy:" "orchestrator receipts record implementedBy"
@@ -68,8 +68,27 @@ require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-m
 require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JSONL delta"
 require_text "$orchestrator" "AWAITING APPROVAL" "postmortem recommendations are proposal-only"
 require_text "$model_cascade" '"openrouter"' "model cascade defines OpenRouter class"
-require_text "$harness" '"openrouter_exec"' "harness profile exposes openrouter_exec rung"
-require_text "$cascade" "dispatch_openrouter_exec" "cascade can dispatch OpenRouter exec runner"
+# Note: the harness openrouter_exec rung and cascade dispatch are covered functionally by
+# validate-openrouter-cascade.sh (dry-run descent test); not re-grepped here to avoid double-reporting.
+
+# Cross-file SSOT: for every kind present in both files, routing-policy cascadeClass must equal
+# model-cascade class_from_kind, so the shared kind->class mapping cannot silently drift.
+if [ -f "$routing" ] && [ -f "$model_cascade" ]; then
+  drift="$(jq -rs '
+    (.[0].chunkKind) as $ck | (.[1].class_from_kind) as $cfk
+    | [ $ck | to_entries[]
+        | select(($cfk[.key] != null) and (.value | type == "object") and (.value.cascadeClass != $cfk[.key]))
+        | .key ]
+    | join(",")
+  ' "$routing" "$model_cascade")"
+  if [ -z "$drift" ]; then
+    printf "  OK    routing-policy cascadeClass matches model-cascade class_from_kind\n"
+  else
+    printf "  FAIL  routing-policy/model-cascade class drift for kinds: %s\n" "$drift"
+    failures=1
+  fi
+fi
+
 require_text "$runner" "implementedBy: openrouter" "OpenRouter exec runner emits implementedBy receipt"
 require_text "$runner" "usage" "OpenRouter exec runner preserves usage information"
 require_text "$dm_review" "routing-policy.json" "dm-review reads shared routing policy"

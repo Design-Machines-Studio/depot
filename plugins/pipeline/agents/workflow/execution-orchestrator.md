@@ -167,7 +167,7 @@ FINAL 4. Record session to ai-memory
 FINAL 5. Run Post-Mortem (measured providerSplit, misroutes, quality ledger, proposals)
 FINAL 5b. Artifact cleanup (write receipt, delete ephemeral/run-scoped artifacts)
 FINAL 5c. Campaign state write (when campaignSlug present)
-FINAL 5. Present summary report
+FINAL 6. Present summary report
 ```
 
 Do NOT mark a step complete until you have actually done it. Do NOT skip steps.
@@ -368,7 +368,7 @@ git push -u origin <featureBranch>
 
 `manifest.baseBranch` may be any existing local or remote ref, including an unmerged feature branch, a stacked branch, or a hotfix base. Default to `main` only when the field is absent.
 
-Create the progress ledger with TodoWrite. One set of 7 sub-steps per chunk, plus 4 final steps.
+Create the progress ledger with TodoWrite. One set of 7 sub-steps per chunk, plus the final steps (FINAL 1 through FINAL 6, Present summary report).
 
 ### 1c: Execution Mode Selection
 
@@ -1127,6 +1127,8 @@ Post-mortem content:
 
 Append one line to `docs/pipeline-metrics/ledger.md` with date, feature, providerSplit, tokens/cost by provider, top recommendation, and status. Add an ai-memory `DepotPlugin` observation if ai-memory is available.
 
+Mark `FINAL 5. Run Post-Mortem` complete.
+
 ## Step 5b: Artifact Cleanup
 
 Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`).
@@ -1200,7 +1202,7 @@ done
 if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deliver"; fi
 ```
 
-Mark `FINAL 4b. Artifact cleanup` complete.
+Mark `FINAL 5b. Artifact cleanup` complete.
 
 ## Step 5c: Campaign State Write
 
@@ -1232,7 +1234,7 @@ If the manifest contains a non-null `campaignSlug`:
 
 If `campaignSlug` is null or absent, skip this step with: `"Campaign state: skipped (no campaignSlug in manifest)"`
 
-Mark `FINAL 4c. Campaign state write` complete.
+Mark `FINAL 5c. Campaign state write` complete.
 
 ## Step 6: Summary Report
 
@@ -1314,7 +1316,7 @@ docs/post-mortems/. If the run was clean, state "None -- clean run, nothing to c
 
 The "Steps Completed" section is your honest self-report. If any step was skipped, say so here.
 
-Mark `FINAL 5. Present summary report` complete.
+Mark `FINAL 6. Present summary report` complete.
 
 ## Graceful Degradation
 

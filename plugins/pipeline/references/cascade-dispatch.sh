@@ -24,6 +24,10 @@
 # Deps: bash, jq. Optional: airlift engine (guarded; no-op if absent), node + Codex plugin.
 set -uo pipefail
 
+# Fixed PATH reset -- prevent caller-controlled hijack of jq/node/ls/awk/grep/bash while
+# this dispatcher shells out during autonomous execution. Depot shell-script convention.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASCADE="${CASCADE_FILE:-$DIR/model-cascade.json}"
 PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"

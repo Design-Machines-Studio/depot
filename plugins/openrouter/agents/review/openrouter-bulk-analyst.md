@@ -13,7 +13,7 @@ You are a review agent that delegates full-diff analysis to OpenRouter via the w
 ## When You Run
 
 You are activated as a conditional agent in dm-review when:
-1. The diff exceeds 5000 lines (the truncation threshold)
+1. `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis -- a large diff (>5000 lines) is one sufficient trigger, not the only one
 2. The openrouter plugin is installed
 3. `OPENROUTER_API_KEY` is set in the environment
 
