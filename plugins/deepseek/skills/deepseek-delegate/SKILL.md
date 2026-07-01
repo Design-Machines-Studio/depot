@@ -1,6 +1,6 @@
 ---
 name: deepseek-delegate
-description: Delegate tasks to DeepSeek V4 API for high-quality code analysis at lower cost than Sonnet. V4-Pro delivers Sonnet-class code reasoning (80.6% SWE-bench Verified); V4-Flash handles mechanical checks at Haiku-tier cost. Use when offloading bulk diff review, code pattern analysis, or mechanical checks from Anthropic quota. Includes a generic agent runner that routes specific dm-review agents (pattern-recognition, code-simplicity, doc-sync, test-coverage) through DeepSeek when DEEPSEEK_API_KEY is set. Invoke with /deepseek for direct delegation.
+description: Delegate tasks to DeepSeek V4 API for high-quality code analysis at lower cost than Sonnet. V4-Pro delivers Sonnet-class code reasoning (80.6% SWE-bench Verified); V4-Flash handles mechanical checks at Haiku-tier cost. Use when routing-policy.json selects DeepSeek for bulk diff review, code pattern analysis, or mechanical checks from Anthropic quota. Includes a generic agent runner that routes dm-review agents through DeepSeek when DEEPSEEK_API_KEY is set. Invoke with /deepseek for direct delegation.
 ---
 
 # DeepSeek Delegation

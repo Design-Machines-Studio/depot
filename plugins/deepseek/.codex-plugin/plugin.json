@@ -1,7 +1,7 @@
 {
   "name": "deepseek",
-  "version": "1.2.0",
-  "description": "DeepSeek V4 API subagent for delegating code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro delivers Sonnet-class code reasoning (80.6% SWE-bench Verified); V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
+  "version": "1.2.1",
+  "description": "DeepSeek V4 API subagent for policy-routed code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro delivers Sonnet-class code reasoning; V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -95,8 +95,8 @@
   },
   "interface": {
     "displayName": "Deepseek",
-    "shortDescription": "DeepSeek V4 API subagent for delegating code review, diff analysis, and pattern checks at Sonnet-class quality and lower",
-    "longDescription": "DeepSeek V4 API subagent for delegating code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro delivers Sonnet-class code reasoning (80.6% SWE-bench Verified); V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
+    "shortDescription": "DeepSeek V4 API subagent for policy-routed code review, diff analysis, and pattern checks at Sonnet-class quality and lo",
+    "longDescription": "DeepSeek V4 API subagent for policy-routed code review, diff analysis, and pattern checks at Sonnet-class quality and lower cost. V4-Pro delivers Sonnet-class code reasoning; V4-Flash handles mechanical checks at Haiku-tier cost. Wraps curl invocation with fallback chain, JSON escaping, and structured output.",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [

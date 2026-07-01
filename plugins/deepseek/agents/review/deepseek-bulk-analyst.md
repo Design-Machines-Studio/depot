@@ -1,6 +1,6 @@
 ---
 name: deepseek-bulk-analyst
-description: Analyzes full diffs using DeepSeek V4's 1M token context when diffs exceed Claude's 5000-line truncation threshold. Runs alongside truncated-diff core agents and produces P1/P2/P3 findings compatible with the dm-review consolidator. Use when diff size triggers truncation in dm-review guardrails.
+description: Analyzes policy-selected diffs using DeepSeek V4's 1M token context when routing-policy.json selects DeepSeek as primary or fallback. Produces P1/P2/P3 findings compatible with the dm-review consolidator.
 model: sonnet
 effort: medium
 tools: Bash, Read, Grep

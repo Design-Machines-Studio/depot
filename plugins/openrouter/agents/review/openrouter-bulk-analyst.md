@@ -1,6 +1,6 @@
 ---
 name: openrouter-bulk-analyst
-description: Analyzes full diffs using GLM-5.2 (z-ai/glm-5.2, 1M token context; DeepSeek V4 fallback) when diffs exceed Claude's 5000-line truncation threshold. Runs alongside truncated-diff core agents and produces P1/P2/P3 findings compatible with the dm-review consolidator. Use when diff size triggers truncation in dm-review guardrails and OPENROUTER_API_KEY is set.
+description: Analyzes policy-selected diffs and large-context review tasks using GLM-5.2 (z-ai/glm-5.2, 1M token context; DeepSeek V4 fallback). Runs whenever routing-policy.json selects OpenRouter and OPENROUTER_API_KEY is set, not only above a diff-size threshold. Produces P1/P2/P3 findings compatible with the dm-review consolidator.
 model: sonnet
 effort: medium
 tools: Bash, Read, Grep
@@ -17,7 +17,7 @@ You are activated as a conditional agent in dm-review when:
 2. The openrouter plugin is installed
 3. `OPENROUTER_API_KEY` is set in the environment
 
-When `OPENROUTER_API_KEY` is set you are **preferred over `deepseek-bulk-analyst`** for the big-diff slot (GLM-5.2 is the quality-per-dollar default). If `OPENROUTER_API_KEY` is not set, dm-review falls back to `deepseek-bulk-analyst`, then to a truncated-diff Claude review.
+When `OPENROUTER_API_KEY` is set and `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis, you are preferred over `deepseek-bulk-analyst` (GLM-5.2 is the quality-per-dollar default). If `OPENROUTER_API_KEY` is not set, dm-review falls back to DeepSeek when available, then to Claude.
 
 You run IN ADDITION to the core review agents that receive the truncated diff. Your job is to catch what truncation hides -- cross-file patterns, long-range dependencies, and issues buried deep in large files.
 

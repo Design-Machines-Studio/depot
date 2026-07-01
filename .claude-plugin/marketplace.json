@@ -397,12 +397,12 @@
     {
       "name": "deepseek",
       "source": "./plugins/deepseek",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "DeepSeek V4 API subagent for delegating code review and diff analysis to V4-Pro or V4-Flash at Sonnet-class quality and lower cost. Includes generic agent runner that routes dm-review mechanical agents (pattern-recognition, code-simplicity, doc-sync, test-coverage) through DeepSeek when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota.",
+      "description": "DeepSeek V4 API subagent for policy-routed code review and diff analysis to V4-Pro or V4-Flash at Sonnet-class quality and lower cost. Includes generic agent runner that routes dm-review mechanical agents through DeepSeek when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 3,
@@ -423,12 +423,12 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "OpenRouter API provider plugin: delegates big-diff analysis, second-opinion review, and one-shot text generation to GLM-5.2 (z-ai/glm-5.2, 1M context) and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail and dm-review's big-diff fallback.",
+      "description": "OpenRouter API provider plugin: delegates policy-routed review, second-opinion analysis, config/doc generation, and bounded OpenRouter execution to GLM-5.2 and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail, openrouter-exec runner, and dm-review external routing.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 1,
