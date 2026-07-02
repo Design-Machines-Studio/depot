@@ -10,8 +10,8 @@ Decision table for choosing the right OpenRouter model for each delegation task.
 | `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro | Sonnet-class code reasoning. | 1M | Alternate / fallback |
 | `deepseek/deepseek-v4-flash` | DeepSeek V4 Flash | Fast, cheap, mechanical checks. | 1M | Bulk / cheap |
 | `minimax/minimax-m3` | MiniMax-M3 | Cost-optimized B-tier workhorse -- the cost-per-action pick for high-volume/bulk work; slightly under GLM-5.2 on quality. | large | Cost / bulk |
-| `anthropic/claude-opus-4.8` | Claude Opus 4.8 | Frontier. Used only on the cascade's `frontier_api` rung (never the main loop). | -- | Frontier |
-| `openai/gpt-5.5` | GPT-5.5 | Frontier alternate. | -- | Frontier |
+| `openai/gpt-5.5` | GPT-5.5 | Preferred frontier cross-check (leads the `frontier_api` rung). | -- | Frontier |
+| `anthropic/claude-opus-4.8` | Claude Opus 4.8 | Frontier alternate. Used only on the cascade's `frontier_api` rung (never the main loop). | -- | Frontier |
 
 ## Task -> Model Mapping
 
@@ -21,7 +21,7 @@ Decision table for choosing the right OpenRouter model for each delegation task.
 | Big-diff review (>=10K lines) | `z-ai/glm-5.2` | 180s | 1M context; longer timeout for very large diffs. |
 | Second-opinion analysis | `z-ai/glm-5.2` | 90s | Cheap cross-check that does not become the implementation. |
 | Config / doc generation | `z-ai/glm-5.2` | 90s | One-shot text the caller writes to disk. |
-| Frontier cross-check (cascade) | `anthropic/claude-opus-4.8` | 120s | Only on the `frontier_api` rung when a primary rail caps. |
+| Frontier cross-check (cascade) | `openai/gpt-5.5` | 120s | Only on the `frontier_api` rung when a primary rail caps. |
 
 ## Rate-Limit Fallback Chain
 
