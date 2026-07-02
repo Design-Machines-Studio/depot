@@ -54,6 +54,16 @@ Right-size effort per agent rather than running everything at the session defaul
 
 For the pipeline, raise *session* effort (`/effort xhigh` or `ultracode`) for complex or high-stakes features rather than pinning the workhorse `execution-orchestrator` to `xhigh` -- that keeps cost user-controlled per run.
 
+## Fable (Mythos-Class) Escalation -- plan-conditional
+
+Claude Fable 5 (`claude-fable-5`, alias `fable`) sits ABOVE Opus in a Mythos-class tier. Availability is **plan-conditional**: it comes and goes with the user's subscription window, so it is an escalation option, never a baseline dependency. Rules:
+
+- **Never pin `model: fable` in agent frontmatter.** Pins must always resolve; a lapsed plan would break dispatch. Defaults stay `opus`.
+- **Use it via inheritance:** unpinned agents (the deep Claude reviewers) inherit the session model. Run the session on Fable (`/model claude-fable-5`) and they upgrade automatically -- the preferred way to spend a Fable availability window on the hardest reviews and builds.
+- **Use it via dispatch-time override for pinned decision gates:** the Agent tool's `model` parameter takes precedence over frontmatter. When the session runs Fable (or the user opts in), dispatch `plan-adversary` -- and the `execution-orchestrator` for the hardest runs -- with `model: fable`. If the dispatch errors as model-unavailable, silently re-dispatch with the frontmatter default.
+- **Cascade:** `model-cascade.json` ranks `fable` at 98 and it leads the claude-code `native_judgment` ladder in `harness-profile.json`. No probe can detect plan-level availability, so the orchestrator's RC-64 rule degrades an unavailable directive model to the next in the native list (`opus`). The entries are inert while Fable is off-plan -- keep them.
+- Effort levels on Fable: assume the full range (it is above Opus); confirm against the model-config docs when a new tier ships.
+
 ## Dynamic Workflows (opportunity, not yet adopted)
 
 `ultracode` and the `/workflows` system let Claude orchestrate JS-defined multi-step workflows. The pipeline already encodes its phases as a hardened, post-mortem-driven orchestration; do not rewrite it as a dynamic workflow unilaterally. Treat dynamic workflows as a future option for ad-hoc multi-step tasks that lack a dedicated pipeline.
