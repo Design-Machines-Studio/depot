@@ -34,6 +34,14 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 - Tasks requiring MCP server access
 - Adversarial review, ambiguity detection, or security-critical analysis (keep on Anthropic)
 
+### Security Boundary (hard rule)
+
+**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Enforce `security` in `plugins/pipeline/references/routing-policy.json` before any delegation:
+
+- **Path exclusions -- route Anthropic-side.** If the diff/context touches `internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`, DECLINE and return the chunk to the Anthropic-native reviewer. A single matching file taints the whole chunk. This applies to the one-shot delegate AND the `openrouter-exec` agentic runner.
+- **Content redaction.** Strip environment values, API tokens/keys, connection strings/DSNs, and production hostnames-with-paths before sending. If they cannot be stripped, do not send that content -- return it to Anthropic-side review.
+- **Intended lanes.** Style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency route off-Anthropic freely when no boundary is tripped.
+
 ## Invocation Protocol
 
 Load the full protocol from `${CLAUDE_SKILL_DIR}/references/invocation-protocol.md`. It covers the wrapper's positional argument shape, the per-request provider preferences (`OPENROUTER_ZDR`, `OPENROUTER_REQUIRE_PARAMS`, `OPENROUTER_PROVIDER_SORT`), HTTP status handling, the rate-limit fallback to a second model slug, and response parsing.
