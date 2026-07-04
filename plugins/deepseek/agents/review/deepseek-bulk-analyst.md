@@ -19,6 +19,20 @@ You are activated as a conditional agent in dm-review when:
 
 You run IN ADDITION to the core review agents that receive the truncated diff. Your job is to catch what truncation hides -- cross-file patterns, long-range dependencies, and issues buried deep in large files.
 
+## Security Boundary (check FIRST, every run)
+
+**Third-party models are bulk pattern reviewers, never security reviewers.** Before preparing the diff, gate the changed file paths against `security.neverRouteOffAnthropic.pathGlobs` in `plugins/pipeline/references/routing-policy.json`:
+
+```
+internal/auth/*      internal/federation/*      *secretbox*
+*destructive_confirmation*      internal/baseplate/email/settings*
+deploy/*      *.env      *.env.*
+```
+
+If ANY changed file matches, DECLINE the delegation -- do not send the diff to DeepSeek. Emit a `RUNNER DECLINED -- SECURITY BOUNDARY` block (same shape as `deepseek-agent-runner` Step 1.4) naming the offending paths and return the chunk to the Anthropic-native reviewer. A single matching file taints the whole chunk.
+
+Then apply `security.contentRedaction`: strip hunks carrying environment values, API tokens/keys, connection strings/DSNs, or production hostnames-with-paths. If the diff still contains any of these after stripping, do not send it -- return it to Anthropic-side review. Your intended lanes are style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency (`security.positiveRouting`).
+
 ## Process
 
 ### Step 1: Prepare the Diff

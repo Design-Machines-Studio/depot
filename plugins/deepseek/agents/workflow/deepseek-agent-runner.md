@@ -81,9 +81,55 @@ fi
 
 The body becomes DeepSeek's system prompt.
 
+### Step 1.4: Security Boundary -- Hard Path Exclusion (route Anthropic-side)
+
+**Third-party models are bulk pattern reviewers, never security reviewers.** Before any per-hunk stripping, gate the WHOLE diff against the `security.neverRouteOffAnthropic.pathGlobs` list in `plugins/pipeline/references/routing-policy.json`. If ANY changed file matches, do NOT send the chunk to DeepSeek at all -- decline and route it back to the Anthropic-native reviewer. This is stronger than per-hunk redaction: a single auth/federation/secrets file taints the whole chunk, because these lanes are never delegated off-Anthropic.
+
+```bash
+# Pass the diff via a temp file so the heredoc is unambiguously the SCRIPT and
+# stdin is not contended between program and data.
+BOUNDARY_TMP=$(mktemp)
+printf '%s' "$diff_content" > "$BOUNDARY_TMP"
+BOUNDARY_HIT=$(python3 - "$BOUNDARY_TMP" <<'PY'
+import re, sys, fnmatch
+text = open(sys.argv[1]).read()
+paths = re.findall(r'^diff --git a/(.+?) b/', text, re.M)
+never = [
+    "internal/auth/*", "internal/federation/*",
+    "*secretbox*", "*destructive_confirmation*",
+    "internal/baseplate/email/settings*",
+    "deploy/*", "*.env", "*.env.*",
+]
+def hit(p):
+    return any(fnmatch.fnmatch(p, g) for g in never)
+print("\n".join(sorted({p for p in paths if hit(p)})))
+PY
+)
+rm -f "$BOUNDARY_TMP"
+if [ -n "$BOUNDARY_HIT" ]; then
+  cat <<EOF
+## ${target_agent_name} Review (via DeepSeek ${target_model})
+
+### RUNNER DECLINED -- SECURITY BOUNDARY
+Chunk touches never-delegate paths (routing-policy.json security.neverRouteOffAnthropic):
+$(printf '%s\n' "$BOUNDARY_HIT" | sed 's/^/  - /')
+
+Route this chunk to the Anthropic-native reviewer instead. DeepSeek is a bulk
+pattern reviewer, never a security reviewer. dm-review Phase 4.5 must run this
+lane on Claude (sonnet+), NOT treat it as a completed external review.
+
+### Critical (P1)
+### Serious (P2)
+### Moderate (P3)
+### Approved
+EOF
+  exit 0
+fi
+```
+
 ### Step 1.5: Pre-flight Sensitive-File Filter
 
-The runner strips sensitive-file hunks before they reach DeepSeek, regardless of whether dm-review Phase 3.5 already filtered upstream. Defence-in-depth.
+The runner strips sensitive-file hunks before they reach DeepSeek, regardless of whether dm-review Phase 3.5 already filtered upstream. Defence-in-depth. This layer also refuses content that carries secrets outside the path globs -- `security.contentRedaction` in routing-policy.json: environment values, API tokens/keys, connection strings/DSNs, and production hostnames-with-paths. A hunk containing any of these is dropped; if stripping leaves the diff empty, the runner returns the chunk to Anthropic-side review (RUNNER FAILURE below) rather than sending a hollowed-out diff.
 
 The python script writes the filtered diff to a temp file (passed as argv[1]) and prints the redaction count to stdout. The shell captures the count, reads the filtered diff back, and refuses to proceed if the entire diff was redacted.
 

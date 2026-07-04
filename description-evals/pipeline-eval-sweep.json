@@ -1,0 +1,14 @@
+[
+  {"query": "evaluate the whole app", "should_trigger": true},
+  {"query": "system-wide evaluation of the app", "should_trigger": true},
+  {"query": "sweep every route across roles and breakpoints", "should_trigger": true},
+  {"query": "audit every page for accessibility and layout", "should_trigger": true},
+  {"query": "screenshot every route at mobile and desktop", "should_trigger": true},
+  {"query": "run an accessibility probe across all pages", "should_trigger": true},
+  {"query": "whole-app audit that survives if the session dies", "should_trigger": true},
+  {"query": "route x role x breakpoint matrix evaluation", "should_trigger": true},
+  {"query": "review my PR for bugs", "should_trigger": false},
+  {"query": "fix the failing test", "should_trigger": false},
+  {"query": "deploy to production", "should_trigger": false},
+  {"query": "write a new feature handler", "should_trigger": false}
+]

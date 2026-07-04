@@ -27,6 +27,20 @@ You MUST execute every step for every chunk. Specifically:
 
 Exception: use `sequential-on-branch` mode instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification.
 
+## CRITICAL: Subagent Budget & Dead-Lane Handling
+
+The single biggest observed waste mode is an uncapped subagent dying mid-flight (monthly spend limit, context overflow, crash) and returning NOTHING -- its entire lane is lost. Two documented incidents: a 143-tool-call runaway, and 4 parallel reviewers dead at 17-24 calls each returning zero findings.
+
+Two rules govern every subagent you spawn:
+
+1. **Inject the budget contract into every subagent prompt.** Implementation subagents inherit it from the promptcraft prompt template (the Tool-Call Budget block is invariant, copied verbatim into every chunk prompt). Review agents carry it in their own frontmatter. If you hand-author any dispatch prompt, include: a hard cap (~40 tool calls, 50 if it drives a browser), "stop at 80% of budget and write up what you have," and mandatory `NOT-COVERED:` / `COMMANDS-RUN:` sections. Partial results returned early beat complete results never returned.
+
+2. **A dead subagent is never relaunched.** When a dispatched implementation or review subagent dies or returns empty/truncated output:
+   - Do NOT relaunch it against the same failure mode. (Cap/usage-limit dispatch errors are the one exception and are already handled by the Step 3d cascade descent -- that is a *reroute to a different provider*, not a relaunch of the same agent.)
+   - Write the chunk/lane receipt from whatever returned, salvaging any complete work or findings.
+   - Add a `NOT-COVERED:` entry to the chunk receipt naming the dead agent and what it left unfinished.
+   - Continue to the next chunk/lane. A silently missing lane that reads as "done" is the costliest failure; flag it instead.
+
 ## CRITICAL: How to Run dm-review (skill, not slash command)
 
 You are a subagent. **Slash commands like `/dm-review-loop`, `/dm-review-quick`, `/dm-review`, and `/dm-review-fix` are NOT callable from a subagent context** -- they are user-input only. References elsewhere in this document that say "Run /dm-review-quick" mean "execute the review-fix-loop pattern below using the `Skill` tool to invoke the underlying review skill."
@@ -86,6 +100,22 @@ for iteration in 1..max_iterations (default 3):
 ```
 
 The stalled-convergence check is critical -- without it, the orchestrator can loop wasting tokens on findings that don't auto-resolve.
+
+### Per-chunk review tier (quick by default; escalate sensitive paths)
+
+Default the per-chunk review gate to **quick** mode -- 5 core agents (+ ui-standards-reviewer for UI files). Full review runs once at the end against the feature branch, not per chunk. This is the token-economy default; do not run full review on every chunk.
+
+**Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so the Opus `security-auditor` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
+
+```
+internal/auth/**            internal/federation/**
+**/secretbox*               **/destructive_confirmation*
+internal/baseplate/email/settings*
+deploy/**                   *.env*
+migrations/** containing seed credentials
+```
+
+These lanes are never quick-only and are never delegated off-Anthropic (see the DeepSeek/OpenRouter routing policy). A chunk that touches auth/federation/secrets and was reviewed quick-only is a run-postmortem miss.
 
 ### Why this matters for DeepSeek routing
 

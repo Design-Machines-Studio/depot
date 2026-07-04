@@ -28,6 +28,19 @@ Every review agent dispatched by this skill operates under a terse-output contra
 - `/dm-review` -- Full review: all applicable agents + memory capture
 - `/dm-review quick` -- Quick review: 5 core agents (6 when UI files changed), no other conditional agents, no memory capture
 
+## Review Tiers (token-economy policy)
+
+Match the review depth to the moment. Running full multi-round review on every chunk burns tokens the run cannot spare; running only quick review before merge misses cross-cutting issues. Default to the cheapest tier that fits.
+
+| When | Tier | What runs |
+|------|------|-----------|
+| **Per chunk during pipeline execution** | `dm-review-quick` | 5 core agents (+ ui-standards-reviewer when UI files changed). No memory capture, no conditional agents beyond file-type triggers. |
+| **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
+| **Bulk second opinions / large-diff first pass** | DeepSeek or GLM via `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. Never security or sensitive paths (see the delegation plugins' routing policy). |
+| **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
+
+**Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full review with the Opus `security-auditor` -- these lanes are never delegated off-Anthropic and never quick-only.
+
 ## Fix Philosophy
 
 All review agents and fix workflows must follow these principles:

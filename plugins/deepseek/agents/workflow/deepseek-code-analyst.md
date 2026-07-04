@@ -27,6 +27,10 @@ DeepSeek V4-Pro:
 
 ## Process
 
+### Step 0: Security Boundary (check FIRST)
+
+**Third-party models are bulk pattern reviewers, never security reviewers.** If any file you would send matches `security.neverRouteOffAnthropic.pathGlobs` in `plugins/pipeline/references/routing-policy.json` (`internal/auth/*`, `internal/federation/*`, `*secretbox*`, `*destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/*`, `*.env*`), DECLINE and route the analysis to the Anthropic-native reviewer instead. Strip env values, tokens, connection strings, and production hostnames-with-paths from any context you do send (`security.contentRedaction`); if they cannot be stripped, do not send that file.
+
 ### Step 1: Gather Code Context
 
 Read the files relevant to the analysis task. Understand:

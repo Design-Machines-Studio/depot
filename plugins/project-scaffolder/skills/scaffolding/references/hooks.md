@@ -184,11 +184,16 @@ exit 0
 
 Provides context-aware agent reminders after file edits. The template includes all possible blocks -- remove the ones that don't apply to your project type.
 
+**Silence discipline (required).** This hook fires on a broad matcher (every Edit|Write), so each reminder category fires **once per session** via a marker file under `$TMPDIR/claude-hook-state` keyed on `session_id`, then stays silent. Emitting the same static reminder on every edit only burns context tokens -- the assembly-baseplate project hit exactly this and fixed it the same way (2026-07-04). A hook that reminds on a broad matcher must be silent on the second and later occurrences; output only on first occurrence (or on a genuine violation).
+
 ```bash
 #!/bin/bash
-# post-edit-context.sh -- After file edits, inject agent reminders
+# post-edit-context.sh -- After file edits, inject agent reminders.
 #
 # Returns systemMessage JSON that reminds Claude to use the right agents.
+# Each reminder category fires ONCE per session (marker files under
+# $TMPDIR/claude-hook-state keyed on session_id): repeating the same static
+# reminder on every edit only burns context tokens. Silent on every repeat.
 
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
@@ -197,78 +202,59 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-# --- GO PROJECTS: Keep for go-templ-datastar, go-library ---
+# Classify the edited file into a single reminder CATEGORY + MESSAGE. Delete the
+# blocks that do not apply to your project type (see Customization below).
+CATEGORY=""
+MESSAGE=""
 
-# Token file changes -> theming skill reminder
+# --- GO PROJECTS: keep for go-templ-datastar, go-library ---
 if printf '%s\n' "$FILE_PATH" | grep -qE '1_tokens/'; then
-  echo "{\"systemMessage\": \"Design tokens modified: Reference livewires theming.md for token guidelines. Run css-reviewer to verify compliance.\"}"
-  exit 0
-fi
-
-# CSS file changes -> css-reviewer reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE 'src/css/|\.css$'; then
-  echo "{\"systemMessage\": \"CSS modified: Consider running the css-reviewer agent to verify Live Wires compliance (cascade layers, naming, tokens).\"}"
-  exit 0
-fi
-
-# Templ template changes -> go-builder + doc-sync reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.templ$'; then
-  echo "{\"systemMessage\": \"Templ template modified: Run templ generate + go build via the go-builder agent. Check documentation via doc-sync.\"}"
-  exit 0
-fi
-
-# Go source changes -> go-builder reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.go$'; then
-  echo "{\"systemMessage\": \"Go source modified: Rebuild via the go-builder agent (docker compose exec app go build).\"}"
-  exit 0
-fi
-
+  CATEGORY="tokens"
+  MESSAGE="Design tokens modified: Reference livewires theming.md for token guidelines. Run css-reviewer to verify compliance."
+elif printf '%s\n' "$FILE_PATH" | grep -qE 'src/css/|\.css$'; then
+  CATEGORY="css"
+  MESSAGE="CSS modified: Consider running the css-reviewer agent to verify Live Wires compliance (cascade layers, naming, tokens)."
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.templ$'; then
+  CATEGORY="templ"
+  MESSAGE="Templ template modified: Run templ generate + go build via the go-builder agent. Check documentation via doc-sync."
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.go$'; then
+  CATEGORY="go"
+  MESSAGE="Go source modified: Rebuild via the go-builder agent (docker compose exec app go build)."
 # --- END GO PROJECTS ---
-
-# --- CRAFT CMS PROJECTS: Keep for craft-cms ---
-
-# Twig template changes -> doc-sync reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.twig$|\.html\.twig$'; then
-  echo "{\"systemMessage\": \"Twig template modified: Check if documentation needs updating via doc-sync.\"}"
-  exit 0
-fi
-
-# PHP changes -> rebuild reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.php$'; then
-  echo "{\"systemMessage\": \"PHP modified: Clear caches if needed (ddev craft clear-caches/all). Run security-auditor for handler/controller changes.\"}"
-  exit 0
-fi
-
+# --- CRAFT CMS PROJECTS: keep for craft-cms ---
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.twig$|\.html\.twig$'; then
+  CATEGORY="twig"
+  MESSAGE="Twig template modified: Check if documentation needs updating via doc-sync."
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.php$'; then
+  CATEGORY="php"
+  MESSAGE="PHP modified: Clear caches if needed (ddev craft clear-caches/all). Run security-auditor for handler/controller changes."
 # --- END CRAFT CMS PROJECTS ---
-
-# --- CSS FRAMEWORK PROJECTS: Keep for css-framework ---
-
-# CSS file changes (standalone framework) -> css-reviewer + build reminder
-# Note: The CSS block above (under GO PROJECTS) covers css-framework too.
-# Only keep this block if you DON'T have the Go CSS block above.
-# if printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
-#   echo "{\"systemMessage\": \"CSS modified: Run css-reviewer to verify naming conventions, cascade layers, and token usage. Rebuild with npm run build.\"}"
-#   exit 0
-# fi
-
-# --- END CSS FRAMEWORK PROJECTS ---
-
-# --- UNIVERSAL: Keep for all project types ---
-
-# SQL migration changes -> doc-sync + security reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.sql$|migrations/'; then
-  echo "{\"systemMessage\": \"Migration/SQL modified: Run security-auditor to check for injection risks. Update documentation via doc-sync.\"}"
-  exit 0
+# --- UNIVERSAL: keep for all project types ---
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.sql$|migrations/'; then
+  CATEGORY="sql"
+  MESSAGE="Migration/SQL modified: Run security-auditor to check for injection risks. Update documentation via doc-sync."
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.(yaml|yml|json|toml)$'; then
+  CATEGORY="config"
+  MESSAGE="Config file modified: Check if CLAUDE.md or other documentation needs updating via doc-sync."
 fi
-
-# Config file changes -> doc-sync reminder
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.(yaml|yml|json|toml)$'; then
-  echo "{\"systemMessage\": \"Config file modified: Check if CLAUDE.md or other documentation needs updating via doc-sync.\"}"
-  exit 0
-fi
-
 # --- END UNIVERSAL ---
 
+if [ -z "$CATEGORY" ]; then
+  exit 0
+fi
+
+# Fire each category at most once per session -- silent on every repeat.
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "nosession"')
+STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
+mkdir -p "$STATE_DIR" 2>/dev/null
+MARKER="$STATE_DIR/${SESSION_ID}-postedit-${CATEGORY}"
+
+if [ -f "$MARKER" ]; then
+  exit 0
+fi
+touch "$MARKER" 2>/dev/null
+
+echo "{\"systemMessage\": \"$MESSAGE\"}"
 exit 0
 ```
 

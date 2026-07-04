@@ -74,6 +74,16 @@ The rendered result must match these visual treatments. If you cannot determine 
 
 Visual criteria describe the IMPRESSION, not the implementation. "Uses button--outline-danger" is structural. "Block button is visually subordinate to the Accept button" is visual. Include both types.
 
+## Tool-Call Budget & Partial-Return Contract
+
+You run under a hard budget. Treat every tool call as spend you track.
+
+- **Hard cap: 40 tool calls** (50 if this chunk drives a browser). Keep a running count.
+- **At 80% of budget (32 calls) stop exploring and finish the edit + write-up.** A subagent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole chunk is lost. Partial progress committed beats a perfect diff never returned.
+- **End your response with two sections, even if you had to stop early:**
+  - `NOT-COVERED:` -- acceptance criteria, files, or checks the budget did not reach.
+  - `COMMANDS-RUN:` -- the build/test/search commands you actually ran.
+
 ## Ambiguity Protocol
 
 This block is one of three layers in the pipeline's ambiguity defence. Sibling layers: `plan-adversary.md` Sprint Contract Negotiation (catches structural ambiguity at prompt-review time, cheapest) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode commit-trailer fallback). Keep the wording here in sync with those two.
@@ -120,4 +130,4 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 
 8. **Reference the approved design.** When a brainstorm produced mockups, the prompt must reference them. The subagent can read HTML source even if it can't view rendered images. Include the path and the key visual decisions extracted from it.
 
-9. **The Ambiguity Protocol and the last two Constraints bullets are invariant.** Copy them verbatim into every prompt. They close the seam between plan-adversary (structural ambiguity) and brainstorming (pre-plan ambiguity) by addressing implementation-time micro-decisions and drive-by refactors. Do not rewrite or shorten them per chunk.
+9. **The Tool-Call Budget block, the Ambiguity Protocol, and the last two Constraints bullets are invariant.** Copy them verbatim into every prompt. The budget block ensures a subagent that hits a spend/context wall returns partial work with a `NOT-COVERED:` list instead of dying silently; the Ambiguity Protocol closes the seam between plan-adversary (structural ambiguity) and brainstorming (pre-plan ambiguity) by addressing implementation-time micro-decisions and drive-by refactors. Do not rewrite or shorten them per chunk.

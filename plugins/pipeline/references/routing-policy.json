@@ -99,5 +99,42 @@
     "crossProviderVerification": true,
     "finalReviewDifferentProvider": true,
     "proposalOnlyEconomics": true
+  },
+  "security": {
+    "_comment": "Hard boundary for off-Anthropic delegation (DeepSeek / OpenRouter / GLM). Third-party models are bulk pattern reviewers, NEVER security reviewers. This block overrides chunkKind and agentType routing: any diff matching neverRouteOffAnthropic.pathGlobs, or containing a contentRedaction pattern, is force-routed to Anthropic-side review regardless of what the routing buckets above would select. Consumed by deepseek-agent-runner, deepseek-bulk-analyst, openrouter-bulk-analyst, and the delegate wrapper prompts, which each re-check it as a second layer.",
+    "neverRouteOffAnthropic": {
+      "pathGlobs": [
+        "internal/auth/**",
+        "internal/federation/**",
+        "**/secretbox*",
+        "**/destructive_confirmation*",
+        "internal/baseplate/email/settings*",
+        "deploy/**",
+        "*.env*"
+      ],
+      "onMatch": "route-anthropic",
+      "rationale": "Auth, federation trust, secret encryption (secretbox), destructive-confirmation HMAC tokens, email-delivery secrets, deploy secrets, and env files must be reviewed by Anthropic-native seats only. A single matching file in the diff forces the whole chunk Anthropic-side."
+    },
+    "contentRedaction": {
+      "refusePatterns": [
+        "environment variable values",
+        "API tokens or keys",
+        "connection strings / DSNs",
+        "production hostnames with request paths",
+        "migration or seed files containing credentials"
+      ],
+      "onMatch": "return-to-anthropic",
+      "rationale": "The delegate MUST strip or refuse these before sending a diff off-Anthropic. If the diff still contains any of them after stripping, do NOT send it -- return the chunk to Anthropic-side review. This catches secrets that live outside the path globs (e.g. a credential pasted into a migration)."
+    },
+    "positiveRouting": {
+      "intendedLanes": [
+        "style / formatting",
+        "duplication",
+        "pattern-recognition",
+        "large-diff first-pass triage",
+        "doc consistency"
+      ],
+      "rationale": "These are the lanes DeepSeek / GLM are for. Route them off-Anthropic freely when no security boundary above is tripped."
+    }
   }
 }
