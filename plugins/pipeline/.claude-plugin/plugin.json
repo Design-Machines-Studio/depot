@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review (with ambiguity surfacing), orchestrate concurrent worktree execution with review-fix loops and surgical-change discipline, and deliver clean branches",
-  "version": "1.23.0",
+  "version": "1.24.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -90,6 +90,27 @@
           "orchestration",
           "dependency-ordering",
           "manifest"
+        ]
+      },
+      {
+        "id": "eval-sweep",
+        "name": "Eval Sweep",
+        "description": "Ledger-first scripted system-wide evaluation harness that sweeps every route, role, and breakpoint and survives session death",
+        "triggers": [
+          "evaluate the whole app",
+          "system-wide evaluation",
+          "sweep every route",
+          "audit every page",
+          "screenshot every route",
+          "accessibility probe across routes"
+        ],
+        "tags": [
+          "evaluation",
+          "browser-sweep",
+          "accessibility",
+          "ledger-first",
+          "system-wide",
+          "audit"
         ]
       }
     ],

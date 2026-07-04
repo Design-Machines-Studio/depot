@@ -348,14 +348,14 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.23.0",
+      "version": "1.24.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
       "description": "Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review (ambiguity surfacing), and worktree-based execution with review-fix loops and surgical-change discipline",
       "capabilities_summary": {
-        "skills": 3,
+        "skills": 4,
         "agents": 2,
         "commands": 5,
         "tags": [
