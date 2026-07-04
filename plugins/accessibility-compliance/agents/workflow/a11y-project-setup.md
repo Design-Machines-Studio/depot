@@ -120,9 +120,12 @@ Create `.claude/hooks/a11y-check.sh`:
 
 ```bash
 #!/bin/bash
-# a11y-check.sh -- Remind about accessibility after template changes
+# a11y-check.sh -- Remind about accessibility after template changes.
 #
-# PostToolUse hook: fires after Edit/Write on template files
+# PostToolUse hook: fires after Edit/Write on template files. Each reminder
+# category fires ONCE per session (marker files under $TMPDIR/claude-hook-state
+# keyed on session_id): repeating the same static reminder on every edit only
+# burns context tokens. Silent on every repeat.
 
 INPUT=$(cat)
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
@@ -131,24 +134,36 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-# Match template files
+CATEGORY=""
+MESSAGE=""
+
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.(templ|twig|html)$'; then
-  echo "{\"systemMessage\": \"Template modified: Run the a11y-html-reviewer agent to check WCAG compliance. For CSS-heavy changes, also run a11y-css-reviewer.\"}"
+  CATEGORY="html"
+  MESSAGE="Template modified: Run the a11y-html-reviewer agent to check WCAG compliance. For CSS-heavy changes, also run a11y-css-reviewer."
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
+  CATEGORY="css"
+  MESSAGE="CSS modified: Run the a11y-css-reviewer agent to verify contrast, focus visibility, and motion safety."
+elif printf '%s\n' "$FILE_PATH" | grep -qE '\.(js|ts)$'; then
+  CATEGORY="js"
+  MESSAGE="JavaScript modified: Run the a11y-dynamic-content-reviewer agent to check live regions, focus management, and keyboard operability."
+fi
+
+if [ -z "$CATEGORY" ]; then
   exit 0
 fi
 
-# Match CSS files
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
-  echo "{\"systemMessage\": \"CSS modified: Run the a11y-css-reviewer agent to verify contrast, focus visibility, and motion safety.\"}"
+# Fire each category at most once per session -- silent on every repeat.
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "nosession"')
+STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
+mkdir -p "$STATE_DIR" 2>/dev/null
+MARKER="$STATE_DIR/${SESSION_ID}-a11y-${CATEGORY}"
+
+if [ -f "$MARKER" ]; then
   exit 0
 fi
+touch "$MARKER" 2>/dev/null
 
-# Match Datastar/JS files
-if printf '%s\n' "$FILE_PATH" | grep -qE '\.(js|ts)$'; then
-  echo "{\"systemMessage\": \"JavaScript modified: Run the a11y-dynamic-content-reviewer agent to check live regions, focus management, and keyboard operability.\"}"
-  exit 0
-fi
-
+echo "{\"systemMessage\": \"$MESSAGE\"}"
 exit 0
 ```
 

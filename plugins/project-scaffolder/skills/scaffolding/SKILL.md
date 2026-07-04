@@ -165,7 +165,8 @@ These principles are baked into every hook template:
 5. **Defensive scripting** -- handle missing git, missing files, unset variables gracefully
 6. **Marker files in /tmp** -- use `{{PROJECT_PREFIX}}` in marker names to avoid collisions
 7. **HEAD-keyed markers** -- nudges that should reset after commits use `git rev-parse --short HEAD` in the marker name
-8. **Security** -- use `printf '%s\n'` instead of `echo` to prevent flag injection; quote all variable expansions
+8. **Silence on repeat (broad-matcher reminder hooks)** -- a PostToolUse hook on a broad matcher (`Edit|Write`, `Bash`) that emits a *static* reminder MUST fire each reminder category at most once per session, keyed on `session_id` via a marker under `$TMPDIR/claude-hook-state`, and stay silent afterward. Emitting the same reminder on every edit only burns context tokens (observed and fixed in assembly-baseplate, 2026-07-04). Hooks must be silent on pass -- output only on first occurrence or a genuine violation.
+9. **Security** -- use `printf '%s\n'` instead of `echo` to prevent flag injection; quote all variable expansions
 
 ## Ecosystem Integration
 

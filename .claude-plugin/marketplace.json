@@ -225,7 +225,7 @@
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "version": "1.8.1",
+      "version": "1.9.0",
       "author": {
         "name": "Design Machines"
       },
@@ -249,7 +249,7 @@
     {
       "name": "accessibility-compliance",
       "source": "./plugins/accessibility-compliance",
-      "version": "1.5.2",
+      "version": "1.6.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
