@@ -18,9 +18,13 @@
 #   curl. (jq optional, only for pretty-printing.)
 #
 # USAGE:
-#   ./curl-probes.sh http://localhost:8080 /login user@example.coop 'password'
-#   Args: BASE_URL [LOGIN_PATH] [EMAIL] [PASSWORD]
-#   Writes the auth cookie jar to ./out/cookies.txt for the browser sweep.
+#   EVAL_LOGIN_PASSWORD='password' \
+#     ./curl-probes.sh http://localhost:8080 /login user@example.coop
+#   Args: BASE_URL [LOGIN_PATH] [EMAIL]
+#   The password comes from EVAL_LOGIN_PASSWORD (an env var), NOT a CLI arg, so
+#   it never lands in `ps aux` / /proc/<pid>/cmdline or shell history.
+#   The session cookie jar is written to a private mktemp file (outside the
+#   repo), never ./out, so a stray `git add` cannot commit a live session token.
 
 # Fixed PATH so a caller-controlled environment cannot hijack curl.
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -29,10 +33,14 @@ export PATH
 BASE_URL="${1:-http://localhost:8080}"
 LOGIN_PATH="${2:-/login}"
 EMAIL="${3:-}"
-PASSWORD="${4:-}"
+# Password from env only -- keep the live credential out of ps/shell history.
+PASSWORD="${EVAL_LOGIN_PASSWORD:-}"
 OUT_DIR="./out"
-COOKIES="${OUT_DIR}/cookies.txt"
 mkdir -p "$OUT_DIR"
+# Live session cookie jar goes to a private temp file, NOT the repo working dir,
+# so it cannot be accidentally committed. Cleaned up on exit.
+COOKIES="$(mktemp -t eval-cookies.XXXXXX)"
+trap 'rm -f "$COOKIES"' EXIT
 
 echo "== header probe: ${BASE_URL}/ =="
 # -D - dumps response headers; look for Content-Encoding, Cache-Control, ETag.

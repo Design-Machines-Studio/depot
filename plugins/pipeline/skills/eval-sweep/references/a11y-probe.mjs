@@ -22,55 +22,14 @@
 //       --routes routes.json --roles anon,member --out ./out/a11y
 //   Reuses the same routes.json / credential contract as sweep.mjs.
 
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-
-function parseArgs(argv) {
-  const a = {};
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) {
-      const key = argv[i].slice(2);
-      const val = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'true';
-      a[key] = val;
-    }
-  }
-  return a;
-}
+import { parseArgs, loadConfig, slug, write, login } from './eval-common.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const BASE_URL = (args['base-url'] || 'http://localhost:8080').replace(/\/$/, '');
 const OUT = args.out || './out/a11y';
 const ROLES = (args.roles || 'anon').split(',').map((s) => s.trim());
-const cfg = args.routes ? JSON.parse(readFileSync(args.routes, 'utf8')) : { routes: ['/'] };
+const cfg = loadConfig(args.routes);
 const ROUTES = cfg.routes || ['/'];
-const slug = (s) => s.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'root';
-function write(path, data) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, typeof data === 'string' ? data : JSON.stringify(data, null, 2));
-}
-function creds(role) {
-  const R = role.toUpperCase();
-  const fromEnv = process.env[`EVAL_${R}_EMAIL`] && {
-    email: process.env[`EVAL_${R}_EMAIL`], password: process.env[`EVAL_${R}_PASSWORD`],
-  };
-  return fromEnv || (cfg.login && cfg.login.roles && cfg.login.roles[role]) || null;
-}
-async function login(context, role) {
-  if (role === 'anon' || !cfg.login) return true;
-  const c = creds(role);
-  if (!c) return false;
-  const page = await context.newPage();
-  try {
-    await page.goto(BASE_URL + (cfg.login.url || '/login'), { waitUntil: 'domcontentloaded' });
-    await page.fill(`[name="${cfg.login.usernameField || 'email'}"]`, c.email);
-    await page.fill(`[name="${cfg.login.passwordField || 'password'}"]`, c.password);
-    await Promise.all([
-      page.waitForLoadState('domcontentloaded'),
-      page.click(cfg.login.submitSelector || 'button[type="submit"]'),
-    ]);
-    return true;
-  } catch { return false; } finally { await page.close(); }
-}
 
 // --- individual checks -----------------------------------------------------
 
@@ -172,19 +131,26 @@ async function main() {
   const allViolations = [];
   for (const role of ROLES) {
     const context = await browser.newContext();
-    await login(context, role);
+    const ok = await login(context, cfg, BASE_URL, role);
+    // null for anon; true/false for a real login attempt. A failed non-anon
+    // login means every result below reflects an anonymous session, so the
+    // role label is unreliable -- surface it as a violation, not a silent pass.
+    const authenticated = role === 'anon' ? null : ok;
+    if (authenticated === false) {
+      allViolations.push({ route: '(all)', role, desc: `login failed -- results reflect an anonymous session; role label unreliable` });
+    }
     for (const route of ROUTES) {
       process.stderr.write(`  a11y ${route} @ ${role}\n`);
       const page = await context.newPage();
       await page.setViewportSize({ width: 1440, height: 900 });
-      let rec = { route, role, error: null };
+      let rec = { route, role, authenticated, error: null };
       try {
         await page.goto(BASE_URL + route, { waitUntil: 'domcontentloaded', timeout: 30000 });
         const keyboard = await keyboardOrder(page);
         const focus = await focusVisibility(page);
         const nav = await landmarksAndNav(page);
         const dialog = await dialogLifecycle(page);
-        rec = { route, role, keyboard, focus, nav, dialog, error: null };
+        rec = { route, role, authenticated, keyboard, focus, nav, dialog, error: null };
         allViolations.push(...violations(route, role, rec));
       } catch (e) {
         rec.error = e.message;

@@ -21,12 +21,12 @@ You run IN ADDITION to the core review agents that receive the truncated diff. Y
 
 ## Security Boundary (check FIRST, every run)
 
-**Third-party models are bulk pattern reviewers, never security reviewers.** Before preparing the diff, gate the changed file paths against `security.neverRouteOffAnthropic.pathGlobs` in `plugins/pipeline/references/routing-policy.json`:
+**Third-party models are bulk pattern reviewers, never security reviewers.** Before preparing the diff, gate the changed file paths against `security.neverRouteOffAnthropic.pathGlobs` in `plugins/pipeline/references/routing-policy.json`. That JSON is the single source of truth; the list below is a convenience mirror -- if they ever differ, the JSON wins, and any path added there is in force here too:
 
 ```
-internal/auth/*      internal/federation/*      *secretbox*
-*destructive_confirmation*      internal/baseplate/email/settings*
-deploy/*      *.env      *.env.*
+internal/auth/**      internal/federation/**      **/secretbox*
+**/destructive_confirmation*      internal/baseplate/email/settings*
+deploy/**      *.env*
 ```
 
 If ANY changed file matches, DECLINE the delegation -- do not send the diff to DeepSeek. Emit a `RUNNER DECLINED -- SECURITY BOUNDARY` block (same shape as `deepseek-agent-runner` Step 1.4) naming the offending paths and return the chunk to the Anthropic-native reviewer. A single matching file taints the whole chunk.

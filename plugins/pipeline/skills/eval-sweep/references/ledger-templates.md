@@ -15,7 +15,7 @@ One per evaluation area (routing, accessibility, performance, auth-surface, ...)
 
 - HEAD: <sha>
 - Base URL: <base-url>
-- Generated: <timestamp — leave as PENDING until the phase completes>
+- Generated: <timestamp -- leave as PENDING until the phase completes>
 - Status: SCAFFOLDED   <!-- SCAFFOLDED -> IN-PROGRESS -> COMPLETE | PARTIAL -->
 
 ## Summary
@@ -75,7 +75,7 @@ The append-only rule matters: it means a crash can never corrupt earlier finding
 
 ## Sample `routes.json`
 
-Consumed by both `sweep.mjs` and `a11y-probe.mjs`. Keep credentials OUT of this file when it is committed — prefer `EVAL_<ROLE>_EMAIL` / `EVAL_<ROLE>_PASSWORD` env vars, or a gitignored copy.
+Consumed by both `sweep.mjs` and `a11y-probe.mjs`. Keep credentials OUT of this file when it is committed -- prefer `EVAL_<ROLE>_EMAIL` / `EVAL_<ROLE>_PASSWORD` env vars, or a gitignored copy.
 
 ```json
 {

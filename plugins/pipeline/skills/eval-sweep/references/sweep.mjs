@@ -28,20 +28,9 @@
 //   env vars EVAL_<ROLE>_EMAIL / EVAL_<ROLE>_PASSWORD (env wins). Keep any
 //   credential file gitignored -- never commit real logins.
 
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-
-function parseArgs(argv) {
-  const a = {};
-  for (let i = 0; i < argv.length; i++) {
-    if (argv[i].startsWith('--')) {
-      const key = argv[i].slice(2);
-      const val = argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'true';
-      a[key] = val;
-    }
-  }
-  return a;
-}
+import { parseArgs, loadConfig, slug, write, login } from './eval-common.mjs';
 
 const args = parseArgs(process.argv.slice(2));
 const BASE_URL = (args['base-url'] || 'http://localhost:8080').replace(/\/$/, '');
@@ -49,47 +38,10 @@ const OUT = args.out || './out/sweep';
 const ENGINE = args.engine || 'chromium';
 const VPS = (args.vp || '375,768,1440').split(',').map((s) => parseInt(s.trim(), 10));
 const ROLES = (args.roles || 'anon').split(',').map((s) => s.trim());
-const cfg = args.routes ? JSON.parse(readFileSync(args.routes, 'utf8')) : { routes: ['/'] };
+const cfg = loadConfig(args.routes);
 const ROUTES = cfg.routes || ['/'];
 
-const slug = (s) => s.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'root';
-function write(path, data) {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, typeof data === 'string' ? data : JSON.stringify(data, null, 2));
-}
-
-function creds(role) {
-  const env = process.env;
-  const R = role.toUpperCase();
-  const fromEnv = env[`EVAL_${R}_EMAIL`] && {
-    email: env[`EVAL_${R}_EMAIL`], password: env[`EVAL_${R}_PASSWORD`],
-  };
-  return fromEnv || (cfg.login && cfg.login.roles && cfg.login.roles[role]) || null;
-}
-
-async function login(context, role) {
-  if (role === 'anon' || !cfg.login) return true;
-  const c = creds(role);
-  if (!c) { console.error(`  ! no credentials for role ${role}; treating as anon`); return false; }
-  const page = await context.newPage();
-  try {
-    await page.goto(BASE_URL + (cfg.login.url || '/login'), { waitUntil: 'domcontentloaded' });
-    await page.fill(`[name="${cfg.login.usernameField || 'email'}"]`, c.email);
-    await page.fill(`[name="${cfg.login.passwordField || 'password'}"]`, c.password);
-    await Promise.all([
-      page.waitForLoadState('domcontentloaded'),
-      page.click(cfg.login.submitSelector || 'button[type="submit"]'),
-    ]);
-    return true;
-  } catch (e) {
-    console.error(`  ! login failed for ${role}: ${e.message}`);
-    return false;
-  } finally {
-    await page.close();
-  }
-}
-
-async function probeCell(context, route, role, vp) {
+async function probeCell(context, route, role, vp, authenticated) {
   const page = await context.newPage();
   await page.setViewportSize({ width: vp, height: 900 });
   const consoleErrors = [];
@@ -121,13 +73,14 @@ async function probeCell(context, route, role, vp) {
     await page.close();
   }
 
-  const cell = { route, role, vp, status, domContentLoaded, overflowX, consoleErrors, failedRequests, error: err };
+  const cell = { route, role, authenticated, vp, status, domContentLoaded, overflowX, consoleErrors, failedRequests, error: err };
   write(`${OUT}/metrics/${slug(route)}__${role}__${vp}.json`, cell);
   return cell;
 }
 
 function cellProblems(c) {
   const p = [];
+  if (c.authenticated === false) p.push(`login failed for role ${c.role} -- cell is anon-equivalent, role label unreliable`);
   if (c.error) p.push(`load error: ${c.error}`);
   if (c.status && (c.status < 200 || c.status >= 400)) p.push(`status ${c.status}`);
   if (c.overflowX && c.overflowX.over) p.push(`horizontal overflow +${c.overflowX.amount}px`);
@@ -147,12 +100,15 @@ async function main() {
 
   for (const role of ROLES) {
     const context = await browser.newContext();
-    const ok = await login(context, role);
-    if (!ok && role !== 'anon') { /* proceed anon-equivalent, flagged per cell */ }
+    const ok = await login(context, cfg, BASE_URL, role);
+    // null for anon (nothing to authenticate); true/false for a real login
+    // attempt. A false here surfaces per-cell via cellProblems so a silently
+    // failed member/admin login is real evidence, not a mislabelled cell.
+    const authenticated = role === 'anon' ? null : ok;
     for (const route of ROUTES) {
       for (const vp of VPS) {
         process.stderr.write(`  sweep ${route} @ ${role}/${vp}\n`);
-        const c = await probeCell(context, route, role, vp);
+        const c = await probeCell(context, route, role, vp, authenticated);
         cells.push(c);
         const pr = cellProblems(c);
         if (pr.length) problems.push({ route, role, vp, problems: pr });

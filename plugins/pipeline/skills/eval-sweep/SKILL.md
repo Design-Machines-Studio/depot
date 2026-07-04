@@ -46,23 +46,27 @@ Before spending a browser, probe with curl -- it is nearly free and catches whol
 
 - Compression + caching headers (`Content-Encoding`, `Cache-Control`, `ETag`).
 - Error-page correctness (404/500 return the right status, not a 200 shell).
-- Authed login flow. **Note:** gorilla/csrf (used by Assembly) requires an `Origin` header on the login POST or it rejects with 403 -- `curl-probes.sh` sets it. Capture the session cookie for the browser sweep to reuse.
+- Authed login flow. **Note:** gorilla/csrf (used by Assembly) requires an `Origin` header on the login POST or it rejects with 403 -- `curl-probes.sh` sets it. The password comes from `EVAL_LOGIN_PASSWORD` (env), never a CLI arg, and the session cookie jar is written to a private temp file, so no live credential lands in `ps`, shell history, or the repo.
 
 Append every probe to `commands-log.md`; append findings to `findings-ledger.md`.
 
 ## Phase 2: Scripted Browser Sweep
 
-Run the matrix in ONE call. See `references/sweep.mjs`.
+First author a `routes.json` for the target app -- it is app-specific, so no shipped copy exists. Copy the **Sample `routes.json`** from `references/ledger-templates.md` to your evaluation output directory and edit its `routes` list and `login` block to match the app. Keep real credentials OUT of it (use `EVAL_<ROLE>_EMAIL` / `EVAL_<ROLE>_PASSWORD` env vars, which win over the file). Omitting `--routes` entirely falls back to sweeping only `/`.
+
+Then run the matrix in ONE call. See `references/sweep.mjs` (which shares its arg/login harness with `a11y-probe.mjs` via `references/eval-common.mjs`).
 
 ```bash
 node references/sweep.mjs \
   --base-url http://localhost:8080 \
-  --routes references/routes.json \
+  --routes ./out/routes.json \
   --roles anon,member,admin \
   --vp 375,768,1440 \
   --engine chromium \
   --out ./out/sweep
 ```
+
+Each cell records an `authenticated` field (`true`/`false` for a login attempt, `null` for anon); a `false` -- a silently failed member/admin login -- is surfaced in `problems[]` so the role label is never trusted when the session was actually anonymous.
 
 Per (route x role x breakpoint) cell the script emits:
 

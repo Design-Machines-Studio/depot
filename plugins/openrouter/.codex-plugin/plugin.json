@@ -1,6 +1,6 @@
 {
   "name": "openrouter",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "OpenRouter API provider plugin for policy-routed review, second-opinion analysis, config/doc generation, and bounded OpenRouter execution via GLM-5.2 and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.",
   "author": {
     "name": "Design Machines",

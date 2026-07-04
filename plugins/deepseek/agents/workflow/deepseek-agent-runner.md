@@ -91,15 +91,30 @@ The body becomes DeepSeek's system prompt.
 BOUNDARY_TMP=$(mktemp)
 printf '%s' "$diff_content" > "$BOUNDARY_TMP"
 BOUNDARY_HIT=$(python3 - "$BOUNDARY_TMP" <<'PY'
-import re, sys, fnmatch
+import re, sys, os, json, fnmatch
 text = open(sys.argv[1]).read()
 paths = re.findall(r'^diff --git a/(.+?) b/', text, re.M)
-never = [
-    "internal/auth/*", "internal/federation/*",
-    "*secretbox*", "*destructive_confirmation*",
+# Single source of truth: load the boundary globs from routing-policy.json so a
+# new protected path added there propagates here automatically -- no hand-copied
+# list to drift. fnmatch '*' already spans '/', so collapse the glob '**' to '*'.
+# CANON is a FAIL-CLOSED fallback: if the policy file is missing/unreadable we
+# must NOT silently gate nothing (that would delegate secrets off-Anthropic), so
+# we fall back to the canonical list rather than an empty one.
+# Translate globs to fnmatch: collapse a leading '**/' to '*' FIRST (so '**/x'
+# matches x at repo root too, not only when nested), then any remaining '**'->'*'.
+# A naive g.replace('**','*') would leave '*/x', which misses a root-level x.
+CANON = [
+    "internal/auth/**", "internal/federation/**",
+    "**/secretbox*", "**/destructive_confirmation*",
     "internal/baseplate/email/settings*",
-    "deploy/*", "*.env", "*.env.*",
+    "deploy/**", "*.env*",
 ]
+POLICY = os.environ.get("ROUTING_POLICY", "plugins/pipeline/references/routing-policy.json")
+try:
+    globs = json.load(open(POLICY))["security"]["neverRouteOffAnthropic"]["pathGlobs"]
+except Exception:
+    globs = CANON  # fail closed -- never disable the boundary on a broken/missing policy file
+never = [g.replace("**/", "*").replace("**", "*") for g in globs]
 def hit(p):
     return any(fnmatch.fnmatch(p, g) for g in never)
 print("\n".join(sorted({p for p in paths if hit(p)})))
