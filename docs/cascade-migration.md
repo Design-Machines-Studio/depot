@@ -26,10 +26,10 @@ This note covers the `world-b-openrouter` changes: a shared `openrouter` provide
 
 The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kind -> class`:
 
-| kind | class | primary | on cap, descends to |
-|------|-------|---------|---------------------|
-| `logic`, `config` | `codex` | Codex (codex-companion) | GLM-5.2 (cheap_api) -> Claude native |
-| `ui`, `integration` | `claude` | Claude native | frontier_api (Opus 4.8 / GPT-5.5) |
+| kind                | class    | primary                              | on cap, descends to                   |
+|---------------------|----------|--------------------------------------|---------------------------------------|
+| `logic`, `config`   | `codex`  | Codex (codex-companion, GPT-5.6 Sol) | GLM-5.2 (cheap_api) -> Claude native  |
+| `ui`, `integration` | `claude` | Claude native                        | frontier_api (GPT-5.6 Sol / Opus 4.8) |
 
 **GLM-5.2 (`z-ai/glm-5.2`, 1M ctx) is the preferred quality-per-dollar fallback** -- it is first in the `cheap_api` ladder and the default for `openrouter-bulk-analyst`. Quality floors: codex 70, claude 80. `harness-profile.json` is the only host-specific file (it resolves abstract roles to concrete rails per host).
 

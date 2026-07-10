@@ -537,10 +537,25 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 
 | `CASCADE_RC` | Meaning | Orchestrator action |
 |---|---|---|
-| `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model`. **Re-dispatch IN-PROCESS through the 3d-LEGACY Claude subagent path**, passing the directive `model:` (e.g. `sonnet` when `opus` is capped). If the directive model is not available on the current plan (e.g. `fable` when the plan does not carry Mythos-class access -- the dispatch errors with a model-unavailable message), retry once with the next model in the host's native list (`opus`), then the default; do not treat plan-level unavailability as a cap event. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
+| `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
 | other | Bad args / engine error. | Fall back to the 3d-LEGACY Claude subagent at the default model. Do NOT re-invoke the cascade (avoids a loop on a persistent engine error). |
+
+**Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
+
+1. **Resolve the native path from the active host** (`harness-profile.json` `_detect`):
+   - `claude-code` -> the 3d-LEGACY **Claude subagent** path, passing the directive as the Agent tool's `model:` (e.g. `sonnet` when `opus` is capped).
+   - `codex` -> the **Codex CLI**, `codex exec --model <model>`.
+2. **On a model-unavailability error, retry with the next model in that role's native list for the active host**, in order, until one succeeds or the list is exhausted. Unavailability is NOT a cap event -- do not checkpoint, do not mark the rail exhausted. Recognise at least:
+   - Claude, plan-level: a model-unavailable message (e.g. `fable` when the plan does not carry Mythos-class access) -> next model (`opus`).
+   - Codex, CLI-version: `requires a newer version of Codex` (a `codex-cli` older than 0.144.x rejects the whole GPT-5.6 family) -> next model (`gpt-5.5`).
+   - Codex, account-tier: `not supported when using Codex with a ChatGPT account` -> next model.
+3. **If the whole native list is exhausted by unavailability**, do NOT retry in place -- re-invoke `cascade-dispatch.sh` once with `--exhausted-rail <probe_rail>` (the `probe_rail` from the directive), as Step 3d.3 does. That is the only mechanism that makes `rail_has_headroom()` skip the role; without the flag the script re-walks the same ladder and returns the identical RC-64 directive, looping forever.
+   - **Carry forward prior exclusions.** Pass every rail already excluded earlier in this chunk's dispatch chain, not just the new one -- repeat the flag (`--exhausted-rail codex --exhausted-rail claude`); the script comma-accumulates them. Dropping an earlier exclusion lets the fresh walk re-try a rail that already failed this chunk.
+   - **Loop guard:** re-invoke with `--exhausted-rail` at most once per rail per chunk. If a second RC 64 names a model you have already tried and failed, stop and treat the chunk as `75` (ladder exhausted) rather than dispatching again.
+   - **Codex-host gotcha:** `premium_sub` and `native_judgment` share `probe: "codex"` there, so `--exhausted-rail codex` skips BOTH roles in one call. "Next ROLE" does not mean a second native attempt on that host -- it descends to `openrouter_exec`.
+4. Record the model actually used in the chunk receipt as a **separate `modelUsed:` field** (e.g. `modelUsed: gpt-5.5`), so a post-mortem can see that descent occurred. Do NOT put the model slug in `implementedBy:` -- that field stays the provider enum `{codex|openrouter|claude}` that the Step 3e misroute check string-compares and that `providerSplit` buckets on. A native descent from `gpt-5.6-sol` to `gpt-5.5` is still `implementedBy: codex`.
 
 **One-shot validity rule (RC 0).** A wrapper rung returns single-turn text, not an agentic commit. It is acceptable ONLY for chunks whose deliverable IS pure text the orchestrator then writes to files:
 - `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR

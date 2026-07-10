@@ -10,11 +10,17 @@
   "roles": ["openrouter_exec", "premium_sub", "native_judgment", "frontier_api", "cheap_api", "bulk_api"],
 
   "quality_rank": {
-    "_comment": "Global model->score; enforces quality_floor regardless of which role surfaced the model. Higher = better.",
-    "fable": 98,
+    "_comment": "Global model->score; enforces quality_floor regardless of which role surfaced the model. Higher = better. Bare slugs (gpt-5.6-sol) are the Codex-native names; openai/-prefixed slugs are the same models via the OpenRouter wrapper -- both carry the same score.",
+    "_comment_gpt56": "GPT-5.6 (Sol/Terra/Luna, GA 2026-07-09) supersedes GPT-5.5. Sol is same price and same 1.05M context as gpt-5.5 ($5/$30 per 1M) and a newer generation, so it strictly dominates and takes the frontier head; gpt-5.5 is retained one rung down as a fallback (it is also the rung an older codex-cli can still reach, via the orchestrator's Native Model Descent -- cascade-dispatch.sh itself never walks past the first floor-clearing model of a `kind: native` role). Terra ($2.50/$15) slots between opus-4.8 and sonnet-5. Luna ($1/$6) is the cheapest OpenAI rung but is NOT a cheap_api model -- its output tokens cost 3.4x z-ai/glm-5.2 ($1.76) and 6.9x deepseek-v4-pro ($0.87), so it lives at the frontier_api tail, never at the cheap head.",
+    "_comment_codex_mini": "gpt-5.1-codex-mini keeps a rank so a stray re-add scores above the codex floor rather than silently resolving to 0, but it appears in NO ladder: `codex exec --model gpt-5.1-codex-mini` returns HTTP 400 'not supported when using Codex with a ChatGPT account', and the codex host runs on the ChatGPT sub. Do not re-add it to harness-profile.json.",
+    "gpt-5.6-sol": 98, "openai/gpt-5.6-sol": 98,
+    "fable": 97,
     "gpt-5.5": 96, "openai/gpt-5.5": 96,
     "anthropic/claude-opus-4.8": 95,
-    "opus": 92, "sonnet": 90, "anthropic/claude-sonnet-5": 90,
+    "opus": 92,
+    "gpt-5.6-terra": 91, "openai/gpt-5.6-terra": 91,
+    "sonnet": 90, "anthropic/claude-sonnet-5": 90,
+    "gpt-5.6-luna": 86, "openai/gpt-5.6-luna": 86,
     "z-ai/glm-5.2": 84, "deepseek/deepseek-v4-pro": 83,
     "minimax/minimax-m3": 79, "deepseek/deepseek-v4-flash": 74, "qwen/qwen3-coder": 72,
     "gpt-5.1-codex-mini": 70, "haiku": 60
@@ -44,7 +50,8 @@
     "reentry": "highest_quality",
     "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again -- prefer quality).",
     "on_cap_error": ["airlift_checkpoint", "mark_exhausted_until_resets_at", "descend"],
-    "_comment_fable": "fable (Claude Fable 5, Mythos-class, rank 98) is PLAN-CONDITIONAL: available only when the user's current plan carries it. It leads the claude-code native_judgment ladder for hardest-task dispatch, but no probe can detect plan-level availability -- if a native directive names a model the plan does not carry, the orchestrator dispatches the next model in the native list (see execution-orchestrator RC-64 rule). Keep the entry when fable is off-plan; it is inert until availability returns.",
+    "_comment_fable": "fable (Claude Fable 5, Mythos-class, rank 97) is PLAN-CONDITIONAL: available only when the user's current plan carries it. It leads the claude-code native_judgment ladder for hardest-task dispatch, but no probe can detect plan-level availability -- if a native directive names a model the plan does not carry, the orchestrator dispatches the next model in the native list (see execution-orchestrator RC-64 rule). Keep the entry when fable is off-plan; it is inert until availability returns.",
+    "_comment_native_host_constraint": "gpt-5.6-sol outranks fable (98 vs 97) but leads native_judgment only on the CODEX host -- claude-code's `kind: native` accepts Claude aliases only. Rationale and failure mode: docs/opus-4-8-tuning.md (Fable vs GPT-5.6 Sol).",
     "privacy": "For cheap_api/frontier_api wrapper rows, pin a no-logging Western provider (Fireworks/Together) for any model whose first-party API trains on data (e.g. DeepSeek). Enforced per-call via OPENROUTER_ZDR=1 in openrouter-wrapper.sh.",
     "_comment_headroom_unknown": "usage-probe state 'unknown' is treated as HAS-headroom (fail-open): a stale/unverified parser prefers dispatch + reactive cap detection over a false 'capped' that needlessly skips a healthy rail. The codex rail has a reactive cap detector (usage-limit string match) in cascade-dispatch.sh; the claude native rail relies on the orchestrator's own cap handling.",
     "_comment_agentic_seam": "openrouter_exec is the agentic OpenRouter rung for config/docs/mechanical-logic. Wrapper rungs (cheap_api/frontier_api) remain single-turn analysis/text generation and are still invalid for complex logic/ui/integration implementation."

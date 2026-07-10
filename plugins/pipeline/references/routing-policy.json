@@ -2,11 +2,11 @@
   "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
   "targets": {
     "providerSplit": {
-      "claude": 50,
-      "codex": 35,
+      "codex": 50,
+      "claude": 35,
       "openrouter": 15
     },
-    "rationale": "Execution-provider target: typical full pipeline runs should land near 50/50 Codex/Claude or lower Claude share, with OpenRouter carrying config, docs, mechanical checks, and large-context synthesis. These three sum to 100 across the chunk-implementation providers. DeepSeek is review-only (mechanical dm-review agents), so it has no execution target here; the post-mortem measures a fourth deepseek providerSplit bucket and compares it against the combined external-provider (openrouter + deepseek) envelope, not against a standalone deepseek target."
+    "rationale": "Execution-provider target: Codex leads at 50 (was 35) since the GPT-5.6 subscription deal (Jul 2026) makes the premium_sub rail flat-rate -- per-token cost is irrelevant there, so it is the cheapest place to spend judgment. Claude drops to 35 (was 50) and still owns ui/integration by chunkKind, where visual and Live Wires judgment is required. OpenRouter holds 15, carrying config, docs, mechanical checks, and large-context synthesis. These three sum to 100 across the chunk-implementation providers. DeepSeek is review-only (mechanical dm-review agents), so it has no execution target here; the post-mortem measures a fourth deepseek providerSplit bucket and compares it against the combined external-provider (openrouter + deepseek) envelope, not against a standalone deepseek target."
   },
   "chunkKind": {
     "_comment_kinds": "config/docs/mechanical-logic/logic/ui/integration are ROUTING buckets, not manifest kind enum values. The manifest kind enum stays {ui, logic, integration, config}; docs and mechanical-logic are refinements carried by the manifest `executor` field (derived from kind + estimatedComplexity per manifest-schema.md Executor Mapping), not first-class kinds. model-cascade.class_from_kind bridges only the manifest kinds (logic/config/docs/ui/integration); mechanical-logic routes via `executor: openrouter` set at prompt-generation time, so it needs no class_from_kind entry.",
