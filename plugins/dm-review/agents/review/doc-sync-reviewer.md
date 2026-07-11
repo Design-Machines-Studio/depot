@@ -89,6 +89,18 @@ Flag when:
 - A new agent/skill in the depot has no entry in the marketplace or plugin table
 - A new command-line flag has no help text
 
+### Runbook Drift (P2)
+
+Operational docs decay silently because nothing fails when they are wrong -- until the night someone follows them. Flag when a change touches production behavior and leaves the corresponding runbook stale:
+
+- **Config** -- a new, renamed, or now-required config key with no runbook or `.env.example` entry, and no note on what happens when it is absent.
+- **Updater / release** -- a changed apply, rollback, or recovery path whose runbook still documents the old sequence. The recovery command named in the failure message must exist and must be the one the runbook gives.
+- **Shutdown / startup ordering** -- a changed sequence with an unchanged operations doc.
+- **Key rotation** -- a changed rotation or grace-window behavior with no runbook update covering the operator steps.
+- **Monitoring** -- a new failure mode with no entry describing what it looks like in the logs or dashboard.
+
+A release claimed complete with no receipt naming what was monitored, and for how long, is a P2 here as well as in security-auditor. Docs and runbooks belong in the same change as the behavior, not a follow-up.
+
 ## Output Format
 
 ```markdown

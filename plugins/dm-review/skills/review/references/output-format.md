@@ -14,6 +14,8 @@ The canonical unified report format produced by the review-consolidator after al
 **Mode:** [Full / Quick]
 **Project Type:** [Go+Templ+Datastar / Craft CMS / CSS Framework / Mixed]
 **Agents Launched:** X of Y applicable
+**Lanes:** claude: ran | deepseek: fallback:claude | openrouter: ran | codex: skipped:cli-absent
+**Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
 
 ---
 
@@ -76,6 +78,28 @@ The canonical unified report format produced by the review-consolidator after al
 **Total:** X findings (Y P1, Z P2, W P3)
 **Agents run:** M of N applicable
 **Agents skipped:** [list with reason]
+
+---
+
+### Repository Cleanup
+
+Emitted by Phase 8. Two tables, matching `repo-cleanup-contract.md` section 7 verbatim -- a deleted ref carries **proof**, a kept ref carries a **follow-up command**, and those are different columns. A blocked ref is never reported as deleted.
+
+#### Created this run
+| Ref | Kind | Disposition | Proof |
+|-----|------|-------------|-------|
+| review/cleanup-findings | review-branch | deleted | merged into main |
+
+#### Remaining after cleanup
+| Ref | Kind | Reason kept | Follow-up command |
+|-----|------|-------------|-------------------|
+| .worktrees/pipeline/auth-map/04-views | worktree | not ours -- created by an interrupted pipeline run | `git worktree remove --force .worktrees/pipeline/auth-map/04-views` |
+
+- Worktrees before: N   after: M   pruned: K
+- Branches deleted: N   blocked: M   left (foreign): K
+- `git status --porcelain`: clean | <residue>
+
+If the review created and left nothing, state `Repository cleanup: nothing created, tree clean, N worktrees pruned.`
 
 ---
 

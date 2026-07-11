@@ -65,6 +65,48 @@ lookups also include Codex cache fallbacks.
 
 This check is included in `./tools/validate-composition.sh`.
 
+## validate-workflow-contracts.sh
+
+Guards three prose contracts that pipeline and dm-review depend on, and that
+nothing else enforces:
+
+1. **Repository cleanup contract** (`plugins/dm-review/skills/review/references/repo-cleanup-contract.md`)
+   -- ref registry, safe-to-delete decision table, feature-branch protection,
+   `git worktree prune`, honest inventory reporting.
+2. **Datastar-first contract** -- all 10 Datastar Pro attributes and 3 actions
+   documented, the JS substitution table present, and the bundle-presence rule
+   wired into promptcraft, plan-adversary, and ui-standards-reviewer.
+3. **Baseplate evidence gates** -- fixture SDK conformance, production preflight,
+   Auth Boundary Map receipt as a finding (not advisory), federation
+   public/private URL boundary.
+
+```bash
+./tools/validate-workflow-contracts.sh
+```
+
+Markdown rots silently. These grep assertions fail loudly when a required anchor
+disappears. Included in `./tools/validate-composition.sh`.
+
+## check-release-preflight.sh
+
+Read-only. Verifies a release is actually safe to tag and push, then prints a
+release receipt. Creates no tags and pushes nothing.
+
+Checks: clean working tree; `marketplace.json` and `plugin.json` version sync per
+plugin; `generate-codex-manifests.py --check` and
+`generate-codex-command-skills.py --check` both clean; every plugin whose files
+changed since its last tag has had its version bumped; and `git ls-remote` push
+auth against `origin`.
+
+```bash
+./tools/check-release-preflight.sh            # all checks
+./tools/check-release-preflight.sh --no-net   # skip the ls-remote auth probe
+```
+
+Exit non-zero means the release claim would be false. Not part of
+`validate-composition.sh --all` -- release hygiene is a separate concern from
+composition validity. Run it before tagging.
+
 ## eval-descriptions.sh
 
 Evaluates whether SKILL.md descriptions would plausibly trigger for test queries using term-overlap heuristics. Catches regressions when descriptions are edited.

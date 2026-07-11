@@ -494,20 +494,33 @@ Mark item 13 as complete.
 "Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. What next?"
 
 Options:
-1. **Create PR** -- work continues on the branch; no artifact cleanup yet
-2. **Give feedback** -- another iteration; no cleanup
-3. **Done -- clean up** -- write receipt, delete all ephemeral + run-scoped + feature-scoped artifacts, retain only `receipt.md`
+1. **Create PR** -- work continues on the branch; feature-scoped artifacts retained
+2. **Give feedback** -- another iteration; feature-scoped artifacts retained
+3. **Done -- clean up** -- retain only `receipt.md`
 
-**If option 1 (PR):** Proceed to create PR. Artifact cleanup deferred until user returns.
+**The repository cleanup phase runs on all three answers.** Only *artifact* disposition varies by answer. Orphan worktrees and temp chunk branches are never left behind because the caller chose "Create PR" or "Give feedback" -- they collide with the next run's `git worktree add`. See `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
+
+Before presenting this gate, confirm the orchestrator's Step 5b ran its repository cleanup and that `plans/<feature-slug>/receipt.md` carries a `## Branch & Worktree Inventory` block. If it does not, run the cleanup phase now and write the inventory before proceeding.
+
+**If option 1 (PR):** Proceed to create PR. The feature branch is kept (no merge proof yet -- that is expected, and the inventory says so). Artifact Tier 3 cleanup deferred until the user returns.
 
 **If option 2 (feedback):** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
 
 **If option 3 (done):** Run full cleanup per the artifact lifecycle policy:
 1. Ensure `plans/<feature-slug>/receipt.md` exists (written by orchestrator Step 5b). If missing, write it now.
 2. Delete Tier 1 + 2 artifacts (if not already cleaned by orchestrator).
-3. Delete Tier 3 artifacts: `rm -f plans/<slug>/original-prompt.md assessment.html research.html plan.html final-requirements-crosscheck.md`
+3. Delete Tier 3 artifacts:
+   ```bash
+   rm -f plans/<slug>/original-prompt.md \
+         plans/<slug>/assessment.html \
+         plans/<slug>/research.html \
+         plans/<slug>/plan.html \
+         plans/<slug>/final-requirements-crosscheck.md
+   ```
+   Every filename carries the `plans/<slug>/` prefix. Without it the `rm` silently matches nothing and the artifacts accumulate.
 4. Only `receipt.md` remains in `plans/<feature-slug>/`.
-5. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.`
+5. Re-verify the repository readiness checks (clean tree, no stale worktree registrations).
+6. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.` Then reproduce the inventory's "Remaining after cleanup" table so the user sees exactly which branches still exist and why.
 
 ## Self-Audit
 

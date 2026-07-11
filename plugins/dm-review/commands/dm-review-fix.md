@@ -96,9 +96,13 @@ If all findings are resolved, suggest committing:
 All review findings resolved. Commit the fixes?
 ```
 
-### 5. Cleanup Completed Todos
+### 5. Cleanup
 
-Clean up completed todo files. This runs unconditionally -- do not gate on whether fixes were committed. Stale done files accumulate across sessions when this step is skipped.
+Two parts, both unconditional -- do not gate either on whether fixes were committed.
+
+**5a. Repository cleanup.** Run the cleanup phase per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: `git worktree prune`, delete only branches this fix pass created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, and report the inventory. Never delete the branch being fixed.
+
+**5b. Completed todo files.** Stale done files accumulate across sessions when this step is skipped.
 
 1. Find all done todo files:
 ```bash

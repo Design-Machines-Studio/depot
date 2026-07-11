@@ -171,6 +171,12 @@ The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list 
 
 Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), `manual_walkthrough` (user is driving some steps), or `curl_fallback` (degraded -- no browser tools). Include the label in every chunk receipt and in the final Summary Report.
 
+Before any chunk runs:
+
+```text
+0e. Ref registry initialized (capture worktree/branch before-state)
+```
+
 For each chunk, you MUST complete ALL applicable steps in order:
 
 ```
@@ -195,7 +201,7 @@ FINAL 2. Requirements cross-check against original-prompt.md (write final-requir
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
 FINAL 4. Record session to ai-memory
 FINAL 5. Run Post-Mortem (measured providerSplit, misroutes, quality ledger, proposals)
-FINAL 5b. Artifact cleanup (write receipt, delete ephemeral/run-scoped artifacts)
+FINAL 5b. Artifact and repository cleanup (receipt, artifacts, worktrees/branches, inventory)
 FINAL 5c. Campaign state write (when campaignSlug present)
 FINAL 6. Present summary report
 ```
@@ -360,6 +366,39 @@ If `plans/<feature-slug>/receipt.md` is ignored, choose one of two explicit path
 
 Never call an ignored, untracked receipt "durable" without surfacing which path was chosen.
 
+## Step 0e: Ref Registry Init
+
+Read the repository cleanup contract. It governs every worktree and branch this run creates.
+
+The path below is depot-relative for readability, as with `guardrails.md` and `output-format.md` elsewhere in this file. Pipeline runs in worktrees outside the depot, so resolve it from the plugin cache before reading -- do not assume the depot-relative path exists:
+
+```bash
+CONTRACT=""
+for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md 2>/dev/null | head -1)
+  [ -n "$CONTRACT" ] && break
+done
+# Fall back to the depot-relative path when running inside the depot itself.
+[ -n "$CONTRACT" ] || CONTRACT="plugins/dm-review/skills/review/references/repo-cleanup-contract.md"
+```
+
+If the contract cannot be resolved from either location, do not proceed with an improvised cleanup. Stop and report: the cleanup rules are what keep a failed run from destroying unmerged work.
+
+Capture the before-state so the final inventory reports a delta, not an absolute:
+
+```bash
+git worktree list --porcelain > "${TMPDIR:-/tmp}/refs-before-<feature-slug>.txt"
+git branch --list > "${TMPDIR:-/tmp}/branches-before-<feature-slug>.txt"
+```
+
+Open an in-run **ref registry**. Every worktree and branch this orchestrator creates is appended to it at creation time, with `kind` (`worktree`, `chunk-branch`, `feature-branch`) and its base. Nothing is cleaned that was not registered; nothing registered is dropped from the final inventory.
+
+Register the feature branch itself once Step 1 creates it. The orchestrator records its disposition but **never deletes it** -- see Constraints.
+
+Log: `Ref registry initialized: N worktrees, M branches pre-existing.`
+
+Mark `0e. Ref registry initialized` complete.
+
 ## Step 1: Setup
 
 ### 1a: Git Safety Check
@@ -457,11 +496,22 @@ Mark `[chunk-id] 1. Classify chunk` complete.
 git worktree add .worktrees/pipeline/<feature>/<chunk-id> -b pipeline/<feature>/<chunk-id> <featureBranch>
 ```
 
+**Register both refs immediately** in the Step 0e ref registry, before dispatching any work:
+
+```text
+| .worktrees/pipeline/<feature>/<chunk-id> | worktree     | 3b | <featureBranch> |
+| pipeline/<feature>/<chunk-id>            | chunk-branch | 3b | <featureBranch> |
+```
+
+Registration happens at creation, never reconstructed afterward from a glob. If the run dies between `worktree add` and registration, Step 5b's sweep is the only thing that finds the orphan -- and it can only find refs it knows the naming convention for.
+
 In `sequential-on-branch` mode, replace the worktree command with:
 
 ```bash
 git checkout <featureBranch>
 ```
+
+No refs are created in that mode, so nothing is registered for this chunk.
 
 Mark `[chunk-id] 2. Create worktree` complete, or `branch selected` for `sequential-on-branch`.
 
@@ -985,12 +1035,55 @@ Mark `[chunk-id] 9. Merge back` complete.
 
 ### 3j: Clean Up Worktree
 
+Apply the safe-to-delete decision table from `repo-cleanup-contract.md`. A ref is deleted only when it is provably merged or provably empty. Never suppress git's exit status -- not on a removal, and not on the dirtiness check that gates it. A swallowed failure becomes a false "cleaned" line in the receipt.
+
+Define `block` once, before the first cleanup step runs. Without it these snippets abort with `block: command not found` and the blocked ref silently never reaches the inventory:
+
 ```bash
-git worktree remove .worktrees/pipeline/<feature>/<chunk-id>
-git branch -d pipeline/<feature>/<chunk-id>
+BLOCKED_REFS=""
+block() {  # block <ref> <reason> <follow-up command>
+  BLOCKED_REFS="${BLOCKED_REFS}| $1 | $2 | \`$3\` |
+"
+  printf 'BLOCKED %s -- %s\n' "$1" "$2" >&2
+}
 ```
 
-Mark `[chunk-id] 10. Clean up worktree` complete.
+Remove the worktree before deleting the branch: a branch checked out in a worktree cannot be deleted.
+
+```bash
+WT=".worktrees/pipeline/<feature>/<chunk-id>"
+BR="pipeline/<feature>/<chunk-id>"
+
+# Worktree: delete only when clean (decision-table row 4 keeps a dirty worktree).
+# Capture the status rc -- a silenced `git status` returns empty stdout, which
+# reads as "clean" and routes an unreadable worktree straight to removal.
+WT_STATUS="$(git -C "$WT" status --porcelain)"; WT_RC=$?
+if [ "$WT_RC" -ne 0 ]; then
+  block "$WT" "git status failed (rc=$WT_RC) -- worktree unreadable" "git -C $WT status"
+elif [ -n "$WT_STATUS" ]; then
+  block "$WT" "uncommitted or untracked changes" "git -C $WT status; git worktree remove --force $WT"
+else
+  git worktree remove "$WT" || block "$WT" "worktree remove failed" "git worktree remove --force $WT"
+fi
+
+# Branch: row 1 (merged) or row 2 (no unique commits over a DIFFERENT base) -- otherwise keep
+if git merge-base --is-ancestor "$BR" "<featureBranch>"; then
+  git branch -d "$BR" || block "$BR" "branch delete failed after merge check" "git branch -D $BR"
+elif [ "$(git rev-list --count "<featureBranch>..$BR")" -eq 0 ]; then
+  # -D still refuses when the branch is checked out in ANOTHER worktree -- the
+  # crash-orphan case this sweep exists for. Unguarded, that refusal would be
+  # swallowed and the ref recorded as "deleted" while it still exists.
+  git branch -D "$BR" || block "$BR" "force-delete failed (checked out in another worktree?)" "git worktree list; git branch -D $BR"
+else
+  block "$BR" "unique commits not merged into <featureBranch>" "git log <featureBranch>..$BR"
+fi
+```
+
+Row 1 catches the common abandoned-chunk case too (a branch with zero unique commits over its base is already an ancestor of it), and deletes it with the safer `-d`. Row 2 only fires when the chunk branch's base differs from the merge target.
+
+Every `block` call records the ref, the reason, and the exact follow-up command. Blocked refs are carried into the Step 5b inventory as `blocked` -- never counted as deleted, never omitted.
+
+Mark `[chunk-id] 10. Clean up worktree` complete (or `blocked: [reason]`).
 
 ## Step 4: Final Full Review
 
@@ -1174,9 +1267,11 @@ Append one line to `docs/pipeline-metrics/ledger.md` with date, feature, provide
 
 Mark `FINAL 5. Run Post-Mortem` complete.
 
-## Step 5b: Artifact Cleanup
+## Step 5b: Artifact and Repository Cleanup
 
-Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`).
+Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`), then clean up git refs per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
+
+**This step is mandatory and runs on every exit path** -- success, review failure, chunk-blocking failure, pipeline-blocking failure, and every answer to the caller's Phase 7 gate. If the run is aborting because of an exception, this step still runs: it is deterministic git and cannot make the failure worse.
 
 ### 1. Write receipt
 
@@ -1203,7 +1298,25 @@ Create `plans/<feature-slug>/receipt.md`:
 - Run-scoped removed: <count> files
 - Feature-scoped retained: <count> files
 - Deferred findings: none | <list with justifications>
+
+## Branch & Worktree Inventory
+
+### Created this run
+| Ref | Kind | Disposition | Proof |
+|-----|------|-------------|-------|
+[One row per ref in the Step 0e registry. Disposition is deleted | kept | blocked.]
+
+### Remaining after cleanup
+| Ref | Kind | Reason kept | Follow-up command |
+|-----|------|-------------|-------------------|
+[Every kept or blocked ref, with the exact command a human runs next.]
+
+- Worktrees before: N   after: M   pruned: K
+- Branches deleted: N   blocked: M
+- git status --porcelain: clean | <residue>
 ```
+
+Every registered ref appears exactly once under "Created this run". A blocked ref is never reported as deleted and never omitted -- reporting a ref as gone when it still exists converts a visible mess into an invisible one.
 
 ### 2. Delete artifacts by tier
 
@@ -1222,19 +1335,89 @@ rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.html
 
 On failure, preserve Tier 2 for debugging. Log: `Artifact cleanup (partial -- run failed): preserved prompts and manifest for debugging.`
 
-### 3. Worktree sweep
+### 3. Repository cleanup
 
-Ensure no stale worktrees remain from this feature (handles cases where per-chunk cleanup in Step 3j was interrupted):
+Sweep any refs whose per-chunk Step 3j was interrupted, apply feature-branch protection, then prune.
+
+Parse `git worktree list --porcelain` field-wise. Do **not** `grep -o` the raw porcelain output for the feature slug -- a slug containing a regex metacharacter (`.`, `+`, `[`) silently matches the wrong paths, or none.
+
+Shell state does not persist between steps: Step 3j runs once per chunk, Step 5b runs once at the end, and they are separate invocations. `block` must be re-defined here, or this sweep dies with `block: command not found` and the blocked worktrees vanish from the receipt -- the precise failure this contract exists to prevent.
+
+For the same reason, `BLOCKED_REFS` does not accumulate across per-chunk Step 3j runs. Each step reports the refs it blocked, and Step 5b's inventory is assembled from those reports plus its own sweep, not from a shared variable.
 
 ```bash
-git worktree list --porcelain | grep -o '\.worktrees/pipeline/<feature>[^ ]*' | while read wt; do
-  git worktree remove --force "$wt" 2>/dev/null
-done
+BLOCKED_REFS=""
+block() {  # block <ref> <reason> <follow-up command>
+  BLOCKED_REFS="${BLOCKED_REFS}| $1 | $2 | \`$3\` |
+"
+  printf 'BLOCKED %s -- %s\n' "$1" "$2" >&2
+}
+
+PREFIX=".worktrees/pipeline/<feature>/"
+
+# Process substitution, NOT `... | while`: a piped while-loop runs in a subshell,
+# so every BLOCKED_REFS mutation inside it is discarded when the loop exits. A
+# blocked ref that never reaches the receipt is the exact failure this contract
+# exists to prevent.
+while IFS=$'\t' read -r WT PRUNABLE; do
+  case "$WT" in
+    */"$PREFIX"*|"$PREFIX"*) ;;   # inside our owned path namespace
+    *) continue ;;                # outside it -- leave it, report it
+  esac
+  # Decision-table row 3: the path is gone. `git status` on it can only fail,
+  # so probing it would mislabel a prunable entry as "unreadable -- blocked"
+  # and hand the operator a follow-up command that cannot succeed.
+  if [ "$PRUNABLE" = "prunable" ]; then
+    printf 'PRUNABLE %s -- registration stale, path gone\n' "$WT"
+    continue   # the `git worktree prune` below clears it; disposition = deleted
+  fi
+  WT_STATUS="$(git -C "$WT" status --porcelain)"; WT_RC=$?
+  if [ "$WT_RC" -ne 0 ]; then
+    block "$WT" "git status failed (rc=$WT_RC) -- worktree unreadable" "git -C $WT status"
+  elif [ -n "$WT_STATUS" ]; then
+    block "$WT" "uncommitted or untracked changes" "git -C $WT status; git worktree remove --force $WT"
+  else
+    git worktree remove "$WT" || block "$WT" "worktree remove failed" "git worktree remove --force $WT"
+  fi
+done < <(git worktree list --porcelain | awk '
+  /^worktree /{ if (p!="") printf "%s\t%s\n", p, f; p=substr($0,10); f="-" }
+  /^prunable/ { f="prunable" }
+  END        { if (p!="") printf "%s\t%s\n", p, f }
+')
+
+# Clears the stale registrations flagged `prunable` above. Removes admin entries
+# whose path is MISSING, not merely unreadable -- a permission-denied worktree
+# whose directory still exists is left alone.
+git worktree prune
 ```
 
-### 4. Report
+Tab-separate the awk output and read with `IFS=$'\t'`. Splitting on the default `IFS` truncates any worktree path containing a space.
+
+Then apply the decision table to every chunk branch still in the registry, exactly as in Step 3j.
+
+**Feature-branch protection.** The orchestrator records the feature branch's disposition and never deletes it. Merge proof is a zero exit from one of:
+
+```bash
+git merge-base --is-ancestor "<featureBranch>" main ||
+git merge-base --is-ancestor "<featureBranch>" origin/main
+```
+
+Absent that, the inventory says `kept -- no merge proof`. A clean review, an opened PR, and the caller saying "done" are not merge proof. `git branch -D` on the feature branch is forbidden under every condition.
+
+### 4. Readiness checks
+
+Verify the repo is fit for the next run and record each result honestly, pass or fail. A failing check does not invalidate the run's result -- the work is already done -- but it must appear in the receipt so the next operator knows what they are inheriting.
+
+```bash
+git worktree list --porcelain   # expect: no prunable entries, no .worktrees/pipeline/ paths
+git status --porcelain          # expect: empty
+```
+
+### 5. Report
 
 Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, retained K feature-scoped files.`
+
+Log repository stats: `Repository cleanup: worktrees N->M (pruned K), branches deleted J, blocked L. Feature branch <featureBranch>: kept -- no merge proof.`
 
 **Airlift checkpoint (after artifact cleanup):** After cleanup completes, fire a final tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots the delivered, cleaned-up state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
 
@@ -1247,7 +1430,7 @@ done
 if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deliver"; fi
 ```
 
-Mark `FINAL 5b. Artifact cleanup` complete.
+Mark `FINAL 5b. Artifact and repository cleanup` complete.
 
 ## Step 5c: Campaign State Write
 
@@ -1319,6 +1502,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - [x] Codify run (if run had friction): yes/no/n-a
 - [x] Run Post-Mortem written and measured providerSplit reported: yes/no
 - [x] Artifact cleanup: yes/no
+- [x] Repository cleanup: worktrees N->M, branches deleted K, blocked J
 - [x] Zero-deferral enforced: yes/no
 
 ## Artifact Cleanup
@@ -1326,6 +1510,11 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - Ephemeral removed: N files
 - Run-scoped removed: N files (or "preserved -- run failed")
 - Feature-scoped retained: N files
+
+## Repository Cleanup
+[Reproduce the `## Branch & Worktree Inventory` block from receipt.md verbatim -- both tables,
+the worktree before/after counts, and the `git status --porcelain` result. Every kept or blocked
+ref carries the exact follow-up command. Never report a blocked ref as deleted.]
 
 ## Evaluation Receipts
 [List every EVAL_GATE_PASSED line, proving each chunk was evaluated]
@@ -1371,6 +1560,8 @@ Mark `FINAL 6. Present summary report` complete.
 - Manifest validation fails
 - Feature branch creation fails
 
+Before reporting any pipeline-blocking failure, run the Step 5b repository cleanup phase. The cleanup phase is never skipped -- a run that aborts without it leaves orphan worktrees that collide with the next `git worktree add`.
+
 **Chunk-blocking (skip chunk and dependents):**
 
 - Subagent fails to complete
@@ -1390,5 +1581,9 @@ Mark `FINAL 6. Present summary report` complete.
 - Never skip dm-review-loop -- this is the most commonly skipped step and the most important
 - Always clean up worktrees, even on failure
 - Always run Step 5b artifact cleanup, even on failure (Tier 1 always, Tier 2 only on success)
+- Always run the repository cleanup phase, even after review failure or an explicit gate
+- Never delete the feature branch without merge proof into main or origin/main
+- Never delete a ref outside this run's owned path namespace (`.worktrees/pipeline/<feature>/`, `pipeline/<feature>/*`). Inside that namespace the Step 5b sweep may remove clean orphans the registry never saw -- that is what finds a ref lost to a crash. Feature slugs must be unique per concurrent run, or two runs will sweep each other's worktrees.
+- Never report a blocked ref as cleaned
 - Always report honestly what you did and didn't do
 - Always follow the Fix Philosophy

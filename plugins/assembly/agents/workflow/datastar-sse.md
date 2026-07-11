@@ -10,7 +10,9 @@ You are a Datastar and SSE specialist for the Assembly project. You implement re
 
 ## Datastar Fundamentals
 
-Datastar is loaded globally via `/vendor/datastar.js` (v1.0.0-RC.7). It adds reactivity through HTML attributes. The backend is always the source of truth.
+Datastar is loaded globally via `/vendor/datastar.js`. It adds reactivity through HTML attributes. The backend is always the source of truth.
+
+The vendored version is a fact to verify, not a constant. Older notes cite core v1.0.0-RC.7 while Datastar Pro is at v1.0.2, and modifier availability is version-bound. Read the bundle before relying on a modifier.
 
 ### Signal Patterns
 
@@ -285,12 +287,77 @@ fmt.Sprintf("{ name: '%s' }", user.Name)  // XSS if name contains quotes
 fmt.Sprintf("{ userId: '%s' }", user.ID)  // IDs are controlled format
 ```
 
+## Datastar Pro
+
+Full reference: `plugins/assembly/skills/development/datastar-pro.md`. Verified against datastar-pro v1.0.2, commit `0f86778`.
+
+**Reach for a Datastar attribute before writing JS.** This is where most Assembly UI work goes wrong: a `<script>` block re-implements something Pro already does declaratively.
+
+| Attribute | Key | Value | Modifiers |
+|---|---|---|---|
+| `data-animate` | optional (attribute name) | required | `__duration`, `__ease.<name>`, `__delay`, `__loop`, `__pingpong` |
+| `data-custom-validity` | denied | required | -- |
+| `data-match-media` | required (signal) | required (media query, not an expression) | `__case` |
+| `data-on-raf` | denied | required | `__delay`, `__debounce`, `__throttle`, `__viewtransition` |
+| `data-on-resize` | denied | required | `__delay`, `__debounce`, `__throttle`, `__viewtransition` |
+| `data-persist` | optional (storage key) | signal filter | `__session` |
+| `data-query-string` | denied | signal filter | `__history` |
+| `data-replace-url` | denied | required | -- |
+| `data-scroll-into-view` | denied | denied | `__smooth`/`__instant`/`__auto`, `__h*`, `__v*`, `__focus` |
+| `data-view-transition` | denied | required | -- |
+
+Actions: `@clipboard(text, isBase64?)`, `@fit(v, oldMin, oldMax, newMin, newMax, clamp?, round?)`, `@intl(type, value, options?, locale?)` where type is `datetime`, `number`, `list`, `pluralRules`, `relativeTime`, or `displayNames`.
+
+### Substitution table
+
+| Hand-rolled JS | Use instead |
+|---|---|
+| `localStorage` / `sessionStorage` | `data-persist`, `data-persist__session` |
+| `history.pushState` + `URLSearchParams` | `data-query-string__history` |
+| `history.replaceState` | `data-replace-url` |
+| `window.matchMedia().addEventListener` | `data-match-media:signal` |
+| `requestAnimationFrame` loop | `data-on-raf__throttle` |
+| `ResizeObserver` | `data-on-resize__debounce` |
+| `el.scrollIntoView()` | `data-scroll-into-view` |
+| `el.setCustomValidity()` | `data-custom-validity` |
+| `document.startViewTransition()` | `data-view-transition` |
+| `navigator.clipboard.writeText()` | `@clipboard()` |
+| `new Intl.NumberFormat().format()` | `@intl('number', ...)` |
+| `IntersectionObserver` | `data-on-intersect` (free) |
+| `setInterval` polling | `data-on-interval__duration` (free) |
+| `fetch()` | `@get` / `@post` / ... (free) |
+
+Custom JS is allowed only when the table has no entry, and you say which interaction needed it.
+
+### Bundle-presence rule
+
+A Pro attribute whose plugin is missing from the bundle is **inert** -- silent no-op, no error, looks correct in the template. Before prescribing one, grep the bundle for the plugin's **registered name** (not the `data-` attribute):
+
+```bash
+grep -c "'query-string'\|\"query-string\"" web/static/vendor/datastar.js
+```
+
+Registered names: `animate`, `custom-validity`, `match-media`, `on-raf`, `on-resize`, `persist`, `query-string`, `replace-url`, `scroll-into-view`, `view-transition`, `clipboard`, `fit`, `intl`.
+
+If the plugin is absent, either add "regenerate the bundle including `<plugin>`" as an explicit step, or fall back to the free tier. Never emit a Pro attribute into a bundle that lacks it.
+
+### Traps
+
+- `data-match-media` resets its signal to `null` on cleanup, not `false`.
+- `data-scroll-into-view` sets `tabindex="0"` when the element has none, silently adding it to the tab order. Set `tabindex="-1"` on non-interactive scroll targets.
+- `data-view-transition` warns and no-ops where View Transitions are unsupported -- never let it be the only carrier of a state change.
+- `data-custom-validity` throws on non-form elements and on non-string expression results. Empty string means valid.
+- `data-animate` animates *element attributes*, not CSS properties, and throws when start and end unit suffixes differ.
+- Easing names are lowercase and fixed. Never guess one.
+- **Never persist authorization state.** `data-persist` writes to `localStorage`, which is attacker-controlled on the next load. A persisted member ID, role, or capability flag that a server decision reads back without re-authorizing is a P1.
+
 ## What You Deliver
 
 When implementing Datastar features:
 1. Signal definitions with proper scoping
-2. HTML attributes for DOM binding
-3. SSE handler Go code (if server-driven)
-4. Fragment view code (if server-driven)
-5. Filter expression helpers (if filtering)
-6. Security notes for any user-data interpolation
+2. HTML attributes for DOM binding -- Datastar/Pro attributes before any JS
+3. Bundle-presence check result for every Pro attribute used
+4. SSE handler Go code (if server-driven)
+5. Fragment view code (if server-driven)
+6. Filter expression helpers (if filtering)
+7. Security notes for any user-data interpolation

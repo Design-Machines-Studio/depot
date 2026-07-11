@@ -63,7 +63,7 @@ When reviewing prototype or early-stage code:
 
 ## Orchestration Phases
 
-Execute these 6 phases in order. Do not skip phases.
+Execute these phases in order. Do not skip phases. The numbered majors are 1 through 8; several carry lettered sub-phases (1b, 2.5, 3.25, 3.5, 3.75, 4.5, 5.5, 7b, 7c) that run in sequence with their parent.
 
 ---
 
@@ -82,6 +82,27 @@ Also get the full diff content for the agents:
 ```bash
 git diff main...HEAD  # or appropriate diff command based on the target
 ```
+
+---
+
+### Phase 1b: Evidence Source Fallback
+
+Reviewer threads and PR comments are frequently empty even when the work was reviewed -- the evidence lives elsewhere. **Absence of threads is never absence of findings.** An empty `gh pr view --comments` is not a clean bill.
+
+When PR review threads and comments come back empty, or no PR exists, fall through these sources in order and use the first that yields evidence:
+
+1. **Checked-in receipts** -- `plans/*/receipt.md` (evidence table, branch/worktree inventory), Auth Boundary Map receipts in the PR body or `docs/`, JSON and screenshot receipts under `.claude/ux-review/`.
+2. **Merge-commit bodies** -- `git log --merges --format='%B' <base>..HEAD`. Decisions and trade-offs are recorded there when recorded nowhere else.
+3. **Closed-issue references in the diff range** -- `git log <base>..HEAD --format=%B | grep -oE '#[0-9]+'`, then `gh issue view <n>` for each. A closed issue names the requirement the diff was meant to satisfy.
+4. **Verification files** -- `tests/`, `tests/ux/`, `docs/runbooks/`, and any conformance-harness cases the diff added.
+
+Record the source in the report header:
+
+```text
+**Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
+```
+
+If every source is empty, say so explicitly and review the diff alone. That is a valid state -- but a *reported* one. A review that found no prior evidence and stays quiet about it is indistinguishable from a review that never looked.
 
 ---
 
@@ -270,7 +291,7 @@ Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/
 
 1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (openrouter-bulk-analyst or deepseek-bulk-analyst), it receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
-3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
+3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
 
 If any agents were dropped or input was modified, report before proceeding:
 
@@ -451,11 +472,24 @@ Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 ---
 
-### Phase 4.5: External LLM Fallback
+### Phase 4.5: Lane Fallback
 
-After all Phase 4 agents complete, scan their results for `### RUNNER FAILURE` markers. This phase retries failed external-LLM agents on Claude before applying the existing failure policies.
+A **lane** is a review path with its own provider and its own way of being absent: the Claude lane, the DeepSeek lane, the OpenRouter lane, the Codex-perspective lane, and the evidence lane from Phase 1b. A lane that is unavailable must be named, never silently dropped. This phase resolves each unavailable lane before the failure policies apply.
 
-#### When to trigger
+#### Lane failure modes
+
+| Lane | Failure signal | Resolution |
+|------|----------------|------------|
+| DeepSeek / OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Claude (procedure below) |
+| Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
+| Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
+| Claude-native agent | Agent errored or timed out | No retry -- guardrails.md failure policy applies immediately |
+
+Fallback always moves **toward** Claude, never away from it. Sensitive-path routing still holds: diffs touching `internal/auth/**`, `internal/federation/**`, secrets, or deploy paths never leave Anthropic, so they have no external lane to fall back from.
+
+A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
+
+#### When the external-LLM retry triggers
 
 Only applies to agents that were routed to an external LLM (DeepSeek, OpenRouter) in Phase 4 Branch A. Claude-native agents that fail do NOT get retried -- their failure policies in guardrails.md apply immediately.
 
@@ -747,6 +781,22 @@ See `${CLAUDE_SKILL_DIR}/../../../project-manager/skills/planner/references/data
 
 ---
 
+### Phase 8: Repository Cleanup
+
+Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
+
+dm-review creates no worktrees. Its obligations are narrower than pipeline's:
+
+1. **Prune stale registrations.** `git worktree prune`, then confirm `git worktree list --porcelain` reports no `prunable` entries.
+2. **Delete only branches this review created.** In practice that is the batch-cleanup branch from `references/issue-tracking.md`, and only once decision-table row 1 passes (`git merge-base --is-ancestor <branch> <target>` exits 0). Nothing else.
+3. **Leave foreign refs alone.** Orphan `.worktrees/pipeline/**` paths and `pipeline/**` branches from an interrupted pipeline run are **not** dm-review's to delete. Report them under "Remaining after cleanup" with a follow-up command and move on. Deleting a ref you did not create is how a review loses someone's work.
+4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
+5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
+
+Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
+
+---
+
 ## Reference Files
 
 These files are loaded on demand during the review process:
@@ -760,6 +810,8 @@ These files are loaded on demand during the review process:
 - `${CLAUDE_SKILL_DIR}/references/ai-slop-detector.md` -- 25-point AI output quality checklist (used by ux-quality-reviewer and ui-standards-reviewer)
 - `${CLAUDE_SKILL_DIR}/references/ui-design-patterns.md` -- Practical UI patterns with Live Wires vocabulary
 - `${CLAUDE_SKILL_DIR}/references/token-discovery.md` -- CSS token discovery protocol for review agents
+- `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md` -- Worktree/branch registry, safe-to-delete decision table, feature-branch protection, inventory format (shared with pipeline)
+- `${CLAUDE_SKILL_DIR}/references/datastar-pro.md` -- Datastar Pro attributes/actions, JS substitution table, bundle-presence rule, correctness traps
 
 ## Agent Definition Paths
 

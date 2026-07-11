@@ -31,11 +31,15 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `final-requirements-crosscheck.md` | 3 | Delivery proof with evidence types |
 | `receipt.md` | 3 | Compact post-cleanup summary (written by Step 5b) |
 
-### Pipeline worktrees
+### Pipeline git refs
 
-| Path | Tier | Notes |
-|------|------|-------|
-| `.worktrees/pipeline/<feature>/<chunk>/` | 1 | Per-chunk isolated workspace, auto-removed in Step 3j |
+Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delete decision table in `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. That contract is authoritative for everything in this table.
+
+| Ref | Removed when | Notes |
+|-----|--------------|-------|
+| `.worktrees/pipeline/<feature>/<chunk>/` | clean working tree | Per-chunk workspace, removed in Step 3j; swept in Step 5b |
+| `pipeline/<feature>/<chunk-id>` | merged, or zero unique commits | Chunk branch, deleted after its worktree |
+| `<featureBranch>` | **never by the orchestrator** | Deleted only with merge proof into `main`/`origin/main`; `-D` forbidden |
 
 ### dm-review artifacts
 
@@ -56,6 +60,8 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | Activity log row | Notion ops dashboard | Pipeline Phase 7 / dm-review Phase 7c |
 
 ## Cleanup Rules
+
+Artifact cleanup (below) and repository cleanup (`repo-cleanup-contract.md`) both run in Step 5b, on every exit path -- success, failure, and every answer to the Phase 7 gate. Artifact disposition varies by outcome; the repository cleanup phase does not.
 
 ### On successful pipeline completion (Step 5b)
 
@@ -113,7 +119,26 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 - Run-scoped removed: N files
 - Feature-scoped retained: N files
 - Deferred findings: none | <list>
+
+## Branch & Worktree Inventory
+
+### Created this run
+| Ref | Kind | Disposition | Proof |
+|-----|------|-------------|-------|
+| pipeline/<feature>/03-handlers | chunk-branch | deleted | merged into <featureBranch> |
+| <featureBranch> | feature-branch | kept | no merge proof into main |
+
+### Remaining after cleanup
+| Ref | Kind | Reason kept | Follow-up command |
+|-----|------|-------------|-------------------|
+| <featureBranch> | feature-branch | not merged -- awaiting PR | `git merge-base --is-ancestor <featureBranch> origin/main` |
+
+- Worktrees before: N   after: M   pruned: K
+- Branches deleted: N   blocked: M
+- git status --porcelain: clean | <residue>
 ```
+
+The inventory is mandatory in every receipt, including fix-pass receipts that created no refs. Disposition is `deleted`, `kept`, or `blocked` -- never inferred, never omitted.
 
 ## Gitignore Enforcement
 

@@ -377,6 +377,14 @@ Test interactive elements:
 - **Destructive differentiation**: Are delete/remove actions visually distinct from create/edit actions? (Color, position, confirmation)
 - **Confirmation appropriateness**: Confirmations should appear only for irreversible actions, not routine ones.
 
+### Phase 9b: Shared-Component Parity
+
+When one component renders on more than one route -- a shared editor, form, or dialog -- it must look and behave the same on each. Sharing a component *is* a parity claim, even when nobody wrote it down.
+
+Screenshot the component on each route at the same viewport, then compare computed styles across routes for `font-size`, `font-weight`, `color`, `padding`, `margin`, `background-color`, and `border`. Any mismatch is **P1**: a route-specific wrapper or stale override has broken the abstraction while the component source stayed identical, which is exactly the failure a source-only code review cannot see.
+
+Cite both URLs and name the differing properties.
+
 ### Phase 10: AI Output Quality Gate
 
 Read and apply the checklist from `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/ai-slop-detector.md`.

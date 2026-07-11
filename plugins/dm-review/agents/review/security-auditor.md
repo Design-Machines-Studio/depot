@@ -164,9 +164,12 @@ The federation backend (Assembly Baseplate PR #252, Session 2.9a) introduced cro
 - **Notification SSE fan-out (Baseplate #273, #277):** cross-install state changes (share grants, signed co-op stats, live trust notifications) that drive live SSE updates must re-authorize each subscriber per fan-out and scope each event to the granted resource. A federated SSE stream must not broadcast ungranted data to a peer who lost (or never held) the grant. Flag fan-out loops that resolve authorization once at subscribe time and never re-check on emit.
 - **Share-grant authorization (Baseplate PR #275):** data-sharing permission grants are explicit, revocable, and re-checked on every cross-install read -- not cached at link time. Super-admin trust controls gate grant creation/revocation. Flag any cross-install read path that serves shared data without re-checking a live grant, or grant mutation reachable below super-admin.
 
-**Look for:** ingress/handshake handlers in `federation/`, well-known fetch clients, key pinning/storage code, trust-state transitions, signed-push delivery/ingest handlers, federated SSE fan-out emitters, share-grant create/revoke/read paths, and any federation-reachable handler missing an explicit grant check.
+- **Public/Private URL Boundary (P1, Baseplate PR #447):** an install has an internal base URL (container address, LAN hostname, `localhost:port`) and a public federation URL. They are never interchangeable. Flag: any internal URL serialized into a federated payload (a remote install cannot resolve `http://app:8080/uploads/logo.png`, and emitting it discloses internal topology); any cross-install asset URL derived from the inbound `Host` header rather than from configuration; and any fallback to the internal address when the public URL is unset -- that path must **refuse to emit the payload**, fail-closed. A `Host`-derived URL is attacker-controlled.
+- **Responder-side share transport (P1, Baseplate PR #447):** federation work is routinely built and verified only from the requester's side. Review the **responder**: serving shared assets (install logo, document preview) re-checks the share grant on **every fetch**, not once at link time; the requesting key is checked fairly (a rotated key is detected and flagged, not silently treated as a forgery); and a signed inbound fetch is validated against the grant that actually covers the target resource. A valid signature proves *identity*, never *authorization*. Flag any asset-serving path reachable by a federated peer whose only check is signature validity.
 
-**Acceptance bar:** cross-install behavior is proven by a real **two-install** exercise (live sender + receiver, PR #275 two-install proof), not a single-install mock. Flag federation work whose only verification is a same-process stub -- note it as insufficient evidence for the trust claim.
+**Look for:** ingress/handshake handlers in `federation/`, well-known fetch clients, key pinning/storage code, trust-state transitions, signed-push delivery/ingest handlers, federated SSE fan-out emitters, share-grant create/revoke/read paths, federated asset/logo/preview serving handlers, URL-building helpers that read `r.Host`, and any federation-reachable handler missing an explicit grant check.
+
+**Acceptance bar:** cross-install behavior is proven by a real **two-install** exercise (live sender + receiver, PR #275 two-install proof) covering **both directions** -- requester and responder. Flag federation work whose only verification is a same-process stub, or that exercises the requester alone -- note it as insufficient evidence for the trust claim.
 
 ### Release / Update Supply-Chain (P1/P2)
 
@@ -180,6 +183,20 @@ The Baseplate update system (PR #279: updater CLI, release manifests, pre-apply 
 - **Provider-agnostic (P2):** no hardcoded single registry/host/provider in updater code or release docs -- the manifest origin is configurable. Flag provider lock-in that would prevent self-hosting the update channel.
 
 **Look for:** `internal/updater/`, release CLI commands (`assembly update`/`assembly version`), manifest fetch/parse, archive extract (`archive/tar`, `archive/zip`, `io.Copy` into a path joined from archive entry names), signature/checksum verify calls, `.goreleaser.yaml`, and release GitHub Actions workflows.
+
+### Update / Release Preflight (P1)
+
+Beyond the supply chain, the *operational* preflight. Baseplate PRs #399, #438, #436/#437.
+
+- **Update candidate preflighted before replacement (P1, #438):** checksum, signature, AND version ordering are verified on the candidate **before any file is swapped**. Flag an apply path that begins replacing files and validates afterward, or that permits a downgrade or same-version reapply without an explicit force flag. "We verify it during extraction" means a partially-replaced install on a failed check.
+- **Config validation fails closed at boot (P1, #399):** invalid configuration exits non-zero. Flag any loader that logs a warning and continues, substitutes a default for a required secret or URL, or treats an empty string as an unset-and-therefore-fine value. A server that boots with half a config is a server that fails at 3am.
+- **Shutdown ordering is explicit (P2, #399):** drain HTTP -> stop consumers -> flush -> close DB. Flag an incidental `defer` stack standing in for a shutdown sequence, and any path that closes the DB while consumers may still write.
+- **Key rotation, responder side (P2, #399):** email and federation key checks must treat a rotated key as *detected and flagged*, not as a forgery, and must state an old-key grace window. Flag rotation logic with no grace period -- it drops in-flight messages signed moments before the rotation.
+- **Double-submit protection on repair forms (P2, #399):** recovery and repair endpoints are idempotent server-side via a token. A disabled submit button is not protection -- these forms run precisely when the system is unhealthy and users double-click.
+- **Update-failure recovery copy (P2, #399):** the failure message names the recovery command. "An error occurred" during a half-applied update is a support ticket.
+- **Release receipt (P2, #436/#437):** a release enumerates active-install monitoring and beta-finalization proof. Flag a release claimed complete with no receipt naming what was monitored and for how long.
+
+**Look for:** `internal/config/` loaders and their `Validate()` methods, `internal/updater/` apply/preflight ordering, `Shutdown(ctx)` implementations and `defer` stacks in `cmd/`, key-rotation handlers for email and federation, repair/recovery form handlers, and release workflow receipts.
 
 ### Hardcoded Member IDs (P2)
 

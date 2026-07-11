@@ -249,6 +249,15 @@ resByMeeting := groupBy(resolutions, "meeting_id")
 
 ## Datastar Integration
 
+### Datastar-First, JS-Last
+
+Before writing any `<script>` block or `.js` file, check the substitution table in [datastar-pro.md](datastar-pro.md). Most client behavior an Assembly page needs already exists as a declarative attribute -- `localStorage`, `matchMedia`, `ResizeObserver`, `scrollIntoView()`, `navigator.clipboard`, `Intl.NumberFormat`, and `requestAnimationFrame` all have Datastar Pro equivalents.
+
+Two rules:
+
+1. **Hand-rolled JS needs a stated reason.** It is allowed only when the substitution table has no entry, and the chunk prompt or PR body says which interaction needed it.
+2. **Check the bundle before using a Pro attribute.** Pro plugins ship via the Bundler. An attribute whose plugin is missing from the vendored bundle is inert -- a silent no-op, no error. Grep the bundle for the plugin's registered name (`grep -c "'query-string'" web/static/vendor/datastar.js`), not for the `data-` attribute.
+
 ### Page-Level Signals
 
 Define signals at the article level for filtering:
@@ -556,6 +565,7 @@ Auth Boundary Map:
 For detailed reference:
 - [pages.md](pages.md) - Page structure and layout patterns
 - [components.md](components.md) - Available components and usage
+- [datastar-pro.md](datastar-pro.md) - Datastar Pro attributes/actions, the JS substitution table, and the bundle-presence rule
 - [workflows.md](workflows.md) - Governance workflows and state machines
 - [data.md](data.md) - Database schema and query patterns
 - [setup.md](setup.md) - Development environment setup
@@ -761,6 +771,26 @@ type ScopedEventBus struct {
 
 **Note:** ADRs (ADR-002 through ADR-007) live in the `assembly-baseplate` repo at `docs/adr/`, not in the depot.
 
+### Fixture SDK Conformance Contract
+
+The SDK's guarantees are only real if something tries to break them. Every change to `internal/fixtures/`, the `Module` interface, or the fixture SDK carries **negative tests** -- proof that the invalid case is rejected, not just that the valid case works. "The SDK validates it" is an assertion; the rejected input is the evidence.
+
+Seven invariants, each with the negative test that proves it:
+
+| Invariant | Negative test |
+|---|---|
+| **Table-prefix enforcement** | An unprefixed table name, or another fixture's prefix, is rejected by `ScopedDB` -- not silently queried |
+| **Zero-value auth is fail-closed** | A zero-value `Authorizer` or a nil/zero actor **denies**. An uninitialized auth struct must never allow |
+| **Stream subject validation** | A subject outside the fixture's own prefix is rejected at registration |
+| **Reserved scopes** | Registering a stream under `gov`, `doc`, `eq`, `health`, `member`, `system`, `audit`, or `federation` from a fixture that does not own that scope is rejected |
+| **Disabled-module route leakage** | A disabled fixture's routes return 404. Not 200, not 500, not a redirect -- 404, the same as a route that never existed |
+| **Module lifecycle** | `register -> enable -> disable -> teardown` runs clean, and a second `enable` after `disable` reattaches the routes and streams |
+| **All-or-nothing stream preflight** | A stream set containing one invalid subject registers **none** of them. Partial registration leaves the fixture half-wired |
+
+Fail-closed is the theme. A zero value, an empty string, an unset flag, and a missing module all deny. Any invariant that defaults to permissive on absent input is a P1.
+
+New SDK behavior adds a case to the conformance harness in the same change. A conformance harness that only exercises the happy path proves nothing.
+
 ### Service Layer Pattern
 
 Handlers -> Services -> ScopedDB. Services contain business logic. Handlers are thin HTTP adapters (parse request, call service, render response).
@@ -822,6 +852,15 @@ GET /.well-known/assembly
 Federation uses OAuth-style account linking with signed tokens: 5-minute TTL, single-use nonce, audience validation, HTTPS required in production. See ADR-006 for the full linking flow.
 
 **Federation trust choreography.** The federation backend (Baseplate PR #252, Session 2.9a) added cross-install link/trust/consent flows. Threat-model new federation work against dm-review security-auditor's "Cross-Install Trust Choreography" checklist (ingress hardening, TOFU pinning, server-side attestation, replay/SSRF controls, key-rotation detection, default-deny) rather than restating it here -- that section owns the per-control detail and maps each control to its open Baseplate issue (#253-#255, #259, all open exercises, not shipped patterns). A good next exercise: implement the #259 receiving ingress endpoint with TOFU-pending handling for known installs, SSRF/replay controls, and audit events, then run it against those security-auditor federation checks.
+
+**Share transport has two sides.** Federation work is routinely built and verified only from the requester's side. The responder is where it breaks: serving a shared asset (an install's logo, a document preview), checking the requesting key fairly, and honouring the share grant on every fetch rather than once at link time. Any federation change ships with a **two-install proof** -- a live sender and a live receiver -- covering both directions. A single-install mock proves the requester's HTTP client works, nothing more.
+
+**Public/private URL boundary.** An install has an internal base URL (the container address, the LAN hostname, `localhost:port`) and a public federation URL. These are not interchangeable:
+
+- Never serialize an internal URL into a federated payload. A remote install cannot resolve `http://app:8080/uploads/logo.png`, and leaking it discloses the internal topology.
+- Every asset reference crossing an install boundary is addressed by the **public** URL, derived from configuration, not from the inbound request's `Host` header.
+- The responder validates that an inbound fetch targets a resource actually covered by the share grant. A signed request is proof of *identity*, never of *authorization*.
+- A missing or unset public URL is fail-closed: refuse to emit the payload rather than falling back to the internal address.
 
 ### Cobra CLI
 

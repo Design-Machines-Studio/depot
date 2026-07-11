@@ -20,9 +20,20 @@ If all 5 complete, the review is valid regardless of conditional agent status. I
 
 ## Failure Classification
 
-### External LLM Fallback (pre-classification)
+### Lane Fallback (pre-classification)
 
-Before classifying an agent failure as "Review Compromised" or "Safe to Skip," check whether the agent was routed to an external LLM (DeepSeek, OpenRouter) in Phase 4. If so, Phase 4.5 retries it on Claude first. Only classify the failure after the Claude fallback has also been attempted.
+Before classifying an agent failure as "Review Compromised" or "Safe to Skip," resolve the lane. Phase 4.5 owns this. Only classify a failure after its lane's fallback has been attempted.
+
+| Lane | Failure signal | Resolution | Reported as |
+|---|---|---|---|
+| DeepSeek / OpenRouter | `### RUNNER FAILURE` | Retry on Claude (Phase 4.5) | "Completed (fallback)" or classify below |
+| Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | None -- lane is optional | Coverage Gaps: "codex-perspective: skipped -- CLI absent" |
+| Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback | Header: `**Evidence source:** <source>` |
+| Claude-native agent | Errored or timed out | None -- no retry | Classify immediately below |
+
+Fallback always moves **toward** Claude, never away. Diffs on sensitive paths (`internal/auth/**`, `internal/federation/**`, secrets, deploy) never had an external lane to fall back from -- they are Anthropic-only by routing policy, and a failure there is a Claude-native failure.
+
+A skipped lane is a coverage gap, and a coverage gap is reported. Reporting "all agents completed" while the Codex lane never ran is a false clean.
 
 Agents that succeed via Claude fallback are reported as "Completed (fallback)" in the Agent Summary. They do not affect the merge recommendation -- their findings are treated identically to primary-run findings, tagged with `[claude-fallback/{agent-name}]` for traceability.
 

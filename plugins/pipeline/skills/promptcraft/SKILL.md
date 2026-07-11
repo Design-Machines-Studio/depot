@@ -199,11 +199,27 @@ Every mutation chunk (creates, updates, deletes, or transitions state) must incl
 
 **Auth Boundary Map gate:** When a chunk touches paths matching `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission code in Assembly projects, the prompt MUST include an Auth Boundary Map receipt as a final acceptance criterion. The receipt enumerates: mapped surfaces, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases addressed, test files, and residual risk. Without this receipt the chunk is incomplete -- the execution-orchestrator must not mark it done.
 
+**Data-integrity receipt (membership and settings chunks):** When a chunk adds, edits, clones, or reorders rows in a membership, settings, or permissions surface, its acceptance criteria must include:
+
+1. **Stable row identity.** Every row carries a server-issued ID. Never an array index, never DOM order, never a client-generated key. Reordering or filtering the list must not change which record a mutation targets.
+2. **Cloned rows regenerate their ID.** A duplicated row must not inherit the source row's identifier -- the submit then silently overwrites the original.
+3. **Validation fails closed.** Unknown fields are rejected, missing required fields are rejected, and a zero-value enum is invalid rather than defaulting to the first option.
+4. **Async mutations announce.** Every row-level loading and completion state is announced through a live region, not conveyed by a spinner alone.
+
 ### Phase 3i: Visual Acceptance Criteria Gate
 
 Every UI chunk must include at least 2 visual acceptance criteria describing rendered impressions, not just structural class names.
 
 **Rule:** UI-classified chunks (`kind: ui`) must have a `### Visual Acceptance Criteria` subsection with >= 2 criteria. "Uses `.button--accent` class" is structural. "Primary action button is visually dominant over secondary actions" is visual. Both types are required.
+
+**Shared-component parity:** When one Templ component is rendered on two or more routes -- a shared editor, a shared form, a shared dialog -- the chunk must carry a **Visual Parity Criterion** even when the prompt never says "visually identical". Sharing a component is itself the parity claim, and a route-specific wrapper or a stale override quietly breaks it.
+
+Detect by grepping the plan's `filesToModify` for a component invoked from more than one page package. For each such component, add:
+
+1. `Screenshot of <component> at /route-a and /route-b at the same viewport shows identical rendering.`
+2. `getComputedStyle on <selector> matches across both routes for: font-size, font-weight, color, padding, margin, background-color, border.`
+
+Both criteria are **P1**. A shared component that renders differently per route is not polish -- it is the component failing to be shared.
 
 ### Phase 3j: UX Task Selection Gate
 
@@ -222,6 +238,56 @@ Sibling parallel prompts must not cross-reference each other. A prompt in a para
 Validate the generated manifest against the required schema before handoff.
 
 **Rule:** Every chunk object in `executionPlan.levels[].groups[].chunks[]` must include: `id`, `title`, `prompt`, `kind`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures.
+
+### Phase 3m: Fixture SDK Conformance Gate
+
+**Trigger:** the chunk touches `internal/fixtures/`, the `Module` interface, or a fixture SDK path.
+
+The SDK's guarantees are only real if something tries to break them. Every such chunk carries **negative-test** acceptance criteria -- proof the invalid case is rejected, not just that the valid case works. "The SDK validates it" is an assertion; the rejected input is the evidence.
+
+**Rule:** the prompt must include an acceptance criterion for each invariant the chunk touches, written as the negative case:
+
+| Invariant | Required AC (negative form) |
+|---|---|
+| Table-prefix enforcement | An unprefixed table name, or another fixture's prefix, is rejected by `ScopedDB` |
+| Zero-value auth | A zero-value `Authorizer` or nil/zero actor **denies**. An uninitialized auth struct never allows |
+| Stream subject validation | A subject outside the fixture's own prefix is rejected at registration |
+| Reserved scopes | Registering under `gov`, `doc`, `eq`, `health`, `member`, `system`, `audit`, or `federation` from a fixture that does not own that scope is rejected |
+| Disabled-module route leakage | A disabled fixture's routes return 404 -- not 200, not 500, not a redirect |
+| Module lifecycle | `register -> enable -> disable -> teardown` runs clean, and a second `enable` reattaches routes and streams |
+| All-or-nothing stream preflight | A stream set with one invalid subject registers **none** of them |
+
+Plus: **a new case is added to the conformance harness in the same chunk.** A harness that only exercises the happy path proves nothing.
+
+Fail-closed is the theme. Any invariant that defaults to permissive on absent input (zero value, empty string, unset flag, missing module) is a P1 and the prompt says so.
+
+### Phase 3n: Production Readiness Preflight Gate
+
+**Trigger:** the chunk touches config loading, the updater, release tooling, shutdown, or key rotation.
+
+**Rule:** the prompt must carry acceptance criteria for each applicable item:
+
+1. **Config validation is fail-closed at boot.** Invalid config exits non-zero. It never defaults through, never warns and continues.
+2. **Update candidate is preflighted before replacement.** Checksum, signature, and version ordering are verified against the *candidate* before any file is swapped. A "verified" claim with no actual verify call is a BLOCKER.
+3. **Update-failure recovery copy is actionable.** The message names the recovery command, not "an error occurred".
+4. **Shutdown ordering is explicit.** Drain HTTP -> stop consumers -> flush -> close DB. An unordered `defer` stack is not a shutdown sequence.
+5. **Key rotation covers both sides.** Email and federation key checks are fair on the responder side (a rotated key is detected, not silently rejected as forged) and old keys have a stated grace window.
+6. **Critical forms are double-submit protected server-side.** An idempotency token, not a disabled button. Repair and recovery forms especially -- they run when the system is already unhealthy.
+7. **A release receipt exists**, enumerating active-install monitoring and beta-finalization proof.
+8. **Runbooks and docs are updated in the same chunk**, not deferred to a follow-up.
+
+### Phase 3o: Datastar-First Gate
+
+**Trigger:** the project is Go + Templ + Datastar and the chunk is `kind: ui` or `kind: integration`.
+
+Agents reach for hand-rolled JS by default. Most client behavior an Assembly page needs already exists as a declarative Datastar attribute, and a Datastar Pro attribute whose plugin is missing from the bundle is **inert** -- a silent no-op that looks correct in review.
+
+**Rule:** the prompt must
+
+1. **Name the attribute per interaction.** For each interactive behavior, state which Datastar attribute or action implements it (`data-persist`, `data-query-string__history`, `data-match-media:signal`, `@clipboard`, `@intl`, ...). See the substitution table in `plugins/assembly/skills/development/datastar-pro.md`.
+2. **Carry a bundle-presence check** for every Pro attribute it prescribes -- a grep of the vendored bundle for the plugin's **registered name** (`grep -c "'query-string'" web/static/vendor/datastar.js`), not for the `data-` attribute. If the plugin is absent, the chunk either adds "regenerate the bundle including `<plugin>`" as an explicit step, or falls back to the free tier. Prescribing a Pro attribute into a bundle that lacks it is a BLOCKER.
+3. **Include the no-new-JS acceptance criterion:** "No new `<script>` block or `.js` file is introduced. If one is unavoidable, the prompt names the interaction and states why the substitution table has no entry for it."
+4. **List `assembly:development` in `companionSkills`** so the substitution table travels with the prompt (the Phase 5 companion-skills check already requires this for Assembly chunks; this gate makes the reason explicit).
 
 ### Phase 4: Prompt Generation
 

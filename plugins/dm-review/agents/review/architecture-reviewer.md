@@ -118,7 +118,28 @@ Open Baseplate exercises for this check: **#258** (decompose the federation file
 
 **Look for:** `Authorize()` calls inside `func (h *Handler)` or `func (h *handler)` methods that precede `h.service.Foo()` calls -- the Authorize should be inside `service.Foo()`, not the handler.
 
-**Auth Boundary Map advisory:** When reviewing PRs that touch `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths, check if the PR description includes an Auth Boundary Map receipt. If absent, note in the "Approved" section: "Consider adding an Auth Boundary Map receipt for this auth-surface PR (see assembly development skill)." This is advisory, not a finding.
+**Missing Auth Boundary Map Receipt (P2):** When reviewing changes that touch `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths, check whether the PR description, a commit body, or a checked-in receipt includes an Auth Boundary Map receipt. If absent, raise a P2.
+
+The receipt enumerates: mapped surfaces, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases addressed, test files, and residual risk. See the assembly development skill for the template.
+
+Under zero-deferral a P2 must be resolved before the review closes -- which is the point. The receipt is how a reviewer learns which surfaces were *considered*, not merely which ones the diff happened to touch. An auth-surface change whose only artifact is the diff cannot be reviewed for the boundary it failed to draw.
+
+If Phase 1b located the receipt somewhere other than the PR body (a merge-commit body, `plans/*/receipt.md`), that satisfies this check -- cite where you found it.
+
+**Fixture SDK Conformance Gap (P2):** When a change touches `internal/fixtures/`, the `Module` interface, or the fixture SDK, verify the tests exercise the *negative* case, not only the happy path. Raise a P2 naming the specific missing invariant:
+
+- An unprefixed or foreign table prefix is rejected by `ScopedDB`
+- Stream subjects outside the fixture's own prefix are rejected at registration
+- Reserved scopes (`gov`, `doc`, `eq`, `health`, `member`, `system`, `audit`, `federation`) cannot be claimed by a fixture that does not own them
+- A disabled module's routes return 404 -- a 200 or a 500 both disclose that the module exists
+- The `register -> enable -> disable -> teardown` lifecycle is exercised, including a second `enable` reattaching routes and streams
+- A stream set containing one invalid subject registers **none** of them
+
+Escalate to **P1** for a fail-open default: a zero-value `Authorizer`, a nil or zero actor, an empty enum, or a missing module that **allows** rather than denies. Absent input must deny.
+
+A change that adds SDK behavior without adding a conformance-harness case is itself the P2. "The SDK validates it" is an assertion; the rejected input is the evidence.
+
+**Hand-Rolled JS Where Datastar Suffices (P2):** In Go + Templ + Datastar projects, a new `<script>` block or `.js` file whose behavior maps to a row in `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/datastar-pro.md`'s substitution table, with no stated escape hatch. Cite the row and name the replacement attribute. Structural concern: application behavior belongs in declarative attributes the server drives, not in a parallel client-side control flow.
 
 #### Craft CMS Projects
 Expected layers:

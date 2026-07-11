@@ -114,7 +114,13 @@ while iteration < max_iterations:
       STOP -- needs attention
 ```
 
-### 3. Report
+### 3. Repository Cleanup
+
+Runs on **all three terminal paths** -- clean, findings remaining, and stalled convergence. A loop that gives up on convergence still owes the next run a clean repository.
+
+Follow `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: `git worktree prune`, delete only branches this loop created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, emit the inventory. Never delete the branch under review.
+
+### 4. Report
 
 Output one of:
 
@@ -134,6 +140,14 @@ Remaining:
 - 002-pending-p3-description
 
 These findings could not be auto-resolved. Manual review needed.
+```
+
+Both paths append the inventory:
+
+```
+Repository cleanup: worktrees N->M (pruned K), branches deleted J, blocked L.
+Remaining: <ref> -- <reason> -- follow-up: <command>
+git status --porcelain: clean | <residue>
 ```
 
 ## Integration

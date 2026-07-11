@@ -168,6 +168,7 @@ Conventions for a batch cleanup PR:
 - Group the commits by finding or by surface, the same way feature PRs group by concern.
 - Run `/dm-review-loop` on the cleanup branch -- a cleanup PR is still subject to zero-deferral on any *new* findings it introduces.
 - Schedule cleanup passes around natural milestones (here: before federation work) so debt does not cross a major boundary.
+- Dispose of the cleanup branch under `repo-cleanup-contract.md`. It is the one branch dm-review creates, so it is the one branch dm-review may delete -- and only once `git merge-base --is-ancestor <branch> main` exits 0. An unmerged cleanup branch is kept and reported, never force-deleted.
 
 ## Closure Reconciliation
 

@@ -135,7 +135,15 @@ Validate all cross-plugin references, dependencies, eval accuracy, and search in
 ./tools/validate-composition.sh --all
 ```
 
-Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution), `validate-composition.sh` (composition references).
+Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution), `validate-composition.sh` (composition references), `validate-workflow-contracts.sh` (repository cleanup contract, Datastar-first contract, Baseplate evidence gates).
+
+Before tagging or pushing a release, run the preflight. It is read-only and prints a release receipt:
+
+```shell
+./tools/check-release-preflight.sh
+```
+
+It verifies a clean tree, marketplace/plugin version sync, Codex shim freshness, that every plugin changed since its last tag has been bumped, and that `origin` is reachable and authenticated. **Never claim a release, tag, or push completed unless this passed.** It is not part of `--all` -- release hygiene is separate from composition validity.
 
 ## Plugin Versioning
 
@@ -313,6 +321,9 @@ These failure patterns have been observed in production pipeline runs. Each has 
 13. **Brittle line-number references:** Prompt references to `file:line` become stale as interstitial chunks edit files. Hardening: Phase 3e Stable Anchors Audit in `promptcraft SKILL.md` (prefer function/templ names over line numbers).
 14. **Silent mid-execution ambiguity:** A subagent encounters a chunk prompt that admits multiple reasonable interpretations, picks one silently, and ships. The brainstorming skill catches pre-plan ambiguity and plan-adversary catches structural ambiguity, but neither covers implementation-time micro-decisions. Hardening (pipeline v1.10.0): Ambiguity Protocol block in `promptcraft/references/prompt-template.md`; Ambiguity Handling section in `execution-orchestrator.md` (autonomous-mode commit trailers `Chose:` / `Rejected:` + `ambiguity_resolved:` receipt flag); Ambiguity surfacing perspective in `plan-adversary.md` Sprint Contract Negotiation. Three-layer defence with "cheapest catch first" wording aligned across all three locations.
 15. **External LLM provider failure without retry:** DeepSeek or OpenRouter runner fails and dm-review immediately classifies the agent as failed without attempting a Claude fallback. Core agent coverage gaps go undetected. Hardening (dm-review v1.30.0): Phase 4.5 External LLM Fallback in `plugins/dm-review/skills/review/SKILL.md` retries on Claude (sonnet) before applying failure policies; `plugins/dm-review/skills/review/references/guardrails.md` updated to trigger Phase 4.5 instead of immediate classification; `plugins/dm-review/skills/review/references/graceful-degradation.md` adds pre-classification fallback check.
+16. **Orphan worktree and branch residue:** a run that fails, or that exits through a non-terminal gate answer ("Create PR", "Give feedback"), leaves `.worktrees/pipeline/**` paths and `pipeline/**` chunk branches behind. The next run collides on `git worktree add`, and `git branch -d` failures were swallowed by `2>/dev/null` so the receipt claimed refs were cleaned that still existed. Hardening (pipeline v1.26.0, dm-review v1.41.0): `plugins/dm-review/skills/review/references/repo-cleanup-contract.md` defines a ref registry, a safe-to-delete decision table, feature-branch protection (never deleted without `merge-base --is-ancestor` proof into `main`/`origin/main`), blocked-removal reporting, and a mandatory `## Branch & Worktree Inventory` receipt block. Wired into orchestrator Steps 0e/3b/3j/5b, all three pipeline commands, and dm-review Phase 8. Enforced by `tools/validate-workflow-contracts.sh`.
+17. **Empty PR review threads read as "no findings":** formal review threads on Baseplate PRs are usually empty; the durable signal lives in checked-in receipts, merge-commit bodies, closed issues, and verification files. A reviewer that checks `gh pr view --comments` and stops concludes the work was unreviewed. Hardening (dm-review v1.41.0): Phase 1b Evidence Source Fallback in `plugins/dm-review/skills/review/SKILL.md` walks four evidence sources in order and reports which one was used; Phase 4.5 generalized from "external LLM failed" to "lane unavailable" (external runner, Codex CLI absent, evidence absent), and a skipped lane must appear in Coverage Gaps.
+18. **Hand-rolled JS where Datastar suffices, and inert Pro attributes:** agents reach for `localStorage`, `matchMedia`, `ResizeObserver`, `scrollIntoView()`, `navigator.clipboard`, and `Intl.*` because Depot never documented Datastar Pro (Context7 has no entry; the repo is private). Worse, a Pro attribute whose plugin is missing from the vendored bundle is **inert** -- a silent no-op that reads as correct in review. Hardening (assembly v3.8.0, pipeline v1.26.0, dm-review v1.41.0): `plugins/assembly/skills/development/datastar-pro.md` is the self-contained reference (10 attributes, 3 actions, JS substitution table, bundle-presence rule, transcribed from the plugin sources at v1.0.2); promptcraft Phase 3o Datastar-First Gate; plan-adversary Datastar-first check; `Hand-Rolled JS Where Datastar Suffices` (P2) and `Inert Pro Attribute` (P1) findings in dm-review.
 
 See `docs/post-mortems/` for detailed root cause analysis.
 
@@ -328,6 +339,9 @@ After any pipeline run or manual feature implementation, verify:
 - [ ] Requirements cross-check with EVIDENCE type for each requirement (screenshot, build pass, computed style)
 - [ ] No "visually identical" requirements left unverified (visual diff protocol applied)
 - [ ] If the orchestrator ran in `execution_mode: curl_fallback`, the 3-item Caller Verification Checklist is complete with attached evidence
+- [ ] Repository cleanup phase ran; receipt carries a `## Branch & Worktree Inventory` with every created ref dispositioned, every kept/blocked ref carrying a follow-up command, and a clean `git status --porcelain`
+- [ ] Feature branch preserved unless `git merge-base --is-ancestor <branch> origin/main` proves it landed
+- [ ] UI work uses Datastar/Datastar Pro attributes rather than hand-rolled JS; every Pro attribute has a recorded bundle-presence check
 - [ ] Session recorded to ai-memory
 - [ ] Postmortem written if any failure patterns were observed
 

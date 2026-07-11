@@ -373,6 +373,39 @@ When the project uses Live Wires, evaluate CSS quality beyond functional correct
 
 Reference the `live-wires:livewires` skill and `live-wires:css-reviewer` agent conventions for specific rules.
 
+### Phase G: Datastar Pro Runtime Verification
+
+Only when the changed templates use Datastar Pro attributes. See `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/datastar-pro.md`.
+
+These attributes **cannot be verified by reading the template.** A Pro attribute whose plugin is missing from the bundle is inert -- present in the markup, doing nothing, no console error. Presence proves nothing; only behavior does.
+
+- **`data-persist`** -- set the signal, `browser_navigate` to reload, assert the value survived. For `__session`, assert it does *not* survive a fresh context.
+- **`data-query-string`** -- change the signal, assert `window.location.search` updated. With `__history`, `browser_navigate_back` and assert the signal reverted.
+- **`data-match-media`** -- `browser_resize` across the breakpoint, assert the signal flipped. After the element is removed, the signal resets to `null`, not `false`.
+- **`data-scroll-into-view`** -- assert the element scrolled, and check whether the plugin's automatic `tabindex="0"` put a non-interactive element into the tab order (P2 if so).
+- **`data-view-transition`** -- confirm the state change is still visible in a browser without View Transitions support. If the transition is the only carrier of the change, that is P2.
+
+Absent a dev server, report these as `NOT-COVERED:` rather than passing them on template inspection. An inert attribute reported as working is worse than an untested one.
+
+### Phase H: Shared-Component Parity
+
+When one Templ component renders on two or more routes -- a shared editor, form, or dialog -- verify it actually renders identically. Sharing a component is a parity claim, and a route-specific wrapper or stale override breaks it while the component source stays identical, so code review passes.
+
+For each shared component, screenshot it on both routes at the same viewport, then compare computed styles:
+
+```javascript
+// browser_evaluate -- run on each route, compare the two results
+const el = document.querySelector('<selector>');
+const s = getComputedStyle(el);
+return JSON.stringify({
+  fontSize: s.fontSize, fontWeight: s.fontWeight, color: s.color,
+  padding: s.padding, margin: s.margin,
+  backgroundColor: s.backgroundColor, border: s.border,
+});
+```
+
+Any mismatch across routes is **P1**. Cite both URLs and the differing properties. A shared component that renders differently per route is not a polish issue -- it is the component failing to be shared.
+
 ---
 
 ## Output Format

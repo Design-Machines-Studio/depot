@@ -68,6 +68,28 @@ All recommendations MUST use Live Wires vocabulary. This is non-negotiable:
 
 If you don't know the Live Wires way to express a recommendation, say so and flag for manual review. Never recommend patterns that violate Live Wires philosophy.
 
+## Datastar Compliance (Go + Templ + Datastar projects)
+
+Full reference: `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/datastar-pro.md`. Two findings.
+
+**Hand-Rolled JS Where Datastar Suffices (P2).** A new `<script>` block or `.js` file whose behavior maps to a substitution-table row, with no stated escape hatch. `localStorage` -> `data-persist`. `matchMedia` -> `data-match-media`. `ResizeObserver` -> `data-on-resize`. `scrollIntoView()` -> `data-scroll-into-view`. `navigator.clipboard` -> `@clipboard`. `Intl.NumberFormat` -> `@intl`. `requestAnimationFrame` -> `data-on-raf`. `history.pushState` -> `data-query-string__history`. Cite the row and name the replacement. The escape hatch is legitimate but must be *stated*; an unexplained script is the finding, not the script.
+
+**Inert Pro Attribute (P1/P2).** A Datastar Pro attribute in a template whose plugin is absent from the vendored bundle. It silently does nothing -- no console error, no exception, and the template reads as correct. That silence is why it can outrank the JS it replaced.
+
+P1 when the inert attribute gates data integrity or security (a `data-custom-validity` that should block an invalid submit; a `data-persist` holding state a server decision reads). P2 when it is cosmetic (an inert `data-view-transition`, a sidebar that forgets its position). A missing Pro *action* (`@clipboard`, `@fit`, `@intl`) throws rather than no-ops, so it surfaces on first use -- that is P2. State which case you concluded; do not apply P1 by reflex.
+
+Pro plugins self-register under a kebab-case name, so check the bundle for the **registered name**, not the `data-` attribute:
+
+```bash
+grep -c "'query-string'\|\"query-string\"" $(git ls-files '*datastar*.js' | head -1)
+```
+
+Registered names: `animate`, `custom-validity`, `match-media`, `on-raf`, `on-resize`, `persist`, `query-string`, `replace-url`, `scroll-into-view`, `view-transition`, `clipboard`, `fit`, `intl`.
+
+If no bundle is vendored (CDN or asset-pipeline build), say so, downgrade to P2, and name the check the author should run. Do not guess.
+
+Do not raise either finding against Live Wires CSS, the Datastar bundle itself, or build tooling.
+
 ## Design Spec Awareness
 
 If your prompt includes a `## Design Spec Context` section (injected by the dm-review orchestrator when a design spec or brainstorm mockup exists), use it as your **PRIMARY evaluation baseline**.
