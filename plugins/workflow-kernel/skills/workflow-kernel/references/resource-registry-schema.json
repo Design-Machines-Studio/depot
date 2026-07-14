@@ -18,7 +18,7 @@
     "dispositionEvent": {
       "type": "object", "additionalProperties": false,
       "required": ["event", "disposition"],
-      "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/disposition"}}
+      "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/nonterminalDisposition"}}
     },
     "transactionEvent": {
       "type": "object", "additionalProperties": false,
@@ -30,10 +30,15 @@
           "type": "array", "minItems": 1,
           "items": {"oneOf": [
             {"$ref": "#/$defs/registrationEvent"},
-            {"$ref": "#/$defs/dispositionEvent"}
+            {"$ref": "#/$defs/transactionDispositionEvent"}
           ]}
         }
       }
+    },
+    "transactionDispositionEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "disposition"],
+      "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/disposition"}}
     },
     "resource": {
       "type": "object",
@@ -68,6 +73,17 @@
         "evidence": {"type": "array", "items": {}, "maxItems": 32},
         "follow_up": {"type": "string", "minLength": 1, "maxLength": 4096}
       }
+    },
+    "nonterminalDisposition": {
+      "allOf": [
+        {"$ref": "#/$defs/disposition"},
+        {
+          "type": "object",
+          "properties": {
+            "disposition": {"enum": ["retained_for_dependency", "blocked", "foreign"]}
+          }
+        }
+      ]
     }
   }
 }

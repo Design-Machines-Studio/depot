@@ -36,6 +36,25 @@ COMPOSE_MATCH_LABEL = {
     ResourceKind.NETWORK: "com.docker.compose.network",
     ResourceKind.VOLUME: "com.docker.compose.volume",
 }
+_CREATE_VALUE_OPTIONS = {
+    ResourceKind.NETWORK: frozenset({
+        "--aux-address", "--config-from", "--driver", "-d", "--gateway",
+        "--ip-range", "--ipam-driver", "--ipam-opt", "--label", "--opt",
+        "-o", "--scope", "--subnet",
+    }),
+    ResourceKind.VOLUME: frozenset({
+        "--availability", "--driver", "-d", "--group", "--label",
+        "--limit-bytes", "--opt", "-o", "--required-bytes", "--scope",
+        "--sharing",
+    }),
+}
+_CREATE_FLAG_OPTIONS = {
+    ResourceKind.NETWORK: frozenset({
+        "--attachable", "--config-only", "--ingress", "--internal",
+        "--ipv4", "--ipv6",
+    }),
+    ResourceKind.VOLUME: frozenset(),
+}
 
 
 def _normalized_docker_text(value: object, maximum: int) -> bool:
@@ -327,7 +346,16 @@ class DockerAdapter:
         labels = self.labels_for(run_id, node_id, lifecycle, cleanup_policy)
         label_argv = tuple(part for key in REQUIRED_LABELS for part in ("--label", key + "=" + labels[key]))
         planned = command[:insert_at] + label_argv + command[insert_at:]
-        expected_name = _explicit_name(command) if kind is ResourceKind.CONTAINER else _last_positional(command, insert_at)
+        expected_name = (
+            _explicit_name(command)
+            if kind is ResourceKind.CONTAINER else
+            _create_resource_name(command, insert_at, kind)
+        )
+        if kind is not ResourceKind.CONTAINER and expected_name is None:
+            return DockerCreationPlan(
+                command, {}, lifecycle, (), managed=False,
+                reason="ambiguous_docker_create_form",
+            )
         intent = ResourceRegistrationIntent(
             kind, expected_name, run_id, node_id, lifecycle, cleanup_policy,
             labels, tuple(dependent_node_ids),
@@ -829,13 +857,15 @@ class DockerAdapter:
         lease_proof: Optional[LeaseProof] = None,
         predecessor_result: Optional[CommandResult] = None,
         *, action_index: Optional[int] = None,
-        ownership_record: Optional[ResourceRecord] = None,
+        registry: Optional[ResourceRegistry] = None,
         incomplete_node_proof: Optional[IncompleteNodeProof] = None,
+        orphan_mode: bool = False,
     ) -> None:
         """Validate the destructive capability against a fresh exact-ID inspect."""
         if (
             type(action) is not CleanupAction or type(resource) is not DockerResource
             or (action_index is not None and (type(action_index) is not int or action_index < 0))
+            or type(orphan_mode) is not bool
         ):
             raise invalid_policy("invalid_docker_cleanup_revalidation")
         try:
@@ -846,42 +876,62 @@ class DockerAdapter:
                 dict(action.environment), action.predecessor_result_id,
                 action.evidence_digest,
             )
+            resource = DockerResource(
+                resource.resource_id, resource.kind, dict(resource.labels),
+                resource.created_at, resource.running, resource.in_use,
+                resource.system, resource.inspect_ok, resource.name,
+                resource.use_known,
+            )
         except Exception:
             raise invalid_policy("invalid_docker_cleanup_revalidation") from None
         if (action.kind, action.resource_id) != (resource.kind, resource.resource_id):
             raise invalid_policy("docker_cleanup_precondition_changed")
-        requires_incomplete_nodes = "incomplete_node_snapshot" in action.preconditions
+
+        if type(registry) is not ResourceRegistry:
+            raise invalid_policy("docker_cleanup_precondition_changed")
+        records = tuple(
+            value for value in registry.resources_for(action.run_id, action.node_id)
+            if (value.kind, value.resource_id) == (action.kind, action.resource_id)
+        )
+        if orphan_mode:
+            if (
+                records or incomplete_node_proof is not None
+                or not _valid_ownership_labels(resource.labels)
+            ):
+                raise invalid_policy("docker_cleanup_precondition_changed")
+            record = _record_from_resource(resource)
+        else:
+            if lease_proof is not None:
+                raise invalid_policy("docker_cleanup_precondition_changed")
+            if len(records) != 1:
+                raise invalid_policy("docker_cleanup_precondition_changed")
+            record = records[0]
+
+        requires_incomplete_nodes = bool(record.dependent_node_ids)
         if requires_incomplete_nodes:
             incomplete_node_proof = _snapshot_incomplete_node_proof(
                 incomplete_node_proof,
             )
             if (
-                type(ownership_record) is not ResourceRecord
-                or not incomplete_node_proof.readable
+                not incomplete_node_proof.readable
                 or incomplete_node_proof.run_id != action.run_id
                 or not self._incomplete_node_proof_is_fresh(incomplete_node_proof)
-                or (ownership_record.kind, ownership_record.resource_id)
+                or (record.kind, record.resource_id)
                 != (resource.kind, resource.resource_id)
-                or (ownership_record.run_id, ownership_record.node_id, ownership_record.lifecycle)
+                or (record.run_id, record.node_id, record.lifecycle)
                 != (action.run_id, action.node_id, action.lifecycle)
-                or not set(ownership_record.dependent_node_ids).issubset(
+                or not set(record.dependent_node_ids).issubset(
                     {node_id for node_id, _status in incomplete_node_proof.node_statuses}
                 )
-                or set(ownership_record.dependent_node_ids) & set(
+                or set(record.dependent_node_ids) & set(
                     incomplete_node_proof.incomplete_node_ids
                 )
             ):
                 raise invalid_policy("docker_cleanup_precondition_changed")
-            record = ownership_record
-        else:
-            if ownership_record is not None or incomplete_node_proof is not None:
-                raise invalid_policy("docker_cleanup_precondition_changed")
-            record = ResourceRecord(
-                resource.resource_id, resource.kind, action.run_id, action.node_id,
-                action.lifecycle, resource.labels.get(POLICY_LABEL, "retain"),
-                resource.created_at, (), _ownership_labels(resource.labels),
-            )
-        requires_lease = "inactive_run_lease" in action.preconditions
+        elif incomplete_node_proof is not None:
+            raise invalid_policy("docker_cleanup_precondition_changed")
+
+        requires_lease = orphan_mode
         lease_valid = (
             type(lease_proof) is LeaseProof and _valid_lease_proof(lease_proof)
             and lease_proof.run_id == action.run_id and lease_proof.readable
@@ -1035,6 +1085,21 @@ class DockerAdapter:
             raise invalid_policy("cleanup_results_not_one_to_one")
         if any(argv not in planned_argv for argv in result_argv):
             raise invalid_policy("cleanup_result_not_planned")
+        action_indexes = {argv: index for index, argv in enumerate(planned_argv)}
+        result_indexes = tuple(action_indexes[argv] for argv in result_argv)
+        if result_indexes != tuple(sorted(result_indexes)):
+            raise invalid_policy("cleanup_results_out_of_order")
+        results_by_index = {
+            index: result for index, result in zip(result_indexes, normalized_results)
+        }
+        for index, result in zip(result_indexes, normalized_results):
+            dependency = plan.actions[index].requires_success_of
+            if dependency is not None and (
+                dependency not in results_by_index
+                or dependency >= index
+                or results_by_index[dependency].exit_code != 0
+            ):
+                raise invalid_policy("cleanup_dependency_result_unsatisfied")
         by_argv = {result.argv: result for result in normalized_results}
         after_keys = {(value.kind, value.resource_id) for value in after.resources}
         exact_absent = _authoritative_absent_keys(after)
@@ -1134,9 +1199,42 @@ def _explicit_name(argv: Tuple[str, ...]) -> Optional[str]:
     return None
 
 
-def _last_positional(argv: Tuple[str, ...], start: int) -> Optional[str]:
-    values = [value for value in argv[start:] if not value.startswith("-")]
-    return values[-1] if values else None
+def _create_resource_name(
+    argv: Tuple[str, ...], start: int, kind: ResourceKind,
+) -> Optional[str]:
+    value_options = _CREATE_VALUE_OPTIONS[kind]
+    flag_options = _CREATE_FLAG_OPTIONS[kind]
+    positionals = []
+    index = start
+    while index < len(argv):
+        value = argv[index]
+        if value in value_options:
+            if index + 1 >= len(argv) or not _normalized_docker_text(argv[index + 1], 4096):
+                return None
+            index += 2
+            continue
+        if value in flag_options:
+            index += 1
+            continue
+        if value.startswith("--"):
+            name, separator, option_value = value.partition("=")
+            if name in value_options and separator and _normalized_docker_text(option_value, 4096):
+                index += 1
+                continue
+            return None
+        if value.startswith("-"):
+            option = value[:2]
+            if option in value_options and len(value) > 2:
+                if not _normalized_docker_text(value[2:].removeprefix("="), 4096):
+                    return None
+                index += 1
+                continue
+            return None
+        positionals.append(value)
+        index += 1
+    if len(positionals) != 1 or not _normalized_docker_text(positionals[0], 4096):
+        return None
+    return positionals[0]
 
 
 def _project_name(run_id: str, node_id: str) -> str:

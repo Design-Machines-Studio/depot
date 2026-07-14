@@ -56,7 +56,10 @@ worktree and one registered branch for the requested scope plus an exact,
 fresh `GitProof` whose normalized path, namespace, branch, base, and merge
 target, resolved object IDs, and authoritative `git worktree list --porcelain`
 row agree with both registry records. Prunable rows remain explicit blocked
-decisions, and option-looking refs are rejected. Additional registered Git resources
+decisions, and option-looking refs are rejected. The adapter canonicalizes its
+absolute worktree ownership root, rejects filesystem root and unsafe or
+unbounded roots, and checks containment by path components rather than string
+prefix. Additional registered Git resources
 make the scope ambiguous: deletion is blocked and every registered worktree and
 branch receives a disposition.
 
@@ -81,6 +84,14 @@ changed dependency/status snapshot invalidates the action. Changed ref count,
 object identity, label, lease/use state, inspect result, or resource identity
 likewise invalidates it. The lifecycle coordinator accepts and forwards this
 typed proof; lower adapters expose no raw active-ID shortcut.
+Execution-time Docker revalidation reloads the exact durable registry record
+for the action owner and derives dependency-proof requirements only from that
+record. Action precondition strings, Docker labels, cached plans, and shadow
+state cannot declare a registered resource dependency-free. Stale-orphan
+revalidation is an explicit separate mode: it proves the registry has no exact
+record and requires complete positive labels plus a fresh inactive lease.
+Command results remain an ordered plan trace; a dependent action is accepted
+only after its declared predecessor result appears earlier and succeeded.
 
 Cleanup uses only exact IDs:
 

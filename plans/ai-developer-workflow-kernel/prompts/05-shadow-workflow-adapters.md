@@ -119,6 +119,8 @@ plan-create --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanu
 plan-compose --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
 record-create --state-dir PATH --plan PATH --result PATH --before-inventory PATH --after-inventory PATH
 plan-cleanup --state-dir PATH --run-id ID [--node-id ID] --output PATH
+next-cleanup-action --state-dir PATH --plan PATH --results PATH --output PATH
+revalidate-cleanup-action --state-dir PATH --plan PATH --action-index N --inventory PATH --node-statuses PATH --results PATH --output PATH
 record-cleanup --state-dir PATH --plan PATH --results PATH
 plan-reconcile --state-dir PATH --run-id ID --ttl-hours 24 --output PATH
 metrics --events PATH --output PATH
@@ -137,6 +139,20 @@ runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict.
 `kernel_prediction_gap`, and `unsafe_to_promote`. A raw text difference is not
 automatically a semantic gap; normalize known host mechanism labels while
 preserving required transition/evidence semantics.
+
+Cleanup execution uses a stable, one-action-at-a-time authority boundary.
+`next-cleanup-action` validates the ordered result trace and returns only the
+next dependency-eligible action and its immutable plan index.
+`revalidate-cleanup-action` is the single non-splittable authorization step for
+that index: it reloads the exact durable registry record (or proves its absence
+for explicit stale-orphan mode), consumes a fresh exact-ID inventory, requires
+a complete fresh authoritative node-status proof for every dependency, and
+binds the exact successful predecessor result when the action declares one.
+The host executes only the exact argv returned by that revalidation immediately
+afterward, records its result, and asks for the next action. Cached plans,
+translated events, comparator output, metrics, and all other shadow state are
+observation only and can never supply registry, dependency, inventory, or
+predecessor authority.
 
 ## Pipeline Translation Map
 
@@ -308,13 +324,21 @@ At Step 3j, after validation, review, evidence, and merge disposition:
 2. Run Git cleanup using the existing decision table.
 3. Invoke `plan-cleanup`; treat its exact argv/proof output as a proposal, not an
    authorization from shadow state.
-4. The Markdown orchestrator, as authoritative lifecycle owner, rechecks the
-   plan's labels/registry/scope/dependencies and explicitly executes only its
-   exact argv. Eligible running `stop-remove` containers are stopped with the
-   bounded exact-argv policy before removal.
-5. Invoke `record-cleanup` with those command results so the observer records
+4. Loop through `next-cleanup-action` and `revalidate-cleanup-action`. For each
+   immutable action index, reload the exact registry record/context, collect a
+   complete fresh authoritative node-status proof, inspect the exact resource
+   into a fresh inventory, and supply the exact predecessor result. The
+   revalidator derives dependency requirements from the registry record, never
+   action precondition strings, labels, or shadow state. Explicit stale-orphan
+   mode instead requires authoritative registry absence, complete positive
+   ownership labels, strict TTL evidence, and a fresh inactive lease.
+5. The Markdown orchestrator executes only the exact argv returned by the
+   immediately preceding revalidation. Eligible running `stop-remove`
+   containers are stopped with the bounded exact-argv policy before removal;
+   each result is appended to the ordered trace before selecting another action.
+6. Invoke `record-cleanup` with those command results so the observer records
    dispositions. Preserve run-shared resources required by incomplete dependents.
-6. A cleanup failure marks cleanup failed/blocked and cannot be written as clean.
+7. A cleanup failure marks cleanup failed/blocked and cannot be written as clean.
 
 At Step 5b, invoke `plan-reconcile` after artifact cleanup. The Markdown
 orchestrator rechecks and explicitly executes the exact safe reconciliation and
@@ -448,6 +472,11 @@ Any routing change is a proposal with evidence and requires human approval.
 - [ ] Step 3j's authoritative orchestrator obtains, rechecks, and executes a
       chunk-scoped Docker cleanup plan after validation, review, evidence, and
       merge disposition, beside existing Git cleanup; shadow records results.
+- [ ] Cleanup execution selects one immutable action index at a time and
+      revalidates it through the stable authoritative interface using the fresh
+      registry record/context, complete dependency-status proof, exact-ID
+      inventory, action index, and predecessor result. Shadow state cannot
+      authorize any of these inputs; stale-orphan mode proves registry absence.
 - [ ] Step 3j stops positively owned `stop-remove` chunk containers with a
       bounded timeout only after the last dependent, then removes them. Step 5b
       applies the same rule to run-scoped containers. Stop timeout/failure and

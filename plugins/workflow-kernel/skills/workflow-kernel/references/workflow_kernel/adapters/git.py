@@ -47,10 +47,16 @@ class GitAdapter:
         now: Callable[[], datetime] | None = None,
         max_proof_age: timedelta = timedelta(seconds=5),
     ):
-        if not ownership_namespace or not worktree_root or max_proof_age.total_seconds() < 0:
+        normalized_root = worktree_root.rstrip("/") if type(worktree_root) is str else ""
+        if (
+            not _normalized_git_ref(ownership_namespace)
+            or not normalized_root or normalized_root == "/"
+            or not _normalized_absolute_path(normalized_root)
+            or max_proof_age.total_seconds() < 0
+        ):
             raise invalid_policy("invalid_git_ownership_scope")
         self.ownership_namespace = ownership_namespace.rstrip("/")
-        self.worktree_root = worktree_root.rstrip("/")
+        self.worktree_root = normalized_root
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.max_proof_age = max_proof_age
 
@@ -259,9 +265,11 @@ class GitAdapter:
         )
 
     def _proof_in_adapter_scope(self, proof: GitProof) -> bool:
+        worktree = PurePosixPath(proof.worktree_path)
+        root = PurePosixPath(self.worktree_root)
         return (
             proof.ownership_namespace == self.ownership_namespace
-            and proof.worktree_path.startswith(self.worktree_root + "/")
+            and root in worktree.parents
             and proof.branch.startswith(self.ownership_namespace + "/")
         )
 

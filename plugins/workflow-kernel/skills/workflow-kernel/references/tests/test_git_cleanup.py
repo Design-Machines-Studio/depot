@@ -72,6 +72,16 @@ class GitCleanupTests(unittest.TestCase):
         self.assertEqual(("git", "branch", "-d", "--", BRANCH), plan.actions[1].argv)
         self.assertEqual(0, plan.actions[1].requires_success_of)
 
+    def test_adapter_rejects_unbounded_or_unsafe_worktree_roots(self):
+        for candidate in (
+            "/", "relative/root", ROOT + "/..", ROOT + "//nested",
+        ):
+            with self.subTest(candidate=candidate), self.assertRaises(InvalidSchemaError):
+                GitAdapter(NAMESPACE, candidate, now=lambda: NOW)
+
+        normalized = GitAdapter(NAMESPACE, ROOT + "/", now=lambda: NOW)
+        self.assertEqual(ROOT, normalized.worktree_root)
+
     def test_proof_commands_carry_explicit_base_and_merge_target(self):
         commands = self.adapter.proof_argv(WORKTREE, BRANCH, "release/base", "feature/kernel")
         self.assertEqual(("git", "worktree", "list", "--porcelain", "-z"), commands[0])

@@ -117,6 +117,40 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual((), receipt.dispositions)
         self.assertTrue(receipt.command_succeeded)
 
+    def test_network_and_volume_creation_parse_interspersed_option_values(self):
+        cases = (
+            (
+                ("docker", "network", "create", "owned-net", "--driver", "bridge"),
+                "owned-net",
+            ),
+            (
+                ("docker", "volume", "create", "owned-vol", "--driver", "local"),
+                "owned-vol",
+            ),
+            (
+                ("docker", "network", "create", "--driver=bridge", "owned-net"),
+                "owned-net",
+            ),
+            (
+                ("docker", "volume", "create", "-dlocal", "owned-vol"),
+                "owned-vol",
+            ),
+        )
+        for argv, expected in cases:
+            with self.subTest(argv=argv):
+                plan = self.adapter.plan_create(
+                    argv, "run-1", "node-1", "chunk", "stop-remove",
+                )
+                self.assertTrue(plan.managed)
+                self.assertEqual(expected, plan.registration_intents[0].expected_name)
+
+        ambiguous = self.adapter.plan_create(
+            ("docker", "network", "create", "owned-net", "--unknown", "value"),
+            "run-1", "node-1", "chunk", "stop-remove",
+        )
+        self.assertFalse(ambiguous.managed)
+        self.assertEqual("ambiguous_docker_create_form", ambiguous.reason)
+
     def test_failed_compose_command_registers_only_correlated_partial_creation(self):
         config_argv = ("docker", "compose", "-f", "compose.yml", "config", "--format", "json")
         config = {
@@ -401,7 +435,9 @@ class DockerLifecycleTests(unittest.TestCase):
         plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
         changed = resource("ctr-1", labels=value.labels, in_use=True)
         with self.assertRaises(InvalidSchemaError):
-            self.adapter.revalidate_action(plan.actions[0], changed)
+            self.adapter.revalidate_action(
+                plan.actions[0], changed, registry=self.registry,
+            )
         with self.assertRaises(InvalidSchemaError):
             self.adapter.record_results(plan, [CommandResult(plan.actions[0].argv, 0, "", "")], exact_absent())
         mutated = self.adapter.plan_chunk_cleanup(
@@ -420,9 +456,13 @@ class DockerLifecycleTests(unittest.TestCase):
         stopped = replace(value, running=False)
         predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
         with self.assertRaises(InvalidSchemaError):
-            self.adapter.revalidate_action(forged, stopped, predecessor_result=predecessor)
+            self.adapter.revalidate_action(
+                forged, stopped, predecessor_result=predecessor,
+                registry=self.registry,
+            )
         self.adapter.revalidate_action(
-            plan.actions[1], stopped, predecessor_result=predecessor, action_index=1,
+            plan.actions[1], stopped, predecessor_result=predecessor,
+            action_index=1, registry=self.registry,
         )
 
     def test_revalidation_requires_same_fresh_terminal_dependency_snapshot(self):
@@ -443,23 +483,91 @@ class DockerLifecycleTests(unittest.TestCase):
         )
         self.assertEqual(1, len(plan.actions))
         self.adapter.revalidate_action(
-            plan.actions[0], value, ownership_record=record,
+            plan.actions[0], value, registry=registry,
             incomplete_node_proof=terminal,
         )
         with self.assertRaises(InvalidSchemaError):
             self.adapter.revalidate_action(
-                plan.actions[0], value, ownership_record=record,
+                plan.actions[0], value, registry=registry,
                 incomplete_node_proof=IncompleteNodeProof(
                     "run-1", (("consumer", NodeStatus.PENDING),), True, NOW,
                 ),
             )
         with self.assertRaises(InvalidSchemaError):
             self.adapter.revalidate_action(
-                plan.actions[0], value, ownership_record=record,
+                plan.actions[0], value, registry=registry,
                 incomplete_node_proof=IncompleteNodeProof(
                     "run-1", (("consumer", NodeStatus.SUCCEEDED),), True,
                     NOW - timedelta(minutes=2),
                 ),
+            )
+
+    def test_revalidation_derives_dependency_proof_from_fresh_registry_record(self):
+        labels = owned_labels(lifecycle="run", cleanup_policy="remove-when-stopped")
+        value = resource(labels=labels)
+        authoritative = ResourceRegistry(Path(self.directory.name) / "authoritative.jsonl")
+        authoritative.register(ResourceRecord(
+            value.resource_id, value.kind, "run-1", "node-1", "run",
+            "remove-when-stopped", NOW, ("consumer",), labels,
+        ))
+        shadow = ResourceRegistry(Path(self.directory.name) / "shadow.jsonl")
+        shadow.register(ResourceRecord(
+            value.resource_id, value.kind, "run-1", "node-1", "run",
+            "remove-when-stopped", NOW, (), labels,
+        ))
+        shadow_action = self.adapter.plan_reconcile_run(
+            shadow, DockerInventory((value,)), "run-1", terminal=True,
+        ).actions[0]
+
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                shadow_action, value, registry=authoritative,
+            )
+
+        proof = IncompleteNodeProof(
+            "run-1", (("consumer", NodeStatus.SUCCEEDED),), True, NOW,
+        )
+        authoritative_action = self.adapter.plan_reconcile_run(
+            authoritative, DockerInventory((value,)), "run-1",
+            incomplete_node_proof=proof, terminal=True,
+        ).actions[0]
+        self.adapter.revalidate_action(
+            authoritative_action, value, registry=authoritative,
+            incomplete_node_proof=proof,
+        )
+
+    def test_stale_orphan_revalidation_requires_explicit_orphan_mode(self):
+        created = NOW - timedelta(hours=25)
+        orphan = resource(
+            "orphan", labels=owned_labels(created_at=created), created_at=created,
+        )
+        plan = self.adapter.plan_stale_sweep(
+            DockerInventory((orphan,)), timedelta(hours=24),
+        )
+        empty_registry = ResourceRegistry(
+            Path(self.directory.name) / "orphan-registry.jsonl",
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                plan.actions[0], orphan, lease_proof=inactive_lease(),
+                registry=empty_registry,
+            )
+        self.adapter.revalidate_action(
+            plan.actions[0], orphan, lease_proof=inactive_lease(),
+            registry=empty_registry, orphan_mode=True,
+        )
+
+        registered = ResourceRegistry(
+            Path(self.directory.name) / "not-an-orphan.jsonl",
+        )
+        registered.register(ResourceRecord(
+            orphan.resource_id, orphan.kind, "run-1", "node-1", "chunk",
+            "stop-remove", created, ("consumer",), orphan.labels,
+        ))
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                plan.actions[0], orphan, lease_proof=inactive_lease(),
+                registry=registered, orphan_mode=True,
             )
 
     def test_dependent_cleanup_without_complete_node_proof_is_blocked(self):
@@ -582,8 +690,23 @@ class DockerLifecycleTests(unittest.TestCase):
                     self.assertRaises(InvalidSchemaError):
                 self.adapter.revalidate_action(
                     forged, stopped, predecessor_result=predecessor,
-                    action_index=action_index,
+                    action_index=action_index, registry=self.registry,
                 )
+
+    def test_result_recording_rejects_reversed_dependency_trace(self):
+        value, _ = self.register(resource(running=True))
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        reversed_results = tuple(
+            CommandResult(action.argv, 0, "", "")
+            for action in reversed(plan.actions)
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_results(
+                self.adapter, plan, reversed_results,
+                DockerInventory((value,)), exact_absent(),
+            )
 
     def test_transport_no_such_is_not_authoritative_absence(self):
         value, _ = self.register()

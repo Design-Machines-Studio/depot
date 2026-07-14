@@ -284,6 +284,27 @@ class ResourceRegistryTests(unittest.TestCase):
         }
         self.assertFalse(schema_matches(payload, schema))
 
+    def test_registry_schema_reserves_terminal_dispositions_for_transactions(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+        )
+        disposition_payload = {
+            "resource_id": "shared", "kind": "container",
+            "run_id": "run-1", "node_id": "node-1", "lifecycle": "chunk",
+            "disposition": "blocked", "action": "remove_exact_id",
+            "reason": "retry", "command": ["docker", "rm", "shared"],
+            "evidence": [],
+        }
+        standalone = {"event": "disposition", "disposition": disposition_payload}
+        self.assertTrue(schema_matches(standalone, schema))
+        standalone["disposition"] = {**disposition_payload, "disposition": "removed"}
+        self.assertFalse(schema_matches(standalone, schema))
+        transaction = {
+            "event": "transaction", "transaction_id": "sha256:" + "0" * 64,
+            "events": [standalone],
+        }
+        self.assertTrue(schema_matches(transaction, schema))
+
     def test_receipt_digests_overdeep_cyclic_evidence_without_losing_schema(self):
         root = []
         cursor = root

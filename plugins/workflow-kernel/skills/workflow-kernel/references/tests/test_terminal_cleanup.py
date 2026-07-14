@@ -132,7 +132,7 @@ class TerminalCleanupTests(unittest.TestCase):
         )
         self.assertEqual(("docker", "rm", "ctr-shared"), plan.actions[0].argv)
         self.adapter.revalidate_action(
-            plan.actions[0], value, ownership_record=record,
+            plan.actions[0], value, registry=registry,
             incomplete_node_proof=terminal,
         )
 
