@@ -13,6 +13,7 @@ from workflow_kernel.schema import (
     UnsafePayloadError, WorkflowEvent,
 )
 from workflow_kernel.state import RunLease
+from workflow_kernel._files import LockHandle
 
 def event(sequence):
     return WorkflowEvent(1, sequence, "run-1", None, "evidence.recorded", "2026-07-14T00:00:00Z", {"evidence": [str(sequence)]})
@@ -30,12 +31,22 @@ def append_event(store, value, expected_sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def assert_stable_event_error(self, operation, error_type=CorruptEventError):
+        sentinel = "never-render-descriptor-event-error"
+        with self.assertRaises(error_type) as raised:
+            operation(sentinel)
+        rendered = "".join(traceback.format_exception(
+            type(raised.exception), raised.exception, raised.exception.__traceback__,
+        ))
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertNotIn(sentinel, rendered)
+
     def test_store_derives_event_and_state_paths_from_one_run_root(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             store = EventStore(root)
-            self.assertEqual(store.path, root / "events.jsonl")
-            self.assertEqual(store.state_path, root / "run-state.json")
+            self.assertEqual(store.path, root.resolve() / "events.jsonl")
+            self.assertEqual(store.state_path, root.resolve() / "run-state.json")
             self.assertFalse(hasattr(store, "__dict__"))
             for name, value in (("root", root / "other"),
                                 ("path", root / "other-events.jsonl"),
@@ -55,6 +66,16 @@ class EventStoreTests(unittest.TestCase):
                 EventStore.__init__(store, root / "other")
             with self.assertRaises(TypeError):
                 EventStore(root / "events.jsonl", root / "other-state.json")
+
+    def test_event_store_binding_errors_are_normalized(self):
+        sentinel = "never-render-event-binding"
+        with mock.patch("workflow_kernel.events.bind_durable_path", side_effect=OSError(sentinel)), \
+                self.assertRaises(CorruptEventError) as raised:
+            EventStore("unused")
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertNotIn(sentinel, "".join(traceback.format_exception(
+            type(raised.exception), raised.exception, raised.exception.__traceback__,
+        )))
 
     def test_store_canonicalizes_ledger_and_lock_before_chdir(self):
         original = Path.cwd()
@@ -82,6 +103,162 @@ class EventStoreTests(unittest.TestCase):
                 append_event(store, event(2), 1)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(store.replay(), (event(0),))
+
+    def test_validate_rejects_ledger_replaced_during_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            append_event(store, event(0), 0)
+            replacement = Path(directory) / "replacement.jsonl"
+            replacement.write_bytes(encode_event(event(0)))
+            original = WorkflowEvent.from_dict
+
+            def replace_then_parse(value):
+                os.replace(replacement, store.path)
+                return original(value)
+
+            with mock.patch.object(WorkflowEvent, "from_dict", side_effect=replace_then_parse), \
+                    self.assertRaises(CorruptEventError):
+                store.validate()
+
+    def test_append_rejects_ledger_replaced_during_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            replacement = Path(directory) / "replacement.jsonl"
+            replacement.write_bytes(b"replacement\n")
+            original_write = os.write
+            replaced = False
+
+            def replace_then_write(descriptor, data):
+                nonlocal replaced
+                if not replaced and descriptor not in ():
+                    replaced = True
+                    os.replace(replacement, store.path)
+                return original_write(descriptor, data)
+
+            lease = RunLease(store.state_path).acquire()
+            try:
+                with mock.patch("workflow_kernel.events.os.write", side_effect=replace_then_write), \
+                        self.assertRaises(CorruptEventError):
+                    store.append(event(0), 0, lease=lease)
+            finally:
+                lease.release()
+            self.assertEqual(store.path.read_bytes(), b"replacement\n")
+
+    def test_descriptor_read_stat_and_write_errors_are_normalized(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            append_event(store, event(0), 0)
+
+            real_fstat = os.fstat
+
+            def fail_validation_stat(sentinel):
+                calls = 0
+
+                def delayed(descriptor):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 2:
+                        raise OSError(sentinel)
+                    return real_fstat(descriptor)
+
+                with mock.patch("workflow_kernel.events.os.fstat", side_effect=delayed):
+                    store.validate()
+
+            self.assert_stable_event_error(fail_validation_stat)
+
+            sentinel = "never-render-descriptor-event-error"
+            lease = RunLease(store.state_path).acquire()
+            try:
+                with mock.patch("workflow_kernel.events.os.write", side_effect=OSError(sentinel)), \
+                        self.assertRaises(CorruptEventError) as raised:
+                    store.append(event(1), 1, lease=lease)
+            finally:
+                lease.release()
+            self.assertIsNone(raised.exception.__cause__)
+            self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            )))
+
+    def test_descriptor_dup_readline_fsync_close_and_release_errors_are_normalized(self):
+        sentinel = "never-render-event-descriptor-matrix"
+
+        class FailingFile:
+            def __init__(self, handle, operation):
+                self.handle = handle
+                self.operation = operation
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.close()
+
+            def close(self):
+                self.handle.close()
+                if self.operation == "close":
+                    raise OSError(sentinel)
+
+            def fileno(self):
+                return self.handle.fileno()
+
+            def readline(self, size=-1):
+                if self.operation == "readline":
+                    raise OSError(sentinel)
+                return self.handle.readline(size)
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            append_event(store, event(0), 0)
+            real_fdopen = os.fdopen
+            for operation in ("readline", "close"):
+                def failing_fdopen(descriptor, mode, operation=operation):
+                    return FailingFile(real_fdopen(descriptor, mode), operation)
+
+                with self.subTest(operation=operation), mock.patch(
+                    "workflow_kernel.events.os.fdopen", side_effect=failing_fdopen,
+                ), self.assertRaises(CorruptEventError) as raised:
+                    store.validate()
+                self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                )))
+
+            for operation, patch_target in (("dup", "os.dup"), ("fsync", "os.fsync")):
+                lease = RunLease(store.state_path).acquire()
+                try:
+                    with self.subTest(operation=operation), mock.patch(
+                        "workflow_kernel.events." + patch_target,
+                        side_effect=OSError(sentinel),
+                    ), self.assertRaises(CorruptEventError) as raised:
+                        store.append(event(1), 1, lease=lease)
+                finally:
+                    lease.release()
+                self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                )))
+
+            lease = RunLease(store.state_path).acquire()
+            try:
+                actual = len(store.replay())
+                with mock.patch.object(LockHandle, "release", side_effect=OSError(sentinel)), \
+                        self.assertRaises(SequenceConflictError) as raised:
+                    store.append(event(actual), actual, lease=lease)
+            finally:
+                lease.release()
+            self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            )))
+
+    def test_primary_event_error_survives_lock_release_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            lease = RunLease(store.state_path).acquire()
+            try:
+                with mock.patch.object(LockHandle, "release", side_effect=OSError("cleanup")), \
+                        self.assertRaises(SequenceConflictError) as raised:
+                    store.append(event(2), 0, lease=lease)
+            finally:
+                lease.release()
+            self.assertEqual(raised.exception.message, "event sequence does not match ledger")
 
     def test_append_rejects_mutated_scalar_subclasses_without_corrupting_replay(self):
         class NegativeInt(int):
@@ -170,7 +347,7 @@ class EventStoreTests(unittest.TestCase):
                 with self.assertRaises(SequenceConflictError):
                     append_event(store, event(0), 0)
             finally:
-                store._release(lock)
+                lock.release()
 
     def test_append_requires_the_live_lease_for_its_bound_state(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -214,8 +391,8 @@ class EventStoreTests(unittest.TestCase):
                     append_event(store, event(0), 0)
             finally:
                 if first is not None:
-                    store._release(first)
-                store._release(second)
+                    first.release()
+                second.release()
             append_event(store, event(0), 0)
 
     def test_replaced_live_event_lock_cannot_mutate_alongside_replacement(self):
@@ -239,8 +416,8 @@ class EventStoreTests(unittest.TestCase):
                     append_event(store, event(0), 0)
             finally:
                 if first is not None:
-                    store._release(first)
-                store._release(second)
+                    first.release()
+                second.release()
             append_event(store, event(0), 0)
 
     def test_oversize_record_and_ledger_are_rejected(self):

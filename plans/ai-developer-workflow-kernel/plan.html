@@ -141,10 +141,10 @@ class EventStore: append(event: WorkflowEvent, expected_sequence: int) -&gt; Non
 class StateStore: load() -&gt; RunState; write(state: RunState, expected_revision: int) -&gt; None
 class TransitionEngine: apply(state: RunState, event: WorkflowEvent) -&gt; RunState</code></pre>
         <h3>As-built deviation and interface — Chunk 01</h3>
-        <p>This block records the implemented hardening without rewriting the design-time decisions above. Exact final schema values require exact built-in scalars and use bounded field-wise snapshots before projection, replay returns a tuple, validation observes ledger and state under one run lease, and every ledger mutation shares the registry-backed run lease used for state publication.</p>
+        <p>This block records the implemented hardening without rewriting the design-time decisions above. Exact final schema values and recursive payload scalars require exact built-in types. Reducers and writers use bounded field-wise snapshots before comparison or projection; replay returns a tuple; validation observes ledger and state under one run lease; and every ledger mutation shares the registry-backed run lease used for state publication.</p>
         <pre><code>@dataclass(frozen=True) class WorkflowEvent: payload: Mapping[str, object]  # exact final type
 class EventStore: final weakref-able slot-only identity; all run/event/state/lock paths are closure-registry owned
-    __init__(run_root)  # derives events.jsonl and run-state.json together
+    __init__(run_root)  # physically binds the existing root; derives events.jsonl and run-state.json together
     append(event: WorkflowEvent, expected_sequence: int, *, lease: RunLease) -&gt; None
     replay() -&gt; tuple[WorkflowEvent, ...]
 class StateStore:
@@ -154,10 +154,12 @@ class StateStore:
 class RunLease: final slot-only identity; path, handle, PID, liveness, and one-shot GC finalizer are closure-registry owned
 class PreparedState: opaque identity; closure registry captures only revision and exact bytes
 command_validate: hold one RunLease across ledger validation and state comparison
-event/state writers: shared field-wise bounded snapshots before public projection
-state graph: nodes + dependency edges + state evidence share one aggregate item budget
+reducers and event/state writers: shared field-wise bounded snapshots before comparison or projection
+state graph: nodes + dependency edges + state evidence share one aggregate item budget and one-pass node projection
+public recursive text: exact scalars; 4 MiB cumulative UTF-8 budget before retained allocation
 public collections: counted before allocation; reconstruction limit: 100,000 events
-public filesystem setup: stable cause-suppressed KernelError boundaries</code></pre>
+durable reads/writes: open descriptor must remain the authoritative exclusive pathname before success
+public filesystem operations: setup, descriptor I/O, identity, fsync, close, and release use cause-suppressed KernelError boundaries</code></pre>
         <ol class="steps">
           <li>Write failing <code>unittest</code> cases for schema versions, strict enum parsing, secret redaction, legal transitions, illegal transitions, duplicate/gapped sequences, truncated JSONL tails, and deterministic receipt serialization.</li>
           <li>Run the focused suite and require failures caused by missing modules, not syntax or fixture mistakes.</li>

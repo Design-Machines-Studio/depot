@@ -11,6 +11,7 @@ from .schema import (
     ErrorDetailKey, ErrorMessage, IllegalTransitionError, MissingEvidenceError, NodeState,
     NodeStatus, MAX_EVIDENCE_ITEMS, RunMode, RunState, RunStatus,
     SequenceConflictError, UnsafePayloadError, WorkflowEvent,
+    _snapshot_run_state, _snapshot_workflow_event,
 )
 
 MAX_EVENT_ITEMS = 100_000
@@ -95,8 +96,8 @@ def _merge_evidence(state: RunState, current: Tuple[str, ...], refs: Tuple[str, 
 
 class TransitionEngine:
     def apply(self, state: RunState, event: WorkflowEvent) -> RunState:
-        if type(state) is not RunState or type(event) is not WorkflowEvent:
-            raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE)
+        state = _snapshot_run_state(state)
+        event = _snapshot_workflow_event(event)
         if event.run_id != state.run_id:
             raise IllegalTransitionError(ErrorMessage.EVENT_RUN_ID_STATE_MISMATCH, {ErrorDetailKey.KIND.value: event.kind})
         if event.sequence != state.revision:
@@ -208,8 +209,7 @@ class TransitionEngine:
             raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
                 ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVENT_ITEMS,
             }) from None
-        if type(first) is not WorkflowEvent:
-            raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA)
+        first = _snapshot_workflow_event(first)
         if first.sequence != 0 or first.kind != "run.initialized":
             raise IllegalTransitionError(ErrorMessage.FIRST_EVENT_INITIALIZE, {
                 ErrorDetailKey.KIND.value: first.kind, ErrorDetailKey.SEQUENCE.value: first.sequence,

@@ -10,7 +10,8 @@ from types import MappingProxyType
 from typing import Any, Mapping, Optional, Tuple
 
 from .redaction import (
-    MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH, bounded_iterable,
+    MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
+    MAX_TOTAL_STRING_BYTES, bounded_iterable,
     freeze_error_details, freeze_json, normalize_durable_string, normalize_evidence_reference, redact, thaw,
     validate_durable_key,
 )
@@ -365,7 +366,7 @@ def _payload(value: object) -> Mapping[str, object]:
     return safe
 
 
-def _bounded_mapping(value: object, required_message: ErrorMessage) -> dict:
+def _bounded_mapping(value: object, required_message: ErrorMessage, *, text_budget=None) -> dict:
     if not isinstance(value, Mapping):
         raise InvalidSchemaError(required_message)
     result = {}
@@ -373,6 +374,8 @@ def _bounded_mapping(value: object, required_message: ErrorMessage) -> dict:
         for key in bounded_iterable(value, max_items=MAX_PAYLOAD_ITEMS):
             if type(key) is not str:
                 raise InvalidSchemaError(ErrorMessage.SCHEMA_KEYS_STRINGS)
+            if text_budget is not None:
+                text_budget.consume_text(key)
             result[key] = value[key]
     except InvalidSchemaError:
         raise
@@ -473,6 +476,7 @@ class _StateItemBudget:
     def __init__(self, limit: int = MAX_PAYLOAD_ITEMS):
         self.limit = limit
         self.count = 0
+        self.text_bytes = 0
 
     def consume(self) -> None:
         self.count += 1
@@ -480,6 +484,54 @@ class _StateItemBudget:
             raise InvalidSchemaError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
                 ErrorDetailKey.LIMIT_ITEMS.value: self.limit,
             })
+
+    def consume_text(self, value: object) -> None:
+        if type(value) is not str:
+            raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD)
+        self.text_bytes += len(value.encode("utf-8"))
+        if self.text_bytes > MAX_TOTAL_STRING_BYTES:
+            raise InvalidSchemaError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
+                ErrorDetailKey.LIMIT_BYTES.value: MAX_TOTAL_STRING_BYTES,
+            })
+
+
+def _node_status(value: object) -> NodeStatus:
+    try:
+        if type(value) is NodeStatus:
+            return value
+        if type(value) is str:
+            return NodeStatus(value)
+        raise TypeError("node status must be an exact enum or string")
+    except (ValueError, TypeError):
+        raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {
+            ErrorDetailKey.STATUS.value: value,
+        }) from None
+
+
+def _trusted_node_state(node_id: str, status: NodeStatus,
+                        dependencies: Tuple[str, ...], evidence: Tuple[str, ...]) -> "NodeState":
+    node = object.__new__(NodeState)
+    object.__setattr__(node, "node_id", node_id)
+    object.__setattr__(node, "status", status)
+    object.__setattr__(node, "dependencies", dependencies)
+    object.__setattr__(node, "evidence", evidence)
+    return node
+
+
+def _validated_node_projection(node_id: object, status: object, dependencies: object,
+                               evidence: object, budget: _StateItemBudget) -> "NodeState":
+    budget.consume_text(node_id)
+    safe_node_id = _string(node_id, "node_id")
+    safe_status = _node_status(status)
+    safe_dependencies = _string_tuple(
+        dependencies, "dependencies", budget=budget,
+    )
+    safe_evidence = _string_tuple(
+        evidence, "evidence", references=True, budget=budget,
+    )
+    return _trusted_node_state(
+        safe_node_id, safe_status, safe_dependencies, safe_evidence,
+    )
 
 
 @dataclass(frozen=True)
@@ -493,19 +545,14 @@ class NodeState:
         raise TypeError("NodeState is final")
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "node_id", _string(self.node_id, "node_id"))
-        try:
-            if type(self.status) is NodeStatus:
-                status = self.status
-            elif type(self.status) is str:
-                status = NodeStatus(self.status)
-            else:
-                raise TypeError("node status must be an exact enum or string")
-        except (ValueError, TypeError):
-            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS.value: self.status}) from None
-        object.__setattr__(self, "status", status)
-        object.__setattr__(self, "dependencies", _string_tuple(self.dependencies, "dependencies"))
-        object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
+        projection = _validated_node_projection(
+            self.node_id, self.status, self.dependencies, self.evidence,
+            _StateItemBudget(MAX_PAYLOAD_ITEMS),
+        )
+        object.__setattr__(self, "node_id", projection.node_id)
+        object.__setattr__(self, "status", projection.status)
+        object.__setattr__(self, "dependencies", projection.dependencies)
+        object.__setattr__(self, "evidence", projection.evidence)
 
     @classmethod
     def from_dict(cls, data: object) -> "NodeState":
@@ -526,6 +573,7 @@ def _string_tuple(value: object, name: str, *, references: bool = False,
         for item in bounded_iterable(value, max_items=limit):
             if budget is not None:
                 budget.consume()
+                budget.consume_text(item)
             result.append(_string(item, name))
         result = tuple(result)
     except TypeError:
@@ -545,9 +593,9 @@ def _snapshot_node_state(node: NodeState, budget: _StateItemBudget) -> NodeState
     if type(node) is not NodeState:
         raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
     try:
-        dependencies = _string_tuple(node.dependencies, "dependencies", budget=budget)
-        evidence = _string_tuple(node.evidence, "evidence", references=True, budget=budget)
-        return NodeState(node.node_id, node.status, dependencies, evidence)
+        return _validated_node_projection(
+            node.node_id, node.status, node.dependencies, node.evidence, budget,
+        )
     except KernelError:
         raise
     except (AttributeError, TypeError, ValueError, RecursionError):
@@ -559,9 +607,11 @@ def _node_state_from_mapping(data: object,
     snapshot = _bounded_mapping(data, ErrorMessage.NODE_OBJECT_REQUIRED)
     fields = {"node_id", "status", "dependencies", "evidence"}
     _only(snapshot, fields, fields)
-    dependencies = _string_tuple(snapshot["dependencies"], "dependencies", budget=budget)
-    evidence = _string_tuple(snapshot["evidence"], "evidence", references=True, budget=budget)
-    return NodeState(snapshot["node_id"], snapshot["status"], dependencies, evidence)
+    active_budget = budget if budget is not None else _StateItemBudget(MAX_PAYLOAD_ITEMS)
+    return _validated_node_projection(
+        snapshot["node_id"], snapshot["status"], snapshot["dependencies"],
+        snapshot["evidence"], active_budget,
+    )
 
 
 @dataclass(frozen=True)
@@ -619,6 +669,7 @@ class RunState:
                 budget.consume()
                 if type(key) is not str:
                     raise InvalidSchemaError(ErrorMessage.NODE_KEYS_STRINGS)
+                budget.consume_text(key)
                 nodes[key] = _snapshot_node_state(self.nodes[key], budget)
         except InvalidSchemaError:
             raise
@@ -653,18 +704,37 @@ class RunState:
         snapshot = _bounded_mapping(data, ErrorMessage.STATE_OBJECT_REQUIRED)
         fields = {"schema_version", "revision", "run_id", "mode", "status", "created_at", "updated_at", "nodes", "evidence", "cleanup_reconciled"}
         _only(snapshot, fields, fields)
-        raw_nodes = _bounded_mapping(snapshot["nodes"], ErrorMessage.NODES_OBJECT_REQUIRED)
         budget = _StateItemBudget(MAX_PAYLOAD_ITEMS)
+        raw_nodes = _bounded_mapping(
+            snapshot["nodes"], ErrorMessage.NODES_OBJECT_REQUIRED,
+            text_budget=budget,
+        )
+        base = cls(snapshot["schema_version"], snapshot["revision"], snapshot["run_id"],
+                   snapshot["mode"], snapshot["status"], snapshot["created_at"],
+                   snapshot["updated_at"], MappingProxyType({}), (),
+                   snapshot["cleanup_reconciled"])
         nodes = {}
         for key, value in raw_nodes.items():
             budget.consume()
             nodes[key] = _node_state_from_mapping(value, budget)
         evidence = _string_tuple(snapshot["evidence"], "evidence", references=True,
                                  budget=budget)
-        return cls(snapshot["schema_version"], snapshot["revision"], snapshot["run_id"],
-                   snapshot["mode"], snapshot["status"], snapshot["created_at"],
-                   snapshot["updated_at"], MappingProxyType(nodes), evidence,
-                   snapshot["cleanup_reconciled"])
+        try:
+            for key in nodes:
+                validate_durable_key(key)
+        except ValueError:
+            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
+        if any(key != node.node_id for key, node in nodes.items()):
+            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
+        _validate_dependency_graph(nodes)
+        if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
+            raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
+                ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
+                ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,
+            })
+        object.__setattr__(base, "nodes", MappingProxyType(nodes))
+        object.__setattr__(base, "evidence", evidence)
+        return base
 
     def to_dict(self) -> dict:
         return {

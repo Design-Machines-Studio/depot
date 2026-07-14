@@ -57,9 +57,11 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 - Construct exact, final, immutable `WorkflowEvent`, `NodeState`, and `RunState`
   schema objects. Durable writers, receipt factories, and reducers reject
-  substitutes instead of dispatching virtual serializers. Durable scalar
-  fields require exact built-in `str` and `int` values; subclasses cannot
-  override validation or comparison. Event and state writers rebuild exact
+  substitutes instead of dispatching virtual serializers. Durable schema
+  fields and recursive payloads require exact built-in `str`, `int`, `float`,
+  and `bool` values as appropriate; mapping keys and evidence references
+  require exact `str`. Subclasses cannot override validation or comparison.
+  Reducers, event writers, receipt factories, and state writers rebuild exact
   fields through shared bounded internal snapshots before any public
   `to_dict()` projection. Direct Python
   construction follows normal signature semantics, so
@@ -68,18 +70,27 @@ errors as stable JSON. Treat `--help` output as plain text.
   versions, unsafe references, and invalid JSON shapes then fail with a stable
   `KernelError.code`.
 - Construct `EventStore(run_root)`; its exact, final, weak-referenceable,
-  slot-only identity records the canonical root, event, state, and lock paths
-  in a closure-owned registry. It derives only `<run_root>/events.jsonl` and
+  slot-only identity records the physically parent-bound root, event, state,
+  and lock paths in a closure-owned registry. It resolves the existing run
+  root without following the final durable filename, then rejects parent or
+  file identity displacement. It derives only `<run_root>/events.jsonl` and
   `<run_root>/run-state.json`, so neither public nor private instance mutation
   can pair paths or locks from different runs. Use
   `EventStore.append(event, expected_sequence, lease=same_run_lease)` to append
   exactly the next event. The exact live `RunLease` must authorize the bound
   state path before mutation and is revalidated immediately before the write.
+  The open ledger descriptor must still match its exclusive pathname
+  immediately before writing and after `fsync`; validation performs the same
+  identity check after parsing and before returning.
   Records and projected ledgers that exceed durable read limits are rejected.
   Use `EventStore.replay()` to reject gaps, corruption, conflicting run IDs,
   and bounded-input violations.
 - Use `StateStore.load()` to read the bounded materialization. Unsafe paths or
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
+  A loaded descriptor is revalidated after parsing. Publication keeps the
+  temporary descriptor open across replacement and directory sync, then
+  requires that descriptor to remain the authoritative state pathname before
+  reporting success.
   Use `StateStore.prepare(state)` before publishing an event that derives the
   state. It returns an opaque exact-type identity capability with no exposed
   state or encoded-byte fields. A closure-owned weak registry keyed by the
@@ -105,7 +116,9 @@ errors as stable JSON. Treat `--help` output as plain text.
   manual `acquire()` is necessary, call `release()` in `finally`; a weakref
   finalizer releases the underlying lock if an acquired lease is garbage
   collected, and explicit release or context exit invokes that finalizer only
-  once.
+  once. Lease setup and explicit release errors are normalized to
+  cause-suppressed `LeaseConflictError`; cleanup failures never replace an
+  already-active primary kernel error.
 - Hold the same run lease across authoritative ledger replay, current-state
   observation, validation comparison, event append or reduction, and
   materialized-state publication.
@@ -113,6 +126,8 @@ errors as stable JSON. Treat `--help` output as plain text.
   kernel rejects symbolic links, hard links, and identity changes.
 - Use `TransitionEngine.apply(state, event)` for one pure transition and
   `TransitionEngine.reconstruct(events)` for deterministic replay. Event
+  and state inputs are captured through the shared exact field-wise snapshots
+  before any comparison, initialization check, or dispatch. Event
   sequence equals the prior state revision; each accepted event increments the
   revision by one. A run may attach at most 1,024 evidence items across run and
   node state; transitions exceeding that aggregate limit fail before state
@@ -120,10 +135,22 @@ errors as stable JSON. Treat `--help` output as plain text.
   eagerly exhausts a caller iterable.
 - One run-wide state-tree budget counts nodes, dependency edges, node evidence,
   and run evidence against `MAX_PAYLOAD_ITEMS` before dependency-graph helper
-  structures are allocated. The same aggregate bound applies to direct
+  structures are allocated. Node mappings and snapshots share one validated
+  projection and private trusted frozen construction path, so dependencies and
+  evidence are normalized once. The same aggregate bound applies to direct
   `RunState` construction, parsed state, and writer snapshots.
-- The package root exports `PreparedState` for type-aware API consumers and
-  `ErrorDetailKey` for the closed public error-detail vocabulary.
+- Recursive payload, raw-receipt, public-metadata, error-detail, and state-tree
+  traversal has a cumulative 4,194,304-byte UTF-8 text budget. Mapping keys and
+  string values consume that budget before they are retained; the independent
+  depth, item, and per-string limits still apply. The package root exports the
+  authoritative limits: `MAX_PAYLOAD_DEPTH=16`, `MAX_PAYLOAD_ITEMS=10000`,
+  `MAX_STRING_LENGTH=65536`, `MAX_TOTAL_STRING_BYTES=4194304`,
+  `MAX_EVIDENCE_ITEMS=1024`, `MAX_EVENT_ITEMS=100000`,
+  `MAX_RECORD_BYTES=1048576`, `MAX_LEDGER_BYTES=16777216`, and
+  `MAX_STATE_BYTES=4194304`. Record, projected-ledger, and materialized-state
+  byte caps remain final writer/read caps after traversal validation.
+- The package root also exports `PreparedState` for type-aware API consumers
+  and `ErrorDetailKey` for the closed public error-detail vocabulary.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
   errors. `ErrorMessage` and `ErrorCode` are the closed developer-owned enums
   for public text and machine codes; raw or unknown candidates become the
@@ -144,9 +171,9 @@ errors as stable JSON. Treat `--help` output as plain text.
   deterministic `value-sha256:<64 lowercase hex>` digest, while numbers,
   booleans, and null remain typed. `ErrorDetailKey` is the developer-owned
   vocabulary whose exact built-in `str` values remain readable. A `str`
-  subclass is always unknown, even when its content equals a known key, and is
-  digested without invoking attacker-defined equality, hashing, string, or
-  encoding methods. Every unknown error-detail key at any depth becomes a
+  subclass is rejected before classification, without invoking
+  attacker-defined equality, hashing, string, or encoding methods. Every
+  exact-string unknown error-detail key at any depth becomes a
   deterministic `key-sha256:<64 lowercase hex>` digest. Canonical
   `value-sha256:` and `key-sha256:` tokens remain stable when already-sanitized
   metadata is sanitized or encoded again; a raw key colliding with a canonical
@@ -188,8 +215,10 @@ All public collection boundaries count before allocation: raw schema mappings,
 node mappings, error details, receipt metadata, evidence/dependency sequences,
 and reconstruction iterables stop at their declared limits without eager
 copies. Public file, state, lease, and event `KernelError` wrappers suppress raw
-OS exception causes, including parent-directory and temporary-file setup, so
-rejected paths cannot reappear in formatted tracebacks.
+OS exception causes, including parent-directory, temporary-file, descriptor
+stat/dup/read/readline/write/flush/fsync/close, identity-check, and lock-release
+failures, so rejected paths and raw OS messages cannot reappear in formatted
+tracebacks. If cleanup also fails, the primary error remains authoritative.
 `transition_receipt()` sanitizes the full event through the shared
 event schema, including its arbitrary payload, and accepts `state_digest` only
 in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,

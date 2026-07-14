@@ -9,6 +9,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+from ._files import bind_durable_path
 from .events import EventStore
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
@@ -29,8 +30,11 @@ class KernelArgumentParser(argparse.ArgumentParser):
 
 def _paths(directory):
     root = Path(directory)
-    states = StateStore(root / "run-state.json")
-    return root, EventStore(root), states
+    if not root.is_dir():
+        raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
+    bound_root = bind_durable_path(root / "run-state.json").path.parent
+    states = StateStore(bound_root / "run-state.json")
+    return bound_root, EventStore(bound_root), states
 
 
 def _emit(value, stream=sys.stdout):
@@ -45,8 +49,9 @@ def _coordinated_run(states):
 
 
 def command_init(args):
-    root, events, states = _paths(args.directory)
+    root = Path(args.directory)
     root.mkdir(parents=True, exist_ok=True)
+    root, events, states = _paths(root)
     with _coordinated_run(states) as lease:
         if events.path.exists() or states.path.exists():
             raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {

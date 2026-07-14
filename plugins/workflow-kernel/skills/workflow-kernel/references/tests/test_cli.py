@@ -56,6 +56,13 @@ class CliTests(unittest.TestCase):
             result = self.run_cli("validate", directory)
             self.assertNotEqual(result.returncode, 0)
 
+    def test_non_init_commands_do_not_create_a_missing_run_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = Path(directory) / "missing-run"
+            result = self.run_cli("validate", missing)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(missing.exists())
+
     def test_argparse_error_does_not_echo_rejected_value(self):
         sentinel = "NEVER-PRINT-THIS-SECRET"
         result = self.run_cli("init", "/tmp/unused", "--run-id", "run-1",
@@ -170,6 +177,57 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = reconstructed
             self.assertEqual(command_validate(SimpleNamespace(directory="unused", recovery=False)), 0)
         self.assertFalse(active["lease"])
+
+    def test_validate_binds_run_directory_before_parent_alias_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first"
+            second = root / "second"
+            alias = root / "alias"
+            for path, run_id in ((first, "run-first"), (second, "run-second")):
+                self.assertEqual(self.run_cli(
+                    "init", path, "--run-id", run_id,
+                    "--occurred-at", "2026-07-14T00:00:00Z",
+                ).returncode, 0)
+            (second / "events.jsonl").write_text("corrupt\n")
+            alias.symlink_to(first, target_is_directory=True)
+
+            original = cli.EventStore.validate
+
+            def retarget_then_validate(store, recovery=False):
+                alias.unlink()
+                alias.symlink_to(second, target_is_directory=True)
+                return original(store, recovery=recovery)
+
+            with mock.patch.object(cli.EventStore, "validate", retarget_then_validate), \
+                    mock.patch("workflow_kernel.cli._emit") as emit:
+                self.assertEqual(command_validate(
+                    SimpleNamespace(directory=alias, recovery=False),
+                ), 0)
+            replayed = original(cli._paths(first)[1], recovery=False)[0]
+            self.assertEqual(replayed[0].run_id, "run-first")
+            self.assertEqual(emit.call_args.args[0]["event_count"], 1)
+
+    def test_path_factory_binds_event_and_state_stores_from_one_root_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(first, target_is_directory=True)
+            original = cli.StateStore
+
+            def retarget_after_state(path):
+                state = original(path)
+                alias.unlink()
+                alias.symlink_to(second, target_is_directory=True)
+                return state
+
+            with mock.patch("workflow_kernel.cli.StateStore", side_effect=retarget_after_state):
+                _, events, states = cli._paths(alias)
+            self.assertEqual(events.state_path, states.path)
 
     def test_documented_cache_resolver_is_quiet_with_only_codex_cache(self):
         skill = Path(__file__).parents[2] / "SKILL.md"

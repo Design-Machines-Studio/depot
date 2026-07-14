@@ -16,8 +16,168 @@ from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import PreparedState, RunLease, StateStore, encode_state
+from workflow_kernel._files import LockHandle
 
 class StateStoreTests(unittest.TestCase):
+    def test_state_and_lease_binding_errors_are_normalized(self):
+        sentinel = "never-render-state-binding"
+        for constructor, error_type in (
+            (lambda: StateStore("unused"), CorruptStateError),
+            (lambda: RunLease("unused"), LeaseConflictError),
+        ):
+            with self.subTest(constructor=constructor), mock.patch(
+                "workflow_kernel.state.bind_durable_path", side_effect=OSError(sentinel),
+            ), self.assertRaises(error_type) as raised:
+                constructor()
+            self.assertIsNone(raised.exception.__cause__)
+            self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            )))
+
+    def test_load_rejects_state_replaced_during_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            path.write_bytes(encode_state(state))
+            replacement = Path(directory) / "replacement.json"
+            replacement.write_bytes(encode_state(state))
+            original = RunState.from_dict
+
+            def replace_then_parse(value):
+                os.replace(replacement, path)
+                return original(value)
+
+            with mock.patch.object(RunState, "from_dict", side_effect=replace_then_parse), \
+                    self.assertRaises(CorruptStateError):
+                StateStore(path).load()
+
+    def test_publish_rejects_state_replaced_before_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            replacement = Path(directory) / "replacement.json"
+            replacement.write_text("replacement")
+            original_fsync = store._fsync_directory
+
+            def replace_then_fsync():
+                result = original_fsync()
+                os.replace(replacement, path)
+                return result
+
+            with RunLease(path) as lease, mock.patch.object(
+                    StateStore, "_fsync_directory", side_effect=replace_then_fsync), \
+                    self.assertRaises(CorruptStateError):
+                store.write(state, -1, lease=lease)
+            self.assertEqual(path.read_text(), "replacement")
+
+    def test_descriptor_read_and_stat_errors_are_stable_and_secret_safe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            path.write_bytes(encode_state(RunState.new(
+                "run-1", "2026-07-14T00:00:00Z",
+            )))
+            sentinel = "never-render-descriptor-state-error"
+            real_fstat = os.fstat
+            for operation in ("read", "fstat"):
+                if operation == "fstat":
+                    calls = 0
+
+                    def delayed(descriptor):
+                        nonlocal calls
+                        calls += 1
+                        if calls == 2:
+                            raise OSError(sentinel)
+                        return real_fstat(descriptor)
+
+                    patched = mock.patch("workflow_kernel.state.os.fstat", side_effect=delayed)
+                else:
+                    patched = mock.patch("workflow_kernel.state.os.read", side_effect=OSError(sentinel))
+                with self.subTest(operation=operation), patched, \
+                        self.assertRaises(CorruptStateError) as raised:
+                    StateStore(path).load()
+                rendered = "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                ))
+                self.assertIsNone(raised.exception.__cause__)
+                self.assertNotIn(sentinel, rendered)
+
+    def test_state_write_flush_fsync_and_close_errors_are_normalized(self):
+        sentinel = "never-render-state-descriptor-matrix"
+
+        class FailingWriter:
+            def __init__(self, handle, operation):
+                self.handle = handle
+                self.operation = operation
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                self.handle.close()
+
+            def write(self, value):
+                if self.operation == "write":
+                    raise OSError(sentinel)
+                return self.handle.write(value)
+
+            def flush(self):
+                if self.operation == "flush":
+                    raise OSError(sentinel)
+                return self.handle.flush()
+
+            def fileno(self):
+                return self.handle.fileno()
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            real_fdopen = os.fdopen
+            for operation in ("write", "flush"):
+                store = StateStore(path)
+                lease = RunLease(path).acquire()
+                try:
+                    def failing_fdopen(descriptor, mode, closefd=True, operation=operation):
+                        return FailingWriter(
+                            real_fdopen(descriptor, mode, closefd=closefd), operation,
+                        )
+
+                    with mock.patch("workflow_kernel.state.os.fdopen", side_effect=failing_fdopen), \
+                            self.assertRaises(CorruptStateError) as raised:
+                        store.write(state, -1, lease=lease)
+                finally:
+                    lease.release()
+                self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                )))
+
+            for operation, target in (("fsync", "os.fsync"), ("close", "os.close")):
+                store = StateStore(path)
+                lease = RunLease(path).acquire()
+                try:
+                    with self.subTest(operation=operation), mock.patch(
+                        "workflow_kernel.state." + target, side_effect=OSError(sentinel),
+                    ), self.assertRaises(CorruptStateError) as raised:
+                        store.write(state, -1, lease=lease)
+                finally:
+                    lease.release()
+                self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                )))
+
+    def test_run_lease_release_error_is_normalized(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            lease = RunLease(path).acquire()
+            sentinel = "never-render-lease-release"
+            with mock.patch.object(LockHandle, "release", side_effect=OSError(sentinel)), \
+                    self.assertRaises(LeaseConflictError) as raised:
+                lease.release()
+            self.assertIsNone(raised.exception.__cause__)
+            self.assertNotIn(sentinel, "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            )))
+
     def test_prepared_state_is_opaque_and_publishes_registry_owned_state(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"

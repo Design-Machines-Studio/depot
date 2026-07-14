@@ -19,6 +19,7 @@ KEY_DIGEST_PREFIX = "key-sha256:"
 MAX_PAYLOAD_DEPTH = 16
 MAX_PAYLOAD_ITEMS = 10_000
 MAX_STRING_LENGTH = 65_536
+MAX_TOTAL_STRING_BYTES = 4_194_304
 _SECRET_PARTS = (
     "token", "key", "secret", "password", "authorization", "cookie", "dsn",
     "environment_value", "environment-value", "env_value",
@@ -57,7 +58,7 @@ def is_secret_key(key: str) -> bool:
 
 def normalize_evidence_reference(reference: str) -> str:
     """Return one safe artifact ID, relative path, or opaque URL digest."""
-    if not isinstance(reference, str) or not reference or len(reference) > MAX_STRING_LENGTH:
+    if type(reference) is not str or not reference or len(reference) > MAX_STRING_LENGTH:
         raise ValueError("evidence reference is invalid")
     if "\\" in reference or any(ord(character) < 32 or ord(character) == 127 for character in reference):
         raise ValueError("evidence reference contains ambiguous characters")
@@ -172,7 +173,7 @@ def _normalize_uri_tokens(value: str) -> str:
     cursor = 0
 
     for token_start, token_end, raw_end in _iter_uri_token_spans(value):
-        token = value[token_start:token_end]
+        token = str.__getitem__(value, slice(token_start, token_end))
         normalized = token if _DURABLE_DIGEST.fullmatch(token) else normalize_evidence_reference(token)
         pieces.extend((value[cursor:token_start], normalized, value[token_end:raw_end]))
         cursor = raw_end
@@ -241,6 +242,7 @@ class _Traversal:
     max_depth: int
     max_items: int
     max_string_length: int
+    max_total_string_bytes: int
     wrap_mapping: Callable[[dict], Any]
     wrap_sequence: Callable[[tuple], Any]
     string_normalizer: Optional[Callable[[str], str]] = None
@@ -250,6 +252,12 @@ class _Traversal:
     mapping_policy: Optional[Callable[[str, Any], Tuple[str, Any]]] = None
     value_policy: Optional[Callable[[Any, str, Any], None]] = None
     count: int = 0
+    text_bytes: int = 0
+
+    def consume_text(self, value: str) -> None:
+        self.text_bytes += len(value.encode("utf-8"))
+        if self.text_bytes > self.max_total_string_bytes:
+            raise TypeError("payload exceeds maximum total string bytes")
 
     def normalize(self, value: Any, *, key: str = "", depth: int = 0,
                   schema: Any = None, policy: Any = None) -> Any:
@@ -266,11 +274,12 @@ class _Traversal:
         if (self.preserve_redacted and type(key) is str and _KEY_DIGEST.fullmatch(key)
                 and type(value) is str and value == REDACTED):
             return REDACTED
-        if value is None or isinstance(value, bool):
+        if value is None or type(value) is bool:
             return value
-        if isinstance(value, str):
+        if type(value) is str:
             if str.__len__(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
+            self.consume_text(value)
             if self.string_policy is not None:
                 return self.string_policy(value, key, policy)
             if self.string_normalizer is not None:
@@ -278,19 +287,20 @@ class _Traversal:
             if key.casefold() in {"reference", "evidence"}:
                 return normalize_evidence_reference(value)
             return normalize_durable_string(value)
-        if isinstance(value, int):
+        if type(value) is int:
             return value
-        if isinstance(value, float):
+        if type(value) is float:
             if not math.isfinite(value):
                 raise TypeError("non-finite numbers are not JSON-safe")
             return value
         if isinstance(value, Mapping):
             result = {}
             for child_key in value:
-                if not isinstance(child_key, str):
+                if type(child_key) is not str:
                     raise TypeError("mapping keys must be strings")
                 if str.__len__(child_key) > self.max_string_length:
                     raise TypeError("mapping key exceeds maximum length")
+                self.consume_text(child_key)
                 if self.count >= self.max_items:
                     raise TypeError("payload exceeds maximum item count")
                 item = value[child_key]
@@ -313,7 +323,7 @@ class _Traversal:
                               and key.casefold() == "evidence")
             result = []
             for item in value:
-                if evidence_items and not isinstance(item, str):
+                if evidence_items and type(item) is not str:
                     raise TypeError("evidence items must be strings")
                 result.append(self.normalize(
                     item, key=key if evidence_items else "", depth=depth + 1,
@@ -326,19 +336,23 @@ class _Traversal:
 def redact(value: Any, *, _key: str = "") -> Any:
     """Return a JSON-safe deep copy with sensitive keyed values removed."""
     return _Traversal(MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
+                      MAX_TOTAL_STRING_BYTES,
                       _mutable_mapping, _mutable_sequence).normalize(value, key=_key)
 
 
 def freeze_json(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                 max_items: int = MAX_PAYLOAD_ITEMS,
-                max_string_length: int = MAX_STRING_LENGTH) -> Any:
+                max_string_length: int = MAX_STRING_LENGTH,
+                max_total_string_bytes: Optional[int] = None) -> Any:
     """Return a recursively immutable, redacted, JSON-safe value."""
-    return _Traversal(max_depth, max_items, max_string_length,
+    total_bytes = (MAX_TOTAL_STRING_BYTES if max_total_string_bytes is None
+                   else max_total_string_bytes)
+    return _Traversal(max_depth, max_items, max_string_length, total_bytes,
                       _frozen_mapping, _frozen_sequence).normalize(value)
 
 
 def _sanitize_public_metadata(value: Any, *, max_depth: int, max_items: int,
-                              max_string_length: int, known_keys,
+                              max_string_length: int, max_total_string_bytes: int, known_keys,
                               wrap_mapping, wrap_sequence) -> Any:
     """Apply the shared public metadata policy with selectable containers."""
     safe_keys = frozenset(key for key in known_keys if type(key) is str)
@@ -348,7 +362,7 @@ def _sanitize_public_metadata(value: Any, *, max_depth: int, max_items: int,
             return key
         return digest_error_detail_key(key)
 
-    return _Traversal(max_depth, max_items, max_string_length,
+    return _Traversal(max_depth, max_items, max_string_length, max_total_string_bytes,
                       wrap_mapping, wrap_sequence,
                       digest_error_detail_string, normalize_key,
                       preserve_redacted=True).normalize(value)
@@ -357,11 +371,15 @@ def _sanitize_public_metadata(value: Any, *, max_depth: int, max_items: int,
 def sanitize_public_metadata(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                              max_items: int = MAX_PAYLOAD_ITEMS,
                              max_string_length: int = MAX_STRING_LENGTH,
+                             max_total_string_bytes: Optional[int] = None,
                              known_keys=()) -> Any:
     """Return plain JSON-safe public metadata with strings and unknown keys digested."""
+    total_bytes = (MAX_TOTAL_STRING_BYTES if max_total_string_bytes is None
+                   else max_total_string_bytes)
     return _sanitize_public_metadata(
         value, max_depth=max_depth, max_items=max_items,
-        max_string_length=max_string_length, known_keys=known_keys,
+        max_string_length=max_string_length, max_total_string_bytes=total_bytes,
+        known_keys=known_keys,
         wrap_mapping=_mutable_mapping, wrap_sequence=_mutable_sequence,
     )
 
@@ -370,10 +388,13 @@ def apply_json_policy(value: Any, *, string_policy, mapping_policy,
                       value_policy=None, schema=None,
                       max_depth: int = MAX_PAYLOAD_DEPTH,
                       max_items: int = MAX_PAYLOAD_ITEMS,
-                      max_string_length: int = MAX_STRING_LENGTH) -> Any:
+                      max_string_length: int = MAX_STRING_LENGTH,
+                      max_total_string_bytes: Optional[int] = None) -> Any:
     """Apply caller-owned field policy through the shared bounded traversal."""
+    total_bytes = (MAX_TOTAL_STRING_BYTES if max_total_string_bytes is None
+                   else max_total_string_bytes)
     return _Traversal(
-        max_depth, max_items, max_string_length,
+        max_depth, max_items, max_string_length, total_bytes,
         _mutable_mapping, _mutable_sequence,
         string_policy=string_policy, mapping_policy=mapping_policy,
         value_policy=value_policy,
@@ -383,11 +404,15 @@ def apply_json_policy(value: Any, *, string_policy, mapping_policy,
 def freeze_error_details(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                          max_items: int = MAX_PAYLOAD_ITEMS,
                          max_string_length: int = MAX_STRING_LENGTH,
+                         max_total_string_bytes: Optional[int] = None,
                          known_keys=()) -> Any:
     """Return immutable error metadata using the shared public policy."""
+    total_bytes = (MAX_TOTAL_STRING_BYTES if max_total_string_bytes is None
+                   else max_total_string_bytes)
     return _sanitize_public_metadata(
         value, max_depth=max_depth, max_items=max_items,
-        max_string_length=max_string_length, known_keys=known_keys,
+        max_string_length=max_string_length, max_total_string_bytes=total_bytes,
+        known_keys=known_keys,
         wrap_mapping=_frozen_mapping, wrap_sequence=_frozen_sequence,
     )
 

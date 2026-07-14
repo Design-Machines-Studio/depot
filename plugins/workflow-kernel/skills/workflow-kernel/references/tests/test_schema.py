@@ -53,6 +53,74 @@ class CountingStr(str):
             yield character
 
 class SchemaTests(unittest.TestCase):
+    def test_public_limit_constants_are_exported(self):
+        for name in (
+            "MAX_PAYLOAD_DEPTH", "MAX_PAYLOAD_ITEMS", "MAX_STRING_LENGTH",
+            "MAX_TOTAL_STRING_BYTES", "MAX_EVIDENCE_ITEMS", "MAX_EVENT_ITEMS",
+            "MAX_RECORD_BYTES", "MAX_LEDGER_BYTES", "MAX_STATE_BYTES",
+        ):
+            with self.subTest(name=name):
+                self.assertIn(name, workflow_kernel.__all__)
+                self.assertIsInstance(getattr(workflow_kernel, name), int)
+
+    def test_shared_traversal_rejects_scalar_and_key_subclasses(self):
+        class Text(str):
+            pass
+
+        class Integer(int):
+            pass
+
+        class Decimal(float):
+            pass
+
+        operations = (
+            lambda value: WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                        "2026-07-14T00:00:00Z", {"value": value}),
+            lambda value: encode_receipt({"value": value}),
+            lambda value: redaction.sanitize_public_metadata({"value": value}),
+        )
+        for value in (Text("text"), Integer(1), Decimal(1.0)):
+            for operation in operations:
+                with self.subTest(value=type(value).__name__, operation=operation), \
+                        self.assertRaises((TypeError, UnsafePayloadError)):
+                    operation(value)
+
+        hostile_key = Text("field")
+        for operation in operations:
+            with self.subTest(operation=operation), self.assertRaises((TypeError, UnsafePayloadError)):
+                operation({hostile_key: "value"})
+
+        with self.assertRaises(ValueError):
+            redaction.normalize_evidence_reference(Text("proof.json"))
+
+    def test_total_text_budget_stops_shared_source_before_full_projection(self):
+        class SharedTextMapping(Mapping):
+            def __init__(self):
+                self.reads = 0
+                self.value = "abcd"
+
+            def __iter__(self):
+                return iter(("a", "b", "c", "d"))
+
+            def __len__(self):
+                return 4
+
+            def __getitem__(self, _key):
+                self.reads += 1
+                return self.value
+
+        for operation in (
+            lambda payload: WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                          "2026-07-14T00:00:00Z", payload),
+            encode_receipt,
+            redaction.sanitize_public_metadata,
+        ):
+            payload = SharedTextMapping()
+            with mock.patch.object(redaction, "MAX_TOTAL_STRING_BYTES", 7):
+                with self.subTest(operation=operation), self.assertRaises((TypeError, UnsafePayloadError)):
+                    operation(payload)
+            self.assertLessEqual(payload.reads, 2)
+
     def test_package_root_exports_capability_and_error_detail_vocabulary(self):
         self.assertIs(workflow_kernel.PreparedState, workflow_kernel.state.PreparedState)
         self.assertIs(workflow_kernel.ErrorDetailKey, schema.ErrorDetailKey)
@@ -183,6 +251,59 @@ class SchemaTests(unittest.TestCase):
             with self.assertRaises(KernelError):
                 StateStore("unused.json").prepare(state)
         self.assertLessEqual(guarded.reads, 1)
+
+    def test_node_text_budget_and_mapping_projection_are_single_pass(self):
+        shared = "abcd"
+        with mock.patch.object(schema, "MAX_TOTAL_STRING_BYTES", 7), \
+                self.assertRaises(InvalidSchemaError):
+            NodeState("n", dependencies=[shared, shared])
+
+        data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+        data["nodes"] = {
+            "node-1": {
+                "node_id": "node-1", "status": "pending",
+                "dependencies": [], "evidence": ["proof.json"],
+            },
+        }
+        with mock.patch.object(schema, "_string_tuple", wraps=schema._string_tuple) as validate:
+            parsed = RunState.from_dict(data)
+        dependency_calls = [
+            call for call in validate.call_args_list
+            if len(call.args) > 1 and call.args[1] == "dependencies"
+        ]
+        node_evidence_calls = [
+            call for call in validate.call_args_list
+            if call.args and call.args[0] == ["proof.json"]
+        ]
+        self.assertEqual(len(dependency_calls), 1)
+        self.assertEqual(len(node_evidence_calls), 1)
+        self.assertEqual(parsed.nodes["node-1"].evidence, ("proof.json",))
+
+    def test_parsed_node_keys_consume_text_budget_before_retention(self):
+        class GuardedNodes(Mapping):
+            def __init__(self):
+                self.reads = 0
+
+            def __iter__(self):
+                return iter(("aaaa", "bbbb", "cccc"))
+
+            def __len__(self):
+                return 3
+
+            def __getitem__(self, key):
+                self.reads += 1
+                return {
+                    "node_id": key, "status": "pending",
+                    "dependencies": [], "evidence": [],
+                }
+
+        data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+        nodes = GuardedNodes()
+        data["nodes"] = nodes
+        with mock.patch.object(schema, "MAX_TOTAL_STRING_BYTES", 7), \
+                self.assertRaises(InvalidSchemaError):
+            RunState.from_dict(data)
+        self.assertLessEqual(nodes.reads, 1)
 
     def test_new_state_defaults_to_shadow(self):
         state = RunState.new("run-1", "2026-07-14T00:00:00Z")
@@ -539,7 +660,7 @@ class SchemaTests(unittest.TestCase):
         encoded = json.dumps(error.to_dict(), sort_keys=True)
         self.assertNotIn(sentinel, encoded)
         self.assertNotIn("forged-field", encoded)
-        self.assertIn(detail_key_digest(sentinel), error.details)
+        self.assertEqual(error.details, {"detail": "[UNSAFE]"})
 
     def test_all_receipt_paths_share_the_public_metadata_policy(self):
         fixture = "never-print-this-fixture"

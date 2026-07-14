@@ -11,7 +11,8 @@ from pathlib import Path
 
 from ._files import (
     LockContentionError, LockHandle, LockIdentityError, LockingUnsupportedError,
-    canonical_path, open_verified_regular, verified_regular_exists,
+    bind_durable_path, open_verified_regular, require_descriptor_path_identity,
+    verified_regular_exists,
 )
 from .schema import (
     CorruptStateError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
@@ -43,7 +44,10 @@ def _capability_types():
             record["handle"] = None
             record["owner_pid"] = None
             record["finalizer"] = None
-        handle.release()
+        try:
+            handle.release()
+        except OSError:
+            pass
 
     class PreparedState:
         """Opaque identity capability issued and owned by one StateStore."""
@@ -64,10 +68,18 @@ def _capability_types():
         def __init__(self, state_path):
             if self in lease_records:
                 raise TypeError("RunLease is already initialized")
-            state_path = canonical_path(Path(state_path))
+            requested = Path(state_path)
+            try:
+                binding = bind_durable_path(requested)
+            except OSError:
+                raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(requested),
+                }) from None
+            state_path = binding.path
             lease_records[self] = {
                 "state_path": state_path,
                 "path": state_path.with_name(state_path.name + ".lease"),
+                "binding": binding,
                 "handle": None,
                 "owner_pid": None,
                 "finalizer": None,
@@ -93,7 +105,10 @@ def _capability_types():
                     ErrorDetailKey.PATH.value: str(record["path"]),
                 })
             try:
+                record["binding"].revalidate_parent()
                 record["path"].parent.mkdir(parents=True, exist_ok=True)
+                if record["binding"].parent_identity is None:
+                    record["binding"] = bind_durable_path(record["state_path"])
                 handle = LockHandle.acquire(record["path"])
             except LockingUnsupportedError:
                 raise LeaseConflictError(ErrorMessage.RUN_LOCKING_UNAVAILABLE, {
@@ -139,9 +154,13 @@ def _capability_types():
             finalizer = record["finalizer"]
             record["finalizer"] = None
             if finalizer is not None and finalizer.alive:
-                finalizer()
-            else:
+                finalizer.detach()
+            try:
                 handle.release()
+            except OSError:
+                raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(record["path"]),
+                }) from None
 
         def __enter__(self):
             return self.acquire()
@@ -152,7 +171,10 @@ def _capability_types():
 
     def require_run_lease(lease, state_path) -> None:
         """Non-dispatching authorization for one exact live lease capability."""
-        canonical = canonical_path(Path(state_path))
+        try:
+            canonical = bind_durable_path(Path(state_path)).path
+        except OSError:
+            raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE) from None
         if type(lease) is not RunLease:
             raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {
                 ErrorDetailKey.PATH.value: str(canonical),
@@ -183,8 +205,16 @@ def _capability_types():
         def __init__(self, path):
             if self in store_records:
                 raise TypeError("StateStore is already initialized")
+            requested = Path(path)
+            try:
+                binding = bind_durable_path(requested)
+            except OSError:
+                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(requested),
+                }) from None
             store_records[self] = {
-                "path": canonical_path(Path(path)),
+                "path": binding.path,
+                "binding": binding,
                 "prepared": weakref.WeakKeyDictionary(),
             }
 
@@ -196,8 +226,10 @@ def _capability_types():
             return store_records[self]["path"]
 
         def load(self) -> RunState:
-            path = store_records[self]["path"]
+            record = store_records[self]
+            path = record["path"]
             try:
+                record["binding"].revalidate_parent()
                 descriptor = open_verified_regular(path, os.O_RDONLY)
             except FileNotFoundError:
                 raise
@@ -205,6 +237,7 @@ def _capability_types():
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
+            failure = None
             try:
                 if os.fstat(descriptor).st_size > MAX_STATE_BYTES:
                     raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
@@ -224,15 +257,31 @@ def _capability_types():
                         ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
                     })
                 data = json.loads(raw_bytes.decode("utf-8"))
-                return RunState.from_dict(data)
+                result = RunState.from_dict(data)
+                record["binding"].revalidate_parent()
+                require_descriptor_path_identity(descriptor, path)
+                return result
             except CorruptStateError:
+                failure = True
                 raise
             except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError):
+                failure = True
                 raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
+            except OSError:
+                failure = True
+                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
             finally:
-                os.close(descriptor)
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    if failure is None:
+                        raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(path),
+                        }) from None
 
         def write(self, state: RunState, expected_revision: int, *, lease: RunLease = None) -> dict:
             prepared = self.prepare(state)
@@ -257,6 +306,7 @@ def _capability_types():
                     ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                 })
             try:
+                record["binding"].revalidate_parent()
                 exists = verified_regular_exists(record["path"])
             except OSError:
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
@@ -280,8 +330,14 @@ def _capability_types():
                 })
 
             path = record["path"]
+            descriptor = None
+            temporary = None
+            failure = None
             try:
+                record["binding"].revalidate_parent()
                 path.parent.mkdir(parents=True, exist_ok=True)
+                if record["binding"].parent_identity is None:
+                    record["binding"] = bind_durable_path(path)
                 descriptor, temporary = tempfile.mkstemp(
                     prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent),
                 )
@@ -290,27 +346,43 @@ def _capability_types():
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
             try:
-                with os.fdopen(descriptor, "wb") as handle:
+                with os.fdopen(descriptor, "wb", closefd=False) as handle:
                     handle.write(encoded)
                     handle.flush()
                     os.fsync(handle.fileno())
+                require_descriptor_path_identity(descriptor, Path(temporary))
                 require_run_lease(lease, path)
                 os.replace(temporary, path)
                 directory_fsync = self._fsync_directory()
+                record["binding"].revalidate_parent()
+                require_descriptor_path_identity(descriptor, path)
             except OSError:
+                failure = True
                 try:
-                    os.unlink(temporary)
+                    if temporary is not None:
+                        os.unlink(temporary)
                 except OSError:
                     pass
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
             except Exception:
+                failure = True
                 try:
-                    os.unlink(temporary)
+                    if temporary is not None:
+                        os.unlink(temporary)
                 except OSError:
                     pass
                 raise
+            finally:
+                if descriptor is not None:
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        if failure is None:
+                            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                                ErrorDetailKey.PATH.value: str(path),
+                            }) from None
             return {"state_path": str(path), "revision": revision,
                     "directory_fsync": directory_fsync}
 

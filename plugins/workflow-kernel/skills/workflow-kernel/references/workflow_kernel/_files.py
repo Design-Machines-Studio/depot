@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import os
 import stat
+from dataclasses import dataclass
 from pathlib import Path
 
 try:
@@ -32,6 +33,38 @@ class LockIdentityError(UnsafeFileError):
 def canonical_path(path: Path) -> Path:
     """Return one absolute lexical path without resolving symbolic links."""
     return Path(os.path.abspath(str(path)))
+
+
+@dataclass(frozen=True)
+class DurablePathBinding:
+    """Physical parent binding for one lexical durable-file name."""
+
+    path: Path
+    parent_identity: object
+
+    def revalidate_parent(self) -> None:
+        if self.parent_identity is None:
+            return
+        parent = os.lstat(str(self.path.parent))
+        if (not stat.S_ISDIR(parent.st_mode)
+                or (parent.st_dev, parent.st_ino) != self.parent_identity):
+            raise UnsafeFileError(errno.ESTALE, "durable parent identity changed")
+
+
+def bind_durable_path(path: Path) -> DurablePathBinding:
+    """Resolve an existing parent without following the final durable-file name."""
+    lexical = canonical_path(Path(path))
+    parent = Path(os.path.realpath(str(lexical.parent)))
+    bound = parent / lexical.name
+    try:
+        opened_parent = os.lstat(str(parent))
+    except (FileNotFoundError, NotADirectoryError):
+        identity = None
+    else:
+        if not stat.S_ISDIR(opened_parent.st_mode):
+            raise UnsafeFileError(errno.ENOTDIR, "durable parent is not a directory")
+        identity = (opened_parent.st_dev, opened_parent.st_ino)
+    return DurablePathBinding(bound, identity)
 
 
 def _require_exclusive_regular(opened, entry, path: Path) -> None:
@@ -62,6 +95,13 @@ def open_verified_regular(path: Path, flags: int, mode: int = 0o600) -> int:
         os.close(directory)
 
 
+def require_descriptor_path_identity(descriptor: int, path: Path) -> None:
+    """Require an open regular descriptor to remain the exclusive named file."""
+    opened = os.fstat(descriptor)
+    entry = os.lstat(str(path))
+    _require_exclusive_regular(opened, entry, Path(path))
+
+
 class LockHandle:
     """An open lock descriptor bound to its canonical pathname and inode."""
 
@@ -79,7 +119,10 @@ class LockHandle:
         try:
             return cls(canonical, descriptor)
         except Exception:
-            os.close(descriptor)
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
             raise
 
     @classmethod
@@ -92,12 +135,18 @@ class LockHandle:
             fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             handle._locked = True
         except (BlockingIOError, OSError) as exc:
-            handle.close()
+            try:
+                handle.close()
+            except OSError:
+                pass
             raise LockContentionError(errno.EWOULDBLOCK, "lock is already held", str(handle.path)) from exc
         try:
             handle.revalidate()
         except OSError as exc:
-            handle.release()
+            try:
+                handle.release()
+            except OSError:
+                pass
             raise LockIdentityError(errno.ESTALE, "lock path identity changed", str(handle.path)) from exc
         return handle
 
@@ -127,12 +176,20 @@ class LockHandle:
         """Unlock and close without unlinking the persistent lock pathname."""
         if self._descriptor is None:
             return
+        failure = None
         try:
             if self._locked:
                 fcntl.flock(self._descriptor, fcntl.LOCK_UN)
                 self._locked = False
+        except BaseException as exc:
+            failure = exc
+            raise
         finally:
-            self.close()
+            try:
+                self.close()
+            except OSError:
+                if failure is None:
+                    raise
 
 
 def verified_regular_exists(path: Path) -> bool:

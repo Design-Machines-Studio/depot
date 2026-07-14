@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import weakref
 from pathlib import Path
 from typing import List, Tuple
 
 from ._files import (
-    LockContentionError, LockHandle, LockIdentityError, LockingUnsupportedError,
-    canonical_path, open_verified_regular,
+    LockContentionError, LockHandle, LockIdentityError,
+    LockingUnsupportedError, bind_durable_path, open_verified_regular,
+    require_descriptor_path_identity,
 )
 from .redaction import redact
 from .schema import (
@@ -48,11 +50,19 @@ def _event_store_type():
         def __init__(self, run_root):
             if self in records:
                 raise TypeError("EventStore is already initialized")
-            root = canonical_path(Path(run_root))
-            path = root / "events.jsonl"
+            requested = Path(run_root) / "events.jsonl"
+            try:
+                binding = bind_durable_path(requested)
+            except OSError:
+                raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(requested),
+                }) from None
+            root = binding.path.parent
+            path = binding.path
             records[self] = {
                 "root": root,
                 "path": path,
+                "binding": binding,
                 "state_path": root / "run-state.json",
                 "lock_path": path.with_name(path.name + ".lock"),
             }
@@ -79,7 +89,10 @@ def _event_store_type():
         def _acquire(self) -> LockHandle:
             record = records[self]
             try:
+                record["binding"].revalidate_parent()
                 record["path"].parent.mkdir(parents=True, exist_ok=True)
+                if record["binding"].parent_identity is None:
+                    record["binding"] = bind_durable_path(record["path"])
                 return LockHandle.acquire(record["lock_path"])
             except LockingUnsupportedError:
                 raise SequenceConflictError(ErrorMessage.EVENT_LOCKING_UNAVAILABLE, {
@@ -99,9 +112,6 @@ def _event_store_type():
                     ErrorDetailKey.PATH.value: str(record["path"]),
                 }) from None
 
-        def _release(self, handle: LockHandle) -> None:
-            handle.release()
-
         def _require_current_lock(self, handle: LockHandle) -> None:
             record = records[self]
             try:
@@ -111,6 +121,37 @@ def _event_store_type():
                     ErrorDetailKey.PATH.value: str(record["lock_path"]),
                     ErrorDetailKey.REASON_CODE.value: "lock_identity_changed",
                 }) from None
+
+        def _read_descriptor(self, descriptor: int, *, recovery: bool,
+                             path: Path, duplicate: bool):
+            read_descriptor = None
+            try:
+                read_descriptor = os.dup(descriptor) if duplicate else descriptor
+                handle = os.fdopen(read_descriptor, "rb")
+                read_descriptor = None
+            except OSError:
+                if read_descriptor is not None:
+                    try:
+                        os.close(read_descriptor)
+                    except OSError:
+                        pass
+                raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
+            failure = None
+            try:
+                return self._validate_handle(handle, recovery, path=path)
+            except BaseException as exc:
+                failure = exc
+                raise
+            finally:
+                try:
+                    handle.close()
+                except OSError:
+                    if failure is None:
+                        raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(path),
+                        }) from None
 
         def append(self, event: WorkflowEvent, expected_sequence: int, *, lease: RunLease) -> None:
             record = records[self]
@@ -125,6 +166,7 @@ def _event_store_type():
                     ErrorDetailKey.LIMIT_BYTES.value: MAX_RECORD_BYTES,
                 })
             lock = self._acquire()
+            lock_failure = None
             try:
                 self._require_current_lock(lock)
                 try:
@@ -136,8 +178,9 @@ def _event_store_type():
                         ErrorDetailKey.PATH.value: str(record["path"]),
                     }) from None
                 try:
-                    with os.fdopen(os.dup(descriptor), "rb") as handle:
-                        events, _ = self._validate_handle(handle, recovery=False)
+                    events, _ = self._read_descriptor(
+                        descriptor, recovery=False, path=record["path"], duplicate=True,
+                    )
                     actual = len(events)
                     if expected_sequence != actual or event_snapshot.sequence != actual:
                         raise SequenceConflictError(ErrorMessage.EVENT_SEQUENCE_LEDGER_MISMATCH, {
@@ -155,22 +198,47 @@ def _event_store_type():
                         })
                     self._require_current_lock(lock)
                     _require_run_lease(lease, record["state_path"])
+                    record["binding"].revalidate_parent()
+                    require_descriptor_path_identity(descriptor, record["path"])
                     written = 0
                     while written < len(data):
                         written += os.write(descriptor, data[written:])
                     os.fsync(descriptor)
+                    require_descriptor_path_identity(descriptor, record["path"])
+                except OSError:
+                    raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                        ErrorDetailKey.PATH.value: str(record["path"]),
+                    }) from None
                 finally:
-                    os.close(descriptor)
+                    descriptor_failure = sys.exc_info()[0] is not None
+                    try:
+                        os.close(descriptor)
+                    except OSError:
+                        if not descriptor_failure:
+                            raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                                ErrorDetailKey.PATH.value: str(record["path"]),
+                            }) from None
+            except BaseException as exc:
+                lock_failure = exc
+                raise
             finally:
-                self._release(lock)
+                try:
+                    lock.release()
+                except OSError:
+                    if lock_failure is None:
+                        raise SequenceConflictError(ErrorMessage.EVENT_LOCK_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(record["path"]),
+                        }) from None
 
         def replay(self) -> Tuple[WorkflowEvent, ...]:
             events, _ = self.validate(recovery=False)
             return events
 
         def validate(self, recovery: bool = False):
-            path = records[self]["path"]
+            record = records[self]
+            path = record["path"]
             try:
+                record["binding"].revalidate_parent()
                 descriptor = open_verified_regular(path, os.O_RDONLY)
             except FileNotFoundError:
                 return (), ()
@@ -178,10 +246,19 @@ def _event_store_type():
                 raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
-            with os.fdopen(descriptor, "rb") as handle:
-                return self._validate_handle(handle, recovery)
+            return self._read_descriptor(
+                descriptor, recovery=recovery, path=path, duplicate=False,
+            )
 
-        def _validate_handle(self, handle, recovery: bool):
+        def _validate_handle(self, handle, recovery: bool, *, path=None):
+            try:
+                return self._validate_handle_unchecked(handle, recovery, path=path)
+            except OSError:
+                raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path or records[self]["path"]),
+                }) from None
+
+        def _validate_handle_unchecked(self, handle, recovery: bool, *, path=None):
             size = os.fstat(handle.fileno()).st_size
             if size > MAX_LEDGER_BYTES:
                 raise CorruptEventError(ErrorMessage.LEDGER_SIZE_LIMIT, {
@@ -239,6 +316,9 @@ def _event_store_type():
                 offset += len(line)
                 index += 1
                 line = next_line
+            if path is not None:
+                records[self]["binding"].revalidate_parent()
+                require_descriptor_path_identity(handle.fileno(), path)
             return tuple(events), tuple(notes)
 
     return EventStore

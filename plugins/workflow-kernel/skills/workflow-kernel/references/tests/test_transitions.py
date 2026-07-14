@@ -6,7 +6,7 @@ from unittest import mock
 from tests import detail_digest
 from workflow_kernel import transitions
 from workflow_kernel.schema import (
-    IllegalTransitionError, MissingEvidenceError, NodeState, NodeStatus,
+    IllegalTransitionError, KernelError, MissingEvidenceError, NodeState, NodeStatus,
     RunState, RunStatus, UnsafePayloadError, WorkflowEvent,
 )
 from workflow_kernel.transitions import TransitionEngine
@@ -45,6 +45,32 @@ class TransitionTests(unittest.TestCase):
             self.engine.apply(object(), event(0, "run.initialized"))
         with self.assertRaises(UnsafePayloadError):
             self.engine.apply(state, object())
+
+    def test_reducer_snapshots_mutated_exact_values_before_dispatch(self):
+        base = RunState.new("run-1", NOW)
+        mutations = (
+            ("event-kind", base, event(0, "run.initialized"), "kind", object()),
+            ("event-run", base, event(0, "run.initialized"), "run_id", object()),
+            ("event-node", base, event(0, "run.initialized"), "node_id", object()),
+            ("state-run", base, event(0, "run.initialized"), "run_id", object()),
+            ("state-status", base, event(0, "run.initialized"), "status", object()),
+            ("state-graph", base, event(0, "run.initialized"), "nodes", {"n": object()}),
+        )
+        for name, state, candidate, field, value in mutations:
+            target = candidate if name.startswith("event") else state
+            object.__setattr__(target, field, value)
+            with self.subTest(name=name), self.assertRaises(KernelError):
+                self.engine.apply(state, candidate)
+            object.__setattr__(target, field, getattr(
+                event(0, "run.initialized") if name.startswith("event") else RunState.new("run-1", NOW),
+                field,
+            ))
+
+    def test_reconstruct_snapshots_first_event_before_initialization_checks(self):
+        candidate = event(0, "run.initialized")
+        object.__setattr__(candidate, "kind", object())
+        with self.assertRaises(KernelError):
+            self.engine.reconstruct((candidate,))
 
     def test_reconstruct_stops_streaming_at_explicit_event_bound(self):
         reads = 0
@@ -99,7 +125,7 @@ class TransitionTests(unittest.TestCase):
         object.__setattr__(state, "nodes", MappingProxyType({
             "b": NodeState("b", dependencies=("missing",)),
         }))
-        with self.assertRaises(IllegalTransitionError):
+        with self.assertRaises(KernelError):
             self.engine.apply(state, event(2, "node.ready", node_id="b"))
 
     def test_aggregate_evidence_limit_accepts_boundary_and_rejects_overflow(self):
