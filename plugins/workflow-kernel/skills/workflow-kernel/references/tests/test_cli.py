@@ -134,11 +134,42 @@ class CliTests(unittest.TestCase):
         states.load.return_value = materialized
         args = SimpleNamespace(directory="unused", recovery=False)
         with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
+                mock.patch("workflow_kernel.cli._coordinated_run", return_value=mock.MagicMock()), \
                 mock.patch("workflow_kernel.cli.TransitionEngine") as engine:
             engine.return_value.reconstruct.return_value = reconstructed
             with self.assertRaises(InvalidSchemaError):
                 command_validate(args)
         states.load.assert_called_once_with()
+
+    def test_validate_holds_run_lease_across_ledger_and_state_observation(self):
+        active = {"lease": False}
+
+        class Lease:
+            def __enter__(self):
+                active["lease"] = True
+                return self
+
+            def __exit__(self, *_):
+                active["lease"] = False
+
+        def observed(value):
+            if not active["lease"]:
+                raise AssertionError("validation observed outside run lease")
+            return value
+
+        reconstructed = SimpleNamespace(revision=1)
+        events = mock.Mock()
+        events.validate.side_effect = lambda **_: observed(((object(),), ()))
+        states = mock.Mock()
+        states.path.exists.side_effect = lambda: observed(True)
+        states.load.side_effect = lambda: observed(reconstructed)
+        with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
+                mock.patch("workflow_kernel.cli.RunLease", return_value=Lease()), \
+                mock.patch("workflow_kernel.cli.TransitionEngine") as engine, \
+                mock.patch("workflow_kernel.cli._emit"):
+            engine.return_value.reconstruct.return_value = reconstructed
+            self.assertEqual(command_validate(SimpleNamespace(directory="unused", recovery=False)), 0)
+        self.assertFalse(active["lease"])
 
     def test_documented_cache_resolver_is_quiet_with_only_codex_cache(self):
         skill = Path(__file__).parents[2] / "SKILL.md"

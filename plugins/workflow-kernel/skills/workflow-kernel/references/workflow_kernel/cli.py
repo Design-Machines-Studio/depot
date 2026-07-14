@@ -30,7 +30,7 @@ class KernelArgumentParser(argparse.ArgumentParser):
 def _paths(directory):
     root = Path(directory)
     states = StateStore(root / "run-state.json")
-    return root, EventStore(root / "events.jsonl", states.path), states
+    return root, EventStore(root), states
 
 
 def _emit(value, stream=sys.stdout):
@@ -63,17 +63,18 @@ def command_init(args):
 
 def command_validate(args):
     _, events, states = _paths(args.directory)
-    replayed, notes = events.validate(recovery=args.recovery)
-    if not replayed:
-        raise CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING)
-    state = TransitionEngine().reconstruct(replayed)
-    if states.path.exists():
-        materialized = states.load()
-        if materialized != state:
-            raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
-                ErrorDetailKey.MATERIALIZED_REVISION.value: materialized.revision,
-                ErrorDetailKey.LEDGER_REVISION.value: state.revision,
-            })
+    with _coordinated_run(states):
+        replayed, notes = events.validate(recovery=args.recovery)
+        if not replayed:
+            raise CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING)
+        state = TransitionEngine().reconstruct(replayed)
+        if states.path.exists():
+            materialized = states.load()
+            if materialized != state:
+                raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
+                    ErrorDetailKey.MATERIALIZED_REVISION.value: materialized.revision,
+                    ErrorDetailKey.LEDGER_REVISION.value: state.revision,
+                })
     _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
     return 0
 
@@ -84,7 +85,7 @@ def command_append(args):
         data = json.loads(args.event)
     except json.JSONDecodeError as exc:
         raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {ErrorDetailKey.OFFSET.value: exc.pos}) from None
-    except RecursionError as exc:
+    except RecursionError:
         raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {
             ErrorDetailKey.REASON_CODE.value: "recursion_limit",
         }) from None

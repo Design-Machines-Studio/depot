@@ -6,11 +6,14 @@ from dataclasses import replace
 from types import MappingProxyType
 from typing import Iterable, Mapping, Tuple
 
+from .redaction import MAX_PAYLOAD_ITEMS, bounded_iterable
 from .schema import (
     ErrorDetailKey, ErrorMessage, IllegalTransitionError, MissingEvidenceError, NodeState,
     NodeStatus, MAX_EVIDENCE_ITEMS, RunMode, RunState, RunStatus,
-    SequenceConflictError, WorkflowEvent,
+    SequenceConflictError, UnsafePayloadError, WorkflowEvent,
 )
+
+MAX_EVENT_ITEMS = 100_000
 
 
 TERMINAL_RUN = frozenset({RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.BLOCKED,
@@ -44,9 +47,22 @@ LEGAL_NODE_SOURCES = {
 
 def _strings(payload: Mapping[str, object], key: str, *, required: bool = False) -> Tuple[str, ...]:
     value = payload.get(key, [])
-    if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) or not item for item in value):
+    if not isinstance(value, (list, tuple)):
         raise IllegalTransitionError(ErrorMessage.EVENT_PAYLOAD_STRING_LIST, {ErrorDetailKey.FIELD.value: key})
-    result = tuple(value)
+    limit = MAX_EVIDENCE_ITEMS if key == "evidence" else MAX_PAYLOAD_ITEMS
+    result = []
+    try:
+        for item in bounded_iterable(value, max_items=limit):
+            if not isinstance(item, str) or not item:
+                raise IllegalTransitionError(
+                    ErrorMessage.EVENT_PAYLOAD_STRING_LIST, {ErrorDetailKey.FIELD.value: key},
+                )
+            result.append(item)
+    except TypeError:
+        raise IllegalTransitionError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
+            ErrorDetailKey.LIMIT_ITEMS.value: limit,
+        }) from None
+    result = tuple(result)
     if required and not result:
         raise MissingEvidenceError(ErrorMessage.TRANSITION_EVIDENCE_REQUIRED, {ErrorDetailKey.FIELD.value: key})
     return result
@@ -79,6 +95,8 @@ def _merge_evidence(state: RunState, current: Tuple[str, ...], refs: Tuple[str, 
 
 class TransitionEngine:
     def apply(self, state: RunState, event: WorkflowEvent) -> RunState:
+        if type(state) is not RunState or type(event) is not WorkflowEvent:
+            raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE)
         if event.run_id != state.run_id:
             raise IllegalTransitionError(ErrorMessage.EVENT_RUN_ID_STATE_MISMATCH, {ErrorDetailKey.KIND.value: event.kind})
         if event.sequence != state.revision:
@@ -108,7 +126,7 @@ class TransitionEngine:
             mode_value = event.payload.get("mode", state.mode.value)
             try:
                 mode = RunMode(mode_value)
-            except (ValueError, TypeError) as exc:
+            except (ValueError, TypeError):
                 raise IllegalTransitionError(ErrorMessage.EVENT_UNKNOWN_RUN_MODE, {ErrorDetailKey.MODE.value: mode_value}) from None
             return self._advance(state, event, mode=mode)
         if event.kind == "run.started":
@@ -152,7 +170,7 @@ class TransitionEngine:
                 dependencies_succeeded = all(
                     nodes[item].status == NodeStatus.SUCCEEDED for item in node.dependencies
                 )
-            except KeyError as exc:
+            except KeyError:
                 raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_MISSING, {
                     ErrorDetailKey.REASON_CODE.value: "missing_dependency",
                 }) from None
@@ -181,15 +199,31 @@ class TransitionEngine:
         return self._advance(state, event, evidence=evidence, cleanup_reconciled=True)
 
     def reconstruct(self, events: Iterable[WorkflowEvent]) -> RunState:
-        sequence = tuple(events)
-        if not sequence:
+        try:
+            sequence = bounded_iterable(events, max_items=MAX_EVENT_ITEMS)
+            first = next(sequence)
+        except StopIteration:
             raise IllegalTransitionError(ErrorMessage.EMPTY_RECONSTRUCTION)
-        first = sequence[0]
+        except (TypeError, RecursionError):
+            raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
+                ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVENT_ITEMS,
+            }) from None
+        if type(first) is not WorkflowEvent:
+            raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA)
         if first.sequence != 0 or first.kind != "run.initialized":
             raise IllegalTransitionError(ErrorMessage.FIRST_EVENT_INITIALIZE, {
                 ErrorDetailKey.KIND.value: first.kind, ErrorDetailKey.SEQUENCE.value: first.sequence,
             })
         state = RunState.new(first.run_id, first.occurred_at)
-        for event in sequence:
+        state = self.apply(state, first)
+        while True:
+            try:
+                event = next(sequence)
+            except StopIteration:
+                break
+            except (TypeError, RecursionError):
+                raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
+                    ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVENT_ITEMS,
+                }) from None
             state = self.apply(state, event)
         return state

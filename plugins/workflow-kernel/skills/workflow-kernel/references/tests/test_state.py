@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 from dataclasses import replace
 from unittest import mock
@@ -25,6 +26,7 @@ class StateStoreTests(unittest.TestCase):
             self.assertFalse(hasattr(prepared, "__dict__"))
             self.assertFalse(hasattr(prepared, "state"))
             self.assertFalse(hasattr(prepared, "encoded"))
+            self.assertFalse(hasattr(store, "_prepared"))
             for name, value in (("state", replace(state, revision=99)),
                                 ("encoded", b"corrupt\n"),
                                 ("_state", replace(state, revision=99)),
@@ -34,6 +36,56 @@ class StateStoreTests(unittest.TestCase):
             with RunLease(path) as lease:
                 store.publish(prepared, -1, lease=lease)
             self.assertEqual(store.load(), state)
+
+    def test_prepared_state_captures_revision_and_bytes_before_caller_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            prepared = store.prepare(state)
+            object.__setattr__(state, "revision", 99)
+            object.__setattr__(state, "run_id", "mutated-after-prepare")
+            with RunLease(path) as lease:
+                evidence = store.publish(prepared, -1, lease=lease)
+            self.assertEqual(evidence["revision"], 0)
+            self.assertEqual(store.load().revision, 0)
+            self.assertEqual(store.load().run_id, "run-1")
+
+    def test_run_lease_and_state_store_capabilities_cannot_be_retargeted_or_shadowed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "first.json"
+            second = Path(directory) / "second.json"
+            store = StateStore(first)
+            lease = RunLease(first).acquire()
+            try:
+                for target, name, value in (
+                    (lease, "state_path", second),
+                    (lease, "path", second.with_suffix(".lease")),
+                    (lease, "require_authorized", lambda *_: None),
+                    (lease, "_handle", object()),
+                    (store, "path", second),
+                    (store, "_prepared", {}),
+                ):
+                    with self.subTest(name=name), self.assertRaises((AttributeError, TypeError)):
+                        object.__setattr__(target, name, value)
+                with self.assertRaises(TypeError):
+                    RunLease.__init__(lease, second)
+                with self.assertRaises(TypeError):
+                    StateStore.__init__(store, second)
+                with self.assertRaises(TypeError):
+                    class ForgedLease(RunLease):
+                        pass
+                with self.assertRaises(TypeError):
+                    class ForgedStore(StateStore):
+                        pass
+                with self.assertRaises(LeaseConflictError):
+                    StateStore(second).write(
+                        RunState.new("run-1", "2026-07-14T00:00:00Z"), -1, lease=lease,
+                    )
+                store.write(RunState.new("run-1", "2026-07-14T00:00:00Z"), -1, lease=lease)
+            finally:
+                lease.release()
+            self.assertFalse(second.exists())
 
     def test_unissued_prepared_state_cannot_publish(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -64,7 +116,7 @@ class StateStoreTests(unittest.TestCase):
             try:
                 os.chdir(first)
                 states = StateStore("run-state.json")
-                events = EventStore("events.jsonl", states.path)
+                events = EventStore(".")
                 canonical_first = Path(first).resolve()
                 self.assertEqual(events.path, canonical_first / "events.jsonl")
                 self.assertEqual(states.path, canonical_first / "run-state.json")
@@ -115,13 +167,12 @@ class StateStoreTests(unittest.TestCase):
             second = RunLease(path).acquire()
             try:
                 with self.assertRaises(LeaseConflictError) as raised:
-                    first.require_authorized(path)
+                    StateStore(path).write(state, -1, lease=first)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lease_identity_changed"))
                 self.assertFalse(path.exists())
                 StateStore(path).write(state, -1, lease=second)
             finally:
                 first.release()
-                second.require_authorized(path)
                 second.release()
 
     def test_replaced_live_lease_cannot_authorize_alongside_replacement(self):
@@ -135,13 +186,12 @@ class StateStoreTests(unittest.TestCase):
             second = RunLease(path).acquire()
             try:
                 with self.assertRaises(LeaseConflictError) as raised:
-                    first.require_authorized(path)
+                    StateStore(path).write(state, -1, lease=first)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lease_identity_changed"))
                 self.assertFalse(path.exists())
                 StateStore(path).write(state, -1, lease=second)
             finally:
                 first.release()
-                second.require_authorized(path)
                 second.release()
 
     def test_write_returns_durability_evidence(self):
@@ -209,6 +259,23 @@ class StateStoreTests(unittest.TestCase):
             with self.assertRaises(LeaseConflictError):
                 RunLease(state_path).acquire()
             self.assertEqual(lease_victim.read_bytes(), before_lease)
+
+    def test_state_and_lease_rejections_do_not_retain_raw_path_causes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sentinel = "never-persist-state-path"
+            state_path = root / sentinel
+            state_path.symlink_to(root / "missing")
+            state_path.with_name(state_path.name + ".lease").symlink_to(root / "missing-lease")
+            for reject in (lambda: StateStore(state_path).load(),
+                           lambda: RunLease(state_path).acquire()):
+                with self.subTest(reject=reject), self.assertRaises((CorruptStateError, LeaseConflictError)) as raised:
+                    reject()
+                rendered = "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                ))
+                self.assertIsNone(raised.exception.__cause__)
+                self.assertNotIn(sentinel, rendered)
 
     def test_oversize_state_is_rejected_before_parsing(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -55,14 +55,17 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 ## Public API and Contracts
 
-- Construct immutable `WorkflowEvent`, `NodeState`, and `RunState` schema
-  objects. Direct Python construction follows normal signature semantics, so
+- Construct exact, final, immutable `WorkflowEvent`, `NodeState`, and `RunState`
+  schema objects. Durable writers, receipt factories, and reducers reject
+  substitutes instead of dispatching virtual serializers. Direct Python
+  construction follows normal signature semantics, so
   missing or extra positional arguments raise Python `TypeError`. Use
   `from_dict()` as the boundary for untrusted mappings; unknown fields, enums,
   versions, unsafe references, and invalid JSON shapes then fail with a stable
   `KernelError.code`.
-- Construct `EventStore(event_path, state_path)` so ledger mutation is bound to
-  the run's materialized-state lease. Use
+- Construct `EventStore(run_root)`; it derives only `<run_root>/events.jsonl`
+  and `<run_root>/run-state.json`, so callers cannot pair paths from different
+  runs. Use
   `EventStore.append(event, expected_sequence, lease=same_run_lease)` to append
   exactly the next event. The exact live `RunLease` must authorize the bound
   state path before mutation and is revalidated immediately before the write.
@@ -73,8 +76,9 @@ errors as stable JSON. Treat `--help` output as plain text.
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
   Use `StateStore.prepare(state)` before publishing an event that derives the
   state. It returns an opaque exact-type identity capability with no exposed
-  state or encoded-byte fields. The issuing store owns the authoritative
-  validated state and exact bytes in a private weak registry; pass only that
+  state or encoded-byte fields. A closure-owned weak registry keyed by the
+  exact store and capability owns only the captured revision and exact bytes;
+  it never retains or later consults the caller's `RunState`. Pass only that
   capability to `StateStore.publish(prepared, expected_revision, lease=lease)`. Preparation
   validates state bytes but does not acquire or replace the live run lease.
   Coordinated CLI append prepares before event publication while holding that
@@ -82,12 +86,17 @@ errors as stable JSON. Treat `--help` output as plain text.
   state is rejected before temporary-file creation or replacement.
 - Acquire `RunLease(state_path)` and pass that live capability to
   `StateStore.write(state, expected_revision, lease=lease)`. A lease for a
-  different path or a released lease never authorizes a write. POSIX advisory
+  different path or a released lease never authorizes a write. `RunLease` and
+  `StateStore` are final, slot-only public identities; authoritative paths,
+  handles, process ownership, and liveness remain in a closure-owned weak
+  registry. Consumers use the module-owned non-dispatching authorization path,
+  never caller-overridable instance state. POSIX advisory
   locks release on process exit, so crash residue does not become a lock. Hosts
   without POSIX `fcntl` locking fail closed with a stable conflict error; the
   kernel never falls back to crash-stale sentinel locking.
 - Hold the same run lease across authoritative ledger replay, current-state
-  observation, event append or reduction, and materialized-state publication.
+  observation, validation comparison, event append or reduction, and
+  materialized-state publication.
   Mutable lock, ledger, and state paths must be exclusive regular files; the
   kernel rejects symbolic links, hard links, and identity changes.
 - Use `TransitionEngine.apply(state, event)` for one pure transition and
@@ -95,7 +104,8 @@ errors as stable JSON. Treat `--help` output as plain text.
   sequence equals the prior state revision; each accepted event increments the
   revision by one. A run may attach at most 1,024 evidence items across run and
   node state; transitions exceeding that aggregate limit fail before state
-  reconstruction.
+  reconstruction. Reconstruction streams at most 100,000 events and never
+  eagerly exhausts a caller iterable.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
   errors. `ErrorMessage` and `ErrorCode` are the closed developer-owned enums
   for public text and machine codes; raw or unknown candidates become the
@@ -156,6 +166,11 @@ reference. It sanitizes one digest-free projection, canonically encodes that
 same projection for content addressing, adds the digest to the sanitized
 projection, then canonically encodes the complete receipt without another
 traversal.
+All public collection boundaries count before allocation: raw schema mappings,
+node mappings, error details, receipt metadata, evidence/dependency sequences,
+and reconstruction iterables stop at their declared limits without eager
+copies. Public file, state, lease, and event `KernelError` wrappers suppress raw
+OS exception causes, so rejected paths cannot reappear in formatted tracebacks.
 `transition_receipt()` sanitizes the full event through the shared
 event schema, including its arbitrary payload, and accepts `state_digest` only
 in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,

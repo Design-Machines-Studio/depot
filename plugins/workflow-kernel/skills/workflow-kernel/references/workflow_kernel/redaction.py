@@ -42,6 +42,14 @@ _CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
 _KEY_DIGEST = re.compile(r"key-sha256:[0-9a-f]{64}\Z")
 
 
+def bounded_iterable(value, *, max_items: int = MAX_PAYLOAD_ITEMS):
+    """Yield at most max_items values and fail before unbounded allocation."""
+    for index, item in enumerate(value):
+        if index >= max_items:
+            raise TypeError("input exceeds maximum item count")
+        yield item
+
+
 def is_secret_key(key: str) -> bool:
     normalized = str.replace(str.casefold(key), "-", "_")
     return any(part.replace("-", "_") in normalized for part in _SECRET_PARTS)
@@ -62,7 +70,7 @@ def normalize_evidence_reference(reference: str) -> str:
     parse_target = "https:" + reference if reference.startswith("//") else reference
     try:
         parsed = urlsplit(parse_target)
-    except ValueError as exc:
+    except ValueError:
         raise ValueError("evidence reference is invalid") from None
     if parsed.scheme:
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.hostname is None:
@@ -71,7 +79,7 @@ def normalize_evidence_reference(reference: str) -> str:
             raise ValueError("evidence reference contains URL credentials")
         try:
             parsed.port
-        except ValueError as exc:
+        except ValueError:
             raise ValueError("evidence reference contains an invalid URL port") from None
         return "url-sha256:" + hashlib.sha256(reference.encode("utf-8")).hexdigest()
     if reference.startswith("/"):
@@ -278,11 +286,14 @@ class _Traversal:
             return value
         if isinstance(value, Mapping):
             result = {}
-            for child_key, item in value.items():
+            for child_key in value:
                 if not isinstance(child_key, str):
                     raise TypeError("mapping keys must be strings")
                 if str.__len__(child_key) > self.max_string_length:
                     raise TypeError("mapping key exceeds maximum length")
+                if self.count >= self.max_items:
+                    raise TypeError("payload exceeds maximum item count")
+                item = value[child_key]
                 child_policy = None
                 if self.mapping_policy is not None:
                     normalized_key, child_policy = self.mapping_policy(child_key, schema)

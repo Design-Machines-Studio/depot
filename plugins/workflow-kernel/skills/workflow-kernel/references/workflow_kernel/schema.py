@@ -10,7 +10,7 @@ from types import MappingProxyType
 from typing import Any, Mapping, Optional, Tuple
 
 from .redaction import (
-    MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
+    MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH, bounded_iterable,
     freeze_error_details, freeze_json, normalize_durable_string, normalize_evidence_reference, redact, thaw,
     validate_durable_key,
 )
@@ -210,7 +210,9 @@ class KernelError(Exception):
         candidate_code = getattr(type(self), "_error_code", ErrorCode.KERNEL_ERROR)
         safe_code = candidate_code if isinstance(candidate_code, ErrorCode) else ErrorCode.KERNEL_ERROR
         try:
-            safe_details = freeze_error_details(dict(details or {}), known_keys=_ERROR_DETAIL_KEYS)
+            safe_details = freeze_error_details(
+                details if details is not None else {}, known_keys=_ERROR_DETAIL_KEYS,
+            )
         except (TypeError, ValueError):
             safe_details = MappingProxyType({ErrorDetailKey.DETAIL.value: "[UNSAFE]"})
         object.__setattr__(self, "_envelope", ErrorEnvelope(safe_code, safe_message, safe_details))
@@ -319,7 +321,7 @@ def _string(value: object, name: str, *, optional: bool = False) -> Optional[str
         return None
     try:
         return normalize_durable_string(text)
-    except ValueError as exc:
+    except ValueError:
         raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD.value: name}) from None
 
 
@@ -327,7 +329,7 @@ def _timestamp(value: object, name: str = "occurred_at") -> str:
     text = _validated_string(value, name)
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError as exc:
+    except ValueError:
         raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {ErrorDetailKey.FIELD.value: name}) from None
     if parsed.tzinfo is None:
         raise InvalidSchemaError(ErrorMessage.TIMESTAMP_TIMEZONE_REQUIRED, {ErrorDetailKey.FIELD.value: name})
@@ -335,16 +337,16 @@ def _timestamp(value: object, name: str = "occurred_at") -> str:
 
 
 def _only(data: Mapping[str, object], fields: set, required: set) -> None:
-    keys = tuple(data)
-    if any(not isinstance(key, str) for key in keys):
+    keys = set(data)
+    if any(type(key) is not str for key in keys):
         raise InvalidSchemaError(ErrorMessage.SCHEMA_KEYS_STRINGS)
     try:
         for key in keys:
             validate_durable_key(key)
-    except ValueError as exc:
+    except ValueError:
         raise InvalidSchemaError(ErrorMessage.SCHEMA_KEYS_UNSAFE_URI) from None
-    unknown = sorted(set(keys) - fields)
-    missing = sorted(required - set(keys))
+    unknown = sorted(keys - fields)
+    missing = sorted(required - keys)
     if unknown or missing:
         raise InvalidSchemaError(ErrorMessage.SCHEMA_FIELDS_MISMATCH, {
             ErrorDetailKey.UNKNOWN.value: unknown, ErrorDetailKey.MISSING.value: missing,
@@ -358,9 +360,25 @@ def _payload(value: object) -> Mapping[str, object]:
         safe = freeze_json(value, max_depth=MAX_PAYLOAD_DEPTH,
                            max_items=MAX_PAYLOAD_ITEMS,
                            max_string_length=MAX_STRING_LENGTH)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
     return safe
+
+
+def _bounded_mapping(value: object, required_message: ErrorMessage) -> dict:
+    if not isinstance(value, Mapping):
+        raise InvalidSchemaError(required_message)
+    result = {}
+    try:
+        for key in bounded_iterable(value, max_items=MAX_PAYLOAD_ITEMS):
+            if type(key) is not str:
+                raise InvalidSchemaError(ErrorMessage.SCHEMA_KEYS_STRINGS)
+            result[key] = value[key]
+    except InvalidSchemaError:
+        raise
+    except (KeyError, TypeError, ValueError, RecursionError):
+        raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
+    return result
 
 
 def _plain(value: object) -> object:
@@ -408,6 +426,9 @@ class WorkflowEvent:
     occurred_at: str
     payload: Mapping[str, object]
 
+    def __init_subclass__(cls, **_kwargs):
+        raise TypeError("WorkflowEvent is final")
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "schema_version", _strict_int(self.schema_version, "schema_version", minimum=1))
         if self.schema_version != SCHEMA_VERSION:
@@ -423,10 +444,9 @@ class WorkflowEvent:
 
     @classmethod
     def from_dict(cls, data: object) -> "WorkflowEvent":
-        if not isinstance(data, Mapping):
-            raise InvalidSchemaError(ErrorMessage.EVENT_MUST_BE_OBJECT)
-        _only(data, WORKFLOW_EVENT_FIELDS, WORKFLOW_EVENT_FIELDS)
-        return cls(**dict(data))
+        snapshot = _bounded_mapping(data, ErrorMessage.EVENT_MUST_BE_OBJECT)
+        _only(snapshot, WORKFLOW_EVENT_FIELDS, WORKFLOW_EVENT_FIELDS)
+        return cls(**snapshot)
 
     def to_dict(self) -> dict:
         return {field.value: _plain(getattr(self, field.value)) for field in WorkflowEventField}
@@ -439,11 +459,14 @@ class NodeState:
     dependencies: Tuple[str, ...] = ()
     evidence: Tuple[str, ...] = ()
 
+    def __init_subclass__(cls, **_kwargs):
+        raise TypeError("NodeState is final")
+
     def __post_init__(self) -> None:
         object.__setattr__(self, "node_id", _string(self.node_id, "node_id"))
         try:
             status = self.status if isinstance(self.status, NodeStatus) else NodeStatus(self.status)
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError):
             raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS.value: self.status}) from None
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "dependencies", _string_tuple(self.dependencies, "dependencies"))
@@ -451,11 +474,11 @@ class NodeState:
 
     @classmethod
     def from_dict(cls, data: object) -> "NodeState":
-        if not isinstance(data, Mapping):
-            raise InvalidSchemaError(ErrorMessage.NODE_OBJECT_REQUIRED)
+        snapshot = _bounded_mapping(data, ErrorMessage.NODE_OBJECT_REQUIRED)
         fields = {"node_id", "status", "dependencies", "evidence"}
-        _only(data, fields, fields)
-        return cls(data["node_id"], data["status"], data["dependencies"], data["evidence"])
+        _only(snapshot, fields, fields)
+        return cls(snapshot["node_id"], snapshot["status"],
+                   snapshot["dependencies"], snapshot["evidence"])
 
     def to_dict(self) -> dict:
         return {"node_id": self.node_id, "status": self.status.value,
@@ -465,11 +488,16 @@ class NodeState:
 def _string_tuple(value: object, name: str, *, references: bool = False) -> Tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         raise InvalidSchemaError(ErrorMessage.FIELD_LIST_REQUIRED, {ErrorDetailKey.FIELD.value: name})
-    result = tuple(_string(item, name) for item in value)
+    limit = MAX_EVIDENCE_ITEMS if references else MAX_PAYLOAD_ITEMS
+    try:
+        result = tuple(_string(item, name) for item in bounded_iterable(value, max_items=limit))
+    except TypeError:
+        message = ErrorMessage.EVIDENCE_ITEM_LIMIT if references else ErrorMessage.PAYLOAD_NON_JSON_SAFE
+        raise InvalidSchemaError(message, {ErrorDetailKey.LIMIT_ITEMS.value: limit}) from None
     if references:
         try:
             result = tuple(normalize_evidence_reference(item) for item in result)
-        except ValueError as exc:
+        except ValueError:
             raise UnsafePayloadError(ErrorMessage.EVIDENCE_REFERENCE_UNSAFE) from None
     if len(result) != len(set(result)):
         raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {ErrorDetailKey.FIELD.value: name})
@@ -489,6 +517,9 @@ class RunState:
     evidence: Tuple[str, ...] = ()
     cleanup_reconciled: bool = False
 
+    def __init_subclass__(cls, **_kwargs):
+        raise TypeError("RunState is final")
+
     def __post_init__(self) -> None:
         version = _strict_int(self.schema_version, "schema_version", minimum=1)
         if version != SCHEMA_VERSION:
@@ -501,7 +532,7 @@ class RunState:
         try:
             mode = self.mode if isinstance(self.mode, RunMode) else RunMode(self.mode)
             status = self.status if isinstance(self.status, RunStatus) else RunStatus(self.status)
-        except (ValueError, TypeError) as exc:
+        except (ValueError, TypeError):
             raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
                 ErrorDetailKey.MODE.value: self.mode, ErrorDetailKey.STATUS.value: self.status,
             }) from None
@@ -511,15 +542,22 @@ class RunState:
         object.__setattr__(self, "updated_at", _timestamp(self.updated_at, "updated_at"))
         if not isinstance(self.nodes, Mapping):
             raise InvalidSchemaError(ErrorMessage.NODES_OBJECT_REQUIRED)
-        nodes = dict(self.nodes)
-        if any(not isinstance(key, str) for key in nodes):
-            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_STRINGS)
+        nodes = {}
+        try:
+            for key in bounded_iterable(self.nodes, max_items=MAX_PAYLOAD_ITEMS):
+                if type(key) is not str:
+                    raise InvalidSchemaError(ErrorMessage.NODE_KEYS_STRINGS)
+                nodes[key] = self.nodes[key]
+        except InvalidSchemaError:
+            raise
+        except (KeyError, TypeError, ValueError, RecursionError):
+            raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
         try:
             for key in nodes:
                 validate_durable_key(key)
-        except ValueError as exc:
+        except ValueError:
             raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
-        if any(not isinstance(node, NodeState) or key != node.node_id
+        if any(type(node) is not NodeState or key != node.node_id
                for key, node in nodes.items()):
             raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
         _validate_dependency_graph(nodes)
@@ -541,22 +579,21 @@ class RunState:
 
     @classmethod
     def from_dict(cls, data: object) -> "RunState":
-        if not isinstance(data, Mapping):
-            raise InvalidSchemaError(ErrorMessage.STATE_OBJECT_REQUIRED)
+        snapshot = _bounded_mapping(data, ErrorMessage.STATE_OBJECT_REQUIRED)
         fields = {"schema_version", "revision", "run_id", "mode", "status", "created_at", "updated_at", "nodes", "evidence", "cleanup_reconciled"}
-        _only(data, fields, fields)
-        raw_nodes = data["nodes"]
-        if not isinstance(raw_nodes, Mapping):
-            raise InvalidSchemaError(ErrorMessage.NODES_OBJECT_REQUIRED)
+        _only(snapshot, fields, fields)
+        raw_nodes = _bounded_mapping(snapshot["nodes"], ErrorMessage.NODES_OBJECT_REQUIRED)
         nodes = {key: NodeState.from_dict(value) for key, value in raw_nodes.items()}
-        return cls(data["schema_version"], data["revision"], data["run_id"], data["mode"], data["status"],
-                   data["created_at"], data["updated_at"], MappingProxyType(nodes), data["evidence"],
-                   data["cleanup_reconciled"])
+        return cls(snapshot["schema_version"], snapshot["revision"], snapshot["run_id"],
+                   snapshot["mode"], snapshot["status"], snapshot["created_at"],
+                   snapshot["updated_at"], MappingProxyType(nodes), snapshot["evidence"],
+                   snapshot["cleanup_reconciled"])
 
     def to_dict(self) -> dict:
         return {
             "schema_version": self.schema_version, "revision": self.revision, "run_id": self.run_id,
             "mode": self.mode.value, "status": self.status.value, "created_at": self.created_at,
-            "updated_at": self.updated_at, "nodes": {key: self.nodes[key].to_dict() for key in sorted(self.nodes)},
+            "updated_at": self.updated_at,
+            "nodes": {key: NodeState.to_dict(self.nodes[key]) for key in sorted(self.nodes)},
             "evidence": list(self.evidence), "cleanup_reconciled": self.cleanup_reconciled,
         }

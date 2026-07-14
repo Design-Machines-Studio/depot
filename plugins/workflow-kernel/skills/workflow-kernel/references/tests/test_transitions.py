@@ -7,7 +7,7 @@ from tests import detail_digest
 from workflow_kernel import transitions
 from workflow_kernel.schema import (
     IllegalTransitionError, MissingEvidenceError, NodeState, NodeStatus,
-    RunState, RunStatus, WorkflowEvent,
+    RunState, RunStatus, UnsafePayloadError, WorkflowEvent,
 )
 from workflow_kernel.transitions import TransitionEngine
 
@@ -38,6 +38,32 @@ class TransitionTests(unittest.TestCase):
         self.assertEqual(state.revision, 7)
         repeated = self.engine.reconstruct(events)
         self.assertEqual(json.dumps(state.to_dict(), sort_keys=True), json.dumps(repeated.to_dict(), sort_keys=True))
+
+    def test_reducer_requires_exact_durable_schema_values(self):
+        state = RunState.new("run-1", NOW)
+        with self.assertRaises(UnsafePayloadError):
+            self.engine.apply(object(), event(0, "run.initialized"))
+        with self.assertRaises(UnsafePayloadError):
+            self.engine.apply(state, object())
+
+    def test_reconstruct_stops_streaming_at_explicit_event_bound(self):
+        reads = 0
+
+        def events():
+            nonlocal reads
+            sequence = 0
+            while True:
+                reads += 1
+                if reads > 4:
+                    raise AssertionError("event iterable was eagerly exhausted")
+                kind = "run.initialized" if sequence == 0 else "run.started"
+                yield event(sequence, kind)
+                sequence += 1
+
+        with mock.patch.object(transitions, "MAX_EVENT_ITEMS", 2):
+            with self.assertRaises(UnsafePayloadError):
+                self.engine.reconstruct(events())
+        self.assertLessEqual(reads, 3)
 
     def test_illegal_transition_and_missing_evidence(self):
         state = RunState.new("run-1", NOW)

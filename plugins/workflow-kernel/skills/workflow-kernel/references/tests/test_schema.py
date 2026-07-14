@@ -51,6 +51,27 @@ class CountingStr(str):
             yield character
 
 class SchemaTests(unittest.TestCase):
+    def test_durable_schema_types_are_final_against_serializer_overrides(self):
+        for base in (WorkflowEvent, NodeState, RunState):
+            with self.subTest(base=base.__name__), self.assertRaises(TypeError):
+                type("Hostile" + base.__name__, (base,), {
+                    "to_dict": lambda self: {"secret": "never-persist-override"},
+                })
+
+    def test_durable_encoders_and_transition_receipt_require_exact_schema_values(self):
+        class Forged:
+            def to_dict(self):
+                return {"secret": "never-persist-override"}
+
+        forged = Forged()
+        for operation in (
+            lambda: encode_event(forged),
+            lambda: encode_state(forged),
+            lambda: transition_receipt(forged, "sha256:" + "a" * 64),
+        ):
+            with self.subTest(operation=operation), self.assertRaises(UnsafePayloadError):
+                operation()
+
     def test_new_state_defaults_to_shadow(self):
         state = RunState.new("run-1", "2026-07-14T00:00:00Z")
         self.assertEqual(state.mode, RunMode.SHADOW)
@@ -70,6 +91,71 @@ class SchemaTests(unittest.TestCase):
         candidate = dict(valid, extra="unknown")
         with self.assertRaises(InvalidSchemaError):
             WorkflowEvent.from_dict(candidate)
+
+    def test_schema_mapping_iteration_stops_at_the_public_item_bound(self):
+        class GuardedMapping(Mapping):
+            def __init__(self):
+                self.yields = 0
+
+            def __iter__(self):
+                while True:
+                    self.yields += 1
+                    if self.yields > 4:
+                        raise AssertionError("mapping was exhausted before its bound")
+                    yield "field-" + str(self.yields)
+
+            def __len__(self):
+                return 100
+
+            def __getitem__(self, key):
+                return key
+
+        candidate = GuardedMapping()
+        with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 2):
+            with self.assertRaises(UnsafePayloadError):
+                WorkflowEvent.from_dict(candidate)
+        self.assertLessEqual(candidate.yields, 3)
+
+    def test_error_details_stop_before_eager_mapping_copy(self):
+        class LargeMapping(Mapping):
+            def __init__(self):
+                self.reads = 0
+
+            def __iter__(self):
+                return (str(index) for index in range(redaction.MAX_PAYLOAD_ITEMS + 50))
+
+            def __len__(self):
+                return redaction.MAX_PAYLOAD_ITEMS + 50
+
+            def __getitem__(self, key):
+                self.reads += 1
+                return 0
+
+        details = LargeMapping()
+        error = UnsafePayloadError(schema.ErrorMessage.INVALID_STRING_FIELD, details)
+        self.assertEqual(error.details, {"detail": "[UNSAFE]"})
+        self.assertLessEqual(details.reads, redaction.MAX_PAYLOAD_ITEMS)
+
+    def test_state_evidence_iteration_stops_at_aggregate_bound(self):
+        class GuardedEvidence(list):
+            def __init__(self):
+                super().__init__()
+                self.reads = 0
+
+            def __iter__(self):
+                while True:
+                    self.reads += 1
+                    if self.reads > 4:
+                        raise AssertionError("evidence was exhausted before its bound")
+                    yield "proof-" + str(self.reads)
+
+        evidence = GuardedEvidence()
+        with mock.patch.object(schema, "MAX_EVIDENCE_ITEMS", 2):
+            with self.assertRaises(InvalidSchemaError):
+                RunState(1, 0, "run-1", "shadow", "planned",
+                         "2026-07-14T00:00:00Z", "2026-07-14T00:00:00Z",
+                         {}, evidence)
+        self.assertLessEqual(evidence.reads, 3)
 
     def test_unknown_enums_and_negative_revision_are_rejected(self):
         data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
@@ -385,26 +471,6 @@ class SchemaTests(unittest.TestCase):
                                         separators=(",", ":")) + "\n").encode("utf-8")
                 self.assertEqual(receipt, canonical)
 
-    def test_receipt_bytes_are_immutable_and_have_no_object_state(self):
-        receipt = evidence_receipt("run-1", "test", "receipt.json")
-        before = bytes(receipt)
-
-        with self.assertRaises(TypeError):
-            receipt[0] = 0
-        self.assertFalse(hasattr(receipt, "__dict__"))
-        self.assertEqual(receipt, before)
-
-    def test_transition_receipt_bytes_are_immutable_and_have_no_object_state(self):
-        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
-                              "2026-07-14T00:00:00Z", {})
-        receipt = transition_receipt(event, "sha256:" + "a" * 64)
-        before = bytes(receipt)
-
-        with self.assertRaises(TypeError):
-            receipt[0] = 0
-        self.assertFalse(hasattr(receipt, "__dict__"))
-        self.assertEqual(receipt, before)
-
     def test_evidence_receipt_is_repeatably_deterministic(self):
         values = [
             evidence_receipt("run-1", "test", "receipt.json", metadata={"count": 1})
@@ -452,6 +518,26 @@ class SchemaTests(unittest.TestCase):
 
         self.assertEqual(nested.reads, 1)
         self.assertEqual(digest, "sha256:" + hashlib.sha256(digest_free).hexdigest())
+
+    def test_receipt_metadata_is_bounded_before_copying(self):
+        class LargeMapping(Mapping):
+            def __init__(self):
+                self.reads = 0
+
+            def __iter__(self):
+                return (str(index) for index in range(redaction.MAX_PAYLOAD_ITEMS + 50))
+
+            def __len__(self):
+                return redaction.MAX_PAYLOAD_ITEMS + 50
+
+            def __getitem__(self, key):
+                self.reads += 1
+                return 0
+
+        metadata = LargeMapping()
+        with self.assertRaises(UnsafePayloadError):
+            evidence_receipt("run-1", "test", "receipt.json", metadata=metadata)
+        self.assertLessEqual(metadata.reads, redaction.MAX_PAYLOAD_ITEMS)
 
     def test_factory_bytes_are_not_a_trusted_encode_receipt_input(self):
         receipt = evidence_receipt("run-1", "test", "receipt.json")

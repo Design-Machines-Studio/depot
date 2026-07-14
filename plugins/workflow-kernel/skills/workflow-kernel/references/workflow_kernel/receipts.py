@@ -132,7 +132,7 @@ def encode_receipt(receipt: Mapping[str, object]) -> bytes:
     """Sanitize one untrusted mapping traversal and return canonical bytes."""
     try:
         return _canonical_bytes(_sanitize_receipt(receipt))
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from None
 
 
@@ -150,7 +150,7 @@ def evidence_receipt(run_id: str, evidence_type: str, reference: str, *,
             ReceiptField.RUN_ID.value: run_id,
             ReceiptField.EVIDENCE_TYPE.value: evidence_type,
             ReceiptField.REFERENCE.value: normalized_reference,
-            ReceiptField.METADATA.value: dict(metadata or {}),
+            ReceiptField.METADATA.value: metadata if metadata is not None else {},
         }
         final = _sanitize_receipt(digest_free, schema=_EVIDENCE_RECEIPT_SCHEMA)
         digest_free_bytes = _canonical_bytes(final)
@@ -158,23 +158,25 @@ def evidence_receipt(run_id: str, evidence_type: str, reference: str, *,
             "sha256:" + hashlib.sha256(digest_free_bytes).hexdigest()
         )
         return _canonical_bytes(final)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         raise UnsafePayloadError(ErrorMessage.EVIDENCE_RECEIPT_UNSAFE) from None
 
 
 def transition_receipt(event: WorkflowEvent, state_digest: str) -> bytes:
     try:
-        if not isinstance(event, WorkflowEvent):
+        if type(event) is not WorkflowEvent:
             raise TypeError("transition receipt requires a workflow event")
         if type(state_digest) is not str or not _STATE_DIGEST.fullmatch(state_digest):
             raise ValueError("state digest must be canonical sha256")
         return _canonical_bytes(_sanitize_receipt({
             ReceiptField.SCHEMA_VERSION.value: 1,
             ReceiptField.RECEIPT_TYPE.value: "transition",
-            ReceiptField.EVENT.value: event.to_dict(),
+            ReceiptField.EVENT.value: WorkflowEvent.to_dict(
+                WorkflowEvent.from_dict(WorkflowEvent.to_dict(event))
+            ),
             ReceiptField.STATE_DIGEST.value: state_digest,
         }, schema=_TRANSITION_RECEIPT_SCHEMA))
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError):
         raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from None
 
 
