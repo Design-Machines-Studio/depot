@@ -211,11 +211,17 @@ maps consumed by adapters are exact module-owned tuple-subclass mappings whose
 pair payload has no rewritable slot or instance dictionary, with content-derived
 seals; caller mapping proxies and custom mappings are rejected without traversal.
 Policy structure processing shares one exact-type taxonomy, rejects cycles, and
-uses Chunk 01's depth `16` and aggregate item limit `10000`. Safety-anchor
-projection charges the graph once before wrapping projected stage sets, ordered
+uses Chunk 01's depth `16` and aggregate item limit `10000`. Policy and
+workflow-class JSON loading also share an iterative, string/escape-aware
+16-level scan and a 4,096-digit integer ceiling (minus sign excluded): over-depth
+structure has each document reason, while syntax and oversized integers have
+each loader's `invalid_*_json` reason consistently on Python 3.9 and 3.12.
+Safety-anchor projection charges the graph once before wrapping projected stage
+sets, ordered
 fields reject sets and frozensets, and only canonical forbidden downgrades accept
 a frozenset. Its exact tuples are projected without re-entry, malformed members
-collapse to one invalid-shape payload, and exact scalar pairs sort by stable keys.
+collapse to one invalid-shape payload, and exact scalar pairs sort through the
+same canonical helper used by normalization.
 The normalizer completes pair-shape validation before mode validation, making
 shape and unknown-mode reasons independent of list order and hash seed. Economics
 mode accepts only the exact string `proposal_only`.

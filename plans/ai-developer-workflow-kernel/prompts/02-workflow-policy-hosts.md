@@ -169,6 +169,12 @@ returns none.
   Both traversals and canonical normalization enforce Chunk 01's maximum depth
   `16` and aggregate item budget `10000`, reject cycles, and map over-depth or
   oversized graphs to stable policy errors without leaking `RecursionError`.
+  Policy and workflow-class files share one iterative, string/escape-aware JSON
+  loader with the same 16-level structural ceiling and a 4,096-digit integer
+  ceiling (excluding a leading minus sign). Over-depth structure maps to
+  `invalid_policy_document` or `invalid_workflow_classes_document`; syntax,
+  oversized integers, and parser `ValueError`/`RecursionError` map to the
+  corresponding `invalid_*_json` reason on Python 3.9 and 3.12.
   Project the safety anchor exactly once, then add only its already-projected
   stage-set wrappers, so file and injected forms consume the same canonical item
   budget. Ordered policy fields accept exact lists or normalized tuples, never
@@ -176,9 +182,9 @@ returns none.
   Project each exact downgrade tuple from its already-entered members without a
   false cycle. Classify the complete frozenset first: any malformed item becomes
   one deterministic invalid-shape payload; otherwise sort exact scalar pairs by
-  stable keys. The normalizer validates every pair shape before sorting and
-  validating modes, so shape errors outrank unknown values independent of file
-  order or hash seed.
+  stable keys through the same canonical pair sorter used by normalization. The
+  normalizer validates every pair shape before sorting and validating modes, so
+  shape errors outrank unknown values independent of file order or hash seed.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both

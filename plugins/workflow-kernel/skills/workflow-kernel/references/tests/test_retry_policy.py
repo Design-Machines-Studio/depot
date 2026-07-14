@@ -307,7 +307,7 @@ class RetryPolicyTests(unittest.TestCase):
                 load_policy(deep_path)
             self.assertEqual(
                 raised.exception.details["reason_code"],
-                detail_digest("invalid_policy_json"),
+                detail_digest("invalid_policy_document"),
             )
 
             wide_payload = json.loads(
@@ -326,6 +326,89 @@ class RetryPolicyTests(unittest.TestCase):
                 raised.exception.details["reason_code"],
                 detail_digest("invalid_policy_document"),
             )
+
+    def test_policy_json_loader_has_explicit_parser_boundaries(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        canonical = source.read_text(encoding="utf-8")
+        loader = getattr(policy_module, "_load_json_document", None)
+        depth_error = getattr(policy_module, "_JSONDocumentDepthError", None)
+        max_depth = getattr(policy_module, "MAX_JSON_DOCUMENT_DEPTH", None)
+        self.assertIsNotNone(loader)
+        self.assertIsNotNone(depth_error)
+        self.assertIs(type(max_depth), int)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            documents = {
+                "syntax": ("{", "invalid_policy_json"),
+                "oversized_integer": (
+                    canonical.replace(
+                        '"schema_version": 1',
+                        '"schema_version": ' + "9" * 5_000,
+                        1,
+                    ),
+                    "invalid_policy_json",
+                ),
+                "over_depth": (
+                    '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
+                    "invalid_policy_document",
+                ),
+            }
+            for name, (content, reason) in documents.items():
+                path = root / f"{name}.json"
+                path.write_text(content, encoding="utf-8")
+                with self.subTest(name=name), self.assertRaises(
+                    InvalidSchemaError,
+                ) as raised:
+                    load_policy(path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest(reason),
+                )
+
+            boundary = root / "boundary.json"
+            boundary.write_text(
+                "[" * max_depth + "0" + "]" * max_depth,
+                encoding="utf-8",
+            )
+            parsed = loader(boundary)
+            for _ in range(max_depth):
+                self.assertIs(type(parsed), list)
+                self.assertEqual(len(parsed), 1)
+                parsed = parsed[0]
+            self.assertEqual(parsed, 0)
+
+            over_boundary = root / "over-boundary.json"
+            over_boundary.write_text(
+                "[" * (max_depth + 1) + "0" + "]" * (max_depth + 1),
+                encoding="utf-8",
+            )
+            with self.assertRaises(depth_error):
+                loader(over_boundary)
+
+            escaped = root / "escaped.json"
+            literal = '\\"' + "[{" * (max_depth + 10) + "}]"
+            escaped.write_text(json.dumps({"literal": literal}), encoding="utf-8")
+            self.assertEqual(loader(escaped), {"literal": literal})
+
+            integer_boundary = root / "integer-boundary.json"
+            integer_boundary.write_text(
+                "-" + "9" * policy_module.MAX_JSON_INTEGER_DIGITS,
+                encoding="utf-8",
+            )
+            parsed_integer = loader(integer_boundary)
+            self.assertLess(parsed_integer, 0)
+            self.assertEqual(
+                len(str(abs(parsed_integer))),
+                policy_module.MAX_JSON_INTEGER_DIGITS,
+            )
+
+            mismatched = root / "mismatched.json"
+            mismatched.write_text("{]", encoding="utf-8")
+            with self.assertRaises(json.JSONDecodeError):
+                loader(mismatched)
+
+        self.assertEqual(load_policy(source), load_policy())
 
     def test_economics_mode_requires_an_exact_proposal_only_string(self):
         document = load_policy()

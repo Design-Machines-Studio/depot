@@ -22,8 +22,47 @@ from .redaction import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
 
 POLICY_SCHEMA_VERSION = 1
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "workflow-policy.json"
+MAX_JSON_DOCUMENT_DEPTH = MAX_PAYLOAD_DEPTH
+MAX_JSON_INTEGER_DIGITS = 4_096
 _MAPPING_PROXY_TYPE = type(MappingProxyType({}))
 _MALFORMED_POLICY_VALUE = object()
+
+
+class _JSONDocumentDepthError(ValueError):
+    pass
+
+
+def _bounded_json_int(value: str) -> int:
+    """Parse a JSON integer with a version-independent 4,096-digit ceiling."""
+    digits = value[1:] if value.startswith("-") else value
+    if len(digits) > MAX_JSON_INTEGER_DIGITS:
+        raise ValueError("JSON integer exceeds the document digit limit")
+    return int(value)
+
+
+def _load_json_document(path: Path) -> object:
+    """Load JSON after an iterative, string-aware 16-level nesting scan."""
+    document = path.read_text(encoding="utf-8")
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in document:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+        elif character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            if depth > MAX_JSON_DOCUMENT_DEPTH:
+                raise _JSONDocumentDepthError
+        elif character in "]}":
+            depth = max(0, depth - 1)
+    return json.loads(document, parse_int=_bounded_json_int)
 
 
 class _TrustedPolicyMap(tuple, MappingABC):
@@ -399,6 +438,20 @@ def _downgrade_scalar_sort_key(value: object) -> Optional[tuple[str, object]]:
     return None
 
 
+def _sort_downgrade_pairs(pairs: list) -> Optional[list]:
+    """Return canonical scalar-pair order, or None for a malformed scalar."""
+    keyed = []
+    for pair in pairs:
+        sort_keys = (
+            _downgrade_scalar_sort_key(pair[0]),
+            _downgrade_scalar_sort_key(pair[1]),
+        )
+        if any(key is None for key in sort_keys):
+            return None
+        keyed.append((sort_keys, pair))
+    return [pair for _, pair in sorted(keyed, key=lambda item: item[0])]
+
+
 def _policy_document_payload(captured: tuple) -> dict:
     (
         retry_budgets, identical_signature_limit, risk_human_approval,
@@ -424,14 +477,7 @@ def _policy_document_payload(captured: tuple) -> dict:
                             for member in tuple.__iter__(item)
                         ]
                         if len(projected) == 2:
-                            sort_keys = tuple(
-                                _downgrade_scalar_sort_key(member)
-                                for member in projected
-                            )
-                            if any(key is None for key in sort_keys):
-                                malformed_pair = True
-                            else:
-                                projected_pairs.append((sort_keys, projected))
+                            projected_pairs.append(projected)
                         else:
                             malformed_pair = True
                     else:
@@ -440,14 +486,15 @@ def _policy_document_payload(captured: tuple) -> dict:
                     state.leave(item_identity)
         finally:
             state.leave(identity)
-        if malformed_pair:
+        ordered_pairs = None if malformed_pair else _sort_downgrade_pairs(
+            projected_pairs,
+        )
+        if ordered_pairs is None:
             forbidden = [None]
         else:
             forbidden = [
-                {"from": projected[0], "to": projected[1]}
-                for _, projected in sorted(
-                    projected_pairs, key=lambda pair: pair[0],
-                )
+                {"from": pair[0], "to": pair[1]}
+                for pair in ordered_pairs
             ]
     else:
         forbidden = _plain_policy_value(
@@ -571,22 +618,12 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
         _exact_keys(item, {"from", "to"}, "invalid_isolation_policy")
         for item in downgrade_items
     ]
-    sortable_downgrades = []
-    for item in shaped_downgrades:
-        sort_keys = (
-            _downgrade_scalar_sort_key(item["from"]),
-            _downgrade_scalar_sort_key(item["to"]),
-        )
-        if all(key is not None for key in sort_keys):
-            sortable_downgrades.append((sort_keys, item))
-        else:
-            sortable_downgrades = []
-            break
-    if sortable_downgrades:
+    sorted_pairs = _sort_downgrade_pairs([
+        (item["from"], item["to"]) for item in shaped_downgrades
+    ])
+    if sorted_pairs is not None:
         shaped_downgrades = [
-            item for _, item in sorted(
-                sortable_downgrades, key=lambda pair: pair[0],
-            )
+            {"from": pair[0], "to": pair[1]} for pair in sorted_pairs
         ]
     for item in shaped_downgrades:
         try:
@@ -635,8 +672,10 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
 def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     source = Path(path) if path is not None else DEFAULT_POLICY_PATH
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
+        payload = _load_json_document(source)
+    except _JSONDocumentDepthError:
+        raise invalid_policy("invalid_policy_document") from None
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, RecursionError):
         raise invalid_policy("invalid_policy_json") from None
     try:
         return _normalize_policy_payload(payload)

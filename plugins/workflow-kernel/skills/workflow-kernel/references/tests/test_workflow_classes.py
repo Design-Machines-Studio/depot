@@ -11,6 +11,43 @@ from workflow_kernel.policies import GatePolicy, load_policy
 from workflow_kernel.workflows import WorkflowTemplates
 
 class WorkflowClassTests(unittest.TestCase):
+    def test_workflow_class_json_loader_has_explicit_parser_boundaries(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        canonical = source.read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            documents = {
+                "syntax": ("{", "invalid_workflow_classes_json"),
+                "oversized_integer": (
+                    canonical.replace(
+                        '"schema_version": 1',
+                        '"schema_version": ' + "9" * 5_000,
+                        1,
+                    ),
+                    "invalid_workflow_classes_json",
+                ),
+                "over_depth": (
+                    '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
+                    "invalid_workflow_classes_document",
+                ),
+            }
+            for name, (content, reason) in documents.items():
+                path = root / f"{name}.json"
+                path.write_text(content, encoding="utf-8")
+                with self.subTest(name=name), self.assertRaises(
+                    InvalidSchemaError,
+                ) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest(reason),
+                )
+
+        self.assertEqual(
+            WorkflowTemplates(source)._templates,
+            WorkflowTemplates()._templates,
+        )
+
     def test_workflow_enum_impostors_are_rejected_without_equality_dispatch(self):
         secret = "sk-secret-workflow-detail"
         calls = []

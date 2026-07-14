@@ -127,15 +127,21 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       caller mapping proxies and custom mappings are rejected without traversal.
       Origin and canonical projection share one exact-type classifier, reject
       cycles, and enforce Chunk 01's depth `16` and aggregate item budget `10000`
-      for injected and file-loaded graphs. Safety anchors are projected once
+      for injected and file-loaded graphs.
+      Policy and workflow-class files share an iterative, string/escape-aware
+      16-level JSON scan and a 4,096-digit integer ceiling (minus sign excluded).
+      Over-depth structure maps to each document reason; syntax, oversized
+      integers, and parser `ValueError`/`RecursionError` map to each loader's
+      stable JSON reason on Python 3.9 and 3.12. Safety anchors are projected once
       before projected stage sets are wrapped, preserving actual-budget parity.
       Ordered fields reject sets and frozensets; only canonical forbidden
       downgrades accept a frozenset. Exact tuples project without re-entry; any
       malformed member collapses to one invalid-shape payload, while exact scalar
-      pairs sort by stable keys. The normalizer validates every pair shape before
-      sorted mode validation, so shape and unknown-mode errors do not depend on
-      file order or hash seed. Economics mode
-      requires the exact string `proposal_only` before equality. Ordinary executor
+      pairs sort through the same canonical helper used by normalization. The
+      normalizer validates every pair shape before sorted mode validation, so
+      shape and unknown-mode errors do not depend on file order or hash seed.
+      Economics mode requires the exact string `proposal_only` before equality.
+      Ordinary executor
       nodes remain open to any compatible declared agentic route; security and
       sensitive nodes stay pinned to Anthropic native Claude. Routes, nodes and
       nested gates, capabilities,
