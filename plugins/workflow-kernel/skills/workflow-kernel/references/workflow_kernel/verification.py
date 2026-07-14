@@ -172,4 +172,3 @@ class VerificationGate:
         if missing:
             return CoverageDecision(False, "missing_required_persona_evidence", missing, tuple(sorted(invalid)))
         return CoverageDecision(True, "required_persona_coverage_complete")
-

@@ -10,4 +10,3 @@ password: sk-fixture-persona-password-must-not-survive
 # Casual Member
 
 Wants to complete one governance task without jargon.
-

@@ -8,4 +8,3 @@ task_ids:
 # Permissions Regression Suite
 
 Selects the current mobile task.
-

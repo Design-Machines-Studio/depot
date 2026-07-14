@@ -43,4 +43,3 @@ A recovered run retains the failed attempts and is degraded, never first-pass
 clean. Application/container restart is a separate diagnostic action and cannot
 stand in for browser restart. Required browser work is never translated to
 skipped, approved, or curl-verified.
-

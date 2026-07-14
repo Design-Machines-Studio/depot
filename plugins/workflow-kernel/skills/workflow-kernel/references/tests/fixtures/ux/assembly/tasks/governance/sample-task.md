@@ -18,4 +18,3 @@ personas:
 # Scenario
 
 Review the proposal and understand the next action.
-
