@@ -1,6 +1,7 @@
 import json
 import hashlib
 import tempfile
+import traceback
 import unittest
 from pathlib import Path
 
@@ -8,7 +9,8 @@ from workflow_kernel.verification import (
     EvidenceRef, PersonaCase, VerificationGate, VerificationProfile,
 )
 from workflow_kernel.adapters.personas import ProjectPersonaAdapter
-from workflow_kernel.schema import InvalidSchemaError
+from workflow_kernel.schema import ErrorDetailKey, InvalidSchemaError
+from tests import detail_digest
 
 
 ROOT = Path(__file__).parents[1]
@@ -295,6 +297,43 @@ class PersonaGateTests(unittest.TestCase):
         profile = adapter.discover(FIXTURE, declaration_root=".")
         with self.assertRaises(InvalidSchemaError):
             adapter.execute(profile.cases[0])
+
+    def test_executor_exceptions_have_stable_redacted_unchained_evidence(self):
+        class HostileExecutorError(RuntimeError):
+            def __str__(self):
+                raise RuntimeError("hostile str leaked")
+
+            def __repr__(self):
+                raise RuntimeError("hostile repr leaked")
+
+        for error in (RuntimeError(SECRET), HostileExecutorError(SECRET)):
+            with self.subTest(error_type=type(error).__name__):
+                class Executor:
+                    def execute(self, case, profile):
+                        raise error
+
+                adapter = ProjectPersonaAdapter(
+                    policy_path=ROOT / "workflow-policy.json", executor=Executor(),
+                )
+                profile = adapter.discover(
+                    FIXTURE, declaration_root=".", target_origin=TARGET_ORIGIN,
+                )
+                try:
+                    adapter.execute(profile.cases[0])
+                except InvalidSchemaError as raised:
+                    rendered = "".join(
+                        traceback.TracebackException.from_exception(raised).format()
+                    )
+                    self.assertTrue(raised.__suppress_context__)
+                    self.assertNotIn(SECRET, rendered)
+                    self.assertNotIn("hostile str leaked", rendered)
+                    self.assertNotIn("hostile repr leaked", rendered)
+                    self.assertEqual(
+                        raised.details[ErrorDetailKey.REASON_CODE.value],
+                        detail_digest("invalid_verification_evidence"),
+                    )
+                else:
+                    self.fail("executor exception must fail closed")
 
 
 if __name__ == "__main__":

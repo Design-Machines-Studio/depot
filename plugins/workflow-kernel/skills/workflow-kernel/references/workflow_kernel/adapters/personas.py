@@ -79,6 +79,8 @@ class _DeclarationTree:
     def __init__(self, root):
         self.root = root
         self._pinned_root = PinnedDirectory.open(root)
+        self._directory_identities = {(): self._pinned_root.identity}
+        self._absent_directories = set()
 
     def __enter__(self):
         return self
@@ -103,7 +105,7 @@ class _DeclarationTree:
         current = descriptors[0]
         current_path = self.root
         try:
-            for part in parts[:-1]:
+            for index, part in enumerate(parts[:-1]):
                 flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
                          | getattr(os, "O_NOFOLLOW", 0))
                 child = os.open(part, flags, dir_fd=current)
@@ -111,10 +113,14 @@ class _DeclarationTree:
                 opened = os.fstat(child)
                 entry = os.stat(part, dir_fd=current, follow_symlinks=False)
                 identity = (opened.st_dev, opened.st_ino)
+                key = tuple(parts[:index + 1])
+                expected = self._directory_identities.get(key)
                 if (not stat.S_ISDIR(opened.st_mode)
                         or not stat.S_ISDIR(entry.st_mode)
-                        or identity != (entry.st_dev, entry.st_ino)):
+                        or identity != (entry.st_dev, entry.st_ino)
+                        or expected is not None and identity != expected):
                     _fail()
+                self._directory_identities.setdefault(key, identity)
                 chain.append((current, part, child, identity))
                 current = child
                 current_path = current_path / part
@@ -140,6 +146,128 @@ class _DeclarationTree:
 
     def revalidate(self):
         self._pinned_root.revalidate()
+
+    @staticmethod
+    def _close_descriptors(descriptors):
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+    def bind_directory(self, path, *, optional=False):
+        parts = self._parts(path)
+        descriptors = [os.dup(self._pinned_root.descriptor)]
+        chain = []
+        current = descriptors[0]
+        try:
+            for index, part in enumerate(parts):
+                flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                         | getattr(os, "O_NOFOLLOW", 0))
+                try:
+                    child = os.open(part, flags, dir_fd=current)
+                except FileNotFoundError:
+                    if optional and index == len(parts) - 1:
+                        self._pinned_root.revalidate()
+                        self._absent_directories.add(tuple(parts))
+                        return False
+                    raise
+                descriptors.append(child)
+                opened = os.fstat(child)
+                entry = os.stat(part, dir_fd=current, follow_symlinks=False)
+                identity = (opened.st_dev, opened.st_ino)
+                key = tuple(parts[:index + 1])
+                expected = self._directory_identities.get(key)
+                if (not stat.S_ISDIR(opened.st_mode)
+                        or not stat.S_ISDIR(entry.st_mode)
+                        or identity != (entry.st_dev, entry.st_ino)
+                        or expected is not None and identity != expected
+                        or key in self._absent_directories):
+                    _fail()
+                self._directory_identities.setdefault(key, identity)
+                chain.append((current, part, child, identity))
+                current = child
+            self._revalidate(chain)
+            return True
+        except (OSError, ValueError):
+            _fail()
+        finally:
+            self._close_descriptors(descriptors)
+
+    def markdown_files(self, directory, *, recursive=False):
+        parts = self._parts(directory)
+        if tuple(parts) in self._absent_directories:
+            _fail()
+        self.bind_directory(directory)
+        descriptors = [os.dup(self._pinned_root.descriptor)]
+        chain = []
+        current = descriptors[0]
+        try:
+            for index, part in enumerate(parts):
+                flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                         | getattr(os, "O_NOFOLLOW", 0))
+                child = os.open(part, flags, dir_fd=current)
+                descriptors.append(child)
+                opened = os.fstat(child)
+                entry = os.stat(part, dir_fd=current, follow_symlinks=False)
+                identity = (opened.st_dev, opened.st_ino)
+                key = tuple(parts[:index + 1])
+                if (not stat.S_ISDIR(opened.st_mode)
+                        or not stat.S_ISDIR(entry.st_mode)
+                        or identity != (entry.st_dev, entry.st_ino)
+                        or self._directory_identities.get(key) != identity):
+                    _fail()
+                chain.append((current, part, child, identity))
+                current = child
+
+            results = []
+
+            def walk(descriptor, relative_parts):
+                for name in sorted(os.listdir(descriptor)):
+                    entry = os.stat(
+                        name, dir_fd=descriptor, follow_symlinks=False,
+                    )
+                    if stat.S_ISLNK(entry.st_mode):
+                        _fail()
+                    if stat.S_ISDIR(entry.st_mode):
+                        if not recursive:
+                            continue
+                        flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                                 | getattr(os, "O_NOFOLLOW", 0))
+                        child = os.open(name, flags, dir_fd=descriptor)
+                        try:
+                            opened = os.fstat(child)
+                            identity = (opened.st_dev, opened.st_ino)
+                            key = tuple(parts) + relative_parts + (name,)
+                            expected = self._directory_identities.get(key)
+                            if (not stat.S_ISDIR(opened.st_mode)
+                                    or identity != (entry.st_dev, entry.st_ino)
+                                    or expected is not None and identity != expected):
+                                _fail()
+                            self._directory_identities.setdefault(key, identity)
+                            walk(child, relative_parts + (name,))
+                            current_entry = os.stat(
+                                name, dir_fd=descriptor, follow_symlinks=False,
+                            )
+                            if ((current_entry.st_dev, current_entry.st_ino)
+                                    != identity):
+                                _fail()
+                        finally:
+                            os.close(child)
+                    elif stat.S_ISREG(entry.st_mode) and name.endswith(".md"):
+                        if entry.st_nlink != 1:
+                            _fail()
+                        results.append(
+                            directory.joinpath(*relative_parts, name)
+                        )
+
+            walk(current, ())
+            self._revalidate(chain)
+            return tuple(results)
+        except (OSError, ValueError):
+            _fail()
+        finally:
+            self._close_descriptors(descriptors)
 
     def regular_exists(self, path):
         descriptors = []
@@ -259,7 +387,15 @@ def _list(frontmatter, key):
     result = []
     for line in lines[start:]:
         if line.startswith("  - "):
-            value = line[4:].strip().strip('"\'')
+            raw = line[4:].strip()
+            quoted = (
+                len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}
+            )
+            if (not quoted and (
+                    raw.startswith(("[", "{", "- ", "? ", "!!map", "!!seq"))
+                    or re.search(r":(?:\s|$)", raw) is not None)):
+                _fail()
+            value = raw[1:-1].strip() if quoted else raw
             if not value:
                 _fail()
             result.append(value)
@@ -360,7 +496,7 @@ def _persona_index(root, declarations):
     if (not declared or len(declared) != len(set(declared))
             or any(Path(name).name != name or name == "_index.md" for name in declared)):
         _fail()
-    persona_files = tuple(directory.glob("*.md"))
+    persona_files = declarations.markdown_files(directory)
     for path in persona_files:
         _owned_path(path, root)
     actual = {path.name for path in persona_files if path.name != "_index.md"}
@@ -445,7 +581,7 @@ def _coverage_matrix_diagnostics(root, tasks, declarations):
 
 def _suite(root, suite_id, declarations):
     matches = []
-    for path in sorted((root / "suites").glob("*.md")) if (root / "suites").is_dir() else ():
+    for path in declarations.markdown_files(root / "suites"):
         frontmatter = _frontmatter(path, declarations)
         if _scalars(frontmatter).get("id") == suite_id:
             matches.append({item.lower() for item in _list(frontmatter, "task_ids")})
@@ -524,7 +660,7 @@ class ProjectPersonaAdapter:
                 raise ValueError
             return result
         except Exception:
-            raise invalid_policy("invalid_verification_evidence")
+            raise invalid_policy("invalid_verification_evidence") from None
 
     def _discover(self, project_root, *, target_origin=None, declaration_root=None):
         project = Path(project_root)
@@ -557,6 +693,9 @@ class ProjectPersonaAdapter:
         _owned_path(ux / "personas", ux, directory=True)
         _reject_symlinks(ux)
         with _DeclarationTree(ux) as declarations:
+            declarations.bind_directory(ux / "tasks")
+            declarations.bind_directory(ux / "personas")
+            declarations.bind_directory(ux / "suites", optional=True)
             return self._discover_declarations(
                 ux, declarations, target_origin=target_origin,
             )
@@ -626,7 +765,9 @@ class ProjectPersonaAdapter:
             declarations, _persona_index(ux, declarations),
         )
         selected = _suite(ux, selected_suite, declarations) if selected_suite else None
-        task_paths = sorted((ux / "tasks").rglob("*.md"))
+        task_paths = declarations.markdown_files(
+            ux / "tasks", recursive=True,
+        )
         for path in task_paths:
             _owned_path(path, ux)
         declarations.revalidate()

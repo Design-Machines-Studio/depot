@@ -19,10 +19,13 @@ tree is `not_declared`. Discovery rejects symlinks
 in every ancestor from the project root through the UX declaration and all
 descendants, plus any resolved path outside the owned UX tree, before reading
 it. The UX declaration root is pinned once for the complete discovery operation.
-Every declaration read beneath it is descriptor-relative and no-follow, rejects
-hardlinks, and revalidates file, ancestor-directory, and pinned-root identity
-after reading so path swaps cannot replace validated config, index, persona,
-task, suite, or matrix content. Duplicate scalar or list-section frontmatter
+The `tasks`, `personas`, and optional `suites` child directories are also bound
+to their device/inode identities before discovery. Their contents are enumerated
+descriptor-relatively and no-follow, including nested task directories. Every
+declaration read beneath them rejects hardlinks and revalidates file,
+ancestor-directory, child-directory, and pinned-root identity after reading so
+path swaps cannot replace validated config, index, persona, task, suite, or
+matrix content. Duplicate scalar or list-section frontmatter
 keys and malformed scalar or container types fail with
 `invalid_verification_declaration`. Only the supported indented scalar-list form
 is accepted; inline arrays, mappings beneath scalar lists, nested containers,
@@ -68,8 +71,11 @@ failed, unauthenticated, or non-evaluative required evidence. No UX directory is
 Persona, scenario, role, and auth field identifiers are at most 128 characters.
 Routes are at most 2048 characters, are absolute and origin-relative, contain no
 credentials, query, fragment, control characters, credential-shaped values, or
-literal/encoded `.` or `..` traversal segments. Ordinary semantic segments such
-as `/monkey` and `/account/password` remain valid.
+literal/encoded `.` or `..` traversal segments. Percent escapes may encode only
+reserved safe ASCII bytes or complete valid UTF-8 sequences; encoded query or
+fragment delimiters, malformed/incomplete UTF-8, encoded unreserved bytes, and
+encoded separators fail identically at runtime and schema validation. Ordinary
+semantic segments such as `/monkey` and `/account/password` remain valid.
 
 `ProjectPersonaAdapter.execute(case)` never owns or launches a live browser. It
 requires an injected executor and a previously discovered profile with a bound
@@ -77,8 +83,11 @@ target origin, snapshots the requested case and profile, and delegates only the
 exact declared case. Returned evidence is independently snapshotted and must
 match the case, profile identity, configured engines, target-origin digest,
 expected evaluation, authentication requirement, and browser proof kind.
-Execution without bound discovery context, or evidence for a different case or
-target, fails with `invalid_verification_evidence`.
+Execution without bound discovery context, evidence for a different case or
+target, or any executor exception fails with
+`invalid_verification_evidence`. Executor exceptions suppress chained context,
+never render hostile exception strings or representations into evidence, and
+produce only the stable digested invalid-evidence detail.
 
 Profiles retain auth field names only. Cookie values, bearer tokens, passwords,
 credential usernames, fixture secrets, and URL credentials never enter profiles,
@@ -106,7 +115,9 @@ input therefore fails before it can promote failed or blocked evidence.
 Quit evidence must identify the initial session, launch evidence must identify a
 different fresh session, and the following attempt must identify that launched
 session. The same launch-to-attempt identity proof applies to the alternate
-engine. Every attempt and receipt binds `case_id`, requested engine, actual
+engine, whose successful session must also differ from every earlier attempt and
+successful launch in the receipt. Every attempt and receipt binds `case_id`,
+requested engine, actual
 engine, configured-engine set, verification-profile identity, validated
 viewport, opaque URL digest, authoritative origin digest, opaque route digest,
 and session ID. Raw targets

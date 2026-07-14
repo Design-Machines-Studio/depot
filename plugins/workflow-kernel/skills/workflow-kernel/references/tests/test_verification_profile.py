@@ -11,7 +11,7 @@ from tests import detail_digest, schema_matches
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import load_policy
 from workflow_kernel.verification import PersonaCase, VerificationProfile
-from workflow_kernel.adapters.personas import ProjectPersonaAdapter
+from workflow_kernel.adapters.personas import _DeclarationTree, ProjectPersonaAdapter
 from workflow_kernel._files import PinnedDirectory
 
 
@@ -420,6 +420,12 @@ class VerificationProfileTests(unittest.TestCase):
         replacements = (
             ("auth_fields:\n  - session_cookie", "auth_fields: [session_cookie]"),
             ("auth_fields:\n  - session_cookie", "auth_fields:\n  nested: session_cookie"),
+            ('  - "A signed-in member has a proposal to review"',
+             "  - key: value"),
+            ('  - "A signed-in member has a proposal to review"',
+             "  - [mobile, responsive]"),
+            ('  - "A signed-in member has a proposal to review"',
+             "  - {kind: mobile}"),
             ("preconditions:\n  - \"A signed-in member has a proposal to review\"",
              "preconditions:\n  viewport: 375x812"),
         )
@@ -433,6 +439,19 @@ class VerificationProfileTests(unittest.TestCase):
                     ProjectPersonaAdapter(
                         policy_path=ROOT / "workflow-policy.json",
                     ).discover(project)
+
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+            task.write_text(task.read_text().replace(
+                '  - "A signed-in member has a proposal to review"',
+                '  - "key: value"\n  - "[mobile, responsive]"\n  - "{kind: mobile}"',
+            ))
+            profile = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(project)
+            self.assertTrue(profile.cases)
 
     def test_identifier_and_route_runtime_and_schema_boundaries_match(self):
         PersonaCase("p" * 128, "s" * 128, "m" * 128, "/" + "a" * 2047,
@@ -499,8 +518,11 @@ class VerificationProfileTests(unittest.TestCase):
             "/safe/%2fadmin", "/safe/%5cadmin", "/safe/%252fadmin",
             "/safe/%252e%252e/admin", "/safe/%2e./admin",
             "/safe/.%2e/admin", "/safe/%00admin", "/safe/%2500admin",
-            "/%73k-live-secret", "/Bearer%20credential", "/safe/%",
+            "/%73k-live-secret", "/Bearer%20credential", "/safe/%23fragment",
+            "/safe/%3Fquery", "/safe/%",
             "/safe/%2", "/safe/%GG", "/safe/\x1fcontrol",
+            "/safe/%80", "/safe/%C2", "/safe/%E2%82",
+            "/safe/%F0%9F%92", "/safe/%C0%AF", "/safe/%ED%A0%80",
         )
         for route in invalid_routes:
             with self.subTest(route=route), self.assertRaises(InvalidSchemaError):
@@ -512,6 +534,33 @@ class VerificationProfileTests(unittest.TestCase):
             ).to_dict()
             payload["cases"][0]["route"] = route
             self.assertFalse(schema_matches(payload, schema), route)
+
+        for encoded in ("%C2%A2", "%C3%A9", "%E2%82%AC", "%F0%9F%92%A9"):
+            route = "/safe/" + encoded
+            case = PersonaCase(
+                "p", "s", "member", route, "chromium", "1440x900", True,
+            )
+            payload = VerificationProfile(
+                1, "project_declaration", (case,), (),
+            ).to_dict()
+            self.assertTrue(schema_matches(payload, schema), route)
+
+        for byte in range(256):
+            route = "/safe/%{:02X}".format(byte)
+            try:
+                PersonaCase(
+                    "p", "s", "member", route, "chromium", "1440x900", True,
+                )
+                runtime_valid = True
+            except InvalidSchemaError:
+                runtime_valid = False
+            payload = VerificationProfile(
+                1, "project_declaration", (safe,), (),
+            ).to_dict()
+            payload["cases"][0]["route"] = route
+            self.assertEqual(
+                runtime_valid, schema_matches(payload, schema), route,
+            )
 
     def test_declaration_root_pin_rejects_ancestor_swap_before_open(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -537,6 +586,34 @@ class VerificationProfileTests(unittest.TestCase):
                 return original(path, *args, **kwargs)
 
             with mock.patch("os.open", side_effect=swap_ancestor), \
+                    self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(
+                    policy_path=ROOT / "workflow-policy.json",
+                ).discover(project)
+            self.assertTrue(swapped)
+
+    def test_bound_child_directory_rejects_ordinary_replacement_before_read(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            ux = project / "tests" / "ux"
+            shutil.copytree(FIXTURES / "assembly", ux)
+            replacement = Path(directory) / "replacement-tasks"
+            shutil.copytree(ux / "tasks", replacement)
+            injected = replacement / "governance" / "sample-task.md"
+            injected.write_text(injected.read_text().replace(
+                "/governance/proposals/sample", "/ordinary-directory-swap",
+            ))
+            original = _DeclarationTree.read_text
+            swapped = []
+
+            def replace_child(declarations, path):
+                if not swapped and path == ux / "tasks" / "governance" / "sample-task.md":
+                    (ux / "tasks").rename(ux / "tasks-owned")
+                    replacement.rename(ux / "tasks")
+                    swapped.append(True)
+                return original(declarations, path)
+
+            with mock.patch.object(_DeclarationTree, "read_text", replace_child), \
                     self.assertRaises(InvalidSchemaError):
                 ProjectPersonaAdapter(
                     policy_path=ROOT / "workflow-policy.json",

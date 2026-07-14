@@ -537,9 +537,18 @@ class BrowserRecoveryReceipt:
                 raise ValueError("browser receipt omits alternate engine evidence")
             alternate = self.lifecycle[lifecycle_index]
             lifecycle_index += 1
+            prior_sessions = {
+                item.session_id for item in attempts[:attempt_index]
+            }
+            prior_sessions.update(
+                item.session_id for item in self.lifecycle[:lifecycle_index - 1]
+                if item.result == "launched"
+            )
             if (alternate.actual_engine == self.requested_engine
                     or alternate.action not in {"browser_process_launch", "session_validation"}
-                    or alternate.previous_session_id != first_session):
+                    or alternate.previous_session_id != first_session
+                    or alternate.result == "launched"
+                    and alternate.session_id in prior_sessions):
                 raise ValueError("browser alternate launch order mismatch")
             if alternate.result == "launched":
                 if (alternate.action != "browser_process_launch"

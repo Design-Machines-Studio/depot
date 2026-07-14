@@ -606,6 +606,32 @@ class BrowserRecoveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(alternate, lifecycle=alternate.lifecycle + (impossible_gap,))
 
+    def test_alternate_launch_cannot_reuse_any_prior_attempt_or_launch_session(self):
+        recovered = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "chromium", "failed", session="primary-2"),
+                    attempt(3, "firefox", "passed", session="secondary-1"),
+                ],
+                launches=[
+                    BrowserLaunchEvidence("chromium", True, True, "primary-2"),
+                    BrowserLaunchEvidence("firefox", True, True, "secondary-1"),
+                ],
+            ),
+        )
+        reused_lifecycle = recovered.lifecycle[:-1] + (
+            replace(recovered.lifecycle[-1], session_id="primary-2"),
+        )
+        reused_attempts = recovered.attempts[:-1] + (
+            replace(recovered.attempts[-1], session_id="primary-2"),
+        )
+        with self.assertRaises(ValueError):
+            replace(
+                recovered, lifecycle=reused_lifecycle, attempts=reused_attempts,
+            )
+
     def test_runtime_receipt_matches_strict_schema_and_empty_evidence_does_not(self):
         adapter = FakeBrowserAdapter(
             [attempt(1, "chromium", "passed", session="primary-1")],
