@@ -1,10 +1,14 @@
 """Workflow kernel host contracts, closed builder outcomes, and safe persistence.
 
-Builder observations project to ``evidence.recorded`` events; they are never
-node lifecycle transitions. ``SessionHandle`` and ``SessionResult`` expose safe
-public projections. ``ResumeStateBlob`` is the supported persistence boundary:
-its raw bytes contain an opaque handle and belong only in a package-owned
-trusted store. The checksum detects corruption and does not claim authenticity.
+Builder outcomes are closed. Observations project to ``evidence.recorded`` and
+are never node lifecycle transitions. ``SessionHandle`` and ``SessionResult``
+are immutable provenance receipts for one run/node/attempt, provider, concrete
+rail, and capability. Downstream translators must require an authoritative
+receipt reference and safely merge result evidence; the observation helper does
+not invent a receipt. ``ResumeStateBlob`` raw bytes belong only in protected,
+permission-restricted storage with retention/deletion, never ordinary receipts,
+events, evidence, artifacts, shadow reports, Airlift payloads, or checkpoints.
+Its checksum detects corruption and does not claim authenticity.
 """
 
 from importlib import import_module

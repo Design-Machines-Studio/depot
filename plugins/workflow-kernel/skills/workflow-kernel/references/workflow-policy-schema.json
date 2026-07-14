@@ -71,7 +71,7 @@
       "minItems": 12,
       "maxItems": 12,
       "uniqueItems": true,
-      "items": {"enum": ["native_dispatch", "companion_dispatch", "wrapper_dispatch", "session_resume", "remote_sandbox", "container", "worktree", "sequential_branch", "claude_execution", "codex_execution", "openrouter_execution", "anthropic_native_execution"]}
+      "items": {"enum": ["native_dispatch", "companion_dispatch", "wrapper_dispatch", "openrouter_exec", "session_resume", "remote_sandbox", "container", "worktree", "sequential_branch", "claude_execution", "codex_execution", "openrouter_execution", "anthropic_native_execution"]}
     },
     "economics": {
       "type": "object",

@@ -1,3 +1,4 @@
+import inspect
 import unittest
 
 from tests import detail_digest
@@ -17,8 +18,26 @@ from workflow_kernel.adapters.base import WorkflowClass, WorkflowContext
 NOW = "2026-07-14T00:00:00Z"
 
 
-def handle(host="codex", value="opaque-token-value", *, resumable=True, created_at=NOW):
-    return SessionHandle(host, value, created_at, resumable)
+def receipt_context(
+    node="build", *, run="run-1", attempt="attempt-1", provider="openai",
+    rail="native", capability=HostCapability.CODEX_EXECUTION,
+):
+    return ResumeStateContext(run, node, attempt, provider, rail, capability)
+
+
+def handle(
+    host="codex", value="opaque-token-value", *, resumable=True, created_at=NOW,
+    context=None,
+):
+    return SessionHandle(
+        host, value, created_at, resumable, context or receipt_context(),
+    )
+
+
+def session_result(status="succeeded", evidence=(), reason_code=None, *, context=None):
+    return SessionResult(
+        status, context or receipt_context(), evidence, reason_code,
+    )
 
 
 def host_capabilities(name="codex"):
@@ -32,27 +51,138 @@ def builder_node(**changes):
     values = {
         "node_id": "build", "executor": "codex",
         "required_capability": HostCapability.CODEX_EXECUTION,
+        "required_dispatch_capability": HostCapability.NATIVE_DISPATCH,
     }
     values.update(changes)
     return NodeSpec(**values)
 
 
 class BuilderResumeTests(unittest.TestCase):
+    def test_session_receipts_require_context_and_provenance(self):
+        handle_parameters = inspect.signature(SessionHandle).parameters
+        result_parameters = inspect.signature(SessionResult).parameters
+        context_parameters = inspect.signature(ResumeStateContext).parameters
+        node_parameters = inspect.signature(NodeSpec).parameters
+        self.assertIn("context", handle_parameters)
+        self.assertIn("context", result_parameters)
+        self.assertIn("capability", context_parameters)
+        self.assertIn("required_dispatch_capability", node_parameters)
+
+    def test_dispatch_rejects_same_host_wrong_rail_provenance(self):
+        expected = receipt_context()
+        wrapper = receipt_context(rail="wrapper")
+        adapter = FakeHostAdapter(
+            HostCapabilities("codex", (
+                HostCapability.NATIVE_DISPATCH, HostCapability.WRAPPER_DISPATCH,
+                HostCapability.CODEX_EXECUTION,
+            )),
+            dispatch_handles=(handle(context=wrapper),),
+        )
+        decision = BuilderSessionManager(adapter).dispatch(builder_node(), expected)
+        self.assertEqual(decision.reason_code, "invalid_session_handle")
+
+    def test_resume_context_and_feedback_mismatch_fail_before_adapter_call(self):
+        class NoAdapterCall:
+            def capabilities(self):
+                raise AssertionError("resume preflight reached adapter")
+
+        manager = BuilderSessionManager(NoAdapterCall())
+        cases = (
+            (receipt_context(node="review"), ValidationFeedback(
+                "build", "deterministic_validation_failure",
+            )),
+            (receipt_context(), ValidationFeedback(
+                "review", "deterministic_validation_failure",
+            )),
+        )
+        for context, feedback in cases:
+            with self.subTest(context=context, feedback=feedback):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    manager.resume_or_replace(
+                        builder_node(), handle(), feedback, context=context, now=NOW,
+                    )
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_builder_resume_request"),
+                )
+
+    def test_resume_result_must_match_validated_receipt_context(self):
+        original = handle()
+        wrong = session_result(context=receipt_context(attempt="attempt-2"))
+        replacement = handle(value="replacement")
+        adapter = FakeHostAdapter(
+            host_capabilities(), dispatch_handles=(replacement,), resume_results=(wrong,),
+        )
+        decision = BuilderSessionManager(adapter).resume_or_replace(
+            builder_node(), original,
+            ValidationFeedback("build", "deterministic_validation_failure"),
+            context=receipt_context(), now=NOW,
+        )
+        self.assertEqual(decision.outcome, BuilderOutcome.REPLACEMENT_DISPATCHED)
+        self.assertEqual(decision.handle, replacement)
+
+    def test_validation_feedback_is_final_normalized_and_secret_safe(self):
+        with self.assertRaises(TypeError):
+            type("HostileValidationFeedback", (ValidationFeedback,), {})
+        for values in (
+            ("build", "Bad Reason", ()),
+            ("build", "validation_failed", ("artifact/sk-provider-credential",)),
+        ):
+            with self.subTest(values=values), self.assertRaises(InvalidSchemaError):
+                ValidationFeedback(*values)
+        feedback = ValidationFeedback(
+            "build", "validation_failed", ("https://example.test/report",),
+        )
+        self.assertTrue(feedback.evidence[0].startswith("url-sha256:"))
+        self.assertNotIn("example.test", repr(feedback))
+
+    def test_durable_public_boundaries_revalidate_hostile_mutation(self):
+        context = ResumeStateContext(
+            "run-1", "build", "attempt-1", "openai", "native",
+            HostCapability.CODEX_EXECUTION,
+        )
+        object.__setattr__(context, "provider", object())
+        with self.assertRaises(InvalidSchemaError):
+            context.to_dict()
+        self.assertEqual(repr(context), "ResumeStateContext([INVALID])")
+
+        from workflow_kernel.adapters.base import BuilderSessionDecision, ResumeStateBlob
+
+        blob = ResumeStateBlob(b"safe")
+        object.__setattr__(blob, "_payload", object())
+        with self.assertRaises(InvalidSchemaError):
+            blob.to_dict()
+        with self.assertRaises(InvalidSchemaError):
+            blob.to_trusted_bytes()
+        self.assertEqual(repr(blob), "ResumeStateBlob([INVALID])")
+
+        decision = BuilderSessionDecision(BuilderOutcome.NODE_GATE_BLOCKED)
+        object.__setattr__(decision, "outcome", "hostile")
+        with self.assertRaises(InvalidSchemaError):
+            decision.to_evidence_event(
+                run_id="run-1", sequence=1, node_id="build", occurred_at=NOW,
+            )
+        self.assertEqual(repr(decision), "BuilderSessionDecision([INVALID])")
+
     def test_real_handle_is_resumed_with_deterministic_validation_feedback(self):
         original = handle()
-        result = SessionResult("succeeded", ("validation.txt",))
+        result = session_result(evidence=("validation.txt",))
         adapter = FakeHostAdapter(host_capabilities(), resume_results=(result,))
         feedback = ValidationFeedback(
             "build", "deterministic_validation_failure", ("test-report.txt",),
         )
         decision = BuilderSessionManager(adapter).resume_or_replace(
-            builder_node(), original, feedback, now=NOW,
+            builder_node(), original, feedback, context=receipt_context(), now=NOW,
         )
         self.assertEqual(decision.status, "resumed")
         self.assertTrue(decision.resumed_original)
         self.assertIsNot(decision.handle, original)
         self.assertEqual(decision.handle, original)
         self.assertEqual(adapter.resume_calls, [(original, feedback)])
+        recorded_feedback = adapter.resume_calls[0][1]
+        object.__setattr__(feedback, "evidence", ("artifact/sk-mutated-credential",))
+        self.assertEqual(recorded_feedback.evidence, ("test-report.txt",))
+        self.assertNotIn("sk-mutated-credential", repr(recorded_feedback))
         self.assertEqual(decision.observations, (BuilderObservation.SESSION_RESUMED,))
         self.assertEqual(decision.outcome, BuilderOutcome.SESSION_RESUMED)
 
@@ -70,7 +200,7 @@ class BuilderResumeTests(unittest.TestCase):
                 decision = BuilderSessionManager(adapter, max_age_seconds=3600).resume_or_replace(
                     builder_node(), original,
                     ValidationFeedback("build", "deterministic_validation_failure"),
-                    now=NOW,
+                    context=receipt_context(), now=NOW,
                 )
                 self.assertEqual(decision.status, "replacement_dispatched")
                 self.assertFalse(decision.resumed_original)
@@ -89,7 +219,7 @@ class BuilderResumeTests(unittest.TestCase):
         decision = BuilderSessionManager(adapter).resume_or_replace(
             builder_node(), None,
             ValidationFeedback("build", "deterministic_validation_failure"),
-            now=NOW,
+            context=receipt_context(), now=NOW,
         )
         self.assertEqual(decision.status, "resume_unavailable")
         self.assertIsNone(decision.handle)
@@ -116,7 +246,8 @@ class BuilderResumeTests(unittest.TestCase):
         adapter = FakeHostAdapter(host_capabilities(), dispatch_handles=(handle(),))
         decision = BuilderSessionManager(adapter).resume_or_replace(
             builder_node(), None,
-            ValidationFeedback("build", "deterministic_validation_failure"), now=NOW,
+            ValidationFeedback("build", "deterministic_validation_failure"),
+            context=receipt_context(), now=NOW,
         )
         projected = decision.to_evidence_event(
             run_id="run-1", sequence=state.revision, node_id="build", occurred_at=NOW,
@@ -200,7 +331,9 @@ class BuilderResumeTests(unittest.TestCase):
             HostCapabilities("generic", (HostCapability.OPENROUTER_EXECUTION,)),
             dispatch_handles=(handle(host="generic"),),
         )
-        missing = BuilderSessionManager(adapter).dispatch(builder_node())
+        missing = BuilderSessionManager(adapter).dispatch(
+            builder_node(), receipt_context(),
+        )
         self.assertEqual(missing.status, "blocked")
         self.assertEqual(missing.reason_code, "host_capability_unavailable")
         self.assertEqual(adapter.dispatch_calls, [])
@@ -210,7 +343,9 @@ class BuilderResumeTests(unittest.TestCase):
             gate_decision=GateDecision(False, "missing_mandatory_evidence",
                                        ("risk_assessment",)),
         )
-        blocked = BuilderSessionManager(FakeHostAdapter(host_capabilities())).dispatch(blocked_node)
+        blocked = BuilderSessionManager(FakeHostAdapter(host_capabilities())).dispatch(
+            blocked_node, receipt_context(),
+        )
         self.assertEqual(blocked.status, "blocked")
         self.assertEqual(blocked.reason_code, "node_gate_blocked")
 
@@ -223,9 +358,9 @@ class BuilderResumeTests(unittest.TestCase):
                                        ("risk_assessment",)),
         )
         adapter = FakeHostAdapter(host_capabilities(),
-                                  resume_results=(SessionResult("succeeded"),))
+                                  resume_results=(session_result(),))
         blocked = BuilderSessionManager(adapter).resume_or_replace(
-            blocked_node, original, feedback, now=NOW,
+            blocked_node, original, feedback, context=receipt_context(), now=NOW,
         )
         self.assertEqual(blocked.reason_code, "node_gate_blocked")
         self.assertEqual(adapter.resume_calls, [])
@@ -238,19 +373,20 @@ class BuilderResumeTests(unittest.TestCase):
             manager = BuilderSessionManager(NoAdapterCall())
             with self.subTest(operation=operation):
                 if operation == "dispatch":
-                    decision = manager.dispatch(blocked_node)
+                    decision = manager.dispatch(blocked_node, receipt_context())
                 else:
                     decision = manager.resume_or_replace(
-                        blocked_node, original, feedback, now=NOW,
+                        blocked_node, original, feedback,
+                        context=receipt_context(), now=NOW,
                     )
                 self.assertEqual(decision.reason_code, "node_gate_blocked")
 
         adapter = FakeHostAdapter(
             HostCapabilities("codex", (HostCapability.SESSION_RESUME,)),
-            resume_results=(SessionResult("succeeded"),),
+            resume_results=(session_result(),),
         )
         missing = BuilderSessionManager(adapter).resume_or_replace(
-            builder_node(), original, feedback, now=NOW,
+            builder_node(), original, feedback, context=receipt_context(), now=NOW,
         )
         self.assertEqual(missing.reason_code, "host_capability_unavailable")
         self.assertEqual(adapter.resume_calls, [])
@@ -277,7 +413,11 @@ class BuilderResumeTests(unittest.TestCase):
                         capabilities_from_harness_profile(host),
                         dispatch_handles=(handle(host=host),),
                     )
-                    decision = BuilderSessionManager(adapter).dispatch(node)
+                    context = receipt_context(
+                        node=node.node_id, provider="anthropic", rail="native",
+                        capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+                    )
+                    decision = BuilderSessionManager(adapter).dispatch(node, context)
                     self.assertEqual(decision.reason_code, "host_capability_unavailable")
                     self.assertEqual(adapter.dispatch_calls, [])
 
@@ -285,8 +425,11 @@ class BuilderResumeTests(unittest.TestCase):
         from workflow_kernel.adapters.base import BuilderSessionDecision
 
         invalid = (
-            (BuilderOutcome.SESSION_RESUMED, None, SessionResult("succeeded")),
+            (BuilderOutcome.SESSION_RESUMED, None, session_result()),
             (BuilderOutcome.SESSION_RESUMED, handle(), None),
+            (BuilderOutcome.SESSION_RESUMED, handle(), session_result(
+                context=receipt_context(attempt="attempt-2"),
+            )),
             (BuilderOutcome.NODE_GATE_BLOCKED, handle(), None),
             (BuilderOutcome.BUILDER_DISPATCHED, None, None),
         )
@@ -301,7 +444,7 @@ class BuilderResumeTests(unittest.TestCase):
             def capabilities(self):
                 return host_capabilities()
 
-            def dispatch(self, _node):
+            def dispatch(self, _node, _context):
                 raise RuntimeError("provider-detail://credential")
 
             def resume(self, _handle, _feedback):
@@ -309,7 +452,8 @@ class BuilderResumeTests(unittest.TestCase):
 
         decision = BuilderSessionManager(DispatchFailure()).resume_or_replace(
             builder_node(), None,
-            ValidationFeedback("build", "deterministic_validation_failure"), now=NOW,
+            ValidationFeedback("build", "deterministic_validation_failure"),
+            context=receipt_context(), now=NOW,
         )
         self.assertEqual(decision.reason_code, "adapter_dispatch_failed")
         self.assertEqual(
@@ -331,7 +475,7 @@ class BuilderResumeTests(unittest.TestCase):
                     raise RuntimeError(secret)
                 return host_capabilities()
 
-            def dispatch(self, _node):
+            def dispatch(self, _node, _context):
                 self.dispatch_calls += 1
                 if self.phase == "dispatch":
                     raise RuntimeError(secret)
@@ -341,14 +485,17 @@ class BuilderResumeTests(unittest.TestCase):
                 raise RuntimeError(secret)
 
         capability_failure = BuilderSessionManager(RaisingAdapter("capabilities")).dispatch(
-            builder_node()
+            builder_node(), receipt_context(),
         )
         self.assertEqual(capability_failure.reason_code, "adapter_capabilities_failed")
-        dispatch_failure = BuilderSessionManager(RaisingAdapter("dispatch")).dispatch(builder_node())
+        dispatch_failure = BuilderSessionManager(RaisingAdapter("dispatch")).dispatch(
+            builder_node(), receipt_context(),
+        )
         self.assertEqual(dispatch_failure.reason_code, "adapter_dispatch_failed")
         resume_failure = BuilderSessionManager(RaisingAdapter("resume")).resume_or_replace(
             builder_node(), handle(),
-            ValidationFeedback("build", "deterministic_validation_failure"), now=NOW,
+            ValidationFeedback("build", "deterministic_validation_failure"),
+            context=receipt_context(), now=NOW,
         )
         self.assertEqual(resume_failure.status, "replacement_dispatched")
         for decision in (capability_failure, dispatch_failure, resume_failure):
@@ -358,15 +505,17 @@ class BuilderResumeTests(unittest.TestCase):
         for values in (
             ("unknown_status", (), None),
             ("succeeded", ("sk-provider-credential",), None),
+            ("succeeded", ("artifact/sk-provider-credential",), None),
             ("failed", (), "provider://credential"),
         ):
             with self.subTest(values=values), self.assertRaises(InvalidSchemaError):
-                SessionResult(*values)
-        result = SessionResult("succeeded", ("validation/report",))
+                SessionResult(values[0], receipt_context(), values[1], values[2])
+        result = session_result(evidence=("validation/report",))
         adapter = FakeHostAdapter(host_capabilities(), resume_results=(result,))
         decision = BuilderSessionManager(adapter).resume_or_replace(
             builder_node(), handle(),
-            ValidationFeedback("build", "deterministic_validation_failure"), now=NOW,
+            ValidationFeedback("build", "deterministic_validation_failure"),
+            context=receipt_context(), now=NOW,
         )
         object.__setattr__(result, "evidence", ("sk-mutated-credential",))
         self.assertNotIn("sk-mutated-credential", repr(decision))
@@ -375,10 +524,8 @@ class BuilderResumeTests(unittest.TestCase):
     def test_supported_resume_state_round_trips_and_rejects_corrupt_foreign_or_missing_state(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
         original = handle(value="real-opaque-resume-value")
-        context = ResumeStateContext(
-            "run-1", "build", "attempt-1", "openai", "codex-native",
-        )
-        durable = manager.serialize_resume_state(original, context)
+        context = receipt_context()
+        durable = manager.serialize_resume_state(original)
         reloaded = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
         restored = reloaded.restore_resume_state(durable, context)
         self.assertEqual(restored.opaque_handle, original.opaque_handle)
@@ -413,16 +560,14 @@ class BuilderResumeTests(unittest.TestCase):
 
     def test_resume_state_rejects_wrong_same_host_context_and_oversize_or_deep_bytes(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
-        context = ResumeStateContext(
-            "run-1", "build", "attempt-1", "openai", "codex-native",
-        )
-        durable = manager.serialize_resume_state(handle(), context)
+        context = receipt_context()
+        durable = manager.serialize_resume_state(handle())
         replacements = (
-            ResumeStateContext("run-2", "build", "attempt-1", "openai", "codex-native"),
-            ResumeStateContext("run-1", "review", "attempt-1", "openai", "codex-native"),
-            ResumeStateContext("run-1", "build", "attempt-2", "openai", "codex-native"),
-            ResumeStateContext("run-1", "build", "attempt-1", "anthropic", "codex-native"),
-            ResumeStateContext("run-1", "build", "attempt-1", "openai", "wrapper"),
+            receipt_context(run="run-2"),
+            receipt_context(node="review"),
+            receipt_context(attempt="attempt-2"),
+            receipt_context(provider="anthropic"),
+            receipt_context(rail="wrapper"),
         )
         for other in replacements:
             with self.subTest(other=other), self.assertRaises(InvalidSchemaError) as rejected:

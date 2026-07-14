@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Optional
 
 from .adapters.base import (
-    DEFAULT_EXECUTOR_CAPABILITY, EXECUTOR_CAPABILITIES, EXECUTORS, GATE_KINDS,
+    DEFAULT_DISPATCH_CAPABILITY, DEFAULT_EXECUTOR_CAPABILITY,
+    DISPATCH_RAIL_CAPABILITIES, EXECUTOR_CAPABILITIES, EXECUTORS, GATE_KINDS,
     HostCapability, NodeSpec, WorkflowClass, WorkflowContext, invalid_policy,
 )
 from .policies import GatePolicy
@@ -17,9 +18,6 @@ from .policies import GatePolicy
 
 WORKFLOW_CLASSES_SCHEMA_VERSION = 1
 DEFAULT_CLASSES_PATH = Path(__file__).resolve().parent.parent / "workflow-classes.json"
-DEFAULT_CLASSES_SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent / "workflow-classes-schema.json"
-)
 
 
 def _repository_file(relative: str) -> Path:
@@ -49,7 +47,8 @@ def _node_record(value: object) -> dict:
         raise invalid_policy("invalid_workflow_node")
     allowed = {
         "id", "depends_on", "gate_kind", "required_evidence", "executor",
-        "required_capability", "executor_overridable",
+        "required_capability", "required_dispatch_capability",
+        "executor_overridable",
     }
     if "id" not in value:
         raise invalid_policy("missing_node_id")
@@ -72,6 +71,8 @@ def _node_record(value: object) -> dict:
         type(value["gate_kind"]) is not str or value["gate_kind"] not in GATE_KINDS
     ):
         raise invalid_policy("unknown_gate_kind")
+    if value["gate_kind"] not in (None, "cleanup") and not required_evidence:
+        raise invalid_policy("invalid_workflow_node")
     if value["executor"] is not None and (
         type(value["executor"]) is not str or value["executor"] not in EXECUTORS
     ):
@@ -83,12 +84,34 @@ def _node_record(value: object) -> dict:
         )
     except (TypeError, ValueError):
         raise invalid_policy("unknown_capability_name") from None
+    try:
+        required_dispatch_capability = (
+            None if value["required_dispatch_capability"] is None
+            else HostCapability(value["required_dispatch_capability"])
+        )
+    except (TypeError, ValueError):
+        raise invalid_policy("unknown_capability_name") from None
+    if (
+        required_dispatch_capability is not None
+        and required_dispatch_capability not in set(DISPATCH_RAIL_CAPABILITIES.values())
+    ):
+        raise invalid_policy("inconsistent_dispatch_capability")
     if type(value["executor_overridable"]) is not bool:
         raise invalid_policy("invalid_workflow_node")
-    if value["executor"] is None and required_capability is not None:
+    if value["executor"] is None and (
+        required_capability is not None or required_dispatch_capability is not None
+    ):
         raise invalid_policy("inconsistent_executor_capability")
-    if value["executor"] is not None and required_capability not in EXECUTOR_CAPABILITIES[value["executor"]]:
+    if value["executor"] is not None and (
+        required_capability not in EXECUTOR_CAPABILITIES[value["executor"]]
+        or required_dispatch_capability is None
+    ):
         raise invalid_policy("inconsistent_executor_capability")
+    if (
+        value["executor"] == "openrouter"
+        and required_dispatch_capability is not HostCapability.OPENROUTER_EXEC
+    ):
+        raise invalid_policy("inconsistent_dispatch_capability")
     if value["executor"] is None and value["executor_overridable"]:
         raise invalid_policy("inconsistent_executor_capability")
     return {
@@ -98,6 +121,7 @@ def _node_record(value: object) -> dict:
         "required_evidence": tuple(required_evidence),
         "executor": value["executor"],
         "required_capability": required_capability,
+        "required_dispatch_capability": required_dispatch_capability,
         "executor_overridable": value["executor_overridable"],
     }
 
@@ -150,73 +174,41 @@ def _validate_graph(records: tuple[dict, ...]) -> None:
         raise invalid_policy("cleanup_terminal_invariant")
 
 
-def _load_boundaries() -> dict:
-    try:
-        schema = json.loads(DEFAULT_CLASSES_SCHEMA_PATH.read_text(encoding="utf-8"))
-        boundaries = schema["x-kernel-boundaries"]
-    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
-        raise invalid_policy("invalid_workflow_boundary_schema") from None
-    if type(boundaries) is not dict or set(boundaries) != {"classes", "promotion"}:
-        raise invalid_policy("invalid_workflow_boundary_schema")
-    return boundaries
-
-
-def _validate_boundary(records: tuple[dict, ...], boundary: object, reason: str) -> None:
-    if type(boundary) is not dict or set(boundary) != {
-        "node_ids", "edges", "gates", "executors", "terminal_node",
-    }:
-        raise invalid_policy("invalid_workflow_boundary_schema")
-    try:
-        node_ids = tuple(boundary["node_ids"])
-        edges = tuple(tuple(item) for item in boundary["edges"])
-        gates = {
-            node_id: (value["gate_kind"], tuple(value["required_evidence"]))
-            for node_id, value in boundary["gates"].items()
-        }
-        executors = {
-            node_id: (
-                value["executor"], value["required_capability"],
-                value["executor_overridable"],
-            )
-            for node_id, value in boundary["executors"].items()
-        }
-        terminal = boundary["terminal_node"]
-    except (AttributeError, KeyError, TypeError):
-        raise invalid_policy("invalid_workflow_boundary_schema") from None
-    actual_edges = tuple(
-        (dependency, record["id"])
-        for record in records for dependency in record["depends_on"]
-    )
-    actual_gates = {
-        record["id"]: (record["gate_kind"], record["required_evidence"])
-        for record in records if record["gate_kind"] is not None
+def _validate_promotion(records: tuple[dict, ...]) -> None:
+    """Require every promoted execution path to cross a promotion gate."""
+    ids = [record["id"] for record in records]
+    if not records or len(ids) != len(set(ids)):
+        raise invalid_policy("promotion_gate_required")
+    by_id = {record["id"]: record for record in records}
+    seen = set()
+    for record in records:
+        internal = {value for value in record["depends_on"] if value in by_id}
+        if not internal <= seen:
+            raise invalid_policy("promotion_gate_required")
+        seen.add(record["id"])
+    gates = {
+        record["id"] for record in records
+        if record["gate_kind"] == "investigation_promotion"
     }
-    actual_executors = {
-        record["id"]: (
-            record["executor"],
-            record["required_capability"].value,
-            record["executor_overridable"],
-        )
-        for record in records if record["executor"] is not None
-    }
-    if (
-        tuple(record["id"] for record in records) != node_ids
-        or actual_edges != edges
-        or actual_gates != gates
-        or actual_executors != executors
-        or not records
-        or records[-1]["id"] != terminal
-    ):
-        raise invalid_policy(reason)
+    if not gates:
+        raise invalid_policy("promotion_gate_required")
+    for record in records:
+        if record["executor"] is None:
+            continue
+        ancestors = set()
+        pending = list(record["depends_on"])
+        while pending:
+            dependency = pending.pop()
+            if dependency in ancestors:
+                continue
+            ancestors.add(dependency)
+            if dependency in by_id:
+                pending.extend(by_id[dependency]["depends_on"])
+        if not gates <= ancestors:
+            raise invalid_policy("promotion_gate_required")
 
 
 def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...]]:
-    boundaries = _load_boundaries()
-    class_boundaries = boundaries["classes"]
-    if type(class_boundaries) is not dict or set(class_boundaries) != {
-        kind.value for kind in WorkflowClass
-    }:
-        raise invalid_policy("invalid_workflow_boundary_schema")
     source = Path(path) if path is not None else DEFAULT_CLASSES_PATH
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
@@ -238,10 +230,6 @@ def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...
             raise invalid_policy("invalid_workflow_class")
         records = tuple(_node_record(item) for item in definition["nodes"])
         _validate_graph(records)
-        _validate_boundary(
-            records, class_boundaries[kind.value],
-            "mandatory_workflow_boundary_changed",
-        )
         result[kind] = records
     promotion = payload["promotion"]
     if type(promotion) is not dict or set(promotion) != {"investigation"}:
@@ -250,9 +238,7 @@ def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...
     if type(promoted) is not dict or set(promoted) != {"nodes"}:
         raise invalid_policy("invalid_promotion_policy")
     promotion_nodes = tuple(_node_record(item) for item in promoted["nodes"])
-    _validate_boundary(
-        promotion_nodes, boundaries["promotion"], "promotion_boundary_invalid",
-    )
+    _validate_promotion(promotion_nodes)
     result["promotion"] = promotion_nodes
     return result
 
@@ -305,20 +291,26 @@ class WorkflowTemplates:
         for record in records:
             executor = record["executor"]
             required_capability = record["required_capability"]
+            required_dispatch_capability = record["required_dispatch_capability"]
             executor_overridable = record["executor_overridable"]
             routing_reason = None
             if executor is not None:
                 if sensitive:
                     executor = "claude"
                     required_capability = HostCapability.ANTHROPIC_NATIVE_EXECUTION
+                    required_dispatch_capability = HostCapability.NATIVE_DISPATCH
+                    executor_overridable = False
                     routing_reason = "sensitive_path_override"
                 elif normalized is WorkflowClass.SECURITY:
                     executor = "claude"
                     required_capability = HostCapability.ANTHROPIC_NATIVE_EXECUTION
+                    required_dispatch_capability = HostCapability.NATIVE_DISPATCH
+                    executor_overridable = False
                     routing_reason = "security_workflow_override"
                 elif context.requested_executor is not None and executor_overridable:
                     executor = context.requested_executor
                     required_capability = DEFAULT_EXECUTOR_CAPABILITY[executor]
+                    required_dispatch_capability = DEFAULT_DISPATCH_CAPABILITY[executor]
                     routing_reason = "requested_executor"
                 else:
                     routing_reason = "workflow_default"
@@ -334,6 +326,7 @@ class WorkflowTemplates:
                 routing_reason=routing_reason,
                 gate_decision=gate,
                 required_capability=required_capability,
+                required_dispatch_capability=required_dispatch_capability,
                 executor_overridable=executor_overridable,
             ))
         return tuple(nodes)

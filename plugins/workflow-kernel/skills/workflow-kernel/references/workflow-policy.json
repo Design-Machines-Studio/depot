@@ -24,6 +24,7 @@
     "native_dispatch",
     "companion_dispatch",
     "wrapper_dispatch",
+    "openrouter_exec",
     "session_resume",
     "remote_sandbox",
     "container",

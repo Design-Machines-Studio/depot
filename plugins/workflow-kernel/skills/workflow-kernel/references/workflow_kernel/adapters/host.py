@@ -10,9 +10,11 @@ from typing import Iterable, Optional
 
 from .base import (
     BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
-    HostCapability, MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob,
-    ResumeStateContext, SessionHandle, SessionResult, ValidationFeedback,
-    _snapshot_session_handle, _snapshot_session_result, invalid_policy,
+    DISPATCH_RAIL_CAPABILITIES, EXECUTOR_PROVIDERS, HostCapability,
+    MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob, ResumeStateContext,
+    SessionHandle, SessionResult, ValidationFeedback, _snapshot_resume_context,
+    _snapshot_session_handle, _snapshot_session_result,
+    _snapshot_validation_feedback, invalid_policy,
 )
 
 
@@ -20,7 +22,7 @@ _ROLE_CAPABILITIES = {
     "native": HostCapability.NATIVE_DISPATCH,
     "codex_companion": HostCapability.COMPANION_DISPATCH,
     "wrapper": HostCapability.WRAPPER_DISPATCH,
-    "openrouter_exec": HostCapability.WRAPPER_DISPATCH,
+    "openrouter_exec": HostCapability.OPENROUTER_EXEC,
     "none": None,
 }
 
@@ -122,10 +124,12 @@ class FakeHostAdapter:
     def capabilities(self) -> HostCapabilities:
         return self._capabilities
 
-    def dispatch(self, node: NodeSpec) -> Optional[SessionHandle]:
-        if type(node) is not NodeSpec:
+    def dispatch(
+        self, node: NodeSpec, context: ResumeStateContext,
+    ) -> Optional[SessionHandle]:
+        if type(node) is not NodeSpec or type(context) is not ResumeStateContext:
             raise invalid_policy("invalid_node_spec")
-        self.dispatch_calls.append(node)
+        self.dispatch_calls.append((node, context))
         return self._dispatch_handles.pop(0) if self._dispatch_handles else None
 
     def resume(
@@ -135,7 +139,9 @@ class FakeHostAdapter:
     ) -> SessionResult:
         self.resume_calls.append((handle, feedback))
         if not self._resume_results:
-            return SessionResult("blocked", (), "fake_resume_result_unavailable")
+            return SessionResult(
+                "blocked", handle.context, (), "fake_resume_result_unavailable",
+            )
         return self._resume_results.pop(0)
 
 
@@ -150,11 +156,15 @@ def _timestamp(value: str) -> datetime:
 
 
 class BuilderSessionManager:
-    """Owns capability-safe dispatch/resume and trusted-store persistence.
+    """Owns provenance-safe dispatch/resume and trusted-store persistence.
 
-    Resume blobs contain real opaque handles and are intended only for a
-    package-owned trusted store. Their checksum detects corruption; it does not
-    claim authenticity. Public repr/projections remain redacted.
+    Adapter receipts must match the authorized node, run, attempt, provider,
+    executor capability, and concrete dispatch rail. Resume blobs contain real
+    opaque handles and belong only in a protected package-owned trusted store
+    with explicit retention/deletion. Their checksum detects corruption; it
+    does not claim authenticity. Public repr/projections remain redacted, and
+    blobs are excluded from ordinary receipts, events, evidence, artifacts,
+    shadow reports, Airlift payloads, and checkpoints.
     """
     def __init__(self, adapter: HostAdapter, max_age_seconds: int = 86_400):
         if type(max_age_seconds) is not int or max_age_seconds < 0:
@@ -169,19 +179,42 @@ class BuilderSessionManager:
             return None
         return capabilities if type(capabilities) is HostCapabilities else None
 
-    def dispatch(self, node: NodeSpec) -> BuilderSessionDecision:
+    def dispatch(
+        self, node: NodeSpec, context: ResumeStateContext,
+    ) -> BuilderSessionDecision:
         if type(node) is not NodeSpec:
             raise invalid_policy("invalid_node_spec")
+        context = self._authorized_context(node, context, "invalid_builder_dispatch_request")
         blocked = self._gate_preflight(node)
         if blocked is not None:
             return blocked
         capabilities = self._safe_capabilities()
         if capabilities is None:
             return BuilderSessionDecision(BuilderOutcome.ADAPTER_CAPABILITIES_FAILED)
-        preflight = self._capability_preflight(node, capabilities)
+        preflight = self._capability_preflight(node, context, capabilities)
         if preflight is not None:
             return preflight
-        return self._dispatch_with_capabilities(node, capabilities, replacement=False)
+        return self._dispatch_with_capabilities(
+            node, context, capabilities, replacement=False,
+        )
+
+    def _authorized_context(
+        self, node: NodeSpec, context: ResumeStateContext, reason_code: str,
+    ) -> ResumeStateContext:
+        try:
+            context = _snapshot_resume_context(context)
+            dispatch_capability = DISPATCH_RAIL_CAPABILITIES[context.rail]
+        except (KeyError, TypeError):
+            raise invalid_policy(reason_code) from None
+        if (
+            node.executor is None
+            or context.node_id != node.node_id
+            or context.provider != EXECUTOR_PROVIDERS[node.executor]
+            or context.capability is not node.required_capability
+            or dispatch_capability is not node.required_dispatch_capability
+        ):
+            raise invalid_policy(reason_code)
+        return context
 
     def _gate_preflight(
         self, node: NodeSpec,
@@ -191,11 +224,16 @@ class BuilderSessionManager:
         return None
 
     def _capability_preflight(
-        self, node: NodeSpec, capabilities: HostCapabilities,
+        self, node: NodeSpec, context: ResumeStateContext,
+        capabilities: HostCapabilities,
     ) -> Optional[BuilderSessionDecision]:
         if (
             node.required_capability is None
             or not capabilities.supports(node.required_capability)
+            or node.required_dispatch_capability is None
+            or not capabilities.supports(node.required_dispatch_capability)
+            or not capabilities.supports(context.capability)
+            or not capabilities.supports(DISPATCH_RAIL_CAPABILITIES[context.rail])
         ):
             return BuilderSessionDecision(BuilderOutcome.HOST_CAPABILITY_UNAVAILABLE)
         return None
@@ -203,12 +241,13 @@ class BuilderSessionManager:
     def _dispatch_with_capabilities(
         self,
         node: NodeSpec,
+        context: ResumeStateContext,
         capabilities: HostCapabilities,
         *,
         replacement: bool,
     ) -> BuilderSessionDecision:
         try:
-            candidate = self._adapter.dispatch(node)
+            candidate = self._adapter.dispatch(node, context)
         except Exception:
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_ADAPTER_DISPATCH_FAILED
@@ -226,7 +265,13 @@ class BuilderSessionManager:
                 BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
                 if replacement else BuilderOutcome.INVALID_SESSION_HANDLE
             )
-        if handle.host_name != capabilities.host_name:
+        if (
+            handle.host_name != capabilities.host_name
+            or handle.context != context
+            or handle.context.capability is not node.required_capability
+            or DISPATCH_RAIL_CAPABILITIES[handle.context.rail]
+            is not node.required_dispatch_capability
+        ):
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
                 if replacement else BuilderOutcome.INVALID_SESSION_HANDLE
@@ -241,13 +286,18 @@ class BuilderSessionManager:
         self,
         handle: Optional[SessionHandle],
         now: str,
+        context: ResumeStateContext,
         capabilities: HostCapabilities,
     ) -> bool:
         if handle is None or type(handle) is not SessionHandle:
             return False
         if not capabilities.supports(HostCapability.SESSION_RESUME):
             return False
-        if not handle.resume_capable or handle.host_name != capabilities.host_name:
+        if (
+            not handle.resume_capable
+            or handle.host_name != capabilities.host_name
+            or handle.context != context
+        ):
             return False
         age = (_timestamp(now) - _timestamp(handle.created_at)).total_seconds()
         return 0 <= age <= self._max_age_seconds
@@ -258,9 +308,16 @@ class BuilderSessionManager:
         handle: Optional[SessionHandle],
         feedback: ValidationFeedback,
         *,
+        context: ResumeStateContext,
         now: str,
     ) -> BuilderSessionDecision:
         if type(node) is not NodeSpec or type(feedback) is not ValidationFeedback:
+            raise invalid_policy("invalid_builder_resume_request")
+        context = self._authorized_context(
+            node, context, "invalid_builder_resume_request",
+        )
+        feedback = _snapshot_validation_feedback(feedback)
+        if feedback.node_id != node.node_id:
             raise invalid_policy("invalid_builder_resume_request")
         blocked = self._gate_preflight(node)
         if blocked is not None:
@@ -268,10 +325,10 @@ class BuilderSessionManager:
         capabilities = self._safe_capabilities()
         if capabilities is None:
             return BuilderSessionDecision(BuilderOutcome.ADAPTER_CAPABILITIES_FAILED)
-        preflight = self._capability_preflight(node, capabilities)
+        preflight = self._capability_preflight(node, context, capabilities)
         if preflight is not None:
             return preflight
-        if self._can_resume(handle, now, capabilities):
+        if self._can_resume(handle, now, context, capabilities):
             try:
                 result = self._adapter.resume(_snapshot_session_handle(handle), feedback)
             except Exception:
@@ -281,18 +338,22 @@ class BuilderSessionManager:
                     safe_result = _snapshot_session_result(result)
                 except Exception:
                     safe_result = None
-                if safe_result is not None:
+                if safe_result is not None and safe_result.context == context:
                     return BuilderSessionDecision(
                         BuilderOutcome.SESSION_RESUMED, handle, safe_result,
                     )
-        return self._dispatch_with_capabilities(node, capabilities, replacement=True)
+        return self._dispatch_with_capabilities(
+            node, context, capabilities, replacement=True,
+        )
 
-    def serialize_resume_state(
-        self, handle: SessionHandle, context: ResumeStateContext,
-    ) -> ResumeStateBlob:
-        """Create a context-bound opaque blob for a trusted package store."""
+    def serialize_resume_state(self, handle: SessionHandle) -> ResumeStateBlob:
+        """Persist validated receipt provenance in a trusted package store only.
+
+        The blob is excluded from receipts, events, evidence, artifacts, shadow
+        reports, and checkpoints. A protected store owns retention and deletion.
+        """
         snapshot = _snapshot_session_handle(handle)
-        context = _snapshot_resume_context(context)
+        context = snapshot.context
         handle_payload = {
             "host_name": snapshot.host_name,
             "opaque_handle": snapshot.opaque_handle,
@@ -332,11 +393,10 @@ class BuilderSessionManager:
                 "schema_version", "context", "handle", "checksum",
             } or payload["schema_version"] != 1:
                 raise ValueError
-            if _json_shape(payload, depth=0) > 32:
-                raise ValueError
             context_payload = payload["context"]
             if type(context_payload) is not dict or set(context_payload) != {
                 "run_id", "node_id", "attempt_id", "provider", "rail",
+                "capability",
             }:
                 raise ValueError
             stored_context = ResumeStateContext(**context_payload)
@@ -348,7 +408,7 @@ class BuilderSessionManager:
             checked = {"context": stored_context.to_dict(), "handle": handle_payload}
             if hashlib.sha256(_canonical_json(checked)).hexdigest() != payload["checksum"]:
                 raise ValueError
-            handle = SessionHandle(**handle_payload)
+            handle = SessionHandle(context=stored_context, **handle_payload)
         except (AttributeError, TypeError, ValueError, UnicodeError, json.JSONDecodeError,
                 RecursionError):
             raise invalid_policy("invalid_session_resume_state") from None
@@ -359,29 +419,18 @@ class BuilderSessionManager:
         capabilities = self._safe_capabilities()
         if capabilities is None:
             raise invalid_policy("adapter_capabilities_failed")
-        if stored_context != expected_context or handle.host_name != capabilities.host_name:
+        if (
+            stored_context != expected_context
+            or handle.context != stored_context
+            or handle.host_name != capabilities.host_name
+            or not capabilities.supports(stored_context.capability)
+            or not capabilities.supports(
+                DISPATCH_RAIL_CAPABILITIES[stored_context.rail]
+            )
+        ):
             raise invalid_policy("foreign_session_resume_state")
         return _snapshot_session_handle(handle)
 
 
 def _canonical_json(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-
-def _snapshot_resume_context(context: ResumeStateContext) -> ResumeStateContext:
-    if type(context) is not ResumeStateContext:
-        raise invalid_policy("invalid_session_resume_context")
-    try:
-        return ResumeStateContext(**context.to_dict())
-    except (AttributeError, TypeError):
-        raise invalid_policy("invalid_session_resume_context") from None
-
-
-def _json_shape(value: object, *, depth: int) -> int:
-    if depth > 4:
-        raise ValueError
-    if type(value) is dict:
-        return len(value) + sum(_json_shape(item, depth=depth + 1) for item in value.values())
-    if type(value) is list:
-        return len(value) + sum(_json_shape(item, depth=depth + 1) for item in value)
-    return 1

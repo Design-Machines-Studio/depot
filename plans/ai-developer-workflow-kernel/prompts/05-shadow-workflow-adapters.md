@@ -69,6 +69,9 @@ generic host parity and record honest fallback/misroute evidence.
 | `plugins/dm-review/skills/review/references/repo-cleanup-contract.md` | Git/Docker sibling lifecycle from Chunk 03 |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md` | Required persona/browser behavior |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/docker-ownership.md` | Required cleanup timing and labels |
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/base.py` | Closed builder outcomes, provenance-bound handles/results, validation feedback, observation helper |
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/host.py` | Capability/rail enforcement, resume/replacement manager, protected restore boundary |
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/__init__.py` | Public continuity contract and trusted-store exclusions |
 
 ## Required Interfaces
 
@@ -165,6 +168,33 @@ and pipeline-run validate and pass it unchanged into `translate_manifest`,
 `RunSpec`, events, receipts, and metrics. Security retains its existing provider
 and approval overrides regardless of host. Tests cover all seven classes, the
 legacy default, invalid values, and security override preservation.
+
+## Builder Continuity Integration
+
+Chunk 05 consumes the Chunk 02 adapter contract; it does not redesign or bypass
+it. Capture the validated `SessionHandle` returned by builder dispatch together
+with its immutable run/node/attempt, provider, concrete rail, and capability
+provenance. On deterministic validation failure, construct secret-safe
+`ValidationFeedback` for the same node and call the manager's resume-or-replace
+path. Preserve the closed outcome: resumed original session, replacement
+dispatch, resume unavailable, gate/capability block, or adapter failure.
+
+Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
+only in permission-restricted package-owned storage with explicit retention and
+deletion. Restore requires exact run/node/attempt/provider/rail/capability
+context before any adapter call. Never place blob bytes in ordinary artifacts,
+shadow reports, events, receipts, Airlift payloads, or checkpoints; those paths
+may carry only the safe digest projection and authoritative receipt reference.
+
+Translation must require an authoritative dispatch/resume receipt reference.
+`BuilderSessionDecision.to_evidence_event` is observation-only: it records
+builder observations but cannot stand in for that receipt. When a validated
+`SessionResult` exists, merge its already-normalized evidence references with
+the observation references, deduplicate without reordering, and keep the
+authoritative receipt reference explicit. Tests must cover handle capture,
+feedback validation and mutation snapshots, protected trusted restore,
+resume/replacement translation, same-host wrong-rail rejection, and the rule
+that no translated success exists without an authoritative receipt.
 
 ## dm-review Translation Map
 
@@ -284,16 +314,19 @@ Any routing change is a proposal with evidence and requires human approval.
 3. Write failing dm-review lane/finding/convergence translation tests.
 4. Write failing cross-host parity tests and named explained-difference cases.
 5. Write failing reliability aggregation and no-policy-mutation tests.
-6. Implement translators and shadow comparison as pure code.
-7. Implement metrics from events only.
-8. Extend the runtime CLI and add trust-anchored source/dual-cache compatible resolution to
+6. Write failing builder-continuity translation tests for receipt-bound handle
+   capture, validation feedback, protected restore, resume/replacement outcomes,
+   authoritative receipt requirements, and safe evidence merging.
+7. Implement translators and shadow comparison as pure code.
+8. Implement metrics from events only.
+9. Extend the runtime CLI and add trust-anchored source/dual-cache compatible resolution to
    canonical commands with stable commands and exit codes.
-9. Add `workflowClass` schema/emission/translation and named-stage shadow hooks.
-10. Add create-time Docker instrumentation plus authoritative Step 3j cleanup
+10. Add `workflowClass` schema/emission/translation and named-stage shadow hooks.
+11. Add create-time Docker instrumentation plus authoritative Step 3j cleanup
     and Step 5b reconciliation planning/execution/result receipts.
-11. Add verification profile and recovery obligations to pipeline/dm-review.
-12. Update artifact lifecycle and postmortem schemas.
-13. Run kernel tests and all current workflow/Codex/cascade validators.
+12. Add verification profile and recovery obligations to pipeline/dm-review.
+13. Update artifact lifecycle and postmortem schemas.
+14. Run kernel tests and all current workflow/Codex/cascade validators.
 
 ## Acceptance Criteria
 
@@ -323,6 +356,14 @@ Any routing change is a proposal with evidence and requires human approval.
       rules; unexplained missing evidence is `unsafe_to_promote`.
 - [ ] Every shadow event references its authoritative receipt/artifact and stores
       redacted data only.
+- [ ] Builder continuity captures provenance-bound handles, validates and
+      snapshots feedback, restores only from protected trusted storage, and
+      translates every resume/replacement closed outcome without fabricating an
+      authoritative receipt.
+- [ ] Resume blobs have explicit retention/deletion and are excluded from
+      ordinary artifacts, shadow reports, events, receipts, Airlift payloads,
+      and checkpoints. Observation evidence safely merges normalized
+      `SessionResult` evidence only beside an authoritative receipt reference.
 - [ ] Canonical Markdown invokes documented runtime CLI commands, never
       `python -c`; canonical-root/Claude-cache/Codex-cache resolution validates
       realpath containment, no symlink escape, plugin name/version, and ignores
@@ -409,6 +450,8 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 - Do not change provider routing, sensitive-path rules, or review severity.
 - Do not hand-edit generated Codex manifests or command-skill aliases; Chunk 06
   regenerates them from canonical sources.
+- Chunk 06 owns package-level `SKILL.md` and final documentation synchronization;
+  this chunk implements only the adapter integration contract above.
 - Preserve existing Markdown headings used by validators; add stable subheadings
   rather than relying on line numbers.
 - Do not refactor surrounding code unless required for the task.

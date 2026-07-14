@@ -2,66 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://designmachines.ca/schemas/workflow-classes-schema.json",
   "title": "Workflow Kernel Class Templates",
-  "x-kernel-boundaries": {
-    "classes": {
-      "chore": {
-        "node_ids": ["assess", "build", "deterministic_validation", "review", "cleanup"],
-        "edges": [["assess", "build"], ["build", "deterministic_validation"], ["deterministic_validation", "review"], ["review", "cleanup"]],
-        "gates": {"deterministic_validation": {"gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {"build": {"executor": "codex", "required_capability": "codex_execution", "executor_overridable": true}, "review": {"executor": "claude", "required_capability": "claude_execution", "executor_overridable": false}},
-        "terminal_node": "cleanup"
-      },
-      "bug": {
-        "node_ids": ["reproduce", "build_fix", "regression_validation", "review", "cleanup"],
-        "edges": [["reproduce", "build_fix"], ["build_fix", "regression_validation"], ["regression_validation", "review"], ["review", "cleanup"]],
-        "gates": {"regression_validation": {"gate_kind": "deterministic_validation", "required_evidence": ["regression_evidence"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {"build_fix": {"executor": "codex", "required_capability": "codex_execution", "executor_overridable": true}, "review": {"executor": "claude", "required_capability": "claude_execution", "executor_overridable": false}},
-        "terminal_node": "cleanup"
-      },
-      "feature": {
-        "node_ids": ["assess", "research_plan", "build", "validation", "review", "requirements_evidence", "cleanup"],
-        "edges": [["assess", "research_plan"], ["research_plan", "build"], ["build", "validation"], ["validation", "review"], ["review", "requirements_evidence"], ["requirements_evidence", "cleanup"]],
-        "gates": {"research_plan": {"gate_kind": "evidence", "required_evidence": ["research_plan"]}, "validation": {"gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"]}, "requirements_evidence": {"gate_kind": "evidence", "required_evidence": ["requirements_evidence"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {"build": {"executor": "codex", "required_capability": "codex_execution", "executor_overridable": true}, "review": {"executor": "claude", "required_capability": "claude_execution", "executor_overridable": false}},
-        "terminal_node": "cleanup"
-      },
-      "hotfix": {
-        "node_ids": ["reproduce_impact", "build", "focused_validation", "risk_gate", "review", "cleanup"],
-        "edges": [["reproduce_impact", "build"], ["build", "focused_validation"], ["focused_validation", "risk_gate"], ["risk_gate", "review"], ["review", "cleanup"]],
-        "gates": {"reproduce_impact": {"gate_kind": "evidence", "required_evidence": ["impact_assessment"]}, "focused_validation": {"gate_kind": "deterministic_validation", "required_evidence": ["focused_validation_evidence"]}, "risk_gate": {"gate_kind": "risk", "required_evidence": ["risk_assessment"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {"build": {"executor": "codex", "required_capability": "codex_execution", "executor_overridable": true}, "review": {"executor": "claude", "required_capability": "claude_execution", "executor_overridable": false}},
-        "terminal_node": "cleanup"
-      },
-      "security": {
-        "node_ids": ["threat_risk_evidence", "security_build", "validation", "security_review", "human_gate", "cleanup"],
-        "edges": [["threat_risk_evidence", "security_build"], ["security_build", "validation"], ["validation", "security_review"], ["security_review", "human_gate"], ["human_gate", "cleanup"]],
-        "gates": {"threat_risk_evidence": {"gate_kind": "evidence", "required_evidence": ["threat_model", "risk_assessment"]}, "validation": {"gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"]}, "security_review": {"gate_kind": "evidence", "required_evidence": ["security_review"]}, "human_gate": {"gate_kind": "human_approval", "required_evidence": ["risk_assessment", "security_review"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {"security_build": {"executor": "claude", "required_capability": "anthropic_native_execution", "executor_overridable": false}, "security_review": {"executor": "claude", "required_capability": "anthropic_native_execution", "executor_overridable": false}},
-        "terminal_node": "cleanup"
-      },
-      "investigation": {
-        "node_ids": ["hypothesis", "evidence_gathering", "conclusion_next_action", "cleanup"],
-        "edges": [["hypothesis", "evidence_gathering"], ["evidence_gathering", "conclusion_next_action"], ["conclusion_next_action", "cleanup"]],
-        "gates": {"hypothesis": {"gate_kind": "evidence", "required_evidence": ["hypothesis"]}, "evidence_gathering": {"gate_kind": "evidence", "required_evidence": ["investigation_evidence"]}, "conclusion_next_action": {"gate_kind": "next_action", "required_evidence": ["conclusion", "next_action"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {},
-        "terminal_node": "cleanup"
-      },
-      "migration": {
-        "node_ids": ["preflight", "schema_data_change", "compatibility_validation", "rollback_evidence", "review", "human_gate", "cleanup"],
-        "edges": [["preflight", "schema_data_change"], ["schema_data_change", "compatibility_validation"], ["compatibility_validation", "rollback_evidence"], ["rollback_evidence", "review"], ["review", "human_gate"], ["human_gate", "cleanup"]],
-        "gates": {"preflight": {"gate_kind": "evidence", "required_evidence": ["migration_preflight"]}, "compatibility_validation": {"gate_kind": "deterministic_validation", "required_evidence": ["compatibility_evidence"]}, "rollback_evidence": {"gate_kind": "evidence", "required_evidence": ["rollback_evidence"]}, "review": {"gate_kind": "evidence", "required_evidence": ["review_evidence"]}, "human_gate": {"gate_kind": "human_approval", "required_evidence": ["rollback_evidence", "review_evidence"]}, "cleanup": {"gate_kind": "cleanup", "required_evidence": []}},
-        "executors": {"schema_data_change": {"executor": "codex", "required_capability": "codex_execution", "executor_overridable": true}, "review": {"executor": "claude", "required_capability": "claude_execution", "executor_overridable": false}},
-        "terminal_node": "cleanup"
-      }
-    },
-    "promotion": {
-      "node_ids": ["promotion_gate", "promoted_build"],
-      "edges": [["evidence_gathering", "promotion_gate"], ["promotion_gate", "promoted_build"]],
-      "gates": {"promotion_gate": {"gate_kind": "investigation_promotion", "required_evidence": ["promotion_decision"]}},
-      "executors": {"promoted_build": {"executor": "codex", "required_capability": "codex_execution", "executor_overridable": true}},
-      "terminal_node": "promoted_build"
-    }
-  },
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "classes", "promotion"],
@@ -100,7 +40,7 @@
     "node": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "depends_on", "gate_kind", "required_evidence", "executor", "required_capability", "executor_overridable"],
+      "required": ["id", "depends_on", "gate_kind", "required_evidence", "executor", "required_capability", "required_dispatch_capability", "executor_overridable"],
       "properties": {
         "id": {"type": "string", "minLength": 1},
         "depends_on": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
@@ -108,12 +48,14 @@
         "required_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "executor": {"type": ["string", "null"], "enum": [null, "claude", "codex", "openrouter"]},
         "required_capability": {"description": "Must match the selected executor; anthropic_native_execution is reserved for trusted native Claude rails.", "type": ["string", "null"], "enum": [null, "claude_execution", "codex_execution", "openrouter_execution", "anthropic_native_execution"]},
+        "required_dispatch_capability": {"description": "Required host dispatch rail, enforced independently from executor capability.", "type": ["string", "null"], "enum": [null, "native_dispatch", "companion_dispatch", "wrapper_dispatch", "openrouter_exec"]},
         "executor_overridable": {"type": "boolean"}
       },
       "allOf": [
-        {"if": {"properties": {"executor": {"const": null}}}, "then": {"properties": {"required_capability": {"const": null}, "executor_overridable": {"const": false}}}},
+        {"if": {"properties": {"executor": {"const": null}}}, "then": {"properties": {"required_capability": {"const": null}, "required_dispatch_capability": {"const": null}, "executor_overridable": {"const": false}}}},
+        {"if": {"properties": {"executor": {"enum": ["claude", "codex", "openrouter"]}}}, "then": {"properties": {"required_dispatch_capability": {"type": "string"}}}},
         {"if": {"properties": {"executor": {"const": "codex"}}}, "then": {"properties": {"required_capability": {"const": "codex_execution"}}}},
-        {"if": {"properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}}}},
+        {"if": {"properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}, "required_dispatch_capability": {"const": "openrouter_exec"}}}},
         {"if": {"properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}}}}
       ]
     }

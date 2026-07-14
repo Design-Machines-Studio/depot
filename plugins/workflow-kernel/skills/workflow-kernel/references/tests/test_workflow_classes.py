@@ -1,4 +1,5 @@
 import json
+import importlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,73 +10,23 @@ from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
 
 
-EXPECTED = {
-    "chore": (
-        ("assess", (), None),
-        ("build", ("assess",), None),
-        ("deterministic_validation", ("build",), "deterministic_validation"),
-        ("review", ("deterministic_validation",), None),
-        ("cleanup", ("review",), "cleanup"),
-    ),
-    "bug": (
-        ("reproduce", (), None),
-        ("build_fix", ("reproduce",), None),
-        ("regression_validation", ("build_fix",), "deterministic_validation"),
-        ("review", ("regression_validation",), None),
-        ("cleanup", ("review",), "cleanup"),
-    ),
-    "feature": (
-        ("assess", (), None),
-        ("research_plan", ("assess",), "evidence"),
-        ("build", ("research_plan",), None),
-        ("validation", ("build",), "deterministic_validation"),
-        ("review", ("validation",), None),
-        ("requirements_evidence", ("review",), "evidence"),
-        ("cleanup", ("requirements_evidence",), "cleanup"),
-    ),
-    "hotfix": (
-        ("reproduce_impact", (), "evidence"),
-        ("build", ("reproduce_impact",), None),
-        ("focused_validation", ("build",), "deterministic_validation"),
-        ("risk_gate", ("focused_validation",), "risk"),
-        ("review", ("risk_gate",), None),
-        ("cleanup", ("review",), "cleanup"),
-    ),
-    "security": (
-        ("threat_risk_evidence", (), "evidence"),
-        ("security_build", ("threat_risk_evidence",), None),
-        ("validation", ("security_build",), "deterministic_validation"),
-        ("security_review", ("validation",), "evidence"),
-        ("human_gate", ("security_review",), "human_approval"),
-        ("cleanup", ("human_gate",), "cleanup"),
-    ),
-    "investigation": (
-        ("hypothesis", (), "evidence"),
-        ("evidence_gathering", ("hypothesis",), "evidence"),
-        ("conclusion_next_action", ("evidence_gathering",), "next_action"),
-        ("cleanup", ("conclusion_next_action",), "cleanup"),
-    ),
-    "migration": (
-        ("preflight", (), "evidence"),
-        ("schema_data_change", ("preflight",), None),
-        ("compatibility_validation", ("schema_data_change",), "deterministic_validation"),
-        ("rollback_evidence", ("compatibility_validation",), "evidence"),
-        ("review", ("rollback_evidence",), "evidence"),
-        ("human_gate", ("review",), "human_approval"),
-        ("cleanup", ("human_gate",), "cleanup"),
-    ),
-}
-
-
 class WorkflowClassTests(unittest.TestCase):
-    def test_all_workflow_classes_expand_to_exact_dependency_valid_graphs(self):
+    def test_authoritative_json_expands_to_dependency_valid_graphs(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        definitions = json.loads(source.read_text(encoding="utf-8"))["classes"]
         templates = WorkflowTemplates()
-        self.assertEqual({kind.value for kind in WorkflowClass}, set(EXPECTED))
+        self.assertEqual({kind.value for kind in WorkflowClass}, set(definitions))
         for kind in WorkflowClass:
             with self.subTest(kind=kind.value):
                 nodes = templates.expand(kind, WorkflowContext())
-                actual = tuple((node.node_id, node.dependencies, node.gate_kind) for node in nodes)
-                self.assertEqual(actual, EXPECTED[kind.value])
+                expected = tuple(
+                    (record["id"], tuple(record["depends_on"]), record["gate_kind"])
+                    for record in definitions[kind.value]["nodes"]
+                )
+                actual = tuple(
+                    (node.node_id, node.dependencies, node.gate_kind) for node in nodes
+                )
+                self.assertEqual(actual, expected)
                 self.assertEqual(nodes[-1].node_id, "cleanup")
                 seen = set()
                 for node in nodes:
@@ -125,6 +76,7 @@ class WorkflowClassTests(unittest.TestCase):
                 self.assertTrue(all(node.routing_reason in {
                     "sensitive_path_override", "security_workflow_override"
                 } for node in routed))
+                self.assertTrue(all(not node.executor_overridable for node in routed))
                 self.assertNotIn("credentials.py", repr(nodes))
 
     def test_sensitive_paths_are_normalized_and_take_precedence_over_security_class(self):
@@ -146,13 +98,15 @@ class WorkflowClassTests(unittest.TestCase):
         for path in ("/internal/auth/keys.py", "../internal/auth/keys.py",
                      "internal/auth/../safe.py", "internal\\auth\\keys.py",
                      "internal/auth/\x00keys.py", "internal/auth/\x1fkeys.py",
+                     "internal/auth/\u0085keys.py", "internal/auth/\u009fkeys.py",
                      "x" * 4_097):
-            with self.subTest(path=path), self.assertRaises(InvalidSchemaError) as raised:
-                WorkflowContext(changed_paths=(path,))
-            self.assertEqual(
-                raised.exception.details["reason_code"],
-                detail_digest("invalid_changed_path"),
-            )
+            with self.subTest(path=path):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowContext(changed_paths=(path,))
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_changed_path"),
+                )
         with self.assertRaises(InvalidSchemaError) as raised:
             WorkflowContext(changed_paths=tuple(f"file-{index}" for index in range(1_025)))
         self.assertEqual(
@@ -167,6 +121,9 @@ class WorkflowClassTests(unittest.TestCase):
         review = next(node for node in nodes if node.node_id == "review")
         self.assertEqual(build.executor, "openrouter")
         self.assertEqual(build.required_capability, HostCapability.OPENROUTER_EXECUTION)
+        self.assertEqual(
+            build.required_dispatch_capability, HostCapability.OPENROUTER_EXEC,
+        )
         self.assertEqual(review.executor, "claude")
         self.assertEqual(review.required_capability, HostCapability.CLAUDE_EXECUTION)
         self.assertEqual(review.routing_reason, "workflow_default")
@@ -186,15 +143,21 @@ class WorkflowClassTests(unittest.TestCase):
                          if kind is WorkflowClass.SECURITY and node.executor == "claude"
                          else expected[node.executor] if node.executor is not None else None),
                     )
+                    self.assertEqual(
+                        node.required_dispatch_capability,
+                        HostCapability.NATIVE_DISPATCH if node.executor is not None else None,
+                    )
 
-    def test_schema_metadata_owns_boundaries_and_executor_capability_conditions(self):
+    def test_authoritative_json_has_no_schema_boundary_mirror(self):
         root = Path(__file__).parents[1]
         schema = json.loads((root / "workflow-classes-schema.json").read_text())
-        boundaries = schema["x-kernel-boundaries"]
-        self.assertEqual(set(boundaries["classes"]), set(EXPECTED))
-        self.assertEqual(boundaries["classes"]["security"]["terminal_node"], "cleanup")
+        self.assertNotIn("x-kernel-boundaries", schema)
         node_schema = schema["$defs"]["node"]
         self.assertIn("allOf", node_schema)
+
+    def test_resume_parser_has_no_redundant_json_shape_traversal(self):
+        host_module = importlib.import_module("workflow_kernel.adapters.host")
+        self.assertFalse(hasattr(host_module, "_json_shape"))
 
     def test_malformed_scalar_shapes_fail_with_stable_errors(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"
@@ -285,35 +248,28 @@ class WorkflowClassTests(unittest.TestCase):
                     WorkflowTemplates(path)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest(reason))
 
-    def test_template_loader_rejects_erased_mandatory_boundaries(self):
+    def test_template_loader_rejects_only_generic_mandatory_constraints(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
-
-        erased_gate = json.loads(json.dumps(base))
-        human = next(node for node in erased_gate["classes"]["security"]["nodes"]
-                     if node["id"] == "human_gate")
-        human["gate_kind"] = None
-        mutations.append(("mandatory_workflow_boundary_changed", erased_gate))
 
         erased_evidence = json.loads(json.dumps(base))
         human = next(node for node in erased_evidence["classes"]["migration"]["nodes"]
                      if node["id"] == "human_gate")
         human["required_evidence"] = []
-        mutations.append(("mandatory_workflow_boundary_changed", erased_evidence))
+        mutations.append(("invalid_workflow_node", erased_evidence))
 
-        rerouted_security = json.loads(json.dumps(base))
-        build = next(node for node in rerouted_security["classes"]["security"]["nodes"]
-                     if node["id"] == "security_build")
-        build["executor"] = "openrouter"
-        build["required_capability"] = "openrouter_execution"
-        mutations.append(("mandatory_workflow_boundary_changed", rerouted_security))
+        missing_dispatch = json.loads(json.dumps(base))
+        build = next(node for node in missing_dispatch["classes"]["chore"]["nodes"]
+                     if node["id"] == "build")
+        build["required_dispatch_capability"] = None
+        mutations.append(("inconsistent_executor_capability", missing_dispatch))
 
         bypassed_promotion = json.loads(json.dumps(base))
         bypassed_promotion["promotion"]["investigation"]["nodes"][1]["depends_on"] = [
             "evidence_gathering"
         ]
-        mutations.append(("promotion_boundary_invalid", bypassed_promotion))
+        mutations.append(("promotion_gate_required", bypassed_promotion))
 
         for reason, payload in mutations:
             with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
@@ -333,6 +289,7 @@ class WorkflowClassTests(unittest.TestCase):
         orphan["classes"]["chore"]["nodes"].insert(-1, {
             "id": "orphan_observation", "depends_on": ["assess"], "gate_kind": None,
             "required_evidence": [], "executor": None, "required_capability": None,
+            "required_dispatch_capability": None,
             "executor_overridable": False,
         })
         for reason, payload in (

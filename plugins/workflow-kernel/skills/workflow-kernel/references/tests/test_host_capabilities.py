@@ -13,12 +13,40 @@ from workflow_kernel.schema import InvalidSchemaError
 
 
 class HostCapabilityTests(unittest.TestCase):
+    def test_openrouter_exec_is_a_distinct_dispatch_rail_capability(self):
+        values = {capability.value for capability in HostCapability}
+        self.assertIn("openrouter_exec", values)
+        payload = {
+            "hosts": {
+                "explicit": {"roles": {"only": {
+                    "kind": "openrouter_exec", "probe": "openrouter",
+                    "models": ["z-ai/glm-5.2"],
+                }}},
+                "wrapper": {"roles": {"only": {
+                    "kind": "wrapper", "probe": "openrouter",
+                    "models": ["z-ai/glm-5.2"],
+                }}},
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            explicit = {value.value for value in
+                        capabilities_from_harness_profile("explicit", path).capabilities}
+            wrapper = {value.value for value in
+                       capabilities_from_harness_profile("wrapper", path).capabilities}
+        self.assertIn("openrouter_exec", explicit)
+        self.assertNotIn("wrapper_dispatch", explicit)
+        self.assertIn("wrapper_dispatch", wrapper)
+        self.assertNotIn("openrouter_exec", wrapper)
+
     def test_harness_fixtures_declare_only_observed_dispatch_rails(self):
         expected = {
             "claude-code": {
                 HostCapability.NATIVE_DISPATCH,
                 HostCapability.COMPANION_DISPATCH,
                 HostCapability.WRAPPER_DISPATCH,
+                HostCapability.OPENROUTER_EXEC,
                 HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
@@ -27,12 +55,14 @@ class HostCapabilityTests(unittest.TestCase):
             "codex": {
                 HostCapability.NATIVE_DISPATCH,
                 HostCapability.WRAPPER_DISPATCH,
+                HostCapability.OPENROUTER_EXEC,
                 HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
             },
             "generic": {
                 HostCapability.WRAPPER_DISPATCH,
+                HostCapability.OPENROUTER_EXEC,
                 HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,

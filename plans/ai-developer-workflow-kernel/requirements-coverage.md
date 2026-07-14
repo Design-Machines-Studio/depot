@@ -26,8 +26,11 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 
 5. Claude/Codex behavior, provider security, receipts, honest degradation
    - Chunks: 02, 05, 06
-   - Evidence: Chunk 02 host/security policy, Chunk 05 `Host and Provider Parity`,
-     and Chunk 06 compatibility/promotion/security validation.
+   - Evidence: Chunk 02 host/security policy enforces executor and concrete
+     dispatch-rail capabilities with immutable receipt provenance; Chunk 05
+     `Host and Provider Parity` and `Builder Continuity Integration` require an
+     authoritative receipt reference; Chunk 06 owns final compatibility,
+     promotion, security, and package-documentation synchronization.
 
 6. Behavioral transition and failure-injection validation
    - Chunks: 01–06
@@ -76,9 +79,17 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 
 14. Preserve builder sessions across deterministic validation failures
     - Chunks: 02, 05, 06
-    - Evidence: Chunk 02 builder-resume policy/tests, Chunk 05 receipt translation,
-      and Chunk 06 failure/promotion fixtures preserve resumable-host evidence and
-      distinguish non-resumable hosts honestly.
+    - Evidence: Chunk 02 builder-resume policy/tests bind handles and results to
+      exact run/node/attempt/provider/rail/capability provenance, snapshot
+      credential-safe validation feedback, reject same-host wrong-rail receipts,
+      and persist only receipt-derived context. Chunk 05 `Builder Continuity
+      Integration` covers handle capture, deterministic feedback, protected
+      permission-restricted restore, retention/deletion, resume/replacement
+      translation, authoritative receipt tests, and safe merging of normalized
+      result evidence with observation-only evidence. Resume blobs are explicitly
+      excluded from ordinary artifacts, shadow reports, events, receipts,
+      Airlift payloads, and checkpoints. Chunk 06 owns final failure fixtures and
+      package documentation synchronization.
 
 15. Route all seven top-level workflow classes end to end
     - Chunks: 02, 05, 06
@@ -119,4 +130,7 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 Result: 20/20 covered after adversarial revision. Docker creation ownership,
 real-project persona discovery, browser process restart, workflow-class routing,
 runtime CLI integration, and promotion evaluation now have explicit executable
-contracts rather than inferred coverage.
+contracts rather than inferred coverage. Builder continuity now also has an
+explicit receipt-provenance and protected-storage contract; future Chunk 05
+implementation remains unimplemented here, and Chunk 06 retains package-doc
+sync ownership.
