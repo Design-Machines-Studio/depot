@@ -133,6 +133,9 @@ class HostRoute:
     provider: str
     capability: HostCapability
     rail: str
+    _origin_seal: tuple[str, str, str] = field(
+        init=False, repr=False, compare=False,
+    )
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("HostRoute is final")
@@ -148,7 +151,7 @@ class HostRoute:
                 if type(self.capability) is HostCapability
                 else HostCapability(self.capability)
             )
-        except (TypeError, ValueError):
+        except Exception:
             raise invalid_policy("invalid_host_route") from None
         if capability not in set().union(*EXECUTOR_CAPABILITIES.values()):
             raise invalid_policy("invalid_host_route")
@@ -179,6 +182,9 @@ class HostRoute:
         ):
             raise invalid_policy("incoherent_host_route")
         object.__setattr__(self, "capability", capability)
+        object.__setattr__(
+            self, "_origin_seal", (self.provider, capability.value, self.rail),
+        )
 
     @property
     def dispatch_capability(self) -> HostCapability:
@@ -203,8 +209,17 @@ def _snapshot_host_route(route: HostRoute) -> HostRoute:
     if type(route) is not HostRoute:
         raise invalid_policy("invalid_host_route")
     try:
-        return HostRoute(route.provider, route.capability, route.rail)
-    except (AttributeError, TypeError):
+        if (
+            type(route.provider) is not str
+            or type(route.capability) is not HostCapability
+            or type(route.rail) is not str
+        ):
+            raise ValueError
+        primitives = (route.provider, route.capability.value, route.rail)
+        if type(route._origin_seal) is not tuple or route._origin_seal != primitives:
+            raise ValueError
+        return HostRoute(*primitives)
+    except Exception:
         raise invalid_policy("invalid_host_route") from None
 
 
@@ -415,6 +430,9 @@ class NodeSpec:
     required_capability: Optional[HostCapability] = None
     required_dispatch_capability: Optional[HostCapability] = None
     executor_overridable: bool = False
+    _origin_seal: tuple[object, ...] = field(
+        init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         if type(self.node_id) is not str or not self.node_id:
@@ -465,12 +483,69 @@ class NodeSpec:
             raise invalid_policy("invalid_node_spec")
         if self.executor is None and self.executor_overridable:
             raise invalid_policy("inconsistent_executor_capability")
+        object.__setattr__(self, "_origin_seal", _node_spec_primitives(self))
+
+
+def _node_spec_primitives(node: NodeSpec) -> tuple[object, ...]:
+    gate = node.gate_decision
+    if (
+        type(node.node_id) is not str
+        or type(node.dependencies) is not tuple
+        or any(type(value) is not str for value in node.dependencies)
+        or node.gate_kind is not None and type(node.gate_kind) is not str
+        or type(node.required_evidence) is not tuple
+        or any(type(value) is not str for value in node.required_evidence)
+        or node.executor is not None and type(node.executor) is not str
+        or node.routing_reason is not None and type(node.routing_reason) is not str
+        or type(gate) is not GateDecision
+        or type(gate.allowed) is not bool
+        or type(gate.reason_code) is not str
+        or type(gate.missing_evidence) is not tuple
+        or any(type(value) is not str for value in gate.missing_evidence)
+        or type(gate.human_required) is not bool
+        or node.required_capability is not None
+        and type(node.required_capability) is not HostCapability
+        or node.required_dispatch_capability is not None
+        and type(node.required_dispatch_capability) is not HostCapability
+        or type(node.executor_overridable) is not bool
+    ):
+        raise ValueError
+    return (
+        node.node_id,
+        node.dependencies,
+        node.gate_kind,
+        node.required_evidence,
+        node.executor,
+        node.routing_reason,
+        (
+            gate.allowed,
+            gate.reason_code,
+            gate.missing_evidence,
+            gate.human_required,
+        ),
+        (
+            None
+            if node.required_capability is None
+            else node.required_capability.value
+        ),
+        (
+            None
+            if node.required_dispatch_capability is None
+            else node.required_dispatch_capability.value
+        ),
+        node.executor_overridable,
+    )
 
 
 def _snapshot_node_spec(node: NodeSpec) -> NodeSpec:
     if type(node) is not NodeSpec:
         raise invalid_policy("invalid_node_spec")
     try:
+        if (
+            type(node._origin_seal) is not tuple
+            or node._origin_seal != _node_spec_primitives(node)
+        ):
+            raise ValueError
         return NodeSpec(
             node_id=node.node_id,
             dependencies=node.dependencies,
@@ -483,7 +558,7 @@ def _snapshot_node_spec(node: NodeSpec) -> NodeSpec:
             required_dispatch_capability=node.required_dispatch_capability,
             executor_overridable=node.executor_overridable,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_node_spec") from None
 
 
@@ -549,7 +624,7 @@ class HostCapabilities:
     _sealed_evidence_model_version: int = field(
         init=False, repr=False, compare=False,
     )
-    _sealed_routes: frozenset[HostRoute] = field(
+    _sealed_routes: frozenset[tuple[str, str, str]] = field(
         init=False, repr=False, compare=False,
     )
 
@@ -562,7 +637,7 @@ class HostCapabilities:
                 value if type(value) is HostCapability else HostCapability(value)
                 for value in raw_values
             ]
-        except (TypeError, ValueError):
+        except Exception:
             raise invalid_policy("unknown_capability_name") from None
         if len(converted) != len(set(converted)):
             raise invalid_policy("duplicate_capability_name")
@@ -572,7 +647,7 @@ class HostCapabilities:
         try:
             raw_routes = list(self.routes)
             routes = frozenset(_snapshot_host_route(route) for route in raw_routes)
-        except (TypeError, ValueError):
+        except Exception:
             raise invalid_policy("invalid_host_route") from None
         if len(raw_routes) != len(routes):
             raise invalid_policy("duplicate_host_route")
@@ -594,7 +669,10 @@ class HostCapabilities:
         object.__setattr__(
             self, "_sealed_evidence_model_version", self.evidence_model_version,
         )
-        object.__setattr__(self, "_sealed_routes", routes)
+        object.__setattr__(self, "_sealed_routes", frozenset(
+            (route.provider, route.capability.value, route.rail)
+            for route in routes
+        ))
 
     def supports(self, capability: HostCapability) -> bool:
         snapshot = _snapshot_host_capabilities(self)
@@ -629,15 +707,30 @@ def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilit
             or capabilities.evidence_model_version
             != capabilities._sealed_evidence_model_version
             or type(capabilities.routes) is not frozenset
-            or capabilities.routes != capabilities._sealed_routes
+            or type(capabilities._sealed_routes) is not frozenset
+            or any(
+                type(route) is not tuple
+                or len(route) != 3
+                or any(type(value) is not str for value in route)
+                for route in capabilities._sealed_routes
+            )
         ):
+            raise ValueError
+        routes = tuple(
+            _snapshot_host_route(route) for route in capabilities.routes
+        )
+        route_values = frozenset(
+            (route.provider, route.capability.value, route.rail)
+            for route in routes
+        )
+        if route_values != capabilities._sealed_routes:
             raise ValueError
         return HostCapabilities(
             capabilities._sealed_host_name,
             capabilities._sealed_capabilities - ROUTE_SCOPED_CAPABILITIES,
             capabilities._sealed_transition_model_version,
             capabilities._sealed_evidence_model_version,
-            capabilities._sealed_routes,
+            frozenset(routes),
         )
     except Exception:
         raise invalid_policy("invalid_host_capabilities") from None

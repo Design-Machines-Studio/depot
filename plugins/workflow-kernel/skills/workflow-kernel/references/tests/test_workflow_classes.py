@@ -4,78 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests import detail_digest
+from tests import detail_digest, schema_matches
 from workflow_kernel.adapters.base import HostCapability, WorkflowClass, WorkflowContext
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import GatePolicy, load_policy
 from workflow_kernel.workflows import WorkflowTemplates
-
-
-def schema_matches(value, schema, root=None):
-    root = schema if root is None else root
-    if "$ref" in schema:
-        target = root
-        for part in schema["$ref"].removeprefix("#/").split("/"):
-            target = target[part]
-        return schema_matches(value, target, root)
-    expected_type = schema.get("type")
-    if expected_type is not None:
-        names = expected_type if isinstance(expected_type, list) else [expected_type]
-        matches = {
-            "object": type(value) is dict,
-            "array": type(value) is list,
-            "string": type(value) is str,
-            "integer": type(value) is int,
-            "boolean": type(value) is bool,
-            "null": value is None,
-        }
-        if not any(matches.get(name, False) for name in names):
-            return False
-    if "const" in schema and value != schema["const"]:
-        return False
-    if "enum" in schema and value not in schema["enum"]:
-        return False
-    if type(value) is str and len(value) < schema.get("minLength", 0):
-        return False
-    if type(value) is int and value < schema.get("minimum", value):
-        return False
-    if any(not schema_matches(value, item, root) for item in schema.get("allOf", [])):
-        return False
-    if "if" in schema and schema_matches(value, schema["if"], root):
-        if not schema_matches(value, schema.get("then", {}), root):
-            return False
-    if type(value) is dict:
-        properties = schema.get("properties", {})
-        if not set(schema.get("required", [])) <= set(value):
-            return False
-        additional = schema.get("additionalProperties", True)
-        extras = set(value) - set(properties)
-        if additional is False and extras:
-            return False
-        if type(additional) is dict and any(
-            not schema_matches(value[name], additional, root) for name in extras
-        ):
-            return False
-        if any(
-            name in properties and not schema_matches(item, properties[name], root)
-            for name, item in value.items()
-        ):
-            return False
-    if type(value) is list:
-        if not schema.get("minItems", 0) <= len(value) <= schema.get(
-            "maxItems", len(value)
-        ):
-            return False
-        if schema.get("uniqueItems") and len({json.dumps(
-            item, sort_keys=True,
-        ) for item in value}) != len(value):
-            return False
-        if "items" in schema and any(
-            not schema_matches(item, schema["items"], root) for item in value
-        ):
-            return False
-    return True
-
 
 class WorkflowClassTests(unittest.TestCase):
     def test_recursive_schema_matcher_supports_shared_superset_keywords(self):
@@ -102,6 +35,8 @@ class WorkflowClassTests(unittest.TestCase):
         ):
             with self.subTest(invalid=invalid):
                 self.assertFalse(schema_matches(invalid, schema))
+        self.assertFalse(schema_matches(True, {"const": 1}))
+        self.assertFalse(schema_matches(True, {"enum": [1]}))
 
     def test_authoritative_json_expands_to_dependency_valid_graphs(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"
@@ -272,7 +207,13 @@ class WorkflowClassTests(unittest.TestCase):
         self.assertNotIn("requirements", class_schema["properties"])
         anchor = policy["workflow_safety_anchor"]
         self.assertEqual(anchor["schema_version"], 1)
-        self.assertEqual(set(anchor), {"schema_version", "common", "classes", "promotion"})
+        self.assertEqual(
+            set(anchor), {
+                "schema_version", "common", "classes", "promotion",
+                "non_executable_classes",
+            },
+        )
+        self.assertEqual(anchor.get("non_executable_classes"), ["investigation"])
         self.assertEqual(set(anchor["classes"]), {"hotfix", "security", "migration"})
         self.assertEqual(set(anchor["promotion"]), {"investigation"})
         expected = {
@@ -591,6 +532,79 @@ class WorkflowClassTests(unittest.TestCase):
                     raised.exception.details["reason_code"],
                     detail_digest("workflow_requirement_unsatisfied"),
                 )
+
+    def test_investigation_base_rejects_direct_and_rewired_execution(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+
+        inserted = json.loads(json.dumps(base))
+        inserted_nodes = inserted["classes"]["investigation"]["nodes"]
+        conclusion = next(
+            node for node in inserted_nodes
+            if node["id"] == "conclusion_next_action"
+        )
+        unpromoted = {
+            "id": "unpromoted_build",
+            "depends_on": ["evidence_gathering"],
+            "gate_kind": None,
+            "required_evidence": [],
+            "executor": "codex",
+            "required_capability": "codex_execution",
+            "required_dispatch_capability": None,
+            "executor_overridable": True,
+        }
+        conclusion["depends_on"] = [unpromoted["id"]]
+        inserted_nodes.insert(inserted_nodes.index(conclusion), unpromoted)
+
+        rewired = json.loads(json.dumps(base))
+        rewired_conclusion = next(
+            node for node in rewired["classes"]["investigation"]["nodes"]
+            if node["id"] == "conclusion_next_action"
+        )
+        rewired_conclusion.update({
+            "executor": "codex",
+            "required_capability": "codex_execution",
+            "executor_overridable": True,
+        })
+
+        for payload in (inserted, rewired):
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("workflow_requirement_unsatisfied"),
+                )
+
+    def test_boolean_schema_versions_fail_schema_and_runtime(self):
+        root = Path(__file__).parents[1]
+        cases = (
+            (
+                "workflow-classes.json", "workflow-classes-schema.json",
+                lambda path: WorkflowTemplates(path),
+            ),
+            (
+                "workflow-policy.json", "workflow-policy-schema.json",
+                lambda path: load_policy(path),
+            ),
+        )
+        for default_name, schema_name, load in cases:
+            payload = json.loads((root / default_name).read_text(encoding="utf-8"))
+            schema = json.loads((root / schema_name).read_text(encoding="utf-8"))
+            payload["schema_version"] = True
+            with self.subTest(default=default_name):
+                self.assertFalse(schema_matches(payload, schema))
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / default_name
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaises(InvalidSchemaError) as raised:
+                        load(path)
+                    self.assertEqual(
+                        raised.exception.details["reason_code"],
+                        detail_digest("unsupported_policy_version"),
+                    )
 
     def test_gate_policy_snapshots_and_revalidates_injected_policy_document(self):
         document = load_policy()

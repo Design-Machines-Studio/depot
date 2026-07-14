@@ -227,6 +227,9 @@ def _validate_safety_anchor(
 ) -> None:
     for records in classes.values():
         _validate_required_stages(records, anchor["common"])
+    for kind in anchor["non_executable_classes"]:
+        if any(record["executor"] is not None for record in classes[kind]):
+            raise invalid_policy("workflow_requirement_unsatisfied")
     for kind, required in anchor["classes"].items():
         _validate_required_stages(classes[kind], required)
         _validate_anchored_execution(classes[kind], required)

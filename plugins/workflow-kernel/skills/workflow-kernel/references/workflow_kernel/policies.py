@@ -94,7 +94,10 @@ def _safety_stage_set(value: object) -> tuple[Mapping[str, object], ...]:
 
 def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
     value = _exact_keys(
-        value, {"schema_version", "common", "classes", "promotion"},
+        value, {
+            "schema_version", "common", "classes", "promotion",
+            "non_executable_classes",
+        },
         "invalid_workflow_safety_anchor",
     )
     if type(value["schema_version"]) is not int or value["schema_version"] != 1:
@@ -107,6 +110,17 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
         value["promotion"], {"investigation"},
         "invalid_workflow_safety_anchor",
     )
+    try:
+        non_executable_classes = tuple(
+            WorkflowClass(name) for name in value["non_executable_classes"]
+        )
+    except Exception:
+        raise invalid_policy("invalid_workflow_safety_anchor") from None
+    if (
+        type(value["non_executable_classes"]) is not list
+        or non_executable_classes != (WorkflowClass.INVESTIGATION,)
+    ):
+        raise invalid_policy("invalid_workflow_safety_anchor")
     return MappingProxyType({
         "schema_version": 1,
         "common": _safety_stage_set(value["common"]),
@@ -118,6 +132,7 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
             name: _safety_stage_set(stage_set)
             for name, stage_set in promotion.items()
         }),
+        "non_executable_classes": non_executable_classes,
     })
 
 
@@ -196,6 +211,7 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
         anchor = document.workflow_safety_anchor
         if not isinstance(anchor, Mapping) or set(anchor) != {
             "schema_version", "common", "classes", "promotion",
+            "non_executable_classes",
         }:
             raise ValueError
         classes = anchor["classes"]
@@ -217,6 +233,9 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
             "promotion": {
                 "investigation": _stage_set_payload(promotion["investigation"]),
             },
+            "non_executable_classes": [
+                kind.value for kind in anchor["non_executable_classes"]
+            ],
         }
         safety_anchor = _workflow_safety_anchor(anchor_payload)
         if document.economics_mode != "proposal_only":

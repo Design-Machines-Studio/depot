@@ -110,12 +110,18 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       `executor_overridable`, and ancestry. Removal, rewiring, execution removal,
       executor change, override flips, and insertion of executable nodes absent
       from the anchored class or promotion declaration fail independently of
-      templates.
+      templates. A separate trusted `non_executable_classes` constraint pins the
+      base investigation graph to zero executable nodes independently of the
+      promotion fragment, covering direct and rewired bypasses.
       Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
-      Anthropic native Claude. Chunk 05 adds the explicit
-      `workflowClass` manifest field and promptcraft → pipeline → RunSpec → event
-      → receipt propagation; Chunk 06 validates all classes and legacy defaulting.
+      Anthropic native Claude. `HostRoute` and every `NodeSpec` field, including
+      nested gate state, are bound to primitive origin seals; `HostCapabilities`
+      seals primitive route tuples. Coherent and nested mutation tests prove
+      rewrites fail before route authorization or manager dispatch. Chunk 05
+      adds the explicit `workflowClass` manifest field and promptcraft → pipeline
+      → RunSpec → event → receipt propagation; Chunk 06 validates all classes
+      and legacy defaulting.
 
 16. Declared isolation abstraction
     - Chunks: 02, 05

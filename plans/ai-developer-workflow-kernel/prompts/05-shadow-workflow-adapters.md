@@ -171,7 +171,9 @@ trusted-policy safety anchor remains authoritative; Chunk 05 must not recreate
 stage constants from `workflow-classes.json`. Tests cover all seven classes, the
 legacy default, invalid values, full hotfix and migration stage/ancestry/
 `executor_overridable` protection, rejection of unanchored executable work in
-anchored classes and promotion, and security override preservation.
+anchored classes and promotion, rejection of any executable node in the base
+investigation graph independently of promotion, and security override
+preservation.
 
 ## Builder Continuity Integration
 
@@ -182,7 +184,10 @@ builder dispatch. Aggregate `HostCapabilities.capabilities` is derived evidence,
 not authorization: callers declare only non-route resume/isolation features,
 while executor and dispatch entries derive exclusively from routes. Wrapper
 routes are analysis/text-only and cannot run builder
-nodes. Capture the validated `SessionHandle` returned by builder dispatch
+nodes. Treat route and node primitive origin seals as part of this boundary:
+coherent route rewrites, coordinated security-node rewrites, and nested
+gate/route mutation must fail before authorization or dispatch. Capture the
+validated `SessionHandle` returned by builder dispatch
 together with its immutable run/node/attempt and exact route provenance. On
 deterministic validation failure, construct secret-safe
 `ValidationFeedback` for the same node and call the manager's resume-or-replace

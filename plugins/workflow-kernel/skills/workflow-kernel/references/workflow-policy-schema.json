@@ -122,7 +122,7 @@
     "workflow_safety_anchor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "common", "classes", "promotion"],
+      "required": ["schema_version", "common", "classes", "promotion", "non_executable_classes"],
       "properties": {
         "schema_version": {"type": "integer", "const": 1},
         "common": {"$ref": "#/$defs/stage_set"},
@@ -141,6 +141,13 @@
           "additionalProperties": false,
           "required": ["investigation"],
           "properties": {"investigation": {"$ref": "#/$defs/stage_set"}}
+        },
+        "non_executable_classes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {"const": "investigation"}
         }
       }
     }

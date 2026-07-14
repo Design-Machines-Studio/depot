@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests import detail_digest
+from tests import detail_digest, schema_matches
 from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
 )
@@ -11,7 +11,6 @@ import workflow_kernel.policies as policy_module
 from workflow_kernel.policies import RetryPolicy, load_policy
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
-from tests.test_workflow_classes import schema_matches
 
 
 class RetryPolicyTests(unittest.TestCase):

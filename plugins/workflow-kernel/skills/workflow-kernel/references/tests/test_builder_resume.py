@@ -192,6 +192,56 @@ class BuilderResumeTests(unittest.TestCase):
         )
         self.assertEqual(decision.reason_code, "adapter_capabilities_failed")
 
+    def test_manager_rejects_coordinated_and_nested_node_rewrites(self):
+        companion = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "codex_companion",
+        )
+        adapter = FakeHostAdapter(
+            HostCapabilities("codex", (), routes=(companion,)),
+        )
+        coordinated = NodeSpec(
+            "security_build", executor="claude",
+            required_capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        object.__setattr__(coordinated, "executor", "codex")
+        object.__setattr__(
+            coordinated, "required_capability", HostCapability.CODEX_EXECUTION,
+        )
+        object.__setattr__(
+            coordinated, "required_dispatch_capability",
+            HostCapability.COMPANION_DISPATCH,
+        )
+
+        blocked_gate = GateDecision(
+            False, "missing_mandatory_evidence", ("security_review",),
+        )
+        nested = NodeSpec(
+            "security_build", gate_kind="evidence",
+            required_evidence=("security_review",), executor="codex",
+            gate_decision=blocked_gate,
+            required_capability=HostCapability.CODEX_EXECUTION,
+            required_dispatch_capability=HostCapability.COMPANION_DISPATCH,
+        )
+        object.__setattr__(nested.gate_decision, "allowed", True)
+        object.__setattr__(nested.gate_decision, "reason_code", "gate_satisfied")
+        object.__setattr__(nested.gate_decision, "missing_evidence", ())
+
+        context = receipt_context(node="security_build", rail="codex_companion")
+        for candidate in (coordinated, nested):
+            with self.subTest(candidate=candidate):
+                try:
+                    BuilderSessionManager(adapter).dispatch(candidate, context)
+                except InvalidSchemaError as raised:
+                    self.assertEqual(
+                        raised.details["reason_code"],
+                        detail_digest("invalid_node_spec"),
+                    )
+                except Exception as raised:
+                    self.fail("manager leaked " + type(raised).__name__)
+                else:
+                    self.fail("manager accepted rewritten node")
+
     def test_authorized_context_translates_snapshot_failures_per_public_method(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
         dispatch_context = receipt_context()

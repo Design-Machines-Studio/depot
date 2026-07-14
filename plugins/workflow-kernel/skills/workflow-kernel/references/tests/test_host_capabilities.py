@@ -94,6 +94,18 @@ class HostCapabilityTests(unittest.TestCase):
             _ = route.agentic
         self.assertEqual(repr(route), "HostRoute([INVALID])")
 
+        coherent = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "native",
+        )
+        object.__setattr__(coherent, "rail", "codex_companion")
+        with self.assertRaises(InvalidSchemaError) as coherent_rejected:
+            _ = coherent.dispatch_capability
+        self.assertEqual(
+            coherent_rejected.exception.details["reason_code"],
+            detail_digest("invalid_host_route"),
+        )
+        self.assertEqual(repr(coherent), "HostRoute([INVALID])")
+
     def test_route_authorization_and_aggregate_snapshot_each_route_once(self):
         route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
         original = adapter_base._snapshot_host_route
@@ -121,6 +133,41 @@ class HostCapabilityTests(unittest.TestCase):
         )
         object.__setattr__(node, "executor", "claude")
         self.assertFalse(route_satisfies_node(route, node))
+
+    def test_route_authorization_rejects_coherent_node_rewrite_and_hostile_iterable(self):
+        node = NodeSpec(
+            "security_build", executor="claude",
+            required_capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        object.__setattr__(node, "executor", "codex")
+        object.__setattr__(node, "required_capability", HostCapability.CODEX_EXECUTION)
+        object.__setattr__(
+            node, "required_dispatch_capability", HostCapability.COMPANION_DISPATCH,
+        )
+        companion = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "codex_companion",
+        )
+        self.assertFalse(route_satisfies_node(companion, node))
+
+        class HostileTuple(tuple):
+            def __iter__(self):
+                raise RuntimeError("provider-detail://credential")
+
+        hostile = NodeSpec(
+            "build", executor="codex",
+            required_capability=HostCapability.CODEX_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        object.__setattr__(hostile, "dependencies", HostileTuple())
+        try:
+            accepted = route_satisfies_node(
+                HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"),
+                hostile,
+            )
+        except Exception as raised:
+            self.fail("route predicate leaked " + type(raised).__name__)
+        self.assertFalse(accepted)
 
     def test_supports_revalidates_mutated_host_capabilities(self):
         capabilities = HostCapabilities("test", (HostCapability.WORKTREE,))
@@ -166,6 +213,19 @@ class HostCapabilityTests(unittest.TestCase):
         self.assertEqual(
             invalid_candidate.exception.details["reason_code"],
             detail_digest("invalid_host_route"),
+        )
+
+        nested = HostCapabilities("test", (), routes=(original,))
+        stored = next(iter(nested.routes))
+        object.__setattr__(stored, "rail", "codex_companion")
+        coherent_substitution = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "codex_companion",
+        )
+        with self.assertRaises(InvalidSchemaError) as nested_rejected:
+            nested.supports_route(coherent_substitution)
+        self.assertEqual(
+            nested_rejected.exception.details["reason_code"],
+            detail_digest("invalid_host_capabilities"),
         )
 
     def test_openrouter_exec_is_a_distinct_dispatch_rail_capability(self):

@@ -1,6 +1,91 @@
 """Workflow kernel tests."""
 import hashlib
+import json
 import os
+
+
+def _json_equal(left, right):
+    if type(left) is not type(right):
+        return False
+    if type(left) is dict:
+        return set(left) == set(right) and all(
+            _json_equal(left[name], right[name]) for name in left
+        )
+    if type(left) is list:
+        return len(left) == len(right) and all(
+            _json_equal(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    return left == right
+
+
+def schema_matches(value, schema, root=None):
+    """Match the JSON Schema keyword superset shared by policy tests."""
+    root = schema if root is None else root
+    if "$ref" in schema:
+        target = root
+        for part in schema["$ref"].removeprefix("#/").split("/"):
+            target = target[part]
+        return schema_matches(value, target, root)
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        names = expected_type if isinstance(expected_type, list) else [expected_type]
+        matches = {
+            "object": type(value) is dict,
+            "array": type(value) is list,
+            "string": type(value) is str,
+            "integer": type(value) is int,
+            "boolean": type(value) is bool,
+            "null": value is None,
+        }
+        if not any(matches.get(name, False) for name in names):
+            return False
+    if "const" in schema and not _json_equal(value, schema["const"]):
+        return False
+    if "enum" in schema and not any(
+        _json_equal(value, candidate) for candidate in schema["enum"]
+    ):
+        return False
+    if type(value) is str and len(value) < schema.get("minLength", 0):
+        return False
+    if type(value) is int and value < schema.get("minimum", value):
+        return False
+    if any(not schema_matches(value, item, root) for item in schema.get("allOf", [])):
+        return False
+    if "if" in schema and schema_matches(value, schema["if"], root):
+        if not schema_matches(value, schema.get("then", {}), root):
+            return False
+    if type(value) is dict:
+        properties = schema.get("properties", {})
+        if not set(schema.get("required", [])) <= set(value):
+            return False
+        additional = schema.get("additionalProperties", True)
+        extras = set(value) - set(properties)
+        if additional is False and extras:
+            return False
+        if type(additional) is dict and any(
+            not schema_matches(value[name], additional, root) for name in extras
+        ):
+            return False
+        if any(
+            name in properties and not schema_matches(item, properties[name], root)
+            for name, item in value.items()
+        ):
+            return False
+    if type(value) is list:
+        if not schema.get("minItems", 0) <= len(value) <= schema.get(
+            "maxItems", len(value)
+        ):
+            return False
+        if schema.get("uniqueItems") and len({
+            json.dumps(item, sort_keys=True) for item in value
+        }) != len(value):
+            return False
+        if "items" in schema and any(
+            not schema_matches(item, schema["items"], root) for item in value
+        ):
+            return False
+    return True
 
 
 def swap_parent_after_relative_stat(parent, entry_name):

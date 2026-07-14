@@ -78,7 +78,8 @@
           {"id": "promoted_build", "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true, "required_ancestors": ["promotion_gate"]}
         ]
       }
-    }
+    },
+    "non_executable_classes": ["investigation"]
   },
   "economics": {"mode": "proposal_only"}
 }
