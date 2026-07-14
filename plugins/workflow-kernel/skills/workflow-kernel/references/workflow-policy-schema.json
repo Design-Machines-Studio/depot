@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/workflow-policy-schema.json",
+  "title": "Workflow Kernel Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "retry", "gates", "isolation", "capability_names", "economics"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["budgets", "identical_signature_limit"],
+      "properties": {
+        "budgets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider_unavailable", "deterministic_validation_failure", "reviewer_finding", "browser_recovery", "cleanup", "infrastructure"],
+          "properties": {
+            "provider_unavailable": {"type": "integer", "minimum": 0},
+            "deterministic_validation_failure": {"type": "integer", "minimum": 0},
+            "reviewer_finding": {"type": "integer", "minimum": 0},
+            "browser_recovery": {"type": "integer", "minimum": 0},
+            "cleanup": {"type": "integer", "minimum": 0},
+            "infrastructure": {"type": "integer", "minimum": 0}
+          }
+        },
+        "identical_signature_limit": {"type": "integer", "minimum": 2}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["risk_human_approval"],
+      "properties": {
+        "risk_human_approval": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["low", "medium", "high", "critical"]}
+        }
+      }
+    },
+    "isolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order", "forbidden_downgrades"],
+      "properties": {
+        "order": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {"enum": ["remote_sandbox", "container", "worktree", "sequential_branch"]}
+        },
+        "forbidden_downgrades": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": {
+              "from": {"enum": ["remote_sandbox", "container", "worktree", "sequential_branch"]},
+              "to": {"enum": ["remote_sandbox", "container", "worktree", "sequential_branch"]}
+            }
+          }
+        }
+      }
+    },
+    "capability_names": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["native_dispatch", "companion_dispatch", "wrapper_dispatch", "openrouter_exec", "session_resume", "remote_sandbox", "container", "worktree", "sequential_branch"]}
+    },
+    "economics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {"mode": {"const": "proposal_only"}}
+    }
+  }
+}

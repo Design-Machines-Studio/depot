@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "retry": {
+    "budgets": {
+      "provider_unavailable": 2,
+      "deterministic_validation_failure": 1,
+      "reviewer_finding": 3,
+      "browser_recovery": 1,
+      "cleanup": 2,
+      "infrastructure": 1
+    },
+    "identical_signature_limit": 2
+  },
+  "gates": {
+    "risk_human_approval": ["high", "critical"]
+  },
+  "isolation": {
+    "order": ["remote_sandbox", "container", "worktree", "sequential_branch"],
+    "forbidden_downgrades": [
+      {"from": "remote_sandbox", "to": "sequential_branch"}
+    ]
+  },
+  "capability_names": [
+    "native_dispatch",
+    "companion_dispatch",
+    "wrapper_dispatch",
+    "openrouter_exec",
+    "session_resume",
+    "remote_sandbox",
+    "container",
+    "worktree",
+    "sequential_branch"
+  ],
+  "economics": {"mode": "proposal_only"}
+}

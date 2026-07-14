@@ -1,0 +1,76 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from tests import detail_digest
+from workflow_kernel.adapters.base import AttemptLedger, FailureReason, WorkflowClass, WorkflowContext
+from workflow_kernel.policies import RetryPolicy
+from workflow_kernel.schema import InvalidSchemaError
+from workflow_kernel.workflows import WorkflowTemplates
+
+
+class RetryPolicyTests(unittest.TestCase):
+    def test_each_normalized_reason_uses_its_own_budget(self):
+        policy = RetryPolicy()
+        budgets = {
+            FailureReason.PROVIDER_UNAVAILABLE: 2,
+            FailureReason.DETERMINISTIC_VALIDATION_FAILURE: 1,
+            FailureReason.REVIEWER_FINDING: 3,
+            FailureReason.BROWSER_RECOVERY: 1,
+            FailureReason.CLEANUP: 2,
+            FailureReason.INFRASTRUCTURE: 1,
+        }
+        self.assertEqual(set(budgets), set(FailureReason))
+        for reason, budget in budgets.items():
+            with self.subTest(reason=reason.value):
+                allowed = policy.decide(reason, AttemptLedger({reason: budget - 1}), None)
+                blocked = policy.decide(reason, AttemptLedger({reason: budget}), None)
+                self.assertTrue(allowed.allowed)
+                self.assertEqual(allowed.budget, budget)
+                self.assertFalse(blocked.allowed)
+                self.assertEqual(blocked.reason_code, "retry_budget_exhausted")
+
+    def test_identical_signature_converges_before_unrelated_budget_is_spent(self):
+        policy = RetryPolicy()
+        ledger = AttemptLedger(
+            {FailureReason.REVIEWER_FINDING: 2},
+            {FailureReason.REVIEWER_FINDING: ("same", "same")},
+        )
+        decision = policy.decide(FailureReason.REVIEWER_FINDING, ledger, "same")
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason_code, "identical_failure_convergence")
+        self.assertEqual(decision.prior_signature, "same")
+        self.assertEqual(decision.attempt_count, 2)
+        self.assertEqual(decision.budget, 3)
+        self.assertEqual(ledger.count(FailureReason.PROVIDER_UNAVAILABLE), 0)
+
+    def test_policy_decisions_do_not_mutate_proposal_only_economics_or_policy_file(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        before = source.read_bytes()
+        policy = RetryPolicy(source)
+        self.assertEqual(policy.economics_mode, "proposal_only")
+        policy.decide(FailureReason.PROVIDER_UNAVAILABLE, AttemptLedger(), "provider-down")
+        WorkflowTemplates().expand(
+            WorkflowClass.CHORE,
+            WorkflowContext(requested_executor="codex", economics_preference="cheapest"),
+        )
+        self.assertEqual(source.read_bytes(), before)
+
+    def test_invalid_policy_version_fails_closed(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload["schema_version"] = 99
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "policy.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                RetryPolicy(path)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("unsupported_policy_version"),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
