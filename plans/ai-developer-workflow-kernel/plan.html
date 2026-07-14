@@ -157,12 +157,14 @@ command_validate: hold one RunLease across ledger validation and state compariso
 reducers and event/state writers: shared field-wise bounded snapshots before comparison or projection
 state graph: nodes + dependency edges + state evidence share one aggregate item budget and one-pass node projection
 public recursive text: exact scalars; 4 MiB cumulative UTF-8 budget before retained allocation
-public collections: counted before allocation; reconstruction limit: 100,000 events
+public collections: counted before allocation; bounded iterables accept at most N items but may consume one lookahead item; reconstruction limit: 100,000 events
+trusted reducer updates: incrementally maintained node, edge, text, and evidence counters enforce state bounds; graph copy/access work is charged against MAX_RECONSTRUCTION_WORK=50100000
 durable reads/writes: open descriptor must remain the authoritative exclusive pathname before success
 durable parent capability: verified directory descriptor and identity own descriptor-relative open/stat/unlink/replace/fsync operations
 atomic state publication: one pinned parent spans observation, temp write/fsync, revision re-observation, rename, and directory fsync
-revision races: valid state interlopers remain RevisionConflictError and are never overwritten
+publication races: compare-and-swap and never-overwrite guarantees cover cooperating writers honoring the same RunLease; pinned checks cannot atomically exclude non-cooperating filesystem mutation in the final commit window; detected valid revision races remain RevisionConflictError
 lease fork safety: child explicit release and GC close inherited descriptors without LOCK_UN; primary errors outrank cleanup errors
+owned resource cleanup: temporary unlink, every descriptor close, and pinned-directory close are all attempted; primary failures win and sole cleanup failures are normalized
 state validation: direct/from_dict share one projection; reducers use trusted construction after one public-boundary graph validation
 cache resolution: candidates are checked for a runnable package in priority order and incomplete installs fall through
 public filesystem operations: setup, descriptor I/O, identity, fsync, close, and release use cause-suppressed KernelError boundaries</code></pre>

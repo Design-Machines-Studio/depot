@@ -22,7 +22,7 @@ for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cach
     if [ -f "$CANDIDATE/workflow_kernel/__init__.py" ] && \
        [ -f "$CANDIDATE/workflow_kernel/__main__.py" ] && \
        (cd "$CANDIDATE" && PYTHONPATH="$CANDIDATE" \
-         python3 -c 'import workflow_kernel.cli') >/dev/null 2>&1; then
+         python3 -m workflow_kernel --help) >/dev/null 2>&1; then
       KERNEL_REFS="$CANDIDATE"
       break
     fi
@@ -102,9 +102,11 @@ errors as stable JSON. Treat `--help` output as plain text.
   creation, write and sync, a second revision observation, descriptor-relative
   replacement, and directory sync, then
   requires that descriptor to remain the authoritative state pathname before
-  reporting success. A valid revision interloper remains a
-  `RevisionConflictError`; it is never overwritten or collapsed into generic
-  filesystem corruption. A missing file in a verified live parent remains the
+  reporting success. Compare-and-swap and never-overwrite guarantees cover
+  cooperating writers that honor the same `RunLease`; pinned checks cannot
+  atomically exclude non-cooperating filesystem mutation in the final commit
+  window. A detected valid revision race remains a `RevisionConflictError`
+  rather than generic filesystem corruption. A missing file in a verified live parent remains the
   public missing/empty case, while a missing bound parent is corruption.
   Use `StateStore.prepare(state)` before publishing an event that derives the
   state. It returns an opaque exact-type identity capability with no exposed
@@ -149,11 +151,15 @@ errors as stable JSON. Treat `--help` output as plain text.
   revision by one. A run may attach at most 1,024 evidence items across run and
   node state; transitions exceeding that aggregate limit fail before state
   reconstruction. Reconstruction streams at most 100,000 events and never
-  eagerly exhausts a caller iterable.
+  eagerly exhausts a caller iterable. A bounded iterable accepts at most N
+  items but may consume one lookahead item to prove that N was exceeded.
   Public `apply` validates the input state graph once and then constructs the
   legal output through a private trusted path. Reconstruction snapshots each
   untrusted event but does not revalidate the accumulated graph after every
-  accepted event.
+  accepted event. The reducer maintains node, dependency-edge, evidence, and
+  UTF-8 text counters before every trusted update. Reconstruction also charges
+  graph copy and access operations against `MAX_RECONSTRUCTION_WORK=50100000`,
+  bounding total replay work by the supported state and event limits.
 - One run-wide state-tree budget counts nodes, dependency edges, node evidence,
   and run evidence against `MAX_PAYLOAD_ITEMS` before dependency-graph helper
   structures are allocated. Node mappings and snapshots share one validated
@@ -242,7 +248,10 @@ copies. Public file, state, lease, and event `KernelError` wrappers suppress raw
 OS exception causes, including parent-directory, temporary-file, descriptor
 stat/dup/read/readline/write/flush/fsync/close, identity-check, and lock-release
 failures, so rejected paths and raw OS messages cannot reappear in formatted
-tracebacks. If cleanup also fails, the primary error remains authoritative.
+tracebacks. Owned descriptor, pinned-directory, and temporary-name scopes always
+attempt every close and unlink. If cleanup also fails, the primary error remains
+authoritative; a sole cleanup failure is normalized to the operation's public
+kernel error.
 `transition_receipt()` sanitizes the full event through the shared
 event schema, including its arbitrary payload, and accepts `state_digest` only
 in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,

@@ -19,7 +19,7 @@ from .schema import (
     serialize_kernel_error,
 )
 from .state import MAX_STATE_BYTES, PreparedState, RunLease, StateStore
-from .transitions import MAX_EVENT_ITEMS, TransitionEngine
+from .transitions import MAX_EVENT_ITEMS, MAX_RECONSTRUCTION_WORK, TransitionEngine
 
 __all__ = [
     "SCHEMA_VERSION", "RunMode", "RunStatus", "NodeStatus", "WorkflowEvent",
@@ -33,5 +33,6 @@ __all__ = [
     "encode_receipt", "evidence_receipt", "transition_receipt",
     "MAX_PAYLOAD_DEPTH", "MAX_PAYLOAD_ITEMS", "MAX_STRING_LENGTH",
     "MAX_TOTAL_STRING_BYTES", "MAX_EVIDENCE_ITEMS", "MAX_EVENT_ITEMS",
+    "MAX_RECONSTRUCTION_WORK",
     "MAX_RECORD_BYTES", "MAX_LEDGER_BYTES", "MAX_STATE_BYTES",
 ]

@@ -280,6 +280,7 @@ class CliTests(unittest.TestCase):
             broken = cache / "9.9.9/skills/workflow-kernel/references/workflow_kernel"
             broken.mkdir(parents=True)
             (broken / "__init__.py").write_text("")
+            (broken / "cli.py").write_text("")
             (broken / "__main__.py").write_text("raise RuntimeError('broken')\n")
             good = cache / "0.1.0/skills/workflow-kernel/references/workflow_kernel"
             good.mkdir(parents=True)
@@ -293,6 +294,56 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("older-viable-runtime", result.stdout)
+
+    def test_documented_cache_resolver_quietly_rejects_broken_main(self):
+        skill = Path(__file__).parents[2] / "SKILL.md"
+        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel/9.9.9/skills/workflow-kernel/references/workflow_kernel"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text("")
+            (package / "cli.py").write_text("")
+            (package / "__main__.py").write_text("raise RuntimeError('broken-main')\n")
+            result = subprocess.run(
+                ["zsh", "-c", snippet], text=True, capture_output=True,
+                env=dict(os.environ, HOME=directory), check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("runtime not found", result.stderr)
+        self.assertNotIn("broken-main", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_documented_cache_resolver_falls_from_broken_claude_to_codex(self):
+        skill = Path(__file__).parents[2] / "SKILL.md"
+        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            broken = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel/9.9.9/skills/workflow-kernel/references/workflow_kernel"
+            broken.mkdir(parents=True)
+            (broken / "__init__.py").write_text("")
+            (broken / "cli.py").write_text("")
+            (broken / "__main__.py").write_text("raise RuntimeError('broken-claude')\n")
+            good = Path(directory) / ".codex/plugins/cache/depot/workflow-kernel/0.1.0/skills/workflow-kernel/references/workflow_kernel"
+            good.mkdir(parents=True)
+            (good / "__init__.py").write_text("")
+            (good / "cli.py").write_text("")
+            (good / "__main__.py").write_text("print('codex-fallback-runtime')\n")
+            result = subprocess.run(
+                ["zsh", "-c", snippet], text=True, capture_output=True,
+                env=dict(os.environ, HOME=directory), check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertIn("codex-fallback-runtime", result.stdout)
+
+    def test_documented_contract_names_cooperating_writer_and_lookahead_boundaries(self):
+        skill = (Path(__file__).parents[2] / "SKILL.md").read_text()
+        plan = (Path(__file__).parents[6] / "plans/ai-developer-workflow-kernel/plan.html").read_text()
+        for document in (skill, plan):
+            self.assertIn("cooperating writers", document)
+            self.assertIn("non-cooperating filesystem mutation", document)
+            self.assertNotIn("interlopers are never overwritten", document)
+        self.assertIn("one lookahead item", skill)
+        self.assertIn("MAX_RECONSTRUCTION_WORK", skill)
 
     def test_replay_holds_run_lease_across_observation_and_publication(self):
         active = {"lease": False}

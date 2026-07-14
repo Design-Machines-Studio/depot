@@ -16,9 +16,89 @@ from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import PreparedState, RunLease, StateStore, encode_state
+from workflow_kernel import _files
 from workflow_kernel._files import LockHandle, PinnedDirectory
 
 class StateStoreTests(unittest.TestCase):
+    def test_missing_state_primary_survives_parent_close_failure(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+                PinnedDirectory, "close", side_effect=OSError("cleanup-sentinel")):
+            try:
+                StateStore(Path(directory) / "run-state.json").load()
+            except OSError as raised:
+                self.assertIsInstance(raised, FileNotFoundError)
+                self.assertNotIn("cleanup-sentinel", str(raised))
+            else:
+                self.fail("missing state did not raise")
+
+    def test_publish_attempts_every_owned_close_after_first_close_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            with RunLease(path) as lease:
+                store.write(base, -1, lease=lease)
+            candidate = replace(base, revision=1)
+            lease = RunLease(path).acquire()
+            original_close = os.close
+            closed = []
+
+            def close_then_report(descriptor):
+                closed.append(descriptor)
+                original_close(descriptor)
+                raise OSError("cleanup-sentinel")
+
+            try:
+                with mock.patch("workflow_kernel.state.os.close",
+                                side_effect=close_then_report), \
+                        self.assertRaises(CorruptStateError) as raised:
+                    store.write(candidate, 0, lease=lease)
+            finally:
+                lease.release()
+            self.assertGreaterEqual(len(closed), 3)
+            self.assertNotIn("cleanup-sentinel", str(raised.exception))
+
+    def test_publish_primary_error_survives_all_cleanup_failures(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            with RunLease(path) as lease:
+                store.write(base, -1, lease=lease)
+            lease = RunLease(path).acquire()
+            original_close = os.close
+            closed = []
+
+            def close_then_report(descriptor):
+                closed.append(descriptor)
+                original_close(descriptor)
+                raise OSError("cleanup-sentinel")
+
+            try:
+                with mock.patch("workflow_kernel.state.os.fsync",
+                                side_effect=OSError("primary-sentinel")), \
+                        mock.patch("workflow_kernel.state.os.close",
+                                   side_effect=close_then_report), \
+                        self.assertRaises(CorruptStateError) as raised:
+                    store.write(replace(base, revision=1), 0, lease=lease)
+            finally:
+                lease.release()
+            self.assertGreaterEqual(len(closed), 3)
+            rendered = "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            ))
+            self.assertNotIn("primary-sentinel", rendered)
+            self.assertNotIn("cleanup-sentinel", rendered)
+
+    def test_obsolete_pathname_file_apis_are_absent(self):
+        for name in (
+            "open_verified_regular", "require_descriptor_path_identity",
+            "verified_regular_exists",
+        ):
+            self.assertFalse(hasattr(_files, name), name)
+        self.assertFalse(hasattr(LockHandle, "open"))
+        self.assertFalse(hasattr(LockHandle, "acquire"))
+
     def test_missing_file_in_live_bound_parent_remains_missing_file(self):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaises(FileNotFoundError):

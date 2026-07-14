@@ -9,7 +9,7 @@ from pathlib import Path
 
 from ._files import (
     LockContentionError, LockHandle, LockIdentityError, LockingUnsupportedError,
-    bind_durable_path,
+    _OwnedResourceScope, bind_durable_path,
 )
 from .schema import (
     CorruptStateError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
@@ -272,57 +272,33 @@ def _capability_types():
         def load(self) -> RunState:
             record = store_records[self]
             path = record["path"]
-            directory = None
             try:
-                directory = record["binding"].pin_parent()
-            except OSError:
-                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                    ErrorDetailKey.PATH.value: str(path),
-                }) from None
-            try:
-                descriptor = directory.open_regular(path.name, os.O_RDONLY)
+                with _OwnedResourceScope() as scope:
+                    try:
+                        directory = scope.pin(record["binding"])
+                    except FileNotFoundError:
+                        raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(path),
+                        }) from None
+                    descriptor = scope.own(
+                        directory.open_regular(path.name, os.O_RDONLY),
+                    )
+                    result = _read_state_descriptor(descriptor, path)
+                    directory.revalidate()
+                    directory.require_identity(descriptor, path.name)
+                    return result
             except FileNotFoundError:
-                directory.close()
                 raise
-            except OSError:
-                directory.close()
-                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                    ErrorDetailKey.PATH.value: str(path),
-                }) from None
-            failure = None
-            try:
-                result = _read_state_descriptor(descriptor, path)
-                directory.revalidate()
-                directory.require_identity(descriptor, path.name)
-                return result
             except CorruptStateError:
-                failure = True
                 raise
             except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError):
-                failure = True
                 raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
             except OSError:
-                failure = True
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
-            finally:
-                try:
-                    os.close(descriptor)
-                except OSError:
-                    if failure is None:
-                        raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                            ErrorDetailKey.PATH.value: str(path),
-                        }) from None
-                try:
-                    directory.close()
-                except OSError:
-                    if failure is None:
-                        raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                            ErrorDetailKey.PATH.value: str(path),
-                        }) from None
 
         def write(self, state: RunState, expected_revision: int, *, lease: RunLease = None) -> dict:
             prepared = self.prepare(state)
@@ -355,150 +331,81 @@ def _capability_types():
                     raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                         ErrorDetailKey.PATH.value: str(path),
                     }) from None
-            directory = None
-            observed = None
-            descriptor = None
-            temporary = None
-            failure = None
             try:
-                directory = record["binding"].pin_parent()
-                try:
-                    observed = directory.open_regular(path.name, os.O_RDONLY)
-                except FileNotFoundError:
-                    observed = None
-                if observed is not None:
-                    actual = _read_state_descriptor(observed, path).revision
-                    directory.require_identity(observed, path.name)
-                    if actual != expected_revision:
-                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
-                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                        })
-                    if revision < actual:
-                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
-                            ErrorDetailKey.CANDIDATE_REVISION.value: revision,
-                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                        })
-                elif expected_revision != -1:
-                    raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {
-                        ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                    })
-                descriptor, temporary = directory.create_temporary(
-                    prefix=f".{path.name}.", suffix=".tmp",
-                )
-            except OSError:
-                if observed is not None:
+                with _OwnedResourceScope() as scope:
+                    directory = scope.pin(record["binding"])
                     try:
-                        os.close(observed)
-                    except OSError:
-                        pass
-                if directory is not None:
-                    try:
-                        directory.close()
-                    except OSError:
-                        pass
-                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                    ErrorDetailKey.PATH.value: str(path),
-                }) from None
-            except BaseException:
-                if observed is not None:
-                    try:
-                        os.close(observed)
-                    except OSError:
-                        pass
-                if directory is not None:
-                    try:
-                        directory.close()
-                    except OSError:
-                        pass
-                raise
-            try:
-                with os.fdopen(descriptor, "wb", closefd=False) as handle:
-                    handle.write(encoded)
-                    handle.flush()
-                    os.fsync(handle.fileno())
-                directory.require_identity(descriptor, temporary)
-                require_run_lease(lease, path)
-                directory.revalidate()
-                if observed is None:
-                    if directory.regular_exists(path.name):
-                        current = directory.open_regular(path.name, os.O_RDONLY)
-                        try:
-                            actual = _read_state_descriptor(current, path).revision
-                        finally:
-                            os.close(current)
-                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
-                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                        })
-                else:
-                    try:
+                        observed = scope.own(
+                            directory.open_regular(path.name, os.O_RDONLY),
+                        )
+                    except FileNotFoundError:
+                        observed = None
+                    if observed is not None:
+                        actual = _read_state_descriptor(observed, path).revision
                         directory.require_identity(observed, path.name)
-                    except OSError:
-                        current = directory.open_regular(path.name, os.O_RDONLY)
-                        try:
-                            actual = _read_state_descriptor(current, path).revision
-                        finally:
-                            os.close(current)
-                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                        if actual != expected_revision:
+                            raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                            })
+                        if revision < actual:
+                            raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
+                                ErrorDetailKey.CANDIDATE_REVISION.value: revision,
+                                ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                            })
+                    elif expected_revision != -1:
+                        raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {
                             ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                        }) from None
-                    os.lseek(observed, 0, os.SEEK_SET)
-                    actual = _read_state_descriptor(observed, path).revision
-                    if actual != expected_revision:
-                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
-                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
                         })
-                directory.replace(temporary, path.name)
-                temporary = None
-                directory_fsync = directory.fsync()
-                directory.revalidate()
-                directory.require_identity(descriptor, path.name)
+                    descriptor, temporary = directory.create_temporary(
+                        prefix=f".{path.name}.", suffix=".tmp",
+                    )
+                    scope.own_temporary(descriptor, temporary)
+                    with os.fdopen(descriptor, "wb", closefd=False) as handle:
+                        handle.write(encoded)
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    directory.require_identity(descriptor, temporary)
+                    require_run_lease(lease, path)
+                    directory.revalidate()
+                    if observed is None:
+                        if directory.regular_exists(path.name):
+                            current = scope.own(
+                                directory.open_regular(path.name, os.O_RDONLY),
+                            )
+                            actual = _read_state_descriptor(current, path).revision
+                            raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                            })
+                    else:
+                        try:
+                            directory.require_identity(observed, path.name)
+                        except OSError:
+                            current = scope.own(
+                                directory.open_regular(path.name, os.O_RDONLY),
+                            )
+                            actual = _read_state_descriptor(current, path).revision
+                            raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                            }) from None
+                        os.lseek(observed, 0, os.SEEK_SET)
+                        actual = _read_state_descriptor(observed, path).revision
+                        if actual != expected_revision:
+                            raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                            })
+                    directory.replace(temporary, path.name)
+                    scope.mark_committed()
+                    directory_fsync = directory.fsync()
+                    directory.revalidate()
+                    directory.require_identity(descriptor, path.name)
             except OSError:
-                failure = True
-                try:
-                    if temporary is not None:
-                        directory.unlink(temporary)
-                except OSError:
-                    pass
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
-            except Exception:
-                failure = True
-                try:
-                    if temporary is not None:
-                        directory.unlink(temporary)
-                except OSError:
-                    pass
-                raise
-            finally:
-                if descriptor is not None:
-                    try:
-                        os.close(descriptor)
-                    except OSError:
-                        if failure is None:
-                            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                                ErrorDetailKey.PATH.value: str(path),
-                            }) from None
-                if observed is not None:
-                    try:
-                        os.close(observed)
-                    except OSError:
-                        if failure is None:
-                            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                                ErrorDetailKey.PATH.value: str(path),
-                            }) from None
-                if directory is not None:
-                    try:
-                        directory.close()
-                    except OSError:
-                        if failure is None:
-                            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                                ErrorDetailKey.PATH.value: str(path),
-                            }) from None
             return {"state_path": str(path), "revision": revision,
                     "directory_fsync": directory_fsync}
 

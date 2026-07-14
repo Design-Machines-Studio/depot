@@ -165,6 +165,64 @@ class PinnedDirectory:
         self.close()
 
 
+class _OwnedResourceScope:
+    """Close every owned durable resource while preserving a primary failure."""
+
+    __slots__ = ("directory", "descriptors", "temporary_name", "committed")
+
+    def __init__(self):
+        self.directory = None
+        self.descriptors = []
+        self.temporary_name = None
+        self.committed = False
+
+    def pin(self, binding: DurablePathBinding) -> PinnedDirectory:
+        self.directory = binding.pin_parent()
+        return self.directory
+
+    def own(self, descriptor: int) -> int:
+        self.descriptors.append(descriptor)
+        return descriptor
+
+    def own_temporary(self, descriptor: int, name: str) -> int:
+        self.temporary_name = name
+        return self.own(descriptor)
+
+    def mark_committed(self) -> None:
+        self.committed = True
+        self.temporary_name = None
+
+    def __enter__(self) -> "_OwnedResourceScope":
+        return self
+
+    def __exit__(self, exc_type, _exc, _traceback) -> bool:
+        failures = []
+        if (self.directory is not None and self.temporary_name is not None
+                and not self.committed):
+            try:
+                self.directory.unlink(self.temporary_name)
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                failures.append(error)
+        while self.descriptors:
+            descriptor = self.descriptors.pop()
+            try:
+                os.close(descriptor)
+            except OSError as error:
+                failures.append(error)
+        if self.directory is not None:
+            directory = self.directory
+            self.directory = None
+            try:
+                directory.close()
+            except OSError as error:
+                failures.append(error)
+        if exc_type is None and failures:
+            raise failures[0]
+        return False
+
+
 def bind_durable_path(path: Path) -> DurablePathBinding:
     """Resolve an existing parent without following the final durable-file name."""
     lexical = canonical_path(Path(path))
@@ -188,36 +246,16 @@ def _require_exclusive_regular(opened, entry, path: Path) -> None:
         raise UnsafeFileError(errno.ELOOP, "refusing linked or non-regular file", str(path))
 
 
-def open_verified_regular(path: Path, flags: int, mode: int = 0o600) -> int:
-    """Open a single-link regular file relative to its verified parent handle."""
-    path = Path(path)
-    with PinnedDirectory.open(path.parent) as directory:
-        return directory.open_regular(path.name, flags, mode)
-
-
-def require_descriptor_path_identity(descriptor: int, path: Path) -> None:
-    """Require an open regular descriptor to remain the exclusive named file."""
-    opened = os.fstat(descriptor)
-    entry = os.lstat(str(path))
-    _require_exclusive_regular(opened, entry, Path(path))
-
-
 class LockHandle:
     """An open lock descriptor bound to its canonical pathname and inode."""
 
-    def __init__(self, path: Path, descriptor: int, directory: PinnedDirectory = None):
+    def __init__(self, path: Path, descriptor: int, directory: PinnedDirectory):
         self.path = canonical_path(path)
         self._descriptor = descriptor
         self._directory = directory
         self._locked = False
         opened = os.fstat(descriptor)
         self.identity = (opened.st_dev, opened.st_ino)
-
-    @classmethod
-    def open(cls, path: Path) -> "LockHandle":
-        canonical = canonical_path(path)
-        binding = bind_durable_path(canonical)
-        return cls.open_bound(binding)
 
     @classmethod
     def open_bound(cls, binding: DurablePathBinding) -> "LockHandle":
@@ -237,13 +275,6 @@ class LockHandle:
             except OSError:
                 pass
             raise
-
-    @classmethod
-    def acquire(cls, path: Path) -> "LockHandle":
-        """Open, exclusively lock, and revalidate one persistent lock file."""
-        if fcntl is None:
-            raise LockingUnsupportedError(errno.ENOSYS, "crash-safe locking is unavailable", str(path))
-        return cls.acquire_bound(bind_durable_path(path))
 
     @classmethod
     def acquire_bound(cls, binding: DurablePathBinding) -> "LockHandle":
@@ -285,12 +316,8 @@ class LockHandle:
         """Require the canonical path to still name this exclusive regular inode."""
         descriptor = self.descriptor
         opened = os.fstat(descriptor)
-        if self._directory is None:
-            entry = os.lstat(str(self.path))
-            _require_exclusive_regular(opened, entry, self.path)
-        else:
-            self._directory.revalidate()
-            self._directory.require_identity(descriptor, self.path.name)
+        self._directory.revalidate()
+        self._directory.require_identity(descriptor, self.path.name)
         if (opened.st_dev, opened.st_ino) != self.identity:
             raise UnsafeFileError(errno.ESTALE, "lock descriptor identity changed", str(self.path))
 
@@ -337,14 +364,3 @@ class LockHandle:
             except OSError:
                 if failure is None:
                     raise
-
-
-def verified_regular_exists(path: Path) -> bool:
-    """Return existence only after rejecting linked or non-regular entries."""
-    path = Path(path)
-    try:
-        entry = os.lstat(str(path))
-    except FileNotFoundError:
-        return False
-    _require_exclusive_regular(entry, entry, path)
-    return True

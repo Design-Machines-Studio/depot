@@ -1,5 +1,6 @@
 import unittest
 import json
+from dataclasses import replace
 from types import MappingProxyType
 from unittest import mock
 
@@ -19,6 +20,59 @@ def event(sequence, kind, *, node_id=None, payload=None):
 
 
 class TransitionTests(unittest.TestCase):
+    def test_reconstruction_work_limit_is_public(self):
+        import workflow_kernel
+
+        self.assertTrue(hasattr(transitions, "MAX_RECONSTRUCTION_WORK"))
+        self.assertTrue(hasattr(workflow_kernel, "MAX_RECONSTRUCTION_WORK"))
+
+    def test_public_apply_rejects_output_beyond_state_tree_item_limit(self):
+        state = replace(
+            RunState.new("run-1", NOW), revision=2, status=RunStatus.RUNNING,
+            nodes={"a": NodeState("a"), "b": NodeState("b")},
+        )
+        with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 2), \
+                mock.patch.object(transitions, "MAX_PAYLOAD_ITEMS", 2), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.apply(state, event(2, "node.added", node_id="c"))
+
+    def test_reconstruct_rejects_output_beyond_state_tree_item_limit(self):
+        stream = [event(0, "run.initialized"), event(1, "run.started")]
+        stream.extend(event(index + 2, "node.added", node_id=f"n-{index}")
+                      for index in range(3))
+        with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 2), \
+                mock.patch.object(transitions, "MAX_PAYLOAD_ITEMS", 2), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct(stream)
+
+    def test_reconstruct_rejects_aggregate_state_text_overflow(self):
+        stream = (
+            event(0, "run.initialized"), event(1, "run.started"),
+            event(2, "node.added", node_id="aaa"),
+            event(3, "node.added", node_id="bbb"),
+        )
+        with mock.patch.object(schema, "MAX_TOTAL_STRING_BYTES", 10), \
+                mock.patch.object(transitions, "MAX_TOTAL_STRING_BYTES", 10, create=True), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct(stream)
+
+    def test_reconstruction_work_limit_stops_consuming_large_stream(self):
+        reads = 0
+
+        def stream():
+            nonlocal reads
+            values = [event(0, "run.initialized"), event(1, "run.started")]
+            values.extend(event(index + 2, "node.added", node_id=f"n-{index}")
+                          for index in range(50))
+            for value in values:
+                reads += 1
+                yield value
+
+        with mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", 10, create=True), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct(stream())
+        self.assertLess(reads, 52)
+
     def setUp(self):
         self.engine = TransitionEngine()
 

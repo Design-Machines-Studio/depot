@@ -11,7 +11,7 @@ from typing import List, Tuple
 
 from ._files import (
     LockContentionError, LockHandle, LockIdentityError,
-    LockingUnsupportedError, bind_durable_path,
+    LockingUnsupportedError, _OwnedResourceScope, bind_durable_path,
 )
 from .redaction import redact
 from .schema import (
@@ -240,36 +240,24 @@ def _event_store_type():
         def validate(self, recovery: bool = False):
             record = records[self]
             path = record["path"]
-            directory = None
             try:
-                directory = record["binding"].pin_parent()
+                with _OwnedResourceScope() as scope:
+                    directory = scope.pin(record["binding"])
+                    try:
+                        descriptor = directory.open_regular(path.name, os.O_RDONLY)
+                    except FileNotFoundError:
+                        return (), ()
+                    scope.own(descriptor)
+                    return self._read_descriptor(
+                        descriptor, recovery=recovery, path=path, duplicate=True,
+                        directory=directory,
+                    )
+            except CorruptEventError:
+                raise
             except OSError:
                 raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
-            try:
-                descriptor = directory.open_regular(path.name, os.O_RDONLY)
-            except FileNotFoundError:
-                directory.close()
-                return (), ()
-            except OSError:
-                directory.close()
-                raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
-                    ErrorDetailKey.PATH.value: str(path),
-                }) from None
-            try:
-                return self._read_descriptor(
-                    descriptor, recovery=recovery, path=path, duplicate=False,
-                    directory=directory,
-                )
-            finally:
-                try:
-                    directory.close()
-                except OSError:
-                    if sys.exc_info()[0] is None:
-                        raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
-                            ErrorDetailKey.PATH.value: str(path),
-                        }) from None
 
         def _validate_handle(self, handle, recovery: bool, *, path=None, directory=None):
             try:
@@ -287,8 +275,6 @@ def _event_store_type():
                 raise CorruptEventError(ErrorMessage.LEDGER_SIZE_LIMIT, {
                     ErrorDetailKey.LIMIT_BYTES.value: MAX_LEDGER_BYTES,
                 })
-            if size == 0:
-                return (), ()
             events: List[WorkflowEvent] = []
             notes = []
             offset = 0

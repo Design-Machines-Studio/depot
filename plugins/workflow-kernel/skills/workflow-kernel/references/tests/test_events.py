@@ -13,7 +13,7 @@ from workflow_kernel.schema import (
     UnsafePayloadError, WorkflowEvent,
 )
 from workflow_kernel.state import RunLease
-from workflow_kernel._files import LockHandle
+from workflow_kernel._files import LockHandle, PinnedDirectory
 
 def event(sequence):
     return WorkflowEvent(1, sequence, "run-1", None, "evidence.recorded", "2026-07-14T00:00:00Z", {"evidence": [str(sequence)]})
@@ -31,6 +31,68 @@ def append_event(store, value, expected_sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def test_empty_ledger_revalidates_file_identity_before_returning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "events.jsonl"
+            path.write_bytes(b"")
+            replacement = root / "replacement.jsonl"
+            replacement.write_bytes(b"replacement\n")
+            store = EventStore(root)
+            original_fstat = os.fstat
+            calls = 0
+
+            def replace_during_empty_validation(descriptor):
+                nonlocal calls
+                calls += 1
+                result = original_fstat(descriptor)
+                if calls == 3:
+                    os.replace(replacement, path)
+                return result
+
+            with mock.patch("workflow_kernel.events.os.fstat",
+                            side_effect=replace_during_empty_validation), \
+                    self.assertRaises(CorruptEventError):
+                store.validate()
+            self.assertEqual(path.read_bytes(), b"replacement\n")
+
+    def test_empty_ledger_revalidates_parent_identity_before_returning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "run"
+            parent.mkdir()
+            (parent / "events.jsonl").write_bytes(b"")
+            moved = root / "moved"
+            store = EventStore(parent)
+            original_fstat = os.fstat
+            calls = 0
+
+            def replace_parent_during_empty_validation(descriptor):
+                nonlocal calls
+                calls += 1
+                result = original_fstat(descriptor)
+                if calls == 3:
+                    parent.rename(moved)
+                    parent.mkdir()
+                    (parent / "events.jsonl").write_bytes(b"")
+                return result
+
+            with mock.patch("workflow_kernel.events.os.fstat",
+                            side_effect=replace_parent_during_empty_validation), \
+                    self.assertRaises(CorruptEventError):
+                store.validate()
+
+    def test_missing_ledger_close_failure_is_normalized(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(
+                PinnedDirectory, "close", side_effect=OSError("cleanup-sentinel")):
+            try:
+                EventStore(directory).validate()
+            except Exception as raised:
+                self.assertIsInstance(raised, CorruptEventError)
+                self.assertNotIn("cleanup-sentinel", str(raised))
+            else:
+                self.fail("close failure was not reported")
+
     def test_missing_file_in_live_bound_parent_is_an_empty_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(event_store(Path(directory) / "events.jsonl").validate(), ((), ()))
