@@ -97,6 +97,25 @@ class EventStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.assertEqual(event_store(Path(directory) / "events.jsonl").validate(), ((), ()))
 
+    def test_missing_ledger_revalidates_parent_before_returning_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "run"
+            parent.mkdir()
+            moved = root / "moved"
+            store = EventStore(parent)
+
+            def swap_parent_then_report_missing(*_args, **_kwargs):
+                parent.rename(moved)
+                parent.mkdir()
+                raise FileNotFoundError("missing-ledger-sentinel")
+
+            with mock.patch.object(PinnedDirectory, "open_regular",
+                                   side_effect=swap_parent_then_report_missing), \
+                    self.assertRaises(CorruptEventError) as raised:
+                store.validate()
+            self.assertIsNone(raised.exception.__cause__)
+
     def test_append_parent_swap_cannot_redirect_ledger_write(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -73,29 +73,85 @@ class TransitionTests(unittest.TestCase):
             self.engine.reconstruct(stream())
         self.assertLess(reads, 52)
 
+    def test_reconstruction_charges_new_evidence_before_materializing_it(self):
+        references = [f"artifact-{index}" for index in range(500)]
+        stream = (
+            event(0, "run.initialized"),
+            event(1, "evidence.recorded", payload={"evidence": references}),
+        )
+        with mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", 100), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct(stream)
+
+    def test_reconstruction_charges_duplicate_evidence_copy_and_membership_work(self):
+        references = [f"artifact-{index}" for index in range(500)]
+        stream = (
+            event(0, "run.initialized"),
+            event(1, "evidence.recorded", payload={"evidence": references}),
+            event(2, "evidence.recorded", payload={"evidence": references}),
+        )
+        for limit in (1_750, 2_250):
+            with self.subTest(limit=limit), \
+                    mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", limit), \
+                    self.assertRaises(UnsafePayloadError):
+                self.engine.reconstruct(stream)
+
+    def test_reconstruction_charges_dependency_membership_scans(self):
+        stream = [event(0, "run.initialized"), event(1, "run.started")]
+        stream.extend(
+            event(index + 2, "node.added", node_id=f"n-{index}")
+            for index in range(10)
+        )
+        stream.append(event(
+            12, "node.added", node_id="dependent",
+            payload={"dependencies": [f"n-{index}" for index in range(10)]},
+        ))
+        with mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", 80), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct(stream)
+
     def setUp(self):
         self.engine = TransitionEngine()
 
-    def test_apply_validates_the_input_graph_once_without_revalidating_output(self):
-        state = RunState.new("run-1", NOW)
+    def test_apply_graph_validation_work_scales_with_input_graph(self):
+        state = replace(
+            RunState.new("run-1", NOW),
+            nodes={f"n-{index}": NodeState(f"n-{index}") for index in range(20)},
+        )
+        validated_nodes = 0
+        validate_graph = schema._validate_dependency_graph
+
+        def observe(nodes):
+            nonlocal validated_nodes
+            validated_nodes += len(nodes)
+            return validate_graph(nodes)
+
         with mock.patch(
                 "workflow_kernel.schema._validate_dependency_graph",
-                wraps=schema._validate_dependency_graph,
-        ) as validate:
+                side_effect=observe,
+        ):
             result = self.engine.apply(state, event(0, "run.initialized"))
         self.assertEqual(result.revision, 1)
-        self.assertEqual(validate.call_count, 1)
+        self.assertLessEqual(validated_nodes, len(state.nodes))
 
-    def test_reconstruct_does_not_revalidate_the_whole_graph_per_event(self):
+    def test_reconstruct_graph_validation_work_does_not_scale_quadratically(self):
         stream = [event(0, "run.initialized"), event(1, "run.started")]
         stream.extend(event(index + 2, "node.added", node_id=f"n-{index}") for index in range(20))
+        validated_nodes = 0
+        validate_graph = schema._validate_dependency_graph
+
+        def observe(nodes):
+            nonlocal validated_nodes
+            validated_nodes += len(nodes)
+            return validate_graph(nodes)
+
         with mock.patch(
                 "workflow_kernel.schema._validate_dependency_graph",
-                wraps=schema._validate_dependency_graph,
-        ) as validate:
+                side_effect=observe,
+        ):
             result = self.engine.reconstruct(stream)
         self.assertEqual(len(result.nodes), 20)
-        self.assertLessEqual(validate.call_count, 1)
+        self.assertLessEqual(validated_nodes, len(result.nodes))
 
     def test_run_and_node_legal_path(self):
         events = (

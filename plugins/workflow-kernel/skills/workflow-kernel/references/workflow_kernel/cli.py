@@ -41,6 +41,14 @@ def _emit(value, stream=sys.stdout):
     stream.write(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
 
 
+def _load_optional_state(states):
+    """Return verified state or None only for a missing file in a live parent."""
+    try:
+        return states.load()
+    except FileNotFoundError:
+        return None
+
+
 @contextmanager
 def _coordinated_run(states):
     """Hold the run lease from mutable observation through publication."""
@@ -73,8 +81,8 @@ def command_validate(args):
         if not replayed:
             raise CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING)
         state = TransitionEngine().reconstruct(replayed)
-        if states.path.exists():
-            materialized = states.load()
+        materialized = _load_optional_state(states)
+        if materialized is not None:
             if materialized != state:
                 raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
                     ErrorDetailKey.MATERIALIZED_REVISION.value: materialized.revision,
@@ -99,7 +107,8 @@ def command_append(args):
         existing = events.replay()
         if not existing:
             raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
-        expected = states.load().revision if states.path.exists() else -1
+        materialized = _load_optional_state(states)
+        expected = materialized.revision if materialized is not None else -1
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
         prepared = states.prepare(next_state)
@@ -114,7 +123,8 @@ def command_replay(args):
     _, events, states = _paths(args.directory)
     with _coordinated_run(states) as lease:
         reconstructed = TransitionEngine().reconstruct(events.replay())
-        expected = states.load().revision if states.path.exists() else -1
+        materialized = _load_optional_state(states)
+        expected = materialized.revision if materialized is not None else -1
         evidence = states.write(reconstructed, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})

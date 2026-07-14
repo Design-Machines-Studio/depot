@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import weakref
 from pathlib import Path
 from typing import List, Tuple
@@ -166,19 +165,25 @@ def _event_store_type():
                 raise UnsafePayloadError(ErrorMessage.EVENT_RECORD_SIZE_LIMIT, {
                     ErrorDetailKey.LIMIT_BYTES.value: MAX_RECORD_BYTES,
                 })
-            lock = self._acquire()
-            lock_failure = None
-            try:
+            with _OwnedResourceScope() as scope:
+                lock = self._acquire()
+                scope.own_callback(
+                    lock.release,
+                    SequenceConflictError(ErrorMessage.EVENT_LOCK_PATH_UNSAFE, {
+                        ErrorDetailKey.PATH.value: str(record["path"]),
+                    }),
+                )
                 self._require_current_lock(lock)
                 try:
-                    descriptor = lock.directory.open_regular(
-                        record["path"].name, os.O_CREAT | os.O_APPEND | os.O_RDWR,
+                    descriptor = scope.own(
+                        lock.directory.open_regular(
+                            record["path"].name,
+                            os.O_CREAT | os.O_APPEND | os.O_RDWR,
+                        ),
+                        CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(record["path"]),
+                        }),
                     )
-                except OSError:
-                    raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
-                        ErrorDetailKey.PATH.value: str(record["path"]),
-                    }) from None
-                try:
                     events, _ = self._read_descriptor(
                         descriptor, recovery=False, path=record["path"], duplicate=True,
                         directory=lock.directory,
@@ -212,26 +217,6 @@ def _event_store_type():
                     raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
                         ErrorDetailKey.PATH.value: str(record["path"]),
                     }) from None
-                finally:
-                    descriptor_failure = sys.exc_info()[0] is not None
-                    try:
-                        os.close(descriptor)
-                    except OSError:
-                        if not descriptor_failure:
-                            raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
-                                ErrorDetailKey.PATH.value: str(record["path"]),
-                            }) from None
-            except BaseException as exc:
-                lock_failure = exc
-                raise
-            finally:
-                try:
-                    lock.release()
-                except OSError:
-                    if lock_failure is None:
-                        raise SequenceConflictError(ErrorMessage.EVENT_LOCK_PATH_UNSAFE, {
-                            ErrorDetailKey.PATH.value: str(record["path"]),
-                        }) from None
 
         def replay(self) -> Tuple[WorkflowEvent, ...]:
             events, _ = self.validate(recovery=False)
@@ -246,6 +231,7 @@ def _event_store_type():
                     try:
                         descriptor = directory.open_regular(path.name, os.O_RDONLY)
                     except FileNotFoundError:
+                        directory.revalidate()
                         return (), ()
                     scope.own(descriptor)
                     return self._read_descriptor(

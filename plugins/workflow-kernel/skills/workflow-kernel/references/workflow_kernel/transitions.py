@@ -69,23 +69,6 @@ def _text_size(values) -> int:
     return sum(len(value.encode("utf-8")) for value in values)
 
 
-def _state_counters(state: RunState) -> _StateCounters:
-    counters = _StateCounters()
-    for key, node in state.nodes.items():
-        counters.add(
-            nodes=1,
-            edges=len(node.dependencies),
-            evidence=len(node.evidence),
-            text_bytes=_text_size((key, node.node_id, *node.dependencies, *node.evidence)),
-        )
-    counters.add(
-        evidence=len(state.evidence),
-        text_bytes=_text_size(state.evidence),
-    )
-    counters.require_delta()
-    return counters
-
-
 TERMINAL_RUN = frozenset({RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.BLOCKED,
                           RunStatus.CANCELLED, RunStatus.INTERRUPTED})
 RUN_TERMINAL_TARGETS = {
@@ -115,11 +98,14 @@ LEGAL_NODE_SOURCES = {
 }
 
 
-def _strings(payload: Mapping[str, object], key: str, *, required: bool = False) -> Tuple[str, ...]:
+def _strings(payload: Mapping[str, object], key: str, *, required: bool = False,
+             work=None) -> Tuple[str, ...]:
     value = payload.get(key, [])
     if not isinstance(value, (list, tuple)):
         raise IllegalTransitionError(ErrorMessage.EVENT_PAYLOAD_STRING_LIST, {ErrorDetailKey.FIELD.value: key})
     limit = MAX_EVIDENCE_ITEMS if key == "evidence" else MAX_PAYLOAD_ITEMS
+    if work is not None:
+        work.charge(len(value))
     result = []
     try:
         for item in bounded_iterable(value, max_items=limit):
@@ -147,10 +133,14 @@ def _require(condition: bool, state: RunState, event: WorkflowEvent) -> None:
 
 
 def _merge_evidence(counters: _StateCounters, current: Tuple[str, ...],
-                    refs: Tuple[str, ...]) -> tuple[Tuple[str, ...], Tuple[str, ...]]:
+                    refs: Tuple[str, ...], work=None) -> tuple[Tuple[str, ...], Tuple[str, ...]]:
     """Merge references only after enforcing the run-wide attachment bound."""
+    if work is not None:
+        work.charge(len(current))
     known = set(current)
     additions = []
+    if work is not None:
+        work.charge(len(refs))
     for reference in refs:
         if reference not in known:
             known.add(reference)
@@ -166,9 +156,9 @@ def _merge_evidence(counters: _StateCounters, current: Tuple[str, ...],
 
 class TransitionEngine:
     def apply(self, state: RunState, event: WorkflowEvent) -> RunState:
-        state = _snapshot_run_state(state)
+        state, accumulated = _snapshot_run_state(state, include_counters=True)
         event = _snapshot_workflow_event(event)
-        counters = _state_counters(state)
+        counters = _StateCounters(*accumulated)
         return self._apply_validated(state, event, counters)
 
     def _apply_validated(self, state: RunState, event: WorkflowEvent,
@@ -190,7 +180,7 @@ class TransitionEngine:
         if event.kind == "evidence.recorded":
             return self._apply_evidence(state, event, counters, work)
         if event.kind == "cleanup.reconciled":
-            return self._apply_cleanup(state, event, counters)
+            return self._apply_cleanup(state, event, counters, work)
         raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND.value: event.kind})
 
     def _advance(self, state: RunState, event: WorkflowEvent,
@@ -229,12 +219,12 @@ class TransitionEngine:
         evidence = state.evidence
         additions = ()
         if target == RunStatus.SUCCEEDED:
-            refs = _strings(event.payload, "evidence", required=True)
+            refs = _strings(event.payload, "evidence", required=True, work=work)
             if work is not None:
                 work.charge(len(state.nodes))
             _require(all(node.status in {NodeStatus.SUCCEEDED, NodeStatus.SKIPPED}
                          for node in state.nodes.values()), state, event)
-            evidence, additions = _merge_evidence(counters, evidence, refs)
+            evidence, additions = _merge_evidence(counters, evidence, refs, work)
         return self._advance(
             state, event, counters, status=target, evidence=evidence,
             counter_delta={
@@ -249,7 +239,9 @@ class TransitionEngine:
         nodes = dict(state.nodes)
         if event.kind == "node.added":
             _require(state.status not in TERMINAL_RUN and event.node_id is not None and event.node_id not in nodes, state, event)
-            dependencies = _strings(event.payload, "dependencies")
+            dependencies = _strings(event.payload, "dependencies", work=work)
+            if work is not None:
+                work.charge(len(dependencies))
             if event.node_id in dependencies or any(item not in nodes for item in dependencies):
                 raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_INVALID, {ErrorDetailKey.NODE_ID.value: event.node_id})
             text_bytes = _text_size((event.node_id, event.node_id, *dependencies))
@@ -282,7 +274,8 @@ class TransitionEngine:
         additions = ()
         if target == NodeStatus.SUCCEEDED:
             refs, additions = _merge_evidence(
-                counters, refs, _strings(event.payload, "evidence", required=True),
+                counters, refs,
+                _strings(event.payload, "evidence", required=True, work=work), work,
             )
         nodes[event.node_id] = replace(node, status=target, evidence=refs)
         return self._advance(
@@ -294,9 +287,11 @@ class TransitionEngine:
 
     def _apply_evidence(self, state: RunState, event: WorkflowEvent,
                         counters: _StateCounters, work) -> RunState:
-        refs = _strings(event.payload, "evidence", required=True)
+        refs = _strings(event.payload, "evidence", required=True, work=work)
         if event.node_id is None:
-            evidence, additions = _merge_evidence(counters, state.evidence, refs)
+            evidence, additions = _merge_evidence(
+                counters, state.evidence, refs, work,
+            )
             return self._advance(
                 state, event, counters, evidence=evidence,
                 counter_delta={
@@ -308,7 +303,7 @@ class TransitionEngine:
         nodes = dict(state.nodes)
         _require(event.node_id in nodes, state, event)
         node = nodes[event.node_id]
-        merged, additions = _merge_evidence(counters, node.evidence, refs)
+        merged, additions = _merge_evidence(counters, node.evidence, refs, work)
         nodes[event.node_id] = replace(node, evidence=merged)
         return self._advance(
             state, event, counters, nodes=MappingProxyType(nodes),
@@ -318,10 +313,12 @@ class TransitionEngine:
         )
 
     def _apply_cleanup(self, state: RunState, event: WorkflowEvent,
-                       counters: _StateCounters) -> RunState:
+                       counters: _StateCounters, work) -> RunState:
         _require(event.node_id is None and not state.cleanup_reconciled, state, event)
-        refs = _strings(event.payload, "evidence", required=True)
-        evidence, additions = _merge_evidence(counters, state.evidence, refs)
+        refs = _strings(event.payload, "evidence", required=True, work=work)
+        evidence, additions = _merge_evidence(
+            counters, state.evidence, refs, work,
+        )
         return self._advance(
             state, event, counters, evidence=evidence, cleanup_reconciled=True,
             counter_delta={

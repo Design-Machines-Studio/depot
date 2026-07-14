@@ -629,7 +629,8 @@ def _trusted_run_state(values) -> "RunState":
 def _validated_run_projection(schema_version, revision, run_id, mode, status,
                               created_at, updated_at, raw_nodes, raw_evidence,
                               cleanup_reconciled, *, nodes_from_dict=False,
-                              budget=None, node_keys_budgeted=False):
+                              budget=None, node_keys_budgeted=False,
+                              include_counters=False):
     version = _strict_int(schema_version, "schema_version", minimum=1)
     if version != SCHEMA_VERSION:
         raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
@@ -652,6 +653,9 @@ def _validated_run_projection(schema_version, revision, run_id, mode, status,
         raise InvalidSchemaError(ErrorMessage.NODES_OBJECT_REQUIRED)
     budget = budget if budget is not None else _StateItemBudget(MAX_PAYLOAD_ITEMS)
     nodes = {}
+    node_count = 0
+    edge_count = 0
+    node_evidence_count = 0
     try:
         for key in bounded_iterable(raw_nodes, max_items=MAX_PAYLOAD_ITEMS):
             budget.consume()
@@ -660,8 +664,12 @@ def _validated_run_projection(schema_version, revision, run_id, mode, status,
             if not node_keys_budgeted:
                 budget.consume_text(key)
             value = raw_nodes[key]
-            nodes[key] = (_node_state_from_mapping(value, budget) if nodes_from_dict
-                          else _snapshot_node_state(value, budget))
+            node = (_node_state_from_mapping(value, budget) if nodes_from_dict
+                    else _snapshot_node_state(value, budget))
+            nodes[key] = node
+            node_count += 1
+            edge_count += len(node.dependencies)
+            node_evidence_count += len(node.evidence)
     except InvalidSchemaError:
         raise
     except (KeyError, TypeError, ValueError, RecursionError):
@@ -682,8 +690,14 @@ def _validated_run_projection(schema_version, revision, run_id, mode, status,
         })
     if type(cleanup_reconciled) is not bool:
         raise InvalidSchemaError(ErrorMessage.CLEANUP_RECONCILED_BOOLEAN)
-    return (version, revision, run_id, mode, status, created_at, updated_at,
-            MappingProxyType(nodes), evidence, cleanup_reconciled)
+    values = (version, revision, run_id, mode, status, created_at, updated_at,
+              MappingProxyType(nodes), evidence, cleanup_reconciled)
+    if include_counters:
+        return values, (
+            node_count, edge_count, node_evidence_count + len(evidence),
+            budget.text_bytes,
+        )
+    return values
 
 
 @dataclass(frozen=True)
@@ -743,16 +757,20 @@ class RunState:
         }
 
 
-def _snapshot_run_state(state: RunState) -> RunState:
+def _snapshot_run_state(state: RunState, *, include_counters=False):
     """Rebuild exact state and nodes field-wise under one aggregate budget."""
     if type(state) is not RunState:
         raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_RUN_STATE_REQUIRED)
     try:
-        return _trusted_run_state(_validated_run_projection(
+        projection = _validated_run_projection(
             state.schema_version, state.revision, state.run_id, state.mode, state.status,
             state.created_at, state.updated_at, state.nodes, state.evidence,
-            state.cleanup_reconciled,
-        ))
+            state.cleanup_reconciled, include_counters=include_counters,
+        )
+        if include_counters:
+            values, counters = projection
+            return _trusted_run_state(values), counters
+        return _trusted_run_state(projection)
     except KernelError:
         raise
     except (AttributeError, TypeError, ValueError, RecursionError):

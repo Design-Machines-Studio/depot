@@ -104,6 +104,29 @@ class StateStoreTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 StateStore(Path(directory) / "run-state.json").load()
 
+    def test_missing_state_revalidates_parent_before_propagating_missing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "run"
+            parent.mkdir()
+            moved = root / "moved"
+            store = StateStore(parent / "run-state.json")
+
+            def swap_parent_then_report_missing(*_args, **_kwargs):
+                parent.rename(moved)
+                parent.mkdir()
+                raise FileNotFoundError("missing-state-sentinel")
+
+            with mock.patch.object(PinnedDirectory, "open_regular",
+                                   side_effect=swap_parent_then_report_missing):
+                try:
+                    store.load()
+                except Exception as raised:
+                    self.assertIsInstance(raised, CorruptStateError)
+                    self.assertIsNone(raised.__cause__)
+                else:
+                    self.fail("parent replacement was accepted as a missing state")
+
     def test_publish_parent_swap_cannot_redirect_atomic_replace(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

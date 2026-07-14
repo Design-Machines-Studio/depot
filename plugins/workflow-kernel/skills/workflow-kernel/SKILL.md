@@ -106,8 +106,9 @@ errors as stable JSON. Treat `--help` output as plain text.
   cooperating writers that honor the same `RunLease`; pinned checks cannot
   atomically exclude non-cooperating filesystem mutation in the final commit
   window. A detected valid revision race remains a `RevisionConflictError`
-  rather than generic filesystem corruption. A missing file in a verified live parent remains the
-  public missing/empty case, while a missing bound parent is corruption.
+  rather than generic filesystem corruption. A missing file is the public
+  missing/empty case only after the pinned parent is revalidated; parent
+  disappearance or replacement is corruption.
   Use `StateStore.prepare(state)` before publishing an event that derives the
   state. It returns an opaque exact-type identity capability with no exposed
   state or encoded-byte fields. A closure-owned weak registry keyed by the
@@ -158,8 +159,10 @@ errors as stable JSON. Treat `--help` output as plain text.
   untrusted event but does not revalidate the accumulated graph after every
   accepted event. The reducer maintains node, dependency-edge, evidence, and
   UTF-8 text counters before every trusted update. Reconstruction also charges
-  graph copy and access operations against `MAX_RECONSTRUCTION_WORK=50100000`,
-  bounding total replay work by the supported state and event limits.
+  graph copy and access operations against `MAX_RECONSTRUCTION_WORK=50100000`.
+  Charged work includes evidence parsing, copying existing evidence into a set,
+  membership scans, and dependency membership/access scans, bounding total
+  replay work by the supported state and event limits.
 - One run-wide state-tree budget counts nodes, dependency edges, node evidence,
   and run evidence against `MAX_PAYLOAD_ITEMS` before dependency-graph helper
   structures are allocated. Node mappings and snapshots share one validated

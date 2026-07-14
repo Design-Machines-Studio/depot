@@ -168,37 +168,38 @@ class PinnedDirectory:
 class _OwnedResourceScope:
     """Close every owned durable resource while preserving a primary failure."""
 
-    __slots__ = ("directory", "descriptors", "temporary_name", "committed")
+    __slots__ = ("directory", "descriptors", "callbacks", "temporary_name")
 
     def __init__(self):
         self.directory = None
         self.descriptors = []
+        self.callbacks = []
         self.temporary_name = None
-        self.committed = False
 
     def pin(self, binding: DurablePathBinding) -> PinnedDirectory:
         self.directory = binding.pin_parent()
         return self.directory
 
-    def own(self, descriptor: int) -> int:
-        self.descriptors.append(descriptor)
+    def own(self, descriptor: int, cleanup_error=None) -> int:
+        self.descriptors.append((descriptor, cleanup_error))
         return descriptor
 
     def own_temporary(self, descriptor: int, name: str) -> int:
         self.temporary_name = name
         return self.own(descriptor)
 
-    def mark_committed(self) -> None:
-        self.committed = True
+    def disown_temporary(self) -> None:
         self.temporary_name = None
+
+    def own_callback(self, callback, cleanup_error=None) -> None:
+        self.callbacks.append((callback, cleanup_error))
 
     def __enter__(self) -> "_OwnedResourceScope":
         return self
 
     def __exit__(self, exc_type, _exc, _traceback) -> bool:
         failures = []
-        if (self.directory is not None and self.temporary_name is not None
-                and not self.committed):
+        if self.directory is not None and self.temporary_name is not None:
             try:
                 self.directory.unlink(self.temporary_name)
             except FileNotFoundError:
@@ -206,11 +207,17 @@ class _OwnedResourceScope:
             except OSError as error:
                 failures.append(error)
         while self.descriptors:
-            descriptor = self.descriptors.pop()
+            descriptor, cleanup_error = self.descriptors.pop()
             try:
                 os.close(descriptor)
             except OSError as error:
-                failures.append(error)
+                failures.append(cleanup_error or error)
+        while self.callbacks:
+            callback, cleanup_error = self.callbacks.pop()
+            try:
+                callback()
+            except OSError as error:
+                failures.append(cleanup_error or error)
         if self.directory is not None:
             directory = self.directory
             self.directory = None

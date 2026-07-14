@@ -20,6 +20,28 @@ class CliTests(unittest.TestCase):
         env["PYTHONPATH"] = str(Path(__file__).parents[1])
         return subprocess.run([sys.executable, "-m", "workflow_kernel", *args], text=True, capture_output=True, env=env, check=False)
 
+    def install_cached_runtime(self, home, cache, version, main_source=None):
+        refs = (Path(home) / cache / "plugins/cache/depot/workflow-kernel" /
+                version / "skills/workflow-kernel/references")
+        if main_source is None:
+            refs.mkdir(parents=True)
+            return refs
+        package = refs / "workflow_kernel"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("")
+        (package / "cli.py").write_text("")
+        (package / "__main__.py").write_text(main_source)
+        return refs
+
+    def run_cache_resolver(self, home, *, cwd=None, **environment):
+        skill = Path(__file__).parents[2] / "SKILL.md"
+        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        env = dict(os.environ, HOME=str(home), **environment)
+        return subprocess.run(
+            ["zsh", "-c", snippet], cwd=cwd, text=True,
+            capture_output=True, env=env, check=False,
+        )
+
     def test_help_lists_commands(self):
         result = self.run_cli("--help")
         self.assertEqual(result.returncode, 0)
@@ -55,6 +77,45 @@ class CliTests(unittest.TestCase):
             Path(directory, "events.jsonl").write_text("")
             result = self.run_cli("validate", directory)
             self.assertNotEqual(result.returncode, 0)
+
+    def test_validate_rejects_dangling_state_symlink(self):
+        with tempfile.TemporaryDirectory() as directory:
+            initialized = self.run_cli(
+                "init", directory, "--run-id", "run-1",
+                "--occurred-at", "2026-07-14T00:00:00Z",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            state_path = Path(directory) / "run-state.json"
+            state_path.unlink()
+            state_path.symlink_to("missing-state-target")
+            result = self.run_cli("validate", directory)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stderr)["error"]["code"], "corrupt_state")
+
+    def test_append_rejects_dangling_state_symlink_before_ledger_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            initialized = self.run_cli(
+                "init", directory, "--run-id", "run-1",
+                "--occurred-at", "2026-07-14T00:00:00Z",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            events_path = Path(directory) / "events.jsonl"
+            before = events_path.read_bytes()
+            state_path = Path(directory) / "run-state.json"
+            state_path.unlink()
+            state_path.symlink_to("missing-state-target")
+            candidate = {
+                "schema_version": 1, "sequence": 1, "run_id": "run-1",
+                "node_id": None, "kind": "run.started",
+                "occurred_at": "2026-07-14T00:00:01Z", "payload": {},
+            }
+            result = self.run_cli(
+                "append", directory, "--event", json.dumps(candidate),
+            )
+            after = events_path.read_bytes()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stderr)["error"]["code"], "corrupt_state")
+        self.assertEqual(after, before)
 
     def test_non_init_commands_do_not_create_a_missing_run_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -137,7 +198,6 @@ class CliTests(unittest.TestCase):
         events = mock.Mock()
         events.validate.return_value = ((object(),), ())
         states = mock.Mock()
-        states.path.exists.return_value = True
         states.load.return_value = materialized
         args = SimpleNamespace(directory="unused", recovery=False)
         with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
@@ -168,7 +228,6 @@ class CliTests(unittest.TestCase):
         events = mock.Mock()
         events.validate.side_effect = lambda **_: observed(((object(),), ()))
         states = mock.Mock()
-        states.path.exists.side_effect = lambda: observed(True)
         states.load.side_effect = lambda: observed(reconstructed)
         with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
                 mock.patch("workflow_kernel.cli.RunLease", return_value=Lease()), \
@@ -230,107 +289,70 @@ class CliTests(unittest.TestCase):
             self.assertEqual(events.state_path, states.path)
 
     def test_documented_cache_resolver_is_quiet_with_only_codex_cache(self):
-        skill = Path(__file__).parents[2] / "SKILL.md"
-        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            refs = Path(directory) / ".codex/plugins/cache/depot/workflow-kernel/0.1.0/skills/workflow-kernel/references"
-            package = refs / "workflow_kernel"
-            package.mkdir(parents=True)
-            (package / "__init__.py").write_text("")
-            (package / "cli.py").write_text("")
-            (package / "__main__.py").write_text("print('codex-only-runtime')\n")
+            self.install_cached_runtime(
+                directory, ".codex", "0.1.0", "print('codex-only-runtime')\n",
+            )
             caller = Path(directory) / "caller"
             conflicting = caller / "workflow_kernel"
             conflicting.mkdir(parents=True)
             (conflicting / "__init__.py").write_text("")
             (conflicting / "__main__.py").write_text("print('caller-runtime')\n")
-            env = dict(os.environ, HOME=directory, PYTHONPATH=str(caller))
-            result = subprocess.run(["zsh", "-c", snippet], cwd=caller, text=True,
-                                    capture_output=True, env=env, check=False)
+            result = self.run_cache_resolver(
+                directory, cwd=caller, PYTHONPATH=str(caller),
+            )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-only-runtime", result.stdout)
         self.assertNotIn("caller-runtime", result.stdout)
 
     def test_documented_cache_resolver_skips_incomplete_newer_candidates(self):
-        skill = Path(__file__).parents[2] / "SKILL.md"
-        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            incomplete = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel/9.9.9/skills/workflow-kernel/references"
-            incomplete.mkdir(parents=True)
-            refs = Path(directory) / ".codex/plugins/cache/depot/workflow-kernel/0.1.0/skills/workflow-kernel/references"
-            package = refs / "workflow_kernel"
-            package.mkdir(parents=True)
-            (package / "__init__.py").write_text("")
-            (package / "cli.py").write_text("")
-            (package / "__main__.py").write_text("print('fallback-runtime')\n")
-            result = subprocess.run(
-                ["zsh", "-c", snippet], text=True, capture_output=True,
-                env=dict(os.environ, HOME=directory), check=False,
+            self.install_cached_runtime(directory, ".claude", "9.9.9")
+            self.install_cached_runtime(
+                directory, ".codex", "0.1.0", "print('fallback-runtime')\n",
             )
+            result = self.run_cache_resolver(directory)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("fallback-runtime", result.stdout)
 
     def test_documented_cache_resolver_falls_through_unimportable_candidate_in_one_root(self):
-        skill = Path(__file__).parents[2] / "SKILL.md"
-        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            cache = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel"
-            broken = cache / "9.9.9/skills/workflow-kernel/references/workflow_kernel"
-            broken.mkdir(parents=True)
-            (broken / "__init__.py").write_text("")
-            (broken / "cli.py").write_text("")
-            (broken / "__main__.py").write_text("raise RuntimeError('broken')\n")
-            good = cache / "0.1.0/skills/workflow-kernel/references/workflow_kernel"
-            good.mkdir(parents=True)
-            (good / "__init__.py").write_text("")
-            (good / "cli.py").write_text("")
-            (good / "__main__.py").write_text("print('older-viable-runtime')\n")
-            result = subprocess.run(
-                ["zsh", "-c", snippet], text=True, capture_output=True,
-                env=dict(os.environ, HOME=directory), check=False,
+            self.install_cached_runtime(
+                directory, ".claude", "9.9.9", "raise RuntimeError('broken')\n",
             )
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.0", "print('older-viable-runtime')\n",
+            )
+            result = self.run_cache_resolver(directory)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("older-viable-runtime", result.stdout)
 
     def test_documented_cache_resolver_quietly_rejects_broken_main(self):
-        skill = Path(__file__).parents[2] / "SKILL.md"
-        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            package = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel/9.9.9/skills/workflow-kernel/references/workflow_kernel"
-            package.mkdir(parents=True)
-            (package / "__init__.py").write_text("")
-            (package / "cli.py").write_text("")
-            (package / "__main__.py").write_text("raise RuntimeError('broken-main')\n")
-            result = subprocess.run(
-                ["zsh", "-c", snippet], text=True, capture_output=True,
-                env=dict(os.environ, HOME=directory), check=False,
+            self.install_cached_runtime(
+                directory, ".claude", "9.9.9",
+                "raise RuntimeError('broken-main')\n",
             )
+            result = self.run_cache_resolver(directory)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("runtime not found", result.stderr)
         self.assertNotIn("broken-main", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 
     def test_documented_cache_resolver_falls_from_broken_claude_to_codex(self):
-        skill = Path(__file__).parents[2] / "SKILL.md"
-        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            broken = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel/9.9.9/skills/workflow-kernel/references/workflow_kernel"
-            broken.mkdir(parents=True)
-            (broken / "__init__.py").write_text("")
-            (broken / "cli.py").write_text("")
-            (broken / "__main__.py").write_text("raise RuntimeError('broken-claude')\n")
-            good = Path(directory) / ".codex/plugins/cache/depot/workflow-kernel/0.1.0/skills/workflow-kernel/references/workflow_kernel"
-            good.mkdir(parents=True)
-            (good / "__init__.py").write_text("")
-            (good / "cli.py").write_text("")
-            (good / "__main__.py").write_text("print('codex-fallback-runtime')\n")
-            result = subprocess.run(
-                ["zsh", "-c", snippet], text=True, capture_output=True,
-                env=dict(os.environ, HOME=directory), check=False,
+            self.install_cached_runtime(
+                directory, ".claude", "9.9.9",
+                "raise RuntimeError('broken-claude')\n",
             )
+            self.install_cached_runtime(
+                directory, ".codex", "0.1.0",
+                "print('codex-fallback-runtime')\n",
+            )
+            result = self.run_cache_resolver(directory)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-fallback-runtime", result.stdout)
@@ -395,7 +417,6 @@ class CliTests(unittest.TestCase):
         events.append.side_effect = lambda *_args, **_kwargs: order.append("event")
         current = mock.Mock(revision=1)
         states = mock.Mock()
-        states.path.exists.return_value = True
         states.load.side_effect = lambda: (order.append("state"), current)[1]
         prepared = object()
         states.prepare.side_effect = lambda *_: (order.append("prepare"), prepared)[1]

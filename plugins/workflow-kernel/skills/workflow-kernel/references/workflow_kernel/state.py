@@ -280,9 +280,13 @@ def _capability_types():
                         raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                             ErrorDetailKey.PATH.value: str(path),
                         }) from None
-                    descriptor = scope.own(
-                        directory.open_regular(path.name, os.O_RDONLY),
-                    )
+                    try:
+                        descriptor = scope.own(
+                            directory.open_regular(path.name, os.O_RDONLY),
+                        )
+                    except FileNotFoundError:
+                        directory.revalidate()
+                        raise
                     result = _read_state_descriptor(descriptor, path)
                     directory.revalidate()
                     directory.require_identity(descriptor, path.name)
@@ -291,10 +295,6 @@ def _capability_types():
                 raise
             except CorruptStateError:
                 raise
-            except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError):
-                raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {
-                    ErrorDetailKey.PATH.value: str(path),
-                }) from None
             except OSError:
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
@@ -398,7 +398,7 @@ def _capability_types():
                                 ErrorDetailKey.ACTUAL_REVISION.value: actual,
                             })
                     directory.replace(temporary, path.name)
-                    scope.mark_committed()
+                    scope.disown_temporary()
                     directory_fsync = directory.fsync()
                     directory.revalidate()
                     directory.require_identity(descriptor, path.name)
