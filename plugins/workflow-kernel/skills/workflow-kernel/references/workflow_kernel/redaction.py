@@ -37,6 +37,8 @@ def validate_reference(reference: str) -> str:
     parsed = urlsplit(reference)
     if parsed.username is not None or parsed.password is not None:
         raise ValueError("evidence reference contains URL credentials")
+    if parsed.fragment:
+        raise ValueError("evidence reference contains a URL fragment")
     for key, _ in parse_qsl(parsed.query, keep_blank_values=True):
         normalized = _normalized_name(key)
         if is_secret_key(normalized) or normalized == "sig" or any(

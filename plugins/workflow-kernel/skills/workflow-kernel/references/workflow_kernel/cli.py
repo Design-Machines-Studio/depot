@@ -85,6 +85,7 @@ def command_append(args):
         expected = states.load().revision if states.path.exists() else -1
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
+        states.preflight(next_state)
         events.append(event, expected_sequence=len(existing))
         evidence = states.write(next_state, expected, lease=lease)
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
@@ -97,6 +98,7 @@ def command_replay(args):
     with _coordinated_run(states) as lease:
         reconstructed = TransitionEngine().reconstruct(events.replay())
         expected = states.load().revision if states.path.exists() else -1
+        states.preflight(reconstructed)
         evidence = states.write(reconstructed, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})

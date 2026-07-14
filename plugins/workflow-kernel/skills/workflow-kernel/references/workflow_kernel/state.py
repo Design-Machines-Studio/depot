@@ -8,13 +8,14 @@ import os
 import tempfile
 from pathlib import Path
 
-from ._files import LockHandle, canonical_path, open_verified_regular, verified_regular_exists
-from .schema import CorruptStateError, KernelError, LeaseConflictError, RevisionConflictError, RunState
-
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - non-POSIX fallback
-    fcntl = None
+from ._files import (
+    LockContentionError, LockHandle, LockIdentityError, LockingUnsupportedError,
+    canonical_path, open_verified_regular, verified_regular_exists,
+)
+from .schema import (
+    CorruptStateError, KernelError, LeaseConflictError, RevisionConflictError,
+    RunState, UnsafePayloadError,
+)
 
 
 MAX_STATE_BYTES = 4_194_304
@@ -34,35 +35,27 @@ class RunLease:
         self._owner_pid = None
 
     def acquire(self):
-        if fcntl is None:
-            raise LeaseConflictError("crash-safe run locking is unavailable", {
-                "reason_code": "locking_unsupported",
-            })
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            handle = LockHandle.open(self.path)
-        except OSError as exc:
-            raise LeaseConflictError("run lease path is unsafe", {"path": str(self.path)}) from exc
-        try:
-            fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except (BlockingIOError, OSError) as exc:
-            handle.close()
-            raise LeaseConflictError("run already has a live writer lease", {"path": str(self.path)}) from exc
-        try:
-            handle.revalidate()
-        except OSError as exc:
-            fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
-            handle.close()
+            handle = LockHandle.acquire(self.path)
+        except LockingUnsupportedError as exc:
+            raise LeaseConflictError("crash-safe run locking is unavailable", {
+                "reason_code": "locking_unsupported",
+            }) from exc
+        except LockIdentityError as exc:
             raise LeaseConflictError("run lease identity changed", {
                 "path": str(self.path), "reason_code": "lease_identity_changed",
             }) from exc
+        except LockContentionError as exc:
+            raise LeaseConflictError("run already has a live writer lease", {"path": str(self.path)}) from exc
+        except OSError as exc:
+            raise LeaseConflictError("run lease path is unsafe", {"path": str(self.path)}) from exc
         try:
             os.ftruncate(handle.descriptor, 0)
             os.write(handle.descriptor, (str(os.getpid()) + "\n").encode("ascii"))
             os.fsync(handle.descriptor)
         except Exception:
-            fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
-            handle.close()
+            handle.release()
             raise
         self._handle = handle
         self._owner_pid = os.getpid()
@@ -73,8 +66,7 @@ class RunLease:
             return
         handle = self._handle
         self._handle = None
-        fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
-        handle.close()
+        handle.release()
         self._owner_pid = None
 
     def require_authorized(self, state_path) -> None:
@@ -140,7 +132,7 @@ class StateStore:
             return RunState.from_dict(data)
         except CorruptStateError:
             raise
-        except (UnicodeDecodeError, json.JSONDecodeError, KernelError) as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError) as exc:
             raise CorruptStateError("materialized state is corrupt", {"path": str(self.path)}) from exc
         finally:
             os.close(descriptor)
@@ -166,11 +158,12 @@ class StateStore:
         elif expected_revision != -1:
             raise RevisionConflictError("state does not exist at expected revision", {"expected_revision": expected_revision})
 
+        encoded = self.preflight(state)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent))
         try:
             with os.fdopen(descriptor, "wb") as handle:
-                handle.write(encode_state(state))
+                handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
             lease.require_authorized(self.path)
@@ -183,6 +176,15 @@ class StateStore:
                 pass
             raise
         return {"state_path": str(self.path), "revision": state.revision, "directory_fsync": directory_fsync}
+
+    def preflight(self, state: RunState) -> bytes:
+        """Encode and require a state that can be read back within durable limits."""
+        encoded = encode_state(state)
+        if len(encoded) > MAX_STATE_BYTES:
+            raise UnsafePayloadError("materialized state exceeds size limit", {
+                "limit_bytes": MAX_STATE_BYTES,
+            })
+        return encoded
 
     def _fsync_directory(self) -> str:
         flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)

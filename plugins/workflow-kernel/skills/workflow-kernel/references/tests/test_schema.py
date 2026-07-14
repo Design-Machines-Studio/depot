@@ -92,6 +92,14 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(receipt=reference), self.assertRaises(UnsafePayloadError):
                 encode_receipt({"reference": reference})
 
+    def test_evidence_url_fragment_is_rejected_before_durable_encoding(self):
+        sentinel = "never-persist-this-access-token"
+        reference = "https://example.invalid/proof#access_token=" + sentinel
+        with self.assertRaises(UnsafePayloadError):
+            event = WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
+                                  "2026-07-14T00:00:00Z", {"evidence": [reference]})
+            encode_event(event)
+
     def test_corrupt_state_error_has_stable_public_code(self):
         self.assertEqual(CorruptStateError("bad state").code, "corrupt_state")
 

@@ -60,10 +60,14 @@ errors as stable JSON. Treat `--help` output as plain text.
   versions, unsafe references, and invalid JSON shapes then fail with a stable
   `KernelError.code`.
 - Use `EventStore.append(event, expected_sequence)` to append exactly the next
-  event. Use `EventStore.replay()` to reject gaps, corruption, conflicting run
-  IDs, and bounded-input violations.
+  event. Records and projected ledgers that exceed durable read limits are
+  rejected before mutation. Use `EventStore.replay()` to reject gaps,
+  corruption, conflicting run IDs, and bounded-input violations.
 - Use `StateStore.load()` to read the bounded materialization. Unsafe paths or
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
+  Use `StateStore.preflight(state)` before publishing an event that derives the
+  state; coordinated CLI append and replay do this automatically. Oversized
+  state is rejected before temporary-file creation or replacement.
 - Acquire `RunLease(state_path)` and pass that live capability to
   `StateStore.write(state, expected_revision, lease=lease)`. A lease for a
   different path or a released lease never authorizes a write. POSIX advisory
@@ -85,7 +89,8 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 Pass only evidence references into the ledger. Recursively redact token, key,
 secret, password, authorization, cookie, DSN, and environment-value fields.
-Never report a raw secret in errors or receipts.
+Never report a raw secret in errors or receipts. Evidence references containing
+URL fragments are rejected before durable encoding.
 
 Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and

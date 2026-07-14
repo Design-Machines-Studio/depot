@@ -9,8 +9,8 @@ from dataclasses import replace
 from unittest import mock
 
 from workflow_kernel import CorruptStateError
-from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState
-from workflow_kernel.state import RunLease, StateStore
+from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError
+from workflow_kernel.state import RunLease, StateStore, encode_state
 
 
 class StateStoreTests(unittest.TestCase):
@@ -150,10 +150,35 @@ class StateStoreTests(unittest.TestCase):
                     StateStore(path).load()
             self.assertEqual(raised.exception.code, "corrupt_state")
 
+    def test_deeply_nested_state_is_normalized_to_corruption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            path.write_text("[" * 1_200 + "0" + "]" * 1_200)
+            with self.assertRaises(Exception) as raised:
+                StateStore(path).load()
+            self.assertIsInstance(raised.exception, CorruptStateError)
+            self.assertEqual(raised.exception.code, "corrupt_state")
+
+    def test_oversize_state_write_preserves_prior_materialization(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            with RunLease(path) as lease:
+                store.write(state, -1, lease=lease)
+            before = path.read_bytes()
+            candidate = replace(state, evidence=("x" * 256,))
+            self.assertGreater(len(encode_state(candidate)), len(before) + 16)
+            with mock.patch("workflow_kernel.state.MAX_STATE_BYTES", len(before) + 16):
+                with RunLease(path) as lease, self.assertRaises(UnsafePayloadError):
+                    store.write(candidate, state.revision, lease=lease)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(list(Path(directory).glob(".run-state.json.*.tmp")), [])
+
     def test_lease_fails_closed_without_crash_safe_locking(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
-            with mock.patch("workflow_kernel.state.fcntl", None):
+            with mock.patch("workflow_kernel._files.fcntl", None, create=True):
                 with self.assertRaises(LeaseConflictError) as raised:
                     RunLease(path).acquire()
             self.assertEqual(raised.exception.details["reason_code"], "locking_unsupported")

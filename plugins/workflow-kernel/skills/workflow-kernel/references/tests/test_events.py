@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from unittest import mock
 
-from workflow_kernel.events import EventStore
-from workflow_kernel.schema import CorruptEventError, SequenceConflictError, WorkflowEvent
+from workflow_kernel.events import EventStore, encode_event
+from workflow_kernel.schema import CorruptEventError, SequenceConflictError, UnsafePayloadError, WorkflowEvent
 
 
 def event(sequence):
@@ -13,6 +13,22 @@ def event(sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def test_store_canonicalizes_ledger_and_lock_before_chdir(self):
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            try:
+                os.chdir(first)
+                store = EventStore("events.jsonl")
+                canonical_first = Path(first).resolve()
+                self.assertEqual(store.path, canonical_first / "events.jsonl")
+                self.assertEqual(store._lock_path, canonical_first / "events.jsonl.lock")
+                os.chdir(second)
+                store.append(event(0), 0)
+            finally:
+                os.chdir(original)
+            self.assertTrue((Path(first) / "events.jsonl").exists())
+            self.assertFalse((Path(second) / "events.jsonl").exists())
+
     def test_append_replay_and_sequence_conflict_preserves_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
@@ -121,6 +137,34 @@ class EventStoreTests(unittest.TestCase):
                 with self.assertRaises(CorruptEventError):
                     EventStore(path).replay()
 
+    def test_append_rejects_oversize_record_without_changing_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            store = EventStore(path)
+            store.append(event(0), 0)
+            before = path.read_bytes()
+            candidate = WorkflowEvent(1, 1, "run-1", None, "evidence.recorded",
+                                      "2026-07-14T00:00:00Z", {"note": "x" * 256})
+            with mock.patch("workflow_kernel.events.MAX_RECORD_BYTES", len(encode_event(candidate)) - 1):
+                with self.assertRaises(UnsafePayloadError):
+                    store.append(candidate, 1)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(store.replay(), (event(0),))
+
+    def test_append_rejects_projected_ledger_overflow_without_changing_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            store = EventStore(path)
+            store.append(event(0), 0)
+            before = path.read_bytes()
+            candidate = event(1)
+            projected_limit = len(before) + len(encode_event(candidate)) - 1
+            with mock.patch("workflow_kernel.events.MAX_LEDGER_BYTES", projected_limit):
+                with self.assertRaises(UnsafePayloadError):
+                    store.append(candidate, 1)
+            self.assertEqual(path.read_bytes(), before)
+            self.assertEqual(store.replay(), (event(0),))
+
     def test_excessive_payload_shape_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
@@ -157,7 +201,7 @@ class EventStoreTests(unittest.TestCase):
     def test_event_writer_fails_closed_without_crash_safe_locking(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            with mock.patch("workflow_kernel.events.fcntl", None):
+            with mock.patch("workflow_kernel._files.fcntl", None, create=True):
                 with self.assertRaises(SequenceConflictError) as raised:
                     EventStore(path).append(event(0), 0)
             self.assertEqual(raised.exception.details["reason_code"], "locking_unsupported")

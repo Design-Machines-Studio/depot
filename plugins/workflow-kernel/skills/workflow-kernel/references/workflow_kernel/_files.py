@@ -7,9 +7,26 @@ import os
 import stat
 from pathlib import Path
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
+
 
 class UnsafeFileError(OSError):
     """A durable file path did not resolve to one exclusive regular file."""
+
+
+class LockingUnsupportedError(UnsafeFileError):
+    """Crash-safe advisory locking is unavailable."""
+
+
+class LockContentionError(UnsafeFileError):
+    """Another process owns the advisory lock."""
+
+
+class LockIdentityError(UnsafeFileError):
+    """A locked pathname no longer names the opened lock inode."""
 
 
 def canonical_path(path: Path) -> Path:
@@ -51,6 +68,7 @@ class LockHandle:
     def __init__(self, path: Path, descriptor: int):
         self.path = canonical_path(path)
         self._descriptor = descriptor
+        self._locked = False
         opened = os.fstat(descriptor)
         self.identity = (opened.st_dev, opened.st_ino)
 
@@ -63,6 +81,25 @@ class LockHandle:
         except Exception:
             os.close(descriptor)
             raise
+
+    @classmethod
+    def acquire(cls, path: Path) -> "LockHandle":
+        """Open, exclusively lock, and revalidate one persistent lock file."""
+        if fcntl is None:
+            raise LockingUnsupportedError(errno.ENOSYS, "crash-safe locking is unavailable", str(path))
+        handle = cls.open(path)
+        try:
+            fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            handle._locked = True
+        except (BlockingIOError, OSError) as exc:
+            handle.close()
+            raise LockContentionError(errno.EWOULDBLOCK, "lock is already held", str(handle.path)) from exc
+        try:
+            handle.revalidate()
+        except OSError as exc:
+            handle.release()
+            raise LockIdentityError(errno.ESTALE, "lock path identity changed", str(handle.path)) from exc
+        return handle
 
     @property
     def descriptor(self) -> int:
@@ -85,6 +122,17 @@ class LockHandle:
         descriptor = self._descriptor
         self._descriptor = None
         os.close(descriptor)
+
+    def release(self) -> None:
+        """Unlock and close without unlinking the persistent lock pathname."""
+        if self._descriptor is None:
+            return
+        try:
+            if self._locked:
+                fcntl.flock(self._descriptor, fcntl.LOCK_UN)
+                self._locked = False
+        finally:
+            self.close()
 
 
 def verified_regular_exists(path: Path) -> bool:

@@ -8,8 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from workflow_kernel.cli import command_append, command_replay, command_validate
-from workflow_kernel.schema import InvalidSchemaError
+from workflow_kernel.cli import command_append, command_init, command_replay, command_validate
+from workflow_kernel.schema import InvalidSchemaError, UnsafePayloadError
 
 
 class CliTests(unittest.TestCase):
@@ -121,6 +121,7 @@ class CliTests(unittest.TestCase):
         events.replay.side_effect = lambda: (ObservedPath.assert_active(), (object(),))[1]
         states = mock.Mock(path=ObservedPath())
         states.load.side_effect = lambda: (ObservedPath.assert_active(), state)[1]
+        states.preflight.side_effect = lambda *_: (ObservedPath.assert_active(), None)[1]
         states.write.side_effect = lambda *_args, **_kwargs: (
             ObservedPath.assert_active(), {"directory_fsync": "completed"}
         )[1]
@@ -145,6 +146,7 @@ class CliTests(unittest.TestCase):
         states = mock.Mock()
         states.path.exists.return_value = True
         states.load.side_effect = lambda: (order.append("state"), current)[1]
+        states.preflight.side_effect = lambda *_: order.append("preflight")
         states.write.return_value = {"directory_fsync": "completed"}
         next_state = mock.Mock(revision=2)
         next_state.status.value = "running"
@@ -157,7 +159,26 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = mock.Mock()
             engine.return_value.apply.return_value = next_state
             self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
-        self.assertEqual(order, ["state", "event"])
+        self.assertEqual(order, ["state", "preflight", "event"])
+
+    def test_append_state_preflight_preserves_prior_ledger_and_state(self):
+        with tempfile.TemporaryDirectory() as directory, mock.patch("workflow_kernel.cli._emit"):
+            command_init(SimpleNamespace(directory=directory, run_id="run-1", mode="shadow",
+                                         occurred_at="2026-07-14T00:00:00Z"))
+            events_path = Path(directory) / "events.jsonl"
+            state_path = Path(directory) / "run-state.json"
+            before_events = events_path.read_bytes()
+            before_state = state_path.read_bytes()
+            event_data = {
+                "schema_version": 1, "sequence": 1, "run_id": "run-1", "node_id": None,
+                "kind": "evidence.recorded", "occurred_at": "2026-07-14T00:00:01Z",
+                "payload": {"evidence": ["x" * 256]},
+            }
+            with mock.patch("workflow_kernel.state.MAX_STATE_BYTES", len(before_state) + 16):
+                with self.assertRaises(UnsafePayloadError):
+                    command_append(SimpleNamespace(directory=directory, event=json.dumps(event_data)))
+            self.assertEqual(events_path.read_bytes(), before_events)
+            self.assertEqual(state_path.read_bytes(), before_state)
 
 
 if __name__ == "__main__":
