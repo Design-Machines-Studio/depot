@@ -12,7 +12,7 @@ from pathlib import Path
 from .events import EventStore
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
-    RunMode, UnsafePayloadError, WorkflowEvent,
+    RunMode, UnsafePayloadError, WorkflowEvent, serialize_kernel_error,
 )
 from .state import RunLease, StateStore
 from .transitions import TransitionEngine
@@ -156,11 +156,11 @@ def main(argv=None):
         args = parser().parse_args(argv)
         return args.handler(args)
     except KernelError as exc:
-        _emit(exc.to_dict(), sys.stderr)
+        _emit(serialize_kernel_error(exc), sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
         error = UnsafePayloadError(ErrorMessage.OPERATION_FAILED, {
             ErrorDetailKey.EXCEPTION_TYPE.value: type(exc).__name__,
         })
-        _emit(error.to_dict(), sys.stderr)
+        _emit(serialize_kernel_error(error), sys.stderr)
         return 1

@@ -149,7 +149,6 @@ class ErrorDetailKey(str, Enum):
 
 
 _ERROR_DETAIL_KEYS = frozenset(key.value for key in ErrorDetailKey)
-_ERROR_HIERARCHY_SEALED = False
 
 
 class RunMode(str, Enum):
@@ -189,13 +188,7 @@ class ErrorEnvelope:
 
 class KernelError(Exception):
     _error_code = ErrorCode.KERNEL_ERROR
-    _PROTECTED_NAMES = frozenset({
-        "_envelope", "_error_code", "message", "code", "details", "args",
-    })
-    def __init_subclass__(cls, **kwargs):
-        if _ERROR_HIERARCHY_SEALED:
-            raise TypeError("kernel error hierarchy is final")
-        super().__init_subclass__(**kwargs)
+    _PROTECTED_NAMES = frozenset({"_envelope", "args"})
 
     def __init__(self, message: object, details: Optional[Mapping[str, object]] = None):
         safe_message = message if isinstance(message, ErrorMessage) else ErrorMessage.GENERIC
@@ -204,9 +197,7 @@ class KernelError(Exception):
         try:
             safe_details = freeze_error_details(dict(details or {}), known_keys=_ERROR_DETAIL_KEYS)
         except (TypeError, ValueError):
-            safe_details = freeze_error_details(
-                {ErrorDetailKey.DETAIL.value: "[UNSAFE]"}, known_keys=_ERROR_DETAIL_KEYS,
-            )
+            safe_details = MappingProxyType({ErrorDetailKey.DETAIL.value: "[UNSAFE]"})
         object.__setattr__(self, "_envelope", ErrorEnvelope(safe_code, safe_message, safe_details))
         Exception.__init__(self, safe_message.value)
 
@@ -241,13 +232,18 @@ class KernelError(Exception):
         return object.__getattribute__(self, "_envelope").message.value
 
     def to_dict(self) -> dict:
-        envelope = object.__getattribute__(self, "_envelope")
-        return {"error": {"code": envelope.code.value, "message": envelope.message.value,
-                          "details": thaw(envelope.details)}}
+        return serialize_kernel_error(self)
 
     def __reduce__(self):
         envelope = object.__getattribute__(self, "_envelope")
         return (type(self), (envelope.message,))
+
+
+def serialize_kernel_error(exc: KernelError) -> dict:
+    """Serialize the captured safe envelope without subclass dispatch."""
+    envelope = object.__getattribute__(exc, "_envelope")
+    return {"error": {"code": envelope.code.value, "message": envelope.message.value,
+                      "details": thaw(envelope.details)}}
 
 
 class InvalidSchemaError(KernelError):
@@ -284,9 +280,6 @@ class MissingEvidenceError(KernelError):
 
 class UnsafePayloadError(KernelError):
     _error_code = ErrorCode.UNSAFE_PAYLOAD
-
-
-_ERROR_HIERARCHY_SEALED = True
 
 
 def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:

@@ -88,8 +88,14 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(sentinel, rejected.stderr)
         self.assertEqual(json.loads(rejected.stderr)["error"]["details"]["kind"], digest)
 
-    def test_main_uses_normal_builtin_error_serialization(self):
-        error = UnsafePayloadError(ErrorMessage.INVALID_STRING_FIELD, {"field": "safe"})
+    def test_main_uses_base_owned_serializer_for_trusted_subclasses(self):
+        sentinel = "never-persist-subclass-serializer"
+
+        class TrustedError(UnsafePayloadError):
+            def to_dict(self):
+                return {"secret": sentinel}
+
+        error = TrustedError(ErrorMessage.INVALID_STRING_FIELD, {"field": sentinel})
         parsed = SimpleNamespace(handler=mock.Mock(side_effect=error))
         with mock.patch("workflow_kernel.cli.parser") as parser, \
                 mock.patch("workflow_kernel.cli._emit") as emit:
@@ -97,6 +103,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(cli.main([]), 2)
         emitted = emit.call_args.args[0]
         self.assertEqual(emitted["error"]["code"], "unsafe_payload")
+        self.assertNotIn(sentinel, json.dumps(emitted, sort_keys=True))
 
     def test_main_hashes_unknown_error_detail_keys(self):
         sentinel = "never-persist-cli-detail-key"

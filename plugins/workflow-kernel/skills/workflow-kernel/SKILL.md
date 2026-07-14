@@ -99,10 +99,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   initialized only with the catalogue-owned safe message, so inherited
   `args`, `repr`, formatting, logging, and pickle surfaces never retain raw
   constructor messages or details; pickle intentionally omits details. The
-  built-in error classes are declared while the module initializes and then the
-  complete hierarchy is final: every later direct or indirect subclass attempt
-  fails before class creation. CLI exception handling therefore uses the normal
-  `error.to_dict()` dispatch safely.
+  exception hierarchy is an in-process extension surface: subclasses and
+  runtime classes are trusted, and hostile monkeypatching inside the Python
+  process is outside this boundary's threat model. `KernelError.to_dict()` is
+  convenient normal dispatch. At CLI or other process/external boundaries, use
+  the base-owned `serialize_kernel_error(error)`, which reads the captured
+  envelope directly without subclass serialization dispatch.
   Sensitive-key paths become `[REDACTED]`; every other string value becomes a
   deterministic `value-sha256:<64 lowercase hex>` digest, while numbers,
   booleans, and null remain typed. `ErrorDetailKey` is the developer-owned
@@ -110,9 +112,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   subclass is always unknown, even when its content equals a known key, and is
   digested without invoking attacker-defined equality, hashing, string, or
   encoding methods. Every unknown error-detail key at any depth becomes a
-  deterministic `key-sha256:<64 lowercase hex>` digest; even an input already
-  shaped like a key digest is hashed again, preventing collision with the digest
-  of another input. Use these digests only for stable correlation
+  deterministic `key-sha256:<64 lowercase hex>` digest. Canonical
+  `value-sha256:` and `key-sha256:` tokens remain stable when already-sanitized
+  metadata is sanitized or encoded again; a raw key colliding with a canonical
+  key token fails closed. Literal caller strings `[REDACTED]` and `[UNSAFE]` are
+  ordinary values and therefore hash. Only the sensitive-key sanitizer branch
+  emits the trusted `[REDACTED]` marker. Use these digests only for stable correlation
   across receipts and logs—the original plaintext is never recoverable from the
   public error. Do not expose raw parser exceptions or rejected values.
 
@@ -120,13 +125,20 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 Pass only evidence references into the ledger. Recursively redact token, key,
 secret, password, authorization, cookie, DSN, and environment-value fields.
-Never report a raw secret in errors or receipts. Receipt metadata uses the same
-public sanitizer as error details but returns plain JSON-safe dictionaries and
+Never report a raw secret in errors or receipts. Every receipt path uses the
+same public metadata sanitizer and returns plain JSON-safe dictionaries and
 lists: sensitive keyed values become `[REDACTED]`, every arbitrary string value
-becomes `value-sha256:...`, and every key outside an explicitly supplied exact
-built-in-string vocabulary becomes `key-sha256:...`. Receipt `run_id` and
-`evidence_type` strings are value digests, while `reference` follows the evidence
-reference policy below. A run-relative artifact path is
+becomes `value-sha256:<64 lowercase hex>`, and every key outside an explicitly
+supplied exact built-in-string vocabulary becomes
+`key-sha256:<64 lowercase hex>`. `encode_receipt()` first applies the durable URI
+policy, then the sanitizer, so generic receipt content is both URI-safe and
+opaque. `evidence_receipt()` value-digests caller `run_id` and `evidence_type`,
+sanitizes arbitrary metadata, and preserves only a separately validated evidence
+reference. `transition_receipt()` sanitizes the full event, including its
+payload, and accepts `state_digest` only in the exact canonical form
+`sha256:<64 lowercase hex>`; raw, uppercase, other-prefix, and non-string values
+fail closed. Re-encoding sanitized receipts preserves canonical `sha256:`,
+`url-sha256:`, `value-sha256:`, and `key-sha256:` tokens. A run-relative artifact path is
 one or more `/`-separated ASCII segments matching
 `[A-Za-z0-9_][A-Za-z0-9._-]*`; absolute paths, empty or dot segments,
 backslashes, controls, and ambiguous query or fragment syntax are rejected.

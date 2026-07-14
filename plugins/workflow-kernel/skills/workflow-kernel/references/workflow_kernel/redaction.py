@@ -39,7 +39,7 @@ _SCHEME_CHARACTERS = _ASCII_LETTERS | frozenset("0123456789+.-")
 _TRAILING_PUNCTUATION = frozenset(".,;!?\"'")
 _OPENING_TO_CLOSING = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
-_SAFE_DETAIL_MARKERS = frozenset({REDACTED, UNSAFE})
+_KEY_DIGEST = re.compile(r"key-sha256:[0-9a-f]{64}\Z")
 
 
 def is_secret_key(key: str) -> bool:
@@ -202,7 +202,7 @@ def validate_durable_key(key: str) -> str:
 
 def digest_error_detail_string(value: str) -> str:
     """Return a stable correlation digest without retaining original text."""
-    if type(value) is str and value in _SAFE_DETAIL_MARKERS:
+    if type(value) is str and _DURABLE_DIGEST.fullmatch(value):
         return value
     return VALUE_DIGEST_PREFIX + hashlib.sha256(str.encode(value, "utf-8")).hexdigest()
 
@@ -237,6 +237,7 @@ class _Traversal:
     wrap_sequence: Callable[[tuple], Any]
     string_normalizer: Optional[Callable[[str], str]] = None
     key_normalizer: Optional[Callable[[str], str]] = None
+    preserve_redacted: bool = False
     count: int = 0
 
     def normalize(self, value: Any, *, key: str = "", depth: int = 0) -> Any:
@@ -245,7 +246,11 @@ class _Traversal:
         self.count += 1
         if self.count > self.max_items:
             raise TypeError("payload exceeds maximum item count")
-        if key and is_secret_key(key):
+        if (key and not (type(key) is str and _KEY_DIGEST.fullmatch(key))
+                and is_secret_key(key)):
+            return REDACTED
+        if (self.preserve_redacted and type(key) is str and _KEY_DIGEST.fullmatch(key)
+                and type(value) is str and value == REDACTED):
             return REDACTED
         if value is None or isinstance(value, bool):
             return value
@@ -305,11 +310,14 @@ def _sanitize_public_metadata(value: Any, *, max_depth: int, max_items: int,
     safe_keys = frozenset(key for key in known_keys if type(key) is str)
 
     def normalize_key(key: str) -> str:
-        return key if type(key) is str and key in safe_keys else digest_error_detail_key(key)
+        if type(key) is str and (key in safe_keys or _KEY_DIGEST.fullmatch(key)):
+            return key
+        return digest_error_detail_key(key)
 
     return _Traversal(max_depth, max_items, max_string_length,
                       wrap_mapping, wrap_sequence,
-                      digest_error_detail_string, normalize_key).normalize(value)
+                      digest_error_detail_string, normalize_key,
+                      preserve_redacted=True).normalize(value)
 
 
 def sanitize_public_metadata(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,

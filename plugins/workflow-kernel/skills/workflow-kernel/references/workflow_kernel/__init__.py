@@ -6,7 +6,7 @@ from .schema import (
     IllegalTransitionError, InvalidSchemaError,
     KernelError, LeaseConflictError, MissingEvidenceError, NodeState, NodeStatus,
     RevisionConflictError, RunMode, RunState, RunStatus, SequenceConflictError,
-    UnsafePayloadError, WorkflowEvent,
+    UnsafePayloadError, WorkflowEvent, serialize_kernel_error,
 )
 from .state import RunLease, StateStore
 from .transitions import TransitionEngine
@@ -18,4 +18,5 @@ __all__ = [
     "CorruptEventError", "CorruptStateError",
     "SequenceConflictError", "RevisionConflictError", "LeaseConflictError",
     "IllegalTransitionError", "MissingEvidenceError", "UnsafePayloadError",
+    "serialize_kernel_error",
 ]

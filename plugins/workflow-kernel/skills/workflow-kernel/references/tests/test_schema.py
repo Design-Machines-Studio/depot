@@ -19,7 +19,7 @@ from workflow_kernel.schema import (
     UnsafePayloadError,
     WorkflowEvent,
 )
-from workflow_kernel.receipts import encode_receipt, evidence_receipt
+from workflow_kernel.receipts import encode_receipt, evidence_receipt, transition_receipt
 from workflow_kernel.events import encode_event
 from workflow_kernel.schema import NodeState
 from workflow_kernel.state import encode_state
@@ -151,10 +151,19 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             envelope.code = schema.ErrorCode.KERNEL_ERROR
 
-    def test_error_hierarchy_is_final_after_builtin_subclasses_load(self):
-        for base in (schema.KernelError, schema.InvalidSchemaError, schema.UnsafePayloadError):
-            with self.subTest(base=base.__name__), self.assertRaises(TypeError):
-                type("ExternalKernelError", (base,), {})
+    def test_trusted_subclasses_are_allowed_but_base_serializer_reads_the_envelope(self):
+        sentinel = "never-persist-trusted-subclass"
+
+        class TrustedError(schema.UnsafePayloadError):
+            def to_dict(self):
+                return {"secret": sentinel}
+
+        error = TrustedError(schema.ErrorMessage.INVALID_STRING_FIELD, {"field": sentinel})
+        self.assertEqual(error.to_dict(), {"secret": sentinel})
+        serialized = schema.serialize_kernel_error(error)
+        self.assertEqual(serialized["error"]["code"], "unsafe_payload")
+        self.assertNotIn(sentinel, json.dumps(serialized, sort_keys=True))
+        self.assertEqual(schema.KernelError.to_dict(error), serialized)
 
     def test_base_exception_surfaces_contain_only_the_safe_message(self):
         sentinel = "never-persist-base-exception"
@@ -277,16 +286,18 @@ class SchemaTests(unittest.TestCase):
         self.assertNotIn("never-persist", encoded)
         self.assertNotIn("example.invalid", encoded)
 
-    def test_unknown_error_detail_key_hashing_avoids_digest_shaped_collisions(self):
+    def test_public_metadata_digest_tokens_are_idempotent_and_collisions_fail_closed(self):
         plaintext = "never-persist-collision-label"
         digest_shaped = detail_key_digest(plaintext)
         error = UnsafePayloadError(schema.ErrorMessage.INVALID_STRING_FIELD, {
             plaintext: "first",
             digest_shaped: "second",
         })
-        self.assertEqual(len(error.details), 2)
-        self.assertIn(digest_shaped, error.details)
-        self.assertIn(detail_key_digest(digest_shaped), error.details)
+        self.assertEqual(error.details, {"detail": "[UNSAFE]"})
+
+        safe = redaction.sanitize_public_metadata({plaintext: "first"})
+        self.assertEqual(redaction.sanitize_public_metadata(safe), safe)
+        self.assertIn(digest_shaped, safe)
 
     def test_hostile_str_subclass_keys_cannot_forge_known_key_classification(self):
         sentinel = "never-persist-hostile-detail-label"
@@ -311,15 +322,30 @@ class SchemaTests(unittest.TestCase):
         self.assertNotIn("forged-field", encoded)
         self.assertIn(detail_key_digest(sentinel), error.details)
 
-    def test_recursive_redaction_covers_events_and_receipts(self):
+    def test_all_receipt_paths_share_the_public_metadata_policy(self):
         fixture = "never-print-this-fixture"
+        state_digest = "sha256:" + "a" * 64
         event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
                               "2026-07-14T00:00:00Z",
-                              {"nested": [{"environment_value": fixture}], "api_token": fixture})
-        event_json = json.dumps(event.to_dict(), sort_keys=True)
-        receipt_json = encode_receipt({"event": event.to_dict(), "cookie": fixture}).decode()
-        self.assertNotIn(fixture, event_json)
-        self.assertNotIn(fixture, receipt_json)
+                              {"note": fixture, "api_token": fixture})
+        generic = json.loads(encode_receipt({"note": fixture, "api_token": fixture}))
+        transition = transition_receipt(event, state_digest)
+        evidence = evidence_receipt("run-1", "test", "receipt.json", metadata={
+            "note": fixture, "api_token": fixture,
+        })
+
+        for receipt in (generic, transition, evidence):
+            self.assertNotIn(fixture, json.dumps(receipt, sort_keys=True))
+        self.assertEqual(generic[detail_key_digest("note")], detail_digest(fixture))
+        self.assertEqual(generic[detail_key_digest("api_token")], "[REDACTED]")
+        payload = transition["event"]["payload"]
+        self.assertEqual(payload[detail_key_digest("note")], detail_digest(fixture))
+        self.assertEqual(payload[detail_key_digest("api_token")], "[REDACTED]")
+        self.assertEqual(transition["state_digest"], state_digest)
+
+        for invalid in ("raw-state", "sha256:" + "A" * 64, detail_digest("state"), None):
+            with self.subTest(invalid=invalid), self.assertRaises(UnsafePayloadError):
+                transition_receipt(event, invalid)
 
     def test_event_payload_is_recursively_immutable_and_encoding_is_stable(self):
         event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
@@ -463,13 +489,14 @@ class SchemaTests(unittest.TestCase):
         state = RunState.new(prose, "2026-07-14T00:00:00Z")
 
         self.assertEqual(event.payload["note"], normalized)
-        self.assertEqual(json.loads(receipt)["note"], normalized)
+        self.assertEqual(json.loads(receipt)[detail_key_digest("note")], detail_digest(normalized))
         self.assertEqual(state.run_id, normalized)
-        for encoded in (encode_event(event), receipt, encode_state(state)):
+        for encoded in (encode_event(event), encode_state(state)):
             self.assertNotIn(sentinel.encode(), encoded)
             self.assertNotIn(b"example.invalid", encoded)
             self.assertNotIn(url.encode(), encoded)
             self.assertIn(digest.encode(), encoded)
+        self.assertNotIn(sentinel.encode(), receipt)
 
     def test_network_path_urls_are_digested_across_event_receipt_and_state(self):
         first = "//one.example.invalid/proof/never-persist-network-one"
@@ -485,14 +512,15 @@ class SchemaTests(unittest.TestCase):
         state = RunState.new(source, "2026-07-14T00:00:00Z")
 
         self.assertEqual(event.payload["note"], normalized)
-        self.assertEqual(json.loads(receipt)["note"], normalized)
+        self.assertEqual(json.loads(receipt)[detail_key_digest("note")], detail_digest(normalized))
         self.assertEqual(state.run_id, normalized)
         self.assertEqual(encode_receipt(json.loads(receipt)), receipt)
-        for encoded in (encode_event(event), receipt, encode_state(state)):
+        for encoded in (encode_event(event), encode_state(state)):
             self.assertNotIn(b"example.invalid", encoded)
             self.assertNotIn(b"never-persist-network", encoded)
             self.assertIn(first_digest.encode(), encoded)
             self.assertIn(second_digest.encode(), encoded)
+        self.assertNotIn(b"never-persist-network", receipt)
 
     def test_standalone_network_path_url_is_digested_and_idempotent(self):
         source = "//example.invalid/proof/never-persist-standalone"
@@ -541,12 +569,13 @@ class SchemaTests(unittest.TestCase):
             state = RunState.new(source, "2026-07-14T00:00:00Z")
 
             self.assertEqual(event.payload["note"], normalized)
-            self.assertEqual(json.loads(receipt)["note"], normalized)
+            self.assertEqual(json.loads(receipt)[detail_key_digest("note")], detail_digest(normalized))
             self.assertEqual(state.run_id, normalized)
-            for encoded in (encode_event(event), receipt, encode_state(state)):
+            for encoded in (encode_event(event), encode_state(state)):
                 self.assertNotIn(url.encode(), encoded)
                 self.assertNotIn(b"never-persist-", encoded)
                 self.assertIn(digest.encode(), encoded)
+            self.assertNotIn(b"never-persist-", receipt)
 
     def test_prefixed_unsupported_uri_schemes_fail_closed_across_outputs(self):
         values = (
@@ -583,14 +612,16 @@ class SchemaTests(unittest.TestCase):
             self.fail("symmetric URI delimiters were treated as URI bytes: " + exc.code)
 
         self.assertEqual(event.payload["note"], normalized)
-        self.assertEqual(json.loads(receipt)["note"], normalized)
+        self.assertEqual(json.loads(receipt)[detail_key_digest("note")], detail_digest(normalized))
         self.assertEqual(state.run_id, normalized)
         self.assertEqual(encode_receipt(json.loads(receipt)), receipt)
-        for encoded in (encode_event(event), receipt, encode_state(state)):
+        for encoded in (encode_event(event), encode_state(state)):
             self.assertNotIn(first.encode(), encoded)
             self.assertNotIn(second.encode(), encoded)
             self.assertIn(("<" + content_digest + ">").encode(), encoded)
             self.assertIn(("<" + url_digest + ">").encode(), encoded)
+        self.assertNotIn(first.encode(), receipt)
+        self.assertNotIn(second.encode(), receipt)
 
     def test_no_space_colon_tokens_fail_closed_but_prose_labels_remain(self):
         preserved = "Note: see the local report"
@@ -829,6 +860,8 @@ class SchemaTests(unittest.TestCase):
             "note": "Bearer " + sentinel,
             "plain": sentinel,
             "api_token": sentinel,
+            "marker": "[REDACTED]",
+            "unsafe_marker": "[UNSAFE]",
             uri_key: "value",
         })
         encoded = json.dumps(safe, sort_keys=True)
@@ -837,22 +870,29 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(safe[detail_key_digest("note")], detail_digest("Bearer " + sentinel))
         self.assertEqual(safe[detail_key_digest("plain")], detail_digest(sentinel))
         self.assertEqual(safe[detail_key_digest("api_token")], "[REDACTED]")
+        self.assertEqual(safe[detail_key_digest("marker")], detail_digest("[REDACTED]"))
+        self.assertEqual(safe[detail_key_digest("unsafe_marker")], detail_digest("[UNSAFE]"))
         self.assertIn(detail_key_digest(uri_key), safe)
+        self.assertEqual(redaction.sanitize_public_metadata(safe), safe)
 
     def test_evidence_receipt_sanitizes_metadata_and_top_level_caller_strings(self):
-        sentinel = "never-persist-receipt-caller"
+        sentinel = "[REDACTED]"
         receipt = evidence_receipt(
             sentinel,
-            "Bearer " + sentinel,
+            "[UNSAFE]",
             "receipt.json",
-            metadata={"note": "Bearer " + sentinel, "plain": sentinel},
+            metadata={"note": sentinel, "plain": "[UNSAFE]", "api_token": sentinel},
         )
-        encoded = encode_receipt(receipt).decode()
-        self.assertNotIn(sentinel, encoded)
         self.assertEqual(receipt["run_id"], detail_digest(sentinel))
-        self.assertEqual(receipt["evidence_type"], detail_digest("Bearer " + sentinel))
-        self.assertEqual(receipt["metadata"][detail_key_digest("note")], detail_digest("Bearer " + sentinel))
-        self.assertEqual(receipt["metadata"][detail_key_digest("plain")], detail_digest(sentinel))
+        self.assertEqual(receipt["evidence_type"], detail_digest("[UNSAFE]"))
+        self.assertEqual(receipt["metadata"][detail_key_digest("note")], detail_digest(sentinel))
+        self.assertEqual(receipt["metadata"][detail_key_digest("plain")], detail_digest("[UNSAFE]"))
+        self.assertEqual(receipt["metadata"][detail_key_digest("api_token")], "[REDACTED]")
+        encoded = encode_receipt(receipt)
+        self.assertEqual(encode_receipt(json.loads(encoded)), encoded)
+
+        generic = encode_receipt({"note": "[UNSAFE]"})
+        self.assertEqual(json.loads(generic)[detail_key_digest("note")], detail_digest("[UNSAFE]"))
 
     def test_python_signature_errors_are_native_but_from_dict_is_stable(self):
         with self.assertRaises(TypeError):
