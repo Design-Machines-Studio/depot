@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from tests import detail_digest
-from workflow_kernel.adapters.base import WorkflowClass, WorkflowContext
+from workflow_kernel.adapters.base import HostCapability, WorkflowClass, WorkflowContext
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
 
@@ -127,6 +127,53 @@ class WorkflowClassTests(unittest.TestCase):
                 } for node in routed))
                 self.assertNotIn("credentials.py", repr(nodes))
 
+    def test_sensitive_paths_are_normalized_and_take_precedence_over_security_class(self):
+        context = WorkflowContext(
+            changed_paths=("./internal/auth/keys.py",), requested_executor="openrouter",
+        )
+        self.assertEqual(context.changed_paths, ("internal/auth/keys.py",))
+        nodes = WorkflowTemplates().expand(WorkflowClass.SECURITY, context)
+        routed = [node for node in nodes if node.executor is not None]
+        self.assertTrue(routed)
+        self.assertTrue(all(node.executor == "claude" for node in routed))
+        self.assertTrue(all(node.routing_reason == "sensitive_path_override" for node in routed))
+
+    def test_changed_paths_reject_absolute_parent_and_non_posix_forms(self):
+        for path in ("/internal/auth/keys.py", "../internal/auth/keys.py",
+                     "internal/auth/../safe.py", "internal\\auth\\keys.py"):
+            with self.subTest(path=path), self.assertRaises(InvalidSchemaError) as raised:
+                WorkflowContext(changed_paths=(path,))
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("invalid_changed_path"),
+            )
+
+    def test_requested_executor_changes_only_overridable_builder_nodes(self):
+        nodes = WorkflowTemplates().expand(
+            WorkflowClass.FEATURE, WorkflowContext(requested_executor="openrouter"),
+        )
+        build = next(node for node in nodes if node.node_id == "build")
+        review = next(node for node in nodes if node.node_id == "review")
+        self.assertEqual(build.executor, "openrouter")
+        self.assertEqual(build.required_capability, HostCapability.OPENROUTER_EXECUTION)
+        self.assertEqual(review.executor, "claude")
+        self.assertEqual(review.required_capability, HostCapability.CLAUDE_EXECUTION)
+        self.assertEqual(review.routing_reason, "workflow_default")
+
+    def test_executor_nodes_declare_matching_provider_capability(self):
+        expected = {
+            "claude": HostCapability.CLAUDE_EXECUTION,
+            "codex": HostCapability.CODEX_EXECUTION,
+            "openrouter": HostCapability.OPENROUTER_EXECUTION,
+        }
+        for kind in WorkflowClass:
+            for node in WorkflowTemplates().expand(kind, WorkflowContext()):
+                with self.subTest(kind=kind.value, node=node.node_id):
+                    self.assertEqual(
+                        node.required_capability,
+                        expected[node.executor] if node.executor is not None else None,
+                    )
+
     def test_human_approval_cannot_repair_missing_mandatory_evidence(self):
         nodes = WorkflowTemplates().expand(
             WorkflowClass.SECURITY, WorkflowContext(human_approved=True),
@@ -160,6 +207,67 @@ class WorkflowClassTests(unittest.TestCase):
         cycle["classes"]["chore"]["nodes"][0]["depends_on"] = ["cleanup"]
         mutations.append(("template_dependency_cycle", cycle))
         for reason, payload in mutations:
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(raised.exception.details["reason_code"], detail_digest(reason))
+
+    def test_template_loader_rejects_erased_mandatory_boundaries(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        mutations = []
+
+        erased_gate = json.loads(json.dumps(base))
+        human = next(node for node in erased_gate["classes"]["security"]["nodes"]
+                     if node["id"] == "human_gate")
+        human["gate_kind"] = None
+        mutations.append(("mandatory_workflow_boundary_changed", erased_gate))
+
+        erased_evidence = json.loads(json.dumps(base))
+        human = next(node for node in erased_evidence["classes"]["migration"]["nodes"]
+                     if node["id"] == "human_gate")
+        human["required_evidence"] = []
+        mutations.append(("mandatory_workflow_boundary_changed", erased_evidence))
+
+        rerouted_security = json.loads(json.dumps(base))
+        build = next(node for node in rerouted_security["classes"]["security"]["nodes"]
+                     if node["id"] == "security_build")
+        build["executor"] = "openrouter"
+        build["required_capability"] = "openrouter_execution"
+        mutations.append(("mandatory_workflow_boundary_changed", rerouted_security))
+
+        bypassed_promotion = json.loads(json.dumps(base))
+        bypassed_promotion["promotion"]["investigation"]["nodes"][1]["depends_on"] = [
+            "evidence_gathering"
+        ]
+        mutations.append(("promotion_boundary_invalid", bypassed_promotion))
+
+        for reason, payload in mutations:
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(raised.exception.details["reason_code"], detail_digest(reason))
+
+    def test_template_loader_rejects_forward_order_and_multiple_terminal_sinks(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        forward = json.loads(json.dumps(base))
+        nodes = forward["classes"]["chore"]["nodes"]
+        nodes[0], nodes[1] = nodes[1], nodes[0]
+        orphan = json.loads(json.dumps(base))
+        orphan["classes"]["chore"]["nodes"].insert(-1, {
+            "id": "orphan_observation", "depends_on": ["assess"], "gate_kind": None,
+            "required_evidence": [], "executor": None, "required_capability": None,
+            "executor_overridable": False,
+        })
+        for reason, payload in (
+            ("non_topological_dependency_order", forward),
+            ("cleanup_terminal_invariant", orphan),
+        ):
             with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "classes.json"
                 path.write_text(json.dumps(payload), encoding="utf-8")

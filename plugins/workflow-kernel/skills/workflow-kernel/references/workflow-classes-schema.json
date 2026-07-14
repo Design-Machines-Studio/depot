@@ -40,13 +40,15 @@
     "node": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "depends_on", "gate_kind", "required_evidence", "executor"],
+      "required": ["id", "depends_on", "gate_kind", "required_evidence", "executor", "required_capability", "executor_overridable"],
       "properties": {
         "id": {"type": "string", "minLength": 1},
         "depends_on": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
         "gate_kind": {"type": ["string", "null"], "enum": [null, "cleanup", "deterministic_validation", "evidence", "human_approval", "investigation_promotion", "next_action", "risk"]},
         "required_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "executor": {"type": ["string", "null"], "enum": [null, "claude", "codex", "openrouter"]}
+        "executor": {"type": ["string", "null"], "enum": [null, "claude", "codex", "openrouter"]},
+        "required_capability": {"type": ["string", "null"], "enum": [null, "claude_execution", "codex_execution", "openrouter_execution"]},
+        "executor_overridable": {"type": "boolean"}
       }
     }
   }

@@ -90,6 +90,8 @@ def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     capability_names = payload["capability_names"]
     if not isinstance(capability_names, list) or any(type(value) is not str for value in capability_names):
         raise invalid_policy("unknown_capability_name")
+    if len(capability_names) != len(set(capability_names)):
+        raise invalid_policy("duplicate_capability_name")
     try:
         declared_capabilities = {HostCapability(value) for value in capability_names}
     except ValueError:
@@ -158,6 +160,22 @@ class GatePolicy:
         required_evidence: Tuple[str, ...],
         context: WorkflowContext,
     ) -> GateDecision:
+        if type(workflow_class) is not WorkflowClass or type(context) is not WorkflowContext:
+            raise invalid_policy("invalid_gate_context")
+        if gate_kind is not None and gate_kind not in {
+            "cleanup", "deterministic_validation", "evidence", "human_approval",
+            "investigation_promotion", "next_action", "risk",
+        }:
+            raise invalid_policy("unknown_gate_kind")
+        if not isinstance(required_evidence, (list, tuple)) or any(
+            type(value) is not str or not value for value in required_evidence
+        ):
+            raise invalid_policy("invalid_gate_evidence")
+        required_evidence = tuple(required_evidence)
+        if len(required_evidence) != len(set(required_evidence)):
+            raise invalid_policy("invalid_gate_evidence")
+        if gate_kind is None and required_evidence:
+            raise invalid_policy("inconsistent_gate_decision")
         if gate_kind is None:
             return GateDecision(True, "gate_not_required")
         missing = tuple(value for value in required_evidence if value not in context.evidence)

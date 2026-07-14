@@ -71,6 +71,34 @@ class RetryPolicyTests(unittest.TestCase):
             detail_digest("unsupported_policy_version"),
         )
 
+    def test_attempt_ledger_rejects_history_without_matching_attempt_count(self):
+        invalid = (
+            ({}, {FailureReason.REVIEWER_FINDING: ("same",)}),
+            ({FailureReason.REVIEWER_FINDING: 1},
+             {FailureReason.REVIEWER_FINDING: ("same", "same")}),
+        )
+        for counts, signatures in invalid:
+            with self.subTest(counts=counts), self.assertRaises(InvalidSchemaError) as raised:
+                AttemptLedger(counts, signatures)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("invalid_attempt_ledger"),
+            )
+
+    def test_runtime_rejects_duplicate_capability_names_like_json_schema(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload["capability_names"].append(payload["capability_names"][0])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "policy.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                RetryPolicy(path)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("duplicate_capability_name"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

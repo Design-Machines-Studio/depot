@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import json
+import hashlib
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
 from .base import (
-    BuilderSessionDecision, HostAdapter, HostCapabilities, HostCapability, NodeSpec,
-    SessionHandle, SessionResult, ValidationFeedback, invalid_policy,
+    BuilderObservation, BuilderSessionDecision, HostAdapter, HostCapabilities,
+    HostCapability, NodeSpec, SessionHandle, SessionResult, ValidationFeedback,
+    _snapshot_session_handle, invalid_policy,
 )
 
 
@@ -54,6 +57,22 @@ def capabilities_from_harness_profile(
         capability = _ROLE_CAPABILITIES[kind]
         if capability is not None:
             declared.add(capability)
+        if kind == "codex_companion":
+            declared.add(HostCapability.CODEX_EXECUTION)
+        if kind in ("wrapper", "openrouter_exec"):
+            declared.add(HostCapability.OPENROUTER_EXECUTION)
+        if kind == "native":
+            if host_name == "claude-code":
+                declared.add(HostCapability.CLAUDE_EXECUTION)
+            elif host_name == "codex":
+                declared.add(HostCapability.CODEX_EXECUTION)
+        models = role.get("models", [])
+        if not isinstance(models, list) or any(type(model) is not str for model in models):
+            raise invalid_policy("invalid_harness_profile")
+        if any(model.startswith("anthropic/") for model in models):
+            declared.add(HostCapability.CLAUDE_EXECUTION)
+        if any(model.startswith("openai/") or model.startswith("gpt-") for model in models):
+            declared.add(HostCapability.CODEX_EXECUTION)
     return HostCapabilities(host_name, frozenset(declared))
 
 
@@ -112,22 +131,58 @@ class BuilderSessionManager:
         self._adapter = adapter
         self._max_age_seconds = max_age_seconds
 
-    def dispatch(self, node: NodeSpec) -> Optional[SessionHandle]:
-        candidate = self._adapter.dispatch(node)
-        if candidate is None:
+    def _safe_capabilities(self) -> Optional[HostCapabilities]:
+        try:
+            capabilities = self._adapter.capabilities()
+        except Exception:
             return None
-        self._validate_dispatched_handle(candidate)
-        return candidate
+        return capabilities if type(capabilities) is HostCapabilities else None
 
-    def _validate_dispatched_handle(self, handle: SessionHandle) -> None:
-        capabilities = self._adapter.capabilities()
-        if type(handle) is not SessionHandle or handle.host_name != capabilities.host_name:
-            raise invalid_policy("invalid_session_handle")
+    def dispatch(self, node: NodeSpec) -> BuilderSessionDecision:
+        if type(node) is not NodeSpec:
+            raise invalid_policy("invalid_node_spec")
+        capabilities = self._safe_capabilities()
+        if capabilities is None:
+            return _blocked_decision("adapter_capabilities_failed")
+        return self._dispatch_with_capabilities(node, capabilities)
 
-    def _can_resume(self, handle: Optional[SessionHandle], now: str) -> bool:
+    def _dispatch_with_capabilities(
+        self,
+        node: NodeSpec,
+        capabilities: HostCapabilities,
+    ) -> BuilderSessionDecision:
+        if not node.gate_decision.allowed:
+            return _blocked_decision("node_gate_blocked")
+        if (
+            node.required_capability is None
+            or not capabilities.supports(node.required_capability)
+        ):
+            return _blocked_decision("host_capability_unavailable")
+        try:
+            candidate = self._adapter.dispatch(node)
+        except Exception:
+            return _blocked_decision("adapter_dispatch_failed")
+        if candidate is None:
+            return _blocked_decision("session_handle_unavailable")
+        try:
+            handle = _snapshot_session_handle(candidate)
+        except Exception:
+            return _blocked_decision("invalid_session_handle")
+        if handle.host_name != capabilities.host_name:
+            return _blocked_decision("invalid_session_handle")
+        return BuilderSessionDecision(
+            "dispatched", "builder_dispatched", handle, None, False,
+            (BuilderObservation.BUILDER_DISPATCHED,),
+        )
+
+    def _can_resume(
+        self,
+        handle: Optional[SessionHandle],
+        now: str,
+        capabilities: HostCapabilities,
+    ) -> bool:
         if handle is None or type(handle) is not SessionHandle:
             return False
-        capabilities = self._adapter.capabilities()
         if not capabilities.supports(HostCapability.SESSION_RESUME):
             return False
         if not handle.resume_capable or handle.host_name != capabilities.host_name:
@@ -145,21 +200,110 @@ class BuilderSessionManager:
     ) -> BuilderSessionDecision:
         if type(node) is not NodeSpec or type(feedback) is not ValidationFeedback:
             raise invalid_policy("invalid_builder_resume_request")
-        if self._can_resume(handle, now):
-            result = self._adapter.resume(handle, feedback)
-            if type(result) is not SessionResult:
-                raise invalid_policy("invalid_session_result")
-            return BuilderSessionDecision(
-                "resumed", "session_resumed", handle, result, True,
-                ("session_resumed",),
-            )
-        replacement = self.dispatch(node)
-        if replacement is None:
+        capabilities = self._safe_capabilities()
+        if capabilities is None:
+            return _blocked_decision("adapter_capabilities_failed")
+        if self._can_resume(handle, now, capabilities):
+            try:
+                result = self._adapter.resume(_snapshot_session_handle(handle), feedback)
+            except Exception:
+                result = None
+            if type(result) is SessionResult:
+                return BuilderSessionDecision(
+                    "resumed", "session_resumed", handle, result, True,
+                    (BuilderObservation.SESSION_RESUMED,),
+                )
+        replacement = self._dispatch_with_capabilities(node, capabilities)
+        if replacement.status != "dispatched":
+            if replacement.reason_code in {
+                "adapter_dispatch_failed", "adapter_capabilities_failed",
+                "host_capability_unavailable", "node_gate_blocked", "invalid_session_handle",
+            }:
+                return replacement
             return BuilderSessionDecision(
                 "resume_unavailable", "session_resume_unavailable", None, None, False,
-                ("session_resume_unavailable",),
+                (BuilderObservation.SESSION_RESUME_UNAVAILABLE,),
             )
         return BuilderSessionDecision(
-            "replacement_dispatched", "session_resume_unavailable", replacement, None,
-            False, ("session_resume_unavailable", "builder_replacement_dispatched"),
+            "replacement_dispatched", "session_resume_unavailable", replacement.handle, None,
+            False, (BuilderObservation.SESSION_RESUME_UNAVAILABLE,
+                    BuilderObservation.BUILDER_REPLACEMENT_DISPATCHED),
         )
+
+    def _serialize_resume_state(self, handle: SessionHandle) -> "_DurableResumeState":
+        snapshot = _snapshot_session_handle(handle)
+        handle_payload = {
+            "host_name": snapshot.host_name,
+            "opaque_handle": snapshot.opaque_handle,
+            "created_at": snapshot.created_at,
+            "resume_capable": snapshot.resume_capable,
+        }
+        canonical = _canonical_json(handle_payload)
+        payload = {
+            "schema_version": 1,
+            "handle": handle_payload,
+            "checksum": hashlib.sha256(canonical).hexdigest(),
+        }
+        return _DurableResumeState(_canonical_json(payload))
+
+    def _restore_resume_state(
+        self,
+        state: Optional[object],
+    ) -> Optional[SessionHandle]:
+        if state is None:
+            return None
+        if type(state) is _DurableResumeState:
+            raw = state._payload
+        elif type(state) is bytes:
+            raw = state
+        else:
+            raise invalid_policy("invalid_session_resume_state")
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+            if type(payload) is not dict or set(payload) != {
+                "schema_version", "handle", "checksum",
+            } or payload["schema_version"] != 1:
+                raise ValueError
+            handle_payload = payload["handle"]
+            if type(handle_payload) is not dict or set(handle_payload) != {
+                "host_name", "opaque_handle", "created_at", "resume_capable",
+            } or type(payload["checksum"]) is not str:
+                raise ValueError
+            if hashlib.sha256(_canonical_json(handle_payload)).hexdigest() != payload["checksum"]:
+                raise ValueError
+            handle = SessionHandle(**handle_payload)
+        except (AttributeError, TypeError, ValueError, UnicodeError, json.JSONDecodeError):
+            raise invalid_policy("invalid_session_resume_state") from None
+        except Exception as error:
+            if getattr(error, "details", None) is not None:
+                raise invalid_policy("invalid_session_resume_state") from None
+            raise
+        capabilities = self._safe_capabilities()
+        if capabilities is None:
+            raise invalid_policy("adapter_capabilities_failed")
+        if handle.host_name != capabilities.host_name:
+            raise invalid_policy("foreign_session_resume_state")
+        return _snapshot_session_handle(handle)
+
+
+def _blocked_decision(reason_code: str) -> BuilderSessionDecision:
+    return BuilderSessionDecision(
+        "blocked", reason_code, None, None, False,
+        (BuilderObservation.DISPATCH_BLOCKED,),
+    )
+
+
+def _canonical_json(value: object) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+@dataclass(frozen=True, repr=False)
+class _DurableResumeState:
+    _payload: bytes
+
+    def __repr__(self) -> str:
+        digest = hashlib.sha256(self._payload).hexdigest()
+        return f"_DurableResumeState(sha256:{digest})"
+
+    def __getitem__(self, key: object) -> object:
+        return self._payload[key]

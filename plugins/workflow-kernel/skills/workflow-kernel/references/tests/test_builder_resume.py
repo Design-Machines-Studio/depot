@@ -2,8 +2,8 @@ import unittest
 
 from tests import detail_digest
 from workflow_kernel.adapters.base import (
-    HostCapabilities, HostCapability, NodeSpec, SessionHandle, SessionResult,
-    ValidationFeedback,
+    BuilderObservation, GateDecision, HostCapabilities, HostCapability, NodeSpec,
+    SessionHandle, SessionResult, ValidationFeedback,
 )
 from workflow_kernel.adapters.host import BuilderSessionManager, FakeHostAdapter
 from workflow_kernel.schema import InvalidSchemaError
@@ -17,7 +17,19 @@ def handle(host="codex", value="opaque-token-value", *, resumable=True, created_
 
 
 def host_capabilities(name="codex"):
-    return HostCapabilities(name, (HostCapability.NATIVE_DISPATCH, HostCapability.SESSION_RESUME))
+    return HostCapabilities(name, (
+        HostCapability.NATIVE_DISPATCH, HostCapability.SESSION_RESUME,
+        HostCapability.CODEX_EXECUTION,
+    ))
+
+
+def builder_node(**changes):
+    values = {
+        "node_id": "build", "executor": "codex",
+        "required_capability": HostCapability.CODEX_EXECUTION,
+    }
+    values.update(changes)
+    return NodeSpec(**values)
 
 
 class BuilderResumeTests(unittest.TestCase):
@@ -29,15 +41,17 @@ class BuilderResumeTests(unittest.TestCase):
             "build", "deterministic_validation_failure", ("test-report.txt",),
         )
         decision = BuilderSessionManager(adapter).resume_or_replace(
-            NodeSpec("build"), original, feedback, now=NOW,
+            builder_node(), original, feedback, now=NOW,
         )
         self.assertEqual(decision.status, "resumed")
         self.assertTrue(decision.resumed_original)
-        self.assertIs(decision.handle, original)
+        self.assertIsNot(decision.handle, original)
+        self.assertEqual(decision.handle, original)
         self.assertEqual(adapter.resume_calls, [(original, feedback)])
-        self.assertEqual(decision.events, ("session_resumed",))
+        self.assertEqual(decision.observations, (BuilderObservation.SESSION_RESUMED,))
+        self.assertEqual(decision.transition_kinds, ("node.started",))
 
-    def test_unavailable_resume_paths_emit_event_and_label_replacement(self):
+    def test_unavailable_resume_paths_emit_observations_and_label_replacement(self):
         cases = {
             "missing": None,
             "non_resumable": handle(resumable=False),
@@ -49,30 +63,36 @@ class BuilderResumeTests(unittest.TestCase):
                 replacement = handle(value="replacement-value")
                 adapter = FakeHostAdapter(host_capabilities(), dispatch_handles=(replacement,))
                 decision = BuilderSessionManager(adapter, max_age_seconds=3600).resume_or_replace(
-                    NodeSpec("build"), original,
+                    builder_node(), original,
                     ValidationFeedback("build", "deterministic_validation_failure"),
                     now=NOW,
                 )
                 self.assertEqual(decision.status, "replacement_dispatched")
                 self.assertFalse(decision.resumed_original)
-                self.assertIs(decision.handle, replacement)
+                self.assertIsNot(decision.handle, replacement)
+                self.assertEqual(decision.handle, replacement)
                 self.assertEqual(decision.reason_code, "session_resume_unavailable")
                 self.assertEqual(
-                    decision.events,
-                    ("session_resume_unavailable", "builder_replacement_dispatched"),
+                    decision.observations,
+                    (BuilderObservation.SESSION_RESUME_UNAVAILABLE,
+                     BuilderObservation.BUILDER_REPLACEMENT_DISPATCHED),
                 )
+                self.assertEqual(decision.transition_kinds, ("node.waiting", "node.started"))
                 self.assertEqual(adapter.resume_calls, [])
 
     def test_missing_replacement_handle_is_not_fabricated(self):
         adapter = FakeHostAdapter(host_capabilities())
         decision = BuilderSessionManager(adapter).resume_or_replace(
-            NodeSpec("build"), None,
+            builder_node(), None,
             ValidationFeedback("build", "deterministic_validation_failure"),
             now=NOW,
         )
         self.assertEqual(decision.status, "resume_unavailable")
         self.assertIsNone(decision.handle)
-        self.assertEqual(decision.events, ("session_resume_unavailable",))
+        self.assertEqual(
+            decision.observations, (BuilderObservation.SESSION_RESUME_UNAVAILABLE,),
+        )
+        self.assertEqual(decision.transition_kinds, ("node.waiting",))
 
     def test_session_serialization_redacts_opaque_values_and_credentials(self):
         secret = "sk-provider-credential"
@@ -98,6 +118,141 @@ class BuilderResumeTests(unittest.TestCase):
                 raised.exception.details["reason_code"],
                 detail_digest("invalid_session_handle"),
             )
+
+    def test_session_handle_is_final_and_revalidates_mutation_before_projection(self):
+        with self.assertRaises(TypeError):
+            type("HostileSessionHandle", (SessionHandle,), {})
+        session = handle(value="safe-original")
+        object.__setattr__(session, "opaque_handle", object())
+        with self.assertRaises(InvalidSchemaError) as raised:
+            session.to_dict()
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_session_handle"),
+        )
+        self.assertNotIn("safe-original", repr(session))
+
+    def test_gated_node_requires_explicit_coherent_decision(self):
+        with self.assertRaises(InvalidSchemaError) as raised:
+            NodeSpec("risk_gate", gate_kind="risk", required_evidence=("risk",))
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("inconsistent_gate_decision"),
+        )
+        incoherent = []
+        for values in (
+            {"allowed": True, "reason_code": "missing_mandatory_evidence",
+             "missing_evidence": ("risk",)},
+            {"allowed": False, "reason_code": "gate_satisfied"},
+            {"allowed": False, "reason_code": "human_approval_required",
+             "human_required": False},
+            {"allowed": True, "reason_code": "uncatalogued_gate_result"},
+        ):
+            decision = GateDecision(True, "gate_satisfied")
+            for name, value in values.items():
+                object.__setattr__(decision, name, value)
+            incoherent.append(decision)
+        for decision in incoherent:
+            with self.subTest(decision=decision), self.assertRaises(InvalidSchemaError) as rejected:
+                builder_node(
+                    gate_kind="risk", required_evidence=("risk",),
+                    gate_decision=decision,
+                )
+            self.assertEqual(
+                rejected.exception.details["reason_code"],
+                detail_digest("invalid_gate_decision"),
+            )
+
+    def test_dispatch_blocks_missing_capability_and_blocked_gate_without_adapter_call(self):
+        adapter = FakeHostAdapter(
+            HostCapabilities("generic", (HostCapability.OPENROUTER_EXECUTION,)),
+            dispatch_handles=(handle(host="generic"),),
+        )
+        missing = BuilderSessionManager(adapter).dispatch(builder_node())
+        self.assertEqual(missing.status, "blocked")
+        self.assertEqual(missing.reason_code, "host_capability_unavailable")
+        self.assertEqual(adapter.dispatch_calls, [])
+
+        blocked_node = builder_node(
+            gate_kind="risk", required_evidence=("risk_assessment",),
+            gate_decision=GateDecision(False, "missing_mandatory_evidence",
+                                       ("risk_assessment",)),
+        )
+        blocked = BuilderSessionManager(FakeHostAdapter(host_capabilities())).dispatch(blocked_node)
+        self.assertEqual(blocked.status, "blocked")
+        self.assertEqual(blocked.reason_code, "node_gate_blocked")
+
+    def test_adapter_exceptions_become_secret_safe_decisions(self):
+        secret = "provider-detail://credential"
+
+        class RaisingAdapter:
+            def __init__(self, phase):
+                self.phase = phase
+                self.dispatch_calls = 0
+
+            def capabilities(self):
+                if self.phase == "capabilities":
+                    raise RuntimeError(secret)
+                return host_capabilities()
+
+            def dispatch(self, _node):
+                self.dispatch_calls += 1
+                if self.phase == "dispatch":
+                    raise RuntimeError(secret)
+                return handle(value="replacement")
+
+            def resume(self, _handle, _feedback):
+                raise RuntimeError(secret)
+
+        capability_failure = BuilderSessionManager(RaisingAdapter("capabilities")).dispatch(
+            builder_node()
+        )
+        self.assertEqual(capability_failure.reason_code, "adapter_capabilities_failed")
+        dispatch_failure = BuilderSessionManager(RaisingAdapter("dispatch")).dispatch(builder_node())
+        self.assertEqual(dispatch_failure.reason_code, "adapter_dispatch_failed")
+        resume_failure = BuilderSessionManager(RaisingAdapter("resume")).resume_or_replace(
+            builder_node(), handle(),
+            ValidationFeedback("build", "deterministic_validation_failure"), now=NOW,
+        )
+        self.assertEqual(resume_failure.status, "replacement_dispatched")
+        for decision in (capability_failure, dispatch_failure, resume_failure):
+            self.assertNotIn(secret, repr(decision))
+
+    def test_private_resume_state_round_trips_and_rejects_corrupt_foreign_or_missing_state(self):
+        manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        original = handle(value="real-opaque-resume-value")
+        durable = manager._serialize_resume_state(original)
+        reloaded = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        restored = reloaded._restore_resume_state(durable)
+        self.assertEqual(restored.opaque_handle, original.opaque_handle)
+        self.assertNotIn(original.opaque_handle, repr(durable))
+        self.assertIsNone(manager._restore_resume_state(None))
+        with self.assertRaises(InvalidSchemaError) as corrupt:
+            manager._restore_resume_state(durable[:-1] + b"x")
+        self.assertEqual(
+            corrupt.exception.details["reason_code"],
+            detail_digest("invalid_session_resume_state"),
+        )
+        foreign = BuilderSessionManager(FakeHostAdapter(host_capabilities("claude-code")))
+        with self.assertRaises(InvalidSchemaError) as rejected:
+            foreign._restore_resume_state(durable)
+        self.assertEqual(
+            rejected.exception.details["reason_code"],
+            detail_digest("foreign_session_resume_state"),
+        )
+
+        class UnavailableAdapter:
+            def capabilities(self):
+                raise RuntimeError("provider-detail://must-not-leak")
+
+        unavailable = BuilderSessionManager(UnavailableAdapter())
+        with self.assertRaises(InvalidSchemaError) as rejected:
+            unavailable._restore_resume_state(durable)
+        self.assertEqual(
+            rejected.exception.details["reason_code"],
+            detail_digest("adapter_capabilities_failed"),
+        )
+        self.assertNotIn("must-not-leak", repr(rejected.exception))
 
 
 if __name__ == "__main__":
