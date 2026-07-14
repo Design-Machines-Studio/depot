@@ -10,22 +10,13 @@ from typing import Iterable, Optional
 
 from .base import (
     BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
-    HostRoute, HostCapability,
+    DISPATCH_RAIL_CAPABILITIES, HostRoute, HostCapability,
     MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob, ResumeStateContext,
     SessionHandle, SessionResult, ValidationFeedback, _snapshot_resume_context,
     _snapshot_host_capabilities, _snapshot_node_spec, _snapshot_session_handle,
     _snapshot_session_result, route_satisfies_node,
     _snapshot_validation_feedback, invalid_policy,
 )
-
-
-_ROLE_CAPABILITIES = {
-    "native": HostCapability.NATIVE_DISPATCH,
-    "codex_companion": HostCapability.COMPANION_DISPATCH,
-    "wrapper": HostCapability.WRAPPER_DISPATCH,
-    "openrouter_exec": HostCapability.OPENROUTER_EXEC,
-    "none": None,
-}
 
 
 def _repository_file(relative: str) -> Path:
@@ -50,13 +41,12 @@ def capabilities_from_harness_profile(
         raise invalid_policy("invalid_harness_profile") from None
     if type(roles) is not dict:
         raise invalid_policy("invalid_harness_profile")
-    declared = set()
     routes = set()
     for role in roles.values():
         if type(role) is not dict or type(role.get("kind")) is not str:
             raise invalid_policy("invalid_harness_profile")
         kind = role["kind"]
-        if kind not in _ROLE_CAPABILITIES:
+        if kind != "none" and kind not in DISPATCH_RAIL_CAPABILITIES:
             raise invalid_policy("unknown_capability_name")
         if kind == "none":
             if set(role) != {"kind"}:
@@ -116,7 +106,7 @@ def capabilities_from_harness_profile(
             routes.add(HostRoute(
                 "openrouter", HostCapability.CODEX_EXECUTION, kind,
             ))
-    return HostCapabilities(host_name, frozenset(declared), routes=frozenset(routes))
+    return HostCapabilities(host_name, frozenset(), routes=frozenset(routes))
 
 
 class FakeHostAdapter:
@@ -213,7 +203,7 @@ class BuilderSessionManager:
             return BuilderSessionDecision(
                 BuilderOutcome.ADAPTER_CAPABILITIES_FAILED, context,
             )
-        preflight = self._capability_preflight(node, context, capabilities)
+        preflight = self._capability_preflight(context, capabilities)
         if preflight is not None:
             return preflight
         return self._dispatch_with_capabilities(
@@ -243,12 +233,9 @@ class BuilderSessionManager:
         return None
 
     def _capability_preflight(
-        self, node: NodeSpec, context: ResumeStateContext,
-        capabilities: HostCapabilities,
+        self, context: ResumeStateContext, capabilities: HostCapabilities,
     ) -> Optional[BuilderSessionDecision]:
-        if not route_satisfies_node(context.route, node) or not capabilities.supports_route(
-            context.route
-        ):
+        if not capabilities.supports_route(context.route):
             return BuilderSessionDecision(
                 BuilderOutcome.HOST_CAPABILITY_UNAVAILABLE, context,
             )
@@ -287,8 +274,6 @@ class BuilderSessionManager:
         if (
             handle.host_name != capabilities.host_name
             or handle.context != context
-            or not capabilities.supports_route(handle.context.route)
-            or not route_satisfies_node(handle.context.route, node)
         ):
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
@@ -317,7 +302,6 @@ class BuilderSessionManager:
             not handle.resume_capable
             or handle.host_name != capabilities.host_name
             or handle.context != context
-            or not capabilities.supports_route(context.route)
         ):
             return False
         age = (_timestamp(now) - _timestamp(handle.created_at)).total_seconds()
@@ -349,7 +333,7 @@ class BuilderSessionManager:
             return BuilderSessionDecision(
                 BuilderOutcome.ADAPTER_CAPABILITIES_FAILED, context,
             )
-        preflight = self._capability_preflight(node, context, capabilities)
+        preflight = self._capability_preflight(context, capabilities)
         if preflight is not None:
             return preflight
         if self._can_resume(handle, now, context, capabilities):

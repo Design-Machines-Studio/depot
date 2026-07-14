@@ -85,8 +85,9 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       to that context, reject same-host wrong-rail receipts and foreign event
       projection, and compare expected/stored/handle context before adapter
       capability probes. Exact immutable harness routes authorize dispatch,
-      resume, and restore; aggregate capabilities are derived evidence and
-      wrapper routes remain analysis-only. Chunk 05 `Builder Continuity
+      resume, and restore; callers declare only non-route features, aggregate
+      executor/dispatch capabilities derive exclusively from routes, and wrapper
+      routes remain analysis-only. Chunk 05 `Builder Continuity
       Integration` covers handle capture, deterministic feedback, protected
       permission-restricted restore, retention/deletion, resume/replacement
       translation, authoritative receipt tests, and safe merging of normalized
@@ -97,11 +98,14 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 
 15. Route all seven top-level workflow classes end to end
     - Chunks: 02, 05, 06
-    - Evidence: Chunk 02 defines class templates plus data-owned generic semantic
-      requirements for cleanup, hotfix, security, migration, and investigation
-      promotion, with mutation tests and ordinary executor nodes left open to any
-      compatible declared agentic route. Security and sensitive nodes stay pinned
-      to Anthropic native Claude. Chunk 05 adds the explicit
+    - Evidence: Chunk 02 defines class templates plus a compact JSON safety
+      declaration and independent immutable runtime anchor for cleanup, hotfix,
+      security, migration, and investigation promotion. Generic validation binds
+      exact mandatory stage IDs, evidence identities, gate/executor tuples, and
+      ancestry, with joint graph/declaration weakening and placeholder-evidence
+      mutation tests. Ordinary executor nodes remain open to any compatible
+      declared agentic route; security and sensitive nodes stay pinned to
+      Anthropic native Claude. Chunk 05 adds the explicit
       `workflowClass` manifest field and promptcraft → pipeline → RunSpec → event
       → receipt propagation; Chunk 06 validates all classes and legacy defaulting.
 

@@ -58,6 +58,39 @@ class HostCapabilityTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(InvalidSchemaError):
                 HostRoute(*values)
 
+    def test_route_scoped_capabilities_are_derived_only_from_routes(self):
+        route_scoped = {
+            HostCapability.NATIVE_DISPATCH,
+            HostCapability.COMPANION_DISPATCH,
+            HostCapability.WRAPPER_DISPATCH,
+            HostCapability.OPENROUTER_EXEC,
+            HostCapability.CLAUDE_EXECUTION,
+            HostCapability.CODEX_EXECUTION,
+            HostCapability.OPENROUTER_EXECUTION,
+            HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+        }
+        for capability in route_scoped:
+            with self.subTest(capability=capability):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    HostCapabilities("test", (capability,))
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("route_capability_requires_route"),
+                )
+
+    def test_host_route_properties_and_repr_revalidate_hostile_mutation(self):
+        route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
+        object.__setattr__(route, "rail", object())
+        with self.assertRaises(InvalidSchemaError) as dispatch_rejected:
+            _ = route.dispatch_capability
+        self.assertEqual(
+            dispatch_rejected.exception.details["reason_code"],
+            detail_digest("invalid_host_route"),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            _ = route.agentic
+        self.assertEqual(repr(route), "HostRoute([INVALID])")
+
     def test_openrouter_exec_is_a_distinct_dispatch_rail_capability(self):
         values = {capability.value for capability in HostCapability}
         self.assertIn("openrouter_exec", values)

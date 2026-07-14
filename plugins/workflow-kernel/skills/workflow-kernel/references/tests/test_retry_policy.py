@@ -7,9 +7,59 @@ from tests import detail_digest
 from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
 )
-from workflow_kernel.policies import RetryPolicy, validate_canonical_policy_schema
+import workflow_kernel.policies as policy_module
+from workflow_kernel.policies import RetryPolicy
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
+
+
+def schema_matches(value, schema):
+    expected_type = schema.get("type")
+    if expected_type is not None:
+        names = expected_type if isinstance(expected_type, list) else [expected_type]
+        matches = {
+            "object": type(value) is dict,
+            "array": type(value) is list,
+            "string": type(value) is str,
+            "integer": type(value) is int,
+            "boolean": type(value) is bool,
+            "null": value is None,
+        }
+        if not any(matches.get(name, False) for name in names):
+            return False
+    if "const" in schema and value != schema["const"]:
+        return False
+    if "enum" in schema and value not in schema["enum"]:
+        return False
+    if type(value) is int and value < schema.get("minimum", value):
+        return False
+    if type(value) is dict:
+        properties = schema.get("properties", {})
+        if not set(schema.get("required", [])) <= set(value):
+            return False
+        if schema.get("additionalProperties") is False and not set(value) <= set(
+            properties
+        ):
+            return False
+        if any(
+            name in properties and not schema_matches(item, properties[name])
+            for name, item in value.items()
+        ):
+            return False
+    if type(value) is list:
+        if not schema.get("minItems", 0) <= len(value) <= schema.get(
+            "maxItems", len(value)
+        ):
+            return False
+        if schema.get("uniqueItems") and len({json.dumps(
+            item, sort_keys=True,
+        ) for item in value}) != len(value):
+            return False
+        if "items" in schema and any(
+            not schema_matches(item, schema["items"]) for item in value
+        ):
+            return False
+    return True
 
 
 class RetryPolicyTests(unittest.TestCase):
@@ -125,22 +175,24 @@ class RetryPolicyTests(unittest.TestCase):
             detail_digest("unknown_capability_name"),
         )
 
-    def test_canonical_policy_is_validated_against_schema_with_stdlib_only(self):
+    def test_canonical_policy_schema_coherence_lives_in_tests_not_runtime(self):
         root = Path(__file__).parents[1]
-        validate_canonical_policy_schema()
+        self.assertFalse(hasattr(policy_module, "_matches_schema"))
+        self.assertFalse(hasattr(policy_module, "validate_canonical_policy_schema"))
+        payload = json.loads((root / "workflow-policy.json").read_text())
         schema = json.loads((root / "workflow-policy-schema.json").read_text())
-        schema["properties"]["capability_names"]["maxItems"] = 12
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "schema.json"
-            path.write_text(json.dumps(schema), encoding="utf-8")
-            with self.assertRaises(InvalidSchemaError) as raised:
-                validate_canonical_policy_schema(
-                    root / "workflow-policy.json", path,
-                )
+        self.assertTrue(schema_matches(payload, schema))
+        root_keys = set(schema["required"])
+        self.assertEqual(set(payload), root_keys)
+        capability_schema = schema["properties"]["capability_names"]
+        self.assertEqual(len(payload["capability_names"]), capability_schema["minItems"])
+        self.assertEqual(len(payload["capability_names"]), capability_schema["maxItems"])
         self.assertEqual(
-            raised.exception.details["reason_code"],
-            detail_digest("policy_schema_mismatch"),
+            set(payload["capability_names"]), set(capability_schema["items"]["enum"]),
         )
+        invalid = json.loads(json.dumps(payload))
+        invalid["retry"]["budgets"]["cleanup"] = "two"
+        self.assertFalse(schema_matches(invalid, schema))
 
 
 if __name__ == "__main__":

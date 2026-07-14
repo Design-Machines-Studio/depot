@@ -99,17 +99,7 @@ DEFAULT_EXECUTOR_CAPABILITY = {
     "codex": HostCapability.CODEX_EXECUTION,
     "openrouter": HostCapability.OPENROUTER_EXECUTION,
 }
-DEFAULT_DISPATCH_CAPABILITY = {
-    "claude": HostCapability.NATIVE_DISPATCH,
-    "codex": HostCapability.NATIVE_DISPATCH,
-    "openrouter": HostCapability.OPENROUTER_EXEC,
-}
-EXECUTOR_PROVIDERS = {
-    "claude": "anthropic",
-    "codex": "openai",
-    "openrouter": "openrouter",
-}
-PROVIDERS = frozenset(EXECUTOR_PROVIDERS.values())
+PROVIDERS = frozenset({"anthropic", "openai", "openrouter"})
 DISPATCH_RAIL_CAPABILITIES = {
     "native": HostCapability.NATIVE_DISPATCH,
     "codex_companion": HostCapability.COMPANION_DISPATCH,
@@ -129,6 +119,11 @@ GATE_KINDS = frozenset(
 )
 EXECUTORS = frozenset(EXECUTOR_CAPABILITIES)
 AGENTIC_DISPATCH_RAILS = frozenset({"native", "codex_companion", "openrouter_exec"})
+ROUTE_SCOPED_CAPABILITIES = frozenset(
+    set(DISPATCH_RAIL_CAPABILITIES.values()).union(
+        *EXECUTOR_CAPABILITIES.values(),
+    )
+)
 
 
 @dataclass(frozen=True, repr=False)
@@ -187,15 +182,20 @@ class HostRoute:
 
     @property
     def dispatch_capability(self) -> HostCapability:
-        return DISPATCH_RAIL_CAPABILITIES[self.rail]
+        route = _snapshot_host_route(self)
+        return DISPATCH_RAIL_CAPABILITIES[route.rail]
 
     @property
     def agentic(self) -> bool:
-        return self.rail in AGENTIC_DISPATCH_RAILS
+        return _snapshot_host_route(self).rail in AGENTIC_DISPATCH_RAILS
 
     def __repr__(self) -> str:
+        try:
+            route = _snapshot_host_route(self)
+        except InvalidSchemaError:
+            return "HostRoute([INVALID])"
         return "HostRoute(provider={!r}, capability={!r}, rail={!r})".format(
-            self.provider, self.capability, self.rail,
+            route.provider, route.capability, route.rail,
         )
 
 
@@ -538,6 +538,8 @@ class HostCapabilities:
         if len(converted) != len(set(converted)):
             raise invalid_policy("duplicate_capability_name")
         values = frozenset(converted)
+        if values & ROUTE_SCOPED_CAPABILITIES:
+            raise invalid_policy("route_capability_requires_route")
         try:
             raw_routes = list(self.routes)
             routes = frozenset(_snapshot_host_route(route) for route in raw_routes)
@@ -572,7 +574,7 @@ def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilit
     try:
         return HostCapabilities(
             capabilities.host_name,
-            capabilities.capabilities,
+            capabilities.capabilities - ROUTE_SCOPED_CAPABILITIES,
             capabilities.transition_model_version,
             capabilities.evidence_model_version,
             capabilities.routes,
@@ -1097,11 +1099,12 @@ class BuilderSessionDecision:
         reference and safely merge ``result.evidence`` when a result exists.
         This helper never fabricates that receipt or treats observations as it.
         """
-        if run_id != self.context.run_id or node_id != self.context.node_id:
+        facts, decision = _snapshot_builder_decision(self)
+        if run_id != decision.context.run_id or node_id != decision.context.node_id:
             raise invalid_policy("invalid_builder_session_event_context")
         return WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,
-            {"evidence": list(self.evidence_references)},
+            {"evidence": [value.evidence_reference for value in facts[3]]},
         )
 
 

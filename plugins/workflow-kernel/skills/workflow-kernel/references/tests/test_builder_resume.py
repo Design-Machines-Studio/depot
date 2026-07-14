@@ -207,6 +207,22 @@ class BuilderResumeTests(unittest.TestCase):
                 detail_digest("invalid_builder_session_event_context"),
             )
 
+    def test_builder_evidence_event_snapshots_context_before_projection(self):
+        from workflow_kernel.adapters.base import BuilderSessionDecision
+
+        decision = BuilderSessionDecision(
+            BuilderOutcome.NODE_GATE_BLOCKED, receipt_context(),
+        )
+        object.__setattr__(decision, "context", object())
+        with self.assertRaises(InvalidSchemaError) as rejected:
+            decision.to_evidence_event(
+                run_id="run-1", sequence=1, node_id="build", occurred_at=NOW,
+            )
+        self.assertEqual(
+            rejected.exception.details["reason_code"],
+            detail_digest("invalid_builder_session_decision"),
+        )
+
     def test_real_handle_is_resumed_with_deterministic_validation_feedback(self):
         original = handle()
         result = session_result(evidence=("validation.txt",))
@@ -371,7 +387,7 @@ class BuilderResumeTests(unittest.TestCase):
 
     def test_dispatch_blocks_missing_capability_and_blocked_gate_without_adapter_call(self):
         adapter = FakeHostAdapter(
-            HostCapabilities("generic", (HostCapability.OPENROUTER_EXECUTION,)),
+            HostCapabilities("generic", ()),
             dispatch_handles=(handle(host="generic"),),
         )
         missing = BuilderSessionManager(adapter).dispatch(
@@ -394,14 +410,11 @@ class BuilderResumeTests(unittest.TestCase):
 
     def test_exact_route_not_aggregate_capability_authorizes_dispatch(self):
         context = receipt_context()
-        aggregate_only = HostCapabilities("codex", (
-            HostCapability.NATIVE_DISPATCH,
-            HostCapability.CODEX_EXECUTION,
-        ), routes=frozenset({
+        wrong_tuple = HostCapabilities("codex", (), routes=frozenset({
             HostRoute("openai", HostCapability.CODEX_EXECUTION,
                       "codex_companion"),
         }))
-        adapter = FakeHostAdapter(aggregate_only, dispatch_handles=(handle(),))
+        adapter = FakeHostAdapter(wrong_tuple, dispatch_handles=(handle(),))
         decision = BuilderSessionManager(adapter).dispatch(builder_node(), context)
         self.assertEqual(decision.reason_code, "host_capability_unavailable")
         self.assertEqual(adapter.dispatch_calls, [])

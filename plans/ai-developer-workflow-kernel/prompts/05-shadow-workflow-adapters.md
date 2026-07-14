@@ -175,7 +175,9 @@ Chunk 05 consumes the Chunk 02 adapter contract; it does not redesign or bypass
 it. Choose one concrete agentic `HostRoute` declared by `HostCapabilities.routes`
 and pass its provider, executor capability, and rail in `ResumeStateContext` to
 builder dispatch. Aggregate `HostCapabilities.capabilities` is derived evidence,
-not authorization; wrapper routes are analysis/text-only and cannot run builder
+not authorization: callers declare only non-route resume/isolation features,
+while executor and dispatch entries derive exclusively from routes. Wrapper
+routes are analysis/text-only and cannot run builder
 nodes. Capture the validated `SessionHandle` returned by builder dispatch
 together with its immutable run/node/attempt and exact route provenance. On
 deterministic validation failure, construct secret-safe
@@ -193,7 +195,8 @@ may carry only the safe digest projection and authoritative receipt reference.
 Translation must require an authoritative dispatch/resume receipt reference.
 Every `BuilderSessionDecision`, including blocked outcomes, owns the validated
 request context; any handle/result must match it. Its event projection rejects
-a different run or node. `BuilderSessionDecision.to_evidence_event` is
+a different run or node and snapshots the decision before reading context.
+`BuilderSessionDecision.to_evidence_event` is
 observation-only: it records
 builder observations but cannot stand in for that receipt. When a validated
 `SessionResult` exists, merge its already-normalized evidence references with

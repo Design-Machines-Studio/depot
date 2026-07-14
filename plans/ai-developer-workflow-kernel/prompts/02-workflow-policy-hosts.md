@@ -1,5 +1,9 @@
 # Chunk: Workflow Policy and Host Capabilities
 
+> **Review-driven as-built documentation sync:** this prompt reflects the
+> implemented Chunk 02 API after defensive review without expanding the product
+> files-to-modify boundary.
+
 ## Context
 
 This is Chunk 02 of the AI Developer Workflow Kernel and depends on Chunk 01.
@@ -95,7 +99,7 @@ class HostRoute:
 @dataclass(frozen=True)
 class HostCapabilities:
     host_name: str
-    capabilities: frozenset[HostCapability]  # derived aggregate view
+    capabilities: frozenset[HostCapability]  # non-route input + derived aggregate
     routes: frozenset[HostRoute]             # authorization boundary
 
 class HostAdapter(Protocol):
@@ -145,13 +149,15 @@ returns none.
 
 - Load policy from versioned JSON and validate before expansion. Do not hide
   policy in Python constants beyond enum and default schema versions.
-- Validate the canonical policy against its checked-in JSON Schema with the
-  standard library; the capability array is exactly the 13 enum values at both
-  schema and runtime boundaries.
-- Keep class semantic invariants in `workflow-classes.json` under the generic
-  `requirements` shape. The loader generically enforces terminal cleanup,
-  declared class gate requirements, security executor constraints, and promoted
-  execution gates; Python must not mirror a second class-by-class policy table.
+- Test canonical policy/schema coherence with deterministic standard-library
+  checks; the runtime uses its exact validator rather than a partial JSON Schema
+  implementation. The capability array is exactly the 13 enum values at both
+  boundaries.
+- Keep a compact safety declaration in `workflow-classes.json` under the generic
+  `requirements` shape. An independent immutable runtime anchor protects common
+  cleanup plus mandatory hotfix, security, migration, and investigation-
+  promotion stage IDs, gate/evidence identities, executor tuples, and ancestry.
+  Apply it generically without mirroring the full templates.
 - Retry budgets are keyed by normalized reason: provider unavailable,
   deterministic validation failure, reviewer finding, browser recovery,
   cleanup, and infrastructure. A global “try three times” rule is forbidden.
@@ -171,6 +177,8 @@ returns none.
   Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
   analysis/text-only. Ordinary nodes may use any compatible declared agentic
   route, while security and sensitive paths require Anthropic native Claude.
+  Caller-declared inputs contain only non-route resume/isolation features;
+  executor and dispatch capabilities derive exclusively from concrete routes.
 - Reliability and cost fields are observations only. This chunk must not mutate
   routing policy based on historical performance.
 
@@ -233,6 +241,9 @@ returns none.
       policy file mutation.
 - [ ] Invalid policy versions, circular template dependencies, missing node IDs,
       or unknown capability names fail closed with stable reason codes.
+- [ ] Joint graph/declaration weakening, placeholder mandatory evidence,
+      unknown or missing requirement keys, and incoherent requirement executor
+      tuples fail against both schema-facing tests and runtime validation.
 - [ ] Full kernel tests pass using:
 
 ```bash

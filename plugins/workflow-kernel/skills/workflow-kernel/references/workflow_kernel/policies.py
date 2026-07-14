@@ -10,15 +10,13 @@ from typing import Mapping, Optional, Tuple
 
 from .adapters.base import (
     AttemptLedger, FailureReason, GATE_KINDS, GateDecision, HostCapability,
-    IsolationMode, RetryDecision, WorkflowClass, WorkflowContext, invalid_policy,
+    IsolationMode, RetryDecision, WorkflowClass, WorkflowContext,
+    _snapshot_workflow_context, invalid_policy,
 )
 
 
 POLICY_SCHEMA_VERSION = 1
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "workflow-policy.json"
-DEFAULT_POLICY_SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent / "workflow-policy-schema.json"
-)
 
 
 @dataclass(frozen=True)
@@ -37,86 +35,8 @@ def _exact_keys(value: object, expected: set[str], reason: str) -> dict:
     return value
 
 
-def _matches_schema(value: object, schema: object) -> bool:
-    """Small stdlib-only validator for the keywords used by policy schema."""
-    if type(schema) is not dict:
-        return False
-    expected_type = schema.get("type")
-    if expected_type is not None:
-        names = expected_type if isinstance(expected_type, list) else [expected_type]
-        type_matches = {
-            "object": type(value) is dict,
-            "array": isinstance(value, list),
-            "string": type(value) is str,
-            "integer": type(value) is int,
-            "null": value is None,
-            "boolean": type(value) is bool,
-        }
-        if not any(type_matches.get(name, False) for name in names):
-            return False
-    if "const" in schema and value != schema["const"]:
-        return False
-    if "enum" in schema and value not in schema["enum"]:
-        return False
-    if type(value) is int and "minimum" in schema and value < schema["minimum"]:
-        return False
-    if type(value) is dict:
-        required = schema.get("required", [])
-        properties = schema.get("properties", {})
-        if not isinstance(required, list) or not isinstance(properties, dict):
-            return False
-        if not set(required) <= set(value):
-            return False
-        if schema.get("additionalProperties") is False and not set(value) <= set(properties):
-            return False
-        if any(
-            name in properties and not _matches_schema(item, properties[name])
-            for name, item in value.items()
-        ):
-            return False
-    if isinstance(value, list):
-        if len(value) < schema.get("minItems", 0):
-            return False
-        if "maxItems" in schema and len(value) > schema["maxItems"]:
-            return False
-        if schema.get("uniqueItems") and len({json.dumps(
-            item, sort_keys=True, separators=(",", ":"),
-        ) for item in value}) != len(value):
-            return False
-        item_schema = schema.get("items")
-        if item_schema is not None and any(
-            not _matches_schema(item, item_schema) for item in value
-        ):
-            return False
-    return True
-
-
-def validate_canonical_policy_schema(
-    policy_path: Path = DEFAULT_POLICY_PATH,
-    schema_path: Path = DEFAULT_POLICY_SCHEMA_PATH,
-) -> None:
-    """Prove the canonical policy satisfies its checked-in schema constraints."""
-    try:
-        payload = json.loads(Path(policy_path).read_text(encoding="utf-8"))
-        schema = json.loads(Path(schema_path).read_text(encoding="utf-8"))
-        capability_schema = schema["properties"]["capability_names"]
-        coherent_capabilities = (
-            capability_schema["minItems"] == len(HostCapability)
-            and capability_schema["maxItems"] == len(HostCapability)
-            and capability_schema["uniqueItems"] is True
-            and set(capability_schema["items"]["enum"])
-            == {value.value for value in HostCapability}
-        )
-    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
-        raise invalid_policy("policy_schema_mismatch") from None
-    if not coherent_capabilities or not _matches_schema(payload, schema):
-        raise invalid_policy("policy_schema_mismatch")
-
-
 def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     source = Path(path) if path is not None else DEFAULT_POLICY_PATH
-    if path is None:
-        validate_canonical_policy_schema()
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
@@ -243,6 +163,10 @@ class GatePolicy:
     ) -> GateDecision:
         if type(workflow_class) is not WorkflowClass or type(context) is not WorkflowContext:
             raise invalid_policy("invalid_gate_context")
+        try:
+            context = _snapshot_workflow_context(context)
+        except Exception:
+            raise invalid_policy("invalid_gate_context") from None
         if gate_kind is not None and (
             type(gate_kind) is not str or gate_kind not in GATE_KINDS
         ):

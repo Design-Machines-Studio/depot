@@ -193,6 +193,7 @@ PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m 
     <section aria-labelledby="task-02">
       <h2 id="task-02">Chunk 02: Workflow Policy and Host Capabilities</h2>
       <div class="card chunk">
+        <p><strong>Review-driven as-built documentation sync:</strong> this section records the implemented Chunk 02 API after defensive review without expanding the product files-to-modify boundary.</p>
         <h3>Files</h3>
         <ul>
           <li>Create <code>policies.py</code>, <code>workflows.py</code>, and <code>adapters/{__init__,base,host,isolation}.py</code> in the kernel package.</li>
@@ -204,15 +205,15 @@ PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m 
 class WorkflowTemplates: expand(kind: WorkflowClass, context: WorkflowContext) -&gt; tuple[NodeSpec, ...]
 class RetryPolicy: decide(reason: FailureReason, attempts: AttemptLedger, signature: str | None) -&gt; RetryDecision
 class HostRoute: provider: str; capability: HostCapability; rail: str
-class HostCapabilities: routes: frozenset[HostRoute]; capabilities: frozenset[HostCapability]  # derived view
+class HostCapabilities: routes: frozenset[HostRoute]; capabilities: frozenset[HostCapability]  # non-route input plus route-derived aggregate
 class HostAdapter(Protocol): capabilities() -&gt; HostCapabilities; dispatch(node: NodeSpec, context: ResumeStateContext) -&gt; SessionHandle | None; resume(handle: SessionHandle, feedback: ValidationFeedback) -&gt; SessionResult
 class IsolationSelector: select(requirements: IsolationRequirements, capabilities: HostCapabilities) -&gt; IsolationDecision</code></pre>
         <ol class="steps">
           <li>Write table-driven failing tests for the seven workflow classes, sensitive-path overrides, gate placement, retry exhaustion by reason, repeated failure signatures, and proposal-only economics.</li>
           <li>Write host fixtures for Claude, Codex, generic host, resumable agent, non-resumable agent, remote sandbox, container, worktree, and sequential branch.</li>
-          <li>Implement deterministic templates and policy loading with schema validation. Keep cleanup, hotfix, security, migration, and promotion invariants in the JSON requirements shape and enforce them generically. Security routing must override class defaults.</li>
+          <li>Implement deterministic templates and policy loading with schema validation. Keep a compact JSON safety declaration plus an independent immutable runtime anchor for exact cleanup, hotfix, security, migration, and promotion stage IDs, evidence, executor tuples, and ancestry; enforce it generically without mirroring full templates. Security routing must override class defaults.</li>
           <li>Implement isolation selection in the order allowed by declared capabilities and policy; every downgrade emits a reason and never silently becomes sequential-on-branch.</li>
-          <li>Implement builder continuity with exact immutable provider/executor-capability/dispatch-rail authorization from harness roles. Aggregate capabilities are derived only; wrapper routes cannot build. Store a real session handle when supplied, bind every decision to its context, send deterministic validation feedback back to that handle, and emit <code>session_resume_unavailable</code> when the host cannot resume.</li>
+          <li>Implement builder continuity with exact immutable provider/executor-capability/dispatch-rail authorization from harness roles. Caller inputs contain only non-route features; executor and dispatch capabilities derive exclusively from routes, and wrapper routes cannot build. Store a real session handle when supplied, bind every decision to its context, snapshot before projections, send deterministic validation feedback back to that handle, and emit <code>session_resume_unavailable</code> when the host cannot resume.</li>
           <li>Run the complete kernel suite. Expected: class, host, retry, isolation, and resume scenarios pass without external commands.</li>
           <li>Commit <code>feat(workflow-kernel): add workflow and host policy</code>.</li>
         </ol>
