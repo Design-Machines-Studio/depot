@@ -17,11 +17,13 @@ MODE_CAPABILITY = {
 
 
 class IsolationTests(unittest.TestCase):
-    def test_hostile_mode_conversion_is_secret_safe_but_base_exceptions_propagate(self):
+    def test_mode_enum_impostors_are_rejected_without_equality_dispatch(self):
         secret = "sk-secret-isolation-detail"
+        calls = []
 
         class Hostile:
             def __eq__(self, other):
+                calls.append("ordinary")
                 raise RuntimeError(secret)
 
         with self.assertRaises(InvalidSchemaError) as raised:
@@ -33,10 +35,12 @@ class IsolationTests(unittest.TestCase):
 
         class Fatal:
             def __eq__(self, other):
+                calls.append("fatal")
                 raise FatalConversion()
 
-        with self.assertRaises(FatalConversion):
+        with self.assertRaises(InvalidSchemaError):
             IsolationRequirements(Fatal())
+        self.assertEqual(calls, [])
 
     def test_all_modes_select_when_declared(self):
         selector = IsolationSelector()

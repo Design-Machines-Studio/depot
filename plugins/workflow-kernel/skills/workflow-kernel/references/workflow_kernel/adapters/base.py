@@ -50,6 +50,8 @@ def _normalize_enum(enum_type: type[Enum], value: object, reason_code: str) -> E
     """Normalize one public enum scalar without leaking ordinary exceptions."""
     if type(value) is enum_type:
         return value
+    if type(value) is not str:
+        raise invalid_policy(reason_code)
     try:
         return enum_type(value)
     except Exception:
@@ -67,7 +69,7 @@ def _safe_membership(value: object, candidates: object, reason_code: str) -> boo
 def _safe_equal(left: object, right: object, reason_code: str) -> bool:
     """Compare a caller scalar without intercepting BaseException control flow."""
     try:
-        return left == right
+        return bool(left == right)
     except Exception:
         raise invalid_policy(reason_code) from None
 
@@ -204,6 +206,14 @@ def _validate_origin(value: object, kind: str, primitives: object) -> None:
     _ORIGIN_SEALS.validate(value, kind, primitives)
 
 
+def _validate_capture(
+    value: object, kind: str, captured: tuple, primitives: object,
+) -> tuple:
+    """Validate one seal and return the exact payload used to derive it."""
+    _validate_origin(value, kind, primitives)
+    return captured
+
+
 def _origin_seal_registry_size() -> int:
     """Return live seal count for lifecycle regression tests."""
     return _ORIGIN_SEALS.size()
@@ -226,10 +236,8 @@ class HostRoute:
         if type(self.rail) is not str or self.rail not in DISPATCH_RAIL_CAPABILITIES:
             raise invalid_policy("invalid_host_route")
         try:
-            capability = (
-                self.capability
-                if type(self.capability) is HostCapability
-                else HostCapability(self.capability)
+            capability = _normalize_enum(
+                HostCapability, self.capability, "invalid_host_route",
             )
         except Exception:
             raise invalid_policy("invalid_host_route") from None
@@ -289,15 +297,16 @@ def _snapshot_host_route(route: HostRoute) -> HostRoute:
     if type(route) is not HostRoute:
         raise invalid_policy("invalid_host_route")
     try:
+        captured = (route.provider, route.capability, route.rail)
         if (
-            type(route.provider) is not str
-            or type(route.capability) is not HostCapability
-            or type(route.rail) is not str
+            type(captured[0]) is not str
+            or type(captured[1]) is not HostCapability
+            or type(captured[2]) is not str
         ):
             raise ValueError
-        primitives = (route.provider, route.capability.value, route.rail)
-        _validate_origin(route, "HostRoute", primitives)
-        return HostRoute(*primitives)
+        primitives = (captured[0], captured[1].value, captured[2])
+        captured = _validate_capture(route, "HostRoute", captured, primitives)
+        return HostRoute(*captured)
     except Exception:
         raise invalid_policy("invalid_host_route") from None
 
@@ -435,53 +444,57 @@ class WorkflowContext:
             type(self.economics_preference) is not str or not self.economics_preference
         ):
             raise invalid_policy("invalid_workflow_context")
-        _register_origin(self, "WorkflowContext", _workflow_context_primitives(self))
+        captured = (
+            self.changed_paths, self.requested_executor, self.risk, self.evidence,
+            self.human_approved, self.investigation_promotion,
+            self.promotion_approved, self.economics_preference,
+        )
+        _register_origin(
+            self, "WorkflowContext", _workflow_context_primitives(captured),
+        )
 
 
-def _workflow_context_primitives(context: WorkflowContext) -> tuple[object, ...]:
+def _workflow_context_primitives(captured: tuple) -> tuple[object, ...]:
+    (
+        changed_paths, requested_executor, risk, evidence, human_approved,
+        investigation_promotion, promotion_approved, economics_preference,
+    ) = captured
     if (
-        type(context.changed_paths) is not tuple
-        or any(type(value) is not str for value in context.changed_paths)
-        or context.requested_executor is not None
-        and type(context.requested_executor) is not str
-        or type(context.risk) is not str
-        or type(context.evidence) is not tuple
-        or any(type(value) is not str for value in context.evidence)
-        or type(context.human_approved) is not bool
-        or type(context.investigation_promotion) is not bool
-        or type(context.promotion_approved) is not bool
-        or context.economics_preference is not None
-        and type(context.economics_preference) is not str
+        type(changed_paths) is not tuple
+        or any(type(value) is not str for value in changed_paths)
+        or requested_executor is not None and type(requested_executor) is not str
+        or type(risk) is not str
+        or type(evidence) is not tuple
+        or any(type(value) is not str for value in evidence)
+        or type(human_approved) is not bool
+        or type(investigation_promotion) is not bool
+        or type(promotion_approved) is not bool
+        or economics_preference is not None
+        and type(economics_preference) is not str
     ):
         raise ValueError
-    return (
-        context.changed_paths,
-        context.requested_executor,
-        context.risk,
-        context.evidence,
-        context.human_approved,
-        context.investigation_promotion,
-        context.promotion_approved,
-        context.economics_preference,
-    )
+    return captured
 
 
 def _snapshot_workflow_context(context: WorkflowContext) -> WorkflowContext:
     if type(context) is not WorkflowContext:
         raise invalid_policy("invalid_workflow_context")
     try:
-        _validate_origin(
-            context, "WorkflowContext", _workflow_context_primitives(context),
+        captured = (
+            context.changed_paths, context.requested_executor, context.risk,
+            context.evidence, context.human_approved,
+            context.investigation_promotion, context.promotion_approved,
+            context.economics_preference,
+        )
+        captured = _validate_capture(
+            context, "WorkflowContext", captured,
+            _workflow_context_primitives(captured),
         )
         return WorkflowContext(
-            changed_paths=context.changed_paths,
-            requested_executor=context.requested_executor,
-            risk=context.risk,
-            evidence=context.evidence,
-            human_approved=context.human_approved,
-            investigation_promotion=context.investigation_promotion,
-            promotion_approved=context.promotion_approved,
-            economics_preference=context.economics_preference,
+            changed_paths=captured[0], requested_executor=captured[1],
+            risk=captured[2], evidence=captured[3], human_approved=captured[4],
+            investigation_promotion=captured[5], promotion_approved=captured[6],
+            economics_preference=captured[7],
         )
     except Exception:
         raise invalid_policy("invalid_workflow_context") from None
@@ -536,31 +549,41 @@ class GateDecision:
         if not coherent:
             raise invalid_policy("invalid_gate_decision")
         object.__setattr__(self, "missing_evidence", values)
-        _register_origin(self, "GateDecision", _gate_decision_primitives(self))
+        captured = (
+            self.allowed, self.reason_code, self.missing_evidence,
+            self.human_required,
+        )
+        _register_origin(
+            self, "GateDecision", _gate_decision_primitives(captured),
+        )
 
 
-def _gate_decision_primitives(decision: GateDecision) -> tuple[object, ...]:
+def _gate_decision_primitives(captured: tuple) -> tuple[object, ...]:
+    allowed, reason_code, missing_evidence, human_required = captured
     if (
-        type(decision.allowed) is not bool
-        or type(decision.reason_code) is not str
-        or type(decision.missing_evidence) is not tuple
-        or any(type(value) is not str for value in decision.missing_evidence)
-        or type(decision.human_required) is not bool
+        type(allowed) is not bool
+        or type(reason_code) is not str
+        or type(missing_evidence) is not tuple
+        or any(type(value) is not str for value in missing_evidence)
+        or type(human_required) is not bool
     ):
         raise ValueError
-    return (
-        decision.allowed, decision.reason_code,
-        decision.missing_evidence, decision.human_required,
-    )
+    return captured
 
 
 def _snapshot_gate_decision(decision: GateDecision) -> GateDecision:
     if type(decision) is not GateDecision:
         raise invalid_policy("invalid_gate_decision")
     try:
-        primitives = _gate_decision_primitives(decision)
-        _validate_origin(decision, "GateDecision", primitives)
-        return GateDecision(*primitives)
+        captured = (
+            decision.allowed, decision.reason_code, decision.missing_evidence,
+            decision.human_required,
+        )
+        captured = _validate_capture(
+            decision, "GateDecision", captured,
+            _gate_decision_primitives(captured),
+        )
+        return GateDecision(*captured)
     except Exception:
         raise invalid_policy("invalid_gate_decision") from None
 
@@ -627,54 +650,53 @@ class NodeSpec:
             raise invalid_policy("invalid_node_spec")
         if self.executor is None and self.executor_overridable:
             raise invalid_policy("inconsistent_executor_capability")
-        _register_origin(self, "NodeSpec", _node_spec_primitives(self))
+        captured = (
+            self.node_id, self.dependencies, self.gate_kind,
+            self.required_evidence, self.executor, self.routing_reason,
+            self.gate_decision, self.required_capability,
+            self.required_dispatch_capability, self.executor_overridable,
+        )
+        _register_origin(self, "NodeSpec", _node_spec_primitives(captured))
 
 
-def _node_spec_primitives(node: NodeSpec) -> tuple[object, ...]:
-    gate = node.gate_decision
+def _node_spec_primitives(captured: tuple) -> tuple[object, ...]:
+    (
+        node_id, dependencies, gate_kind, required_evidence, executor,
+        routing_reason, gate, required_capability,
+        required_dispatch_capability, executor_overridable,
+    ) = captured
     if (
-        type(node.node_id) is not str
-        or type(node.dependencies) is not tuple
-        or any(type(value) is not str for value in node.dependencies)
-        or node.gate_kind is not None and type(node.gate_kind) is not str
-        or type(node.required_evidence) is not tuple
-        or any(type(value) is not str for value in node.required_evidence)
-        or node.executor is not None and type(node.executor) is not str
-        or node.routing_reason is not None and type(node.routing_reason) is not str
+        type(node_id) is not str
+        or type(dependencies) is not tuple
+        or any(type(value) is not str for value in dependencies)
+        or gate_kind is not None and type(gate_kind) is not str
+        or type(required_evidence) is not tuple
+        or any(type(value) is not str for value in required_evidence)
+        or executor is not None and type(executor) is not str
+        or routing_reason is not None and type(routing_reason) is not str
         or type(gate) is not GateDecision
-        or type(gate.allowed) is not bool
-        or type(gate.reason_code) is not str
-        or type(gate.missing_evidence) is not tuple
-        or any(type(value) is not str for value in gate.missing_evidence)
-        or type(gate.human_required) is not bool
-        or node.required_capability is not None
-        and type(node.required_capability) is not HostCapability
-        or node.required_dispatch_capability is not None
-        and type(node.required_dispatch_capability) is not HostCapability
-        or type(node.executor_overridable) is not bool
+        or required_capability is not None
+        and type(required_capability) is not HostCapability
+        or required_dispatch_capability is not None
+        and type(required_dispatch_capability) is not HostCapability
+        or type(executor_overridable) is not bool
     ):
         raise ValueError
-    gate_primitives = _gate_decision_primitives(gate)
+    gate_captured = (
+        gate.allowed, gate.reason_code, gate.missing_evidence, gate.human_required,
+    )
+    gate_primitives = _gate_decision_primitives(gate_captured)
     _validate_origin(gate, "GateDecision", gate_primitives)
     return (
-        node.node_id,
-        node.dependencies,
-        node.gate_kind,
-        node.required_evidence,
-        node.executor,
-        node.routing_reason,
+        node_id, dependencies, gate_kind, required_evidence, executor,
+        routing_reason,
         gate_primitives,
+        None if required_capability is None else required_capability.value,
         (
-            None
-            if node.required_capability is None
-            else node.required_capability.value
+            None if required_dispatch_capability is None
+            else required_dispatch_capability.value
         ),
-        (
-            None
-            if node.required_dispatch_capability is None
-            else node.required_dispatch_capability.value
-        ),
-        node.executor_overridable,
+        executor_overridable,
     )
 
 
@@ -682,19 +704,23 @@ def _snapshot_node_spec(node: NodeSpec) -> NodeSpec:
     if type(node) is not NodeSpec:
         raise invalid_policy("invalid_node_spec")
     try:
-        primitives = _node_spec_primitives(node)
-        _validate_origin(node, "NodeSpec", primitives)
+        gate = _snapshot_gate_decision(node.gate_decision)
+        captured = (
+            node.node_id, node.dependencies, node.gate_kind,
+            node.required_evidence, node.executor, node.routing_reason, gate,
+            node.required_capability, node.required_dispatch_capability,
+            node.executor_overridable,
+        )
+        captured = _validate_capture(
+            node, "NodeSpec", captured, _node_spec_primitives(captured),
+        )
         return NodeSpec(
-            node_id=node.node_id,
-            dependencies=node.dependencies,
-            gate_kind=node.gate_kind,
-            required_evidence=node.required_evidence,
-            executor=node.executor,
-            routing_reason=node.routing_reason,
-            gate_decision=node.gate_decision,
-            required_capability=node.required_capability,
-            required_dispatch_capability=node.required_dispatch_capability,
-            executor_overridable=node.executor_overridable,
+            node_id=captured[0], dependencies=captured[1], gate_kind=captured[2],
+            required_evidence=captured[3], executor=captured[4],
+            routing_reason=captured[5], gate_decision=captured[6],
+            required_capability=captured[7],
+            required_dispatch_capability=captured[8],
+            executor_overridable=captured[9],
         )
     except Exception:
         raise invalid_policy("invalid_node_spec") from None
@@ -710,12 +736,16 @@ class AttemptLedger:
         safe_signatures = {}
         try:
             for raw_reason, count in self.counts.items():
-                reason = raw_reason if type(raw_reason) is FailureReason else FailureReason(raw_reason)
+                reason = _normalize_enum(
+                    FailureReason, raw_reason, "invalid_attempt_ledger",
+                )
                 if type(count) is not int or count < 0:
                     raise ValueError
                 safe_counts[reason] = count
             for raw_reason, values in self.signatures.items():
-                reason = raw_reason if type(raw_reason) is FailureReason else FailureReason(raw_reason)
+                reason = _normalize_enum(
+                    FailureReason, raw_reason, "invalid_attempt_ledger",
+                )
                 if not isinstance(values, (list, tuple)) or any(
                     type(value) is not str or not value for value in values
                 ):
@@ -728,7 +758,10 @@ class AttemptLedger:
                 raise invalid_policy("invalid_attempt_ledger")
         object.__setattr__(self, "counts", MappingProxyType(safe_counts))
         object.__setattr__(self, "signatures", MappingProxyType(safe_signatures))
-        _register_origin(self, "AttemptLedger", _attempt_ledger_primitives(self))
+        _register_origin(
+            self, "AttemptLedger",
+            _attempt_ledger_primitives((self.counts, self.signatures)),
+        )
 
     def count(self, reason: FailureReason) -> int:
         return _snapshot_attempt_ledger(self).counts.get(reason, 0)
@@ -737,14 +770,15 @@ class AttemptLedger:
         return _snapshot_attempt_ledger(self).signatures.get(reason, ())
 
 
-def _attempt_ledger_primitives(ledger: AttemptLedger) -> tuple[object, ...]:
+def _attempt_ledger_primitives(captured: tuple) -> tuple[object, ...]:
+    counts_value, signatures_value = captured
     try:
         counts = tuple(sorted(
-            (reason.value, count) for reason, count in ledger.counts.items()
+            (reason.value, count) for reason, count in counts_value.items()
         ))
         signatures = tuple(sorted(
             (reason.value, tuple(values))
-            for reason, values in ledger.signatures.items()
+            for reason, values in signatures_value.items()
         ))
     except Exception:
         raise ValueError from None
@@ -765,9 +799,17 @@ def _snapshot_attempt_ledger(ledger: AttemptLedger) -> AttemptLedger:
     if type(ledger) is not AttemptLedger:
         raise invalid_policy("invalid_attempt_ledger")
     try:
-        primitives = _attempt_ledger_primitives(ledger)
-        _validate_origin(ledger, "AttemptLedger", primitives)
-        return AttemptLedger(dict(ledger.counts), dict(ledger.signatures))
+        captured = (ledger.counts, ledger.signatures)
+        primitives = _attempt_ledger_primitives(captured)
+        _validate_capture(ledger, "AttemptLedger", captured, primitives)
+        counts, signatures = primitives
+        return AttemptLedger(
+            {FailureReason(reason): count for reason, count in counts},
+            {
+                FailureReason(reason): values
+                for reason, values in signatures
+            },
+        )
     except Exception:
         raise invalid_policy("invalid_attempt_ledger") from None
 
@@ -795,7 +837,9 @@ class HostCapabilities:
         try:
             raw_values = list(self.capabilities)
             converted = [
-                value if type(value) is HostCapability else HostCapability(value)
+                _normalize_enum(
+                    HostCapability, value, "unknown_capability_name",
+                )
                 for value in raw_values
             ]
         except Exception:
@@ -833,13 +877,9 @@ class HostCapabilities:
 
     def supports(self, capability: HostCapability) -> bool:
         snapshot = _snapshot_host_capabilities(self)
-        try:
-            capability = (
-                capability if type(capability) is HostCapability
-                else HostCapability(capability)
-            )
-        except Exception:
-            raise invalid_policy("unknown_capability_name") from None
+        capability = _normalize_enum(
+            HostCapability, capability, "unknown_capability_name",
+        )
         return capability in snapshot.capabilities
 
     def supports_route(self, route: HostRoute) -> bool:
@@ -852,29 +892,32 @@ def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilit
     if type(capabilities) is not HostCapabilities:
         raise invalid_policy("invalid_host_capabilities")
     try:
+        captured = (
+            capabilities.host_name, capabilities.capabilities,
+            capabilities.transition_model_version,
+            capabilities.evidence_model_version, capabilities.routes,
+        )
         if (
-            type(capabilities.host_name) is not str
-            or type(capabilities.capabilities) is not frozenset
-            or type(capabilities.transition_model_version) is not int
-            or type(capabilities.evidence_model_version) is not int
-            or type(capabilities.routes) is not frozenset
+            type(captured[0]) is not str
+            or type(captured[1]) is not frozenset
+            or type(captured[2]) is not int
+            or type(captured[3]) is not int
+            or type(captured[4]) is not frozenset
         ):
             raise ValueError
         routes = tuple(
-            _snapshot_host_route(route) for route in capabilities.routes
+            _snapshot_host_route(route) for route in captured[4]
         )
+        captured = captured[:4] + (routes,)
         primitives = _host_capabilities_primitives(
-            capabilities.host_name, capabilities.capabilities,
-            capabilities.transition_model_version,
-            capabilities.evidence_model_version, routes,
+            captured[0], captured[1], captured[2], captured[3], captured[4],
         )
-        _validate_origin(capabilities, "HostCapabilities", primitives)
+        captured = _validate_capture(
+            capabilities, "HostCapabilities", captured, primitives,
+        )
         return HostCapabilities(
-            capabilities.host_name,
-            capabilities.capabilities - ROUTE_SCOPED_CAPABILITIES,
-            capabilities.transition_model_version,
-            capabilities.evidence_model_version,
-            frozenset(routes),
+            captured[0], captured[1] - ROUTE_SCOPED_CAPABILITIES,
+            captured[2], captured[3], frozenset(captured[4]),
         )
     except Exception:
         raise invalid_policy("invalid_host_capabilities") from None
@@ -935,18 +978,17 @@ def _snapshot_isolation_requirements(
     if type(requirements) is not IsolationRequirements:
         raise invalid_policy("invalid_isolation_requirements")
     try:
+        captured = (requirements.preferred, requirements.allow_degradation)
         if (
-            type(requirements.preferred) is not IsolationMode
-            or type(requirements.allow_degradation) is not bool
+            type(captured[0]) is not IsolationMode
+            or type(captured[1]) is not bool
         ):
             raise ValueError
-        _validate_origin(
-            requirements, "IsolationRequirements",
-            (requirements.preferred.value, requirements.allow_degradation),
+        captured = _validate_capture(
+            requirements, "IsolationRequirements", captured,
+            (captured[0].value, captured[1]),
         )
-        return IsolationRequirements(
-            requirements.preferred, requirements.allow_degradation,
-        )
+        return IsolationRequirements(*captured)
     except Exception:
         raise invalid_policy("invalid_isolation_requirements") from None
 
@@ -990,8 +1032,12 @@ class ResumeStateContext:
         object.__setattr__(self, "provider", route.provider)
         object.__setattr__(self, "rail", route.rail)
         object.__setattr__(self, "capability", route.capability)
+        captured = (
+            self.run_id, self.node_id, self.attempt_id, self.provider,
+            self.rail, self.capability,
+        )
         _register_origin(
-            self, "ResumeStateContext", _resume_context_primitives(self),
+            self, "ResumeStateContext", _resume_context_primitives(captured),
         )
 
     @property
@@ -1028,32 +1074,33 @@ def _snapshot_resume_context(context: ResumeStateContext) -> ResumeStateContext:
     if type(context) is not ResumeStateContext:
         raise invalid_policy("invalid_session_resume_context")
     try:
-        primitives = _resume_context_primitives(context)
-        _validate_origin(context, "ResumeStateContext", primitives)
-        return ResumeStateContext(
-            context.run_id, context.node_id, context.attempt_id, context.provider,
-            context.rail, context.capability,
+        captured = (
+            context.run_id, context.node_id, context.attempt_id,
+            context.provider, context.rail, context.capability,
         )
+        captured = _validate_capture(
+            context, "ResumeStateContext", captured,
+            _resume_context_primitives(captured),
+        )
+        return ResumeStateContext(*captured)
     except Exception:
         raise invalid_policy("invalid_session_resume_context") from None
 
 
 def _resume_context_primitives(
-    context: ResumeStateContext,
+    captured: tuple,
 ) -> tuple[str, str, str, str, str, str]:
+    run_id, node_id, attempt_id, provider, rail, capability = captured
     if (
-        type(context.run_id) is not str
-        or type(context.node_id) is not str
-        or type(context.attempt_id) is not str
-        or type(context.provider) is not str
-        or type(context.rail) is not str
-        or type(context.capability) is not HostCapability
+        type(run_id) is not str
+        or type(node_id) is not str
+        or type(attempt_id) is not str
+        or type(provider) is not str
+        or type(rail) is not str
+        or type(capability) is not HostCapability
     ):
         raise ValueError
-    return (
-        context.run_id, context.node_id, context.attempt_id,
-        context.provider, context.rail, context.capability.value,
-    )
+    return run_id, node_id, attempt_id, provider, rail, capability.value
 
 
 @dataclass(frozen=True, repr=False)
@@ -1090,7 +1137,13 @@ class SessionHandle:
         if created.tzinfo is None:
             raise invalid_policy("invalid_session_handle")
         object.__setattr__(self, "context", _snapshot_resume_context(self.context))
-        _register_origin(self, "SessionHandle", _session_handle_primitives(self))
+        captured = (
+            self.host_name, self.opaque_handle, self.created_at,
+            self.resume_capable, self.context,
+        )
+        _register_origin(
+            self, "SessionHandle", _session_handle_primitives(captured),
+        )
 
     def __repr__(self) -> str:
         try:
@@ -1120,36 +1173,46 @@ def _snapshot_session_handle(handle: SessionHandle) -> SessionHandle:
     if type(handle) is not SessionHandle:
         raise invalid_policy("invalid_session_handle")
     try:
-        primitives = _session_handle_primitives(handle)
-        _validate_origin(handle, "SessionHandle", primitives)
+        context = _snapshot_resume_context(handle.context)
+        captured = (
+            handle.host_name, handle.opaque_handle, handle.created_at,
+            handle.resume_capable, context,
+        )
+        captured = _validate_capture(
+            handle, "SessionHandle", captured,
+            _session_handle_primitives(captured),
+        )
         return SessionHandle(
-            host_name=handle.host_name,
-            opaque_handle=handle.opaque_handle,
-            created_at=handle.created_at,
-            resume_capable=handle.resume_capable,
-            context=handle.context,
+            host_name=captured[0], opaque_handle=captured[1],
+            created_at=captured[2], resume_capable=captured[3],
+            context=captured[4],
         )
     except Exception:
         raise invalid_policy("invalid_session_handle") from None
 
 
-def _session_handle_primitives(handle: SessionHandle) -> tuple[object, ...]:
+def _session_handle_primitives(captured: tuple) -> tuple[object, ...]:
+    host_name, opaque_handle, created_at, resume_capable, context_value = captured
     if (
-        type(handle.host_name) is not str
-        or type(handle.opaque_handle) is not str
-        or type(handle.created_at) is not str
-        or type(handle.resume_capable) is not bool
-        or type(handle.context) is not ResumeStateContext
+        type(host_name) is not str
+        or type(opaque_handle) is not str
+        or type(created_at) is not str
+        or type(resume_capable) is not bool
+        or type(context_value) is not ResumeStateContext
     ):
         raise ValueError
-    context = _resume_context_primitives(handle.context)
-    _validate_origin(handle.context, "ResumeStateContext", context)
+    context_captured = (
+        context_value.run_id, context_value.node_id, context_value.attempt_id,
+        context_value.provider, context_value.rail, context_value.capability,
+    )
+    context = _resume_context_primitives(context_captured)
+    _validate_origin(context_value, "ResumeStateContext", context)
     return (
-        handle.host_name,
-        len(handle.opaque_handle),
-        hashlib.sha256(handle.opaque_handle.encode("utf-8")).hexdigest(),
-        handle.created_at,
-        handle.resume_capable,
+        host_name,
+        len(opaque_handle),
+        hashlib.sha256(opaque_handle.encode("utf-8")).hexdigest(),
+        created_at,
+        resume_capable,
         context,
     )
 
@@ -1180,8 +1243,10 @@ class ValidationFeedback:
             self, "evidence",
             _normalize_safe_evidence(self.evidence, "invalid_validation_feedback"),
         )
+        captured = (self.node_id, self.reason_code, self.evidence)
         _register_origin(
-            self, "ValidationFeedback", _validation_feedback_primitives(self),
+            self, "ValidationFeedback",
+            _validation_feedback_primitives(captured),
         )
 
     def __repr__(self) -> str:
@@ -1206,26 +1271,28 @@ def _snapshot_validation_feedback(feedback: ValidationFeedback) -> ValidationFee
     if type(feedback) is not ValidationFeedback:
         raise invalid_policy("invalid_validation_feedback")
     try:
-        primitives = _validation_feedback_primitives(feedback)
-        _validate_origin(feedback, "ValidationFeedback", primitives)
-        return ValidationFeedback(
-            feedback.node_id, feedback.reason_code, feedback.evidence,
+        captured = (feedback.node_id, feedback.reason_code, feedback.evidence)
+        captured = _validate_capture(
+            feedback, "ValidationFeedback", captured,
+            _validation_feedback_primitives(captured),
         )
+        return ValidationFeedback(*captured)
     except Exception:
         raise invalid_policy("invalid_validation_feedback") from None
 
 
 def _validation_feedback_primitives(
-    feedback: ValidationFeedback,
+    captured: tuple,
 ) -> tuple[object, ...]:
+    node_id, reason_code, evidence = captured
     if (
-        type(feedback.node_id) is not str
-        or type(feedback.reason_code) is not str
-        or type(feedback.evidence) is not tuple
-        or any(type(value) is not str for value in feedback.evidence)
+        type(node_id) is not str
+        or type(reason_code) is not str
+        or type(evidence) is not tuple
+        or any(type(value) is not str for value in evidence)
     ):
         raise ValueError
-    return feedback.node_id, feedback.reason_code, feedback.evidence
+    return captured
 
 
 def _normalize_safe_evidence(values: object, reason_code: str) -> Tuple[str, ...]:
@@ -1291,7 +1358,12 @@ class SessionResult:
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "context", _snapshot_resume_context(self.context))
         object.__setattr__(self, "evidence", values)
-        _register_origin(self, "SessionResult", _session_result_primitives(self))
+        captured = (
+            self.status, self.context, self.evidence, self.reason_code,
+        )
+        _register_origin(
+            self, "SessionResult", _session_result_primitives(captured),
+        )
 
     def __repr__(self) -> str:
         try:
@@ -1316,27 +1388,36 @@ def _snapshot_session_result(result: SessionResult) -> SessionResult:
     if type(result) is not SessionResult:
         raise invalid_policy("invalid_session_result")
     try:
-        primitives = _session_result_primitives(result)
-        _validate_origin(result, "SessionResult", primitives)
-        return SessionResult(
-            result.status, result.context, result.evidence, result.reason_code,
+        context = _snapshot_resume_context(result.context)
+        captured = (
+            result.status, context, result.evidence, result.reason_code,
         )
+        captured = _validate_capture(
+            result, "SessionResult", captured,
+            _session_result_primitives(captured),
+        )
+        return SessionResult(*captured)
     except Exception:
         raise invalid_policy("invalid_session_result") from None
 
 
-def _session_result_primitives(result: SessionResult) -> tuple[object, ...]:
+def _session_result_primitives(captured: tuple) -> tuple[object, ...]:
+    status, context_value, evidence, reason_code = captured
     if (
-        type(result.status) is not SessionStatus
-        or type(result.context) is not ResumeStateContext
-        or type(result.evidence) is not tuple
-        or any(type(value) is not str for value in result.evidence)
-        or result.reason_code is not None and type(result.reason_code) is not str
+        type(status) is not SessionStatus
+        or type(context_value) is not ResumeStateContext
+        or type(evidence) is not tuple
+        or any(type(value) is not str for value in evidence)
+        or reason_code is not None and type(reason_code) is not str
     ):
         raise ValueError
-    context = _resume_context_primitives(result.context)
-    _validate_origin(result.context, "ResumeStateContext", context)
-    return result.status.value, context, result.evidence, result.reason_code
+    context_captured = (
+        context_value.run_id, context_value.node_id, context_value.attempt_id,
+        context_value.provider, context_value.rail, context_value.capability,
+    )
+    context = _resume_context_primitives(context_captured)
+    _validate_origin(context_value, "ResumeStateContext", context)
+    return status.value, context, evidence, reason_code
 
 
 MAX_RESUME_STATE_BYTES = 65_536
@@ -1390,10 +1471,11 @@ def _snapshot_resume_blob(blob: ResumeStateBlob) -> bytes:
         payload = blob._payload
         if type(payload) is not bytes or len(payload) > MAX_RESUME_STATE_BYTES:
             raise invalid_policy("invalid_session_resume_state")
-        _validate_origin(
-            blob, "ResumeStateBlob", _resume_blob_primitives(payload),
+        captured = (payload,)
+        captured = _validate_capture(
+            blob, "ResumeStateBlob", captured, _resume_blob_primitives(payload),
         )
-        return bytes(payload)
+        return bytes(captured[0])
     except Exception:
         raise invalid_policy("invalid_session_resume_state") from None
 
@@ -1503,9 +1585,10 @@ class BuilderSessionDecision:
             raise invalid_policy("invalid_builder_session_decision")
         if self.result is not None and self.result.context != self.context:
             raise invalid_policy("invalid_builder_session_decision")
+        captured = (self.outcome, self.context, self.handle, self.result)
         _register_origin(
             self, "BuilderSessionDecision",
-            _builder_decision_primitives(self),
+            _builder_decision_primitives(captured),
         )
 
     @property
@@ -1567,45 +1650,65 @@ def _snapshot_builder_decision(
     if type(decision) is not BuilderSessionDecision:
         raise invalid_policy("invalid_builder_session_decision")
     try:
-        primitives = _builder_decision_primitives(decision)
-        _validate_origin(decision, "BuilderSessionDecision", primitives)
-        outcome = (
-            decision.outcome
-            if type(decision.outcome) is BuilderOutcome
-            else BuilderOutcome(decision.outcome)
+        context = _snapshot_resume_context(decision.context)
+        handle = (
+            None if decision.handle is None
+            else _snapshot_session_handle(decision.handle)
         )
+        result = (
+            None if decision.result is None
+            else _snapshot_session_result(decision.result)
+        )
+        captured = (decision.outcome, context, handle, result)
+        captured = _validate_capture(
+            decision, "BuilderSessionDecision", captured,
+            _builder_decision_primitives(captured),
+        )
+        outcome = captured[0]
         facts = _OUTCOME_FACTS.get(outcome)
         if facts is None:
             raise ValueError
-        snapshot = BuilderSessionDecision(
-            outcome, decision.context, decision.handle, decision.result,
-        )
+        snapshot = BuilderSessionDecision(*captured)
         return facts, snapshot
     except Exception:
         raise invalid_policy("invalid_builder_session_decision") from None
 
 
 def _builder_decision_primitives(
-    decision: BuilderSessionDecision,
+    captured: tuple,
 ) -> tuple[object, ...]:
+    outcome, context_value, handle_value, result_value = captured
     if (
-        type(decision.outcome) is not BuilderOutcome
-        or type(decision.context) is not ResumeStateContext
-        or decision.handle is not None and type(decision.handle) is not SessionHandle
-        or decision.result is not None and type(decision.result) is not SessionResult
+        type(outcome) is not BuilderOutcome
+        or type(context_value) is not ResumeStateContext
+        or handle_value is not None and type(handle_value) is not SessionHandle
+        or result_value is not None and type(result_value) is not SessionResult
     ):
         raise ValueError
-    context = _resume_context_primitives(decision.context)
-    _validate_origin(decision.context, "ResumeStateContext", context)
+    context_capture = (
+        context_value.run_id, context_value.node_id, context_value.attempt_id,
+        context_value.provider, context_value.rail, context_value.capability,
+    )
+    context = _resume_context_primitives(context_capture)
+    _validate_origin(context_value, "ResumeStateContext", context)
     handle = None
-    if decision.handle is not None:
-        handle = _session_handle_primitives(decision.handle)
-        _validate_origin(decision.handle, "SessionHandle", handle)
+    if handle_value is not None:
+        handle_capture = (
+            handle_value.host_name, handle_value.opaque_handle,
+            handle_value.created_at, handle_value.resume_capable,
+            handle_value.context,
+        )
+        handle = _session_handle_primitives(handle_capture)
+        _validate_origin(handle_value, "SessionHandle", handle)
     result = None
-    if decision.result is not None:
-        result = _session_result_primitives(decision.result)
-        _validate_origin(decision.result, "SessionResult", result)
-    return decision.outcome.value, context, handle, result
+    if result_value is not None:
+        result_capture = (
+            result_value.status, result_value.context, result_value.evidence,
+            result_value.reason_code,
+        )
+        result = _session_result_primitives(result_capture)
+        _validate_origin(result_value, "SessionResult", result)
+    return outcome.value, context, handle, result
 
 
 class HostAdapter(Protocol):

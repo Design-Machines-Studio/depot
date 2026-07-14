@@ -1,7 +1,9 @@
 import hashlib
 import inspect
 import json
+import threading
 import unittest
+from unittest.mock import patch
 
 from tests import detail_digest
 from workflow_kernel.adapters.base import (
@@ -16,6 +18,7 @@ from workflow_kernel.schema import InvalidSchemaError, RunState, WorkflowEvent
 from workflow_kernel.transitions import TransitionEngine
 from workflow_kernel.workflows import WorkflowTemplates
 from workflow_kernel.adapters.base import WorkflowClass, WorkflowContext
+import workflow_kernel.adapters.base as adapter_base
 
 
 NOW = "2026-07-14T00:00:00Z"
@@ -70,7 +73,7 @@ class BuilderResumeTests(unittest.TestCase):
         with self.assertRaises(InvalidSchemaError):
             candidate.to_dict()
 
-    def test_hostile_session_scalars_are_secret_safe_but_base_exceptions_propagate(self):
+    def test_hostile_session_scalars_are_secret_safe_and_exact_enums_reject_impostors(self):
         secret = "sk-secret-session-detail"
 
         class Hostile:
@@ -101,6 +104,8 @@ class BuilderResumeTests(unittest.TestCase):
                 ),
             ),
         )
+        enum_cases = cases[:2]
+        equality_cases = cases[2:]
         for name, action in cases:
             with self.subTest(name=name):
                 with self.assertRaises(InvalidSchemaError) as raised:
@@ -117,10 +122,104 @@ class BuilderResumeTests(unittest.TestCase):
             def __ne__(self, other):
                 raise FatalConversion()
 
-        for name, action in cases:
+        for name, action in enum_cases:
+            with self.subTest(name=name):
+                with self.assertRaises(InvalidSchemaError):
+                    action(Fatal())
+        for name, action in equality_cases:
             with self.subTest(name=name):
                 with self.assertRaises(FatalConversion):
                     action(Fatal())
+
+    def test_safe_equality_coerces_truth_inside_the_secret_safe_boundary(self):
+        secret = "sk-secret-truth-detail"
+
+        class Truth:
+            def __bool__(self):
+                raise RuntimeError(secret)
+
+        class Hostile:
+            def __eq__(self, other):
+                return Truth()
+
+        decision = BuilderSessionDecision(
+            BuilderOutcome.NODE_GATE_BLOCKED, receipt_context(),
+        )
+        with self.assertRaises(InvalidSchemaError) as raised:
+            decision.to_evidence_event(
+                run_id=Hostile(), sequence=1, node_id="build", occurred_at=NOW,
+            )
+        self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalTruth(BaseException):
+            pass
+
+        class FatalBool:
+            def __bool__(self):
+                raise FatalTruth()
+
+        class FatalHostile:
+            def __eq__(self, other):
+                return FatalBool()
+
+        with self.assertRaises(FatalTruth):
+            decision.to_evidence_event(
+                run_id=FatalHostile(), sequence=1, node_id="build", occurred_at=NOW,
+            )
+
+    def test_resume_and_handle_snapshots_use_one_validated_capture(self):
+        def interleave(value, snapshot, mutate):
+            validated = threading.Event()
+            release = threading.Event()
+            result = []
+            failure = []
+            original = adapter_base._ORIGIN_SEALS.validate
+
+            def validate(candidate, kind, primitives):
+                original(candidate, kind, primitives)
+                if candidate is value:
+                    validated.set()
+                    release.wait(timeout=2)
+
+            def run():
+                try:
+                    result.append(snapshot(value))
+                except BaseException as error:
+                    failure.append(error)
+
+            with patch.object(
+                adapter_base._ORIGIN_SEALS, "validate", side_effect=validate,
+            ):
+                worker = threading.Thread(target=run)
+                worker.start()
+                self.assertTrue(validated.wait(timeout=2))
+                mutate()
+                release.set()
+                worker.join(timeout=2)
+            self.assertFalse(worker.is_alive())
+            if failure:
+                raise failure[0]
+            return result[0]
+
+        context = receipt_context()
+        captured_context = interleave(
+            context, adapter_base._snapshot_resume_context,
+            lambda: object.__setattr__(context, "run_id", "run-2"),
+        )
+        self.assertEqual(captured_context.run_id, "run-1")
+
+        original_context = receipt_context()
+        candidate = handle(value="opaque-original", context=original_context)
+
+        def mutate_handle():
+            object.__setattr__(candidate, "opaque_handle", "opaque-replacement")
+            object.__setattr__(candidate, "context", receipt_context(run="run-2"))
+
+        captured_handle = interleave(
+            candidate, adapter_base._snapshot_session_handle, mutate_handle,
+        )
+        self.assertEqual(captured_handle.opaque_handle, "opaque-original")
+        self.assertEqual(captured_handle.context.run_id, "run-1")
 
     def test_module_seals_reject_nested_resume_and_decision_spoofing(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))

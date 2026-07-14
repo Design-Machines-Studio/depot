@@ -11,16 +11,19 @@ from workflow_kernel.policies import GatePolicy, load_policy
 from workflow_kernel.workflows import WorkflowTemplates
 
 class WorkflowClassTests(unittest.TestCase):
-    def test_hostile_workflow_scalars_are_secret_safe_but_base_exceptions_propagate(self):
+    def test_workflow_enum_impostors_are_rejected_without_equality_dispatch(self):
         secret = "sk-secret-workflow-detail"
+        calls = []
 
         class Hostile:
             def __eq__(self, other):
+                calls.append("ordinary")
                 raise RuntimeError(secret)
 
         with self.assertRaises(InvalidSchemaError) as risk_error:
             WorkflowContext(risk=Hostile())
         self.assertNotIn(secret, repr(risk_error.exception))
+        calls.clear()
         with self.assertRaises(InvalidSchemaError) as class_error:
             WorkflowTemplates().expand(Hostile(), WorkflowContext())
         self.assertNotIn(secret, repr(class_error.exception))
@@ -30,10 +33,12 @@ class WorkflowClassTests(unittest.TestCase):
 
         class Fatal:
             def __eq__(self, other):
+                calls.append("fatal")
                 raise FatalConversion()
 
-        with self.assertRaises(FatalConversion):
+        with self.assertRaises(InvalidSchemaError):
             WorkflowTemplates().expand(Fatal(), WorkflowContext())
+        self.assertEqual(calls, [])
 
     def test_recursive_schema_matcher_supports_shared_superset_keywords(self):
         schema = {

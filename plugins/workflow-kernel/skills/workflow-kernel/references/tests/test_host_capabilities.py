@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import weakref
 from unittest.mock import patch
@@ -13,10 +14,47 @@ from pathlib import Path
 from tests import detail_digest
 import workflow_kernel.adapters.base as adapter_base
 from workflow_kernel.adapters.base import (
-    HostCapabilities, HostCapability, HostRoute, NodeSpec, route_satisfies_node,
+    GateDecision, HostCapabilities, HostCapability, HostRoute, NodeSpec,
+    WorkflowContext, route_satisfies_node,
 )
 from workflow_kernel.adapters.host import capabilities_from_harness_profile
 from workflow_kernel.schema import InvalidSchemaError
+
+
+def snapshot_during_validated_mutation(value, snapshot, mutate):
+    validated = threading.Event()
+    release = threading.Event()
+    result = []
+    failure = []
+    original = adapter_base._ORIGIN_SEALS.validate
+
+    def validate(candidate, kind, primitives):
+        original(candidate, kind, primitives)
+        if candidate is value:
+            validated.set()
+            release.wait(timeout=2)
+
+    def run():
+        try:
+            result.append(snapshot(value))
+        except BaseException as error:
+            failure.append(error)
+
+    with patch.object(adapter_base._ORIGIN_SEALS, "validate", side_effect=validate):
+        worker = threading.Thread(target=run)
+        worker.start()
+        if not validated.wait(timeout=2):
+            release.set()
+            worker.join(timeout=2)
+            raise AssertionError("snapshot never reached origin validation")
+        mutate()
+        release.set()
+        worker.join(timeout=2)
+    if worker.is_alive():
+        raise AssertionError("snapshot worker did not finish")
+    if failure:
+        raise failure[0]
+    return result[0]
 
 
 class HostCapabilityTests(unittest.TestCase):
@@ -108,11 +146,13 @@ class HostCapabilityTests(unittest.TestCase):
         stale_callback(stale_entry[0])
         registry.validate(replacement, "Token", ("replacement",))
 
-    def test_hostile_capability_scalars_are_secret_safe_but_base_exceptions_propagate(self):
+    def test_enum_impostors_are_rejected_without_hash_or_equality_dispatch(self):
         secret = "sk-secret-capability-detail"
+        calls = []
 
         class Hostile:
             def __eq__(self, other):
+                calls.append("equal")
                 raise RuntimeError(secret)
 
         for field in ("required_capability", "required_dispatch_capability"):
@@ -132,9 +172,10 @@ class HostCapabilityTests(unittest.TestCase):
 
         class Fatal:
             def __eq__(self, other):
+                calls.append("fatal_equal")
                 raise FatalConversion()
 
-        with self.assertRaises(FatalConversion):
+        with self.assertRaises(InvalidSchemaError):
             NodeSpec(
                 "build", executor="codex", required_capability=Fatal(),
                 required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
@@ -142,6 +183,7 @@ class HostCapabilityTests(unittest.TestCase):
 
         class HostileHash:
             def __hash__(self):
+                calls.append("hash")
                 raise RuntimeError(secret)
 
         with self.assertRaises(InvalidSchemaError) as hash_error:
@@ -153,13 +195,16 @@ class HostCapabilityTests(unittest.TestCase):
 
         class FatalHash:
             def __hash__(self):
+                calls.append("fatal_hash")
                 raise FatalConversion()
 
-        with self.assertRaises(FatalConversion):
+        with self.assertRaises(InvalidSchemaError):
             NodeSpec(
                 "build", executor="codex", required_capability=FatalHash(),
                 required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
             )
+
+        self.assertEqual(calls, [])
 
         class HostileIterable(tuple):
             def __iter__(self):
@@ -175,6 +220,63 @@ class HostCapabilityTests(unittest.TestCase):
 
         with self.assertRaises(FatalConversion):
             HostCapabilities("host", FatalIterable())
+
+    def test_snapshots_reconstruct_only_from_one_validated_capture(self):
+        context = WorkflowContext(risk="low")
+        captured_context = snapshot_during_validated_mutation(
+            context, adapter_base._snapshot_workflow_context,
+            lambda: object.__setattr__(context, "risk", "high"),
+        )
+        self.assertEqual(captured_context.risk, "low")
+
+        blocked = GateDecision(
+            False, "missing_mandatory_evidence", ("review",),
+        )
+        node = NodeSpec(
+            "build", gate_kind="evidence", required_evidence=("review",),
+            executor="claude", gate_decision=blocked,
+            required_capability=HostCapability.CLAUDE_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+
+        def mutate_node():
+            object.__setattr__(node, "executor", "codex")
+            object.__setattr__(
+                node, "required_capability", HostCapability.CODEX_EXECUTION,
+            )
+            object.__setattr__(node, "gate_decision", GateDecision(
+                True, "gate_satisfied",
+            ))
+
+        captured_node = snapshot_during_validated_mutation(
+            node, adapter_base._snapshot_node_spec, mutate_node,
+        )
+        self.assertEqual(captured_node.executor, "claude")
+        self.assertFalse(captured_node.gate_decision.allowed)
+
+        original_route = HostRoute(
+            "anthropic", HostCapability.CLAUDE_EXECUTION, "native",
+        )
+        capabilities = HostCapabilities(
+            "claude", (), routes=frozenset({original_route}),
+        )
+        stored_route = next(iter(capabilities.routes))
+
+        def mutate_capabilities():
+            object.__setattr__(capabilities, "host_name", "codex")
+            object.__setattr__(stored_route, "provider", "openai")
+            object.__setattr__(
+                stored_route, "capability", HostCapability.CODEX_EXECUTION,
+            )
+
+        captured_capabilities = snapshot_during_validated_mutation(
+            capabilities, adapter_base._snapshot_host_capabilities,
+            mutate_capabilities,
+        )
+        self.assertEqual(captured_capabilities.host_name, "claude")
+        self.assertEqual(
+            next(iter(captured_capabilities.routes)).provider, "anthropic",
+        )
 
     def test_module_owned_seals_reject_instance_field_spoofing(self):
         companion = HostRoute(

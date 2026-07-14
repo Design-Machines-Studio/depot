@@ -18,11 +18,13 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 
 class RetryPolicyTests(unittest.TestCase):
-    def test_retry_reason_conversion_is_secret_safe_but_base_exceptions_propagate(self):
+    def test_retry_reason_enum_impostors_are_rejected_without_equality_dispatch(self):
         secret = "sk-secret-retry-detail"
+        calls = []
 
         class Hostile:
             def __eq__(self, other):
+                calls.append("ordinary")
                 raise RuntimeError(secret)
 
         with self.assertRaises(InvalidSchemaError) as raised:
@@ -34,10 +36,12 @@ class RetryPolicyTests(unittest.TestCase):
 
         class Fatal:
             def __eq__(self, other):
+                calls.append("fatal")
                 raise FatalConversion()
 
-        with self.assertRaises(FatalConversion):
+        with self.assertRaises(InvalidSchemaError):
             RetryPolicy().decide(Fatal(), AttemptLedger(), None)
+        self.assertEqual(calls, [])
 
     def test_retry_decision_snapshots_attempt_ledger_exactly_once(self):
         snapshots = []
@@ -143,6 +147,25 @@ class RetryPolicyTests(unittest.TestCase):
             ),
         ))
 
+        non_iterable_downgrade_payload = json.loads(json.dumps(canonical_payload))
+        non_iterable_downgrade_payload["isolation"]["forbidden_downgrades"] = None
+        cases.append((
+            non_iterable_downgrade_payload,
+            replace(document, forbidden_downgrades=None),
+        ))
+
+        hostile_downgrade_payload = json.loads(json.dumps(canonical_payload))
+        hostile_downgrade_payload["isolation"]["forbidden_downgrades"] = {}
+
+        class HostileDowngrades(dict):
+            def __iter__(self):
+                raise RuntimeError("sk-secret-downgrade-detail")
+
+        cases.append((
+            hostile_downgrade_payload,
+            replace(document, forbidden_downgrades=HostileDowngrades()),
+        ))
+
         for payload, injected in cases:
             with tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "policy.json"
@@ -154,6 +177,9 @@ class RetryPolicyTests(unittest.TestCase):
             self.assertEqual(
                 injected_error.exception.details["reason_code"],
                 file_error.exception.details["reason_code"],
+            )
+            self.assertNotIn(
+                "sk-secret-downgrade-detail", repr(injected_error.exception),
             )
 
     def test_attempt_ledger_seal_cannot_be_spoofed(self):

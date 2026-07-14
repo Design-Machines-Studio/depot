@@ -115,8 +115,9 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       promotion fragment, covering direct and rewired bypasses.
       File-loaded and injected policy documents share one canonical
       payload-to-document normalizer; structural injected projection preserves
-      missing anchor sections and malformed stages so parity includes nested
-      shape errors as well as budgets and convergence. Ordinary executor nodes remain open to any compatible
+      missing anchor sections, malformed stages, and raw non-iterable or hostile
+      downgrade fields so parity includes nested shape errors as well as budgets
+      and convergence. Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
       Anthropic native Claude. Routes, nodes and nested gates, capabilities,
       workflow/attempt/isolation inputs, resume contexts, handles, results,
@@ -125,9 +126,13 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       registered only once—even with an identical seal—while guarded dead-slot
       reuse preserves bounded lifecycle and ID-reuse safety; caller-owned seal
       fields and direct initialization re-entry have no authority. Coherent and nested mutation tests prove rewrites fail
-      before route authorization or manager dispatch, while hostile ordinary
+      before route authorization or manager dispatch. Every sealed snapshot
+      captures fields and nested primitives once, validates the seal derived from
+      that payload, and reconstructs without rereading caller state, while hostile ordinary
       scalar, enum, membership, equality, hashing, iterator, and mapping failures
-      map to stable secret-safe reasons and `BaseException` propagates. Retry
+      map to stable secret-safe reasons and `BaseException` propagates. Enum
+      inputs are exact enum instances or exact strings only, and equality truth
+      coercion is covered by the same safe boundary as comparison. Retry
       policy snapshots its ledger once and reads the reconstructed mappings
       directly. Chunk 05
       adds the explicit `workflowClass` manifest field and promptcraft → pipeline

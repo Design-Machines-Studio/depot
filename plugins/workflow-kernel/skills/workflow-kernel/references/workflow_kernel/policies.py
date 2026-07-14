@@ -14,7 +14,7 @@ from .adapters.base import (
     IsolationMode, RetryDecision, WorkflowClass, WorkflowContext,
     _normalize_enum,
     _register_origin, _snapshot_attempt_ledger, _snapshot_workflow_context,
-    _validate_origin, invalid_policy, normalize_executor_constraint,
+    _validate_capture, invalid_policy, normalize_executor_constraint,
 )
 from .schema import InvalidSchemaError
 
@@ -34,8 +34,14 @@ class PolicyDocument:
     economics_mode: str
 
     def __post_init__(self) -> None:
+        captured = (
+            self.retry_budgets, self.identical_signature_limit,
+            self.risk_human_approval, self.isolation_order,
+            self.forbidden_downgrades, self.workflow_safety_anchor,
+            self.economics_mode,
+        )
         try:
-            digest = _policy_document_digest(self)
+            digest = _policy_payload_digest(_policy_document_payload(captured))
         except Exception:
             raise invalid_policy("invalid_policy_document") from None
         _register_origin(self, "PolicyDocument", digest)
@@ -63,7 +69,7 @@ def _safety_stage(value: object) -> Mapping[str, object]:
     normalized_lists = {}
     for field in ("required_evidence", "required_ancestors"):
         items = value[field]
-        if not isinstance(items, list) or any(
+        if type(items) is not list or any(
             type(item) is not str or not item for item in items
         ) or len(items) != len(set(items)):
             raise invalid_policy("invalid_workflow_safety_anchor")
@@ -95,7 +101,7 @@ def _safety_stage(value: object) -> Mapping[str, object]:
 
 def _safety_stage_set(value: object) -> tuple[Mapping[str, object], ...]:
     value = _exact_keys(value, {"stages"}, "invalid_workflow_safety_anchor")
-    if not isinstance(value["stages"], list) or not value["stages"]:
+    if type(value["stages"]) is not list or not value["stages"]:
         raise invalid_policy("invalid_workflow_safety_anchor")
     stages = tuple(_safety_stage(stage) for stage in value["stages"])
     if len({stage["id"] for stage in stages}) != len(stages):
@@ -121,22 +127,26 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
         value["promotion"], {"investigation"},
         "invalid_workflow_safety_anchor",
     )
+    if type(value["non_executable_classes"]) is not list:
+        raise invalid_policy("invalid_workflow_safety_anchor")
     try:
         non_executable_classes = tuple(
-            WorkflowClass(name) for name in value["non_executable_classes"]
+            _normalize_enum(
+                WorkflowClass, name, "invalid_workflow_safety_anchor",
+            )
+            for name in value["non_executable_classes"]
         )
     except Exception:
         raise invalid_policy("invalid_workflow_safety_anchor") from None
-    if (
-        type(value["non_executable_classes"]) is not list
-        or non_executable_classes != (WorkflowClass.INVESTIGATION,)
-    ):
+    if non_executable_classes != (WorkflowClass.INVESTIGATION,):
         raise invalid_policy("invalid_workflow_safety_anchor")
     return MappingProxyType({
         "schema_version": 1,
         "common": _safety_stage_set(value["common"]),
         "classes": MappingProxyType({
-            WorkflowClass(name): _safety_stage_set(stage_set)
+            _normalize_enum(
+                WorkflowClass, name, "invalid_workflow_safety_anchor",
+            ): _safety_stage_set(stage_set)
             for name, stage_set in classes.items()
         }),
         "promotion": MappingProxyType({
@@ -150,14 +160,14 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
 def _plain_policy_value(value: object) -> object:
     if type(value) in {FailureReason, HostCapability, IsolationMode, WorkflowClass}:
         return value.value
-    if isinstance(value, Mapping):
+    if type(value) in {dict, type(MappingProxyType({}))}:
         return {
             _plain_policy_value(key): _plain_policy_value(item)
             for key, item in value.items()
         }
-    if isinstance(value, (list, tuple)):
+    if type(value) in {list, tuple}:
         return [_plain_policy_value(item) for item in value]
-    if isinstance(value, (set, frozenset)):
+    if type(value) in {set, frozenset}:
         return sorted(
             (_plain_policy_value(item) for item in value),
             key=lambda item: repr(item),
@@ -190,41 +200,47 @@ def _safety_anchor_payload(value: object) -> object:
     return result
 
 
-def _policy_document_payload(document: PolicyDocument) -> dict:
-    forbidden = []
-    for item in document.forbidden_downgrades:
-        if type(item) is tuple and len(item) == 2:
-            forbidden.append({
-                "from": _plain_policy_value(item[0]),
-                "to": _plain_policy_value(item[1]),
-            })
-        else:
-            forbidden.append(_plain_policy_value(item))
+def _policy_document_payload(captured: tuple) -> dict:
+    (
+        retry_budgets, identical_signature_limit, risk_human_approval,
+        isolation_order, forbidden_downgrades, workflow_safety_anchor,
+        economics_mode,
+    ) = captured
+    if type(forbidden_downgrades) is frozenset:
+        forbidden = []
+        for item in forbidden_downgrades:
+            if type(item) is tuple and len(item) == 2:
+                forbidden.append({
+                    "from": _plain_policy_value(item[0]),
+                    "to": _plain_policy_value(item[1]),
+                })
+            else:
+                forbidden.append(_plain_policy_value(item))
+    elif type(forbidden_downgrades) is list:
+        forbidden = _plain_policy_value(forbidden_downgrades)
+    else:
+        forbidden = forbidden_downgrades
     return {
         "schema_version": POLICY_SCHEMA_VERSION,
         "retry": {
-            "budgets": _plain_policy_value(document.retry_budgets),
-            "identical_signature_limit": document.identical_signature_limit,
+            "budgets": _plain_policy_value(retry_budgets),
+            "identical_signature_limit": identical_signature_limit,
         },
         "gates": {
             "risk_human_approval": _plain_policy_value(
-                document.risk_human_approval,
+                risk_human_approval,
             ),
         },
         "isolation": {
-            "order": _plain_policy_value(document.isolation_order),
+            "order": _plain_policy_value(isolation_order),
             "forbidden_downgrades": forbidden,
         },
         "capability_names": [value.value for value in HostCapability],
         "workflow_safety_anchor": _safety_anchor_payload(
-            document.workflow_safety_anchor,
+            workflow_safety_anchor,
         ),
-        "economics": {"mode": document.economics_mode},
+        "economics": {"mode": economics_mode},
     }
-
-
-def _policy_document_digest(document: PolicyDocument) -> str:
-    return _policy_payload_digest(_policy_document_payload(document))
 
 
 def _policy_payload_digest(payload: object) -> str:
@@ -238,15 +254,21 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
     if type(document) is not PolicyDocument:
         raise invalid_policy("invalid_policy_document")
     try:
-        payload = _policy_document_payload(document)
+        captured = (
+            document.retry_budgets, document.identical_signature_limit,
+            document.risk_human_approval, document.isolation_order,
+            document.forbidden_downgrades, document.workflow_safety_anchor,
+            document.economics_mode,
+        )
+        payload = _policy_document_payload(captured)
         normalization_error = None
         try:
             normalized = _normalize_policy_payload(payload)
         except InvalidSchemaError as error:
             normalization_error = error
             normalized = None
-        _validate_origin(
-            document, "PolicyDocument", _policy_payload_digest(payload),
+        _validate_capture(
+            document, "PolicyDocument", captured, _policy_payload_digest(payload),
         )
         if normalization_error is not None:
             raise normalization_error
@@ -281,7 +303,7 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
 
     gates = _exact_keys(payload["gates"], {"risk_human_approval"}, "invalid_gate_policy")
     risk_values = gates["risk_human_approval"]
-    if not isinstance(risk_values, list) or any(
+    if type(risk_values) is not list or any(
         type(value) is not str or value not in ("low", "medium", "high", "critical")
         for value in risk_values
     ) or len(risk_values) != len(set(risk_values)):
@@ -289,6 +311,8 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
 
     isolation = _exact_keys(payload["isolation"], {"order", "forbidden_downgrades"},
                             "invalid_isolation_policy")
+    if type(isolation["order"]) is not list:
+        raise invalid_policy("invalid_isolation_order")
     try:
         order = tuple(
             _normalize_enum(IsolationMode, value, "unknown_isolation_mode")
@@ -301,7 +325,7 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
     if len(order) != len(IsolationMode) or set(order) != set(IsolationMode):
         raise invalid_policy("invalid_isolation_order")
     forbidden = set()
-    if not isinstance(isolation["forbidden_downgrades"], list):
+    if type(isolation["forbidden_downgrades"]) is not list:
         raise invalid_policy("invalid_isolation_policy")
     for item in isolation["forbidden_downgrades"]:
         item = _exact_keys(item, {"from", "to"}, "invalid_isolation_policy")
@@ -320,7 +344,7 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
             raise invalid_policy("unknown_isolation_mode") from None
 
     capability_names = payload["capability_names"]
-    if not isinstance(capability_names, list) or any(type(value) is not str for value in capability_names):
+    if type(capability_names) is not list or any(type(value) is not str for value in capability_names):
         raise invalid_policy("unknown_capability_name")
     if len(capability_names) != len(set(capability_names)):
         raise invalid_policy("duplicate_capability_name")

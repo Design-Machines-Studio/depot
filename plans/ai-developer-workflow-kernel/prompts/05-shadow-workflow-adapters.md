@@ -200,7 +200,11 @@ dispatch, resume unavailable, gate/capability block, or adapter failure.
 Ordinary caller-data exceptions from scalar/enum conversion, membership,
 equality, hashing, iteration, or mapping access at reconstruction and projection
 boundaries must map to stable secret-safe failures; do not intercept
-`BaseException`.
+`BaseException`. Consume only sealed snapshots that captured their public fields
+and nested primitives once, validated the seal derived from that capture, and
+reconstructed without rereading the caller object. Enum inputs accept only the
+exact enum type or exact `str`; equality truth coercion belongs inside the same
+safe boundary as the equality operation.
 
 Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
 only in permission-restricted package-owned storage with explicit retention and

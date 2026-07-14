@@ -152,8 +152,9 @@ returns none.
 - Normalize file-loaded and injected policy documents through one canonical
   payload-to-`PolicyDocument` path. The injected-document projector preserves
   malformed nested anchor shape without dereferencing required keys first, so
-  missing sections, malformed stages, budgets, and convergence limits reach the
-  same normalizer and stable reason at both boundaries.
+  missing sections, malformed stages, non-iterable or hostile downgrade fields,
+  budgets, and convergence limits reach the same normalizer and stable reason at
+  both boundaries.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both
@@ -196,13 +197,17 @@ returns none.
   reseal changed state; only dead/stale identity slots may be replaced, with the
   weakref callback identity guard intact. Never trust a caller-owned seal attribute.
   `HostCapabilities` seals primitive route tuples rather than route-object
-  aliases. Snapshot/property/repr,
+  aliases. Each sealed-value snapshot captures every field and nested primitive
+  once, derives and validates its seal from that payload, and reconstructs only
+  from that payload after validation. Snapshot/property/repr,
   authorization, and manager tests must reject coherent route rewrites,
   coordinated security-node rewrites, and nested gate/route mutations before
   dispatch. Public reconstruction and projection boundaries map ordinary
   scalar, enum, membership, equality, hashing, iterator, and mapping exceptions
   to stable secret-safe failures while allowing `BaseException` control flow to
-  propagate. Retry decisions snapshot the attempt ledger once, then read the
+  propagate. Enum inputs accept only the exact enum type or exact `str`, and
+  equality truth coercion remains inside the same safe boundary as `==`. Retry
+  decisions snapshot the attempt ledger once, then read the
   sealed reconstructed mappings directly.
   `capabilities` is a derived compatibility view, never an authorization proof.
   Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
