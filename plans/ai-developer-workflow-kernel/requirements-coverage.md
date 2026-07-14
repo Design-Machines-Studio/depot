@@ -120,7 +120,13 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       and convergence. Policy origin registration and validation traverse exact
       trusted built-ins only; malformed and non-exact objects use inert
       type/identity markers without caller iteration, hashing, equality, or
-      representation. Ordinary executor nodes remain open to any compatible
+      representation. Normalized policy maps are exact module-owned tuple-backed
+      immutable mappings with content-derived seals and ordinary read behavior;
+      caller mapping proxies and custom mappings are rejected without traversal.
+      Origin and canonical projection share one exact-type classifier, reject
+      cycles, and enforce Chunk 01's depth `16` and aggregate item budget `10000`
+      for injected and file-loaded graphs. Economics mode requires the exact
+      string `proposal_only` before equality. Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
       Anthropic native Claude. Routes, nodes and nested gates, capabilities,
       workflow/attempt/isolation inputs, resume contexts, handles, results,

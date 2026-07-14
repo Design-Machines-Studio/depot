@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -18,6 +19,268 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 
 class RetryPolicyTests(unittest.TestCase):
+    def test_policy_value_classifier_has_one_exact_type_taxonomy(self):
+        document = load_policy()
+        trusted = document.retry_budgets
+        cases = (
+            (None, "scalar"),
+            (True, "scalar"),
+            (1, "scalar"),
+            ("value", "scalar"),
+            (FailureReason.CLEANUP, "enum"),
+            ({}, "dict"),
+            ([], "list"),
+            ((), "tuple"),
+            (set(), "set"),
+            (frozenset(), "frozenset"),
+            (trusted, "trusted_map"),
+            (MappingProxyType({}), "untrusted_mappingproxy"),
+            (object(), "other"),
+        )
+        for value, expected in cases:
+            with self.subTest(value_type=type(value).__name__):
+                self.assertEqual(
+                    policy_module._classify_policy_value(value), expected,
+                )
+
+        class DictSubclass(dict):
+            pass
+
+        class StringSubclass(str):
+            pass
+
+        self.assertEqual(
+            policy_module._classify_policy_value(DictSubclass()), "other",
+        )
+        self.assertEqual(
+            policy_module._classify_policy_value(StringSubclass("value")),
+            "other",
+        )
+
+    def test_normalized_policy_maps_are_trusted_immutable_mappings(self):
+        document = load_policy()
+        budgets = document.retry_budgets
+        self.assertIs(type(budgets), policy_module._TrustedPolicyMap)
+        self.assertIsInstance(budgets, Mapping)
+        self.assertEqual(len(budgets), len(FailureReason))
+        self.assertEqual(
+            budgets[FailureReason.CLEANUP],
+            dict(budgets.items())[FailureReason.CLEANUP],
+        )
+        self.assertEqual(tuple(budgets), tuple(dict(budgets)))
+        self.assertEqual(
+            budgets.get(FailureReason.CLEANUP),
+            document.retry_budgets[FailureReason.CLEANUP],
+        )
+        with self.assertRaises(TypeError):
+            budgets[FailureReason.CLEANUP] = 999
+        with self.assertRaises(AttributeError):
+            budgets._items = ()
+
+        anchor = document.workflow_safety_anchor
+        self.assertIs(type(anchor), policy_module._TrustedPolicyMap)
+        self.assertIs(type(anchor["classes"]), policy_module._TrustedPolicyMap)
+        self.assertIs(
+            type(anchor["common"][0]), policy_module._TrustedPolicyMap,
+        )
+
+    def test_canonical_policy_map_content_mutation_breaks_origin_seal(self):
+        document = load_policy()
+        budgets = document.retry_budgets
+        rewritten = tuple(
+            (reason, 999 if reason is FailureReason.CLEANUP else budget)
+            for reason, budget in budgets.items()
+        )
+        object.__setattr__(budgets, "_items", rewritten)
+        with self.assertRaises(InvalidSchemaError) as raised:
+            GatePolicy(policy_document=document)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_policy_document"),
+        )
+
+    def test_caller_mapping_proxies_are_rejected_without_backing_traversal(self):
+        document = load_policy()
+        backing = dict(document.retry_budgets)
+        injected = replace(
+            document, retry_budgets=MappingProxyType(backing),
+        )
+        for budget in (document.retry_budgets[FailureReason.CLEANUP], 999):
+            backing[FailureReason.CLEANUP] = budget
+            with self.subTest(budget=budget):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    GatePolicy(policy_document=injected)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_retry_policy"),
+                )
+
+        calls = []
+
+        class FatalTraversal(BaseException):
+            pass
+
+        class HostileBacking(dict):
+            def items(self):
+                calls.append("ordinary_items")
+                raise RuntimeError("sk-secret-proxy-items")
+
+            def __iter__(self):
+                calls.append("ordinary_iter")
+                raise RuntimeError("sk-secret-proxy-iter")
+
+        class FatalBacking(dict):
+            def items(self):
+                calls.append("fatal_items")
+                raise FatalTraversal()
+
+            def __iter__(self):
+                calls.append("fatal_iter")
+                raise FatalTraversal()
+
+        class FatalMapping(Mapping):
+            def __getitem__(self, key):
+                calls.append("mapping_getitem")
+                raise FatalTraversal()
+
+            def __iter__(self):
+                calls.append("mapping_iter")
+                raise FatalTraversal()
+
+            def __len__(self):
+                calls.append("mapping_len")
+                raise FatalTraversal()
+
+        hostile_values = (
+            MappingProxyType(HostileBacking(backing)),
+            MappingProxyType(FatalBacking(backing)),
+            FatalMapping(),
+        )
+        for value in hostile_values:
+            hostile = replace(document, retry_budgets=value)
+            with self.subTest(value_type=type(value).__name__):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    GatePolicy(policy_document=hostile)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_retry_policy"),
+                )
+        self.assertEqual(calls, [])
+
+    def test_policy_structure_bounds_cycles_depth_and_aggregate_items(self):
+        from workflow_kernel import redaction
+
+        self.assertEqual(policy_module.MAX_PAYLOAD_DEPTH, redaction.MAX_PAYLOAD_DEPTH)
+        self.assertEqual(policy_module.MAX_PAYLOAD_ITEMS, redaction.MAX_PAYLOAD_ITEMS)
+        document = load_policy()
+
+        cyclic = []
+        cyclic.append(cyclic)
+        deep = []
+        for _ in range(1_500):
+            deep = [deep]
+        for value in (cyclic, deep):
+            with self.subTest(shape="cycle" if value is cyclic else "deep"):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    replace(document, forbidden_downgrades=value)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_policy_document"),
+                )
+
+        with patch.object(policy_module, "MAX_PAYLOAD_ITEMS", 8, create=True):
+            with self.assertRaises(InvalidSchemaError) as raised:
+                replace(document, forbidden_downgrades=[None] * 20)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_policy_document"),
+        )
+
+        payload = json.loads(
+            (Path(__file__).parents[1] / "workflow-policy.json").read_text(
+                encoding="utf-8",
+            )
+        )
+        payload["economics"]["mode"] = cyclic
+        with self.assertRaises(InvalidSchemaError) as raised:
+            policy_module._normalize_policy_payload(payload)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_policy_document"),
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            deep_path = Path(directory) / "deep-policy.json"
+            deep_path.write_text(
+                '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
+                encoding="utf-8",
+            )
+            with self.assertRaises(InvalidSchemaError) as raised:
+                load_policy(deep_path)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("invalid_policy_json"),
+            )
+
+            wide_payload = json.loads(
+                (Path(__file__).parents[1] / "workflow-policy.json").read_text(
+                    encoding="utf-8",
+                )
+            )
+            wide_payload["gates"]["risk_human_approval"] = (
+                [None] * (redaction.MAX_PAYLOAD_ITEMS + 1)
+            )
+            wide_path = Path(directory) / "wide-policy.json"
+            wide_path.write_text(json.dumps(wide_payload), encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                load_policy(wide_path)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("invalid_policy_document"),
+            )
+
+    def test_economics_mode_requires_an_exact_proposal_only_string(self):
+        document = load_policy()
+        calls = []
+
+        class FatalEquality(BaseException):
+            pass
+
+        class HostileString(str):
+            def __eq__(self, other):
+                calls.append("ordinary_string_equal")
+                raise RuntimeError("sk-secret-economics-equal")
+
+        class FatalString(str):
+            def __eq__(self, other):
+                calls.append("fatal_string_equal")
+                raise FatalEquality()
+
+        class HostileValue:
+            def __eq__(self, other):
+                calls.append("ordinary_value_equal")
+                raise RuntimeError("sk-secret-economics-value")
+
+        class FatalValue:
+            def __eq__(self, other):
+                calls.append("fatal_value_equal")
+                raise FatalEquality()
+
+        for value in (
+            HostileString("proposal_only"), FatalString("proposal_only"),
+            HostileValue(), FatalValue(), True, 1, None, "automatic",
+        ):
+            malformed = replace(document, economics_mode=value)
+            with self.subTest(value_type=type(value).__name__):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    GatePolicy(policy_document=malformed)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("economics_must_be_proposal_only"),
+                )
+                self.assertNotIn("sk-secret", repr(raised.exception))
+        self.assertEqual(calls, [])
+
     def test_attempt_ledger_accessors_normalize_before_mapping_lookup(self):
         ledger = AttemptLedger(
             {FailureReason.CLEANUP: 1},
@@ -177,7 +440,7 @@ class RetryPolicyTests(unittest.TestCase):
         bad_budgets[FailureReason.CLEANUP] = True
         cases.append((
             bad_budget_payload,
-            replace(document, retry_budgets=MappingProxyType(bad_budgets)),
+            replace(document, retry_budgets=bad_budgets),
         ))
 
         bad_limit_payload = json.loads(json.dumps(canonical_payload))
@@ -195,7 +458,7 @@ class RetryPolicyTests(unittest.TestCase):
             missing_classes_payload,
             replace(
                 document,
-                workflow_safety_anchor=MappingProxyType(missing_classes_anchor),
+                workflow_safety_anchor=missing_classes_anchor,
             ),
         ))
 
@@ -206,14 +469,12 @@ class RetryPolicyTests(unittest.TestCase):
         bad_stage_anchor = dict(document.workflow_safety_anchor)
         bad_common = [dict(stage) for stage in bad_stage_anchor["common"]]
         bad_common[0]["required_evidence"] = ("",)
-        bad_stage_anchor["common"] = tuple(
-            MappingProxyType(stage) for stage in bad_common
-        )
+        bad_stage_anchor["common"] = tuple(bad_common)
         cases.append((
             bad_stage_payload,
             replace(
                 document,
-                workflow_safety_anchor=MappingProxyType(bad_stage_anchor),
+                workflow_safety_anchor=bad_stage_anchor,
             ),
         ))
 

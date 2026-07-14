@@ -157,7 +157,16 @@ returns none.
   both boundaries. Register and validate injected policy origins through inert
   structural primitives that traverse exact trusted built-ins only. Non-exact or
   malformed objects become type/identity markers without invoking caller
-  iteration, hashing, equality, or representation.
+  iteration, hashing, equality, or representation. Canonical normalized maps use
+  one module-owned exact tuple-backed immutable `Mapping` that retains ordinary
+  read behavior and seals independent content primitives. Caller-supplied
+  `MappingProxyType` and custom mappings are untrusted and must reach rejection
+  without traversing their backing methods. One exact-type classifier is the
+  single taxonomy for origin and canonical projection across scalars, enums,
+  exact built-in containers, trusted maps, untrusted proxies, and other values.
+  Both traversals and canonical normalization enforce Chunk 01's maximum depth
+  `16` and aggregate item budget `10000`, reject cycles, and map over-depth or
+  oversized graphs to stable policy errors without leaking `RecursionError`.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both
@@ -180,6 +189,8 @@ returns none.
   cleanup, and infrastructure. A global “try three times” rule is forbidden.
 - Repeated identical failure signatures converge to blocked before exhausting
   unrelated budgets.
+- Economics mode is an exact `str` equal to `proposal_only`; subclasses and
+  equality impostors are rejected before comparison.
 - Sensitive-path routing from `routing-policy.json` overrides class, economics,
   and requested executor.
 - Gate resolution is deterministic: workflow class + risk + evidence state →

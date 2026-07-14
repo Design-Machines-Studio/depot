@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
@@ -16,10 +17,112 @@ from .adapters.base import (
     _validate_capture, invalid_policy, normalize_executor_constraint,
 )
 from .schema import InvalidSchemaError
+from .redaction import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
 
 
 POLICY_SCHEMA_VERSION = 1
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "workflow-policy.json"
+_MAPPING_PROXY_TYPE = type(MappingProxyType({}))
+_MALFORMED_POLICY_VALUE = object()
+
+
+class _TrustedPolicyMap(MappingABC):
+    """Exact, tuple-backed mapping created only from normalized policy data."""
+
+    __slots__ = ("_items",)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise TypeError("_TrustedPolicyMap is final")
+
+    def __init__(self, values: dict) -> None:
+        if type(values) is not dict:
+            raise TypeError
+        object.__setattr__(self, "_items", tuple(values.items()))
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("_TrustedPolicyMap is immutable")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError("_TrustedPolicyMap is immutable")
+
+    def __len__(self) -> int:
+        return len(_trusted_policy_items(self))
+
+    def __iter__(self):
+        return (pair[0] for pair in _trusted_policy_items(self))
+
+    def __getitem__(self, key: object) -> object:
+        for candidate, value in _trusted_policy_items(self):
+            if candidate == key:
+                return value
+        raise KeyError(key)
+
+
+def _trusted_policy_items(value: object) -> tuple:
+    if type(value) is not _TrustedPolicyMap:
+        raise ValueError
+    items = object.__getattribute__(value, "_items")
+    if type(items) is not tuple or any(
+        type(pair) is not tuple or len(pair) != 2 for pair in items
+    ):
+        raise ValueError
+    return items
+
+
+def _classify_policy_value(value: object) -> str:
+    """Return the single exact-type taxonomy used by policy traversals."""
+    value_type = type(value)
+    if value is None or value_type in {bool, int, str}:
+        return "scalar"
+    if value_type in {
+        FailureReason, HostCapability, IsolationMode, WorkflowClass,
+    }:
+        return "enum"
+    if value_type is dict:
+        return "dict"
+    if value_type is list:
+        return "list"
+    if value_type is tuple:
+        return "tuple"
+    if value_type is set:
+        return "set"
+    if value_type is frozenset:
+        return "frozenset"
+    if value_type is _TrustedPolicyMap:
+        return "trusted_map"
+    if value_type is _MAPPING_PROXY_TYPE:
+        return "untrusted_mappingproxy"
+    return "other"
+
+
+_POLICY_CONTAINER_KINDS = frozenset({
+    "dict", "list", "tuple", "set", "frozenset", "trusted_map",
+})
+
+
+class _PolicyTraversal:
+    def __init__(self) -> None:
+        self.count = 0
+        self.active = set()
+
+    def enter(self, value: object, depth: int) -> tuple[str, Optional[int]]:
+        if depth > MAX_PAYLOAD_DEPTH:
+            raise ValueError
+        self.count += 1
+        if self.count > MAX_PAYLOAD_ITEMS:
+            raise ValueError
+        kind = _classify_policy_value(value)
+        identity = None
+        if kind in _POLICY_CONTAINER_KINDS:
+            identity = id(value)
+            if identity in self.active:
+                raise ValueError
+            self.active.add(identity)
+        return kind, identity
+
+    def leave(self, identity: Optional[int]) -> None:
+        if identity is not None:
+            self.active.remove(identity)
 
 
 @dataclass(frozen=True)
@@ -39,44 +142,65 @@ class PolicyDocument:
             self.forbidden_downgrades, self.workflow_safety_anchor,
             self.economics_mode,
         )
+        try:
+            primitives = _policy_origin_primitives(captured)
+        except Exception:
+            raise invalid_policy("invalid_policy_document") from None
         _register_origin(
-            self, "PolicyDocument", _policy_origin_primitives(captured),
+            self, "PolicyDocument", primitives,
         )
 
 
-def _policy_origin_primitives(value: object) -> tuple:
+def _policy_origin_primitives(
+    value: object, *, _state: Optional[_PolicyTraversal] = None, _depth: int = 0,
+) -> tuple:
     """Capture policy structure without executing caller-defined behavior."""
-    value_type = type(value)
-    if value is None:
-        return ("none",)
-    if value_type in {bool, int, str}:
-        return (value_type.__name__, value)
-    if value_type in {
-        FailureReason, HostCapability, IsolationMode, WorkflowClass,
-    }:
-        return ("enum", id(value_type), value.value)
-    if value_type is dict:
-        return (
-            "dict",
-            tuple(
-                (
-                    _policy_origin_primitives(key),
-                    _policy_origin_primitives(item),
-                )
-                for key, item in value.items()
-            ),
-        )
-    if value_type in {list, tuple}:
-        return (
-            value_type.__name__,
-            tuple(_policy_origin_primitives(item) for item in value),
-        )
-    if value_type in {set, frozenset}:
-        return (
-            value_type.__name__,
-            frozenset(_policy_origin_primitives(item) for item in value),
-        )
-    return ("opaque", id(value_type), id(value))
+    state = _state if _state is not None else _PolicyTraversal()
+    kind, identity = state.enter(value, _depth)
+    try:
+        if kind == "scalar":
+            return ("none",) if value is None else (type(value).__name__, value)
+        if kind == "enum":
+            return ("enum", id(type(value)), value.value)
+        if kind in {"dict", "trusted_map"}:
+            items = value.items() if kind == "dict" else _trusted_policy_items(value)
+            return (
+                kind,
+                tuple(
+                    (
+                        _policy_origin_primitives(
+                            key, _state=state, _depth=_depth + 1,
+                        ),
+                        _policy_origin_primitives(
+                            item, _state=state, _depth=_depth + 1,
+                        ),
+                    )
+                    for key, item in items
+                ),
+            )
+        if kind in {"list", "tuple"}:
+            return (
+                kind,
+                tuple(
+                    _policy_origin_primitives(
+                        item, _state=state, _depth=_depth + 1,
+                    )
+                    for item in value
+                ),
+            )
+        if kind in {"set", "frozenset"}:
+            return (
+                kind,
+                frozenset(
+                    _policy_origin_primitives(
+                        item, _state=state, _depth=_depth + 1,
+                    )
+                    for item in value
+                ),
+            )
+        return (kind, id(type(value)), id(value))
+    finally:
+        state.leave(identity)
 
 
 def _exact_keys(value: object, expected: set[str], reason: str) -> dict:
@@ -119,7 +243,7 @@ def _safety_stage(value: object) -> Mapping[str, object]:
         executor is None and value["executor_overridable"]
     ):
         raise invalid_policy("invalid_workflow_safety_anchor")
-    return MappingProxyType({
+    return _TrustedPolicyMap({
         "id": value["id"],
         "gate_kind": gate_kind,
         "required_evidence": normalized_lists["required_evidence"],
@@ -172,16 +296,16 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
         raise invalid_policy("invalid_workflow_safety_anchor") from None
     if non_executable_classes != (WorkflowClass.INVESTIGATION,):
         raise invalid_policy("invalid_workflow_safety_anchor")
-    return MappingProxyType({
+    return _TrustedPolicyMap({
         "schema_version": 1,
         "common": _safety_stage_set(value["common"]),
-        "classes": MappingProxyType({
+        "classes": _TrustedPolicyMap({
             _normalize_enum(
                 WorkflowClass, name, "invalid_workflow_safety_anchor",
             ): _safety_stage_set(stage_set)
             for name, stage_set in classes.items()
         }),
-        "promotion": MappingProxyType({
+        "promotion": _TrustedPolicyMap({
             name: _safety_stage_set(stage_set)
             for name, stage_set in promotion.items()
         }),
@@ -189,44 +313,69 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
     })
 
 
-def _plain_policy_value(value: object) -> object:
-    if type(value) in {FailureReason, HostCapability, IsolationMode, WorkflowClass}:
-        return value.value
-    if type(value) in {dict, type(MappingProxyType({}))}:
-        return {
-            _plain_policy_value(key): _plain_policy_value(item)
-            for key, item in value.items()
-        }
-    if type(value) in {list, tuple}:
-        return [_plain_policy_value(item) for item in value]
-    if type(value) in {set, frozenset}:
-        return sorted(
-            (_plain_policy_value(item) for item in value),
-            key=lambda item: repr(item),
-        )
-    return value
+def _plain_policy_value(
+    value: object, *, _state: Optional[_PolicyTraversal] = None, _depth: int = 0,
+) -> object:
+    """Project trusted policy values without traversing caller-defined types."""
+    state = _state if _state is not None else _PolicyTraversal()
+    kind, identity = state.enter(value, _depth)
+    try:
+        if kind == "scalar":
+            return value
+        if kind == "enum":
+            return value.value
+        if kind in {"dict", "trusted_map"}:
+            items = value.items() if kind == "dict" else _trusted_policy_items(value)
+            result = {}
+            for key, item in items:
+                projected_key = _plain_policy_value(
+                    key, _state=state, _depth=_depth + 1,
+                )
+                projected_item = _plain_policy_value(
+                    item, _state=state, _depth=_depth + 1,
+                )
+                if type(projected_key) is not str:
+                    return _MALFORMED_POLICY_VALUE
+                result[projected_key] = projected_item
+            return result
+        if kind in {"list", "tuple", "set", "frozenset"}:
+            return [
+                _plain_policy_value(
+                    item, _state=state, _depth=_depth + 1,
+                )
+                for item in value
+            ]
+        return value
+    finally:
+        state.leave(identity)
 
 
-def _stage_set_payload(value: object) -> dict:
-    value = _plain_policy_value(value)
+def _stage_set_payload(
+    value: object, state: _PolicyTraversal, depth: int,
+) -> dict:
+    value = _plain_policy_value(value, _state=state, _depth=depth)
     if type(value) is dict and set(value) == {"stages"}:
         return value
     return {"stages": value}
 
 
-def _safety_anchor_payload(value: object) -> object:
+def _safety_anchor_payload(
+    value: object, state: _PolicyTraversal, depth: int,
+) -> object:
     """Project normalized or malformed injected anchor state without validating."""
-    anchor = _plain_policy_value(value)
+    anchor = _plain_policy_value(value, _state=state, _depth=depth)
     if type(anchor) is not dict:
         return anchor
     result = dict(anchor)
     if "common" in result:
-        result["common"] = _stage_set_payload(result["common"])
+        result["common"] = _stage_set_payload(
+            result["common"], state, depth + 1,
+        )
     for name in ("classes", "promotion"):
         groups = result.get(name)
         if type(groups) is dict:
             result[name] = {
-                key: _stage_set_payload(stage_set)
+                key: _stage_set_payload(stage_set, state, depth + 2)
                 for key, stage_set in groups.items()
             }
     return result
@@ -238,40 +387,65 @@ def _policy_document_payload(captured: tuple) -> dict:
         isolation_order, forbidden_downgrades, workflow_safety_anchor,
         economics_mode,
     ) = captured
-    if type(forbidden_downgrades) is frozenset:
+    state = _PolicyTraversal()
+    if _classify_policy_value(forbidden_downgrades) == "frozenset":
+        kind, identity = state.enter(forbidden_downgrades, 1)
         forbidden = []
-        for item in forbidden_downgrades:
-            if type(item) is tuple and len(item) == 2:
-                forbidden.append({
-                    "from": _plain_policy_value(item[0]),
-                    "to": _plain_policy_value(item[1]),
-                })
-            else:
-                forbidden.append(_plain_policy_value(item))
-    elif type(forbidden_downgrades) is list:
-        forbidden = _plain_policy_value(forbidden_downgrades)
+        try:
+            if kind != "frozenset":
+                raise ValueError
+            for item in forbidden_downgrades:
+                item_kind, item_identity = state.enter(item, 2)
+                try:
+                    if item_kind == "tuple" and len(item) == 2:
+                        forbidden.append({
+                            "from": _plain_policy_value(
+                                item[0], _state=state, _depth=3,
+                            ),
+                            "to": _plain_policy_value(
+                                item[1], _state=state, _depth=3,
+                            ),
+                        })
+                    else:
+                        forbidden.append(_plain_policy_value(
+                            item, _state=state, _depth=3,
+                        ))
+                finally:
+                    state.leave(item_identity)
+        finally:
+            state.leave(identity)
     else:
-        forbidden = forbidden_downgrades
+        forbidden = _plain_policy_value(
+            forbidden_downgrades, _state=state, _depth=1,
+        )
     return {
         "schema_version": POLICY_SCHEMA_VERSION,
         "retry": {
-            "budgets": _plain_policy_value(retry_budgets),
-            "identical_signature_limit": identical_signature_limit,
+            "budgets": _plain_policy_value(
+                retry_budgets, _state=state, _depth=1,
+            ),
+            "identical_signature_limit": _plain_policy_value(
+                identical_signature_limit, _state=state, _depth=1,
+            ),
         },
         "gates": {
             "risk_human_approval": _plain_policy_value(
-                risk_human_approval,
+                risk_human_approval, _state=state, _depth=1,
             ),
         },
         "isolation": {
-            "order": _plain_policy_value(isolation_order),
+            "order": _plain_policy_value(
+                isolation_order, _state=state, _depth=1,
+            ),
             "forbidden_downgrades": forbidden,
         },
         "capability_names": [value.value for value in HostCapability],
         "workflow_safety_anchor": _safety_anchor_payload(
-            workflow_safety_anchor,
+            workflow_safety_anchor, state, 1,
         ),
-        "economics": {"mode": economics_mode},
+        "economics": {"mode": _plain_policy_value(
+            economics_mode, _state=state, _depth=1,
+        )},
     }
 
 
@@ -306,6 +480,10 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
 
 
 def _normalize_policy_payload(payload: object) -> PolicyDocument:
+    try:
+        _policy_origin_primitives(payload)
+    except Exception:
+        raise invalid_policy("invalid_policy_document") from None
     payload = _exact_keys(payload, {
         "schema_version", "retry", "gates", "isolation", "capability_names",
         "workflow_safety_anchor", "economics",
@@ -389,10 +567,10 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
         raise invalid_policy("unknown_capability_name")
 
     economics = _exact_keys(payload["economics"], {"mode"}, "invalid_economics_policy")
-    if economics["mode"] != "proposal_only":
+    if type(economics["mode"]) is not str or economics["mode"] != "proposal_only":
         raise invalid_policy("economics_must_be_proposal_only")
     return PolicyDocument(
-        MappingProxyType(safe_budgets), convergence_limit, tuple(risk_values), order,
+        _TrustedPolicyMap(safe_budgets), convergence_limit, tuple(risk_values), order,
         frozenset(forbidden), _workflow_safety_anchor(payload["workflow_safety_anchor"]),
         economics["mode"],
     )
@@ -402,7 +580,7 @@ def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     source = Path(path) if path is not None else DEFAULT_POLICY_PATH
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
         raise invalid_policy("invalid_policy_json") from None
     try:
         return _normalize_policy_payload(payload)
