@@ -45,12 +45,11 @@ def capabilities_from_harness_profile(
     else:
         try:
             raw_path = os.fspath(path)
-            # Copy exact text and force pathlib's lazy parser before profile I/O.
+            # Copy caller text to an exact built-in string before Path creation.
             path_text = str.__str__(raw_path)
             if type(path_text) is not str:
                 raise TypeError
             source = Path(path_text)
-            str(source)
         except Exception:
             raise invalid_policy("invalid_harness_profile") from None
     try:
