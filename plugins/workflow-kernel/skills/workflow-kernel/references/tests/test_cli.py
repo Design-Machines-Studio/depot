@@ -149,12 +149,18 @@ class CliTests(unittest.TestCase):
             package.mkdir(parents=True)
             (package / "__init__.py").write_text("")
             (package / "__main__.py").write_text("print('codex-only-runtime')\n")
-            env = dict(os.environ, HOME=directory)
-            env.pop("PYTHONPATH", None)
-            result = subprocess.run(["zsh", "-c", snippet], text=True, capture_output=True, env=env, check=False)
+            caller = Path(directory) / "caller"
+            conflicting = caller / "workflow_kernel"
+            conflicting.mkdir(parents=True)
+            (conflicting / "__init__.py").write_text("")
+            (conflicting / "__main__.py").write_text("print('caller-runtime')\n")
+            env = dict(os.environ, HOME=directory, PYTHONPATH=str(caller))
+            result = subprocess.run(["zsh", "-c", snippet], cwd=caller, text=True,
+                                    capture_output=True, env=env, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-only-runtime", result.stdout)
+        self.assertNotIn("caller-runtime", result.stdout)
 
     def test_replay_holds_run_lease_across_observation_and_publication(self):
         active = {"lease": False}

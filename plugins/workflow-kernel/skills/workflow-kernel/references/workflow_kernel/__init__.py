@@ -2,7 +2,7 @@
 
 from .events import EventStore
 from .receipts import (
-    EVIDENCE_RECEIPT_FIELDS, TRANSITION_RECEIPT_FIELDS, ReceiptField, SafeReceipt,
+    EVIDENCE_RECEIPT_FIELDS, TRANSITION_RECEIPT_FIELDS, ReceiptField,
     encode_receipt, evidence_receipt, transition_receipt,
 )
 from .schema import (
@@ -25,5 +25,5 @@ __all__ = [
     "IllegalTransitionError", "MissingEvidenceError", "UnsafePayloadError",
     "serialize_kernel_error", "WorkflowEventField", "WORKFLOW_EVENT_FIELDS",
     "ReceiptField", "EVIDENCE_RECEIPT_FIELDS", "TRANSITION_RECEIPT_FIELDS",
-    "SafeReceipt", "encode_receipt", "evidence_receipt", "transition_receipt",
+    "encode_receipt", "evidence_receipt", "transition_receipt",
 ]

@@ -1,4 +1,4 @@
-"""Deterministic secret-safe receipt capabilities and encoders."""
+"""Deterministic secret-safe receipt builders and raw-mapping encoder."""
 
 from __future__ import annotations
 
@@ -7,13 +7,11 @@ import json
 import re
 from collections.abc import Mapping
 from enum import Enum
-from types import MappingProxyType
 from typing import Optional
-from weakref import WeakKeyDictionary
 
 from .redaction import (
     VALUE_DIGEST_PREFIX, apply_json_policy, digest_error_detail_key,
-    normalize_durable_string, normalize_evidence_reference, thaw,
+    normalize_durable_string, normalize_evidence_reference,
     validate_durable_key,
 )
 from .schema import (
@@ -39,75 +37,8 @@ class ReceiptField(str, Enum):
 _STATE_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
-def _freeze_projection(value):
-    if isinstance(value, Mapping):
-        return MappingProxyType({key: _freeze_projection(item) for key, item in value.items()})
-    if isinstance(value, (list, tuple)):
-        return tuple(_freeze_projection(item) for item in value)
-    return value
-
-
 def _canonical_bytes(value: Mapping[str, object]) -> bytes:
-    plain = thaw(value)
-    return (json.dumps(plain, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-
-
-def _receipt_capability_boundary():
-    registry = WeakKeyDictionary()
-
-    def registered_state(receipt):
-        if type(receipt) is not SafeReceipt:
-            raise TypeError("receipt capability type is invalid")
-        try:
-            return registry[receipt]
-        except KeyError as exc:
-            raise TypeError("receipt capability was not issued") from exc
-
-    class SafeReceipt(Mapping):
-        """Final identity capability backed only by issuer-owned registry state."""
-
-        __slots__ = ("__weakref__",)
-        __hash__ = object.__hash__
-        __eq__ = object.__eq__
-
-        def __new__(cls, *_args, **_kwargs):
-            raise TypeError("safe receipts are factory-owned")
-
-        def __init_subclass__(cls, **_kwargs):
-            raise TypeError("SafeReceipt is final")
-
-        def __getitem__(self, key):
-            return registered_state(self)[0][key]
-
-        def __iter__(self):
-            return iter(registered_state(self)[0])
-
-        def __len__(self):
-            return len(registered_state(self)[0])
-
-        def __setattr__(self, _name, _value):
-            raise TypeError("safe receipt is immutable")
-
-        def __delattr__(self, _name):
-            raise TypeError("safe receipt is immutable")
-
-    def issue(value):
-        if not isinstance(value, Mapping):
-            raise TypeError("safe receipt issuance requires a mapping")
-        projection = _freeze_projection(value)
-        encoded = _canonical_bytes(projection)
-        receipt = object.__new__(SafeReceipt)
-        registry[receipt] = (projection, encoded)
-        return receipt
-
-    def issued_bytes(receipt):
-        return registered_state(receipt)[1]
-
-    return SafeReceipt, issue, issued_bytes
-
-
-SafeReceipt, _make_safe_receipt, _issued_bytes = _receipt_capability_boundary()
-del _receipt_capability_boundary
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
 class _Policy(Enum):
@@ -198,46 +129,48 @@ def _sanitize_receipt(receipt: Mapping[str, object], *, schema=None) -> dict:
 
 
 def encode_receipt(receipt: Mapping[str, object]) -> bytes:
+    """Sanitize one untrusted mapping traversal and return canonical bytes."""
     try:
-        if type(receipt) is SafeReceipt:
-            return _issued_bytes(receipt)
-        return _issued_bytes(_make_safe_receipt(_sanitize_receipt(receipt)))
+        return _canonical_bytes(_sanitize_receipt(receipt))
     except (TypeError, ValueError) as exc:
         raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from exc
 
 
 def evidence_receipt(run_id: str, evidence_type: str, reference: str, *,
-                     metadata: Optional[Mapping[str, object]] = None) -> SafeReceipt:
+                     metadata: Optional[Mapping[str, object]] = None) -> bytes:
     try:
         if not all(type(value) is str for value in (run_id, evidence_type, reference)):
             raise TypeError("receipt caller fields must be strings")
         if metadata is not None and not isinstance(metadata, Mapping):
             raise TypeError("receipt metadata must be a mapping")
         normalized_reference = normalize_evidence_reference(reference)
-        safe = _sanitize_receipt({
+        digest_free = {
             ReceiptField.SCHEMA_VERSION.value: 1,
             ReceiptField.RECEIPT_TYPE.value: "evidence",
             ReceiptField.RUN_ID.value: run_id,
             ReceiptField.EVIDENCE_TYPE.value: evidence_type,
             ReceiptField.REFERENCE.value: normalized_reference,
             ReceiptField.METADATA.value: dict(metadata or {}),
-        }, schema=_EVIDENCE_RECEIPT_SCHEMA)
-        base_projection = _freeze_projection(safe)
-        safe[ReceiptField.DIGEST.value] = (
-            "sha256:" + hashlib.sha256(_canonical_bytes(base_projection)).hexdigest()
+        }
+        digest_free_bytes = _canonical_bytes(
+            _sanitize_receipt(digest_free, schema=_EVIDENCE_RECEIPT_SCHEMA)
         )
-        return _make_safe_receipt(safe)
+        final = dict(digest_free)
+        final[ReceiptField.DIGEST.value] = (
+            "sha256:" + hashlib.sha256(digest_free_bytes).hexdigest()
+        )
+        return _canonical_bytes(_sanitize_receipt(final, schema=_EVIDENCE_RECEIPT_SCHEMA))
     except (TypeError, ValueError) as exc:
         raise UnsafePayloadError(ErrorMessage.EVIDENCE_RECEIPT_UNSAFE) from exc
 
 
-def transition_receipt(event: WorkflowEvent, state_digest: str) -> SafeReceipt:
+def transition_receipt(event: WorkflowEvent, state_digest: str) -> bytes:
     try:
         if not isinstance(event, WorkflowEvent):
             raise TypeError("transition receipt requires a workflow event")
         if type(state_digest) is not str or not _STATE_DIGEST.fullmatch(state_digest):
             raise ValueError("state digest must be canonical sha256")
-        return _make_safe_receipt(_sanitize_receipt({
+        return _canonical_bytes(_sanitize_receipt({
             ReceiptField.SCHEMA_VERSION.value: 1,
             ReceiptField.RECEIPT_TYPE.value: "transition",
             ReceiptField.EVENT.value: event.to_dict(),
@@ -249,5 +182,5 @@ def transition_receipt(event: WorkflowEvent, state_digest: str) -> SafeReceipt:
 
 __all__ = [
     "EVIDENCE_RECEIPT_FIELDS", "TRANSITION_RECEIPT_FIELDS", "ReceiptField",
-    "SafeReceipt", "encode_receipt", "evidence_receipt", "transition_receipt",
+    "encode_receipt", "evidence_receipt", "transition_receipt",
 ]

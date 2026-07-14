@@ -27,8 +27,10 @@ if [ -z "$KERNEL_REFS" ]; then
   echo "workflow-kernel runtime not found in Claude or Codex plugin cache" >&2
   exit 1
 fi
-export PYTHONPATH="$KERNEL_REFS${PYTHONPATH:+:$PYTHONPATH}"
-python3 -m workflow_kernel --help
+(
+  cd "$KERNEL_REFS" || exit 1
+  PYTHONPATH="$KERNEL_REFS" python3 -m workflow_kernel --help
+)
 ```
 
 For repository-local development, invoke the module with
@@ -134,31 +136,21 @@ the selected exact built-in-string schema becomes
 `key-sha256:<64 lowercase hex>`. `ReceiptField` and `WorkflowEventField` own the
 explicit evidence, transition, and nested-event vocabularies; arbitrary
 metadata and payload mappings use no trusted field vocabulary.
-`evidence_receipt()` and `transition_receipt()` return exact-type, final
-`SafeReceipt` mapping capabilities constructed only by the owned factory. A
-capability object contains no projection, encoded bytes, issuance token, or
-other authority: its only slot supports weak identity. A closure-owned
-`WeakKeyDictionary` binds each exact factory-issued identity to its recursively
-immutable `MappingProxyType`/tuple projection and canonical bytes. The private
-issuer freezes the projection first and derives those bytes from that immutable
-value; it never accepts caller-provided encoded bytes. Evidence receipts are
-issued only after their digest is part of the complete final projection. Public
-construction always fails, capabilities cannot be subclassed, identity equality
-and hashing prevent mapping-value aliases, and weak registry keys do not extend
-object lifetime. `encode_receipt()` and mapping access trust only a registered
-object whose type is exactly `SafeReceipt`, returning registry-owned bytes
-byte-idempotently. Unissued `object.__new__` instances and attempts to add or
-replace projection, byte, or issuance slots fail closed. The closure-owned
-issuer and registry accessors are trusted private in-process implementation
-boundaries, not extension points; callers use only the public receipt factories.
-Every ordinary `Mapping`, including parsed JSON copied from a safe receipt, is
-raw and is sanitized exactly once. Raw
+`evidence_receipt()` and `transition_receipt()` return final immutable canonical
+`bytes`, ready for artifact scanners and durable writes. `encode_receipt()` is
+the sole raw-mapping boundary and sanitizes its input exactly once before
+canonical encoding. Parsed receipt JSON is therefore raw input if passed back
+to `encode_receipt()`; there is no trusted re-encoding or provenance-inference
+path. Raw
 `key-sha256:` keys and all raw digest-shaped or marker-shaped values are therefore
 re-digested and cannot infer provenance from their shape. Only the sensitive-key
 branch emits `[REDACTED]`.
 `evidence_receipt()` value-digests caller `run_id` and `evidence_type`, sanitizes
 arbitrary metadata, and preserves only a separately validated evidence
-reference. `transition_receipt()` sanitizes the full event through the shared
+reference. It intentionally performs one content-addressing pass to sanitize
+and canonically encode the digest-free payload, computes that payload's digest,
+then performs one final sanitize-and-encode pass for the complete receipt.
+`transition_receipt()` sanitizes the full event through the shared
 event schema, including its arbitrary payload, and accepts `state_digest` only
 in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,
 other-prefix, and non-string values fail closed. A run-relative artifact path is

@@ -1,4 +1,3 @@
-import gc
 import hashlib
 import io
 import inspect
@@ -6,7 +5,6 @@ import json
 import logging
 import pickle
 import unittest
-import weakref
 from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
@@ -338,148 +336,118 @@ class SchemaTests(unittest.TestCase):
 
         self.assertNotIn(fixture, json.dumps(generic, sort_keys=True))
         for receipt in (transition, evidence):
-            self.assertNotIn(fixture.encode(), encode_receipt(receipt))
+            self.assertNotIn(fixture.encode(), receipt)
         self.assertEqual(generic[detail_key_digest("note")], detail_digest(fixture))
         self.assertEqual(generic[detail_key_digest("api_token")], "[REDACTED]")
-        payload = transition["event"]["payload"]
+        parsed_transition = json.loads(transition)
+        payload = parsed_transition["event"]["payload"]
         self.assertEqual(payload[detail_key_digest("note")], detail_digest(fixture))
         self.assertEqual(payload[detail_key_digest("api_token")], "[REDACTED]")
-        self.assertEqual(transition["state_digest"], state_digest)
+        self.assertEqual(parsed_transition["state_digest"], state_digest)
 
         for invalid in ("raw-state", "sha256:" + "A" * 64, detail_digest("state"), None):
             with self.subTest(invalid=invalid), self.assertRaises(UnsafePayloadError):
                 transition_receipt(event, invalid)
 
-    def test_safe_receipt_is_factory_owned_deeply_immutable_provenance(self):
-        self.assertTrue(hasattr(receipts, "SafeReceipt"))
-        with self.assertRaises(TypeError):
-            receipts.SafeReceipt({"receipt_type": "forged"})
-
-        receipt = evidence_receipt(
-            "run-1", "test", "receipt.json", metadata={"nested": {"count": 1}},
-        )
-        self.assertIsInstance(receipt, receipts.SafeReceipt)
-        with self.assertRaises(TypeError):
-            receipt["run_id"] = "forged"
-        with self.assertRaises(TypeError):
-            receipt["metadata"][detail_key_digest("nested")][detail_key_digest("count")] = 2
-
+    def test_receipt_factories_return_final_canonical_bytes(self):
         event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
                               "2026-07-14T00:00:00Z", {})
-        transition = transition_receipt(event, "sha256:" + "a" * 64)
-        self.assertIsInstance(transition, receipts.SafeReceipt)
-        self.assertEqual(encode_receipt(transition), encode_receipt(transition))
-
-    def test_safe_receipt_rejects_subclass_forgery(self):
-        with self.assertRaises(TypeError):
-            class ForgedReceipt(receipts.SafeReceipt):
-                pass
-
-    def test_safe_receipt_has_only_weak_identity_storage(self):
-        self.assertEqual(receipts.SafeReceipt.__slots__, ("__weakref__",))
-        receipt = evidence_receipt("run-1", "test", "receipt.json")
-        self.assertFalse(hasattr(receipt, "__dict__"))
-        self.assertFalse(any(hasattr(receipt, name) for name in (
-            "_encoded", "_projection", "_issuance",
-        )))
-
-    def test_safe_receipt_legacy_token_cannot_be_reused(self):
-        legacy_authority = getattr(receipts, "_SAFE_RECEIPT_CAPABILITY", object())
-        for _ in range(2):
-            with self.assertRaises(TypeError):
-                receipts.SafeReceipt(
-                    {"receipt_type": "forged"}, b"forged\n",
-                    _capability=legacy_authority,
-                )
-
-    def test_safe_receipt_identity_is_not_mapping_value_equality(self):
-        first = evidence_receipt("run-1", "test", "receipt.json")
-        second = evidence_receipt("run-1", "test", "receipt.json")
-
-        self.assertIsNot(first, second)
-        self.assertNotEqual(first, second)
-        self.assertIs(receipts.SafeReceipt.__hash__, object.__hash__)
-        self.assertIs(receipts.SafeReceipt.__eq__, object.__eq__)
-
-    def test_safe_receipt_has_no_mutable_dict_base_or_stale_digest_path(self):
-        receipt = evidence_receipt("run-1", "test", "receipt.json")
-        before = encode_receipt(receipt)
-        digest = receipt["digest"]
-
-        with self.assertRaises(TypeError):
-            dict.__setitem__(receipt, "api_token", "never-emit-mutated-receipt")
-
-        self.assertEqual(encode_receipt(receipt), before)
-        self.assertEqual(receipt["digest"], digest)
-
-    def test_safe_receipt_slots_cannot_replace_registry_owned_state(self):
-        for name, value in (
-            ("_encoded", b'{"api_token":"never-emit-slot-forgery"}\n'),
-            ("_projection", {"api_token": "never-emit-slot-forgery"}),
-            ("_issuance", object()),
+        for receipt in (
+            evidence_receipt("run-1", "test", "receipt.json"),
+            transition_receipt(event, "sha256:" + "a" * 64),
         ):
-            receipt = evidence_receipt("run-1", "test", "receipt.json")
-            before = encode_receipt(receipt)
-            digest = receipt["digest"]
-            with self.subTest(name=name):
-                with self.assertRaises((AttributeError, TypeError)):
-                    object.__setattr__(receipt, name, value)
-                self.assertEqual(encode_receipt(receipt), before)
-                self.assertEqual(receipt["digest"], digest)
+            with self.subTest(receipt=receipt):
+                self.assertIs(type(receipt), bytes)
+                self.assertTrue(receipt.endswith(b"\n"))
+                parsed = json.loads(receipt)
+                canonical = (json.dumps(parsed, ensure_ascii=False, sort_keys=True,
+                                        separators=(",", ":")) + "\n").encode("utf-8")
+                self.assertEqual(receipt, canonical)
 
-    def test_safe_receipt_registry_does_not_extend_object_lifetime(self):
-        self.assertIn("__weakref__", receipts.SafeReceipt.__slots__)
+    def test_receipt_bytes_are_immutable_and_have_no_object_state(self):
         receipt = evidence_receipt("run-1", "test", "receipt.json")
-        reference = weakref.ref(receipt)
+        before = bytes(receipt)
 
-        del receipt
-        gc.collect()
+        with self.assertRaises(TypeError):
+            receipt[0] = 0
+        self.assertFalse(hasattr(receipt, "__dict__"))
+        self.assertEqual(receipt, before)
 
-        self.assertIsNone(reference())
+    def test_transition_receipt_bytes_are_immutable_and_have_no_object_state(self):
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {})
+        receipt = transition_receipt(event, "sha256:" + "a" * 64)
+        before = bytes(receipt)
 
-    def test_evidence_receipt_issues_only_the_complete_final_projection(self):
-        with mock.patch(
-                "workflow_kernel.receipts._make_safe_receipt",
-                wraps=receipts._make_safe_receipt,
-        ) as issue:
-            receipt = evidence_receipt("run-1", "test", "receipt.json")
+        with self.assertRaises(TypeError):
+            receipt[0] = 0
+        self.assertFalse(hasattr(receipt, "__dict__"))
+        self.assertEqual(receipt, before)
 
-        self.assertEqual(issue.call_count, 1)
-        self.assertIn("digest", receipt)
+    def test_evidence_receipt_is_repeatably_deterministic(self):
+        values = [
+            evidence_receipt("run-1", "test", "receipt.json", metadata={"count": 1})
+            for _ in range(3)
+        ]
+        self.assertEqual(values, [values[0]] * 3)
 
-    def test_unissued_safe_receipt_objects_cannot_bypass_encoding(self):
-        constructors = (
-            lambda: object.__new__(receipts.SafeReceipt),
-            lambda: receipts.SafeReceipt.__new__(receipts.SafeReceipt),
-        )
-        rejected = 0
-        for constructor in constructors:
-            try:
-                candidate = constructor()
-            except TypeError:
-                rejected += 1
-                continue
-            with self.assertRaises(UnsafePayloadError):
-                encode_receipt(candidate)
-            rejected += 1
-        self.assertEqual(rejected, len(constructors))
+    def test_transition_receipt_is_repeatably_deterministic(self):
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {})
+        values = [transition_receipt(event, "sha256:" + "a" * 64) for _ in range(3)]
+        self.assertEqual(values, [values[0]] * 3)
+
+    def test_evidence_receipt_digest_covers_digest_free_canonical_payload(self):
+        receipt = json.loads(evidence_receipt("run-1", "test", "receipt.json"))
+        digest = receipt.pop("digest")
+        digest_free = (json.dumps(receipt, ensure_ascii=False, sort_keys=True,
+                                  separators=(",", ":")) + "\n").encode("utf-8")
+        self.assertEqual(digest, "sha256:" + hashlib.sha256(digest_free).hexdigest())
+
+    def test_factory_bytes_are_not_a_trusted_encode_receipt_input(self):
+        receipt = evidence_receipt("run-1", "test", "receipt.json")
+        with self.assertRaises(UnsafePayloadError):
+            encode_receipt(receipt)
+
+        raw = encode_receipt(json.loads(receipt))
+        self.assertNotEqual(raw, receipt)
+        self.assertNotIn("run_id", json.loads(raw))
+
+    def test_evidence_receipt_contains_complete_final_payload(self):
+        receipt = json.loads(evidence_receipt("run-1", "test", "receipt.json"))
+        self.assertEqual(set(receipt), set(receipts.EVIDENCE_RECEIPT_FIELDS))
+        self.assertRegex(receipt["digest"], r"\Asha256:[0-9a-f]{64}\Z")
+
+    def test_transition_receipt_contains_complete_final_payload(self):
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {})
+        receipt = json.loads(transition_receipt(event, "sha256:" + "a" * 64))
+        self.assertEqual(set(receipt), set(receipts.TRANSITION_RECEIPT_FIELDS))
+        self.assertEqual(set(receipt["event"]), set(schema.WORKFLOW_EVENT_FIELDS))
+
+    def test_receipt_factory_bytes_are_scanner_ready_json(self):
+        receipt = evidence_receipt("run-1", "test", "receipt.json")
+        self.assertEqual(json.loads(receipt.decode("utf-8"))["receipt_type"], "evidence")
 
     def test_receipts_use_the_shared_redaction_traversal(self):
         encoded = encode_receipt({"note": "shared traversal"})
         self.assertEqual(json.loads(encoded)[detail_key_digest("note")],
                          detail_digest("shared traversal"))
 
-    def test_shared_traversal_policy_api_does_not_allocate_paths(self):
-        parameters = inspect.signature(redaction._Traversal.normalize).parameters
-        self.assertNotIn("path", parameters)
+    def test_raw_mapping_encode_receipt_runs_one_shared_traversal(self):
+        with mock.patch("workflow_kernel.receipts.apply_json_policy",
+                        wraps=redaction.apply_json_policy) as traversal:
+            encoded = encode_receipt({"note": "one traversal"})
+
+        self.assertEqual(traversal.call_count, 1)
+        self.assertEqual(json.loads(encoded)[detail_key_digest("note")],
+                         detail_digest("one traversal"))
 
     def test_raw_receipt_cannot_infer_safe_provenance_from_schema_shapes(self):
         receipt = evidence_receipt("run-1", "test", "receipt.json")
-        trusted = encode_receipt(receipt)
-        raw = encode_receipt(dict(receipt))
+        raw = encode_receipt(json.loads(receipt))
 
-        self.assertEqual(encode_receipt(receipt), trusted)
-        self.assertNotEqual(raw, trusted)
+        self.assertNotEqual(raw, receipt)
         self.assertNotIn("run_id", json.loads(raw))
 
     def test_raw_evidence_key_does_not_select_reference_schema_policy(self):
@@ -526,8 +494,8 @@ class SchemaTests(unittest.TestCase):
         evidence = evidence_receipt("run-1", "test", "receipt.json")
 
         self.assertEqual(set(event.to_dict()), set(schema.WORKFLOW_EVENT_FIELDS))
-        self.assertEqual(set(transition), set(receipts.TRANSITION_RECEIPT_FIELDS))
-        self.assertEqual(set(evidence), set(receipts.EVIDENCE_RECEIPT_FIELDS))
+        self.assertEqual(set(json.loads(transition)), set(receipts.TRANSITION_RECEIPT_FIELDS))
+        self.assertEqual(set(json.loads(evidence)), set(receipts.EVIDENCE_RECEIPT_FIELDS))
         self.assertEqual({field.value for field in receipts.ReceiptField},
                          set(receipts.EVIDENCE_RECEIPT_FIELDS) | set(receipts.TRANSITION_RECEIPT_FIELDS))
 
@@ -581,10 +549,11 @@ class SchemaTests(unittest.TestCase):
         event = WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
                               "2026-07-14T00:00:00Z", {"evidence": [reference]})
         receipt = evidence_receipt("run-1", "test", reference)
+        parsed_receipt = json.loads(receipt)
 
         self.assertEqual(event.payload["evidence"], (expected,))
-        self.assertEqual(receipt["reference"], expected)
-        for encoded in (encode_event(event), encode_receipt(receipt)):
+        self.assertEqual(parsed_receipt["reference"], expected)
+        for encoded in (encode_event(event), receipt):
             self.assertNotIn(sentinel.encode(), encoded)
             self.assertNotIn(reference.encode(), encoded)
             self.assertIn(expected.encode(), encoded)
@@ -621,16 +590,15 @@ class SchemaTests(unittest.TestCase):
             "nested": {"arbitrary_name": nested_url},
         })
 
-        metadata = receipt["metadata"]
+        metadata = json.loads(receipt)["metadata"]
         self.assertEqual(metadata[detail_key_digest("source_url")], source_digest)
         self.assertEqual(
             metadata[detail_key_digest("nested")][detail_key_digest("arbitrary_name")],
             nested_digest,
         )
-        encoded = encode_receipt(receipt)
-        self.assertNotIn(sentinel.encode(), encoded)
-        self.assertNotIn(b"metadata.example.invalid", encoded)
-        self.assertNotIn(b"nested.example.invalid", encoded)
+        self.assertNotIn(sentinel.encode(), receipt)
+        self.assertNotIn(b"metadata.example.invalid", receipt)
+        self.assertNotIn(b"nested.example.invalid", receipt)
 
     def test_standalone_uri_and_content_id_whitespace_is_rejected_across_outputs(self):
         digest = "sha256:" + "a" * 64
@@ -1067,13 +1035,18 @@ class SchemaTests(unittest.TestCase):
             "receipt.json",
             metadata={"note": sentinel, "plain": "[UNSAFE]", "api_token": sentinel},
         )
-        self.assertEqual(receipt["run_id"], detail_digest(sentinel))
-        self.assertEqual(receipt["evidence_type"], detail_digest("[UNSAFE]"))
-        self.assertEqual(receipt["metadata"][detail_key_digest("note")], detail_digest(sentinel))
-        self.assertEqual(receipt["metadata"][detail_key_digest("plain")], detail_digest("[UNSAFE]"))
-        self.assertEqual(receipt["metadata"][detail_key_digest("api_token")], "[REDACTED]")
-        encoded = encode_receipt(receipt)
-        self.assertEqual(encode_receipt(receipt), encoded)
+        parsed = json.loads(receipt)
+        self.assertEqual(parsed["run_id"], detail_digest(sentinel))
+        self.assertEqual(parsed["evidence_type"], detail_digest("[UNSAFE]"))
+        self.assertEqual(parsed["metadata"][detail_key_digest("note")], detail_digest(sentinel))
+        self.assertEqual(parsed["metadata"][detail_key_digest("plain")], detail_digest("[UNSAFE]"))
+        self.assertEqual(parsed["metadata"][detail_key_digest("api_token")], "[REDACTED]")
+        self.assertEqual(evidence_receipt(
+            sentinel,
+            "[UNSAFE]",
+            "receipt.json",
+            metadata={"note": sentinel, "plain": "[UNSAFE]", "api_token": sentinel},
+        ), receipt)
 
         generic = encode_receipt({"note": "[UNSAFE]"})
         self.assertEqual(json.loads(generic)[detail_key_digest("note")], detail_digest("[UNSAFE]"))
