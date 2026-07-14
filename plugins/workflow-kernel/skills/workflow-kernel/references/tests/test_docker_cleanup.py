@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from tests import schema_matches
 from workflow_kernel.adapters.docker import (
     DockerAdapter,
     DockerCreationPlan,
@@ -61,6 +62,11 @@ def inactive_lease(run_id="run-1"):
     return LeaseProof(run_id, active=False, readable=True, observed_at=NOW)
 
 
+def exact_absent(kind=ResourceKind.CONTAINER, resource_id="ctr-1"):
+    key = ((kind, resource_id),)
+    return DockerInventory((), key, key, "registered_exact")
+
+
 class DockerLifecycleTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -98,10 +104,16 @@ class DockerLifecycleTests(unittest.TestCase):
 
     def test_failed_compose_command_registers_only_correlated_partial_creation(self):
         config_argv = ("docker", "compose", "config", "--format", "json")
-        config = {"services": {"app": {}, "worker": {}}, "networks": {}, "volumes": {}}
+        config = {
+            "services": {"app": {"image": "app:1", "command": ["serve"]}, "worker": {"image": "worker:1"}},
+            "networks": {}, "volumes": {},
+        }
         runner = FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),))
         adapter = DockerAdapter(runner, now=lambda: NOW, lease_reader=self.leases)
         plan = adapter.plan_compose(("docker", "compose", "up"), "run-1", "node-1", "chunk", "stop-remove")
+        materialized = json.loads(plan.compose_override_content)
+        self.assertEqual("app:1", materialized["services"]["app"]["image"])
+        self.assertEqual(["serve"], materialized["services"]["app"]["command"])
         labels = {**owned_labels(), "com.docker.compose.service": "app"}
         app = resource("app-id", labels=labels, name="depot-run-1-node-1-app-1")
         outcome = adapter.record_creation(
@@ -160,7 +172,7 @@ class DockerLifecycleTests(unittest.TestCase):
         wrong_kind = DockerInventory((resource("ctr-1", kind=ResourceKind.VOLUME, in_use=False, use_known=True),))
         denied = self.adapter.plan_chunk_cleanup(self.registry, wrong_kind, "run-1", "node-1")
         self.assertEqual((), denied.actions)
-        self.assertEqual(CleanupDisposition.MISSING, denied.dispositions[0].disposition)
+        self.assertEqual(CleanupDisposition.BLOCKED, denied.dispositions[0].disposition)
 
     def test_inspection_failure_with_registry_proof_is_blocked(self):
         value, _ = self.register()
@@ -291,11 +303,11 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(CleanupDisposition.BLOCKED, absent_without_result.dispositions[0].disposition)
 
         receipt = self.adapter.record_results(
-            plan, (CommandResult(action.argv, 0, "", ""),), DockerInventory(())
+            plan, (CommandResult(action.argv, 0, "", ""),), exact_absent()
         )
         removed = receipt.dispositions[0]
         self.assertEqual(CleanupDisposition.REMOVED, removed.disposition)
-        self.registry.record_disposition(removed)
+        self.registry.record_receipt(receipt)
         self.assertEqual(CleanupDisposition.REMOVED, self.registry.disposition_for(ResourceKind.CONTAINER, "ctr-1").disposition)
 
         rerun = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory(()), "run-1", "node-1")
@@ -303,9 +315,57 @@ class DockerLifecycleTests(unittest.TestCase):
 
     def test_missing_is_emitted_only_when_absent_before_plan(self):
         value, _ = self.register()
-        plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory(()), "run-1", "node-1")
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry,
+            exact_absent(),
+            "run-1", "node-1",
+        )
         self.assertEqual(CleanupDisposition.MISSING, plan.dispositions[0].disposition)
         self.assertEqual((), plan.actions)
+
+    def test_registered_inventory_inspects_exact_ids_and_proves_absence(self):
+        value, _ = self.register()
+        inspect = ("docker", "container", "inspect", value.resource_id)
+        runner = FakeRunner((CommandResult(inspect, 1, "", "Error: No such object: ctr-1"),))
+        adapter = DockerAdapter(runner, now=lambda: NOW, lease_reader=self.leases)
+        inventory = adapter.inventory_registered(tuple(self.registry.resources_for("run-1")))
+        self.assertEqual((inspect,), tuple(runner.calls))
+        self.assertEqual(((ResourceKind.CONTAINER, "ctr-1"),), inventory.absent)
+        plan = adapter.plan_chunk_cleanup(self.registry, inventory, "run-1", "node-1")
+        self.assertEqual(CleanupDisposition.MISSING, plan.dispositions[0].disposition)
+
+    def test_malformed_network_inspect_containers_type_blocks_cleanup(self):
+        list_argv = ("docker", "network", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.ID}}")
+        inspect = ("docker", "network", "inspect", "net-1")
+        payload = [{
+            "Name": "net-1", "Labels": owned_labels(), "Created": NOW.isoformat(),
+            "State": {}, "Containers": ["attached"],
+        }]
+        runner = FakeRunner((
+            CommandResult(("docker", "ps", "-a", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.ID}}"), 0, "", ""),
+            CommandResult(list_argv, 0, "net-1\n", ""),
+            CommandResult(inspect, 0, json.dumps(payload), ""),
+            CommandResult(("docker", "volume", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.Name}}"), 0, "", ""),
+        ))
+        inventory = DockerAdapter(runner, now=lambda: NOW).inventory()
+        self.assertFalse(inventory.resources[0].inspect_ok)
+
+    def test_action_revalidation_and_result_models_fail_closed(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
+        changed = resource("ctr-1", labels=value.labels, in_use=True)
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(plan.actions[0], changed)
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.record_results(plan, [CommandResult(plan.actions[0].argv, 0, "", "")], exact_absent())
+        mutated = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        object.__setattr__(mutated, "actions", (object(),))
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.record_results(mutated, (), exact_absent())
+        schema = json.loads((Path(__file__).parents[1] / "cleanup-plan-schema.json").read_text())
+        self.assertTrue(schema_matches(plan.to_dict(), schema))
 
 
 if __name__ == "__main__":

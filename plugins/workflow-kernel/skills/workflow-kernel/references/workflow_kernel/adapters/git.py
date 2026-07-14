@@ -5,12 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
+import re
 from typing import Callable, Tuple
 
 from workflow_kernel.adapters.base import invalid_policy
 from workflow_kernel.resources import (
     CleanupAction, CleanupDisposition, CleanupPlan, CleanupScope,
-    ResourceDisposition, ResourceKind, ResourceRecord, ResourceRegistry, disposition_for,
+    ResourceDisposition, ResourceKind, ResourceRecord, ResourceRegistry,
+    cleanup_proof_digest, disposition_for,
 )
 
 
@@ -27,6 +29,11 @@ class GitProof:
     merge_target: str
     ownership_namespace: str
     captured_at: datetime
+    worktree_head_oid: str
+    branch_oid: str
+    base_oid: str
+    merge_target_oid: str
+    worktree_prunable: bool
 
     def __post_init__(self) -> None:
         if not _valid_git_proof(self):
@@ -51,9 +58,13 @@ class GitAdapter:
         worktree_path: str, branch: str, base_ref: str, merge_target: str,
     ) -> Tuple[Tuple[str, ...], ...]:
         return (
+            ("git", "worktree", "list", "--porcelain", "-z"),
             ("git", "-C", worktree_path, "status", "--porcelain=v1", "-z"),
-            ("git", "merge-base", "--is-ancestor", branch, merge_target),
-            ("git", "rev-list", "--count", base_ref + ".." + branch),
+            ("git", "merge-base", "--is-ancestor", "--", branch, merge_target),
+            ("git", "rev-list", "--count", "--", base_ref + ".." + branch),
+            ("git", "rev-parse", "--verify", "--end-of-options", branch + "^{commit}"),
+            ("git", "rev-parse", "--verify", "--end-of-options", base_ref + "^{commit}"),
+            ("git", "rev-parse", "--verify", "--end-of-options", merge_target + "^{commit}"),
         )
 
     def cleanup_owned(
@@ -100,16 +111,30 @@ class GitAdapter:
                 disposition_for(worktree, CleanupDisposition.BLOCKED, "none", "worktree_unreadable"),
                 disposition_for(branch, CleanupDisposition.BLOCKED, "none", "worktree_proof_unavailable"),
             ))
+        if proof.worktree_prunable:
+            return CleanupPlan(scope, before, (), (
+                disposition_for(
+                    worktree, CleanupDisposition.BLOCKED, "none",
+                    "registered_worktree_prunable", evidence=("head=" + proof.worktree_head_oid,),
+                ),
+                disposition_for(branch, CleanupDisposition.BLOCKED, "none", "worktree_must_be_removed_first"),
+            ))
         if proof.dirty:
             return CleanupPlan(scope, before, (), (
                 disposition_for(worktree, CleanupDisposition.BLOCKED, "none", "worktree_dirty"),
                 disposition_for(branch, CleanupDisposition.BLOCKED, "none", "worktree_must_be_removed_first"),
             ))
 
+        proof_digest = self._proof_digest(proof)
+        preconditions = (
+            "registered_kind_and_exact_id", "proof_fresh", "worktree_clean",
+            "authoritative_worktree_inventory_unchanged",
+        )
         actions = [CleanupAction(
             worktree.resource_id, ResourceKind.WORKTREE, "remove",
-            ("git", "worktree", "remove", worktree.resource_id),
+            ("git", "worktree", "remove", "--", worktree.resource_id),
             run_id=worktree.run_id, node_id=worktree.node_id, lifecycle=worktree.lifecycle,
+            proof_digest=proof_digest, preconditions=preconditions,
         )]
         dispositions = []
         if branch.labels["ref-role"] == "feature-branch":
@@ -120,14 +145,16 @@ class GitAdapter:
         elif proof.ancestor_of_merge_target:
             actions.append(CleanupAction(
                 branch.resource_id, ResourceKind.BRANCH, "remove",
-                ("git", "branch", "-d", branch.resource_id), 0,
-                branch.run_id, branch.node_id, branch.lifecycle,
+                ("git", "branch", "-d", "--", branch.resource_id), 0,
+                branch.run_id, branch.node_id, branch.lifecycle, proof_digest,
+                preconditions + ("branch_ancestor_of_merge_target",),
             ))
         elif proof.unique_commit_count == 0:
             actions.append(CleanupAction(
                 branch.resource_id, ResourceKind.BRANCH, "remove",
-                ("git", "branch", "-D", branch.resource_id), 0,
-                branch.run_id, branch.node_id, branch.lifecycle,
+                ("git", "branch", "-D", "--", branch.resource_id), 0,
+                branch.run_id, branch.node_id, branch.lifecycle, proof_digest,
+                preconditions + ("branch_unique_commit_count_zero",),
             ))
         else:
             dispositions.append(disposition_for(
@@ -135,6 +162,31 @@ class GitAdapter:
                 follow_up="inspect exact registered branch before retry",
             ))
         return CleanupPlan(scope, before, tuple(actions), tuple(dispositions))
+
+    def revalidate_action(self, action: CleanupAction, proof: GitProof) -> None:
+        """Fail closed unless execution-time Git proof is byte-for-byte equivalent."""
+        if type(action) is not CleanupAction or type(proof) is not GitProof:
+            raise invalid_policy("invalid_git_cleanup_revalidation")
+        if not self._proof_is_fresh(proof) or action.proof_digest != self._proof_digest(proof):
+            raise invalid_policy("git_cleanup_precondition_changed")
+        if action.resource_id not in {proof.worktree_path, proof.branch}:
+            raise invalid_policy("git_cleanup_precondition_changed")
+
+    @staticmethod
+    def _proof_digest(proof: GitProof) -> str:
+        return cleanup_proof_digest({
+            "worktree_path": proof.worktree_path, "branch": proof.branch,
+            "readable": proof.readable, "dirty": proof.dirty,
+            "branch_is_feature": proof.branch_is_feature,
+            "ancestor_of_merge_target": proof.ancestor_of_merge_target,
+            "unique_commit_count": proof.unique_commit_count,
+            "base_ref": proof.base_ref, "merge_target": proof.merge_target,
+            "ownership_namespace": proof.ownership_namespace,
+            "captured_at": proof.captured_at.isoformat(),
+            "worktree_head_oid": proof.worktree_head_oid, "branch_oid": proof.branch_oid,
+            "base_oid": proof.base_oid, "merge_target_oid": proof.merge_target_oid,
+            "worktree_prunable": proof.worktree_prunable,
+        })
 
     def _proof_matches_scope(
         self, proof: GitProof, worktree: ResourceRecord, branch: ResourceRecord,
@@ -187,7 +239,7 @@ def _normalized_git_ref(value: object) -> bool:
     if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
         return False
     return (
-        not value.startswith(("/", ".")) and not value.endswith(("/", ".", ".lock"))
+        not value.startswith(("/", ".", "-")) and not value.endswith(("/", ".", ".lock"))
         and "//" not in value and ".." not in value and "@{" not in value and "\\" not in value
     )
 
@@ -201,9 +253,12 @@ def _valid_git_proof(proof: object) -> bool:
         ))
         and all(type(value) is bool for value in (
             proof.readable, proof.dirty, proof.branch_is_feature,
-            proof.ancestor_of_merge_target,
+            proof.ancestor_of_merge_target, proof.worktree_prunable,
         ))
         and type(proof.unique_commit_count) is int and proof.unique_commit_count >= 0
         and type(proof.captured_at) is datetime
         and proof.captured_at.tzinfo is not None and proof.captured_at.utcoffset() is not None
+        and all(type(value) is str and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", value)
+                for value in (proof.worktree_head_oid, proof.branch_oid, proof.base_oid, proof.merge_target_oid))
+        and proof.worktree_head_oid == proof.branch_oid
     )

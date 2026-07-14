@@ -58,7 +58,11 @@ class TerminalCleanupTests(unittest.TestCase):
         ):
             plan = self.lifecycle.at_terminal(self.registry, self.inventory, "run-1", status)
             action = plan.actions[0]
-            receipt = self.adapter.record_results(plan, (CommandResult(action.argv, 0, "", ""),), DockerInventory(()))
+            key = ((ResourceKind.CONTAINER, "ctr-1"),)
+            receipt = self.adapter.record_results(
+                plan, (CommandResult(action.argv, 0, "", ""),),
+                DockerInventory((), key, key, "registered_exact"),
+            )
             self.assertTrue(receipt.scope.terminal)
             self.assertEqual(CleanupDisposition.REMOVED, receipt.dispositions[0].disposition)
             self.assertEqual((), receipt.after)

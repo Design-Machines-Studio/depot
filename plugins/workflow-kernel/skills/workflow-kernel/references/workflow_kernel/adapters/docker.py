@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,10 +13,11 @@ from typing import Callable, Mapping, Optional, Protocol, Sequence, Tuple
 
 from workflow_kernel.adapters.base import invalid_policy
 from workflow_kernel.resources import (
+    _CLEANUP_RECEIPT_AUTHORITY,
     VALID_CLEANUP_POLICIES, VALID_LIFECYCLES,
     CleanupAction, CleanupDisposition, CleanupPlan, CleanupReceipt, CleanupScope,
     CommandResult, CreationReceipt, ResourceDisposition, ResourceKind, ResourceRecord,
-    ResourceRegistrationIntent, ResourceRegistry, disposition_for,
+    ResourceRegistrationIntent, ResourceRegistry, cleanup_proof_digest, disposition_for,
 )
 
 
@@ -89,6 +91,8 @@ class DockerResource:
     def __post_init__(self) -> None:
         try:
             kind = ResourceKind(self.kind)
+            if type(self.labels) is not dict:
+                raise TypeError
             labels = dict(self.labels)
         except Exception:
             raise invalid_policy("invalid_docker_resource") from None
@@ -116,13 +120,31 @@ class DockerResource:
 @dataclass(frozen=True)
 class DockerInventory:
     resources: Tuple[DockerResource, ...]
+    queried: Tuple[Tuple[ResourceKind, str], ...] = ()
+    absent: Tuple[Tuple[ResourceKind, str], ...] = ()
+    source: str = "provided"
 
     def __post_init__(self) -> None:
-        resources = tuple(self.resources)
+        if type(self.resources) is not tuple or type(self.queried) is not tuple or type(self.absent) is not tuple:
+            raise invalid_policy("invalid_docker_inventory")
+        resources = self.resources
         keys = [(value.kind, value.resource_id) for value in resources if type(value) is DockerResource]
-        if len(keys) != len(resources) or len(set(keys)) != len(keys):
+        try:
+            queried = tuple((ResourceKind(kind), resource_id) for kind, resource_id in self.queried)
+            absent = tuple((ResourceKind(kind), resource_id) for kind, resource_id in self.absent)
+        except Exception:
+            raise invalid_policy("invalid_docker_inventory") from None
+        if (
+            len(keys) != len(resources) or len(set(keys)) != len(keys)
+            or any(type(value) is not tuple or len(value) != 2 for value in self.queried + self.absent)
+            or len(set(queried)) != len(queried) or len(set(absent)) != len(absent)
+            or not set(absent).issubset(set(queried)) or set(keys) & set(absent)
+            or self.source not in {"provided", "registered_exact", "managed_orphan_sweep"}
+        ):
             raise invalid_policy("invalid_docker_inventory")
         object.__setattr__(self, "resources", resources)
+        object.__setattr__(self, "queried", queried)
+        object.__setattr__(self, "absent", absent)
 
 
 @dataclass(frozen=True)
@@ -258,13 +280,16 @@ class DockerAdapter:
             return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_anonymous_volume")
         labels = self.labels_for(run_id, node_id, lifecycle, cleanup_policy)
         project = _project_name(run_id, node_id)
-        override_networks = {name: {"labels": labels} for name in networks}
-        override_networks.setdefault("default", {"labels": labels})
-        override = {
-            "services": {name: {"labels": labels} for name in services},
-            "networks": override_networks,
-            "volumes": {name: {"labels": labels} for name in volumes},
-        }
+        override = deepcopy(config)
+        for value in override["services"].values():
+            value["labels"] = {**_normalize_compose_labels(value.get("labels")), **labels}
+        override.setdefault("networks", {})
+        override["networks"].setdefault("default", {})
+        for value in override["networks"].values():
+            value["labels"] = {**_normalize_compose_labels(value.get("labels")), **labels}
+        for value in override["volumes"].values():
+            value["labels"] = {**_normalize_compose_labels(value.get("labels")), **labels}
+        override_networks = override["networks"]
         dependencies = tuple(dependent_node_ids)
         intents = [
             ResourceRegistrationIntent(ResourceKind.CONTAINER, name, run_id, node_id, lifecycle, cleanup_policy, labels, dependencies)
@@ -326,7 +351,45 @@ class DockerAdapter:
                         in_use=use.exit_code == 0 and bool(use.stdout.strip()),
                     )
                 resources.append(resource)
-        return DockerInventory(tuple(sorted(resources, key=_resource_key)))
+        return DockerInventory(tuple(sorted(resources, key=_resource_key)), source="managed_orphan_sweep")
+
+    def inventory_registered(self, records: Sequence[ResourceRecord]) -> DockerInventory:
+        """Inspect every registered Docker kind+ID directly; never discover by label."""
+        if type(records) is not tuple or any(type(value) is not ResourceRecord for value in records):
+            raise invalid_policy("invalid_registered_docker_inventory_request")
+        queried = tuple((value.kind, value.resource_id) for value in records if value.kind in KIND_ORDER)
+        if len(set(queried)) != len(queried):
+            raise invalid_policy("invalid_registered_docker_inventory_request")
+        resources = []
+        absent = []
+        for kind, resource_id in queried:
+            inspected = self.runner.run(_inspect_argv(kind, resource_id))
+            if inspected.exit_code != 0:
+                if "no such" in inspected.stderr.casefold():
+                    absent.append((kind, resource_id))
+                else:
+                    resources.append(DockerResource(
+                        resource_id, kind, {}, self.now(), inspect_ok=False, use_known=False,
+                    ))
+                continue
+            try:
+                value = json.loads(inspected.stdout)
+                if type(value) is not list or len(value) != 1:
+                    raise ValueError
+                resource = _resource_from_inspect(kind, resource_id, value[0])
+            except Exception:
+                resource = DockerResource(
+                    resource_id, kind, {}, self.now(), inspect_ok=False, use_known=False,
+                )
+            if kind is ResourceKind.VOLUME and resource.inspect_ok:
+                use = self.runner.run((
+                    "docker", "ps", "-a", "--filter", "volume=" + resource_id,
+                    "--format", "{{.ID}}",
+                ))
+                resource = replace(resource, use_known=use.exit_code == 0,
+                                   in_use=use.exit_code == 0 and bool(use.stdout.strip()))
+            resources.append(resource)
+        return DockerInventory(tuple(sorted(resources, key=_resource_key)), queried, tuple(absent), "registered_exact")
 
     def record_creation(
         self, registry: ResourceRegistry, plan: DockerCreationPlan, result: CommandResult,
@@ -385,6 +448,8 @@ class DockerAdapter:
         self, registry: ResourceRegistry, inventory: DockerInventory, run_id: str,
         *, active_node_ids: Sequence[str] = (), terminal: bool = False,
     ) -> CleanupPlan:
+        if type(active_node_ids) is not tuple:
+            raise invalid_policy("invalid_active_node_ids")
         records = [value for value in registry.resources_for(run_id) if value.kind in KIND_ORDER]
         return self._plan_registered(
             inventory, records, CleanupScope(run_id, terminal=terminal),
@@ -396,13 +461,17 @@ class DockerAdapter:
         *, active_node_ids: Optional[set[str]] = None,
     ) -> CleanupPlan:
         by_key = {(value.kind, value.resource_id): value for value in inventory.resources}
+        exact_absent = set(inventory.absent) if inventory.source == "registered_exact" else set()
         actions = []
         dispositions = []
         active = active_node_ids or set()
         for record in sorted(records, key=lambda value: (KIND_ORDER[value.kind], value.resource_id)):
             resource = by_key.get((record.kind, record.resource_id))
             if resource is None:
-                dispositions.append(disposition_for(record, CleanupDisposition.MISSING, "none", "resource_absent_before_cleanup"))
+                if (record.kind, record.resource_id) in exact_absent:
+                    dispositions.append(disposition_for(record, CleanupDisposition.MISSING, "none", "resource_absent_before_cleanup"))
+                else:
+                    dispositions.append(disposition_for(record, CleanupDisposition.BLOCKED, "none", "resource_not_exactly_inspected"))
                 continue
             if not resource.inspect_ok:
                 dispositions.append(disposition_for(record, CleanupDisposition.BLOCKED, "none", "docker_inspect_failed"))
@@ -424,6 +493,28 @@ class DockerAdapter:
             actions.extend(_offset_dependencies(planned, base))
             if disposition is not None:
                 dispositions.append(disposition)
+        registered_keys = {(value.kind, value.resource_id) for value in records}
+        if scope.terminal:
+            for resource in sorted(inventory.resources, key=_resource_key):
+                key = (resource.kind, resource.resource_id)
+                if key in registered_keys:
+                    continue
+                if (
+                    not resource.inspect_ok or not _valid_ownership_labels(resource.labels)
+                    or resource.labels.get(RUN_LABEL) != scope.run_id
+                ):
+                    if resource.labels.get(RUN_LABEL) == scope.run_id:
+                        dispositions.append(_docker_disposition(
+                            resource, CleanupDisposition.FOREIGN, "none",
+                            "unregistered_resource_ownership_invalid",
+                        ))
+                    continue
+                record = _record_from_resource(resource)
+                planned, disposition = self._plan_one(record, resource, allow_stop=True)
+                base = len(actions)
+                actions.extend(_offset_dependencies(planned, base))
+                if disposition is not None:
+                    dispositions.append(disposition)
         return CleanupPlan(
             scope, tuple(sorted(_resource_identity(value) for value in inventory.resources)),
             tuple(actions), tuple(dispositions),
@@ -464,7 +555,9 @@ class DockerAdapter:
             if now - created <= ttl or now - resource.created_at <= ttl:
                 dispositions.append(disposition_for(record, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "none", "ttl_not_expired"))
                 continue
-            planned, disposition = self._plan_one(record, resource, allow_stop=False)
+            planned, disposition = self._plan_one(
+                record, resource, allow_stop=False, lease_proof=lease,
+            )
             base = len(actions)
             actions.extend(_offset_dependencies(planned, base))
             if disposition is not None:
@@ -496,6 +589,7 @@ class DockerAdapter:
 
     def _plan_one(
         self, record: ResourceRecord, resource: DockerResource, *, allow_stop: bool,
+        lease_proof: Optional[LeaseProof] = None,
     ) -> tuple[Tuple[CleanupAction, ...], Optional[ResourceDisposition]]:
         if resource.kind in (ResourceKind.NETWORK, ResourceKind.VOLUME):
             if not resource.use_known:
@@ -507,6 +601,13 @@ class DockerAdapter:
         if record.cleanup_policy == "retain":
             return (), disposition_for(record, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "none", "cleanup_policy_retain")
         actions = []
+        proof_digest = _docker_cleanup_digest(record, resource, lease_proof)
+        preconditions = (
+            "registered_kind_and_exact_id", "ownership_labels_exact",
+            "docker_inspect_exact_id_succeeded", "resource_use_revalidated",
+        )
+        if lease_proof is not None:
+            preconditions += ("inactive_run_lease",)
         if resource.kind is ResourceKind.CONTAINER:
             if resource.running:
                 if not allow_stop or record.cleanup_policy != "stop-remove":
@@ -516,32 +617,117 @@ class DockerAdapter:
                     resource.resource_id, resource.kind, "stop",
                     ("docker", "stop", "--time", str(self.stop_timeout_seconds), resource.resource_id),
                     run_id=record.run_id, node_id=record.node_id, lifecycle=record.lifecycle,
+                    proof_digest=proof_digest, preconditions=preconditions + ("container_running",),
                 ))
             actions.append(CleanupAction(
                 resource.resource_id, resource.kind, "remove", ("docker", "rm", resource.resource_id),
                 0 if actions else None, record.run_id, record.node_id, record.lifecycle,
+                proof_digest, preconditions,
             ))
         elif resource.kind is ResourceKind.NETWORK:
             actions.append(CleanupAction(
                 resource.resource_id, resource.kind, "remove", ("docker", "network", "rm", resource.resource_id),
                 None, record.run_id, record.node_id, record.lifecycle,
+                proof_digest, preconditions + ("network_not_in_use",),
             ))
         elif resource.kind is ResourceKind.VOLUME:
             actions.append(CleanupAction(
                 resource.resource_id, resource.kind, "remove", ("docker", "volume", "rm", resource.resource_id),
                 None, record.run_id, record.node_id, record.lifecycle,
+                proof_digest, preconditions + ("volume_not_in_use",),
             ))
         return tuple(actions), None
+
+    def revalidate_action(
+        self, action: CleanupAction, resource: DockerResource,
+        lease_proof: Optional[LeaseProof] = None,
+    ) -> None:
+        """Validate the destructive capability against a fresh exact-ID inspect."""
+        if type(action) is not CleanupAction or type(resource) is not DockerResource:
+            raise invalid_policy("invalid_docker_cleanup_revalidation")
+        if (action.kind, action.resource_id) != (resource.kind, resource.resource_id):
+            raise invalid_policy("docker_cleanup_precondition_changed")
+        record = ResourceRecord(
+            resource.resource_id, resource.kind, action.run_id, action.node_id,
+            action.lifecycle, resource.labels.get(POLICY_LABEL, "retain"),
+            resource.created_at, (), _ownership_labels(resource.labels),
+        )
+        requires_lease = "inactive_run_lease" in action.preconditions
+        lease_valid = (
+            type(lease_proof) is LeaseProof and _valid_lease_proof(lease_proof)
+            and lease_proof.run_id == action.run_id and lease_proof.readable
+            and not lease_proof.active
+            and timedelta(0) <= self.now() - lease_proof.observed_at <= self.lease_max_age
+        ) if requires_lease else lease_proof is None
+        if (
+            not resource.inspect_ok or not _registry_labels_agree(record, resource, self.creation_time_skew)
+            or not lease_valid
+            or action.proof_digest != _docker_cleanup_digest(record, resource, lease_proof)
+            or resource.system or (resource.kind in (ResourceKind.NETWORK, ResourceKind.VOLUME)
+                                   and (not resource.use_known or resource.in_use))
+        ):
+            raise invalid_policy("docker_cleanup_precondition_changed")
 
     def record_results(
         self, plan: CleanupPlan, results: Sequence[CommandResult], after: DockerInventory,
     ) -> CleanupReceipt:
-        by_argv = {result.argv: result for result in results}
+        if type(plan) is not CleanupPlan or type(results) is not tuple or type(after) is not DockerInventory:
+            raise invalid_policy("invalid_cleanup_result_models")
+        if (
+            type(plan.scope) is not CleanupScope
+            or type(plan.before) is not tuple or type(plan.actions) is not tuple
+            or type(plan.dispositions) is not tuple
+            or any(type(value) is not CleanupAction for value in plan.actions)
+            or any(type(value) is not ResourceDisposition for value in plan.dispositions)
+            or any(type(value) is not CommandResult for value in results)
+            or type(after.resources) is not tuple or type(after.queried) is not tuple
+            or type(after.absent) is not tuple
+            or any(type(value) is not DockerResource for value in after.resources)
+        ):
+            raise invalid_policy("invalid_cleanup_result_models")
+        # Reconstruct every externally supplied frozen model before trusting it.
+        plan = CleanupPlan(
+            CleanupScope(plan.scope.run_id, plan.scope.node_id, plan.scope.terminal, plan.scope.stale_sweep),
+            tuple(plan.before),
+            tuple(CleanupAction(
+                item.resource_id, item.kind, item.action, tuple(item.argv), item.requires_success_of,
+                item.run_id, item.node_id, item.lifecycle, item.proof_digest, tuple(item.preconditions),
+            ) for item in plan.actions),
+            tuple(ResourceDisposition(
+                item.resource_id, item.kind, item.run_id, item.node_id, item.lifecycle,
+                item.disposition, item.action, item.reason, tuple(item.evidence), tuple(item.command),
+                item.follow_up,
+            ) for item in plan.dispositions),
+        )
+        normalized_results = tuple(CommandResult(
+            tuple(value.argv), value.exit_code, value.stdout, value.stderr,
+        ) for value in results)
+        after = DockerInventory(
+            tuple(DockerResource(
+                value.resource_id, value.kind, dict(value.labels), value.created_at,
+                value.running, value.in_use, value.system, value.inspect_ok,
+                value.name, value.use_known,
+            ) for value in after.resources),
+            tuple(after.queried), tuple(after.absent), after.source,
+        )
+        planned_argv = tuple(action.argv for action in plan.actions)
+        result_argv = tuple(value.argv for value in normalized_results)
+        if len(set(planned_argv)) != len(planned_argv) or len(set(result_argv)) != len(result_argv):
+            raise invalid_policy("cleanup_results_not_one_to_one")
+        if any(argv not in planned_argv for argv in result_argv):
+            raise invalid_policy("cleanup_result_not_planned")
+        by_argv = {result.argv: result for result in normalized_results}
         after_keys = {(value.kind, value.resource_id) for value in after.resources}
         groups: dict[tuple[ResourceKind, str], list[CleanupAction]] = {}
         for action in plan.actions:
             groups.setdefault((action.kind, action.resource_id), []).append(action)
-        dispositions = list(plan.dispositions)
+        dispositions = [
+            replace(item, disposition=CleanupDisposition.BLOCKED,
+                    reason="resource_reappeared_before_result_recording")
+            if item.disposition is CleanupDisposition.MISSING
+            and (item.kind, item.resource_id) in after_keys else item
+            for item in plan.dispositions
+        ]
         for (kind, resource_id), actions in groups.items():
             missing_results = [action for action in actions if action.argv not in by_argv]
             failures = [(action, by_argv[action.argv]) for action in actions if action.argv in by_argv and by_argv[action.argv].exit_code != 0]
@@ -562,7 +748,7 @@ class DockerAdapter:
                     evidence=("exit=" + str(failed_result.exit_code),), command=failed_action.argv,
                     follow_up="retry exact owned resource cleanup",
                 ))
-            elif (kind, resource_id) not in after_keys:
+            elif (kind, resource_id) in set(after.absent) and after.source == "registered_exact":
                 remove_action = actions[-1]
                 dispositions.append(ResourceDisposition(
                     resource_id, kind, owner.run_id, owner.node_id, owner.lifecycle,
@@ -578,7 +764,7 @@ class DockerAdapter:
         return CleanupReceipt(
             plan.scope, plan.before,
             tuple(sorted(_resource_identity(value) for value in after.resources)),
-            tuple(dispositions),
+            tuple(dispositions), _authority=_CLEANUP_RECEIPT_AUTHORITY,
         )
 
 
@@ -626,6 +812,22 @@ def _has_anonymous_volume(services: Mapping[str, object]) -> bool:
             if isinstance(volume, dict) and volume.get("type", "volume") == "volume" and not volume.get("source"):
                 return True
     return False
+
+
+def _normalize_compose_labels(value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    if type(value) is dict and all(type(key) is str and type(item) is str for key, item in value.items()):
+        return dict(value)
+    if type(value) is list:
+        result = {}
+        for item in value:
+            if type(item) is not str or "=" not in item:
+                raise invalid_policy("compose_config_invalid")
+            key, label_value = item.split("=", 1)
+            result[key] = label_value
+        return result
+    raise invalid_policy("compose_config_invalid")
 
 
 def _intent_matches(
@@ -736,6 +938,27 @@ def _resource_identity(value: DockerResource) -> str:
     return value.kind.value + ":" + value.resource_id
 
 
+def _docker_cleanup_digest(
+    record: ResourceRecord, resource: DockerResource,
+    lease_proof: Optional[LeaseProof] = None,
+) -> str:
+    payload = {
+        "resource_id": resource.resource_id, "kind": resource.kind.value,
+        "labels": dict(sorted(resource.labels.items())),
+        "created_at": _timestamp(resource.created_at), "running": resource.running,
+        "in_use": resource.in_use, "system": resource.system,
+        "inspect_ok": resource.inspect_ok, "use_known": resource.use_known,
+        "run_id": record.run_id, "node_id": record.node_id,
+        "lifecycle": record.lifecycle, "cleanup_policy": record.cleanup_policy,
+    }
+    if lease_proof is not None:
+        payload["lease"] = {
+            "run_id": lease_proof.run_id, "active": lease_proof.active,
+            "readable": lease_proof.readable, "observed_at": _timestamp(lease_proof.observed_at),
+        }
+    return cleanup_proof_digest(payload)
+
+
 def _offset_dependencies(actions: Sequence[CleanupAction], offset: int) -> Tuple[CleanupAction, ...]:
     return tuple(replace(
         value,
@@ -750,16 +973,30 @@ def _inspect_argv(kind: ResourceKind, resource_id: str) -> Tuple[str, ...]:
 
 
 def _resource_from_inspect(kind: ResourceKind, resource_id: str, value: Mapping[str, object]) -> DockerResource:
-    config = value.get("Config", {}) if isinstance(value, dict) else {}
-    labels = value.get("Labels", {}) or (config.get("Labels", {}) if isinstance(config, dict) else {})
+    if type(value) is not dict:
+        raise ValueError("inspect payload must be an object")
+    config = value.get("Config", {})
+    if type(config) is not dict:
+        raise ValueError("inspect Config must be an object")
+    labels = value.get("Labels", {}) or config.get("Labels", {})
+    if type(labels) is not dict or any(type(key) is not str or type(item) is not str for key, item in labels.items()):
+        raise ValueError("inspect Labels must be a string map")
     created_raw = value.get("Created") or value.get("CreatedAt") or labels.get(CREATED_LABEL)
-    state = value.get("State", {}) if isinstance(value.get("State", {}), dict) else {}
-    containers = value.get("Containers", {}) if isinstance(value.get("Containers", {}), dict) else {}
+    state = value.get("State", {})
+    containers = value.get("Containers", {})
+    if type(state) is not dict or type(containers) is not dict:
+        raise ValueError("inspect State and Containers must be objects")
+    running = state.get("Running", False)
+    if type(running) is not bool:
+        raise ValueError("inspect Running must be boolean")
+    name = value.get("Name")
+    if name is not None and type(name) is not str:
+        raise ValueError("inspect Name must be a string")
     return DockerResource(
         resource_id, kind, labels, _parse_timestamp(created_raw),
-        running=bool(state.get("Running")),
+        running=running,
         in_use=bool(containers),
-        system=kind is ResourceKind.NETWORK and value.get("Name") in {"bridge", "host", "none"},
-        name=value.get("Name"),
+        system=kind is ResourceKind.NETWORK and name in {"bridge", "host", "none"},
+        name=name,
         use_known=kind is not ResourceKind.VOLUME,
     )

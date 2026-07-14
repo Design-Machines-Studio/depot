@@ -18,8 +18,11 @@ Docker creates it:
 `docker run`, `docker container create`, `docker network create`, and
 `docker volume create` receive label flags in their creation argv. Compose is
 first rendered with `docker compose ... config --format json`; the kernel then
-creates a run-scoped project name and an override that labels services, the
-default and declared networks, and named volumes. External resources, anonymous
+creates a run-scoped project name and materializes that complete rendered
+configuration with ownership labels merged into services, the default and
+declared networks, and named volumes. The planned command uses that full config,
+so images, commands, mounts, and every other inspected setting remain present.
+External resources, anonymous
 volumes, invalid config, and unsupported or ambiguous command forms are
 explicitly unmanaged.
 
@@ -30,8 +33,11 @@ inventory delta against every registration intent. A current-run object is
 removable only when its kind and ID, complete ownership-label snapshot, and
 inspected creation time agree with its durable registry record. The registry
 keys identity by kind plus ID. Each registration or disposition takes an
-exclusive registry lock, reloads and validates the full journal, then appends,
-flushes, and fsyncs while still holding that lock. This keeps owner conflicts,
+exclusive registry lock bound to one physical parent and exclusive regular-file
+inode, reloads and validates the full journal with exact event keys, then
+appends, flushes, and fsyncs while still holding that lock. Symlink, hardlink,
+parent replacement, journal replacement, and lock replacement are rejected.
+This keeps owner conflicts,
 attempt history, and terminal dispositions immutable across concurrent kernel
 instances. A stale orphan may lack a registry record only
 when every label value is valid, the label timestamp agrees with Docker's
@@ -43,7 +49,9 @@ stale lease proof retains the object. At either exact TTL boundary it remains.
 Git cleanup is likewise a pure plan. It requires exactly one registered
 worktree and one registered branch for the requested scope plus an exact,
 fresh `GitProof` whose normalized path, namespace, branch, base, and merge
-target agree with both registry records. Additional registered Git resources
+target, resolved object IDs, and authoritative `git worktree list --porcelain`
+row agree with both registry records. Prunable rows remain explicit blocked
+decisions, and option-looking refs are rejected. Additional registered Git resources
 make the scope ambiguous: deletion is blocked and every registered worktree and
 branch receives a disposition.
 
@@ -54,6 +62,13 @@ dependent node is active. `succeeded`, `failed`, `blocked`, `cancelled`, and
 executor of these plans; Chunk 03 performs inventory, pure planning, durable
 registration, and pure result recording.
 
+Every cleanup action is a proof-bound capability. Its schema carries an exact
+kind and ID, argv, owner, lifecycle, a canonical SHA-256 proof digest, explicit
+preconditions, and dependency ordering. Chunk 05 must refresh exact Git or
+Docker evidence and call the adapter revalidation contract immediately before
+executing the argv; any changed ref count, object identity, label, lease/use
+state, inspect result, or resource identity invalidates the action.
+
 Cleanup uses only exact IDs:
 
 - a current, owned running container may be stopped with a bounded
@@ -62,9 +77,10 @@ Cleanup uses only exact IDs:
 - networks and volumes in use, system networks, and objects that cannot be
   inspected are retained or blocked with a reason; volume use is proven by an
   authoritative container-mount query, never inferred from absent inspect data;
-- missing objects are an idempotent successful end state;
-- volumes are discovered by the positive managed label and removed by explicit
-  IDs only.
+- missing objects are an idempotent successful end state only after a registered
+  kind+ID inspection proves absence; filtered managed-label inventory is used
+  only for orphan reconciliation;
+- volumes are removed by explicit IDs only.
 
 Broad cleanup is forbidden. The kernel never emits `docker system prune`, any
 unfiltered or negative prune, wildcards, shell command strings, or name-based
@@ -77,3 +93,8 @@ reason, command evidence, and nested evidence—is traversed through the shared
 bounded redaction policy. Cookie, bearer, DSN, environment-secret, overlong,
 cyclic, and otherwise unsafe values are redacted or hashed before durable
 persistence while safe resource identities remain available as evidence.
+`REMOVED` and `MISSING` cannot be written through the public disposition API.
+They become durable only through the authorized result-recording receipt
+transaction, after one result per planned command and an exact post-cleanup
+inventory have been reconstructed and revalidated. If an object reappears, the
+terminal disposition is downgraded to blocked.

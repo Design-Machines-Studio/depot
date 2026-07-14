@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import fcntl
+import hashlib
 import json
 import os
 import re
@@ -13,8 +13,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
+from workflow_kernel._files import LockHandle, bind_durable_path
 from workflow_kernel.adapters.base import invalid_policy
-from workflow_kernel.redaction import digest_error_detail_string, sanitize_durable_payload
+from workflow_kernel.redaction import (
+    contains_secret_shape, digest_error_detail_string, is_secret_key,
+    sanitize_durable_payload,
+)
 from workflow_kernel.schema import InvalidSchemaError, RunStatus
 
 
@@ -45,6 +49,7 @@ _MAX_RESOURCE_ID = 4096
 _VALID_DISPOSITION_ACTIONS = {"none", "remove_exact_id"}
 _VALID_CLEANUP_ACTIONS = {"stop", "remove"}
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_CLEANUP_RECEIPT_AUTHORITY = object()
 
 
 def _valid_text(value: object, *, maximum: int) -> bool:
@@ -66,7 +71,9 @@ class CommandResult:
     stderr: str
 
     def __post_init__(self) -> None:
-        argv = tuple(self.argv)
+        if type(self.argv) is not tuple:
+            raise invalid_policy("invalid_command_result")
+        argv = self.argv
         if not argv or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in argv):
             raise invalid_policy("invalid_command_result")
         if type(self.exit_code) is not int or type(self.stdout) is not str or type(self.stderr) is not str:
@@ -101,7 +108,9 @@ class ResourceRecord:
             raise invalid_policy("invalid_cleanup_policy")
         if not _valid_timestamp(self.created_at):
             raise invalid_policy("resource_created_at_requires_timezone")
-        dependencies = tuple(self.dependent_node_ids)
+        if type(self.dependent_node_ids) is not tuple or type(self.labels) is not dict:
+            raise invalid_policy("invalid_resource_record_collections")
+        dependencies = self.dependent_node_ids
         if any(not _valid_text(value, maximum=_MAX_IDENTIFIER) for value in dependencies) or len(set(dependencies)) != len(dependencies):
             raise invalid_policy("invalid_resource_dependency")
         try:
@@ -114,6 +123,8 @@ class ResourceRecord:
             for key, value in labels.items()
         ):
             raise invalid_policy("invalid_resource_labels")
+        if any(is_secret_key(key) or contains_secret_shape(value) for key, value in labels.items()):
+            raise invalid_policy("secret_shaped_resource_label")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "dependent_node_ids", dependencies)
         object.__setattr__(self, "labels", labels)
@@ -147,14 +158,16 @@ class ResourceDisposition:
             or not _valid_text(self.reason, maximum=_MAX_RESOURCE_ID)
         ):
             raise invalid_policy("invalid_resource_disposition")
-        command = tuple(self.command)
+        if type(self.evidence) is not tuple or type(self.command) is not tuple:
+            raise invalid_policy("invalid_resource_disposition_collections")
+        command = self.command
         if len(command) > _MAX_RECEIPT_ITEMS or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in command):
             raise invalid_policy("invalid_cleanup_command")
         if self.follow_up is not None and not _valid_text(self.follow_up, maximum=_MAX_RESOURCE_ID):
             raise invalid_policy("invalid_resource_disposition")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "disposition", state)
-        object.__setattr__(self, "evidence", tuple(self.evidence))
+        object.__setattr__(self, "evidence", self.evidence)
         object.__setattr__(self, "command", command)
 
 
@@ -172,8 +185,10 @@ class ResourceRegistrationIntent:
     def __post_init__(self) -> None:
         try:
             kind = ResourceKind(self.kind)
+            if type(self.labels) is not dict or type(self.dependent_node_ids) is not tuple:
+                raise TypeError
             labels = dict(self.labels)
-            dependencies = tuple(self.dependent_node_ids)
+            dependencies = self.dependent_node_ids
         except Exception:
             raise invalid_policy("invalid_resource_registration_intent") from None
         if (
@@ -201,11 +216,15 @@ class CleanupAction:
     run_id: str = ""
     node_id: str = ""
     lifecycle: str = "chunk"
+    proof_digest: str = ""
+    preconditions: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         try:
             kind = ResourceKind(self.kind)
-            argv = tuple(self.argv)
+            if type(self.argv) is not tuple or type(self.preconditions) is not tuple:
+                raise TypeError
+            argv = self.argv
         except Exception:
             raise invalid_policy("invalid_cleanup_action") from None
         if (
@@ -217,10 +236,25 @@ class CleanupAction:
             ))
             or not all(_valid_text(value, maximum=_MAX_IDENTIFIER) for value in (self.run_id, self.node_id))
             or self.lifecycle not in VALID_LIFECYCLES
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.proof_digest)
+            or not self.preconditions
+            or len(set(self.preconditions)) != len(self.preconditions)
+            or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in self.preconditions)
         ):
             raise invalid_policy("invalid_cleanup_action")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "argv", argv)
+        object.__setattr__(self, "preconditions", self.preconditions)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "resource_id": self.resource_id, "kind": self.kind.value,
+            "action": self.action, "argv": list(self.argv),
+            "requires_success_of": self.requires_success_of,
+            "owner": {"run_id": self.run_id, "node_id": self.node_id},
+            "lifecycle": self.lifecycle, "proof_digest": self.proof_digest,
+            "preconditions": list(self.preconditions),
+        }
 
 
 @dataclass(frozen=True)
@@ -247,7 +281,9 @@ class CleanupPlan:
     dispositions: Tuple[ResourceDisposition, ...]
 
     def __post_init__(self) -> None:
-        before, actions, dispositions = tuple(self.before), tuple(self.actions), tuple(self.dispositions)
+        if not all(type(value) is tuple for value in (self.before, self.actions, self.dispositions)):
+            raise invalid_policy("invalid_cleanup_plan_collections")
+        before, actions, dispositions = self.before, self.actions, self.dispositions
         if (
             type(self.scope) is not CleanupScope
             or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in before)
@@ -260,6 +296,18 @@ class CleanupPlan:
         object.__setattr__(self, "actions", actions)
         object.__setattr__(self, "dispositions", dispositions)
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": 1,
+            "scope": {
+                "run_id": self.scope.run_id,
+                **({"node_id": self.scope.node_id} if self.scope.node_id is not None else {}),
+                "terminal": self.scope.terminal, "stale_sweep": self.scope.stale_sweep,
+            },
+            "before": list(self.before),
+            "actions": [value.to_dict() for value in self.actions],
+        }
+
 
 @dataclass(frozen=True)
 class CleanupReceipt:
@@ -268,9 +316,12 @@ class CleanupReceipt:
     after: Tuple[str, ...]
     dispositions: Tuple[ResourceDisposition, ...]
     schema_version: int = 1
+    _authority: object = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        before, after, dispositions = tuple(self.before), tuple(self.after), tuple(self.dispositions)
+        if not all(type(value) is tuple for value in (self.before, self.after, self.dispositions)):
+            raise invalid_policy("invalid_cleanup_receipt_collections")
+        before, after, dispositions = self.before, self.after, self.dispositions
         if (
             type(self.scope) is not CleanupScope or type(self.schema_version) is not int or self.schema_version != 1
             or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in before + after)
@@ -353,11 +404,28 @@ def disposition_for(
     )
 
 
+def cleanup_proof_digest(payload: Mapping[str, object]) -> str:
+    """Bind a cleanup capability to one canonical, secret-free proof snapshot."""
+    if type(payload) is not dict:
+        raise invalid_policy("invalid_cleanup_proof")
+    try:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    except (TypeError, ValueError):
+        raise invalid_policy("invalid_cleanup_proof") from None
+    if contains_secret_shape(encoded):
+        raise invalid_policy("secret_shaped_cleanup_proof")
+    return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 class ResourceRegistry:
     """Append-only kind+ID registry with immutable successful outcomes."""
 
     def __init__(self, path: Path | str):
-        self.path = Path(path)
+        lexical = Path(path)
+        lexical.parent.mkdir(parents=True, exist_ok=True)
+        self._binding = bind_durable_path(lexical)
+        self.path = self._binding.path
+        self._lock_binding = bind_durable_path(self.path.with_name(self.path.name + ".lock"))
         self._records: dict[tuple[ResourceKind, str], ResourceRecord] = {}
         self._attempts: dict[tuple[ResourceKind, str], list[ResourceDisposition]] = {}
         with self._exclusive_lock():
@@ -365,27 +433,51 @@ class ResourceRegistry:
 
     @contextmanager
     def _exclusive_lock(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        lock_path = self.path.with_name(self.path.name + ".lock")
-        with lock_path.open("a+b") as handle:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle = None
+        primary = None
+        try:
+            self._binding.revalidate_parent()
+            self._lock_binding.revalidate_parent()
+            handle = LockHandle.acquire_bound(self._lock_binding)
+            handle.revalidate()
+            yield handle
+        except InvalidSchemaError:
+            primary = True
+            raise
+        except OSError:
+            primary = True
+            raise invalid_policy("resource_registry_path_or_lock_unsafe") from None
+        finally:
+            if handle is not None:
+                try:
+                    handle.release()
+                except OSError:
+                    if primary is None:
+                        raise invalid_policy("resource_registry_lock_release_failed") from None
 
     def _reload_unlocked(self) -> None:
         self._records = {}
         self._attempts = {}
-        if not self.path.exists():
-            return
         try:
-            lines = self.path.read_text(encoding="utf-8").splitlines()
+            with self._binding.pin_parent() as directory:
+                if not directory.regular_exists(self.path.name):
+                    return
+                descriptor = directory.open_regular(self.path.name, os.O_RDONLY)
+                try:
+                    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
+                        descriptor = None
+                        lines = handle.read().splitlines()
+                    directory.revalidate()
+                finally:
+                    if descriptor is not None:
+                        os.close(descriptor)
             for line in lines:
                 event = json.loads(line)
-                if event.get("event") == "registered":
+                if type(event) is not dict:
+                    raise invalid_policy("invalid_resource_registry_event")
+                if set(event) == {"event", "resource"} and event["event"] == "registered":
                     self._apply_registration(_record_from_json(event["resource"]), persist=False)
-                elif event.get("event") == "disposition":
+                elif set(event) == {"event", "disposition"} and event["event"] == "disposition":
                     self._apply_disposition(_disposition_from_json(event["disposition"]), persist=False)
                 else:
                     raise invalid_policy("invalid_resource_registry_event")
@@ -395,13 +487,35 @@ class ResourceRegistry:
             raise invalid_policy("invalid_resource_registry") from None
 
     def _append_unlocked(self, event: Mapping[str, object]) -> None:
-        encoded = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
-        with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(encoded)
-            handle.flush()
-            os.fsync(handle.fileno())
+        self._append_events_unlocked((event,))
+
+    def _append_events_unlocked(self, events: Sequence[Mapping[str, object]]) -> None:
+        encoded = "".join(
+            json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
+            for event in events
+        )
+        with self._binding.pin_parent() as directory:
+            descriptor = directory.open_regular(
+                self.path.name, os.O_APPEND | os.O_CREAT | os.O_WRONLY,
+            )
+            try:
+                directory.require_identity(descriptor, self.path.name)
+                pending = memoryview(encoded.encode("utf-8"))
+                while pending:
+                    written = os.write(descriptor, pending)
+                    if written <= 0:
+                        raise OSError("resource registry write made no progress")
+                    pending = pending[written:]
+                os.fsync(descriptor)
+                directory.require_identity(descriptor, self.path.name)
+                directory.fsync()
+            finally:
+                os.close(descriptor)
 
     def register(self, resource: ResourceRecord) -> None:
+        if type(resource) is not ResourceRecord:
+            raise invalid_policy("invalid_resource_record")
+        resource = _record_from_json(_resource_json(resource))
         with self._exclusive_lock():
             self._reload_unlocked()
             self._apply_registration(resource, persist=True)
@@ -435,9 +549,43 @@ class ResourceRegistry:
             ))
 
     def record_disposition(self, value: ResourceDisposition) -> ResourceDisposition:
+        if type(value) is not ResourceDisposition:
+            raise invalid_policy("invalid_resource_disposition")
+        if value.disposition in TERMINAL_DISPOSITIONS:
+            raise invalid_policy("terminal_disposition_requires_cleanup_receipt")
+        value = _disposition_from_json(_disposition_json(value))
         with self._exclusive_lock():
             self._reload_unlocked()
             return self._apply_disposition(value, persist=True)
+
+    def record_receipt(self, receipt: CleanupReceipt) -> Tuple[ResourceDisposition, ...]:
+        """Atomically persist terminal outcomes issued by result reconciliation."""
+        if type(receipt) is not CleanupReceipt or receipt._authority is not _CLEANUP_RECEIPT_AUTHORITY:
+            raise invalid_policy("cleanup_receipt_not_authoritative")
+        values = tuple(_disposition_from_json(_disposition_json(value)) for value in receipt.dispositions)
+        after = set(receipt.after)
+        if any(
+            value.disposition in TERMINAL_DISPOSITIONS
+            and value.kind.value + ":" + value.resource_id in after
+            for value in values
+        ):
+            raise invalid_policy("terminal_resource_still_present")
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            saved = {key: list(history) for key, history in self._attempts.items()}
+            try:
+                applied = tuple(self._apply_disposition(value, persist=False) for value in values)
+            except Exception:
+                self._attempts = saved
+                raise
+            events = tuple(
+                {"event": "disposition", "disposition": _disposition_json(value)}
+                for value in applied
+                if value not in saved.get((value.kind, value.resource_id), ())
+            )
+            if events:
+                self._append_events_unlocked(events)
+            return applied
 
     def _apply_disposition(self, value: ResourceDisposition, *, persist: bool) -> ResourceDisposition:
         key = (value.kind, value.resource_id)
@@ -526,13 +674,20 @@ def _resource_json(value: ResourceRecord) -> dict[str, object]:
 
 
 def _record_from_json(value: Mapping[str, object]) -> ResourceRecord:
+    required = {
+        "resource_id", "kind", "run_id", "node_id", "lifecycle", "cleanup_policy",
+        "created_at", "dependent_node_ids", "labels",
+    }
+    if type(value) is not dict or set(value) != required:
+        raise invalid_policy("invalid_resource_registry_resource")
+    if type(value["dependent_node_ids"]) is not list or type(value["labels"]) is not dict:
+        raise invalid_policy("invalid_resource_registry_resource")
     return ResourceRecord(
         resource_id=value["resource_id"], kind=ResourceKind(value["kind"]),
         run_id=value["run_id"], node_id=value["node_id"],
         lifecycle=value["lifecycle"], cleanup_policy=value["cleanup_policy"],
         created_at=_parse_timestamp(value["created_at"]),
-        dependent_node_ids=tuple(value.get("dependent_node_ids", ())),
-        labels=value.get("labels", {}),
+        dependent_node_ids=tuple(value["dependent_node_ids"]), labels=dict(value["labels"]),
     )
 
 
@@ -549,12 +704,20 @@ def _disposition_json(value: ResourceDisposition) -> dict[str, object]:
 
 
 def _disposition_from_json(value: Mapping[str, object]) -> ResourceDisposition:
+    required = {
+        "resource_id", "kind", "run_id", "node_id", "lifecycle", "disposition",
+        "action", "reason", "command", "evidence",
+    }
+    if type(value) is not dict or set(value) not in (required, required | {"follow_up"}):
+        raise invalid_policy("invalid_resource_registry_disposition")
+    if type(value["command"]) is not list or type(value["evidence"]) is not list:
+        raise invalid_policy("invalid_resource_registry_disposition")
     return ResourceDisposition(
         resource_id=value["resource_id"], kind=ResourceKind(value["kind"]),
         run_id=value["run_id"], node_id=value["node_id"], lifecycle=value["lifecycle"],
         disposition=CleanupDisposition(value["disposition"]), action=value["action"],
-        reason=value["reason"], evidence=tuple(value.get("evidence", ())),
-        command=tuple(value.get("command", ())), follow_up=value.get("follow_up"),
+        reason=value["reason"], evidence=tuple(value["evidence"]),
+        command=tuple(value["command"]), follow_up=value.get("follow_up"),
     )
 
 

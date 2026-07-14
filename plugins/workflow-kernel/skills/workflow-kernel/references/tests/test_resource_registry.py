@@ -1,11 +1,14 @@
 import json
+import os
 import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 from tests import detail_digest, schema_matches
 from workflow_kernel.resources import (
+    _CLEANUP_RECEIPT_AUTHORITY,
     CleanupDisposition,
     CleanupAction,
     CleanupReceipt,
@@ -50,6 +53,17 @@ def disposition(value, state, reason):
     )
 
 
+def authoritative_receipt(value, outcome):
+    after = () if outcome.disposition in {CleanupDisposition.REMOVED, CleanupDisposition.MISSING} else (
+        value.kind.value + ":" + value.resource_id,
+    )
+    return CleanupReceipt(
+        CleanupScope(value.run_id, value.node_id),
+        (value.kind.value + ":" + value.resource_id,), after, (outcome,),
+        _authority=_CLEANUP_RECEIPT_AUTHORITY,
+    )
+
+
 class ResourceRegistryTests(unittest.TestCase):
     def test_preopened_registries_cannot_interleave_conflicting_registration(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -77,10 +91,12 @@ class ResourceRegistryTests(unittest.TestCase):
             value = record()
             first.register(value)
             removed = disposition(value, CleanupDisposition.REMOVED, "confirmed_removed")
-            first.record_disposition(removed)
-            self.assertEqual(removed, second.record_disposition(removed))
+            first.record_receipt(authoritative_receipt(value, removed))
+            self.assertEqual((removed,), second.record_receipt(authoritative_receipt(value, removed)))
             with self.assertRaises(InvalidSchemaError) as caught:
-                second.record_disposition(disposition(value, CleanupDisposition.MISSING, "later_missing"))
+                second.record_receipt(authoritative_receipt(
+                    value, disposition(value, CleanupDisposition.MISSING, "later_missing"),
+                ))
             self.assertEqual(
                 detail_digest("terminal_resource_disposition_immutable"),
                 caught.exception.details["reason_code"],
@@ -121,7 +137,9 @@ class ResourceRegistryTests(unittest.TestCase):
             registry.record_disposition(disposition(value, CleanupDisposition.BLOCKED, "remove_failed"))
             registry.record_disposition(disposition(value, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "active_node"))
             self.assertEqual((value,), registry.resources_for("run-1"))
-            registry.record_disposition(disposition(value, CleanupDisposition.REMOVED, "confirmed_removed"))
+            registry.record_receipt(authoritative_receipt(
+                value, disposition(value, CleanupDisposition.REMOVED, "confirmed_removed"),
+            ))
             self.assertEqual((), registry.resources_for("run-1"))
             self.assertEqual(3, len(registry.disposition_history(ResourceKind.CONTAINER, "shared")))
             with self.assertRaises(InvalidSchemaError):
@@ -256,6 +274,50 @@ class ResourceRegistryTests(unittest.TestCase):
         cycle.append(cycle)
         with self.assertRaises(TypeError):
             freeze_json(cycle)
+
+    def test_registry_rejects_symlink_and_hardlink_journal_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real = root / "real.jsonl"
+            ResourceRegistry(real).register(record())
+            alias = root / "alias.jsonl"
+            alias.symlink_to(real)
+            with self.assertRaises(InvalidSchemaError):
+                ResourceRegistry(alias)
+            hard = root / "hard.jsonl"
+            os.link(real, hard)
+            with self.assertRaises(InvalidSchemaError):
+                ResourceRegistry(hard)
+
+    def test_registry_replay_requires_exact_event_and_resource_keys(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            ResourceRegistry(path).register(record())
+            event = json.loads(path.read_text())
+            del event["resource"]["dependent_node_ids"]
+            path.write_text(json.dumps(event) + "\n", encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError):
+                ResourceRegistry(path)
+
+    def test_registry_normalizes_lock_failures_and_terminal_requires_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with mock.patch("workflow_kernel.resources.LockHandle.acquire_bound", side_effect=OSError("lock")):
+                with self.assertRaises(InvalidSchemaError):
+                    ResourceRegistry(Path(directory) / "resources.jsonl")
+            registry = ResourceRegistry(Path(directory) / "other.jsonl")
+            value = record()
+            registry.register(value)
+            with self.assertRaises(InvalidSchemaError):
+                registry.record_disposition(disposition(value, CleanupDisposition.REMOVED, "forged"))
+
+    def test_exact_collection_boundaries_reject_strings_and_lists(self):
+        with self.assertRaises(InvalidSchemaError):
+            ResourceRecord(
+                "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                "stop-remove", NOW, dependent_node_ids="node-2", labels={},
+            )
+        with self.assertRaises(InvalidSchemaError):
+            CleanupReceipt(CleanupScope("run-1"), [], (), ())
 
 
 if __name__ == "__main__":
