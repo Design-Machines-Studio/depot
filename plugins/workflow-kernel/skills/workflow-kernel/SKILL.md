@@ -135,11 +135,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   that ledger-authoritative replacement in either revision direction without a
   caller flag, alternate mutation method, or weakened path identity, lease, or
   cooperating-writer CAS enforcement. Replay issuance is revision-bound and
-  one-shot: publication requires the issued expected revision and consumes the
-  capability before filesystem observation or temporary-file work, so success
-  and any later publication failure both make it unusable. Ordinary prepared
-  capabilities retain their existing reusable behavior. There is no public
-  rollback API.
+  one-shot: publication requires the issued expected revision. Invalid lease,
+  expected-revision shape, or issuance-binding checks reject without consuming
+  the capability; after those static checks, publication consumes it immediately
+  before filesystem observation or temporary-file work, so success and any
+  later publication failure both make it unusable. Ordinary prepared capabilities
+  retain their existing reusable behavior. There is no public rollback API.
   Preparation uses the same field-wise bounded snapshot-and-encode helper as
   `encode_state()` but does not acquire or replace the live run lease.
   Coordinated CLI append prepares before event publication while holding that

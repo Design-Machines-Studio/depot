@@ -870,7 +870,7 @@ class StateStoreTests(unittest.TestCase):
                     store.publish(ordinary, 2, lease=lease)
             self.assertEqual(path.read_bytes(), before)
 
-    def test_replay_prepared_publication_requires_issued_expected_revision(self):
+    def test_replay_static_rejections_preserve_token_for_corrected_publication(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
             store = StateStore(path)
@@ -880,9 +880,24 @@ class StateStoreTests(unittest.TestCase):
                 store.write(current, -1, lease=lease)
             authoritative = state_module._prepare_replay_state(store, base, 2)
 
-            with RunLease(path) as lease, self.assertRaises(RevisionConflictError):
-                store.publish(authoritative, 1, lease=lease)
-            self.assertEqual(store.load().revision, 2)
+            with self.assertRaises(LeaseConflictError):
+                store.publish(authoritative, 2)
+            with RunLease(path) as lease:
+                for invalid_expected in (True, -2):
+                    with self.subTest(expected_revision=invalid_expected), \
+                            self.assertRaises(RevisionConflictError):
+                        store.publish(authoritative, invalid_expected, lease=lease)
+                with self.assertRaises(RevisionConflictError) as raised:
+                    store.publish(authoritative, 1, lease=lease)
+                self.assertEqual(raised.exception.code, "revision_conflict")
+                self.assertEqual(raised.exception.message, "invalid expected revision")
+                self.assertEqual(dict(raised.exception.details), {
+                    "expected_revision": 1,
+                    "reason_code": detail_digest("prepared_expected_revision_mismatch"),
+                })
+                self.assertNotIn("actual_revision", raised.exception.details)
+                store.publish(authoritative, 2, lease=lease)
+            self.assertEqual(store.load(), base)
 
     def test_replay_prepared_publication_is_consumed_after_success(self):
         with tempfile.TemporaryDirectory() as directory:

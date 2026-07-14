@@ -356,9 +356,9 @@ def _capability_types():
                 })
             if (issuance_mode is ledger_reconciliation_issuance
                     and expected_revision != issued_expected_revision):
-                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
-                    ErrorDetailKey.EXPECTED_REVISION.value: issued_expected_revision,
-                    ErrorDetailKey.ACTUAL_REVISION.value: expected_revision,
+                raise RevisionConflictError(ErrorMessage.INVALID_EXPECTED_REVISION, {
+                    ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                    ErrorDetailKey.REASON_CODE.value: "prepared_expected_revision_mismatch",
                 })
             path = record["path"]
             if record["binding"].parent_identity is None:
