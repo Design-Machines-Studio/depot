@@ -5,6 +5,11 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
+
+from workflow_kernel.cli import command_validate
+from workflow_kernel.schema import InvalidSchemaError
 
 
 class CliTests(unittest.TestCase):
@@ -56,6 +61,38 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn(sentinel, result.stderr)
         self.assertEqual(json.loads(result.stderr)["error"]["details"]["reason_code"], "invalid_argument")
+
+    def test_validate_loads_materialized_state_once_on_mismatch(self):
+        materialized = SimpleNamespace(revision=3)
+        reconstructed = SimpleNamespace(revision=4)
+        events = mock.Mock()
+        events.validate.return_value = ((object(),), ())
+        states = mock.Mock()
+        states.path.exists.return_value = True
+        states.load.return_value = materialized
+        args = SimpleNamespace(directory="unused", recovery=False)
+        with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
+                mock.patch("workflow_kernel.cli.TransitionEngine") as engine:
+            engine.return_value.reconstruct.return_value = reconstructed
+            with self.assertRaises(InvalidSchemaError):
+                command_validate(args)
+        states.load.assert_called_once_with()
+
+    def test_documented_cache_resolver_is_quiet_with_only_codex_cache(self):
+        skill = Path(__file__).parents[2] / "SKILL.md"
+        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            refs = Path(directory) / ".codex/plugins/cache/depot/workflow-kernel/0.1.0/skills/workflow-kernel/references"
+            package = refs / "workflow_kernel"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text("")
+            (package / "__main__.py").write_text("print('codex-only-runtime')\n")
+            env = dict(os.environ, HOME=directory)
+            env.pop("PYTHONPATH", None)
+            result = subprocess.run(["zsh", "-c", snippet], text=True, capture_output=True, env=env, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertIn("codex-only-runtime", result.stdout)
 
 
 if __name__ == "__main__":

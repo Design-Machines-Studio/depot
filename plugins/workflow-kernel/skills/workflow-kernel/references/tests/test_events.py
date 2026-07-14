@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import os
 from pathlib import Path
 from unittest import mock
 
@@ -79,3 +80,58 @@ class EventStoreTests(unittest.TestCase):
             with mock.patch("workflow_kernel.schema.MAX_PAYLOAD_DEPTH", 2):
                 with self.assertRaises(CorruptEventError):
                     EventStore(path).replay()
+
+    def test_symlinked_ledger_is_rejected_without_mutating_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "other-run.jsonl"
+            EventStore(target).append(event(0), 0)
+            before = target.read_bytes()
+            alias = root / "events.jsonl"
+            alias.symlink_to(target)
+            with self.assertRaises(CorruptEventError):
+                EventStore(alias).validate()
+            with self.assertRaises(CorruptEventError):
+                EventStore(alias).append(event(1), 1)
+            self.assertEqual(target.read_bytes(), before)
+
+    def test_symlinked_event_lock_is_rejected_without_touching_victim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            victim = Path(directory) / "victim.txt"
+            victim.write_text("do-not-touch")
+            path.with_name(path.name + ".lock").symlink_to(victim)
+            before = victim.read_bytes()
+            with self.assertRaises(SequenceConflictError):
+                EventStore(path).append(event(0), 0)
+            self.assertEqual(victim.read_bytes(), before)
+
+    def test_event_writer_fails_closed_without_crash_safe_locking(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            with mock.patch("workflow_kernel.events.fcntl", None):
+                with self.assertRaises(SequenceConflictError) as raised:
+                    EventStore(path).append(event(0), 0)
+            self.assertEqual(raised.exception.details["reason_code"], "locking_unsupported")
+            self.assertFalse(path.exists())
+            self.assertFalse(path.with_name(path.name + ".lock").exists())
+
+    def test_append_does_not_reopen_a_swapped_regular_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "events.jsonl"
+            target = root / "other-run.jsonl"
+            EventStore(path).append(event(0), 0)
+            EventStore(target).append(event(0), 0)
+            before = target.read_bytes()
+            store = EventStore(path)
+
+            def swap_after_replay():
+                existing = EventStore(path).replay()
+                path.unlink()
+                os.link(target, path)
+                return existing
+
+            with mock.patch.object(store, "replay", side_effect=swap_after_replay):
+                store.append(event(1), 1)
+            self.assertEqual(target.read_bytes(), before)

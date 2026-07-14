@@ -58,10 +58,12 @@ def command_validate(args):
     if not replayed:
         raise CorruptEventError("authoritative event ledger is missing or empty")
     state = TransitionEngine().reconstruct(replayed)
-    if states.path.exists() and states.load() != state:
-        raise InvalidSchemaError("materialized state does not match event ledger", {
-            "materialized_revision": states.load().revision, "ledger_revision": state.revision,
-        })
+    if states.path.exists():
+        materialized = states.load()
+        if materialized != state:
+            raise InvalidSchemaError("materialized state does not match event ledger", {
+                "materialized_revision": materialized.revision, "ledger_revision": state.revision,
+            })
     _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
     return 0
 

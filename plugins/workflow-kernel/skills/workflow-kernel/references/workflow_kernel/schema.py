@@ -52,7 +52,7 @@ class KernelError(Exception):
         self.message = message
         try:
             self.details = redact(dict(details or {}))
-        except TypeError:
+        except (TypeError, ValueError):
             self.details = {"detail": "[UNSAFE]"}
         super().__init__(message)
 
@@ -66,6 +66,10 @@ class InvalidSchemaError(KernelError):
 
 class CorruptEventError(KernelError):
     code = "corrupt_event"
+
+
+class CorruptStateError(KernelError):
+    code = "corrupt_state"
 
 
 class SequenceConflictError(KernelError):
@@ -200,13 +204,7 @@ class NodeState:
             raise InvalidSchemaError("node must be an object")
         fields = {"node_id", "status", "dependencies", "evidence"}
         _only(data, fields, fields)
-        try:
-            status = NodeStatus(data["status"])
-        except (ValueError, TypeError) as exc:
-            raise InvalidSchemaError("unknown node status", {"status": data.get("status")}) from exc
-        dependencies = _string_tuple(data["dependencies"], "dependencies")
-        evidence = _string_tuple(data["evidence"], "evidence")
-        return cls(_string(data["node_id"], "node_id"), status, dependencies, evidence)
+        return cls(data["node_id"], data["status"], data["dependencies"], data["evidence"])
 
     def to_dict(self) -> dict:
         return {"node_id": self.node_id, "status": self.status.value,
@@ -283,25 +281,13 @@ class RunState:
             raise InvalidSchemaError("state must be an object")
         fields = {"schema_version", "revision", "run_id", "mode", "status", "created_at", "updated_at", "nodes", "evidence", "cleanup_reconciled"}
         _only(data, fields, fields)
-        version = _strict_int(data["schema_version"], "schema_version", minimum=1)
-        if version != SCHEMA_VERSION:
-            raise InvalidSchemaError("unsupported schema version", {"schema_version": version})
-        try:
-            mode, status = RunMode(data["mode"]), RunStatus(data["status"])
-        except (ValueError, TypeError) as exc:
-            raise InvalidSchemaError("unknown run enum", {"mode": data.get("mode"), "status": data.get("status")}) from exc
         raw_nodes = data["nodes"]
         if not isinstance(raw_nodes, Mapping):
             raise InvalidSchemaError("nodes must be an object")
         nodes = {key: NodeState.from_dict(value) for key, value in raw_nodes.items()}
-        if any(key != node.node_id for key, node in nodes.items()):
-            raise InvalidSchemaError("node keys must match node ids")
-        cleanup = data["cleanup_reconciled"]
-        if not isinstance(cleanup, bool):
-            raise InvalidSchemaError("cleanup_reconciled must be boolean")
-        return cls(version, _strict_int(data["revision"], "revision"), _string(data["run_id"], "run_id"),
-                   mode, status, _timestamp(data["created_at"], "created_at"), _timestamp(data["updated_at"], "updated_at"),
-                   MappingProxyType(nodes), _string_tuple(data["evidence"], "evidence", references=True), cleanup)
+        return cls(data["schema_version"], data["revision"], data["run_id"], data["mode"], data["status"],
+                   data["created_at"], data["updated_at"], MappingProxyType(nodes), data["evidence"],
+                   data["cleanup_reconciled"])
 
     def to_dict(self) -> dict:
         return {

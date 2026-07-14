@@ -18,7 +18,9 @@ cache. Avoid hardcoded version directories:
 ```sh
 KERNEL_REFS=""
 for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  KERNEL_REFS=$(ls -td "$CACHE_ROOT"/workflow-kernel/*/skills/workflow-kernel/references 2>/dev/null | head -1)
+  KERNEL_REFS=$(find "$CACHE_ROOT/workflow-kernel" -type d \
+    -path "*/skills/workflow-kernel/references" -prune \
+    -exec ls -td {} + 2>/dev/null | head -1)
   [ -n "$KERNEL_REFS" ] && break
 done
 if [ -z "$KERNEL_REFS" ]; then
@@ -52,15 +54,22 @@ errors as stable JSON. Treat `--help` output as plain text.
 ## Public API and Contracts
 
 - Construct immutable `WorkflowEvent`, `NodeState`, and `RunState` schema
-  objects; unknown fields, enums, versions, unsafe references, and invalid
-  JSON shapes fail with a stable `KernelError.code`.
+  objects. Direct Python construction follows normal signature semantics, so
+  missing or extra positional arguments raise Python `TypeError`. Use
+  `from_dict()` as the boundary for untrusted mappings; unknown fields, enums,
+  versions, unsafe references, and invalid JSON shapes then fail with a stable
+  `KernelError.code`.
 - Use `EventStore.append(event, expected_sequence)` to append exactly the next
   event. Use `EventStore.replay()` to reject gaps, corruption, conflicting run
   IDs, and bounded-input violations.
+- Use `StateStore.load()` to read the bounded materialization. Unsafe paths or
+  invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
 - Acquire `RunLease(state_path)` and pass that live capability to
   `StateStore.write(state, expected_revision, lease=lease)`. A lease for a
   different path or a released lease never authorizes a write. POSIX advisory
-  locks release on process exit, so crash residue does not become a lock.
+  locks release on process exit, so crash residue does not become a lock. Hosts
+  without POSIX `fcntl` locking fail closed with a stable conflict error; the
+  kernel never falls back to crash-stale sentinel locking.
 - Use `TransitionEngine.apply(state, event)` for one pure transition and
   `TransitionEngine.reconstruct(events)` for deterministic replay. Event
   sequence equals the prior state revision; each accepted event increments the

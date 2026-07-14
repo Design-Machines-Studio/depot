@@ -2,6 +2,7 @@ import json
 import unittest
 
 from workflow_kernel.schema import (
+    CorruptStateError,
     InvalidSchemaError,
     RunMode,
     RunState,
@@ -89,3 +90,23 @@ class SchemaTests(unittest.TestCase):
                               "2026-07-14T00:00:00Z", {"evidence": [reference]})
             with self.subTest(receipt=reference), self.assertRaises(UnsafePayloadError):
                 encode_receipt({"reference": reference})
+
+    def test_corrupt_state_error_has_stable_public_code(self):
+        self.assertEqual(CorruptStateError("bad state").code, "corrupt_state")
+
+    def test_error_details_value_error_is_safely_contained(self):
+        fixture = "never-print-this-credential"
+        error = UnsafePayloadError("unsafe", {
+            "authorization": "Bearer " + fixture,
+            "reference": "https://user:" + fixture + "@example.invalid/proof",
+        })
+        encoded = json.dumps(error.to_dict(), sort_keys=True)
+        self.assertNotIn(fixture, encoded)
+        self.assertEqual(error.details, {"detail": "[UNSAFE]"})
+
+    def test_python_signature_errors_are_native_but_from_dict_is_stable(self):
+        with self.assertRaises(TypeError):
+            WorkflowEvent(1, 0)
+        with self.assertRaises(InvalidSchemaError) as raised:
+            WorkflowEvent.from_dict({})
+        self.assertEqual(raised.exception.code, "invalid_schema")
