@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from types import MappingProxyType
 from typing import Mapping, Optional, Tuple
 
@@ -140,13 +141,14 @@ class PolicyDocument:
     forbidden_downgrades: frozenset[tuple[IsolationMode, IsolationMode]]
     workflow_safety_anchor: Mapping[str, object]
     economics_mode: str
+    verification_defaults: Mapping[str, object]
 
     def __post_init__(self) -> None:
         captured = (
             self.retry_budgets, self.identical_signature_limit,
             self.risk_human_approval, self.isolation_order,
             self.forbidden_downgrades, self.workflow_safety_anchor,
-            self.economics_mode,
+            self.economics_mode, self.verification_defaults,
         )
         try:
             primitives = _policy_origin_primitives(captured)
@@ -414,10 +416,16 @@ def _sort_downgrade_pairs(pairs: list) -> Optional[list]:
 
 
 def _policy_document_payload(captured: tuple) -> dict:
+    if len(captured) == 7:
+        captured = captured + (_TrustedPolicyMap({
+            "browser_engines": ("chromium", "firefox"),
+            "desktop_viewport": "1440x900",
+            "mobile_viewport": "375x812",
+        }),)
     (
         retry_budgets, identical_signature_limit, risk_human_approval,
         isolation_order, forbidden_downgrades, workflow_safety_anchor,
-        economics_mode,
+        economics_mode, verification_defaults,
     ) = captured
     state = _PolicyTraversal()
     if _classify_policy_value(forbidden_downgrades) == "frozenset":
@@ -489,6 +497,9 @@ def _policy_document_payload(captured: tuple) -> dict:
         "economics": {"mode": _plain_policy_value(
             economics_mode, _state=state, _depth=1,
         )},
+        "verification": _plain_policy_value(
+            verification_defaults, _state=state, _depth=1,
+        ),
     }
 
 
@@ -500,7 +511,7 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
             document.retry_budgets, document.identical_signature_limit,
             document.risk_human_approval, document.isolation_order,
             document.forbidden_downgrades, document.workflow_safety_anchor,
-            document.economics_mode,
+            document.economics_mode, document.verification_defaults,
         )
         origin = _policy_origin_primitives(captured)
         payload = _policy_document_payload(captured)
@@ -529,7 +540,7 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
         raise invalid_policy("invalid_policy_document") from None
     payload = _exact_keys(payload, {
         "schema_version", "retry", "gates", "isolation", "capability_names",
-        "workflow_safety_anchor", "economics",
+        "workflow_safety_anchor", "economics", "verification",
     }, "invalid_policy_document")
     if type(payload["schema_version"]) is not int or payload["schema_version"] != POLICY_SCHEMA_VERSION:
         raise invalid_policy("unsupported_policy_version")
@@ -623,10 +634,27 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
     economics = _exact_keys(payload["economics"], {"mode"}, "invalid_economics_policy")
     if type(economics["mode"]) is not str or economics["mode"] != "proposal_only":
         raise invalid_policy("economics_must_be_proposal_only")
+    verification = _exact_keys(
+        payload["verification"],
+        {"browser_engines", "desktop_viewport", "mobile_viewport"},
+        "invalid_verification_policy",
+    )
+    engines = verification["browser_engines"]
+    viewport_pattern = re.compile(r"[1-9][0-9]{1,4}x[1-9][0-9]{1,4}\Z")
+    if (type(engines) is not list or engines != ["chromium", "firefox"]
+            or any(type(verification[name]) is not str
+                   or viewport_pattern.fullmatch(verification[name]) is None
+                   for name in ("desktop_viewport", "mobile_viewport"))):
+        raise invalid_policy("invalid_verification_policy")
+    verification_defaults = _TrustedPolicyMap({
+        "browser_engines": tuple(engines),
+        "desktop_viewport": verification["desktop_viewport"],
+        "mobile_viewport": verification["mobile_viewport"],
+    })
     return PolicyDocument(
         _TrustedPolicyMap(safe_budgets), convergence_limit, tuple(risk_values), order,
         frozenset(forbidden), _workflow_safety_anchor(payload["workflow_safety_anchor"]),
-        economics["mode"],
+        economics["mode"], verification_defaults,
     )
 
 

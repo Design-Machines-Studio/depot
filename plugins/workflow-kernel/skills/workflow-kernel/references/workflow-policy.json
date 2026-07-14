@@ -81,5 +81,10 @@
     },
     "non_executable_classes": ["investigation"]
   },
-  "economics": {"mode": "proposal_only"}
+  "economics": {"mode": "proposal_only"},
+  "verification": {
+    "browser_engines": ["chromium", "firefox"],
+    "desktop_viewport": "1440x900",
+    "mobile_viewport": "375x812"
+  }
 }

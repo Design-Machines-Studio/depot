@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/verification-profile-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source", "discovery_status", "cases", "auth_field_names"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source": {"enum": ["project_declaration", "not_declared"]},
+    "discovery_status": {"enum": ["declared", "not_declared"]},
+    "auth_field_names": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}}
+  },
+  "$defs": {
+    "case": {
+      "type": "object", "additionalProperties": false,
+      "required": ["case_id", "persona_id", "scenario_id", "role", "route", "browser_engine", "viewport", "required", "expected_outcome", "requires_auth", "browser_source", "viewport_source", "legacy_status_defaulted"],
+      "properties": {
+        "case_id": {"type": "string"}, "persona_id": {"type": "string"},
+        "scenario_id": {"type": "string"}, "role": {"type": "string"},
+        "route": {"type": "string"}, "browser_engine": {"enum": ["chromium", "firefox", "webkit"]},
+        "viewport": {"type": "string"}, "required": {"type": "boolean"},
+        "expected_outcome": {"enum": ["SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"]},
+        "requires_auth": {"type": "boolean"},
+        "browser_source": {"enum": ["project_config", "workflow_policy_default"]},
+        "viewport_source": {"enum": ["project_config", "task_declaration", "persona_default", "workflow_policy_default"]},
+        "legacy_status_defaulted": {"type": "boolean"}
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+---
+id: GOV-SAMPLE-001
+title: Review a proposal
+area: governance
+feature: proposals
+route: /governance/proposals/sample
+requires_auth: true
+requires_role: member
+auth_fields:
+  - session_cookie
+preconditions:
+  - "A signed-in member has a proposal to review"
+personas:
+  - id: casual-member
+    expected: FRICTION
+---
+
+# Scenario
+
+Review the proposal and understand the next action.
+

@@ -47,32 +47,22 @@ If a specific URL was provided in the prompt context, use that directly and skip
 
 ## Browser Fallback Chain
 
-If Playwright MCP tools fail (connection refused, timeout, browser crash), do NOT skip testing. Follow this fallback chain:
+Use `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
+On failure, capture safe screenshot/trace/console/error evidence before recovery.
+Quit the primary browser process/engine session, relaunch it with a fresh profile
+and changed session identity, and retry once. If that proof is unavailable, record
+`primary_restart_unavailable`. Then launch one genuinely different engine and
+retry once. Closing a tab/context, changing tool wrappers for the same engine, or
+restarting the application/container does not prove browser restart.
 
-### Step 1: Retry Playwright
-Try the Playwright tools again -- transient failures are common. If it works on retry, continue normally.
-
-### Step 2: Restart and Retry
-If Playwright still fails, try restarting the browser session:
-1. Call `browser_close` to close any existing session
-2. Wait 3 seconds
-3. Retry `browser_navigate` to the target URL
-
-### Step 3: Chrome for Claude (Vivaldi)
-If the compound-engineering Playwright MCP is unavailable, try the Chrome for Claude plugin tools instead. These are installed for both Chrome and Vivaldi browsers:
-- Use `mcp__plugin_playwright_playwright__browser_navigate` (the non-compound-engineering Playwright prefix)
-- Run the same testing protocol with these alternative tool names
-
-### Step 4: Stop and Report
-If ALL of the above fail, **stop the review and tell the user**:
+If the alternate engine fails or cannot launch, **stop the review and tell the user**:
 
 ```
 BROWSER TESTING BLOCKED -- Could not connect to any browser.
 
-Attempted:
-1. Playwright MCP tools (compound-engineering) -- [error]
-2. Playwright retry after browser_close -- [error]
-3. Chrome for Claude plugin tools -- [error]
+Outcome: human_help_required
+Attempt evidence: [safe references]
+Missing cases: [exact persona/scenario/route/engine/viewport IDs]
 
 Please:
 - Check that Playwright or Chrome for Claude is running
@@ -80,7 +70,8 @@ Please:
 - Re-run the review after fixing browser connectivity
 ```
 
-**Never silently skip browser testing.** The user must be informed so they can intervene.
+**Never silently skip browser testing.** Curl may diagnose reachability but cannot
+satisfy browser proof or change this outcome to skipped/approved.
 
 ## URL Discovery
 

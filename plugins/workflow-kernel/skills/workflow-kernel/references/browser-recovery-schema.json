@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/browser-recovery-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "status", "reason_code", "attempts", "lifecycle", "missing_case_ids"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["clean", "recovered", "blocked"]},
+    "reason_code": {"type": "string"},
+    "attempts": {"type": "array", "items": {"type": "object"}},
+    "lifecycle": {"type": "array", "items": {"type": "object"}},
+    "missing_case_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+  }
+}

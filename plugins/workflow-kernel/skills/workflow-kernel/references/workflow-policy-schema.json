@@ -4,7 +4,7 @@
   "title": "Workflow Kernel Policy",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "retry", "gates", "isolation", "capability_names", "workflow_safety_anchor", "economics"],
+  "required": ["schema_version", "retry", "gates", "isolation", "capability_names", "workflow_safety_anchor", "economics", "verification"],
   "properties": {
     "schema_version": {"const": 1},
     "retry": {
@@ -79,6 +79,16 @@
       "additionalProperties": false,
       "required": ["mode"],
       "properties": {"mode": {"const": "proposal_only"}}
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["browser_engines", "desktop_viewport", "mobile_viewport"],
+      "properties": {
+        "browser_engines": {"const": ["chromium", "firefox"]},
+        "desktop_viewport": {"type": "string", "pattern": "^[1-9][0-9]{1,4}x[1-9][0-9]{1,4}$"},
+        "mobile_viewport": {"type": "string", "pattern": "^[1-9][0-9]{1,4}x[1-9][0-9]{1,4}$"}
+      }
     }
   },
   "$defs": {

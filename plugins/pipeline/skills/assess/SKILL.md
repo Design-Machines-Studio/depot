@@ -105,6 +105,13 @@ Baseline screenshots are Tier 1 (ephemeral) artifacts per the artifact lifecycle
 
 Many codebases ship with dev-time auth bypasses or persona-switching helpers. Discovering these up-front saves the prompt-writer from having to re-derive them from handler code.
 
+For projects with `tests/ux/`, emit a sanitized declared verification profile
+using `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
+Include every selected task/persona/route/browser/viewport case and provenance,
+not a representative sample. Task frontmatter overrides the generated coverage
+matrix. Record auth field names only; never copy cookie, bearer, password,
+username, or fixture-secret values into assessment HTML or its data islands.
+
 Protocol:
 
 1. **Auth middleware scan:** grep the project's auth middleware (common locations: `internal/handlers/middleware.go`, `backend/auth/*.go`, `app/Http/Middleware/*.php`, `config/authentication.*`) for keywords: `cookie`, `X-Test-User`, `Bearer`, `session`, `impersonate`. **Extract the header/cookie NAME only. Redact values.** If a matched line contains `=<literal>`, `: "<literal>"`, `Bearer <literal>`, or any hardcoded token, flag the file for manual review and record only the field name in the Assessment Brief. Never copy raw matched lines into `plans/<feature-slug>/assessment.html` (neither the rendered Test Personas section nor the `testPersonas` data island) -- dev-mode middleware sometimes hardcodes bearer tokens or session secrets that must not propagate downstream.
@@ -200,6 +207,8 @@ Present the Assessment Brief to the user. If running as part of `/pipeline`, pas
 
 ## Graceful Degradation
 
-- No Playwright MCP: Skip UX assessment, note in report. Playwright is intentionally not declared in `mcpDependencies` because the UX assessment is optional -- the skill functions without it.
+- No Playwright MCP: discovery may continue, but required UI/integration browser
+  coverage is blocked. Follow the shared recovery ladder and return
+  `human_help_required`; never mark required proof skipped or curl-verified.
 - No ai-memory MCP: Skip project history check, note in report
 - No domain plugins: Use general patterns only, note which plugins would have helped

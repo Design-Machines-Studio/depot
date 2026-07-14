@@ -45,7 +45,13 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 
 Use the first URL that loads successfully. If none respond, ask the user for the URL.
 
-If Playwright tools fail, follow the Browser Fallback Chain defined in the `visual-browser-tester` agent definition. Never silently skip browser testing.
+If Playwright tools fail, follow
+`plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`
+and the Browser Fallback Chain defined in the `visual-browser-tester` agent.
+The receipt must preserve every failed and recovered attempt, prove a primary
+process/session quit plus fresh relaunch, then try a genuinely different engine.
+Exhaustion returns blocked `human_help_required` with exact missing cases. Never
+silently skip required browser testing, and never treat curl as browser proof.
 
 **Local domain preference:** For Assembly projects, prefer local `.site`/`.test` TLD domains (e.g., `http://assembly.coop.site`) over `localhost:PORT`. These are configured via Caddy/DDEV and match the visual-browser-tester's URL discovery order.
 
