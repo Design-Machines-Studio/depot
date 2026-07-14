@@ -72,12 +72,15 @@ kind and ID, argv, environment, owner, lifecycle, action, canonical evidence
 and capability SHA-256 digests, explicit preconditions, dependency ordering,
 and predecessor-result identity. Chunk 05 must refresh exact Git or
 Docker evidence and call the adapter revalidation contract immediately before
-executing the argv. Actions for records with declared dependents bind both the
-exact dependent-node IDs and the planning-time active-node snapshot. Execution
-requires a fresh, readable `ActiveNodeProof` plus the exact registry record;
-any active dependent or changed dependency/active-node snapshot invalidates the
-action. Changed ref count, object identity, label, lease/use state, inspect
-result, or resource identity likewise invalidates it.
+executing the argv. Actions for records with declared dependents bind the exact
+dependent-node IDs and an authoritative status row for every dependent. A
+fresh, readable `IncompleteNodeProof` treats `pending`, `ready`, `running`, and
+`waiting` nodes as incomplete; `succeeded`, `failed`, `blocked`, and `skipped`
+are terminal. Missing status rows, any incomplete dependent, stale proof, or a
+changed dependency/status snapshot invalidates the action. Changed ref count,
+object identity, label, lease/use state, inspect result, or resource identity
+likewise invalidates it. The lifecycle coordinator accepts and forwards this
+typed proof; lower adapters expose no raw active-ID shortcut.
 
 Cleanup uses only exact IDs:
 

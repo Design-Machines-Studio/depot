@@ -3,9 +3,15 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory, DockerResource, LeaseProof
-from workflow_kernel.resources import CommandResult, CleanupDisposition, OwnedResourceLifecycle, ResourceKind, ResourceRegistry
-from workflow_kernel.schema import InvalidSchemaError, RunStatus
+from workflow_kernel.adapters.docker import (
+    DockerAdapter, DockerInventory, DockerResource, IncompleteNodeProof,
+    LeaseProof,
+)
+from workflow_kernel.resources import (
+    CommandResult, CleanupDisposition, OwnedResourceLifecycle, ResourceKind,
+    ResourceRecord, ResourceRegistry,
+)
+from workflow_kernel.schema import InvalidSchemaError, NodeStatus, RunStatus
 
 
 NOW = datetime(2026, 7, 15, tzinfo=timezone.utc)
@@ -74,6 +80,61 @@ class TerminalCleanupTests(unittest.TestCase):
             self.assertEqual((), receipt.after)
         with self.assertRaises(InvalidSchemaError):
             self.lifecycle.at_terminal(self.registry, self.inventory, "run-1", RunStatus.RUNNING)
+
+    def test_chunk_boundary_retains_every_nonterminal_dependent_then_cleans(self):
+        labels = self.adapter.labels_for(
+            "run-2", "producer", "chunk", "remove-when-stopped",
+        )
+        value = DockerResource(
+            "ctr-shared", ResourceKind.CONTAINER, labels, NOW,
+        )
+        registry = ResourceRegistry(Path(self.directory.name) / "dependent.jsonl")
+        record = ResourceRecord(
+            "ctr-shared", ResourceKind.CONTAINER, "run-2", "producer",
+            "chunk", "remove-when-stopped", NOW,
+            ("queued", "running"), labels,
+        )
+        registry.register(record)
+        lifecycle = OwnedResourceLifecycle(self.adapter)
+        for status in (
+            NodeStatus.PENDING, NodeStatus.READY, NodeStatus.RUNNING,
+            NodeStatus.WAITING,
+        ):
+            with self.subTest(status=status):
+                proof = IncompleteNodeProof(
+                    "run-2",
+                    (("queued", status), ("running", NodeStatus.SUCCEEDED)),
+                    True, NOW,
+                )
+                plan = lifecycle.after_chunk(
+                    registry, DockerInventory((value,)), "run-2", "producer",
+                    True, True, True, True,
+                    incomplete_node_proof=proof,
+                )
+                self.assertEqual((), plan.actions)
+                self.assertEqual(
+                    CleanupDisposition.RETAINED_FOR_DEPENDENCY,
+                    plan.dispositions[0].disposition,
+                )
+                self.assertEqual(
+                    ("dependent_node=queued",), plan.dispositions[0].evidence,
+                )
+
+        terminal = IncompleteNodeProof(
+            "run-2",
+            (("queued", NodeStatus.SKIPPED), ("running", NodeStatus.SUCCEEDED)),
+            True, NOW,
+        )
+        plan = lifecycle.after_chunk(
+            registry, DockerInventory((value,)), "run-2", "producer",
+            True, True, True, True,
+            incomplete_node_proof=terminal,
+        )
+        self.assertEqual(("docker", "rm", "ctr-shared"), plan.actions[0].argv)
+        self.adapter.revalidate_action(
+            plan.actions[0], value, ownership_record=record,
+            incomplete_node_proof=terminal,
+        )
 
 
 if __name__ == "__main__":

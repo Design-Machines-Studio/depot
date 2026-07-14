@@ -13,13 +13,14 @@ from workflow_kernel.adapters.docker import (
     DockerCreationPlan,
     DockerInventory,
     DockerResource,
+    IncompleteNodeProof,
     LeaseProof,
 )
 from workflow_kernel.resources import (
     CleanupDisposition, CleanupReceipt, CommandResult, ResourceDisposition,
     ResourceKind, ResourceRecord, ResourceRegistry, reseal_cleanup_action,
 )
-from workflow_kernel.schema import InvalidSchemaError
+from workflow_kernel.schema import InvalidSchemaError, NodeStatus
 
 
 NOW = datetime(2026, 7, 15, 1, 2, 3, tzinfo=timezone.utc)
@@ -424,11 +425,7 @@ class DockerLifecycleTests(unittest.TestCase):
             plan.actions[1], stopped, predecessor_result=predecessor, action_index=1,
         )
 
-    def test_revalidation_rejects_action_when_declared_dependent_becomes_active(self):
-        try:
-            from workflow_kernel.adapters.docker import ActiveNodeProof
-        except ImportError:
-            self.fail("Docker cleanup must expose a typed active-node proof")
+    def test_revalidation_requires_same_fresh_terminal_dependency_snapshot(self):
         labels = owned_labels(lifecycle="run", cleanup_policy="remove-when-stopped")
         value = resource(labels=labels)
         record = ResourceRecord(
@@ -437,24 +434,35 @@ class DockerLifecycleTests(unittest.TestCase):
         )
         registry = ResourceRegistry(Path(self.directory.name) / "dependent.jsonl")
         registry.register(record)
+        terminal = IncompleteNodeProof(
+            "run-1", (("consumer", NodeStatus.SUCCEEDED),), True, NOW,
+        )
         plan = self.adapter.plan_reconcile_run(
             registry, DockerInventory((value,)), "run-1",
-            active_node_ids=(), terminal=True,
+            incomplete_node_proof=terminal, terminal=True,
         )
         self.assertEqual(1, len(plan.actions))
         self.adapter.revalidate_action(
             plan.actions[0], value, ownership_record=record,
-            active_node_proof=ActiveNodeProof("run-1", (), True, NOW),
+            incomplete_node_proof=terminal,
         )
         with self.assertRaises(InvalidSchemaError):
             self.adapter.revalidate_action(
                 plan.actions[0], value, ownership_record=record,
-                active_node_proof=ActiveNodeProof(
-                    "run-1", ("consumer",), True, NOW,
+                incomplete_node_proof=IncompleteNodeProof(
+                    "run-1", (("consumer", NodeStatus.PENDING),), True, NOW,
+                ),
+            )
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                plan.actions[0], value, ownership_record=record,
+                incomplete_node_proof=IncompleteNodeProof(
+                    "run-1", (("consumer", NodeStatus.SUCCEEDED),), True,
+                    NOW - timedelta(minutes=2),
                 ),
             )
 
-    def test_dependent_cleanup_without_active_node_proof_is_blocked(self):
+    def test_dependent_cleanup_without_complete_node_proof_is_blocked(self):
         labels = owned_labels()
         value = resource(labels=labels)
         registry = ResourceRegistry(Path(self.directory.name) / "proof-missing.jsonl")
@@ -466,7 +474,23 @@ class DockerLifecycleTests(unittest.TestCase):
             registry, DockerInventory((value,)), "run-1", "node-1",
         )
         self.assertEqual((), plan.actions)
-        self.assertEqual("active_node_proof_missing", plan.dispositions[0].reason)
+        self.assertEqual("incomplete_node_proof_missing", plan.dispositions[0].reason)
+        incomplete = self.adapter.plan_chunk_cleanup(
+            registry, DockerInventory((value,)), "run-1", "node-1",
+            incomplete_node_proof=IncompleteNodeProof(
+                "run-1", (("other", NodeStatus.SUCCEEDED),), True, NOW,
+            ),
+        )
+        self.assertEqual((), incomplete.actions)
+        self.assertEqual("dependent_node_status_missing", incomplete.dispositions[0].reason)
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.plan_chunk_cleanup(
+                registry, DockerInventory((value,)), "run-1", "node-1",
+                incomplete_node_proof=IncompleteNodeProof(
+                    "run-1", (("consumer", NodeStatus.SUCCEEDED),), True,
+                    NOW - timedelta(minutes=2),
+                ),
+            )
 
     def test_compose_preserves_base_files_but_override_contains_labels_only(self):
         config_argv = ("docker", "compose", "-f", "compose.yml", "config", "--format", "json")
@@ -615,7 +639,7 @@ class DockerLifecycleTests(unittest.TestCase):
         orphan = resource("orphan-1")
         plan = self.adapter.plan_reconcile_run(
             orphan_registry, DockerInventory((orphan,), source="managed_orphan_sweep"),
-            "run-1", active_node_ids=(), terminal=True,
+            "run-1", terminal=True,
         )
         action = plan.actions[0]
         inspect = ("docker", "container", "inspect", "orphan-1")

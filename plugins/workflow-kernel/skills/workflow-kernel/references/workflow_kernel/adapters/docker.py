@@ -19,6 +19,7 @@ from workflow_kernel.resources import (
     cleanup_proof_digest, cleanup_result_id, disposition_for,
     reseal_cleanup_action,
 )
+from workflow_kernel.schema import NodeStatus
 
 
 LABEL_PREFIX = "com.designmachines.depot."
@@ -75,32 +76,72 @@ class LeaseReader(Protocol):
     def read(self, run_id: str) -> Optional[LeaseProof]: ...
 
 
+TERMINAL_NODE_STATUSES = frozenset({
+    NodeStatus.SUCCEEDED, NodeStatus.FAILED, NodeStatus.BLOCKED,
+    NodeStatus.SKIPPED,
+})
+
+
 @dataclass(frozen=True)
-class ActiveNodeProof:
-    """Authoritative active-node snapshot for one workflow run."""
+class IncompleteNodeProof:
+    """Authoritative status snapshot used to retain every nonterminal dependent."""
 
     run_id: str
-    active_node_ids: Tuple[str, ...]
+    node_statuses: Tuple[Tuple[str, NodeStatus], ...]
     readable: bool
     observed_at: datetime
 
     def __post_init__(self) -> None:
-        if not _valid_active_node_proof(self):
-            raise invalid_policy("invalid_active_node_proof")
+        if not _valid_incomplete_node_proof(self):
+            raise invalid_policy("invalid_incomplete_node_proof")
+
+    @property
+    def incomplete_node_ids(self) -> Tuple[str, ...]:
+        return tuple(
+            node_id for node_id, status in self.node_statuses
+            if status not in TERMINAL_NODE_STATUSES
+        )
 
 
-def _valid_active_node_proof(proof: object) -> bool:
-    return (
-        type(proof) is ActiveNodeProof
-        and _normalized_docker_text(proof.run_id, 256)
-        and type(proof.active_node_ids) is tuple
-        and len(set(proof.active_node_ids)) == len(proof.active_node_ids)
-        and all(_normalized_docker_text(value, 256) for value in proof.active_node_ids)
-        and type(proof.readable) is bool
-        and type(proof.observed_at) is datetime
-        and proof.observed_at.tzinfo is not None
-        and proof.observed_at.utcoffset() is not None
-    )
+def _valid_incomplete_node_proof(proof: object) -> bool:
+    if (
+        type(proof) is not IncompleteNodeProof
+        or not _normalized_docker_text(proof.run_id, 256)
+        or type(proof.node_statuses) is not tuple
+        or type(proof.readable) is not bool
+        or type(proof.observed_at) is not datetime
+        or proof.observed_at.tzinfo is None
+        or proof.observed_at.utcoffset() is None
+    ):
+        return False
+    seen = set()
+    for row in proof.node_statuses:
+        if type(row) is not tuple or len(row) != 2:
+            return False
+        node_id, status = row
+        if (
+            not _normalized_docker_text(node_id, 256)
+            or type(status) is not NodeStatus or node_id in seen
+        ):
+            return False
+        seen.add(node_id)
+    return True
+
+
+def _snapshot_incomplete_node_proof(proof: object) -> IncompleteNodeProof:
+    if type(proof) is not IncompleteNodeProof:
+        raise invalid_policy("invalid_incomplete_node_proof")
+    try:
+        rows = proof.node_statuses
+        snapshot = IncompleteNodeProof(
+            proof.run_id,
+            tuple((row[0], row[1]) for row in rows),
+            proof.readable,
+            proof.observed_at,
+        )
+    except Exception:
+        raise invalid_policy("invalid_incomplete_node_proof") from None
+    return snapshot
 
 
 @dataclass(frozen=True)
@@ -230,7 +271,7 @@ class DockerAdapter:
         self, runner: CommandRunner, *, now: Optional[Callable[[], datetime]] = None,
         lease_reader: Optional[LeaseReader] = None,
         lease_max_age: timedelta = timedelta(minutes=1),
-        active_node_max_age: timedelta = timedelta(minutes=1),
+        incomplete_node_max_age: timedelta = timedelta(minutes=1),
         creation_time_skew: timedelta = timedelta(minutes=5),
         stop_timeout_seconds: int = 10,
     ):
@@ -238,7 +279,7 @@ class DockerAdapter:
             raise invalid_policy("invalid_docker_stop_timeout")
         if (
             lease_max_age.total_seconds() < 0
-            or active_node_max_age.total_seconds() < 0
+            or incomplete_node_max_age.total_seconds() < 0
             or creation_time_skew.total_seconds() < 0
         ):
             raise invalid_policy("invalid_docker_proof_window")
@@ -246,7 +287,7 @@ class DockerAdapter:
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.lease_reader = lease_reader
         self.lease_max_age = lease_max_age
-        self.active_node_max_age = active_node_max_age
+        self.incomplete_node_max_age = incomplete_node_max_age
         self.creation_time_skew = creation_time_skew
         self.stop_timeout_seconds = stop_timeout_seconds
 
@@ -524,47 +565,48 @@ class DockerAdapter:
 
     def plan_chunk_cleanup(
         self, registry: ResourceRegistry, inventory: DockerInventory, run_id: str, node_id: str,
-        *, active_node_ids: Optional[Sequence[str]] = None,
+        *, incomplete_node_proof: Optional[IncompleteNodeProof] = None,
     ) -> CleanupPlan:
         records = [value for value in registry.resources_for(run_id, node_id) if value.lifecycle == "chunk" and value.kind in KIND_ORDER]
-        proof = self._capture_active_nodes(run_id, active_node_ids)
         return self._plan_registered(
             inventory, records, CleanupScope(run_id, node_id),
-            active_node_proof=proof,
+            incomplete_node_proof=incomplete_node_proof,
         )
 
     def plan_reconcile_run(
         self, registry: ResourceRegistry, inventory: DockerInventory, run_id: str,
-        *, active_node_ids: Optional[Sequence[str]] = None, terminal: bool = False,
+        *, incomplete_node_proof: Optional[IncompleteNodeProof] = None,
+        terminal: bool = False,
     ) -> CleanupPlan:
-        if active_node_ids is not None and type(active_node_ids) is not tuple:
-            raise invalid_policy("invalid_active_node_ids")
         records = [value for value in registry.resources_for(run_id) if value.kind in KIND_ORDER]
-        proof = self._capture_active_nodes(run_id, active_node_ids)
         return self._plan_registered(
             inventory, records, CleanupScope(run_id, terminal=terminal),
-            active_node_proof=proof,
+            incomplete_node_proof=incomplete_node_proof,
         )
 
     def _plan_registered(
         self, inventory: DockerInventory, records: Sequence[ResourceRecord], scope: CleanupScope,
-        *, active_node_proof: Optional[ActiveNodeProof],
+        *, incomplete_node_proof: Optional[IncompleteNodeProof],
     ) -> CleanupPlan:
         by_key = {(value.kind, value.resource_id): value for value in inventory.resources}
         exact_absent = _authoritative_absent_keys(inventory)
         actions = []
         dispositions = []
-        if active_node_proof is not None:
+        if incomplete_node_proof is not None:
+            incomplete_node_proof = _snapshot_incomplete_node_proof(
+                incomplete_node_proof,
+            )
             if (
-                type(active_node_proof) is not ActiveNodeProof
-                or not _valid_active_node_proof(active_node_proof)
-                or active_node_proof.run_id != scope.run_id
-                or not active_node_proof.readable
+                incomplete_node_proof.run_id != scope.run_id
+                or not incomplete_node_proof.readable
+                or not self._incomplete_node_proof_is_fresh(incomplete_node_proof)
             ):
-                raise invalid_policy("invalid_active_node_proof")
-            active = set(active_node_proof.active_node_ids)
+                raise invalid_policy("invalid_incomplete_node_proof")
+            statuses = dict(incomplete_node_proof.node_statuses)
+            incomplete = set(incomplete_node_proof.incomplete_node_ids)
         else:
-            active = set()
+            statuses = {}
+            incomplete = set()
         for record in sorted(records, key=lambda value: (KIND_ORDER[value.kind], value.resource_id)):
             resource = by_key.get((record.kind, record.resource_id))
             if resource is None:
@@ -579,22 +621,37 @@ class DockerAdapter:
             if not _registry_labels_agree(record, resource, self.creation_time_skew):
                 dispositions.append(disposition_for(record, CleanupDisposition.FOREIGN, "none", "registry_label_disagreement"))
                 continue
-            if record.dependent_node_ids and active_node_proof is None:
+            if record.dependent_node_ids and incomplete_node_proof is None:
                 dispositions.append(disposition_for(
                     record, CleanupDisposition.BLOCKED, "none",
-                    "active_node_proof_missing",
+                    "incomplete_node_proof_missing",
                 ))
                 continue
-            dependent_ids = tuple(sorted(node for node in record.dependent_node_ids if node in active))
+            missing_statuses = tuple(sorted(
+                node for node in record.dependent_node_ids if node not in statuses
+            ))
+            if missing_statuses:
+                dispositions.append(disposition_for(
+                    record, CleanupDisposition.BLOCKED, "none",
+                    "dependent_node_status_missing",
+                    evidence=("dependent_node=" + node for node in missing_statuses),
+                ))
+                continue
+            dependent_ids = tuple(sorted(
+                node for node in record.dependent_node_ids if node in incomplete
+            ))
             if dependent_ids:
                 dispositions.append(disposition_for(
-                    record, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "none", "active_dependent_node",
+                    record, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "none",
+                    "incomplete_dependent_node",
                     evidence=("dependent_node=" + node for node in dependent_ids),
                 ))
                 continue
             planned, disposition = self._plan_one(
                 record, resource, allow_stop=record.lifecycle == "chunk" or scope.terminal,
-                active_node_proof=(active_node_proof if record.dependent_node_ids else None),
+                incomplete_node_proof=(
+                    incomplete_node_proof if record.dependent_node_ids else None
+                ),
             )
             base = len(actions)
             actions.extend(_offset_dependencies(planned, base))
@@ -711,7 +768,7 @@ class DockerAdapter:
     def _plan_one(
         self, record: ResourceRecord, resource: DockerResource, *, allow_stop: bool,
         lease_proof: Optional[LeaseProof] = None,
-        active_node_proof: Optional[ActiveNodeProof] = None,
+        incomplete_node_proof: Optional[IncompleteNodeProof] = None,
     ) -> tuple[Tuple[CleanupAction, ...], Optional[ResourceDisposition]]:
         if resource.kind in (ResourceKind.NETWORK, ResourceKind.VOLUME):
             if not resource.use_known:
@@ -729,8 +786,8 @@ class DockerAdapter:
         )
         if lease_proof is not None:
             preconditions += ("inactive_run_lease",)
-        if active_node_proof is not None:
-            preconditions += ("active_node_snapshot",)
+        if incomplete_node_proof is not None:
+            preconditions += ("incomplete_node_snapshot",)
         if resource.kind is ResourceKind.CONTAINER:
             if resource.running:
                 if not allow_stop or record.cleanup_policy != "stop-remove":
@@ -743,7 +800,7 @@ class DockerAdapter:
                 actions.append(_docker_action(
                     record, resource, "stop", stop_argv, None,
                     preconditions + ("container_running",), lease_proof,
-                    active_node_proof,
+                    incomplete_node_proof,
                 ))
             projected = replace(resource, running=False) if actions else resource
             predecessor_id = cleanup_result_id(actions[0].argv, 0) if actions else None
@@ -751,19 +808,19 @@ class DockerAdapter:
                 record, projected, "remove", ("docker", "rm", resource.resource_id),
                 0 if actions else None,
                 preconditions + (("container_stopped_after_predecessor",) if actions else ()),
-                lease_proof, active_node_proof, predecessor_id,
+                lease_proof, incomplete_node_proof, predecessor_id,
             ))
         elif resource.kind is ResourceKind.NETWORK:
             actions.append(_docker_action(
                 record, resource, "remove", ("docker", "network", "rm", resource.resource_id),
                 None, preconditions + ("network_not_in_use",), lease_proof,
-                active_node_proof,
+                incomplete_node_proof,
             ))
         elif resource.kind is ResourceKind.VOLUME:
             actions.append(_docker_action(
                 record, resource, "remove", ("docker", "volume", "rm", resource.resource_id),
                 None, preconditions + ("volume_not_in_use",), lease_proof,
-                active_node_proof,
+                incomplete_node_proof,
             ))
         return tuple(actions), None
 
@@ -773,7 +830,7 @@ class DockerAdapter:
         predecessor_result: Optional[CommandResult] = None,
         *, action_index: Optional[int] = None,
         ownership_record: Optional[ResourceRecord] = None,
-        active_node_proof: Optional[ActiveNodeProof] = None,
+        incomplete_node_proof: Optional[IncompleteNodeProof] = None,
     ) -> None:
         """Validate the destructive capability against a fresh exact-ID inspect."""
         if (
@@ -793,25 +850,31 @@ class DockerAdapter:
             raise invalid_policy("invalid_docker_cleanup_revalidation") from None
         if (action.kind, action.resource_id) != (resource.kind, resource.resource_id):
             raise invalid_policy("docker_cleanup_precondition_changed")
-        requires_active_nodes = "active_node_snapshot" in action.preconditions
-        if requires_active_nodes:
+        requires_incomplete_nodes = "incomplete_node_snapshot" in action.preconditions
+        if requires_incomplete_nodes:
+            incomplete_node_proof = _snapshot_incomplete_node_proof(
+                incomplete_node_proof,
+            )
             if (
                 type(ownership_record) is not ResourceRecord
-                or type(active_node_proof) is not ActiveNodeProof
-                or not _valid_active_node_proof(active_node_proof)
-                or not active_node_proof.readable
-                or active_node_proof.run_id != action.run_id
-                or not self._active_node_proof_is_fresh(active_node_proof)
+                or not incomplete_node_proof.readable
+                or incomplete_node_proof.run_id != action.run_id
+                or not self._incomplete_node_proof_is_fresh(incomplete_node_proof)
                 or (ownership_record.kind, ownership_record.resource_id)
                 != (resource.kind, resource.resource_id)
                 or (ownership_record.run_id, ownership_record.node_id, ownership_record.lifecycle)
                 != (action.run_id, action.node_id, action.lifecycle)
-                or set(ownership_record.dependent_node_ids) & set(active_node_proof.active_node_ids)
+                or not set(ownership_record.dependent_node_ids).issubset(
+                    {node_id for node_id, _status in incomplete_node_proof.node_statuses}
+                )
+                or set(ownership_record.dependent_node_ids) & set(
+                    incomplete_node_proof.incomplete_node_ids
+                )
             ):
                 raise invalid_policy("docker_cleanup_precondition_changed")
             record = ownership_record
         else:
-            if ownership_record is not None or active_node_proof is not None:
+            if ownership_record is not None or incomplete_node_proof is not None:
                 raise invalid_policy("docker_cleanup_precondition_changed")
             record = ResourceRecord(
                 resource.resource_id, resource.kind, action.run_id, action.node_id,
@@ -831,14 +894,14 @@ class DockerAdapter:
             "registered_kind_and_exact_id", "ownership_labels_exact",
             "docker_inspect_exact_id_succeeded", "resource_use_revalidated",
         ) + (("inactive_run_lease",) if lease_proof is not None else ()) \
-            + (("active_node_snapshot",) if active_node_proof is not None else ())
+            + (("incomplete_node_snapshot",) if incomplete_node_proof is not None else ())
         expected = None
         if action.action == "stop" and resource.kind is ResourceKind.CONTAINER and resource.running:
             expected = _docker_action(
                 record, resource, "stop",
                 ("docker", "stop", "--time", str(self.stop_timeout_seconds), resource.resource_id),
                 None, base_preconditions + ("container_running",), lease_proof,
-                active_node_proof,
+                incomplete_node_proof,
             )
         elif action.action == "remove":
             if resource.system or (
@@ -879,23 +942,20 @@ class DockerAdapter:
                 preconditions += ("volume_not_in_use",)
             expected = _docker_action(
                 record, resource, "remove", argv, requires, preconditions,
-                lease_proof, active_node_proof, predecessor_id,
+                lease_proof, incomplete_node_proof, predecessor_id,
             )
         if expected is None or action != expected:
             raise invalid_policy("docker_cleanup_precondition_changed")
 
-    def _capture_active_nodes(
-        self, run_id: str, active_node_ids: Optional[Sequence[str]],
-    ) -> Optional[ActiveNodeProof]:
-        if active_node_ids is None:
-            return None
-        if type(active_node_ids) is not tuple:
-            raise invalid_policy("invalid_active_node_ids")
-        return ActiveNodeProof(run_id, active_node_ids, True, self.now())
-
-    def _active_node_proof_is_fresh(self, proof: ActiveNodeProof) -> bool:
-        age = self.now() - proof.observed_at
-        return timedelta(0) <= age <= self.active_node_max_age
+    def _incomplete_node_proof_is_fresh(self, proof: IncompleteNodeProof) -> bool:
+        current = self.now()
+        if (
+            type(current) is not datetime or current.tzinfo is None
+            or current.utcoffset() is None
+        ):
+            return False
+        age = current - proof.observed_at
+        return timedelta(0) <= age <= self.incomplete_node_max_age
 
     def record_results(
         self, plan: CleanupPlan, results: Sequence[CommandResult], after: DockerInventory,
@@ -1220,7 +1280,7 @@ def _resource_identity(value: DockerResource) -> str:
 def _docker_cleanup_evidence(
     record: ResourceRecord, resource: DockerResource,
     lease_proof: Optional[LeaseProof] = None,
-    active_node_proof: Optional[ActiveNodeProof] = None,
+    incomplete_node_proof: Optional[IncompleteNodeProof] = None,
 ) -> dict[str, object]:
     payload = {
         "resource_id": resource.resource_id, "kind": resource.kind.value,
@@ -1231,11 +1291,17 @@ def _docker_cleanup_evidence(
         "run_id": record.run_id, "node_id": record.node_id,
         "lifecycle": record.lifecycle, "cleanup_policy": record.cleanup_policy,
     }
-    if active_node_proof is not None:
+    if incomplete_node_proof is not None:
         payload["dependencies"] = {
             "dependent_node_ids": list(record.dependent_node_ids),
-            "active_node_ids": list(active_node_proof.active_node_ids),
-            "run_id": active_node_proof.run_id,
+            "node_statuses": [
+                [node_id, status.value]
+                for node_id, status in incomplete_node_proof.node_statuses
+            ],
+            "incomplete_node_ids": list(
+                incomplete_node_proof.incomplete_node_ids
+            ),
+            "run_id": incomplete_node_proof.run_id,
         }
     if lease_proof is not None:
         payload["lease"] = {
@@ -1249,12 +1315,12 @@ def _docker_action(
     record: ResourceRecord, resource: DockerResource, action: str,
     argv: Tuple[str, ...], requires_success_of: Optional[int],
     preconditions: Tuple[str, ...], lease_proof: Optional[LeaseProof],
-    active_node_proof: Optional[ActiveNodeProof] = None,
+    incomplete_node_proof: Optional[IncompleteNodeProof] = None,
     predecessor_result_id: Optional[str] = None,
 ) -> CleanupAction:
     return build_cleanup_action(
         evidence=_docker_cleanup_evidence(
-            record, resource, lease_proof, active_node_proof,
+            record, resource, lease_proof, incomplete_node_proof,
         ),
         resource_id=resource.resource_id, kind=resource.kind, action=action,
         argv=argv, requires_success_of=requires_success_of,

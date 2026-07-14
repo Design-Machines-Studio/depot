@@ -11,7 +11,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Sequence, Tuple
 
 from workflow_kernel._files import LockHandle, PinnedDirectory, bind_durable_path
 from workflow_kernel.adapters.base import invalid_policy
@@ -20,6 +20,9 @@ from workflow_kernel.redaction import (
     sanitize_durable_payload,
 )
 from workflow_kernel.schema import InvalidSchemaError, RunStatus
+
+if TYPE_CHECKING:
+    from workflow_kernel.adapters.docker import IncompleteNodeProof
 
 
 class ResourceKind(str, Enum):
@@ -826,14 +829,18 @@ class OwnedResourceLifecycle:
     def after_chunk(
         self, registry: ResourceRegistry, inventory: object, run_id: str, node_id: str,
         validated: bool, reviewed: bool, evidence_captured: bool, merge_disposed: bool,
+        *, incomplete_node_proof: Optional[IncompleteNodeProof] = None,
     ) -> CleanupPlan:
         if not all((validated, reviewed, evidence_captured, merge_disposed)):
             raise invalid_policy("chunk_cleanup_before_boundary_complete")
-        return self.docker_adapter.plan_chunk_cleanup(registry, inventory, run_id, node_id)
+        return self.docker_adapter.plan_chunk_cleanup(
+            registry, inventory, run_id, node_id,
+            incomplete_node_proof=incomplete_node_proof,
+        )
 
     def at_terminal(
         self, registry: ResourceRegistry, inventory: object, run_id: str, status: RunStatus,
-        *, active_node_ids: Optional[Sequence[str]] = None,
+        *, incomplete_node_proof: Optional[IncompleteNodeProof] = None,
     ) -> CleanupPlan:
         try:
             normalized = RunStatus(status)
@@ -845,7 +852,8 @@ class OwnedResourceLifecycle:
         }:
             raise invalid_policy("cleanup_requires_terminal_status")
         return self.docker_adapter.plan_reconcile_run(
-            registry, inventory, run_id, active_node_ids=active_node_ids, terminal=True,
+            registry, inventory, run_id,
+            incomplete_node_proof=incomplete_node_proof, terminal=True,
         )
 
 
