@@ -69,6 +69,9 @@ generic host parity and record honest fallback/misroute evidence.
 | `plugins/dm-review/skills/review/references/repo-cleanup-contract.md` | Git/Docker sibling lifecycle from Chunk 03 |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md` | Required persona/browser behavior |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/docker-ownership.md` | Required cleanup timing and labels |
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/base.py` | Closed builder outcomes, provenance-bound handles/results, validation feedback, observation helper |
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/host.py` | Capability/rail enforcement, resume/replacement manager, protected restore boundary |
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/__init__.py` | Public continuity contract and trusted-store exclusions |
 
 ## Required Interfaces
 
@@ -163,8 +166,107 @@ emit it explicitly for new manifests. Legacy manifests default to `feature`
 with `workflow_class_defaulted=true`; there is no content heuristic. Pipeline
 and pipeline-run validate and pass it unchanged into `translate_manifest`,
 `RunSpec`, events, receipts, and metrics. Security retains its existing provider
-and approval overrides regardless of host. Tests cover all seven classes, the
-legacy default, invalid values, and security override preservation.
+and approval overrides regardless of host. Chunk 02's separately versioned
+trusted-policy safety anchor remains authoritative; Chunk 05 must not recreate
+stage constants from `workflow-classes.json`. Tests cover all seven classes, the
+legacy default, invalid values, full hotfix and migration stage/ancestry/
+`executor_overridable` protection, rejection of unanchored executable work in
+anchored classes and promotion, rejection of any executable node in the base
+investigation graph independently of promotion, and security override
+preservation.
+
+## Builder Continuity Integration
+
+Chunk 05 consumes the Chunk 02 adapter contract; it does not redesign or bypass
+it. Choose one concrete agentic `HostRoute` declared by `HostCapabilities.routes`
+and pass its provider, executor capability, and rail in `ResumeStateContext` to
+builder dispatch. Aggregate `HostCapabilities.capabilities` is derived evidence,
+not authorization: callers declare only non-route resume/isolation features,
+while executor and dispatch entries derive exclusively from routes. Wrapper
+routes are analysis/text-only and cannot run builder
+nodes. Treat the module-owned weak identity seals over route, node, nested gate,
+capability, context, handle, result, feedback, blob, and decision primitives or
+digests as part of this boundary. Live identities may be registered only once,
+so direct initialization re-entry cannot reseal changed state; guarded weakref
+cleanup alone permits stale identity-slot reuse. Caller-added seal fields have no authority:
+coherent route rewrites, coordinated security-node rewrites, and nested
+gate/route mutation must fail before authorization or dispatch. Capture the
+validated `SessionHandle` returned by builder dispatch
+together with its immutable run/node/attempt and exact route provenance. On
+deterministic validation failure, construct secret-safe
+`ValidationFeedback` for the same node and call the manager's resume-or-replace
+path. Preserve the closed outcome: resumed original session, replacement
+dispatch, resume unavailable, gate/capability block, or adapter failure.
+Ordinary caller-data exceptions from scalar/enum conversion, membership,
+equality, hashing, iteration, or mapping access at reconstruction and projection
+boundaries must map to stable secret-safe failures; do not intercept
+`BaseException`. Consume only sealed snapshots that captured their public fields
+and nested primitives once, validated the seal derived from that capture, and
+reconstructed without rereading the caller object. Enum inputs accept only the
+exact enum type or exact `str`; equality truth coercion belongs inside the same
+safe boundary as the equality operation. Builder decisions capture outcome,
+context, handle, and result before any nested snapshot, and retry-ledger
+accessors normalize their public key before taking one sealed snapshot. Policy
+maps consumed by adapters are exact module-owned tuple-subclass mappings whose
+pair payload has no rewritable slot or instance dictionary, with content-derived
+seals; caller mapping proxies and custom mappings are rejected without traversal.
+Policy structure processing shares one exact-type taxonomy, rejects cycles, and
+uses Chunk 01's depth `16` and aggregate item limit `10000`. Policy and
+workflow-class JSON loading import the same neutral `limits.py` API. Its
+iterative tokenizer and container grammar assign the document reason only to
+balanced, fully valid JSON above depth 16; delimiter mismatch/underflow,
+unterminated strings or escapes, remaining openers, balanced grammar errors,
+oversized integers, and parser failures retain each loader's `invalid_*_json`
+reason. The scanner and decoder both reject non-standard `NaN`, `Infinity`, and
+`-Infinity` constants on that JSON path. Signed integers use owned manual decimal
+accumulation with a 4,096-digit ceiling (minus sign excluded) enforced during
+tokenization before depth is assigned: depth 17 plus 4,096 digits keeps the
+document reason, while 4,097 or 5,000 digits takes the JSON reason. Results are
+independent of Python 3.12's integer-string limit at its default, `640`, or
+disabled setting, with Python 3.9 parity.
+Sensitive-path routing and harness-authorization profile loading share this
+boundary even for otherwise ignored fields, mapping all syntax, depth, and
+integer failures to their existing `invalid_routing_policy` and
+`invalid_harness_profile` reasons.
+Harness host selection uses one callback-free exact built-in string and
+`[a-z0-9][a-z0-9._-]*` format validator before profile I/O. Malformed caller
+names therefore take `invalid_host_name` independently of profile state; valid
+missing names and malformed profiles retain `invalid_harness_profile`. Explicit
+profile paths accept `str` or `os.PathLike[str]`, are fully materialized only
+after the host-name gate, and contain ordinary conversion callback failures as
+`invalid_harness_profile`; bytes remain outside the accepted contract.
+Safety-anchor projection charges the graph once before wrapping projected stage
+sets, ordered
+fields reject sets and frozensets, and only canonical forbidden downgrades accept
+a frozenset. Its exact tuples are projected without re-entry, malformed members
+collapse to one invalid-shape payload, and exact scalar pairs sort through the
+same canonical helper used by normalization.
+The normalizer completes pair-shape validation before mode validation, making
+shape and unknown-mode reasons independent of list order and hash seed. Economics
+mode accepts only the exact string `proposal_only`.
+
+Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
+only in permission-restricted package-owned storage with explicit retention and
+deletion. Restore requires exact run/node/attempt/provider/rail/capability
+context before any adapter call, plus an exact integer blob schema version whose
+value is included with context and handle payload in the corruption checksum.
+Never place blob bytes in ordinary artifacts,
+shadow reports, events, receipts, Airlift payloads, or checkpoints; those paths
+may carry only the safe digest projection and authoritative receipt reference.
+
+Translation must require an authoritative dispatch/resume receipt reference.
+Every `BuilderSessionDecision`, including blocked outcomes, owns the validated
+request context; any handle/result must match it. Its event projection rejects
+a different run or node and snapshots the decision before reading context.
+`BuilderSessionDecision.to_evidence_event` is
+observation-only: it records
+builder observations but cannot stand in for that receipt. When a validated
+`SessionResult` exists, merge its already-normalized evidence references with
+the observation references, deduplicate without reordering, and keep the
+authoritative receipt reference explicit. Tests must cover handle capture,
+feedback validation and mutation snapshots, protected trusted restore,
+resume/replacement translation, same-host wrong-rail rejection, and the rule
+that no translated success exists without an authoritative receipt.
 
 ## dm-review Translation Map
 
@@ -284,16 +386,19 @@ Any routing change is a proposal with evidence and requires human approval.
 3. Write failing dm-review lane/finding/convergence translation tests.
 4. Write failing cross-host parity tests and named explained-difference cases.
 5. Write failing reliability aggregation and no-policy-mutation tests.
-6. Implement translators and shadow comparison as pure code.
-7. Implement metrics from events only.
-8. Extend the runtime CLI and add trust-anchored source/dual-cache compatible resolution to
+6. Write failing builder-continuity translation tests for receipt-bound handle
+   capture, validation feedback, protected restore, resume/replacement outcomes,
+   authoritative receipt requirements, and safe evidence merging.
+7. Implement translators and shadow comparison as pure code.
+8. Implement metrics from events only.
+9. Extend the runtime CLI and add trust-anchored source/dual-cache compatible resolution to
    canonical commands with stable commands and exit codes.
-9. Add `workflowClass` schema/emission/translation and named-stage shadow hooks.
-10. Add create-time Docker instrumentation plus authoritative Step 3j cleanup
+10. Add `workflowClass` schema/emission/translation and named-stage shadow hooks.
+11. Add create-time Docker instrumentation plus authoritative Step 3j cleanup
     and Step 5b reconciliation planning/execution/result receipts.
-11. Add verification profile and recovery obligations to pipeline/dm-review.
-12. Update artifact lifecycle and postmortem schemas.
-13. Run kernel tests and all current workflow/Codex/cascade validators.
+12. Add verification profile and recovery obligations to pipeline/dm-review.
+13. Update artifact lifecycle and postmortem schemas.
+14. Run kernel tests and all current workflow/Codex/cascade validators.
 
 ## Acceptance Criteria
 
@@ -323,6 +428,14 @@ Any routing change is a proposal with evidence and requires human approval.
       rules; unexplained missing evidence is `unsafe_to_promote`.
 - [ ] Every shadow event references its authoritative receipt/artifact and stores
       redacted data only.
+- [ ] Builder continuity captures provenance-bound handles, validates and
+      snapshots feedback, restores only from protected trusted storage, and
+      translates every resume/replacement closed outcome without fabricating an
+      authoritative receipt.
+- [ ] Resume blobs have explicit retention/deletion and are excluded from
+      ordinary artifacts, shadow reports, events, receipts, Airlift payloads,
+      and checkpoints. Observation evidence safely merges normalized
+      `SessionResult` evidence only beside an authoritative receipt reference.
 - [ ] Canonical Markdown invokes documented runtime CLI commands, never
       `python -c`; canonical-root/Claude-cache/Codex-cache resolution validates
       realpath containment, no symlink escape, plugin name/version, and ignores
@@ -409,6 +522,8 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 - Do not change provider routing, sensitive-path rules, or review severity.
 - Do not hand-edit generated Codex manifests or command-skill aliases; Chunk 06
   regenerates them from canonical sources.
+- Chunk 06 owns package-level `SKILL.md` and final documentation synchronization;
+  this chunk implements only the adapter integration contract above.
 - Preserve existing Markdown headings used by validators; add stable subheadings
   rather than relying on line numbers.
 - Do not refactor surrounding code unless required for the task.

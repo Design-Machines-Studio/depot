@@ -1,5 +1,9 @@
 # Chunk: Workflow Policy and Host Capabilities
 
+> **Review-driven as-built documentation sync:** this prompt reflects the
+> implemented Chunk 02 API after defensive review without expanding the product
+> files-to-modify boundary.
+
 ## Context
 
 This is Chunk 02 of the AI Developer Workflow Kernel and depends on Chunk 01.
@@ -23,6 +27,7 @@ builder session handles. Provide fake adapters and complete deterministic tests.
 
 | File | Action | Notes |
 |------|--------|-------|
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/limits.py` | Create | Review-required neutral owner for shared JSON grammar, depth, and integer limits |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/policies.py` | Create | Retry, convergence, risk, gate, and degradation decisions |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/workflows.py` | Create | Seven workflow templates and dependency expansion |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/__init__.py` | Create | Adapter exports |
@@ -86,9 +91,25 @@ class RetryPolicy:
         signature: str | None,
     ) -> RetryDecision: ...
 
+@dataclass(frozen=True)
+class HostRoute:
+    provider: str
+    capability: HostCapability
+    rail: str
+
+@dataclass(frozen=True)
+class HostCapabilities:
+    host_name: str
+    capabilities: frozenset[HostCapability]  # non-route input + derived aggregate
+    routes: frozenset[HostRoute]             # authorization boundary
+
 class HostAdapter(Protocol):
     def capabilities(self) -> HostCapabilities: ...
-    def dispatch(self, node: NodeSpec) -> SessionHandle | None: ...
+    def dispatch(
+        self,
+        node: NodeSpec,
+        context: ResumeStateContext,
+    ) -> SessionHandle | None: ...
     def resume(
         self,
         handle: SessionHandle,
@@ -103,9 +124,12 @@ class IsolationSelector:
     ) -> IsolationDecision: ...
 ```
 
-`SessionHandle` must carry a host name, opaque handle value, creation time, and
-resume capability. It must serialize safely without assuming the value is a PID
-or provider ID. Never fabricate a handle when dispatch returns none.
+`SessionHandle` must carry a host name, opaque handle value, creation time,
+resume capability, and immutable `ResumeStateContext`. Every
+`BuilderSessionDecision`, including blocked outcomes, owns that same context;
+any handle or result must match it. It must serialize safely without assuming
+the opaque value is a PID or provider ID. Never fabricate a handle when dispatch
+returns none.
 
 ## Workflow Template Minimums
 
@@ -126,11 +150,88 @@ or provider ID. Never fabricate a handle when dispatch returns none.
 
 - Load policy from versioned JSON and validate before expansion. Do not hide
   policy in Python constants beyond enum and default schema versions.
+- Normalize file-loaded and injected policy documents through one canonical
+  payload-to-`PolicyDocument` path. The injected-document projector preserves
+  malformed nested anchor shape without dereferencing required keys first, so
+  missing sections, malformed stages, non-iterable or hostile downgrade fields,
+  budgets, and convergence limits reach the same normalizer and stable reason at
+  both boundaries. Register and validate injected policy origins through inert
+  structural primitives that traverse exact trusted built-ins only. Non-exact or
+  malformed objects become type/identity markers without invoking caller
+  iteration, hashing, equality, or representation. Canonical normalized maps use
+  one module-owned exact tuple-subclass immutable `Mapping`: its key/value pairs
+  live only in the tuple payload, with no slot or instance dictionary that
+  `object.__setattr__` can rewrite. It retains ordinary read behavior and seals
+  independent content primitives. Caller-supplied
+  `MappingProxyType` and custom mappings are untrusted and must reach rejection
+  without traversing their backing methods. One exact-type classifier is the
+  single taxonomy for origin and canonical projection across scalars, enums,
+  exact built-in containers, trusted maps, untrusted proxies, and other values.
+  Both traversals and canonical normalization enforce Chunk 01's maximum depth
+  `16` and aggregate item budget `10000`, reject cycles, and map over-depth or
+  oversized graphs to stable policy errors without leaking `RecursionError`.
+  Policy and workflow-class files import one neutral loader from `limits.py`.
+  Its iterative tokenizer and typed-container grammar validate delimiters,
+  strings/escapes, numbers, literals, keys, separators, and root completion
+  before assigning the 16-level depth outcome. Only syntactically valid,
+  balanced over-depth structure maps to `invalid_policy_document` or
+  `invalid_workflow_classes_document`; mismatches, underflow, unterminated
+  strings, remaining openers, balanced grammar errors, oversized integers, and
+  parser failures map to the corresponding `invalid_*_json` reason. The scanner
+  and decoder both enforce strict standard JSON constants, so bare or nested
+  `NaN`, `Infinity`, and `-Infinity` also take that JSON-error path. Signed
+  decimal integers have a 4,096-digit ceiling excluding the minus sign, checked
+  during tokenization before the structural depth outcome, and use owned manual
+  accumulation. Thus depth-17 input with exactly 4,096 digits takes the document
+  reason, while 4,097 or 5,000 digits takes the JSON reason; a 1,000-digit schema
+  version reaches the same
+  semantic `unsupported_policy_version` reason with Python's integer-string
+  limit defaulted, set to `640`, or disabled on Python 3.9 and 3.12.
+  Sensitive-path routing and harness-authorization profile loading use this same
+  strict boundary, including for ignored fields, while translating every
+  syntax, depth, and integer failure to their existing `invalid_routing_policy`
+  and `invalid_harness_profile` reason contracts.
+  Validate harness host names through one shared callback-free exact-string and
+  `[a-z0-9][a-z0-9._-]*` format contract before profile I/O: malformed caller
+  names always produce `invalid_host_name`, while valid missing names and
+  malformed profiles retain `invalid_harness_profile`. Accept explicit profile
+  paths as `str` or `os.PathLike[str]`, fully materialize them only after that
+  name gate, and contain ordinary conversion callback failures as
+  `invalid_harness_profile`; bytes remain outside the accepted contract.
+  Project the safety anchor exactly once, then add only its already-projected
+  stage-set wrappers, so file and injected forms consume the same canonical item
+  budget. Ordered policy fields accept exact lists or normalized tuples, never
+  sets or frozensets; only canonical `forbidden_downgrades` accepts a frozenset.
+  Project each exact downgrade tuple from its already-entered members without a
+  false cycle. Classify the complete frozenset first: any malformed item becomes
+  one deterministic invalid-shape payload; otherwise sort exact scalar pairs by
+  stable keys through the same canonical pair sorter used by normalization. The
+  normalizer validates every pair shape before sorting and validating modes, so
+  shape errors outrank unknown values independent of file order or hash seed.
+- Test canonical policy/schema coherence with deterministic standard-library
+  checks; the runtime uses its exact validator rather than a partial JSON Schema
+  implementation. The capability array is exactly the 13 enum values at both
+  boundaries.
+- Keep `workflow-classes.json` templates-only. The separately versioned,
+  schema-validated `workflow_safety_anchor` in trusted `workflow-policy.json` is
+  the one independent safety declaration. Python parses it into immutable generic
+  records and validates common cleanup; hotfix build/validation/risk/review;
+  security threat/build/validation/review/human; migration preflight/change/
+  compatibility/rollback/review/human; and investigation promotion/build IDs,
+  gate/evidence identities, executor/capability/dispatch tuples,
+  `executor_overridable`, and ancestry without mirroring stage values in code.
+  Its `non_executable_classes` constraint independently pins the base
+  investigation graph to zero executable nodes, so direct and rewired execution
+  fail even when promotion remains valid.
+  Anchored classes and promotion reject every executable node whose ID is absent
+  from that trusted anchor, so inserted work cannot bypass required validation.
 - Retry budgets are keyed by normalized reason: provider unavailable,
   deterministic validation failure, reviewer finding, browser recovery,
   cleanup, and infrastructure. A global “try three times” rule is forbidden.
 - Repeated identical failure signatures converge to blocked before exhausting
   unrelated budgets.
+- Economics mode is an exact `str` equal to `proposal_only`; subclasses and
+  equality impostors are rejected before comparison.
 - Sensitive-path routing from `routing-policy.json` overrides class, economics,
   and requested executor.
 - Gate resolution is deterministic: workflow class + risk + evidence state →
@@ -139,6 +240,37 @@ or provider ID. Never fabricate a handle when dispatch returns none.
   from/to modes and a reason. If policy forbids a downgrade, return blocked.
 - Builder resume feeds deterministic validation feedback to the original handle.
   A fresh builder is not a resume and must be labeled as replacement dispatch.
+  Protected resume blobs require an exact integer schema version and checksum the
+  version together with context and handle payload.
+- Authorize builder work by one exact immutable
+  `(provider, executor capability, dispatch rail)` route from the harness role.
+  Bind routes, nodes and nested gate state, capabilities, workflow/attempt/
+  isolation inputs, resume contexts, handles, results, feedback, blobs, and
+  builder decisions to module-owned weak identity seals over immutable primitive
+  tuples or payload digests. Registration is one-shot for each live identity,
+  including identical re-registration, so direct `__post_init__` re-entry cannot
+  reseal changed state; only dead/stale identity slots may be replaced, with the
+  weakref callback identity guard intact. Never trust a caller-owned seal attribute.
+  `HostCapabilities` seals primitive route tuples rather than route-object
+  aliases. Each sealed-value snapshot captures every field and nested primitive
+  once, derives and validates its seal from that payload, and reconstructs only
+  from that payload after validation. Builder decisions capture outcome, context,
+  handle, and result together before any nested snapshot. Snapshot/property/repr,
+  authorization, and manager tests must reject coherent route rewrites,
+  coordinated security-node rewrites, and nested gate/route mutations before
+  dispatch. Public reconstruction and projection boundaries map ordinary
+  scalar, enum, membership, equality, hashing, iterator, and mapping exceptions
+  to stable secret-safe failures while allowing `BaseException` control flow to
+  propagate. Enum inputs accept only the exact enum type or exact `str`, and
+  equality truth coercion remains inside the same safe boundary as `==`. Retry
+  decisions normalize accessor keys before snapshotting the attempt ledger once,
+  then read the sealed reconstructed mappings directly.
+  `capabilities` is a derived compatibility view, never an authorization proof.
+  Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
+  analysis/text-only. Ordinary nodes may use any compatible declared agentic
+  route, while security and sensitive paths require Anthropic native Claude.
+  Caller-declared inputs contain only non-route resume/isolation features;
+  executor and dispatch capabilities derive exclusively from concrete routes.
 - Reliability and cost fields are observations only. This chunk must not mutate
   routing policy based on historical performance.
 
@@ -180,6 +312,9 @@ or provider ID. Never fabricate a handle when dispatch returns none.
       and human-approval boundaries; missing evidence cannot be approved away.
 - [ ] Claude, Codex, and generic host fixtures expose only capabilities they can
       actually perform and produce the same required transition/evidence model.
+- [ ] Harness roles produce coherent routes using only `anthropic`, `openai`,
+      or `openrouter`; exact route membership is checked on dispatch, resume,
+      and restore, and wrapper routes cannot execute builder nodes.
 - [ ] Isolation selection covers remote sandbox, container, worktree, and
       sequential branch, in policy order, with a reason for every downgrade.
 - [ ] A policy-forbidden isolation downgrade returns blocked rather than silently
@@ -191,10 +326,23 @@ or provider ID. Never fabricate a handle when dispatch returns none.
       original session.
 - [ ] Session handle serialization is opaque and redacted; no token or provider
       credential can enter events or receipts.
+- [ ] Every builder decision is bound to its request context; event projection
+      rejects a different run or node, and restore rejects expected/stored/handle
+      context mismatch before probing adapter capabilities.
+- [ ] Public policy methods snapshot and revalidate workflow, retry-ledger,
+      isolation, host-capability, route, session, and decision inputs; hostile
+      mutation fails with the method-specific stable reason.
 - [ ] Economics aggregation fields remain proposal-only and no test observes a
       policy file mutation.
 - [ ] Invalid policy versions, circular template dependencies, missing node IDs,
       or unknown capability names fail closed with stable reason codes.
+- [ ] Removing or rewiring protected stages, changing/removing their executor
+      tuple, or flipping `executor_overridable` fails against the independent
+      trusted-policy anchor. Anchored classes and promotion also reject
+      unanchored executable nodes, while the base investigation graph rejects
+      every executable node independently of promotion. Empty gated evidence,
+      malformed anchor records, and impossible executor/dispatch tuples fail at
+      both schema and runtime.
 - [ ] Full kernel tests pass using:
 
 ```bash

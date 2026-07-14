@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "retry": {
+    "budgets": {
+      "provider_unavailable": 2,
+      "deterministic_validation_failure": 1,
+      "reviewer_finding": 3,
+      "browser_recovery": 1,
+      "cleanup": 2,
+      "infrastructure": 1
+    },
+    "identical_signature_limit": 2
+  },
+  "gates": {
+    "risk_human_approval": ["high", "critical"]
+  },
+  "isolation": {
+    "order": ["remote_sandbox", "container", "worktree", "sequential_branch"],
+    "forbidden_downgrades": [
+      {"from": "remote_sandbox", "to": "sequential_branch"}
+    ]
+  },
+  "capability_names": [
+    "native_dispatch",
+    "companion_dispatch",
+    "wrapper_dispatch",
+    "openrouter_exec",
+    "session_resume",
+    "remote_sandbox",
+    "container",
+    "worktree",
+    "sequential_branch",
+    "claude_execution",
+    "codex_execution",
+    "openrouter_execution",
+    "anthropic_native_execution"
+  ],
+  "workflow_safety_anchor": {
+    "schema_version": 1,
+    "common": {
+      "stages": [
+        {"id": "cleanup", "gate_kind": "cleanup", "required_evidence": [], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": []}
+      ]
+    },
+    "classes": {
+      "hotfix": {
+        "stages": [
+          {"id": "build", "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true, "required_ancestors": ["reproduce_impact"]},
+          {"id": "focused_validation", "gate_kind": "deterministic_validation", "required_evidence": ["focused_validation_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["build"]},
+          {"id": "risk_gate", "gate_kind": "risk", "required_evidence": ["risk_assessment"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["focused_validation"]},
+          {"id": "review", "gate_kind": null, "required_evidence": [], "executor": "claude", "required_capability": "claude_execution", "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["risk_gate"]}
+        ]
+      },
+      "security": {
+        "stages": [
+          {"id": "threat_risk_evidence", "gate_kind": "evidence", "required_evidence": ["threat_model", "risk_assessment"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": []},
+          {"id": "security_build", "gate_kind": null, "required_evidence": [], "executor": "claude", "required_capability": "anthropic_native_execution", "required_dispatch_capability": "native_dispatch", "executor_overridable": false, "required_ancestors": ["threat_risk_evidence"]},
+          {"id": "validation", "gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["security_build"]},
+          {"id": "security_review", "gate_kind": "evidence", "required_evidence": ["security_review"], "executor": "claude", "required_capability": "anthropic_native_execution", "required_dispatch_capability": "native_dispatch", "executor_overridable": false, "required_ancestors": ["validation"]},
+          {"id": "human_gate", "gate_kind": "human_approval", "required_evidence": ["risk_assessment", "security_review"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["security_review"]}
+        ]
+      },
+      "migration": {
+        "stages": [
+          {"id": "preflight", "gate_kind": "evidence", "required_evidence": ["migration_preflight"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": []},
+          {"id": "schema_data_change", "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true, "required_ancestors": ["preflight"]},
+          {"id": "compatibility_validation", "gate_kind": "deterministic_validation", "required_evidence": ["compatibility_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["schema_data_change"]},
+          {"id": "rollback_evidence", "gate_kind": "evidence", "required_evidence": ["rollback_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["compatibility_validation"]},
+          {"id": "review", "gate_kind": "evidence", "required_evidence": ["review_evidence"], "executor": "claude", "required_capability": "claude_execution", "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["rollback_evidence"]},
+          {"id": "human_gate", "gate_kind": "human_approval", "required_evidence": ["rollback_evidence", "review_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["review"]}
+        ]
+      }
+    },
+    "promotion": {
+      "investigation": {
+        "stages": [
+          {"id": "promotion_gate", "gate_kind": "investigation_promotion", "required_evidence": ["promotion_decision"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false, "required_ancestors": ["evidence_gathering"]},
+          {"id": "promoted_build", "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true, "required_ancestors": ["promotion_gate"]}
+        ]
+      }
+    },
+    "non_executable_classes": ["investigation"]
+  },
+  "economics": {"mode": "proposal_only"}
+}
