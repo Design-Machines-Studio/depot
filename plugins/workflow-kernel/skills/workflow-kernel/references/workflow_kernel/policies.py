@@ -17,9 +17,7 @@ from .adapters.base import (
 )
 from .schema import InvalidSchemaError
 from .redaction import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
-from .limits import (
-    JSONDocumentDepthError, JSONDocumentSyntaxError, load_json_document,
-)
+from .limits import JSONDocumentDepthError, load_json_document
 
 
 POLICY_SCHEMA_VERSION = 1
@@ -638,7 +636,7 @@ def load_policy(path: Optional[Path] = None) -> PolicyDocument:
         payload = load_json_document(source)
     except JSONDocumentDepthError:
         raise invalid_policy("invalid_policy_document") from None
-    except (OSError, UnicodeError, JSONDocumentSyntaxError, ValueError, RecursionError):
+    except (OSError, UnicodeError, ValueError, RecursionError):
         raise invalid_policy("invalid_policy_json") from None
     try:
         return _normalize_policy_payload(payload)

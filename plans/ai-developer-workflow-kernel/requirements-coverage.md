@@ -133,10 +133,14 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       grammar reserve each document reason for balanced, fully valid structure
       above depth `16`; mismatches, underflow, unterminated strings or escapes,
       remaining openers, balanced grammar errors, oversized integers, and parser
-      failures retain each stable JSON reason. Its signed decimal parser manually
-      accumulates at most 4,096 digits excluding the minus sign, so Python 3.9 and
-      3.12 agree with the integer-string limit defaulted, set to `640`, or
-      disabled. Safety anchors are projected once
+      failures retain each stable JSON reason. Scanner and decoder reject bare or
+      nested `NaN`, `Infinity`, and `-Infinity` as non-standard JSON. Integer
+      length is checked during tokenization before depth is assigned: at depth 17,
+      exactly 4,096 sign-excluded digits keeps the document reason, while 4,097 or
+      5,000 digits takes the JSON reason. The signed decimal parser manually
+      accumulates within that ceiling, so Python 3.9 and 3.12 agree with the
+      integer-string limit defaulted, set to `640`, or disabled. Safety anchors
+      are projected once
       before projected stage sets are wrapped, preserving actual-budget parity.
       Ordered fields reject sets and frozensets; only canonical forbidden
       downgrades accept a frozenset. Exact tuples project without re-entry; any

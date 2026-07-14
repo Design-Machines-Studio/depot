@@ -217,9 +217,13 @@ iterative tokenizer and container grammar assign the document reason only to
 balanced, fully valid JSON above depth 16; delimiter mismatch/underflow,
 unterminated strings or escapes, remaining openers, balanced grammar errors,
 oversized integers, and parser failures retain each loader's `invalid_*_json`
-reason. Signed integers use owned manual decimal accumulation with a 4,096-digit
-ceiling (minus sign excluded), independent of Python 3.12's integer-string limit
-at its default, `640`, or disabled setting, with Python 3.9 parity.
+reason. The scanner and decoder both reject non-standard `NaN`, `Infinity`, and
+`-Infinity` constants on that JSON path. Signed integers use owned manual decimal
+accumulation with a 4,096-digit ceiling (minus sign excluded) enforced during
+tokenization before depth is assigned: depth 17 plus 4,096 digits keeps the
+document reason, while 4,097 or 5,000 digits takes the JSON reason. Results are
+independent of Python 3.12's integer-string limit at its default, `640`, or
+disabled setting, with Python 3.9 parity.
 Safety-anchor projection charges the graph once before wrapping projected stage
 sets, ordered
 fields reject sets and frozensets, and only canonical forbidden downgrades accept

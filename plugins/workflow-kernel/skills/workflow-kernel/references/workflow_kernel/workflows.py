@@ -13,9 +13,7 @@ from .adapters.base import (
     WorkflowClass, WorkflowContext, _snapshot_workflow_context, invalid_policy,
     _normalize_enum, normalize_executor_constraint,
 )
-from .limits import (
-    JSONDocumentDepthError, JSONDocumentSyntaxError, load_json_document,
-)
+from .limits import JSONDocumentDepthError, load_json_document
 from .policies import GatePolicy, load_policy
 
 
@@ -249,10 +247,7 @@ def _load_templates(
         payload = load_json_document(source)
     except JSONDocumentDepthError:
         raise invalid_policy("invalid_workflow_classes_document") from None
-    except (
-        OSError, UnicodeError, JSONDocumentSyntaxError, json.JSONDecodeError,
-        ValueError, RecursionError,
-    ):
+    except (OSError, UnicodeError, ValueError, RecursionError):
         raise invalid_policy("invalid_workflow_classes_json") from None
     if type(payload) is not dict or set(payload) != {
         "schema_version", "classes", "promotion",

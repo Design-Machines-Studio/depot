@@ -51,6 +51,40 @@ class WorkflowClassTests(unittest.TestCase):
                     "[" * 17 + "0 1" + "]" * 17,
                     "invalid_workflow_classes_json",
                 ),
+                "nan": ("NaN", "invalid_workflow_classes_json"),
+                "infinity": ("Infinity", "invalid_workflow_classes_json"),
+                "negative_infinity": (
+                    "-Infinity", "invalid_workflow_classes_json",
+                ),
+                "nested_nan": (
+                    '{"value":NaN}', "invalid_workflow_classes_json",
+                ),
+                "nested_infinity": (
+                    '{"value":Infinity}', "invalid_workflow_classes_json",
+                ),
+                "nested_negative_infinity": (
+                    '[0,-Infinity]', "invalid_workflow_classes_json",
+                ),
+                "depth_integer_boundary": (
+                    "[" * 17 + "9" * 4_096 + "]" * 17,
+                    "invalid_workflow_classes_document",
+                ),
+                "depth_negative_integer_boundary": (
+                    "[" * 17 + "-" + "9" * 4_096 + "]" * 17,
+                    "invalid_workflow_classes_document",
+                ),
+                "depth_integer_over_limit": (
+                    "[" * 17 + "9" * 4_097 + "]" * 17,
+                    "invalid_workflow_classes_json",
+                ),
+                "depth_negative_integer_over_limit": (
+                    "[" * 17 + "-" + "9" * 4_097 + "]" * 17,
+                    "invalid_workflow_classes_json",
+                ),
+                "depth_integer_far_over_limit": (
+                    "[" * 17 + "9" * 5_000 + "]" * 17,
+                    "invalid_workflow_classes_json",
+                ),
                 "thousand_digit_version": (
                     canonical.replace(
                         '"schema_version": 1',

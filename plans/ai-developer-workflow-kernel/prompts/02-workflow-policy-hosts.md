@@ -177,9 +177,14 @@ returns none.
   balanced over-depth structure maps to `invalid_policy_document` or
   `invalid_workflow_classes_document`; mismatches, underflow, unterminated
   strings, remaining openers, balanced grammar errors, oversized integers, and
-  parser failures map to the corresponding `invalid_*_json` reason. Signed
-  decimal integers have a 4,096-digit ceiling excluding the minus sign and use
-  owned manual accumulation, so a 1,000-digit schema version reaches the same
+  parser failures map to the corresponding `invalid_*_json` reason. The scanner
+  and decoder both enforce strict standard JSON constants, so bare or nested
+  `NaN`, `Infinity`, and `-Infinity` also take that JSON-error path. Signed
+  decimal integers have a 4,096-digit ceiling excluding the minus sign, checked
+  during tokenization before the structural depth outcome, and use owned manual
+  accumulation. Thus depth-17 input with exactly 4,096 digits takes the document
+  reason, while 4,097 or 5,000 digits takes the JSON reason; a 1,000-digit schema
+  version reaches the same
   semantic `unsupported_policy_version` reason with Python's integer-string
   limit defaulted, set to `640`, or disabled on Python 3.9 and 3.12.
   Project the safety anchor exactly once, then add only its already-projected

@@ -372,6 +372,34 @@ class RetryPolicyTests(unittest.TestCase):
                     "[" * 17 + "0 1" + "]" * 17,
                     "invalid_policy_json",
                 ),
+                "nan": ("NaN", "invalid_policy_json"),
+                "infinity": ("Infinity", "invalid_policy_json"),
+                "negative_infinity": ("-Infinity", "invalid_policy_json"),
+                "nested_nan": ('{"value":NaN}', "invalid_policy_json"),
+                "nested_infinity": ('{"value":Infinity}', "invalid_policy_json"),
+                "nested_negative_infinity": (
+                    '[0,-Infinity]', "invalid_policy_json",
+                ),
+                "depth_integer_boundary": (
+                    "[" * 17 + "9" * 4_096 + "]" * 17,
+                    "invalid_policy_document",
+                ),
+                "depth_negative_integer_boundary": (
+                    "[" * 17 + "-" + "9" * 4_096 + "]" * 17,
+                    "invalid_policy_document",
+                ),
+                "depth_integer_over_limit": (
+                    "[" * 17 + "9" * 4_097 + "]" * 17,
+                    "invalid_policy_json",
+                ),
+                "depth_negative_integer_over_limit": (
+                    "[" * 17 + "-" + "9" * 4_097 + "]" * 17,
+                    "invalid_policy_json",
+                ),
+                "depth_integer_far_over_limit": (
+                    "[" * 17 + "9" * 5_000 + "]" * 17,
+                    "invalid_policy_json",
+                ),
                 "thousand_digit_version": (
                     canonical.replace(
                         '"schema_version": 1',
@@ -436,6 +464,12 @@ class RetryPolicyTests(unittest.TestCase):
             mismatched.write_text("{]", encoding="utf-8")
             with self.assertRaises(syntax_error):
                 loader(mismatched)
+
+            constant = root / "constant.json"
+            constant.write_text("NaN", encoding="utf-8")
+            with patch.object(limits, "_scan_json_document", return_value=False):
+                with self.assertRaises(ValueError):
+                    loader(constant)
 
         self.assertEqual(load_policy(source), load_policy())
 

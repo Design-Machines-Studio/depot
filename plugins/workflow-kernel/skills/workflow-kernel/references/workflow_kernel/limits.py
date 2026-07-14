@@ -41,6 +41,10 @@ def bounded_json_int(raw: str) -> int:
     return -value if negative else value
 
 
+def _reject_json_constant(raw: str) -> None:
+    raise ValueError("non-finite JSON constant")
+
+
 def _json_tokens(document: str):
     """Yield JSON grammar tokens without materializing nested containers."""
     index = 0
@@ -87,7 +91,7 @@ def _json_tokens(document: str):
                 raise JSONDocumentSyntaxError
             continue
         matched_constant = False
-        for constant in ("-Infinity", "Infinity", "NaN", "true", "false", "null"):
+        for constant in ("true", "false", "null"):
             if document.startswith(constant, index):
                 index += len(constant)
                 yield "scalar"
@@ -100,18 +104,23 @@ def _json_tokens(document: str):
                 index += 1
                 if index >= length or not "0" <= document[index] <= "9":
                     raise JSONDocumentSyntaxError
+            digit_start = index
             if document[index] == "0":
                 index += 1
             else:
                 while index < length and "0" <= document[index] <= "9":
                     index += 1
+            integer_digits = index - digit_start
+            is_integer = True
             if index < length and document[index] == ".":
+                is_integer = False
                 index += 1
                 if index >= length or not "0" <= document[index] <= "9":
                     raise JSONDocumentSyntaxError
                 while index < length and "0" <= document[index] <= "9":
                     index += 1
             if index < length and document[index] in "eE":
+                is_integer = False
                 index += 1
                 if index < length and document[index] in "+-":
                     index += 1
@@ -119,6 +128,8 @@ def _json_tokens(document: str):
                     raise JSONDocumentSyntaxError
                 while index < length and "0" <= document[index] <= "9":
                     index += 1
+            if is_integer and integer_digits > MAX_JSON_INTEGER_DIGITS:
+                raise ValueError("JSON integer exceeds the document digit limit")
             yield "scalar"
             continue
         raise JSONDocumentSyntaxError
@@ -192,4 +203,8 @@ def load_json_document(path: Path) -> object:
     document = path.read_text(encoding="utf-8")
     if _scan_json_document(document):
         raise JSONDocumentDepthError
-    return json.loads(document, parse_int=bounded_json_int)
+    return json.loads(
+        document,
+        parse_int=bounded_json_int,
+        parse_constant=_reject_json_constant,
+    )
