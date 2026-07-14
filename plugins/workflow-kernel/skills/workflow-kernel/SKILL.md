@@ -105,15 +105,21 @@ kernel-generated `url-sha256:<64 lowercase hex>` form. Valid content IDs are
 exempt from URI normalization, but surrounding whitespace on a standalone URI
 or content ID is rejected as ambiguous. Every whole-string URI candidate
 matching `[A-Za-z][A-Za-z0-9+.-]*:` and every URI token embedded in prose is
-treated as URI-valued regardless of its field name. An exact or embedded `http`
-or `https` URI must have an authority and valid port with no userinfo, query, or
-fragment; the kernel immediately replaces each complete original UTF-8 URI
-token with its deterministic `url-sha256:` digest. For embedded URIs,
-surrounding prose and punctuation are preserved, multiple tokens normalize
-deterministically, and repeated normalization is idempotent. No original URL
-component enters events, receipts, or state. Exact and embedded values using
-all other URI schemes are rejected. Local paths and prose without URI tokens
-remain unchanged.
+treated as URI-valued regardless of its field name or any adjacent punctuation,
+digit, or delimiter. An exact or embedded `http` or `https` URI must have an
+authority and valid port with no userinfo, query, or fragment; the kernel
+immediately replaces each complete original UTF-8 URI token with its
+deterministic `url-sha256:` digest. For embedded URIs, symmetric angle brackets,
+quotes, parentheses, brackets, braces, and terminal punctuation are preserved;
+multiple tokens normalize deterministically, and repeated normalization is
+idempotent. Token scanning is linear in the bounded input length. After
+normalization, any remaining `[A-Za-z][A-Za-z0-9+.-]*:` token whose colon is
+followed immediately by a non-whitespace character fails closed unless it is a
+valid content ID. This intentionally rejects namespace-like prose such as
+`Note:see`; labels such as `Note: see` and URI-free local paths remain unchanged.
+Schema timestamp fields are validated separately as timezone-aware ISO-8601
+values. No original URL component enters events, receipts, or state. Exact and
+embedded values using all other URI schemes are rejected.
 
 Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and

@@ -4,7 +4,7 @@ import unittest
 from dataclasses import replace
 from unittest import mock
 
-from workflow_kernel import schema
+from workflow_kernel import redaction, schema
 from workflow_kernel.schema import (
     CorruptStateError,
     InvalidSchemaError,
@@ -212,6 +212,108 @@ class SchemaTests(unittest.TestCase):
             self.assertNotIn(b"example.invalid", encoded)
             self.assertNotIn(url.encode(), encoded)
             self.assertIn(digest.encode(), encoded)
+
+    def test_uri_prefix_punctuation_and_digits_cannot_bypass_durable_outputs(self):
+        urls = (
+            "https://example.invalid/never-persist-dot",
+            "https://example.invalid/never-persist-hyphen",
+            "https://example.invalid/never-persist-plus",
+            "https://example.invalid/never-persist-digit",
+            "https://example.invalid/never-persist-adjacent",
+        )
+        prefixes = (".", "-", "+", "7", "7.+-")
+        for prefix, url in zip(prefixes, urls):
+            digest = "url-sha256:" + hashlib.sha256(url.encode("utf-8")).hexdigest()
+            source = "See " + prefix + url + " now"
+            normalized = "See " + prefix + digest + " now"
+
+            event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                  "2026-07-14T00:00:00Z", {"note": source})
+            receipt = encode_receipt({"note": source})
+            state = RunState.new(source, "2026-07-14T00:00:00Z")
+
+            self.assertEqual(event.payload["note"], normalized)
+            self.assertEqual(json.loads(receipt)["note"], normalized)
+            self.assertEqual(state.run_id, normalized)
+            for encoded in (encode_event(event), receipt, encode_state(state)):
+                self.assertNotIn(url.encode(), encoded)
+                self.assertNotIn(b"never-persist-", encoded)
+                self.assertIn(digest.encode(), encoded)
+
+    def test_prefixed_unsupported_uri_schemes_fail_closed_across_outputs(self):
+        values = (
+            "See +data:text/plain,never-persist-data now",
+            "See -javascript:alert(never-persist-script) now",
+            "See 7mailto:never-persist-mail@example.invalid now",
+            "See .+-urn:example:never-persist-urn now",
+        )
+        for value in values:
+            with self.subTest(event=value), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"note": value})
+            with self.subTest(receipt=value), self.assertRaises(UnsafePayloadError):
+                encode_receipt({"note": value})
+            with self.subTest(state=value), self.assertRaises(UnsafePayloadError):
+                RunState.new(value, "2026-07-14T00:00:00Z")
+
+    def test_symmetric_delimiters_and_angle_content_ids_are_preserved(self):
+        first = "https://one.example.invalid/path"
+        second = "http://two.example.invalid/report"
+        first_digest = "url-sha256:" + hashlib.sha256(first.encode("utf-8")).hexdigest()
+        second_digest = "url-sha256:" + hashlib.sha256(second.encode("utf-8")).hexdigest()
+        content_digest = "sha256:" + "a" * 64
+        url_digest = "url-sha256:" + "b" * 64
+        source = "Compare <" + first + ">, then \"([{<" + second + ">}])\"; keep <" + content_digest + "> and <" + url_digest + ">."
+        normalized = "Compare <" + first_digest + ">, then \"([{<" + second_digest + ">}])\"; keep <" + content_digest + "> and <" + url_digest + ">."
+
+        try:
+            event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                  "2026-07-14T00:00:00Z", {"note": source})
+            receipt = encode_receipt({"note": source})
+            state = RunState.new(source, "2026-07-14T00:00:00Z")
+        except UnsafePayloadError as exc:
+            self.fail("symmetric URI delimiters were treated as URI bytes: " + exc.code)
+
+        self.assertEqual(event.payload["note"], normalized)
+        self.assertEqual(json.loads(receipt)["note"], normalized)
+        self.assertEqual(state.run_id, normalized)
+        self.assertEqual(encode_receipt(json.loads(receipt)), receipt)
+        for encoded in (encode_event(event), receipt, encode_state(state)):
+            self.assertNotIn(first.encode(), encoded)
+            self.assertNotIn(second.encode(), encoded)
+            self.assertIn(("<" + content_digest + ">").encode(), encoded)
+            self.assertIn(("<" + url_digest + ">").encode(), encoded)
+
+    def test_no_space_colon_tokens_fail_closed_but_prose_labels_remain(self):
+        preserved = "Note: see the local report"
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"note": preserved})
+        self.assertEqual(event.payload["note"], preserved)
+
+        rejected = "Note:see-the-local-report"
+        with self.assertRaises(UnsafePayloadError):
+            WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                          "2026-07-14T00:00:00Z", {"note": rejected})
+        with self.assertRaises(UnsafePayloadError):
+            encode_receipt({"note": rejected})
+        with self.assertRaises(UnsafePayloadError):
+            RunState.new(rejected, "2026-07-14T00:00:00Z")
+
+    def test_maximum_length_uri_scan_has_linear_operation_bound(self):
+        prefix = "See https://example.invalid/path"
+        source = prefix + ")" * (redaction.MAX_STRING_LENGTH - len(prefix))
+        self.assertEqual(len(source), redaction.MAX_STRING_LENGTH)
+        self.assertTrue(hasattr(redaction, "_normalize_uri_tokens"))
+
+        normalized, operations = redaction._normalize_uri_tokens(source)
+
+        digest = "url-sha256:" + hashlib.sha256(
+            "https://example.invalid/path".encode("utf-8")
+        ).hexdigest()
+        self.assertLessEqual(operations, len(source) * 8)
+        self.assertNotIn("example.invalid", normalized)
+        self.assertIn(digest, normalized)
+        self.assertEqual(len(normalized.rsplit(digest, 1)[1]), source.count(")"))
 
     def test_multiple_embedded_urls_preserve_punctuation_and_are_idempotent(self):
         first = "https://one.example.invalid/path"

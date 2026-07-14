@@ -23,9 +23,16 @@ _SECRET_PARTS = (
 _CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
 _ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 _WHOLE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:\S*\Z")
-_EMBEDDED_URI = re.compile(r"(?<![A-Za-z0-9+.-])(?P<uri>[A-Za-z][A-Za-z0-9+.-]*:\S+)")
+_SCHEME_SHAPE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:(?=\S)")
+_ISO_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})\Z"
+)
+_ASCII_LETTERS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+_SCHEME_CHARACTERS = _ASCII_LETTERS | frozenset("0123456789+.-")
 _TRAILING_PUNCTUATION = frozenset(".,;!?\"'")
-_CLOSING_PUNCTUATION = {")": "(", "]": "[", "}": "{"}
+_OPENING_TO_CLOSING = {"(": ")", "[": "]", "{": "}", "<": ">"}
+_CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
 
 
 def is_secret_key(key: str) -> bool:
@@ -67,26 +74,96 @@ def normalize_evidence_reference(reference: str) -> str:
     return reference
 
 
-def _separate_uri_punctuation(token: str) -> tuple[str, str]:
-    """Separate prose punctuation that cannot safely be part of a URI token."""
-    suffix = ""
-    while token:
-        trailing = token[-1]
+def _uri_token_end(value: str, start: int, raw_end: int) -> tuple[int, int]:
+    """Return the URI end after one balance scan and one reverse index scan."""
+    balance = {closing: 0 for closing in _CLOSING_PUNCTUATION}
+    operations = 0
+    for index in range(start, raw_end):
+        operations += 1
+        character = value[index]
+        closing = _OPENING_TO_CLOSING.get(character)
+        if closing is not None:
+            balance[closing] -= 1
+        elif character in balance:
+            balance[character] += 1
+
+    unmatched = {closing: max(0, count) for closing, count in balance.items()}
+    end = raw_end
+    while end > start:
+        operations += 1
+        trailing = value[end - 1]
         if trailing in _TRAILING_PUNCTUATION:
-            token = token[:-1]
-            suffix = trailing + suffix
+            end -= 1
             continue
-        opening = _CLOSING_PUNCTUATION.get(trailing)
-        if opening is not None and token.count(trailing) > token.count(opening):
-            token = token[:-1]
-            suffix = trailing + suffix
+        if trailing in unmatched and unmatched[trailing] > 0:
+            unmatched[trailing] -= 1
+            end -= 1
             continue
         break
-    return token, suffix
+    return end, operations
+
+
+def _reject_remaining_uri_shapes(value: str) -> int:
+    """Fail closed if normalization leaves any non-content-ID URI shape."""
+    operations = len(value)
+    length = len(value)
+    for match in _SCHEME_SHAPE.finditer(value):
+        raw_end = match.end()
+        while raw_end < length and not value[raw_end].isspace():
+            operations += 1
+            raw_end += 1
+        token_end, token_operations = _uri_token_end(value, match.start(), raw_end)
+        operations += token_operations
+        if not _CONTENT_ID.fullmatch(value[match.start():token_end]):
+            raise ValueError("durable string contains an unhandled URI")
+    return operations
+
+
+def _normalize_uri_tokens(value: str) -> tuple[str, int]:
+    """Normalize embedded URI tokens in linear work and return a work receipt."""
+    pieces = []
+    cursor = 0
+    index = 0
+    length = len(value)
+    operations = 0
+
+    while index < length:
+        operations += 1
+        if value[index] not in _ASCII_LETTERS:
+            index += 1
+            continue
+
+        start = index
+        index += 1
+        while index < length and value[index] in _SCHEME_CHARACTERS:
+            operations += 1
+            index += 1
+        if (index >= length or value[index] != ":" or index + 1 >= length
+                or value[index + 1].isspace()):
+            continue
+
+        raw_end = index + 1
+        while raw_end < length and not value[raw_end].isspace():
+            operations += 1
+            raw_end += 1
+        token_end, token_operations = _uri_token_end(value, start, raw_end)
+        operations += token_operations
+        token = value[start:token_end]
+        normalized = token if _CONTENT_ID.fullmatch(token) else normalize_evidence_reference(token)
+        pieces.extend((value[cursor:start], normalized, value[token_end:raw_end]))
+        cursor = raw_end
+        index = raw_end
+
+    pieces.append(value[cursor:])
+    normalized_value = "".join(pieces)
+    operations += _reject_remaining_uri_shapes(normalized_value)
+    return normalized_value, operations
 
 
 def normalize_durable_string(value: str) -> str:
     """Digest supported URIs and reject unsupported ones in durable strings."""
+    if _ISO_TIMESTAMP.fullmatch(value):
+        return value
     stripped = value.strip()
     if stripped != value and (_CONTENT_ID.fullmatch(stripped) or _WHOLE_URI.fullmatch(stripped)):
         raise ValueError("standalone URI contains surrounding whitespace")
@@ -94,14 +171,8 @@ def normalize_durable_string(value: str) -> str:
         return value
     if _WHOLE_URI.fullmatch(value):
         return normalize_evidence_reference(value)
-
-    def replace_uri(match: re.Match) -> str:
-        token, suffix = _separate_uri_punctuation(match.group("uri"))
-        if _CONTENT_ID.fullmatch(token):
-            return token + suffix
-        return normalize_evidence_reference(token) + suffix
-
-    return _EMBEDDED_URI.sub(replace_uri, value)
+    normalized, _ = _normalize_uri_tokens(value)
+    return normalized
 
 
 def _mutable_mapping(value: dict) -> dict:

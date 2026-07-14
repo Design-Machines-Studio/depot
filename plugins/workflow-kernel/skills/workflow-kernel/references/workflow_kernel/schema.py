@@ -104,19 +104,22 @@ def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
     return value
 
 
-def _string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
+def _string(value: object, name: str, *, optional: bool = False,
+            normalize_uris: bool = True) -> Optional[str]:
     if optional and value is None:
         return None
     if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
         raise InvalidSchemaError("invalid string field", {"field": name})
-    try:
-        return normalize_durable_string(value)
-    except ValueError as exc:
-        raise UnsafePayloadError("string field contains an unsafe URI", {"field": name}) from exc
+    if normalize_uris:
+        try:
+            return normalize_durable_string(value)
+        except ValueError as exc:
+            raise UnsafePayloadError("string field contains an unsafe URI", {"field": name}) from exc
+    return value
 
 
 def _timestamp(value: object, name: str = "occurred_at") -> str:
-    text = _string(value, name)
+    text = _string(value, name, normalize_uris=False)
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
