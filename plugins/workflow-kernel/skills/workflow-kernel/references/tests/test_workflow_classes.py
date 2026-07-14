@@ -7,7 +7,7 @@ from pathlib import Path
 from tests import detail_digest
 from workflow_kernel.adapters.base import HostCapability, WorkflowClass, WorkflowContext
 from workflow_kernel.schema import InvalidSchemaError
-from workflow_kernel.policies import GatePolicy
+from workflow_kernel.policies import GatePolicy, load_policy
 from workflow_kernel.workflows import WorkflowTemplates
 
 
@@ -36,6 +36,8 @@ def schema_matches(value, schema, root=None):
     if "enum" in schema and value not in schema["enum"]:
         return False
     if type(value) is str and len(value) < schema.get("minLength", 0):
+        return False
+    if type(value) is int and value < schema.get("minimum", value):
         return False
     if any(not schema_matches(value, item, root) for item in schema.get("allOf", [])):
         return False
@@ -76,6 +78,31 @@ def schema_matches(value, schema, root=None):
 
 
 class WorkflowClassTests(unittest.TestCase):
+    def test_recursive_schema_matcher_supports_shared_superset_keywords(self):
+        schema = {
+            "type": "object",
+            "required": ["count", "items"],
+            "properties": {
+                "count": {"type": "integer", "minimum": 2},
+                "items": {
+                    "type": "array", "minItems": 1,
+                    "items": {"type": "string", "minLength": 2},
+                },
+            },
+            "additionalProperties": {"type": "string", "minLength": 3},
+        }
+        self.assertTrue(schema_matches(
+            {"count": 2, "items": ["ok"], "note": "yes"}, schema,
+        ))
+        for invalid in (
+            {"count": 1, "items": ["ok"], "note": "yes"},
+            {"count": 2, "items": ["x"], "note": "yes"},
+            {"count": 2, "items": ["ok"], "note": "no"},
+            {"count": 2, "items": []},
+        ):
+            with self.subTest(invalid=invalid):
+                self.assertFalse(schema_matches(invalid, schema))
+
     def test_authoritative_json_expands_to_dependency_valid_graphs(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"
         definitions = json.loads(source.read_text(encoding="utf-8"))["classes"]
@@ -509,6 +536,100 @@ class WorkflowClassTests(unittest.TestCase):
                     raised.exception.details["reason_code"],
                     detail_digest("workflow_requirement_unsatisfied"),
                 )
+
+    def test_trusted_safety_anchor_rejects_unanchored_executable_work(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        mutations = []
+        cases = (
+            ("hotfix", "risk_gate", "review", "late_hotfix_build"),
+            ("security", "validation", "security_review", "late_security_build"),
+            ("migration", "rollback_evidence", "review", "late_migration_build"),
+        )
+        for class_name, predecessor, protected_review, inserted_id in cases:
+            payload = json.loads(json.dumps(base))
+            nodes = payload["classes"][class_name]["nodes"]
+            review = next(node for node in nodes if node["id"] == protected_review)
+            inserted = {
+                "id": inserted_id,
+                "depends_on": [predecessor],
+                "gate_kind": None,
+                "required_evidence": [],
+                "executor": "codex",
+                "required_capability": "codex_execution",
+                "required_dispatch_capability": None,
+                "executor_overridable": True,
+            }
+            review["depends_on"] = [inserted_id]
+            nodes.insert(nodes.index(review), inserted)
+            mutations.append(payload)
+
+        promotion = json.loads(json.dumps(base))
+        promoted = promotion["promotion"]["investigation"]["nodes"]
+        promoted_build = next(node for node in promoted if node["id"] == "promoted_build")
+        extra = {
+            "id": "unanchored_promoted_build",
+            "depends_on": ["promotion_gate"],
+            "gate_kind": None,
+            "required_evidence": [],
+            "executor": "codex",
+            "required_capability": "codex_execution",
+            "required_dispatch_capability": None,
+            "executor_overridable": True,
+        }
+        promoted_build["depends_on"] = [extra["id"]]
+        promoted.insert(promoted.index(promoted_build), extra)
+        mutations.append(promotion)
+
+        for payload in mutations:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("workflow_requirement_unsatisfied"),
+                )
+
+    def test_gate_policy_snapshots_and_revalidates_injected_policy_document(self):
+        document = load_policy()
+        gate_policy = GatePolicy(policy_document=document)
+        object.__setattr__(document, "risk_human_approval", ())
+        decision = gate_policy.decide(
+            WorkflowClass.HOTFIX, "risk", (), WorkflowContext(risk="high"),
+        )
+        self.assertFalse(decision.allowed)
+        self.assertTrue(decision.human_required)
+
+        for field in ("risk_human_approval", "workflow_safety_anchor"):
+            malformed = load_policy()
+            object.__setattr__(malformed, field, object())
+            with self.subTest(field=field), self.assertRaises(
+                InvalidSchemaError,
+            ) as raised:
+                GatePolicy(policy_document=malformed)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("invalid_policy_document"),
+            )
+
+        malformed_anchor = load_policy()
+        anchor = malformed_anchor.workflow_safety_anchor
+        cleanup = dict(anchor["common"][0])
+        cleanup["unexpected"] = True
+        object.__setattr__(malformed_anchor, "workflow_safety_anchor", {
+            "schema_version": anchor["schema_version"],
+            "common": (cleanup,),
+            "classes": anchor["classes"],
+            "promotion": anchor["promotion"],
+        })
+        with self.assertRaises(InvalidSchemaError) as raised:
+            GatePolicy(policy_document=malformed_anchor)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_policy_document"),
+        )
 
     def test_canonical_safety_anchor_rejects_removed_cleanup_and_promotion(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"

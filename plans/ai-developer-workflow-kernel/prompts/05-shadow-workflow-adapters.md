@@ -170,7 +170,8 @@ and approval overrides regardless of host. Chunk 02's separately versioned
 trusted-policy safety anchor remains authoritative; Chunk 05 must not recreate
 stage constants from `workflow-classes.json`. Tests cover all seven classes, the
 legacy default, invalid values, full hotfix and migration stage/ancestry/
-`executor_overridable` protection, and security override preservation.
+`executor_overridable` protection, rejection of unanchored executable work in
+anchored classes and promotion, and security override preservation.
 
 ## Builder Continuity Integration
 

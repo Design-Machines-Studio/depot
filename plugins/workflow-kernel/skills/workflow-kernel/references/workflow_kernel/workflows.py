@@ -209,6 +209,17 @@ def _validate_required_stages(
             raise invalid_policy("workflow_requirement_unsatisfied")
 
 
+def _validate_anchored_execution(
+    records: tuple[dict, ...], requirements: tuple[Mapping[str, object], ...],
+) -> None:
+    anchored = {required["id"] for required in requirements}
+    if any(
+        record["executor"] is not None and record["id"] not in anchored
+        for record in records
+    ):
+        raise invalid_policy("workflow_requirement_unsatisfied")
+
+
 def _validate_safety_anchor(
     anchor: Mapping[str, object],
     classes: dict[WorkflowClass, tuple[dict, ...]],
@@ -218,8 +229,10 @@ def _validate_safety_anchor(
         _validate_required_stages(records, anchor["common"])
     for kind, required in anchor["classes"].items():
         _validate_required_stages(classes[kind], required)
+        _validate_anchored_execution(classes[kind], required)
     for required in anchor["promotion"].values():
         _validate_required_stages(promotion, required)
+        _validate_anchored_execution(promotion, required)
 
 
 def _load_templates(

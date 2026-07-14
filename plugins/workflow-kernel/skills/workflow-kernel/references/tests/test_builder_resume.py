@@ -216,6 +216,46 @@ class BuilderResumeTests(unittest.TestCase):
             detail_digest("invalid_builder_resume_request"),
         )
 
+    def test_resume_revalidates_handle_and_exact_aware_now_before_use(self):
+        secret = "provider-detail://credential"
+
+        class HostileTimestamp:
+            def replace(self, *_args):
+                raise RuntimeError(secret)
+
+        manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        mutated = handle()
+        object.__setattr__(mutated, "created_at", HostileTimestamp())
+        cases = (
+            (mutated, NOW),
+            (handle(), HostileTimestamp()),
+            (handle(), "2026-07-14T00:00:00"),
+            (handle(), 1),
+        )
+        for candidate, now in cases:
+            with self.subTest(now=now):
+                try:
+                    manager.resume_or_replace(
+                        builder_node(), candidate,
+                        ValidationFeedback(
+                            "build", "deterministic_validation_failure",
+                        ),
+                        context=receipt_context(), now=now,
+                    )
+                except InvalidSchemaError as raised:
+                    self.assertEqual(
+                        raised.details["reason_code"],
+                        detail_digest("invalid_builder_resume_request"),
+                    )
+                    self.assertNotIn(secret, repr(raised))
+                except Exception as raised:
+                    self.fail(
+                        "resume leaked non-schema exception: "
+                        + type(raised).__name__,
+                    )
+                else:
+                    self.fail("invalid resume request was accepted")
+
     def test_builder_evidence_event_rejects_foreign_run_or_node(self):
         from workflow_kernel.adapters.base import BuilderSessionDecision
 

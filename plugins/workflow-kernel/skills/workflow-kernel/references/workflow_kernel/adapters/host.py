@@ -291,7 +291,7 @@ class BuilderSessionManager:
     def _can_resume(
         self,
         handle: Optional[SessionHandle],
-        now: str,
+        now: datetime,
         context: ResumeStateContext,
         capabilities: HostCapabilities,
     ) -> bool:
@@ -305,7 +305,7 @@ class BuilderSessionManager:
             or handle.context != context
         ):
             return False
-        age = (_timestamp(now) - _timestamp(handle.created_at)).total_seconds()
+        age = (now - _timestamp(handle.created_at)).total_seconds()
         return 0 <= age <= self._max_age_seconds
 
     def resume_or_replace(
@@ -319,6 +319,15 @@ class BuilderSessionManager:
     ) -> BuilderSessionDecision:
         if type(feedback) is not ValidationFeedback:
             raise invalid_policy("invalid_builder_resume_request")
+        try:
+            handle = (
+                None if handle is None else _snapshot_session_handle(handle)
+            )
+            if type(now) is not str:
+                raise TypeError
+            now_timestamp = _timestamp(now)
+        except Exception:
+            raise invalid_policy("invalid_builder_resume_request") from None
         node = _snapshot_node_spec(node)
         context = self._authorized_context(
             node, context, "invalid_builder_resume_request",
@@ -337,7 +346,7 @@ class BuilderSessionManager:
         preflight = self._capability_preflight(context, capabilities)
         if preflight is not None:
             return preflight
-        if self._can_resume(handle, now, context, capabilities):
+        if self._can_resume(handle, now_timestamp, context, capabilities):
             try:
                 result = self._adapter.resume(_snapshot_session_handle(handle), feedback)
             except Exception:

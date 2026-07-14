@@ -161,6 +161,8 @@ returns none.
   compatibility/rollback/review/human; and investigation promotion/build IDs,
   gate/evidence identities, executor/capability/dispatch tuples,
   `executor_overridable`, and ancestry without mirroring stage values in code.
+  Anchored classes and promotion reject every executable node whose ID is absent
+  from that trusted anchor, so inserted work cannot bypass required validation.
 - Retry budgets are keyed by normalized reason: provider unavailable,
   deterministic validation failure, reviewer finding, browser recovery,
   cleanup, and infrastructure. A global “try three times” rule is forbidden.
@@ -251,8 +253,10 @@ returns none.
       or unknown capability names fail closed with stable reason codes.
 - [ ] Removing or rewiring protected stages, changing/removing their executor
       tuple, or flipping `executor_overridable` fails against the independent
-      trusted-policy anchor. Empty gated evidence, malformed anchor records, and
-      impossible executor/dispatch tuples fail at both schema and runtime.
+      trusted-policy anchor. Anchored classes and promotion also reject
+      unanchored executable nodes. Empty gated evidence, malformed anchor
+      records, and impossible executor/dispatch tuples fail at both schema and
+      runtime.
 - [ ] Full kernel tests pass using:
 
 ```bash

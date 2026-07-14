@@ -105,9 +105,22 @@ class HostCapabilityTests(unittest.TestCase):
             required_capability=HostCapability.CODEX_EXECUTION,
             required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
         )
-        with patch.object(adapter_base, "_snapshot_host_route", wraps=original) as snapshot:
+        original_node = adapter_base._snapshot_node_spec
+        with patch.object(adapter_base, "_snapshot_host_route", wraps=original) as route_snapshot, \
+                patch.object(adapter_base, "_snapshot_node_spec", wraps=original_node) as node_snapshot:
             self.assertTrue(route_satisfies_node(next(iter(capabilities.routes)), node))
-        self.assertEqual(snapshot.call_count, 1)
+        self.assertEqual(route_snapshot.call_count, 1)
+        self.assertEqual(node_snapshot.call_count, 1)
+
+    def test_route_authorization_rejects_mutated_incoherent_node(self):
+        route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
+        node = NodeSpec(
+            "build", executor="codex",
+            required_capability=HostCapability.CODEX_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        object.__setattr__(node, "executor", "claude")
+        self.assertFalse(route_satisfies_node(route, node))
 
     def test_supports_revalidates_mutated_host_capabilities(self):
         capabilities = HostCapabilities("test", (HostCapability.WORKTREE,))
@@ -117,6 +130,42 @@ class HostCapabilityTests(unittest.TestCase):
         self.assertEqual(
             raised.exception.details["reason_code"],
             detail_digest("invalid_host_capabilities"),
+        )
+
+    def test_supports_route_rejects_substituted_or_malformed_routes(self):
+        original = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
+        substituted = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "codex_companion",
+        )
+        capabilities = HostCapabilities("test", (), routes=(original,))
+        object.__setattr__(capabilities, "routes", frozenset({substituted}))
+        with self.assertRaises(InvalidSchemaError) as replaced:
+            capabilities.supports_route(substituted)
+        self.assertEqual(
+            replaced.exception.details["reason_code"],
+            detail_digest("invalid_host_capabilities"),
+        )
+
+        malformed = HostCapabilities("test", (), routes=(original,))
+        object.__setattr__(malformed, "routes", object())
+        with self.assertRaises(InvalidSchemaError) as invalid:
+            malformed.supports_route(original)
+        self.assertEqual(
+            invalid.exception.details["reason_code"],
+            detail_digest("invalid_host_capabilities"),
+        )
+
+        candidate = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "native",
+        )
+        object.__setattr__(candidate, "rail", object())
+        with self.assertRaises(InvalidSchemaError) as invalid_candidate:
+            HostCapabilities(
+                "test", (), routes=(original,),
+            ).supports_route(candidate)
+        self.assertEqual(
+            invalid_candidate.exception.details["reason_code"],
+            detail_digest("invalid_host_route"),
         )
 
     def test_openrouter_exec_is_a_distinct_dispatch_rail_capability(self):

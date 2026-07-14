@@ -108,7 +108,9 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       compatibility/rollback/review/human; and investigation promotion/build
       stage IDs, evidence identities, executor/capability/dispatch tuples,
       `executor_overridable`, and ancestry. Removal, rewiring, execution removal,
-      executor change, and override-flip tests fail independently of templates.
+      executor change, override flips, and insertion of executable nodes absent
+      from the anchored class or promotion declaration fail independently of
+      templates.
       Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
       Anthropic native Claude. Chunk 05 adds the explicit

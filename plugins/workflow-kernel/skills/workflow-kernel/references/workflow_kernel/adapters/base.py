@@ -214,6 +214,7 @@ def route_satisfies_node(route: HostRoute, node: "NodeSpec") -> bool:
         return False
     try:
         route = _snapshot_host_route(route)
+        node = _snapshot_node_spec(node)
     except InvalidSchemaError:
         return False
     if route.rail not in AGENTIC_DISPATCH_RAILS:
@@ -538,6 +539,19 @@ class HostCapabilities:
     transition_model_version: int = 1
     evidence_model_version: int = 1
     routes: frozenset[HostRoute] = frozenset()
+    _sealed_host_name: str = field(init=False, repr=False, compare=False)
+    _sealed_capabilities: frozenset[HostCapability] = field(
+        init=False, repr=False, compare=False,
+    )
+    _sealed_transition_model_version: int = field(
+        init=False, repr=False, compare=False,
+    )
+    _sealed_evidence_model_version: int = field(
+        init=False, repr=False, compare=False,
+    )
+    _sealed_routes: frozenset[HostRoute] = field(
+        init=False, repr=False, compare=False,
+    )
 
     def __post_init__(self) -> None:
         if type(self.host_name) is not str or _HOST_NAME.fullmatch(self.host_name) is None:
@@ -572,6 +586,15 @@ class HostCapabilities:
             derived.add(DISPATCH_RAIL_CAPABILITIES[route.rail])
         object.__setattr__(self, "capabilities", frozenset(derived))
         object.__setattr__(self, "routes", routes)
+        object.__setattr__(self, "_sealed_host_name", self.host_name)
+        object.__setattr__(self, "_sealed_capabilities", frozenset(derived))
+        object.__setattr__(
+            self, "_sealed_transition_model_version", self.transition_model_version,
+        )
+        object.__setattr__(
+            self, "_sealed_evidence_model_version", self.evidence_model_version,
+        )
+        object.__setattr__(self, "_sealed_routes", routes)
 
     def supports(self, capability: HostCapability) -> bool:
         snapshot = _snapshot_host_capabilities(self)
@@ -585,22 +608,36 @@ class HostCapabilities:
         return capability in snapshot.capabilities
 
     def supports_route(self, route: HostRoute) -> bool:
-        try:
-            return _snapshot_host_route(route) in self.routes
-        except InvalidSchemaError:
-            return False
+        snapshot = _snapshot_host_capabilities(self)
+        candidate = _snapshot_host_route(route)
+        return candidate in snapshot.routes
 
 
 def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilities:
     if type(capabilities) is not HostCapabilities:
         raise invalid_policy("invalid_host_capabilities")
     try:
+        if (
+            type(capabilities.host_name) is not str
+            or capabilities.host_name != capabilities._sealed_host_name
+            or type(capabilities.capabilities) is not frozenset
+            or capabilities.capabilities != capabilities._sealed_capabilities
+            or type(capabilities.transition_model_version) is not int
+            or capabilities.transition_model_version
+            != capabilities._sealed_transition_model_version
+            or type(capabilities.evidence_model_version) is not int
+            or capabilities.evidence_model_version
+            != capabilities._sealed_evidence_model_version
+            or type(capabilities.routes) is not frozenset
+            or capabilities.routes != capabilities._sealed_routes
+        ):
+            raise ValueError
         return HostCapabilities(
-            capabilities.host_name,
-            capabilities.capabilities - ROUTE_SCOPED_CAPABILITIES,
-            capabilities.transition_model_version,
-            capabilities.evidence_model_version,
-            capabilities.routes,
+            capabilities._sealed_host_name,
+            capabilities._sealed_capabilities - ROUTE_SCOPED_CAPABILITIES,
+            capabilities._sealed_transition_model_version,
+            capabilities._sealed_evidence_model_version,
+            capabilities._sealed_routes,
         )
     except Exception:
         raise invalid_policy("invalid_host_capabilities") from None

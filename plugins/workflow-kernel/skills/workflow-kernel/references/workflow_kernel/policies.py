@@ -121,6 +121,114 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
     })
 
 
+def _stage_set_payload(value: object) -> dict:
+    if not isinstance(value, (list, tuple)):
+        raise ValueError
+    stages = []
+    expected = {
+        "id", "gate_kind", "required_evidence", "executor",
+        "required_capability", "required_dispatch_capability",
+        "executor_overridable", "required_ancestors",
+    }
+    for stage in value:
+        if not isinstance(stage, Mapping) or set(stage) != expected:
+            raise ValueError
+        stages.append({
+            "id": stage["id"],
+            "gate_kind": stage["gate_kind"],
+            "required_evidence": list(stage["required_evidence"]),
+            "executor": stage["executor"],
+            "required_capability": (
+                stage["required_capability"].value
+                if type(stage["required_capability"]) is HostCapability
+                else stage["required_capability"]
+            ),
+            "required_dispatch_capability": (
+                stage["required_dispatch_capability"].value
+                if type(stage["required_dispatch_capability"]) is HostCapability
+                else stage["required_dispatch_capability"]
+            ),
+            "executor_overridable": stage["executor_overridable"],
+            "required_ancestors": list(stage["required_ancestors"]),
+        })
+    return {"stages": stages}
+
+
+def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
+    if type(document) is not PolicyDocument:
+        raise invalid_policy("invalid_policy_document")
+    try:
+        if set(document.retry_budgets) != set(FailureReason):
+            raise ValueError
+        budgets = {}
+        for reason in FailureReason:
+            budget = document.retry_budgets[reason]
+            if type(budget) is not int or budget < 0:
+                raise ValueError
+            budgets[reason] = budget
+        if (
+            type(document.identical_signature_limit) is not int
+            or document.identical_signature_limit < 2
+        ):
+            raise ValueError
+        risk_values = tuple(document.risk_human_approval)
+        if any(
+            type(value) is not str
+            or value not in ("low", "medium", "high", "critical")
+            for value in risk_values
+        ) or len(risk_values) != len(set(risk_values)):
+            raise ValueError
+        order = tuple(document.isolation_order)
+        if (
+            len(order) != len(IsolationMode)
+            or set(order) != set(IsolationMode)
+            or any(type(value) is not IsolationMode for value in order)
+        ):
+            raise ValueError
+        forbidden = frozenset(document.forbidden_downgrades)
+        if any(
+            type(item) is not tuple
+            or len(item) != 2
+            or any(type(value) is not IsolationMode for value in item)
+            for item in forbidden
+        ):
+            raise ValueError
+        anchor = document.workflow_safety_anchor
+        if not isinstance(anchor, Mapping) or set(anchor) != {
+            "schema_version", "common", "classes", "promotion",
+        }:
+            raise ValueError
+        classes = anchor["classes"]
+        promotion = anchor["promotion"]
+        if not isinstance(classes, Mapping) or set(classes) != {
+            WorkflowClass.HOTFIX, WorkflowClass.SECURITY, WorkflowClass.MIGRATION,
+        } or not isinstance(promotion, Mapping) or set(promotion) != {"investigation"}:
+            raise ValueError
+        anchor_payload = {
+            "schema_version": anchor["schema_version"],
+            "common": _stage_set_payload(anchor["common"]),
+            "classes": {
+                kind.value: _stage_set_payload(classes[kind])
+                for kind in (
+                    WorkflowClass.HOTFIX, WorkflowClass.SECURITY,
+                    WorkflowClass.MIGRATION,
+                )
+            },
+            "promotion": {
+                "investigation": _stage_set_payload(promotion["investigation"]),
+            },
+        }
+        safety_anchor = _workflow_safety_anchor(anchor_payload)
+        if document.economics_mode != "proposal_only":
+            raise ValueError
+        return PolicyDocument(
+            MappingProxyType(budgets), document.identical_signature_limit,
+            risk_values, order, forbidden, safety_anchor, "proposal_only",
+        )
+    except Exception:
+        raise invalid_policy("invalid_policy_document") from None
+
+
 def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     source = Path(path) if path is not None else DEFAULT_POLICY_PATH
     try:
@@ -251,7 +359,7 @@ class GatePolicy:
         if policy_document is not None:
             if path is not None or type(policy_document) is not PolicyDocument:
                 raise invalid_policy("invalid_policy_document")
-            self._policy = policy_document
+            self._policy = _snapshot_policy_document(policy_document)
         else:
             self._policy = load_policy(path)
 
