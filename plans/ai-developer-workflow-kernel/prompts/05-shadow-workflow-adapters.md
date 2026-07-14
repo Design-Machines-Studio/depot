@@ -232,8 +232,9 @@ Harness host selection uses one callback-free exact built-in string and
 `[a-z0-9][a-z0-9._-]*` format validator before profile I/O. Malformed caller
 names therefore take `invalid_host_name` independently of profile state; valid
 missing names and malformed profiles retain `invalid_harness_profile`. Explicit
-profile paths are canonicalized only after the host-name gate, and ordinary path
-conversion callback failures are contained as `invalid_harness_profile`.
+profile paths accept `str` or `os.PathLike[str]`, are fully materialized only
+after the host-name gate, and contain ordinary conversion callback failures as
+`invalid_harness_profile`; bytes remain outside the accepted contract.
 Safety-anchor projection charges the graph once before wrapping projected stage
 sets, ordered
 fields reject sets and frozensets, and only canonical forbidden downgrades accept

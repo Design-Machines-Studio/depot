@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Union
 
 from .base import (
     BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
@@ -21,6 +22,9 @@ from ..limits import load_json_document
 from ..schema import InvalidSchemaError
 
 
+_HarnessProfilePath = Union[str, os.PathLike[str]]
+
+
 def _repository_file(relative: str) -> Path:
     for parent in Path(__file__).resolve().parents:
         candidate = parent / relative
@@ -31,7 +35,7 @@ def _repository_file(relative: str) -> Path:
 
 def capabilities_from_harness_profile(
     host_name: str,
-    path: Optional[Path] = None,
+    path: Optional[_HarnessProfilePath] = None,
 ) -> HostCapabilities:
     host_name = _validate_host_name(host_name)
     if path is None:
@@ -40,7 +44,13 @@ def capabilities_from_harness_profile(
         )
     else:
         try:
-            source = Path(path)
+            raw_path = os.fspath(path)
+            # Copy exact text and force pathlib's lazy parser before profile I/O.
+            path_text = str.__str__(raw_path)
+            if type(path_text) is not str:
+                raise TypeError
+            source = Path(path_text)
+            str(source)
         except Exception:
             raise invalid_policy("invalid_harness_profile") from None
     try:

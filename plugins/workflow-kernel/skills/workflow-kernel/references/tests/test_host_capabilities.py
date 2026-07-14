@@ -9,6 +9,7 @@ import unittest
 import weakref
 from unittest.mock import patch
 from pathlib import Path
+from typing import get_type_hints, Optional, Union
 
 from tests import (
     detail_digest, ignored_json_boundary_corpus,
@@ -749,7 +750,7 @@ class HostCapabilityTests(unittest.TestCase):
                 self.assertNotIn(secret, repr(raised.exception))
                 self.assertEqual(candidate.calls, 1)
 
-    def test_harness_profile_preserves_valid_pathlike_support(self):
+    def test_harness_profile_preserves_valid_string_and_pathlike_support(self):
         class ValidPathLike(os.PathLike):
             def __init__(self, path):
                 self.path = path
@@ -764,12 +765,47 @@ class HostCapabilityTests(unittest.TestCase):
             path.write_text(json.dumps({
                 "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
             }), encoding="utf-8")
+            string_profile = capabilities_from_harness_profile(
+                "test", os.fspath(path),
+            )
             candidate = ValidPathLike(path)
-            profile = capabilities_from_harness_profile("test", candidate)
-        self.assertEqual(profile.capabilities, frozenset())
+            pathlike_profile = capabilities_from_harness_profile(
+                "test", candidate,
+            )
+        self.assertEqual(string_profile.capabilities, frozenset())
+        self.assertEqual(pathlike_profile.capabilities, frozenset())
         self.assertEqual(candidate.calls, 1)
 
-    def test_harness_profile_canonicalizes_concrete_path_subclasses(self):
+    def test_harness_profile_materializes_pathlike_string_subclasses(self):
+        secret = "sk-secret-path-string-callback"
+        path_calls = []
+        string_calls = []
+
+        class HostileString(str):
+            def __getitem__(self, item):
+                string_calls.append("getitem")
+                raise RuntimeError(secret)
+
+            def __str__(self):
+                string_calls.append("str")
+                raise RuntimeError(secret)
+
+        class StringPathLike(os.PathLike):
+            def __fspath__(self):
+                path_calls.append("fspath")
+                return HostileString("/absent/harness.json")
+
+        with self.assertRaises(InvalidSchemaError) as raised:
+            capabilities_from_harness_profile("test", StringPathLike())
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_harness_profile"),
+        )
+        self.assertNotIn(secret, repr(raised.exception))
+        self.assertEqual(path_calls, ["fspath"])
+        self.assertEqual(string_calls, [])
+
+    def test_harness_profile_contains_concrete_path_subclass_callbacks(self):
         secret = "sk-secret-path-subclass-callback"
         calls = []
 
@@ -787,11 +823,57 @@ class HostCapabilityTests(unittest.TestCase):
             path.write_text(json.dumps({
                 "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
             }), encoding="utf-8")
-            profile = capabilities_from_harness_profile(
-                "test", HostilePath(path),
-            )
-        self.assertEqual(profile.capabilities, frozenset())
-        self.assertEqual(calls, [])
+            with self.assertRaises(InvalidSchemaError) as raised:
+                capabilities_from_harness_profile("test", HostilePath(path))
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_harness_profile"),
+        )
+        self.assertNotIn(secret, repr(raised.exception))
+        self.assertEqual(calls, ["fspath"])
+
+    def test_harness_profile_rejects_bytes_without_subclass_callbacks(self):
+        secret = "sk-secret-path-bytes-callback"
+        path_calls = []
+        bytes_calls = []
+
+        class HostileBytes(bytes):
+            def __bytes__(self):
+                bytes_calls.append("bytes")
+                raise RuntimeError(secret)
+
+            def __getitem__(self, item):
+                bytes_calls.append("getitem")
+                raise RuntimeError(secret)
+
+        class BytesPathLike(os.PathLike):
+            def __fspath__(self):
+                path_calls.append("fspath")
+                return HostileBytes(b"/absent/harness.json")
+
+        for name, candidate in (
+            ("exact", b"/absent/harness.json"),
+            ("subclass", BytesPathLike()),
+        ):
+            with self.subTest(name=name):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    capabilities_from_harness_profile("test", candidate)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_harness_profile"),
+                )
+                self.assertNotIn(secret, repr(raised.exception))
+        self.assertEqual(path_calls, ["fspath"])
+        self.assertEqual(bytes_calls, [])
+
+    def test_harness_profile_path_annotation_matches_runtime_contract(self):
+        annotation = get_type_hints(
+            capabilities_from_harness_profile,
+        )["path"]
+        self.assertEqual(
+            annotation,
+            Optional[Union[str, os.PathLike[str]]],
+        )
 
     def test_invalid_host_name_precedes_hostile_path_dispatch(self):
         secret = "sk-secret-unreached-path-callback"
