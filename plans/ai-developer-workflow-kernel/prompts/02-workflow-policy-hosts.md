@@ -149,6 +149,9 @@ returns none.
 
 - Load policy from versioned JSON and validate before expansion. Do not hide
   policy in Python constants beyond enum and default schema versions.
+- Normalize file-loaded and injected policy documents through one canonical
+  payload-to-`PolicyDocument` path so both boundaries reject the same malformed
+  values with the same stable reason.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both
@@ -183,12 +186,17 @@ returns none.
   version together with context and handle payload.
 - Authorize builder work by one exact immutable
   `(provider, executor capability, dispatch rail)` route from the harness role.
-  Seal each `HostRoute` and every `NodeSpec` field, including nested gate state,
-  to immutable primitive origin tuples; seal `HostCapabilities` with primitive
-  route tuples rather than route-object aliases. Snapshot/property/repr,
+  Bind routes, nodes and nested gate state, capabilities, workflow/attempt/
+  isolation inputs, resume contexts, handles, results, feedback, blobs, and
+  builder decisions to module-owned weak identity seals over immutable primitive
+  tuples or payload digests. Never trust a caller-owned seal attribute.
+  `HostCapabilities` seals primitive route tuples rather than route-object
+  aliases. Snapshot/property/repr,
   authorization, and manager tests must reject coherent route rewrites,
   coordinated security-node rewrites, and nested gate/route mutations before
-  dispatch.
+  dispatch. Public reconstruction and projection boundaries map ordinary
+  iterator/data exceptions to stable secret-safe failures while allowing
+  `BaseException` control flow to propagate.
   `capabilities` is a derived compatibility view, never an authorization proof.
   Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
   analysis/text-only. Ordinary nodes may use any compatible declared agentic

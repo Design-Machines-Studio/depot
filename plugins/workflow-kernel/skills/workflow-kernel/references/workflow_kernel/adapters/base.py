@@ -11,10 +11,12 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import PurePosixPath
+from threading import RLock
 from types import MappingProxyType
 from typing import Mapping, Optional, Protocol, Tuple
 
@@ -126,6 +128,58 @@ ROUTE_SCOPED_CAPABILITIES = frozenset(
 )
 
 
+class _IdentitySealRegistry:
+    """Weak identity registry whose keys cannot be rewritten through values."""
+
+    def __init__(self) -> None:
+        self._entries = {}
+        self._lock = RLock()
+
+    def register(self, value: object, kind: str, primitives: object) -> None:
+        identity = id(value)
+
+        def discard(reference: weakref.ReferenceType, identity: int = identity) -> None:
+            with self._lock:
+                current = self._entries.get(identity)
+                if current is not None and current[0] is reference:
+                    del self._entries[identity]
+
+        reference = weakref.ref(value, discard)
+        with self._lock:
+            self._entries[identity] = (reference, kind, primitives)
+
+    def validate(self, value: object, kind: str, primitives: object) -> None:
+        with self._lock:
+            current = self._entries.get(id(value))
+            if (
+                current is None
+                or current[0]() is not value
+                or current[1] != kind
+                or current[2] != primitives
+            ):
+                raise ValueError
+
+    def size(self) -> int:
+        with self._lock:
+            return len(self._entries)
+
+
+_ORIGIN_SEALS = _IdentitySealRegistry()
+
+
+def _register_origin(value: object, kind: str, primitives: object) -> None:
+    _ORIGIN_SEALS.register(value, kind, primitives)
+
+
+def _validate_origin(value: object, kind: str, primitives: object) -> None:
+    _ORIGIN_SEALS.validate(value, kind, primitives)
+
+
+def _origin_seal_registry_size() -> int:
+    """Return live seal count for lifecycle regression tests."""
+    return _ORIGIN_SEALS.size()
+
+
 @dataclass(frozen=True, repr=False)
 class HostRoute:
     """One concrete provider/executor/dispatch authorization tuple."""
@@ -133,9 +187,6 @@ class HostRoute:
     provider: str
     capability: HostCapability
     rail: str
-    _origin_seal: tuple[str, str, str] = field(
-        init=False, repr=False, compare=False,
-    )
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("HostRoute is final")
@@ -182,8 +233,8 @@ class HostRoute:
         ):
             raise invalid_policy("incoherent_host_route")
         object.__setattr__(self, "capability", capability)
-        object.__setattr__(
-            self, "_origin_seal", (self.provider, capability.value, self.rail),
+        _register_origin(
+            self, "HostRoute", (self.provider, capability.value, self.rail),
         )
 
     @property
@@ -216,8 +267,7 @@ def _snapshot_host_route(route: HostRoute) -> HostRoute:
         ):
             raise ValueError
         primitives = (route.provider, route.capability.value, route.rail)
-        if type(route._origin_seal) is not tuple or route._origin_seal != primitives:
-            raise ValueError
+        _validate_origin(route, "HostRoute", primitives)
         return HostRoute(*primitives)
     except Exception:
         raise invalid_policy("invalid_host_route") from None
@@ -326,16 +376,20 @@ class WorkflowContext:
                 if normalized in ("", "."):
                     raise invalid_policy("invalid_changed_path")
                 normalized_paths.append(normalized)
-        except TypeError:
+        except Exception:
             raise invalid_policy("invalid_changed_path")
         if len(normalized_paths) != len(set(normalized_paths)):
             raise invalid_policy("invalid_changed_path")
         object.__setattr__(self, "changed_paths", tuple(normalized_paths))
-        if not isinstance(self.evidence, (list, tuple)) or any(
-            type(value) is not str or not value for value in self.evidence
-        ):
-            raise invalid_policy("invalid_workflow_context")
-        object.__setattr__(self, "evidence", tuple(self.evidence))
+        try:
+            if not isinstance(self.evidence, (list, tuple)) or any(
+                type(value) is not str or not value for value in self.evidence
+            ):
+                raise ValueError
+            evidence = tuple(self.evidence)
+        except Exception:
+            raise invalid_policy("invalid_workflow_context") from None
+        object.__setattr__(self, "evidence", evidence)
         if self.requested_executor is not None and (
             type(self.requested_executor) is not str
             or self.requested_executor not in EXECUTORS
@@ -351,12 +405,44 @@ class WorkflowContext:
             type(self.economics_preference) is not str or not self.economics_preference
         ):
             raise invalid_policy("invalid_workflow_context")
+        _register_origin(self, "WorkflowContext", _workflow_context_primitives(self))
+
+
+def _workflow_context_primitives(context: WorkflowContext) -> tuple[object, ...]:
+    if (
+        type(context.changed_paths) is not tuple
+        or any(type(value) is not str for value in context.changed_paths)
+        or context.requested_executor is not None
+        and type(context.requested_executor) is not str
+        or type(context.risk) is not str
+        or type(context.evidence) is not tuple
+        or any(type(value) is not str for value in context.evidence)
+        or type(context.human_approved) is not bool
+        or type(context.investigation_promotion) is not bool
+        or type(context.promotion_approved) is not bool
+        or context.economics_preference is not None
+        and type(context.economics_preference) is not str
+    ):
+        raise ValueError
+    return (
+        context.changed_paths,
+        context.requested_executor,
+        context.risk,
+        context.evidence,
+        context.human_approved,
+        context.investigation_promotion,
+        context.promotion_approved,
+        context.economics_preference,
+    )
 
 
 def _snapshot_workflow_context(context: WorkflowContext) -> WorkflowContext:
     if type(context) is not WorkflowContext:
         raise invalid_policy("invalid_workflow_context")
     try:
+        _validate_origin(
+            context, "WorkflowContext", _workflow_context_primitives(context),
+        )
         return WorkflowContext(
             changed_paths=context.changed_paths,
             requested_executor=context.requested_executor,
@@ -367,7 +453,7 @@ def _snapshot_workflow_context(context: WorkflowContext) -> WorkflowContext:
             promotion_approved=context.promotion_approved,
             economics_preference=context.economics_preference,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_workflow_context") from None
 
 
@@ -379,16 +465,22 @@ class GateDecision:
     human_required: bool = False
 
     def __post_init__(self) -> None:
-        if (
-            type(self.allowed) is not bool
-            or type(self.reason_code) is not str
-            or not self.reason_code
-            or type(self.human_required) is not bool
-            or not isinstance(self.missing_evidence, (list, tuple))
-            or any(type(value) is not str or not value for value in self.missing_evidence)
-        ):
-            raise invalid_policy("invalid_gate_decision")
-        values = tuple(self.missing_evidence)
+        try:
+            if (
+                type(self.allowed) is not bool
+                or type(self.reason_code) is not str
+                or not self.reason_code
+                or type(self.human_required) is not bool
+                or not isinstance(self.missing_evidence, (list, tuple))
+                or any(
+                    type(value) is not str or not value
+                    for value in self.missing_evidence
+                )
+            ):
+                raise ValueError
+            values = tuple(self.missing_evidence)
+        except Exception:
+            raise invalid_policy("invalid_gate_decision") from None
         if len(values) != len(set(values)):
             raise invalid_policy("invalid_gate_decision")
         coherent = (
@@ -414,6 +506,33 @@ class GateDecision:
         if not coherent:
             raise invalid_policy("invalid_gate_decision")
         object.__setattr__(self, "missing_evidence", values)
+        _register_origin(self, "GateDecision", _gate_decision_primitives(self))
+
+
+def _gate_decision_primitives(decision: GateDecision) -> tuple[object, ...]:
+    if (
+        type(decision.allowed) is not bool
+        or type(decision.reason_code) is not str
+        or type(decision.missing_evidence) is not tuple
+        or any(type(value) is not str for value in decision.missing_evidence)
+        or type(decision.human_required) is not bool
+    ):
+        raise ValueError
+    return (
+        decision.allowed, decision.reason_code,
+        decision.missing_evidence, decision.human_required,
+    )
+
+
+def _snapshot_gate_decision(decision: GateDecision) -> GateDecision:
+    if type(decision) is not GateDecision:
+        raise invalid_policy("invalid_gate_decision")
+    try:
+        primitives = _gate_decision_primitives(decision)
+        _validate_origin(decision, "GateDecision", primitives)
+        return GateDecision(*primitives)
+    except Exception:
+        raise invalid_policy("invalid_gate_decision") from None
 
 
 @dataclass(frozen=True)
@@ -430,20 +549,20 @@ class NodeSpec:
     required_capability: Optional[HostCapability] = None
     required_dispatch_capability: Optional[HostCapability] = None
     executor_overridable: bool = False
-    _origin_seal: tuple[object, ...] = field(
-        init=False, repr=False, compare=False,
-    )
 
     def __post_init__(self) -> None:
         if type(self.node_id) is not str or not self.node_id:
             raise invalid_policy("missing_node_id")
         for name in ("dependencies", "required_evidence"):
             values = getattr(self, name)
-            if not isinstance(values, (list, tuple)) or any(
-                type(value) is not str or not value for value in values
-            ):
-                raise invalid_policy("invalid_node_spec")
-            values = tuple(values)
+            try:
+                if not isinstance(values, (list, tuple)) or any(
+                    type(value) is not str or not value for value in values
+                ):
+                    raise ValueError
+                values = tuple(values)
+            except Exception:
+                raise invalid_policy("invalid_node_spec") from None
             if len(values) != len(set(values)):
                 raise invalid_policy("duplicate_node_value")
             object.__setattr__(self, name, values)
@@ -458,13 +577,8 @@ class NodeSpec:
         if type(self.gate_decision) is not GateDecision:
             raise invalid_policy("invalid_gate_decision")
         try:
-            gate_decision = GateDecision(
-                self.gate_decision.allowed,
-                self.gate_decision.reason_code,
-                self.gate_decision.missing_evidence,
-                self.gate_decision.human_required,
-            )
-        except (AttributeError, TypeError):
+            gate_decision = _snapshot_gate_decision(self.gate_decision)
+        except Exception:
             raise invalid_policy("invalid_gate_decision") from None
         object.__setattr__(self, "gate_decision", gate_decision)
         if self.gate_kind is None:
@@ -483,7 +597,7 @@ class NodeSpec:
             raise invalid_policy("invalid_node_spec")
         if self.executor is None and self.executor_overridable:
             raise invalid_policy("inconsistent_executor_capability")
-        object.__setattr__(self, "_origin_seal", _node_spec_primitives(self))
+        _register_origin(self, "NodeSpec", _node_spec_primitives(self))
 
 
 def _node_spec_primitives(node: NodeSpec) -> tuple[object, ...]:
@@ -510,6 +624,8 @@ def _node_spec_primitives(node: NodeSpec) -> tuple[object, ...]:
         or type(node.executor_overridable) is not bool
     ):
         raise ValueError
+    gate_primitives = _gate_decision_primitives(gate)
+    _validate_origin(gate, "GateDecision", gate_primitives)
     return (
         node.node_id,
         node.dependencies,
@@ -517,12 +633,7 @@ def _node_spec_primitives(node: NodeSpec) -> tuple[object, ...]:
         node.required_evidence,
         node.executor,
         node.routing_reason,
-        (
-            gate.allowed,
-            gate.reason_code,
-            gate.missing_evidence,
-            gate.human_required,
-        ),
+        gate_primitives,
         (
             None
             if node.required_capability is None
@@ -541,11 +652,8 @@ def _snapshot_node_spec(node: NodeSpec) -> NodeSpec:
     if type(node) is not NodeSpec:
         raise invalid_policy("invalid_node_spec")
     try:
-        if (
-            type(node._origin_seal) is not tuple
-            or node._origin_seal != _node_spec_primitives(node)
-        ):
-            raise ValueError
+        primitives = _node_spec_primitives(node)
+        _validate_origin(node, "NodeSpec", primitives)
         return NodeSpec(
             node_id=node.node_id,
             dependencies=node.dependencies,
@@ -583,19 +691,55 @@ class AttemptLedger:
                 ):
                     raise ValueError
                 safe_signatures[reason] = tuple(values)
-        except (TypeError, ValueError):
+        except Exception:
             raise invalid_policy("invalid_attempt_ledger") from None
         for reason, history in safe_signatures.items():
             if reason not in safe_counts or len(history) > safe_counts[reason]:
                 raise invalid_policy("invalid_attempt_ledger")
         object.__setattr__(self, "counts", MappingProxyType(safe_counts))
         object.__setattr__(self, "signatures", MappingProxyType(safe_signatures))
+        _register_origin(self, "AttemptLedger", _attempt_ledger_primitives(self))
 
     def count(self, reason: FailureReason) -> int:
-        return self.counts.get(reason, 0)
+        return _snapshot_attempt_ledger(self).counts.get(reason, 0)
 
     def history(self, reason: FailureReason) -> Tuple[str, ...]:
-        return self.signatures.get(reason, ())
+        return _snapshot_attempt_ledger(self).signatures.get(reason, ())
+
+
+def _attempt_ledger_primitives(ledger: AttemptLedger) -> tuple[object, ...]:
+    try:
+        counts = tuple(sorted(
+            (reason.value, count) for reason, count in ledger.counts.items()
+        ))
+        signatures = tuple(sorted(
+            (reason.value, tuple(values))
+            for reason, values in ledger.signatures.items()
+        ))
+    except Exception:
+        raise ValueError from None
+    if (
+        any(type(reason) is not str or type(count) is not int for reason, count in counts)
+        or any(
+            type(reason) is not str
+            or type(values) is not tuple
+            or any(type(value) is not str for value in values)
+            for reason, values in signatures
+        )
+    ):
+        raise ValueError
+    return counts, signatures
+
+
+def _snapshot_attempt_ledger(ledger: AttemptLedger) -> AttemptLedger:
+    if type(ledger) is not AttemptLedger:
+        raise invalid_policy("invalid_attempt_ledger")
+    try:
+        primitives = _attempt_ledger_primitives(ledger)
+        _validate_origin(ledger, "AttemptLedger", primitives)
+        return AttemptLedger(dict(ledger.counts), dict(ledger.signatures))
+    except Exception:
+        raise invalid_policy("invalid_attempt_ledger") from None
 
 
 @dataclass(frozen=True)
@@ -614,19 +758,6 @@ class HostCapabilities:
     transition_model_version: int = 1
     evidence_model_version: int = 1
     routes: frozenset[HostRoute] = frozenset()
-    _sealed_host_name: str = field(init=False, repr=False, compare=False)
-    _sealed_capabilities: frozenset[HostCapability] = field(
-        init=False, repr=False, compare=False,
-    )
-    _sealed_transition_model_version: int = field(
-        init=False, repr=False, compare=False,
-    )
-    _sealed_evidence_model_version: int = field(
-        init=False, repr=False, compare=False,
-    )
-    _sealed_routes: frozenset[tuple[str, str, str]] = field(
-        init=False, repr=False, compare=False,
-    )
 
     def __post_init__(self) -> None:
         if type(self.host_name) is not str or _HOST_NAME.fullmatch(self.host_name) is None:
@@ -661,18 +792,14 @@ class HostCapabilities:
             derived.add(DISPATCH_RAIL_CAPABILITIES[route.rail])
         object.__setattr__(self, "capabilities", frozenset(derived))
         object.__setattr__(self, "routes", routes)
-        object.__setattr__(self, "_sealed_host_name", self.host_name)
-        object.__setattr__(self, "_sealed_capabilities", frozenset(derived))
-        object.__setattr__(
-            self, "_sealed_transition_model_version", self.transition_model_version,
+        _register_origin(
+            self, "HostCapabilities",
+            _host_capabilities_primitives(
+                self.host_name, self.capabilities,
+                self.transition_model_version, self.evidence_model_version,
+                tuple(routes),
+            ),
         )
-        object.__setattr__(
-            self, "_sealed_evidence_model_version", self.evidence_model_version,
-        )
-        object.__setattr__(self, "_sealed_routes", frozenset(
-            (route.provider, route.capability.value, route.rail)
-            for route in routes
-        ))
 
     def supports(self, capability: HostCapability) -> bool:
         snapshot = _snapshot_host_capabilities(self)
@@ -681,7 +808,7 @@ class HostCapabilities:
                 capability if type(capability) is HostCapability
                 else HostCapability(capability)
             )
-        except (TypeError, ValueError):
+        except Exception:
             raise invalid_policy("unknown_capability_name") from None
         return capability in snapshot.capabilities
 
@@ -697,43 +824,62 @@ def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilit
     try:
         if (
             type(capabilities.host_name) is not str
-            or capabilities.host_name != capabilities._sealed_host_name
             or type(capabilities.capabilities) is not frozenset
-            or capabilities.capabilities != capabilities._sealed_capabilities
             or type(capabilities.transition_model_version) is not int
-            or capabilities.transition_model_version
-            != capabilities._sealed_transition_model_version
             or type(capabilities.evidence_model_version) is not int
-            or capabilities.evidence_model_version
-            != capabilities._sealed_evidence_model_version
             or type(capabilities.routes) is not frozenset
-            or type(capabilities._sealed_routes) is not frozenset
-            or any(
-                type(route) is not tuple
-                or len(route) != 3
-                or any(type(value) is not str for value in route)
-                for route in capabilities._sealed_routes
-            )
         ):
             raise ValueError
         routes = tuple(
             _snapshot_host_route(route) for route in capabilities.routes
         )
-        route_values = frozenset(
-            (route.provider, route.capability.value, route.rail)
-            for route in routes
+        primitives = _host_capabilities_primitives(
+            capabilities.host_name, capabilities.capabilities,
+            capabilities.transition_model_version,
+            capabilities.evidence_model_version, routes,
         )
-        if route_values != capabilities._sealed_routes:
-            raise ValueError
+        _validate_origin(capabilities, "HostCapabilities", primitives)
         return HostCapabilities(
-            capabilities._sealed_host_name,
-            capabilities._sealed_capabilities - ROUTE_SCOPED_CAPABILITIES,
-            capabilities._sealed_transition_model_version,
-            capabilities._sealed_evidence_model_version,
+            capabilities.host_name,
+            capabilities.capabilities - ROUTE_SCOPED_CAPABILITIES,
+            capabilities.transition_model_version,
+            capabilities.evidence_model_version,
             frozenset(routes),
         )
     except Exception:
         raise invalid_policy("invalid_host_capabilities") from None
+
+
+def _host_capabilities_primitives(
+    host_name: object,
+    capabilities: object,
+    transition_version: object,
+    evidence_version: object,
+    routes: tuple[HostRoute, ...],
+) -> tuple[object, ...]:
+    if (
+        type(host_name) is not str
+        or type(capabilities) is not frozenset
+        or any(type(value) is not HostCapability for value in capabilities)
+        or type(transition_version) is not int
+        or type(evidence_version) is not int
+        or type(routes) is not tuple
+    ):
+        raise ValueError
+    route_values = []
+    for route in routes:
+        if type(route) is not HostRoute:
+            raise ValueError
+        route_value = (route.provider, route.capability.value, route.rail)
+        _validate_origin(route, "HostRoute", route_value)
+        route_values.append(route_value)
+    return (
+        host_name,
+        tuple(sorted(value.value for value in capabilities)),
+        transition_version,
+        evidence_version,
+        tuple(sorted(route_values)),
+    )
 
 
 @dataclass(frozen=True)
@@ -752,6 +898,9 @@ class IsolationRequirements:
         if type(self.allow_degradation) is not bool:
             raise invalid_policy("invalid_isolation_requirements")
         object.__setattr__(self, "preferred", preferred)
+        _register_origin(
+            self, "IsolationRequirements", (preferred.value, self.allow_degradation),
+        )
 
 
 def _snapshot_isolation_requirements(
@@ -760,6 +909,15 @@ def _snapshot_isolation_requirements(
     if type(requirements) is not IsolationRequirements:
         raise invalid_policy("invalid_isolation_requirements")
     try:
+        if (
+            type(requirements.preferred) is not IsolationMode
+            or type(requirements.allow_degradation) is not bool
+        ):
+            raise ValueError
+        _validate_origin(
+            requirements, "IsolationRequirements",
+            (requirements.preferred.value, requirements.allow_degradation),
+        )
         return IsolationRequirements(
             requirements.preferred, requirements.allow_degradation,
         )
@@ -806,10 +964,14 @@ class ResumeStateContext:
         object.__setattr__(self, "provider", route.provider)
         object.__setattr__(self, "rail", route.rail)
         object.__setattr__(self, "capability", route.capability)
+        _register_origin(
+            self, "ResumeStateContext", _resume_context_primitives(self),
+        )
 
     @property
     def route(self) -> HostRoute:
-        return HostRoute(self.provider, self.capability, self.rail)
+        context = _snapshot_resume_context(self)
+        return HostRoute(context.provider, context.capability, context.rail)
 
     def __repr__(self) -> str:
         try:
@@ -840,12 +1002,32 @@ def _snapshot_resume_context(context: ResumeStateContext) -> ResumeStateContext:
     if type(context) is not ResumeStateContext:
         raise invalid_policy("invalid_session_resume_context")
     try:
+        primitives = _resume_context_primitives(context)
+        _validate_origin(context, "ResumeStateContext", primitives)
         return ResumeStateContext(
             context.run_id, context.node_id, context.attempt_id, context.provider,
             context.rail, context.capability,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_session_resume_context") from None
+
+
+def _resume_context_primitives(
+    context: ResumeStateContext,
+) -> tuple[str, str, str, str, str, str]:
+    if (
+        type(context.run_id) is not str
+        or type(context.node_id) is not str
+        or type(context.attempt_id) is not str
+        or type(context.provider) is not str
+        or type(context.rail) is not str
+        or type(context.capability) is not HostCapability
+    ):
+        raise ValueError
+    return (
+        context.run_id, context.node_id, context.attempt_id,
+        context.provider, context.rail, context.capability.value,
+    )
 
 
 @dataclass(frozen=True, repr=False)
@@ -882,6 +1064,7 @@ class SessionHandle:
         if created.tzinfo is None:
             raise invalid_policy("invalid_session_handle")
         object.__setattr__(self, "context", _snapshot_resume_context(self.context))
+        _register_origin(self, "SessionHandle", _session_handle_primitives(self))
 
     def __repr__(self) -> str:
         try:
@@ -911,6 +1094,8 @@ def _snapshot_session_handle(handle: SessionHandle) -> SessionHandle:
     if type(handle) is not SessionHandle:
         raise invalid_policy("invalid_session_handle")
     try:
+        primitives = _session_handle_primitives(handle)
+        _validate_origin(handle, "SessionHandle", primitives)
         return SessionHandle(
             host_name=handle.host_name,
             opaque_handle=handle.opaque_handle,
@@ -918,8 +1103,29 @@ def _snapshot_session_handle(handle: SessionHandle) -> SessionHandle:
             resume_capable=handle.resume_capable,
             context=handle.context,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_session_handle") from None
+
+
+def _session_handle_primitives(handle: SessionHandle) -> tuple[object, ...]:
+    if (
+        type(handle.host_name) is not str
+        or type(handle.opaque_handle) is not str
+        or type(handle.created_at) is not str
+        or type(handle.resume_capable) is not bool
+        or type(handle.context) is not ResumeStateContext
+    ):
+        raise ValueError
+    context = _resume_context_primitives(handle.context)
+    _validate_origin(handle.context, "ResumeStateContext", context)
+    return (
+        handle.host_name,
+        len(handle.opaque_handle),
+        hashlib.sha256(handle.opaque_handle.encode("utf-8")).hexdigest(),
+        handle.created_at,
+        handle.resume_capable,
+        context,
+    )
 
 
 @dataclass(frozen=True, repr=False)
@@ -948,6 +1154,9 @@ class ValidationFeedback:
             self, "evidence",
             _normalize_safe_evidence(self.evidence, "invalid_validation_feedback"),
         )
+        _register_origin(
+            self, "ValidationFeedback", _validation_feedback_primitives(self),
+        )
 
     def __repr__(self) -> str:
         try:
@@ -971,11 +1180,26 @@ def _snapshot_validation_feedback(feedback: ValidationFeedback) -> ValidationFee
     if type(feedback) is not ValidationFeedback:
         raise invalid_policy("invalid_validation_feedback")
     try:
+        primitives = _validation_feedback_primitives(feedback)
+        _validate_origin(feedback, "ValidationFeedback", primitives)
         return ValidationFeedback(
             feedback.node_id, feedback.reason_code, feedback.evidence,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_validation_feedback") from None
+
+
+def _validation_feedback_primitives(
+    feedback: ValidationFeedback,
+) -> tuple[object, ...]:
+    if (
+        type(feedback.node_id) is not str
+        or type(feedback.reason_code) is not str
+        or type(feedback.evidence) is not tuple
+        or any(type(value) is not str for value in feedback.evidence)
+    ):
+        raise ValueError
+    return feedback.node_id, feedback.reason_code, feedback.evidence
 
 
 def _normalize_safe_evidence(values: object, reason_code: str) -> Tuple[str, ...]:
@@ -996,7 +1220,7 @@ def _normalize_safe_evidence(values: object, reason_code: str) -> Tuple[str, ...
             if total_bytes > MAX_TOTAL_STRING_BYTES:
                 raise ValueError
             normalized.append(reference)
-    except (TypeError, ValueError, UnicodeError):
+    except Exception:
         raise invalid_policy(reason_code) from None
     result = tuple(normalized)
     if len(result) != len(values) or len(result) != len(set(result)):
@@ -1042,6 +1266,7 @@ class SessionResult:
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "context", _snapshot_resume_context(self.context))
         object.__setattr__(self, "evidence", values)
+        _register_origin(self, "SessionResult", _session_result_primitives(self))
 
     def __repr__(self) -> str:
         try:
@@ -1066,11 +1291,27 @@ def _snapshot_session_result(result: SessionResult) -> SessionResult:
     if type(result) is not SessionResult:
         raise invalid_policy("invalid_session_result")
     try:
+        primitives = _session_result_primitives(result)
+        _validate_origin(result, "SessionResult", primitives)
         return SessionResult(
             result.status, result.context, result.evidence, result.reason_code,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_session_result") from None
+
+
+def _session_result_primitives(result: SessionResult) -> tuple[object, ...]:
+    if (
+        type(result.status) is not SessionStatus
+        or type(result.context) is not ResumeStateContext
+        or type(result.evidence) is not tuple
+        or any(type(value) is not str for value in result.evidence)
+        or result.reason_code is not None and type(result.reason_code) is not str
+    ):
+        raise ValueError
+    context = _resume_context_primitives(result.context)
+    _validate_origin(result.context, "ResumeStateContext", context)
+    return result.status.value, context, result.evidence, result.reason_code
 
 
 MAX_RESUME_STATE_BYTES = 65_536
@@ -1093,6 +1334,9 @@ class ResumeStateBlob:
     def __post_init__(self) -> None:
         if type(self._payload) is not bytes or len(self._payload) > MAX_RESUME_STATE_BYTES:
             raise invalid_policy("invalid_session_resume_state")
+        _register_origin(
+            self, "ResumeStateBlob", _resume_blob_primitives(self._payload),
+        )
 
     def __repr__(self) -> str:
         try:
@@ -1121,9 +1365,18 @@ def _snapshot_resume_blob(blob: ResumeStateBlob) -> bytes:
         payload = blob._payload
         if type(payload) is not bytes or len(payload) > MAX_RESUME_STATE_BYTES:
             raise invalid_policy("invalid_session_resume_state")
+        _validate_origin(
+            blob, "ResumeStateBlob", _resume_blob_primitives(payload),
+        )
         return bytes(payload)
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_session_resume_state") from None
+
+
+def _resume_blob_primitives(payload: bytes) -> tuple[int, str]:
+    if type(payload) is not bytes:
+        raise ValueError
+    return len(payload), hashlib.sha256(payload).hexdigest()
 
 
 class BuilderObservation(str, Enum):
@@ -1226,6 +1479,10 @@ class BuilderSessionDecision:
             raise invalid_policy("invalid_builder_session_decision")
         if self.result is not None and self.result.context != self.context:
             raise invalid_policy("invalid_builder_session_decision")
+        _register_origin(
+            self, "BuilderSessionDecision",
+            _builder_decision_primitives(self),
+        )
 
     @property
     def status(self) -> str:
@@ -1280,6 +1537,8 @@ def _snapshot_builder_decision(
     if type(decision) is not BuilderSessionDecision:
         raise invalid_policy("invalid_builder_session_decision")
     try:
+        primitives = _builder_decision_primitives(decision)
+        _validate_origin(decision, "BuilderSessionDecision", primitives)
         outcome = (
             decision.outcome
             if type(decision.outcome) is BuilderOutcome
@@ -1292,8 +1551,31 @@ def _snapshot_builder_decision(
             outcome, decision.context, decision.handle, decision.result,
         )
         return facts, snapshot
-    except (AttributeError, KeyError, TypeError, ValueError):
+    except Exception:
         raise invalid_policy("invalid_builder_session_decision") from None
+
+
+def _builder_decision_primitives(
+    decision: BuilderSessionDecision,
+) -> tuple[object, ...]:
+    if (
+        type(decision.outcome) is not BuilderOutcome
+        or type(decision.context) is not ResumeStateContext
+        or decision.handle is not None and type(decision.handle) is not SessionHandle
+        or decision.result is not None and type(decision.result) is not SessionResult
+    ):
+        raise ValueError
+    context = _resume_context_primitives(decision.context)
+    _validate_origin(decision.context, "ResumeStateContext", context)
+    handle = None
+    if decision.handle is not None:
+        handle = _session_handle_primitives(decision.handle)
+        _validate_origin(decision.handle, "SessionHandle", handle)
+    result = None
+    if decision.result is not None:
+        result = _session_result_primitives(decision.result)
+        _validate_origin(decision.result, "SessionResult", result)
+    return decision.outcome.value, context, handle, result
 
 
 class HostAdapter(Protocol):

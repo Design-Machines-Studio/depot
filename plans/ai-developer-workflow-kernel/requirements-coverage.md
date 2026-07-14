@@ -113,12 +113,17 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       templates. A separate trusted `non_executable_classes` constraint pins the
       base investigation graph to zero executable nodes independently of the
       promotion fragment, covering direct and rewired bypasses.
-      Ordinary executor nodes remain open to any compatible
+      File-loaded and injected policy documents share one canonical
+      payload-to-document normalizer. Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
-      Anthropic native Claude. `HostRoute` and every `NodeSpec` field, including
-      nested gate state, are bound to primitive origin seals; `HostCapabilities`
-      seals primitive route tuples. Coherent and nested mutation tests prove
-      rewrites fail before route authorization or manager dispatch. Chunk 05
+      Anthropic native Claude. Routes, nodes and nested gates, capabilities,
+      workflow/attempt/isolation inputs, resume contexts, handles, results,
+      feedback, blobs, and decisions are bound to module-owned weak identity
+      seals over primitive tuples or payload digests; caller-owned seal fields
+      have no authority. Coherent and nested mutation tests prove rewrites fail
+      before route authorization or manager dispatch, while hostile ordinary
+      iterator failures map to stable secret-safe reasons and `BaseException`
+      propagates. Chunk 05
       adds the explicit `workflowClass` manifest field and promptcraft → pipeline
       → RunSpec → event → receipt propagation; Chunk 06 validates all classes
       and legacy defaulting.

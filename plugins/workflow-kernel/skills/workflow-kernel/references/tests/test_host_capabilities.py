@@ -1,3 +1,4 @@
+import gc
 import json
 import inspect
 import os
@@ -5,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import weakref
 from unittest.mock import patch
 from pathlib import Path
 
@@ -18,6 +20,70 @@ from workflow_kernel.schema import InvalidSchemaError
 
 
 class HostCapabilityTests(unittest.TestCase):
+    def test_module_owned_seals_reject_instance_field_spoofing(self):
+        companion = HostRoute(
+            "openai", HostCapability.CODEX_EXECUTION, "codex_companion",
+        )
+
+        route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
+        object.__setattr__(route, "rail", "codex_companion")
+        object.__setattr__(
+            route, "_origin_seal",
+            ("openai", "codex_execution", "codex_companion"),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            _ = route.dispatch_capability
+
+        node = NodeSpec(
+            "security_build", executor="claude",
+            required_capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        object.__setattr__(node, "executor", "codex")
+        object.__setattr__(node, "required_capability", HostCapability.CODEX_EXECUTION)
+        object.__setattr__(
+            node, "required_dispatch_capability", HostCapability.COMPANION_DISPATCH,
+        )
+        object.__setattr__(node, "_origin_seal", (
+            "security_build", (), None, (), "codex", None,
+            (True, "gate_not_required", (), False),
+            "codex_execution", "companion_dispatch", False,
+        ))
+        self.assertFalse(route_satisfies_node(companion, node))
+
+        aggregate = HostCapabilities(
+            "codex", (), routes=(
+                HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"),
+            ),
+        )
+        stored = next(iter(aggregate.routes))
+        object.__setattr__(stored, "rail", "codex_companion")
+        object.__setattr__(stored, "_origin_seal", (
+            "openai", "codex_execution", "codex_companion",
+        ))
+        rewritten = frozenset({
+            HostCapability.CODEX_EXECUTION,
+            HostCapability.COMPANION_DISPATCH,
+        })
+        object.__setattr__(aggregate, "capabilities", rewritten)
+        object.__setattr__(aggregate, "_sealed_capabilities", rewritten)
+        object.__setattr__(aggregate, "_sealed_routes", frozenset({
+            ("openai", "codex_execution", "codex_companion"),
+        }))
+        with self.assertRaises(InvalidSchemaError):
+            aggregate.supports_route(companion)
+
+    def test_module_owned_seal_registry_releases_dead_identities(self):
+        self.assertTrue(hasattr(adapter_base, "_origin_seal_registry_size"))
+        before = adapter_base._origin_seal_registry_size()
+        route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
+        reference = weakref.ref(route)
+        self.assertEqual(adapter_base._origin_seal_registry_size(), before + 1)
+        del route
+        gc.collect()
+        self.assertIsNone(reference())
+        self.assertLessEqual(adapter_base._origin_seal_registry_size(), before)
+
     def test_host_authorization_exposes_immutable_concrete_routes(self):
         self.assertTrue(hasattr(adapter_base, "HostRoute"))
         self.assertIn("routes", inspect.signature(HostCapabilities).parameters)

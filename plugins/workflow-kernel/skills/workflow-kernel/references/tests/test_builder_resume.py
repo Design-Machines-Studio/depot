@@ -5,9 +5,10 @@ import unittest
 
 from tests import detail_digest
 from workflow_kernel.adapters.base import (
-    BuilderObservation, BuilderOutcome, GateDecision, HostCapabilities,
+    BuilderObservation, BuilderOutcome, BuilderSessionDecision, GateDecision,
+    AttemptLedger, HostCapabilities,
     HostCapability, HostRoute, NodeSpec, ResumeStateContext, SessionHandle, SessionResult,
-    ValidationFeedback,
+    ValidationFeedback, ResumeStateBlob,
 )
 from workflow_kernel.adapters.host import BuilderSessionManager, FakeHostAdapter
 from workflow_kernel.adapters.host import capabilities_from_harness_profile
@@ -61,6 +62,142 @@ def builder_node(**changes):
 
 
 class BuilderResumeTests(unittest.TestCase):
+    def test_module_seals_reject_nested_resume_and_decision_spoofing(self):
+        manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        expected = receipt_context()
+
+        foreign_handle = handle(context=receipt_context(run="run-2"))
+        object.__setattr__(foreign_handle, "context", expected)
+        object.__setattr__(foreign_handle, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError) as resume_error:
+            manager.resume_or_replace(
+                builder_node(), foreign_handle,
+                ValidationFeedback("build", "deterministic_validation_failure"),
+                context=expected, now=NOW,
+            )
+        self.assertEqual(
+            resume_error.exception.details["reason_code"],
+            detail_digest("invalid_builder_resume_request"),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            manager.serialize_resume_state(foreign_handle)
+
+        valid_handle = handle(context=expected)
+        blob = manager.serialize_resume_state(valid_handle)
+        foreign_expected = receipt_context(run="run-2")
+        object.__setattr__(foreign_expected, "run_id", "run-1")
+        object.__setattr__(foreign_expected, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError):
+            manager.restore_resume_state(blob, foreign_expected)
+
+        result = session_result(context=receipt_context(run="run-2"))
+        object.__setattr__(result, "context", expected)
+        object.__setattr__(result, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError):
+            result.to_dict()
+
+        decision = BuilderSessionDecision(
+            BuilderOutcome.NODE_GATE_BLOCKED, receipt_context(run="run-2"),
+        )
+        object.__setattr__(decision, "context", expected)
+        object.__setattr__(decision, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError):
+            decision.to_evidence_event(
+                run_id="run-1", sequence=1, node_id="build", occurred_at=NOW,
+            )
+
+        mutable_blob = ResumeStateBlob(b"original")
+        object.__setattr__(mutable_blob, "_payload", b"replacement")
+        object.__setattr__(mutable_blob, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError):
+            mutable_blob.to_trusted_bytes()
+
+        rewritten_context = receipt_context()
+        object.__setattr__(rewritten_context, "rail", "codex_companion")
+        object.__setattr__(rewritten_context, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError):
+            _ = rewritten_context.route
+
+    def test_nested_handle_identity_rewrites_fail_for_every_context_key(self):
+        manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        expected = receipt_context()
+        cases = (
+            ("run_id", receipt_context(run="run-2"), "run-1"),
+            ("node_id", receipt_context(node="review"), "build"),
+            ("attempt_id", receipt_context(attempt="attempt-2"), "attempt-1"),
+        )
+        for field, foreign, replacement in cases:
+            candidate = handle(context=foreign)
+            object.__setattr__(candidate.context, field, replacement)
+            object.__setattr__(candidate.context, "_origin_seal", "spoofed")
+            object.__setattr__(candidate, "_origin_seal", "spoofed")
+            with self.subTest(field=field):
+                with self.assertRaises(InvalidSchemaError) as resume_error:
+                    manager.resume_or_replace(
+                        builder_node(), candidate,
+                        ValidationFeedback(
+                            "build", "deterministic_validation_failure",
+                        ),
+                        context=expected, now=NOW,
+                    )
+                self.assertEqual(
+                    resume_error.exception.details["reason_code"],
+                    detail_digest("invalid_builder_resume_request"),
+                )
+                with self.assertRaises(InvalidSchemaError):
+                    manager.serialize_resume_state(candidate)
+
+    def test_hostile_iterators_are_secret_safe_at_public_boundaries(self):
+        secret = "sk-secret-provider-detail"
+
+        class HostileTuple(tuple):
+            def __iter__(self):
+                raise RuntimeError(secret)
+
+        context = WorkflowContext()
+        object.__setattr__(context, "changed_paths", HostileTuple())
+        with self.assertRaises(InvalidSchemaError) as workflow_error:
+            WorkflowTemplates().expand(WorkflowClass.CHORE, context)
+        self.assertNotIn(secret, repr(workflow_error.exception))
+
+        feedback = ValidationFeedback("build", "validation_failed")
+        object.__setattr__(feedback, "evidence", HostileTuple())
+        object.__setattr__(feedback, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError) as feedback_error:
+            BuilderSessionManager(FakeHostAdapter(host_capabilities())).resume_or_replace(
+                builder_node(), None, feedback, context=receipt_context(), now=NOW,
+            )
+        self.assertEqual(
+            feedback_error.exception.details["reason_code"],
+            detail_digest("invalid_builder_resume_request"),
+        )
+        self.assertNotIn(secret, repr(feedback_error.exception))
+
+        result = session_result(reason_code="validation_failed")
+        object.__setattr__(result, "evidence", HostileTuple())
+        object.__setattr__(result, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError) as result_error:
+            result.to_dict()
+        self.assertNotIn(secret, repr(result_error.exception))
+
+        class HostileMapping(dict):
+            def items(self):
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as ledger_error:
+            AttemptLedger(HostileMapping(), {})
+        self.assertNotIn(secret, repr(ledger_error.exception))
+
+        class FatalIteration(BaseException):
+            pass
+
+        class FatalTuple(tuple):
+            def __iter__(self):
+                raise FatalIteration()
+
+        with self.assertRaises(FatalIteration):
+            ValidationFeedback("build", "validation_failed", FatalTuple())
+
     def test_session_receipts_require_context_and_provenance(self):
         handle_parameters = inspect.signature(SessionHandle).parameters
         result_parameters = inspect.signature(SessionResult).parameters
@@ -212,6 +349,13 @@ class BuilderResumeTests(unittest.TestCase):
             coordinated, "required_dispatch_capability",
             HostCapability.COMPANION_DISPATCH,
         )
+        object.__setattr__(
+            coordinated, "_origin_seal", (
+                "security_build", (), None, (), "codex", None,
+                (True, "gate_not_required", (), False),
+                "codex_execution", "companion_dispatch", False,
+            ),
+        )
 
         blocked_gate = GateDecision(
             False, "missing_mandatory_evidence", ("security_review",),
@@ -226,6 +370,13 @@ class BuilderResumeTests(unittest.TestCase):
         object.__setattr__(nested.gate_decision, "allowed", True)
         object.__setattr__(nested.gate_decision, "reason_code", "gate_satisfied")
         object.__setattr__(nested.gate_decision, "missing_evidence", ())
+        object.__setattr__(
+            nested, "_origin_seal", (
+                "security_build", (), "evidence", ("security_review",),
+                "codex", None, (True, "gate_satisfied", (), False),
+                "codex_execution", "companion_dispatch", False,
+            ),
+        )
 
         context = receipt_context(node="security_build", rail="codex_companion")
         for candidate in (coordinated, nested):

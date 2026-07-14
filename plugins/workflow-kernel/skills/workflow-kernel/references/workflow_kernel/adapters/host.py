@@ -332,7 +332,10 @@ class BuilderSessionManager:
         context = self._authorized_context(
             node, context, "invalid_builder_resume_request",
         )
-        feedback = _snapshot_validation_feedback(feedback)
+        try:
+            feedback = _snapshot_validation_feedback(feedback)
+        except Exception:
+            raise invalid_policy("invalid_builder_resume_request") from None
         if feedback.node_id != node.node_id:
             raise invalid_policy("invalid_builder_resume_request")
         blocked = self._gate_preflight(node, context)

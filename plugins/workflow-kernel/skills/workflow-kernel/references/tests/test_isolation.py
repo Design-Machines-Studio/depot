@@ -77,6 +77,20 @@ class IsolationTests(unittest.TestCase):
             detail_digest("invalid_host_capabilities"),
         )
 
+    def test_isolation_requirement_seal_cannot_be_spoofed(self):
+        requirements = IsolationRequirements(IsolationMode.REMOTE_SANDBOX)
+        object.__setattr__(requirements, "preferred", IsolationMode.CONTAINER)
+        object.__setattr__(requirements, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError) as raised:
+            IsolationSelector().select(
+                requirements,
+                HostCapabilities("host", (HostCapability.CONTAINER,)),
+            )
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_isolation_requirements"),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

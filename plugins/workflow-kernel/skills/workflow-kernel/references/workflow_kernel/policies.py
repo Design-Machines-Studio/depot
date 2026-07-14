@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,8 +12,10 @@ from typing import Mapping, Optional, Tuple
 from .adapters.base import (
     AttemptLedger, FailureReason, GATE_KINDS, GateDecision, HostCapability,
     IsolationMode, RetryDecision, WorkflowClass, WorkflowContext,
-    _snapshot_workflow_context, invalid_policy, normalize_executor_constraint,
+    _register_origin, _snapshot_attempt_ledger, _snapshot_workflow_context,
+    _validate_origin, invalid_policy, normalize_executor_constraint,
 )
+from .schema import InvalidSchemaError
 
 
 POLICY_SCHEMA_VERSION = 1
@@ -28,6 +31,13 @@ class PolicyDocument:
     forbidden_downgrades: frozenset[tuple[IsolationMode, IsolationMode]]
     workflow_safety_anchor: Mapping[str, object]
     economics_mode: str
+
+    def __post_init__(self) -> None:
+        try:
+            digest = _policy_document_digest(self)
+        except Exception:
+            raise invalid_policy("invalid_policy_document") from None
+        _register_origin(self, "PolicyDocument", digest)
 
 
 def _exact_keys(value: object, expected: set[str], reason: str) -> dict:
@@ -136,124 +146,98 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
     })
 
 
+def _plain_policy_value(value: object) -> object:
+    if type(value) in {FailureReason, HostCapability, IsolationMode, WorkflowClass}:
+        return value.value
+    if isinstance(value, Mapping):
+        return {
+            _plain_policy_value(key): _plain_policy_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_plain_policy_value(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(
+            (_plain_policy_value(item) for item in value),
+            key=lambda item: repr(item),
+        )
+    return value
+
+
 def _stage_set_payload(value: object) -> dict:
-    if not isinstance(value, (list, tuple)):
-        raise ValueError
-    stages = []
-    expected = {
-        "id", "gate_kind", "required_evidence", "executor",
-        "required_capability", "required_dispatch_capability",
-        "executor_overridable", "required_ancestors",
+    return {"stages": _plain_policy_value(value)}
+
+
+def _policy_document_payload(document: PolicyDocument) -> dict:
+    anchor = document.workflow_safety_anchor
+    classes = anchor["classes"]
+    promotion = anchor["promotion"]
+    forbidden = []
+    for item in document.forbidden_downgrades:
+        if type(item) is tuple and len(item) == 2:
+            forbidden.append({
+                "from": _plain_policy_value(item[0]),
+                "to": _plain_policy_value(item[1]),
+            })
+        else:
+            forbidden.append(_plain_policy_value(item))
+    return {
+        "schema_version": POLICY_SCHEMA_VERSION,
+        "retry": {
+            "budgets": _plain_policy_value(document.retry_budgets),
+            "identical_signature_limit": document.identical_signature_limit,
+        },
+        "gates": {
+            "risk_human_approval": _plain_policy_value(
+                document.risk_human_approval,
+            ),
+        },
+        "isolation": {
+            "order": _plain_policy_value(document.isolation_order),
+            "forbidden_downgrades": forbidden,
+        },
+        "capability_names": [value.value for value in HostCapability],
+        "workflow_safety_anchor": {
+            "schema_version": anchor["schema_version"],
+            "common": _stage_set_payload(anchor["common"]),
+            "classes": {
+                _plain_policy_value(kind): _stage_set_payload(stage_set)
+                for kind, stage_set in classes.items()
+            },
+            "promotion": {
+                _plain_policy_value(name): _stage_set_payload(stage_set)
+                for name, stage_set in promotion.items()
+            },
+            "non_executable_classes": _plain_policy_value(
+                anchor["non_executable_classes"],
+            ),
+        },
+        "economics": {"mode": document.economics_mode},
     }
-    for stage in value:
-        if not isinstance(stage, Mapping) or set(stage) != expected:
-            raise ValueError
-        stages.append({
-            "id": stage["id"],
-            "gate_kind": stage["gate_kind"],
-            "required_evidence": list(stage["required_evidence"]),
-            "executor": stage["executor"],
-            "required_capability": (
-                stage["required_capability"].value
-                if type(stage["required_capability"]) is HostCapability
-                else stage["required_capability"]
-            ),
-            "required_dispatch_capability": (
-                stage["required_dispatch_capability"].value
-                if type(stage["required_dispatch_capability"]) is HostCapability
-                else stage["required_dispatch_capability"]
-            ),
-            "executor_overridable": stage["executor_overridable"],
-            "required_ancestors": list(stage["required_ancestors"]),
-        })
-    return {"stages": stages}
+
+
+def _policy_document_digest(document: PolicyDocument) -> str:
+    payload = _policy_document_payload(document)
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
     if type(document) is not PolicyDocument:
         raise invalid_policy("invalid_policy_document")
     try:
-        if set(document.retry_budgets) != set(FailureReason):
-            raise ValueError
-        budgets = {}
-        for reason in FailureReason:
-            budget = document.retry_budgets[reason]
-            if type(budget) is not int or budget < 0:
-                raise ValueError
-            budgets[reason] = budget
-        if (
-            type(document.identical_signature_limit) is not int
-            or document.identical_signature_limit < 2
-        ):
-            raise ValueError
-        risk_values = tuple(document.risk_human_approval)
-        if any(
-            type(value) is not str
-            or value not in ("low", "medium", "high", "critical")
-            for value in risk_values
-        ) or len(risk_values) != len(set(risk_values)):
-            raise ValueError
-        order = tuple(document.isolation_order)
-        if (
-            len(order) != len(IsolationMode)
-            or set(order) != set(IsolationMode)
-            or any(type(value) is not IsolationMode for value in order)
-        ):
-            raise ValueError
-        forbidden = frozenset(document.forbidden_downgrades)
-        if any(
-            type(item) is not tuple
-            or len(item) != 2
-            or any(type(value) is not IsolationMode for value in item)
-            for item in forbidden
-        ):
-            raise ValueError
-        anchor = document.workflow_safety_anchor
-        if not isinstance(anchor, Mapping) or set(anchor) != {
-            "schema_version", "common", "classes", "promotion",
-            "non_executable_classes",
-        }:
-            raise ValueError
-        classes = anchor["classes"]
-        promotion = anchor["promotion"]
-        if not isinstance(classes, Mapping) or set(classes) != {
-            WorkflowClass.HOTFIX, WorkflowClass.SECURITY, WorkflowClass.MIGRATION,
-        } or not isinstance(promotion, Mapping) or set(promotion) != {"investigation"}:
-            raise ValueError
-        anchor_payload = {
-            "schema_version": anchor["schema_version"],
-            "common": _stage_set_payload(anchor["common"]),
-            "classes": {
-                kind.value: _stage_set_payload(classes[kind])
-                for kind in (
-                    WorkflowClass.HOTFIX, WorkflowClass.SECURITY,
-                    WorkflowClass.MIGRATION,
-                )
-            },
-            "promotion": {
-                "investigation": _stage_set_payload(promotion["investigation"]),
-            },
-            "non_executable_classes": [
-                kind.value for kind in anchor["non_executable_classes"]
-            ],
-        }
-        safety_anchor = _workflow_safety_anchor(anchor_payload)
-        if document.economics_mode != "proposal_only":
-            raise ValueError
-        return PolicyDocument(
-            MappingProxyType(budgets), document.identical_signature_limit,
-            risk_values, order, forbidden, safety_anchor, "proposal_only",
-        )
+        digest = _policy_document_digest(document)
+        _validate_origin(document, "PolicyDocument", digest)
+        return _normalize_policy_payload(_policy_document_payload(document))
+    except InvalidSchemaError:
+        raise
     except Exception:
         raise invalid_policy("invalid_policy_document") from None
 
 
-def load_policy(path: Optional[Path] = None) -> PolicyDocument:
-    source = Path(path) if path is not None else DEFAULT_POLICY_PATH
-    try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        raise invalid_policy("invalid_policy_json") from None
+def _normalize_policy_payload(payload: object) -> PolicyDocument:
     payload = _exact_keys(payload, {
         "schema_version", "retry", "gates", "isolation", "capability_names",
         "workflow_safety_anchor", "economics",
@@ -323,6 +307,20 @@ def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     )
 
 
+def load_policy(path: Optional[Path] = None) -> PolicyDocument:
+    source = Path(path) if path is not None else DEFAULT_POLICY_PATH
+    try:
+        payload = json.loads(source.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        raise invalid_policy("invalid_policy_json") from None
+    try:
+        return _normalize_policy_payload(payload)
+    except InvalidSchemaError:
+        raise
+    except Exception:
+        raise invalid_policy("invalid_policy_document") from None
+
+
 class RetryPolicy:
     def __init__(self, path: Optional[Path] = None):
         self._policy = load_policy(path)
@@ -341,10 +339,8 @@ class RetryPolicy:
             normalized = reason if type(reason) is FailureReason else FailureReason(reason)
         except (TypeError, ValueError):
             raise invalid_policy("unknown_failure_reason") from None
-        if type(attempts) is not AttemptLedger:
-            raise invalid_policy("invalid_attempt_ledger")
         try:
-            attempts = AttemptLedger(attempts.counts, attempts.signatures)
+            attempts = _snapshot_attempt_ledger(attempts)
         except Exception:
             raise invalid_policy("invalid_attempt_ledger") from None
         if signature is not None and (type(signature) is not str or not signature):
@@ -399,11 +395,15 @@ class GatePolicy:
             type(gate_kind) is not str or gate_kind not in GATE_KINDS
         ):
             raise invalid_policy("unknown_gate_kind")
-        if not isinstance(required_evidence, (list, tuple)) or any(
-            type(value) is not str or not value for value in required_evidence
-        ):
-            raise invalid_policy("invalid_gate_evidence")
-        required_evidence = tuple(required_evidence)
+        try:
+            if not isinstance(required_evidence, (list, tuple)) or any(
+                type(value) is not str or not value
+                for value in required_evidence
+            ):
+                raise ValueError
+            required_evidence = tuple(required_evidence)
+        except Exception:
+            raise invalid_policy("invalid_gate_evidence") from None
         if len(required_evidence) != len(set(required_evidence)):
             raise invalid_policy("invalid_gate_evidence")
         if gate_kind is None and required_evidence:

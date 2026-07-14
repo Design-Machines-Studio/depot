@@ -1,19 +1,98 @@
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
+from types import MappingProxyType
 
 from tests import detail_digest, schema_matches
 from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
 )
 import workflow_kernel.policies as policy_module
-from workflow_kernel.policies import RetryPolicy, load_policy
+from workflow_kernel.policies import GatePolicy, RetryPolicy, load_policy
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
 
 
 class RetryPolicyTests(unittest.TestCase):
+    def test_gate_evidence_iterator_failures_are_secret_safe(self):
+        secret = "sk-secret-gate-detail"
+
+        class HostileTuple(tuple):
+            def __iter__(self):
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as raised:
+            GatePolicy().decide(
+                WorkflowClass.CHORE, "evidence", HostileTuple(), WorkflowContext(),
+            )
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_gate_evidence"),
+        )
+        self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalIteration(BaseException):
+            pass
+
+        class FatalTuple(tuple):
+            def __iter__(self):
+                raise FatalIteration()
+
+        with self.assertRaises(FatalIteration):
+            GatePolicy().decide(
+                WorkflowClass.CHORE, "evidence", FatalTuple(), WorkflowContext(),
+            )
+
+    def test_file_and_injected_policy_share_canonical_normalization(self):
+        root = Path(__file__).parents[1]
+        source = root / "workflow-policy.json"
+        canonical_payload = json.loads(source.read_text(encoding="utf-8"))
+        document = load_policy(source)
+
+        cases = []
+        bad_budget_payload = json.loads(json.dumps(canonical_payload))
+        bad_budget_payload["retry"]["budgets"]["cleanup"] = True
+        bad_budgets = dict(document.retry_budgets)
+        bad_budgets[FailureReason.CLEANUP] = True
+        cases.append((
+            bad_budget_payload,
+            replace(document, retry_budgets=MappingProxyType(bad_budgets)),
+        ))
+
+        bad_limit_payload = json.loads(json.dumps(canonical_payload))
+        bad_limit_payload["retry"]["identical_signature_limit"] = 1
+        cases.append((
+            bad_limit_payload,
+            replace(document, identical_signature_limit=1),
+        ))
+
+        for payload, injected in cases:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "policy.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as file_error:
+                    load_policy(path)
+            with self.assertRaises(InvalidSchemaError) as injected_error:
+                GatePolicy(policy_document=injected)
+            self.assertEqual(
+                injected_error.exception.details["reason_code"],
+                file_error.exception.details["reason_code"],
+            )
+
+    def test_attempt_ledger_seal_cannot_be_spoofed(self):
+        ledger = AttemptLedger({FailureReason.CLEANUP: 1})
+        rewritten = MappingProxyType({FailureReason.CLEANUP: 0})
+        object.__setattr__(ledger, "counts", rewritten)
+        object.__setattr__(ledger, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError) as raised:
+            RetryPolicy().decide(FailureReason.CLEANUP, ledger, None)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_attempt_ledger"),
+        )
+
     def test_each_normalized_reason_uses_its_own_budget(self):
         policy = RetryPolicy()
         budgets = {
