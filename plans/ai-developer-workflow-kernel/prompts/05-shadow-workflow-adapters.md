@@ -207,11 +207,15 @@ exact enum type or exact `str`; equality truth coercion belongs inside the same
 safe boundary as the equality operation. Builder decisions capture outcome,
 context, handle, and result before any nested snapshot, and retry-ledger
 accessors normalize their public key before taking one sealed snapshot. Policy
-maps consumed by adapters are exact module-owned tuple-backed mappings with
-content-derived seals; caller mapping proxies and custom mappings are rejected
-without traversal. Policy structure processing shares one exact-type taxonomy,
-rejects cycles, and uses Chunk 01's depth `16` and aggregate item limit `10000`.
-Economics mode accepts only the exact string `proposal_only`.
+maps consumed by adapters are exact module-owned tuple-subclass mappings whose
+pair payload has no rewritable slot or instance dictionary, with content-derived
+seals; caller mapping proxies and custom mappings are rejected without traversal.
+Policy structure processing shares one exact-type taxonomy, rejects cycles, and
+uses Chunk 01's depth `16` and aggregate item limit `10000`. Safety-anchor
+projection charges the graph once before wrapping projected stage sets, ordered
+fields reject sets and frozensets, and only canonical forbidden downgrades accept
+a frozenset whose exact tuples are projected without re-entering them. Economics
+mode accepts only the exact string `proposal_only`.
 
 Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
 only in permission-restricted package-owned storage with explicit retention and

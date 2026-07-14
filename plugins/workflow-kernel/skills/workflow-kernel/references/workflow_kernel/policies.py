@@ -26,27 +26,21 @@ _MAPPING_PROXY_TYPE = type(MappingProxyType({}))
 _MALFORMED_POLICY_VALUE = object()
 
 
-class _TrustedPolicyMap(MappingABC):
+class _TrustedPolicyMap(tuple, MappingABC):
     """Exact, tuple-backed mapping created only from normalized policy data."""
 
-    __slots__ = ("_items",)
+    __slots__ = ()
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         raise TypeError("_TrustedPolicyMap is final")
 
-    def __init__(self, values: dict) -> None:
+    def __new__(cls, values: dict):
         if type(values) is not dict:
             raise TypeError
-        object.__setattr__(self, "_items", tuple(values.items()))
-
-    def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError("_TrustedPolicyMap is immutable")
-
-    def __delattr__(self, name: str) -> None:
-        raise AttributeError("_TrustedPolicyMap is immutable")
+        return tuple.__new__(cls, tuple(values.items()))
 
     def __len__(self) -> int:
-        return len(_trusted_policy_items(self))
+        return tuple.__len__(self)
 
     def __iter__(self):
         return (pair[0] for pair in _trusted_policy_items(self))
@@ -57,11 +51,23 @@ class _TrustedPolicyMap(MappingABC):
                 return value
         raise KeyError(key)
 
+    def __contains__(self, key: object) -> bool:
+        return any(candidate == key for candidate, _ in _trusted_policy_items(self))
+
+    def __eq__(self, other: object) -> bool:
+        return MappingABC.__eq__(self, other)
+
+    def __ne__(self, other: object) -> bool:
+        equal = self.__eq__(other)
+        return equal if equal is NotImplemented else not equal
+
+    __hash__ = None
+
 
 def _trusted_policy_items(value: object) -> tuple:
     if type(value) is not _TrustedPolicyMap:
         raise ValueError
-    items = object.__getattribute__(value, "_items")
+    items = tuple.__getitem__(value, slice(None))
     if type(items) is not tuple or any(
         type(pair) is not tuple or len(pair) != 2 for pair in items
     ):
@@ -338,7 +344,7 @@ def _plain_policy_value(
                     return _MALFORMED_POLICY_VALUE
                 result[projected_key] = projected_item
             return result
-        if kind in {"list", "tuple", "set", "frozenset"}:
+        if kind in {"list", "tuple"}:
             return [
                 _plain_policy_value(
                     item, _state=state, _depth=_depth + 1,
@@ -350,10 +356,7 @@ def _plain_policy_value(
         state.leave(identity)
 
 
-def _stage_set_payload(
-    value: object, state: _PolicyTraversal, depth: int,
-) -> dict:
-    value = _plain_policy_value(value, _state=state, _depth=depth)
+def _stage_set_payload(value: object) -> dict:
     if type(value) is dict and set(value) == {"stages"}:
         return value
     return {"stages": value}
@@ -368,14 +371,12 @@ def _safety_anchor_payload(
         return anchor
     result = dict(anchor)
     if "common" in result:
-        result["common"] = _stage_set_payload(
-            result["common"], state, depth + 1,
-        )
+        result["common"] = _stage_set_payload(result["common"])
     for name in ("classes", "promotion"):
         groups = result.get(name)
         if type(groups) is dict:
             result[name] = {
-                key: _stage_set_payload(stage_set, state, depth + 2)
+                key: _stage_set_payload(stage_set)
                 for key, stage_set in groups.items()
             }
     return result
@@ -397,19 +398,24 @@ def _policy_document_payload(captured: tuple) -> dict:
             for item in forbidden_downgrades:
                 item_kind, item_identity = state.enter(item, 2)
                 try:
-                    if item_kind == "tuple" and len(item) == 2:
-                        forbidden.append({
-                            "from": _plain_policy_value(
-                                item[0], _state=state, _depth=3,
-                            ),
-                            "to": _plain_policy_value(
-                                item[1], _state=state, _depth=3,
-                            ),
-                        })
+                    if item_kind == "tuple":
+                        projected = [
+                            _plain_policy_value(
+                                member, _state=state, _depth=3,
+                            )
+                            for member in tuple.__iter__(item)
+                        ]
+                        if len(projected) == 2:
+                            forbidden.append({
+                                "from": projected[0],
+                                "to": projected[1],
+                            })
+                        else:
+                            forbidden.append(projected)
+                    elif item_kind == "enum":
+                        forbidden.append(item.value)
                     else:
-                        forbidden.append(_plain_policy_value(
-                            item, _state=state, _depth=3,
-                        ))
+                        forbidden.append(item)
                 finally:
                     state.leave(item_identity)
         finally:

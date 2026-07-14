@@ -120,15 +120,22 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       and convergence. Policy origin registration and validation traverse exact
       trusted built-ins only; malformed and non-exact objects use inert
       type/identity markers without caller iteration, hashing, equality, or
-      representation. Normalized policy maps are exact module-owned tuple-backed
-      immutable mappings with content-derived seals and ordinary read behavior;
+      representation. Normalized policy maps are exact module-owned
+      tuple-subclass immutable mappings whose pair payload has no rewritable slot
+      or instance dictionary, with content-derived seals and ordinary read
+      behavior;
       caller mapping proxies and custom mappings are rejected without traversal.
       Origin and canonical projection share one exact-type classifier, reject
       cycles, and enforce Chunk 01's depth `16` and aggregate item budget `10000`
-      for injected and file-loaded graphs. Economics mode requires the exact
-      string `proposal_only` before equality. Ordinary executor nodes remain open to any compatible
-      declared agentic route; security and sensitive nodes stay pinned to
-      Anthropic native Claude. Routes, nodes and nested gates, capabilities,
+      for injected and file-loaded graphs. Safety anchors are projected once
+      before projected stage sets are wrapped, preserving actual-budget parity.
+      Ordered fields reject sets and frozensets; only canonical forbidden
+      downgrades accept a frozenset, and their exact tuples are projected without
+      re-entry so malformed tuple parity reaches the normalizer. Economics mode
+      requires the exact string `proposal_only` before equality. Ordinary executor
+      nodes remain open to any compatible declared agentic route; security and
+      sensitive nodes stay pinned to Anthropic native Claude. Routes, nodes and
+      nested gates, capabilities,
       workflow/attempt/isolation inputs, resume contexts, handles, results,
       feedback, blobs, and decisions are bound to module-owned weak identity
       seals over primitive tuples or payload digests. Each live identity can be

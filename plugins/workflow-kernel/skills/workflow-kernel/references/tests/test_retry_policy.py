@@ -10,7 +10,8 @@ from unittest.mock import patch
 from tests import detail_digest, schema_matches
 import workflow_kernel.adapters.base as adapter_base
 from workflow_kernel.adapters.base import (
-    AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
+    AttemptLedger, FailureReason, HostCapability, IsolationMode, WorkflowClass,
+    WorkflowContext,
 )
 import workflow_kernel.policies as policy_module
 from workflow_kernel.policies import GatePolicy, RetryPolicy, load_policy
@@ -72,10 +73,21 @@ class RetryPolicyTests(unittest.TestCase):
             budgets.get(FailureReason.CLEANUP),
             document.retry_budgets[FailureReason.CLEANUP],
         )
+        self.assertIn(FailureReason.CLEANUP, budgets)
+        self.assertNotIn("unknown", budgets)
+        self.assertEqual(budgets, dict(budgets))
+        self.assertFalse(budgets != dict(budgets))
+        self.assertFalse(hasattr(budgets, "__dict__"))
         with self.assertRaises(TypeError):
             budgets[FailureReason.CLEANUP] = 999
-        with self.assertRaises(AttributeError):
-            budgets._items = ()
+        for mutate in (
+            lambda: setattr(budgets, "_items", ()),
+            lambda: object.__setattr__(budgets, "_items", ()),
+            lambda: object.__setattr__(budgets, "extra", ()),
+        ):
+            with self.subTest(mutate=mutate):
+                with self.assertRaises((AttributeError, TypeError)):
+                    mutate()
 
         anchor = document.workflow_safety_anchor
         self.assertIs(type(anchor), policy_module._TrustedPolicyMap)
@@ -84,19 +96,92 @@ class RetryPolicyTests(unittest.TestCase):
             type(anchor["common"][0]), policy_module._TrustedPolicyMap,
         )
 
-    def test_canonical_policy_map_content_mutation_breaks_origin_seal(self):
-        document = load_policy()
-        budgets = document.retry_budgets
+    def test_policy_decisions_are_stable_after_map_mutation_attempts(self):
+        retry = RetryPolicy()
+        budgets = retry._policy.retry_budgets
         rewritten = tuple(
             (reason, 999 if reason is FailureReason.CLEANUP else budget)
             for reason, budget in budgets.items()
         )
-        object.__setattr__(budgets, "_items", rewritten)
-        with self.assertRaises(InvalidSchemaError) as raised:
-            GatePolicy(policy_document=document)
+        before_retry = retry.decide(
+            FailureReason.CLEANUP, AttemptLedger(), None,
+        )
+        with self.assertRaises((AttributeError, TypeError)):
+            object.__setattr__(budgets, "_items", rewritten)
         self.assertEqual(
-            raised.exception.details["reason_code"],
-            detail_digest("invalid_policy_document"),
+            retry.decide(FailureReason.CLEANUP, AttemptLedger(), None),
+            before_retry,
+        )
+
+        gate = GatePolicy()
+        anchor = gate._policy.workflow_safety_anchor
+        before_gate = gate.decide(
+            WorkflowClass.CHORE, "risk", (), WorkflowContext(risk="high"),
+        )
+        with self.assertRaises((AttributeError, TypeError)):
+            object.__setattr__(anchor, "_items", ())
+        self.assertEqual(
+            gate.decide(
+                WorkflowClass.CHORE, "risk", (), WorkflowContext(risk="high"),
+            ),
+            before_gate,
+        )
+
+    def test_unordered_containers_are_rejected_for_ordered_policy_fields(self):
+        document = load_policy()
+        anchor = dict(document.workflow_safety_anchor)
+        common = [dict(stage) for stage in anchor["common"]]
+        common[0]["required_evidence"] = {"cleanup_receipt"}
+        anchor["common"] = tuple(common)
+        cases = (
+            (
+                {"isolation_order": set(IsolationMode)},
+                "invalid_isolation_order",
+            ),
+            (
+                {"risk_human_approval": frozenset({"high", "critical"})},
+                "invalid_gate_policy",
+            ),
+            (
+                {"workflow_safety_anchor": anchor},
+                "invalid_workflow_safety_anchor",
+            ),
+        )
+        for changes, reason in cases:
+            with self.subTest(field=next(iter(changes))):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    GatePolicy(policy_document=replace(document, **changes))
+                self.assertEqual(
+                    raised.exception.details["reason_code"], detail_digest(reason),
+                )
+
+        GatePolicy(policy_document=replace(
+            document,
+            forbidden_downgrades=frozenset(document.forbidden_downgrades),
+        ))
+
+    def test_file_and_injected_anchor_share_the_actual_item_budget(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload["workflow_safety_anchor"]["common"]["stages"][0][
+            "required_evidence"
+        ] = [
+            f"near-limit-{index}"
+            for index in range(policy_module.MAX_PAYLOAD_ITEMS - 1_000)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "near-limit-policy.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            document = load_policy(path)
+
+        injected = GatePolicy(policy_document=document)._policy
+        self.assertEqual(
+            policy_module._policy_origin_primitives(
+                injected.workflow_safety_anchor,
+            ),
+            policy_module._policy_origin_primitives(
+                document.workflow_safety_anchor,
+            ),
         )
 
     def test_caller_mapping_proxies_are_rejected_without_backing_traversal(self):
@@ -511,6 +596,43 @@ class RetryPolicyTests(unittest.TestCase):
             )
             self.assertNotIn(
                 "sk-secret-downgrade-detail", repr(injected_error.exception),
+            )
+
+    def test_malformed_downgrade_tuples_reach_the_canonical_normalizer(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        canonical_payload = json.loads(source.read_text(encoding="utf-8"))
+        document = load_policy(source)
+        cases = (
+            (["remote_sandbox"], (IsolationMode.REMOTE_SANDBOX,)),
+            (
+                ["remote_sandbox", "container", "worktree"],
+                (
+                    IsolationMode.REMOTE_SANDBOX,
+                    IsolationMode.CONTAINER,
+                    IsolationMode.WORKTREE,
+                ),
+            ),
+            (
+                {"from": "remote_sandbox", "to": "unknown"},
+                (IsolationMode.REMOTE_SANDBOX, "unknown"),
+            ),
+        )
+        for file_item, injected_item in cases:
+            payload = json.loads(json.dumps(canonical_payload))
+            payload["isolation"]["forbidden_downgrades"] = [file_item]
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "policy.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as file_error:
+                    load_policy(path)
+            injected = replace(
+                document, forbidden_downgrades=frozenset({injected_item}),
+            )
+            with self.assertRaises(InvalidSchemaError) as injected_error:
+                GatePolicy(policy_document=injected)
+            self.assertEqual(
+                injected_error.exception.details["reason_code"],
+                file_error.exception.details["reason_code"],
             )
 
     def test_policy_origin_seal_never_executes_malformed_nested_containers(self):
