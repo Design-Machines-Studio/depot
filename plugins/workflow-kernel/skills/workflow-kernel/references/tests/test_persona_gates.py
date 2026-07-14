@@ -1,4 +1,5 @@
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,14 +18,18 @@ SECRET = "sk-fixture-persona-password-must-not-survive"
 
 def evidence(
     case, *, evaluation=None, authenticated=True, proof_kind="browser",
-    actual_engine=None, substitution=None,
+    actual_engine=None, substitution=None, profile=None, recovery_receipt=None,
 ):
+    configured = profile.configured_engines if profile is not None else (case.browser_engine,)
+    profile_id = profile.profile_id if profile is not None else "profile-sha256:" + "a" * 64
+    attempt_number = recovery_receipt.attempts[-1].attempt_number if recovery_receipt else 1
     return EvidenceRef(
         case.case_id, case.persona_id, case.scenario_id, case.route,
-        case.browser_engine, case.viewport, 1,
+        case.browser_engine, case.viewport, attempt_number,
         case.expected_outcome if evaluation is None else evaluation,
         authenticated, "proof/screenshot.png", proof_kind,
-        actual_engine or case.browser_engine, substitution,
+        actual_engine or case.browser_engine, substitution, profile_id,
+        configured, recovery_receipt,
     )
 
 
@@ -36,11 +41,13 @@ class PersonaGateTests(unittest.TestCase):
             PersonaCase("p3", "s3", "member", "/three", "firefox", "375x812", False),
         )
         profile = VerificationProfile(1, "project_declaration", cases, ())
-        missing = VerificationGate().evaluate(profile, [evidence(cases[0])])
+        missing = VerificationGate().evaluate(profile, [evidence(cases[0], profile=profile)])
         self.assertFalse(missing.allowed)
         self.assertEqual(missing.reason_code, "missing_required_persona_evidence")
         self.assertEqual(missing.missing_case_ids, (cases[1].case_id,))
-        complete = VerificationGate().evaluate(profile, [evidence(cases[0]), evidence(cases[1])])
+        complete = VerificationGate().evaluate(
+            profile, [evidence(cases[0], profile=profile), evidence(cases[1], profile=profile)]
+        )
         self.assertTrue(complete.allowed)
 
     def test_expected_blocked_is_evaluative_but_unauthenticated_or_curl_is_not(self):
@@ -50,24 +57,84 @@ class PersonaGateTests(unittest.TestCase):
         )
         profile = VerificationProfile(1, "project_declaration", (case,), ())
         gate = VerificationGate()
-        self.assertTrue(gate.evaluate(profile, [evidence(case)]).allowed)
-        self.assertFalse(gate.evaluate(profile, [evidence(case, authenticated=False)]).allowed)
-        self.assertFalse(gate.evaluate(profile, [evidence(case, proof_kind="curl")]).allowed)
-        self.assertFalse(gate.evaluate(profile, [evidence(case, evaluation="")]).allowed)
+        self.assertTrue(gate.evaluate(profile, [evidence(case, profile=profile)]).allowed)
+        self.assertFalse(gate.evaluate(profile, [evidence(case, profile=profile, authenticated=False)]).allowed)
+        self.assertFalse(gate.evaluate(profile, [evidence(case, profile=profile, proof_kind="curl")]).allowed)
+        self.assertFalse(gate.evaluate(profile, [evidence(case, profile=profile, evaluation="")]).allowed)
 
     def test_only_explicit_alternate_engine_substitution_satisfies_requested_case(self):
         case = PersonaCase(
             "member", "dashboard", "member", "/dashboard", "chromium",
             "1440x900", True,
         )
-        profile = VerificationProfile(1, "project_declaration", (case,), ())
-        generic_mismatch = evidence(case, actual_engine="firefox")
-        explicit_substitution = evidence(
-            case, actual_engine="firefox",
-            substitution="alternate_engine_recovery",
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (),
+            configured_engines=("chromium", "firefox"),
         )
+        generic_mismatch = evidence(case, profile=profile, actual_engine="firefox")
         self.assertFalse(VerificationGate().evaluate(profile, [generic_mismatch]).allowed)
-        self.assertTrue(VerificationGate().evaluate(profile, [explicit_substitution]).allowed)
+        with self.assertRaises(InvalidSchemaError):
+            evidence(
+                case, profile=profile, actual_engine="firefox",
+                substitution="alternate_engine_recovery",
+            )
+
+    def test_substitution_requires_receipt_from_same_profile_and_configured_set(self):
+        from workflow_kernel.adapters.browser import (
+            BrowserAttempt, BrowserLaunchEvidence, BrowserQuitEvidence,
+            BrowserRecovery, BrowserRequest,
+        )
+        case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (),
+            configured_engines=("chromium", "firefox"),
+        )
+        url = "https://example.invalid/dashboard"
+        url_digest = "url-sha256:" + hashlib.sha256(url.encode()).hexdigest()
+        route_digest = "sha256:" + hashlib.sha256(b"/dashboard").hexdigest()
+
+        class Adapter:
+            def __init__(self): self.count = 0
+            def attempt(self, request, engine):
+                self.count += 1
+                result = "failed" if self.count == 1 else "passed"
+                return BrowserAttempt(
+                    case.case_id, self.count, "chromium", engine, "verify", result,
+                    "browser_tool_failure" if result == "failed" else None,
+                    "failed" if result == "failed" else None,
+                    "proof/screenshot.png", None, None,
+                    "primary-1" if self.count == 1 else "secondary-1", "browser",
+                    None if engine == "chromium" else "alternate_engine_recovery",
+                    profile.profile_id, profile.configured_engines,
+                    url_digest, route_digest, case.viewport,
+                )
+            def quit_engine(self, engine):
+                return BrowserQuitEvidence(engine, False, "primary-1")
+            def launch_engine(self, engine, fresh_profile=True):
+                return BrowserLaunchEvidence(engine, True, True, "secondary-1")
+
+        request = BrowserRequest(
+            case.case_id, url, case.viewport, "chromium", "firefox",
+            profile.profile_id, profile.configured_engines,
+        )
+        receipt = BrowserRecovery().run(request, Adapter())
+        valid = evidence(
+            case, profile=profile, actual_engine="firefox",
+            substitution="alternate_engine_recovery", recovery_receipt=receipt,
+        )
+        self.assertTrue(VerificationGate().evaluate(profile, [valid]).allowed)
+        other = VerificationProfile(
+            1, "project_declaration", (case,), (),
+            configured_engines=("chromium", "webkit"),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            evidence(
+                case, profile=other, actual_engine="firefox",
+                substitution="alternate_engine_recovery", recovery_receipt=receipt,
+            )
 
     def test_declared_empty_profile_requires_non_runnable_provenance(self):
         with self.assertRaises(InvalidSchemaError):

@@ -1,13 +1,23 @@
 import json
+import hashlib
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from tests import schema_matches
 
 from workflow_kernel.adapters.browser import (
-    BrowserAttempt, BrowserLaunchEvidence, BrowserQuitEvidence, BrowserRecovery,
-    BrowserRequest,
+    BrowserAttempt, BrowserLaunchEvidence, BrowserLifecycleEvidence,
+    BrowserQuitEvidence, BrowserRecovery, BrowserRecoveryReceipt, BrowserRequest,
 )
+
+
+PROFILE_ID = "profile-sha256:" + "a" * 64
+ENGINES = ("chromium", "firefox")
+TARGET_URL = "https://example.invalid/page"
+TARGET_URL_DIGEST = "url-sha256:" + hashlib.sha256(TARGET_URL.encode()).hexdigest()
+TARGET_ROUTE_DIGEST = "sha256:" + hashlib.sha256(b"/page").hexdigest()
+VIEWPORT = "375x812"
 
 
 class FakeBrowserAdapter:
@@ -43,20 +53,31 @@ def attempt(
     detail="tool failed", proof_kind="browser", case_id="case-1",
     requested_engine="chromium", substitution=None,
 ):
+    if engine != requested_engine and substitution is None:
+        substitution = "alternate_engine_recovery"
     return BrowserAttempt(
         case_id, number, requested_engine, engine, "verify", result,
         reason if result != "passed" else None,
         detail if result != "passed" else None,
         "proof/screenshot.png", "proof/trace.zip", "proof/console.txt",
-        session, proof_kind, substitution,
+        session, proof_kind, substitution, PROFILE_ID, ENGINES,
+        TARGET_URL_DIGEST, TARGET_ROUTE_DIGEST, VIEWPORT,
     )
+
+
+class HostileException(Exception):
+    def __str__(self):
+        raise RuntimeError("str leaked")
+
+    def __repr__(self):
+        raise RuntimeError("repr leaked")
 
 
 class BrowserRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.request = BrowserRequest(
-            "case-1", "https://example.invalid/page", "375x812",
-            "chromium", "firefox",
+            "case-1", TARGET_URL, VIEWPORT, "chromium", "firefox",
+            PROFILE_ID, ENGINES,
         )
 
     def test_primary_first_pass_is_clean_without_recovery(self):
@@ -103,6 +124,8 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.requested_engine, "chromium")
         self.assertEqual(receipt.actual_engine, "firefox")
         self.assertEqual(receipt.substitution_provenance, "alternate_engine_recovery")
+        self.assertEqual(receipt.verification_profile_id, PROFILE_ID)
+        self.assertEqual(receipt.configured_engines, ENGINES)
         self.assertIn("primary_restart_unavailable", [item.result for item in receipt.lifecycle])
         self.assertEqual(adapter.calls[-2:], [("launch_engine", "firefox", True), ("attempt", "firefox")])
 
@@ -136,7 +159,13 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.attempts[0].result, "failed")
         self.assertEqual(receipt.attempts[0].failure_reason, "curl_not_browser_evidence")
         with self.assertRaises(ValueError):
-            BrowserRequest("case", "/", "1440x900", "chromium", "chromium")
+            BrowserRequest("case", TARGET_URL, "1440x900", "chromium", "chromium",
+                           PROFILE_ID, ENGINES)
+
+    def test_request_rejects_engines_outside_authoritative_profile(self):
+        with self.assertRaises(ValueError):
+            BrowserRequest("case", TARGET_URL, VIEWPORT, "chromium", "firefox",
+                           PROFILE_ID, ("chromium",))
 
     def test_app_restart_is_distinct_diagnostic_not_browser_relaunch(self):
         adapter = FakeBrowserAdapter(
@@ -203,6 +232,89 @@ class BrowserRecoveryTests(unittest.TestCase):
             ("launch_engine", "firefox", True),
         ])
 
+    def test_hostile_exception_rendering_cannot_abort_any_adapter_boundary(self):
+        for boundary in ("attempt", "quit", "launch"):
+            with self.subTest(boundary=boundary):
+                attempts = [HostileException()] if boundary == "attempt" else [
+                    attempt(1, "chromium", "failed", session="primary-1")
+                ]
+                quit_result = HostileException() if boundary == "quit" else BrowserQuitEvidence(
+                    "chromium", False, "primary-1"
+                )
+                launches = [HostileException()]
+                adapter = FakeBrowserAdapter(
+                    attempts, quit_result=quit_result, launches=launches,
+                )
+                receipt = BrowserRecovery().run(self.request, adapter)
+                self.assertEqual(receipt.status, "blocked")
+                self.assertIn(
+                    "value-sha256:" + hashlib.sha256(
+                        b"unrenderable-adapter-exception"
+                    ).hexdigest(),
+                    json.dumps(receipt.to_dict()),
+                )
+
+    def test_attempt_and_receipt_bind_safe_target_metadata(self):
+        secret_url = "https://member:password@example.invalid/private?token=secret"
+        request = BrowserRequest(
+            "case-1", secret_url, VIEWPORT, "chromium", "firefox",
+            PROFILE_ID, ENGINES,
+        )
+        url_digest = "url-sha256:" + hashlib.sha256(secret_url.encode()).hexdigest()
+        route_digest = "sha256:" + hashlib.sha256(b"/private").hexdigest()
+        bound = replace(
+            attempt(1, "chromium", "passed", session="primary-1"),
+            target_url_digest=url_digest, target_route_digest=route_digest,
+        )
+        receipt = BrowserRecovery().run(request, FakeBrowserAdapter([bound]))
+        serialized = json.dumps(receipt.to_dict(), sort_keys=True)
+        self.assertEqual(receipt.target_url_digest, url_digest)
+        self.assertEqual(receipt.target_route_digest, route_digest)
+        self.assertEqual(receipt.viewport, VIEWPORT)
+        self.assertNotIn("password", serialized)
+        self.assertNotIn("token=secret", serialized)
+        self.assertNotIn("example.invalid", serialized)
+
+    def test_runtime_receipt_rejects_cross_field_and_session_chain_contradictions(self):
+        adapter = FakeBrowserAdapter([attempt(1, "chromium", "passed", session="primary-1")])
+        clean = BrowserRecovery().run(self.request, adapter)
+        invalid_updates = (
+            {"schema_version": True},
+            {"status": "blocked", "reason_code": "human_help_required"},
+            {"reason_code": "human_help_required"},
+            {"actual_engine": "firefox"},
+            {"missing_case_ids": ("case-1",)},
+        )
+        for update in invalid_updates:
+            with self.subTest(update=update), self.assertRaises(ValueError):
+                replace(clean, **update)
+        with self.assertRaises(ValueError):
+            BrowserLifecycleEvidence(
+                "case-1", "chromium", "chromium", "browser_process_quit",
+                "launched", "primary-1",
+            )
+        with self.assertRaises(ValueError):
+            replace(clean, attempts=(replace(clean.attempts[0], attempt_number=2),))
+
+        recovered = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "chromium", "passed", session="primary-2"),
+                ],
+                launches=[BrowserLaunchEvidence("chromium", True, True, "primary-2")],
+            ),
+        )
+        with self.assertRaises(ValueError):
+            replace(recovered, lifecycle=recovered.lifecycle[1:])
+        wrong_engine_launch = replace(
+            recovered.lifecycle[-1], actual_engine="firefox",
+            substitution_provenance="alternate_engine_recovery",
+        )
+        with self.assertRaises(ValueError):
+            replace(recovered, lifecycle=(recovered.lifecycle[0], wrong_engine_launch))
+
     def test_runtime_receipt_matches_strict_schema_and_empty_evidence_does_not(self):
         adapter = FakeBrowserAdapter(
             [attempt(1, "chromium", "passed", session="primary-1")],
@@ -215,6 +327,36 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertFalse(schema_matches(invalid, schema))
         invalid = dict(receipt, lifecycle=[{}])
         self.assertFalse(schema_matches(invalid, schema))
+        for update in (
+            {"schema_version": True},
+            {"status": "blocked", "reason_code": "human_help_required"},
+            {"reason_code": "human_help_required"},
+            {"actual_engine": "firefox"},
+            {"missing_case_ids": ["case-1"]},
+        ):
+            invalid = dict(receipt, **update)
+            self.assertFalse(schema_matches(invalid, schema), update)
+        passed_with_failure = dict(receipt)
+        passed_with_failure["attempts"] = [
+            dict(receipt["attempts"][0], reason_code="browser_tool_failure")
+        ]
+        self.assertFalse(schema_matches(passed_with_failure, schema))
+        wrong_order = dict(receipt)
+        wrong_order["attempts"] = [dict(receipt["attempts"][0], attempt_number=2)]
+        self.assertFalse(schema_matches(wrong_order, schema))
+
+        recovered = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "chromium", "passed", session="primary-2"),
+                ],
+                launches=[BrowserLaunchEvidence("chromium", True, True, "primary-2")],
+            ),
+        ).to_dict()
+        recovered["lifecycle"][0]["result"] = "launched"
+        self.assertFalse(schema_matches(recovered, schema))
 
 
 if __name__ == "__main__":

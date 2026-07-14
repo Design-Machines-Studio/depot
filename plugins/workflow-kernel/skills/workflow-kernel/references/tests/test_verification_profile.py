@@ -170,6 +170,59 @@ class VerificationProfileTests(unittest.TestCase):
             with self.assertRaises(InvalidSchemaError):
                 ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
 
+        with tempfile.TemporaryDirectory() as directory:
+            project = project_copy(directory)
+            shutil.copytree(
+                FIXTURES / "assembly-baseplate" / "tasks",
+                project / "tests" / "ux" / "tasks",
+                dirs_exist_ok=True,
+            )
+            matrix = project / "tests" / "ux" / "coverage-matrix.md"
+            matrix.write_text(
+                "| Task ID | CM |\n| --- | --- |\n| GOV-SAMPLE-001 | F |\n"
+            )
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_persona_and_task_discovery_reject_symlinks_before_reading(self):
+        for target_kind in ("persona", "task", "directory"):
+            with self.subTest(target_kind=target_kind), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory) / "project"
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                outside = Path(directory) / "outside.md"
+                if target_kind == "persona":
+                    victim = project / "tests" / "ux" / "personas" / "casual-member.md"
+                    outside.write_text(victim.read_text())
+                    victim.unlink(); victim.symlink_to(outside)
+                elif target_kind == "task":
+                    victim = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                    outside.write_text(victim.read_text())
+                    victim.unlink(); victim.symlink_to(outside)
+                else:
+                    victim = project / "tests" / "ux" / "personas"
+                    outside_dir = Path(directory) / "outside-personas"
+                    victim.rename(outside_dir); victim.symlink_to(outside_dir, target_is_directory=True)
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_exact_bool_and_schema_version_types_fail_closed(self):
+        with self.assertRaises(InvalidSchemaError):
+            PersonaCase(
+                "member", "task", "member", "/", "chromium", "1440x900",
+                True, legacy_status_defaulted=1,
+            )
+        with self.assertRaises(InvalidSchemaError):
+            VerificationProfile(True, "project_declaration", (), (),
+                                selection_status="no_runnable_tasks")
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            (project / "tests" / "ux" / "verification.json").write_text(
+                json.dumps({"schema_version": True})
+            )
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
     def test_existing_incomplete_ux_tree_is_invalid_not_not_declared(self):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)

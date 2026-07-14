@@ -3,15 +3,23 @@
   "$id": "https://designmachines.ca/schemas/verification-profile-schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "source", "discovery_status", "selection_status", "cases", "auth_field_names"],
+  "required": ["schema_version", "profile_id", "source", "discovery_status", "selection_status", "configured_engines", "cases", "auth_field_names"],
   "properties": {
     "schema_version": {"const": 1},
+    "profile_id": {"type": "string", "pattern": "^profile-sha256:[0-9a-f]{64}$"},
     "source": {"enum": ["project_declaration", "not_declared"]},
     "discovery_status": {"enum": ["declared", "not_declared"]},
     "selection_status": {"enum": ["runnable_cases", "optional_cases_only", "no_runnable_tasks", "not_declared"]},
     "auth_field_names": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "configured_engines": {"type": "array", "uniqueItems": true, "items": {"enum": ["chromium", "firefox", "webkit"]}},
     "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}}
   },
+  "allOf": [
+    {"if": {"properties": {"discovery_status": {"const": "not_declared"}}}, "then": {"properties": {"source": {"const": "not_declared"}, "selection_status": {"const": "not_declared"}, "configured_engines": {"maxItems": 0}, "cases": {"maxItems": 0}}}},
+    {"if": {"properties": {"discovery_status": {"const": "declared"}}}, "then": {"properties": {"source": {"const": "project_declaration"}, "configured_engines": {"minItems": 1}}}},
+    {"if": {"properties": {"selection_status": {"const": "no_runnable_tasks"}}}, "then": {"properties": {"cases": {"maxItems": 0}}}},
+    {"if": {"properties": {"selection_status": {"enum": ["runnable_cases", "optional_cases_only"]}}}, "then": {"properties": {"cases": {"minItems": 1}}}}
+  ],
   "$defs": {
     "case": {
       "type": "object", "additionalProperties": false,

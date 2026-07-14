@@ -31,7 +31,34 @@ def _fail():
     raise invalid_policy("invalid_verification_declaration")
 
 
-def _frontmatter(path):
+def _owned_path(path, root, *, directory=False):
+    try:
+        if path.is_symlink():
+            _fail()
+        resolved_root = root.resolve(strict=True)
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        _fail()
+    if resolved != resolved_root and resolved_root not in resolved.parents:
+        _fail()
+    if directory and not path.is_dir():
+        _fail()
+    if not directory and not path.is_file():
+        _fail()
+    return path
+
+
+def _reject_symlinks(root):
+    try:
+        for path in root.rglob("*"):
+            if path.is_symlink():
+                _fail()
+    except OSError:
+        _fail()
+
+
+def _frontmatter(path, root):
+    _owned_path(path, root)
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -78,8 +105,8 @@ def _assignments(frontmatter):
     return result
 
 
-def _task(path):
-    frontmatter = _frontmatter(path); values = _scalars(frontmatter)
+def _task_at(path, root):
+    frontmatter = _frontmatter(path, root); values = _scalars(frontmatter)
     assignments = _assignments(frontmatter)
     if not {"id", "title", "route", "requires_auth", "requires_role"} <= set(values) or not assignments:
         _fail()
@@ -98,7 +125,9 @@ def _task(path):
 
 def _persona_index(root):
     directory = root / "personas"
+    _owned_path(directory, root, directory=True)
     index = directory / "_index.md"
+    _owned_path(index, root)
     try:
         text = index.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -114,7 +143,10 @@ def _persona_index(root):
     if (not declared or len(declared) != len(set(declared))
             or any(Path(name).name != name or name == "_index.md" for name in declared)):
         _fail()
-    actual = {path.name for path in directory.glob("*.md") if path.name != "_index.md"}
+    persona_files = tuple(directory.glob("*.md"))
+    for path in persona_files:
+        _owned_path(path, root)
+    actual = {path.name for path in persona_files if path.name != "_index.md"}
     if set(declared) != actual:
         _fail()
     return tuple(directory / name for name in sorted(declared))
@@ -123,7 +155,7 @@ def _persona_index(root):
 def _persona_defaults(root, persona_paths):
     result = {}
     for path in persona_paths:
-        values = _scalars(_frontmatter(path)); persona_id = values.get("id")
+        values = _scalars(_frontmatter(path, root)); persona_id = values.get("id")
         if not persona_id or persona_id in result or path.stem != persona_id:
             _fail()
         viewport = None
@@ -136,8 +168,11 @@ def _persona_defaults(root, persona_paths):
 
 def _validate_coverage_matrix(root, tasks):
     path = root / "coverage-matrix.md"
+    if path.is_symlink():
+        _fail()
     if not path.exists():
         return
+    _owned_path(path, root)
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except (OSError, UnicodeError):
@@ -185,6 +220,8 @@ def _validate_coverage_matrix(root, tasks):
         authoritative = {row for row in expected if row[0] == task_id}
         if not authoritative or rows != authoritative:
             _fail()
+    if indexed_rows and set().union(*indexed_rows.values()) != expected:
+        _fail()
     if not direct_rows and not indexed_rows:
         _fail()
 
@@ -192,7 +229,7 @@ def _validate_coverage_matrix(root, tasks):
 def _suite(root, suite_id):
     matches = []
     for path in sorted((root / "suites").glob("*.md")) if (root / "suites").is_dir() else ():
-        frontmatter = _frontmatter(path)
+        frontmatter = _frontmatter(path, root)
         if _scalars(frontmatter).get("id") == suite_id:
             matches.append({item.lower() for item in _list(frontmatter, "task_ids")})
     if len(matches) != 1 or not matches[0]:
@@ -217,18 +254,21 @@ class ProjectPersonaAdapter:
     def discover(self, project_root):
         project = Path(project_root)
         declared_root = project / "tests" / "ux"
+        if declared_root.is_symlink():
+            _fail()
         if declared_root.exists():
-            if not declared_root.is_dir():
-                _fail()
+            _owned_path(declared_root, project, directory=True)
             ux = declared_root
         elif any((project / name).exists() for name in ("tasks", "personas", "coverage-matrix.md")):
             ux = project
         else:
             return VerificationProfile(
-                1, "not_declared", (), (), "not_declared", "not_declared",
+                1, "not_declared", (), (), "not_declared", "not_declared", (),
             )
-        if not ux.is_dir() or not (ux / "tasks").is_dir() or not (ux / "personas").is_dir():
-            _fail()
+        _owned_path(ux, project if ux == declared_root else ux, directory=True)
+        _owned_path(ux / "tasks", ux, directory=True)
+        _owned_path(ux / "personas", ux, directory=True)
+        _reject_symlinks(ux)
         try:
             document = self._policy_document or load_policy(self._policy_path)
             defaults_map = document.verification_defaults
@@ -243,13 +283,18 @@ class ProjectPersonaAdapter:
         browser_source = "workflow_policy_default"; viewport_source = "workflow_policy_default"
         selected_suite = None; statuses = set(_RUNNABLE)
         config_path = ux / "verification.json"
+        if config_path.is_symlink():
+            _fail()
         if config_path.exists():
+            _owned_path(config_path, ux)
             try:
                 config = load_json_document(config_path)
             except Exception:
                 _fail()
             allowed = {"schema_version", "suite", "browser_engines", "viewports", "include_statuses"}
-            if type(config) is not dict or set(config) - allowed or config.get("schema_version") != 1:
+            if (type(config) is not dict or set(config) - allowed
+                    or type(config.get("schema_version")) is not int
+                    or config.get("schema_version") != 1):
                 _fail()
             selected_suite = config.get("suite")
             if "browser_engines" in config:
@@ -274,7 +319,10 @@ class ProjectPersonaAdapter:
             validate_viewport(policy.get("desktop_viewport")); validate_viewport(policy.get("mobile_viewport"))
         defaults = _persona_defaults(ux, _persona_index(ux))
         selected = _suite(ux, selected_suite) if selected_suite else None
-        tasks = [_task(path) for path in sorted((ux / "tasks").rglob("*.md"))]
+        task_paths = sorted((ux / "tasks").rglob("*.md"))
+        for path in task_paths:
+            _owned_path(path, ux)
+        tasks = [_task_at(path, ux) for path in task_paths]
         if not tasks:
             _fail()
         ids = [task["id"] for task in tasks]
@@ -318,5 +366,5 @@ class ProjectPersonaAdapter:
             selection_status = "optional_cases_only"
         return VerificationProfile(
             1, "project_declaration", tuple(cases), tuple(sorted(auth_names)),
-            "declared", selection_status,
+            "declared", selection_status, tuple(engines),
         )
