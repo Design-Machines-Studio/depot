@@ -125,21 +125,26 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 Pass only evidence references into the ledger. Recursively redact token, key,
 secret, password, authorization, cookie, DSN, and environment-value fields.
-Never report a raw secret in errors or receipts. Every receipt path uses one
-recursive sanitizer traversal that composes durable-string normalization with
-public-value digesting: sensitive keyed values become `[REDACTED]`, every other
+Never report a raw secret in errors or receipts. Every receipt path uses the
+shared bounded redaction traversal with receipt-owned schema callbacks, composing
+durable-string normalization with public-value digesting in one recursion:
+sensitive keyed values become `[REDACTED]`, every other
 string value becomes `value-sha256:<64 lowercase hex>`, and every key outside
 the selected exact built-in-string schema becomes
 `key-sha256:<64 lowercase hex>`. `ReceiptField` and `WorkflowEventField` own the
 explicit evidence, transition, and nested-event vocabularies; arbitrary
 metadata and payload mappings use no trusted field vocabulary.
-`evidence_receipt()` and `transition_receipt()` return deeply immutable
-`SafeReceipt` mapping capabilities constructed only by the owned sanitizer.
-`encode_receipt()` encodes a `SafeReceipt` directly and byte-idempotently; every
-ordinary `Mapping`, including parsed JSON copied from a safe receipt, is raw and
-is sanitized exactly once. Raw `key-sha256:` keys and all raw digest-shaped or
-marker-shaped values are therefore re-digested and cannot infer provenance from
-their shape. Only the sensitive-key branch emits `[REDACTED]`.
+`evidence_receipt()` and `transition_receipt()` return exact-type, final
+`SafeReceipt` mapping capabilities constructed only by the owned factory. A
+capability contains a recursively immutable `MappingProxyType`/tuple projection
+and the canonical bytes computed at issuance; it has no mutable `dict` base and
+cannot be subclassed. `encode_receipt()` trusts only a valid, issued object whose
+type is exactly `SafeReceipt`, returning its stored bytes byte-idempotently.
+Unissued objects fail closed. Every ordinary `Mapping`, including parsed JSON
+copied from a safe receipt, is raw and is sanitized exactly once. Raw
+`key-sha256:` keys and all raw digest-shaped or marker-shaped values are therefore
+re-digested and cannot infer provenance from their shape. Only the sensitive-key
+branch emits `[REDACTED]`.
 `evidence_receipt()` value-digests caller `run_id` and `evidence_type`, sanitizes
 arbitrary metadata, and preserves only a separately validated evidence
 reference. `transition_receipt()` sanitizes the full event through the shared

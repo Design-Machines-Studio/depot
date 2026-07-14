@@ -238,9 +238,14 @@ class _Traversal:
     string_normalizer: Optional[Callable[[str], str]] = None
     key_normalizer: Optional[Callable[[str], str]] = None
     preserve_redacted: bool = False
+    string_policy: Optional[Callable[[str, str, Tuple[str, ...], Any], str]] = None
+    mapping_policy: Optional[Callable[[str, Tuple[str, ...], Any], Tuple[str, Any]]] = None
+    value_policy: Optional[Callable[[Any, str, Tuple[str, ...], Any], None]] = None
     count: int = 0
 
-    def normalize(self, value: Any, *, key: str = "", depth: int = 0) -> Any:
+    def normalize(self, value: Any, *, key: str = "", depth: int = 0,
+                  path: Tuple[str, ...] = (), schema: Any = None,
+                  policy: Any = None) -> Any:
         if depth > self.max_depth:
             raise TypeError("payload exceeds maximum depth")
         self.count += 1
@@ -249,6 +254,8 @@ class _Traversal:
         if (key and not (type(key) is str and _KEY_DIGEST.fullmatch(key))
                 and is_secret_key(key)):
             return REDACTED
+        if self.value_policy is not None:
+            self.value_policy(value, key, path, policy)
         if (self.preserve_redacted and type(key) is str and _KEY_DIGEST.fullmatch(key)
                 and type(value) is str and value == REDACTED):
             return REDACTED
@@ -257,6 +264,8 @@ class _Traversal:
         if isinstance(value, str):
             if str.__len__(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
+            if self.string_policy is not None:
+                return self.string_policy(value, key, path, policy)
             if self.string_normalizer is not None:
                 return self.string_normalizer(value)
             if key.casefold() == "reference":
@@ -275,16 +284,27 @@ class _Traversal:
                     raise TypeError("mapping keys must be strings")
                 if str.__len__(child_key) > self.max_string_length:
                     raise TypeError("mapping key exceeds maximum length")
-                normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
-                                  else validate_durable_key(child_key))
+                child_policy = None
+                if self.mapping_policy is not None:
+                    normalized_key, child_policy = self.mapping_policy(child_key, path, schema)
+                else:
+                    normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
+                                      else validate_durable_key(child_key))
                 if normalized_key in result:
                     raise TypeError("mapping keys collide after normalization")
-                result[normalized_key] = self.normalize(item, key=child_key, depth=depth + 1)
+                child_schema = child_policy if isinstance(child_policy, Mapping) else None
+                result[normalized_key] = self.normalize(
+                    item, key=child_key, depth=depth + 1,
+                    path=path + (child_key,), schema=child_schema, policy=child_policy,
+                )
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
-            if self.string_normalizer is None and key.casefold() == "evidence":
+            if (self.string_normalizer is None and self.string_policy is None
+                    and key.casefold() == "evidence"):
                 value = tuple(normalize_evidence_reference(reference) for reference in value)
-            result = tuple(self.normalize(item, depth=depth + 1) for item in value)
+            result = tuple(self.normalize(
+                item, depth=depth + 1, path=path + (str(index),),
+            ) for index, item in enumerate(value))
             return self.wrap_sequence(result)
         raise TypeError("value is not JSON-safe")
 
@@ -330,6 +350,20 @@ def sanitize_public_metadata(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
         max_string_length=max_string_length, known_keys=known_keys,
         wrap_mapping=_mutable_mapping, wrap_sequence=_mutable_sequence,
     )
+
+
+def apply_json_policy(value: Any, *, string_policy, mapping_policy,
+                      value_policy=None, schema=None,
+                      max_depth: int = MAX_PAYLOAD_DEPTH,
+                      max_items: int = MAX_PAYLOAD_ITEMS,
+                      max_string_length: int = MAX_STRING_LENGTH) -> Any:
+    """Apply caller-owned field policy through the shared bounded traversal."""
+    return _Traversal(
+        max_depth, max_items, max_string_length,
+        _mutable_mapping, _mutable_sequence,
+        string_policy=string_policy, mapping_policy=mapping_policy,
+        value_policy=value_policy,
+    ).normalize(value, schema=schema)
 
 
 def freeze_error_details(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,

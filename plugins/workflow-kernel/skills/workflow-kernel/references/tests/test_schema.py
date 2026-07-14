@@ -334,8 +334,9 @@ class SchemaTests(unittest.TestCase):
             "note": fixture, "api_token": fixture,
         })
 
-        for receipt in (generic, transition, evidence):
-            self.assertNotIn(fixture, json.dumps(receipt, sort_keys=True))
+        self.assertNotIn(fixture, json.dumps(generic, sort_keys=True))
+        for receipt in (transition, evidence):
+            self.assertNotIn(fixture.encode(), encode_receipt(receipt))
         self.assertEqual(generic[detail_key_digest("note")], detail_digest(fixture))
         self.assertEqual(generic[detail_key_digest("api_token")], "[REDACTED]")
         payload = transition["event"]["payload"]
@@ -367,6 +368,45 @@ class SchemaTests(unittest.TestCase):
         self.assertIsInstance(transition, receipts.SafeReceipt)
         self.assertEqual(encode_receipt(transition), encode_receipt(transition))
 
+    def test_safe_receipt_rejects_subclass_forgery(self):
+        with self.assertRaises(TypeError):
+            class ForgedReceipt(receipts.SafeReceipt):
+                pass
+
+    def test_safe_receipt_has_no_mutable_dict_base_or_stale_digest_path(self):
+        receipt = evidence_receipt("run-1", "test", "receipt.json")
+        before = encode_receipt(receipt)
+        digest = receipt["digest"]
+
+        with self.assertRaises(TypeError):
+            dict.__setitem__(receipt, "api_token", "never-emit-mutated-receipt")
+
+        self.assertEqual(encode_receipt(receipt), before)
+        self.assertEqual(receipt["digest"], digest)
+
+    def test_unissued_safe_receipt_objects_cannot_bypass_encoding(self):
+        constructors = (
+            lambda: object.__new__(receipts.SafeReceipt),
+            lambda: receipts.SafeReceipt.__new__(receipts.SafeReceipt),
+        )
+        rejected = 0
+        for constructor in constructors:
+            try:
+                candidate = constructor()
+            except TypeError:
+                rejected += 1
+                continue
+            with self.assertRaises(UnsafePayloadError):
+                encode_receipt(candidate)
+            rejected += 1
+        self.assertEqual(rejected, len(constructors))
+
+    def test_receipts_use_the_shared_redaction_traversal(self):
+        self.assertFalse(hasattr(receipts, "_ReceiptSanitizer"))
+        encoded = encode_receipt({"note": "shared traversal"})
+        self.assertEqual(json.loads(encoded)[detail_key_digest("note")],
+                         detail_digest("shared traversal"))
+
     def test_raw_receipt_cannot_infer_safe_provenance_from_schema_shapes(self):
         receipt = evidence_receipt("run-1", "test", "receipt.json")
         trusted = encode_receipt(receipt)
@@ -375,6 +415,15 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(encode_receipt(receipt), trusted)
         self.assertNotEqual(raw, trusted)
         self.assertNotIn("run_id", json.loads(raw))
+
+    def test_raw_evidence_key_does_not_select_reference_schema_policy(self):
+        source = "/caller-controlled/absolute-path.json"
+        encoded = json.loads(encode_receipt({"evidence": [source]}))
+
+        self.assertEqual(
+            encoded[detail_key_digest("evidence")],
+            [detail_digest(source)],
+        )
 
     def test_raw_digest_key_and_marker_literals_are_re_digested(self):
         digest_key = detail_key_digest("caller-controlled-key")
