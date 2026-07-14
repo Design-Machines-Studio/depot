@@ -222,6 +222,38 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(CleanupDisposition.FOREIGN, dispositions["mismatch"].disposition)
         self.assertEqual(CleanupDisposition.FOREIGN, dispositions["invalid"].disposition)
 
+    def test_stale_sweep_records_malformed_ownership_identifiers_without_aborting(self):
+        created = NOW - timedelta(hours=25)
+        variants = []
+        for resource_id, changes in (
+            ("incomplete", {"com.designmachines.depot.run-id": None}),
+            ("whitespace", {"com.designmachines.depot.run-id": " run-1"}),
+            ("overlong", {"com.designmachines.depot.node-id": "n" * 257}),
+            ("bad-domain", {"com.designmachines.depot.lifecycle": "temporary"}),
+        ):
+            labels = owned_labels(created_at=created)
+            for key, value in changes.items():
+                if value is None:
+                    labels.pop(key)
+                else:
+                    labels[key] = value
+            variants.append(resource(resource_id, labels=labels, created_at=created))
+        try:
+            plan = self.adapter.plan_stale_sweep(
+                DockerInventory(tuple(variants)), timedelta(hours=24),
+            )
+        except InvalidSchemaError:
+            self.fail("malformed ownership labels must not abort a stale sweep")
+        self.assertEqual((), plan.actions)
+        self.assertEqual(
+            {value.resource_id for value in variants},
+            {value.resource_id for value in plan.dispositions},
+        )
+        self.assertTrue(all(
+            value.disposition is CleanupDisposition.FOREIGN
+            for value in plan.dispositions
+        ))
+
     def test_stale_sweep_requires_both_label_and_inspected_age_to_exceed_ttl(self):
         label_created = NOW - timedelta(hours=24, seconds=1)
         inspected_created = NOW - timedelta(hours=23, minutes=59)
@@ -392,6 +424,50 @@ class DockerLifecycleTests(unittest.TestCase):
             plan.actions[1], stopped, predecessor_result=predecessor, action_index=1,
         )
 
+    def test_revalidation_rejects_action_when_declared_dependent_becomes_active(self):
+        try:
+            from workflow_kernel.adapters.docker import ActiveNodeProof
+        except ImportError:
+            self.fail("Docker cleanup must expose a typed active-node proof")
+        labels = owned_labels(lifecycle="run", cleanup_policy="remove-when-stopped")
+        value = resource(labels=labels)
+        record = ResourceRecord(
+            value.resource_id, value.kind, "run-1", "node-1", "run",
+            "remove-when-stopped", NOW, ("consumer",), labels,
+        )
+        registry = ResourceRegistry(Path(self.directory.name) / "dependent.jsonl")
+        registry.register(record)
+        plan = self.adapter.plan_reconcile_run(
+            registry, DockerInventory((value,)), "run-1",
+            active_node_ids=(), terminal=True,
+        )
+        self.assertEqual(1, len(plan.actions))
+        self.adapter.revalidate_action(
+            plan.actions[0], value, ownership_record=record,
+            active_node_proof=ActiveNodeProof("run-1", (), True, NOW),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                plan.actions[0], value, ownership_record=record,
+                active_node_proof=ActiveNodeProof(
+                    "run-1", ("consumer",), True, NOW,
+                ),
+            )
+
+    def test_dependent_cleanup_without_active_node_proof_is_blocked(self):
+        labels = owned_labels()
+        value = resource(labels=labels)
+        registry = ResourceRegistry(Path(self.directory.name) / "proof-missing.jsonl")
+        registry.register(ResourceRecord(
+            value.resource_id, value.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, ("consumer",), labels,
+        ))
+        plan = self.adapter.plan_chunk_cleanup(
+            registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        self.assertEqual((), plan.actions)
+        self.assertEqual("active_node_proof_missing", plan.dispositions[0].reason)
+
     def test_compose_preserves_base_files_but_override_contains_labels_only(self):
         config_argv = ("docker", "compose", "-f", "compose.yml", "config", "--format", "json")
         secret = "super-secret-password"
@@ -438,6 +514,34 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual((config_argv,), tuple(adapter.runner.calls))
         self.assertEqual("depot-run-1-node-1", plan.environment["COMPOSE_PROJECT_NAME"])
         self.assertIn("-f=compose.yml", plan.argv)
+
+    def test_compose_attached_project_shorthand_cannot_override_kernel_identity(self):
+        plan = self.adapter.plan_compose(
+            ("docker", "compose", "-f", "compose.yml", "-pforeign", "up"),
+            "run-1", "node-1", "chunk", "stop-remove",
+        )
+        self.assertFalse(plan.managed)
+        self.assertEqual("caller_project_name_forbidden", plan.reason)
+
+    def test_compose_attached_file_shorthand_is_an_explicit_base_file(self):
+        config_argv = (
+            "docker", "compose", "-fcompose.yml", "config", "--format", "json",
+        )
+        config = {
+            "services": {"app": {"image": "app:1"}},
+            "networks": {}, "volumes": {},
+        }
+        adapter = DockerAdapter(
+            FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),)),
+            now=lambda: NOW,
+        )
+        plan = adapter.plan_compose(
+            ("docker", "compose", "-fcompose.yml", "up"),
+            "run-1", "node-1", "chunk", "stop-remove",
+        )
+        self.assertTrue(plan.managed)
+        self.assertIn("-fcompose.yml", plan.argv)
+        self.assertEqual((config_argv,), tuple(adapter.runner.calls))
 
     def test_remove_revalidation_requires_immediately_preceding_stop_index(self):
         value, _ = self.register(resource(running=True))

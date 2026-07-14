@@ -833,7 +833,7 @@ class OwnedResourceLifecycle:
 
     def at_terminal(
         self, registry: ResourceRegistry, inventory: object, run_id: str, status: RunStatus,
-        *, active_node_ids: Sequence[str] = (),
+        *, active_node_ids: Optional[Sequence[str]] = None,
     ) -> CleanupPlan:
         try:
             normalized = RunStatus(status)

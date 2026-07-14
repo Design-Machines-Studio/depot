@@ -2,26 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://designmachines.ca/schemas/workflow-kernel/resource-registry-event-v1.json",
   "title": "Workflow kernel resource registry event",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["event"],
-  "properties": {
-    "event": {"enum": ["registered", "disposition", "transaction"]},
-    "resource": {"$ref": "#/$defs/resource"},
-    "disposition": {"$ref": "#/$defs/disposition"},
-    "transaction_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "events": {
-      "type": "array", "minItems": 1,
-      "items": {"oneOf": [
-        {"$ref": "#/$defs/registrationEvent"},
-        {"$ref": "#/$defs/dispositionEvent"}
-      ]}
-    }
-  },
   "oneOf": [
-    {"required": ["event", "resource"], "properties": {"event": {"const": "registered"}}},
-    {"required": ["event", "disposition"], "properties": {"event": {"const": "disposition"}}},
-    {"required": ["event", "transaction_id", "events"], "properties": {"event": {"const": "transaction"}}}
+    {"$ref": "#/$defs/registrationEvent"},
+    {"$ref": "#/$defs/dispositionEvent"},
+    {"$ref": "#/$defs/transactionEvent"}
   ],
   "$defs": {
     "kind": {"enum": ["worktree", "branch", "container", "network", "volume"]},
@@ -35,6 +19,21 @@
       "type": "object", "additionalProperties": false,
       "required": ["event", "disposition"],
       "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/disposition"}}
+    },
+    "transactionEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "transaction_id", "events"],
+      "properties": {
+        "event": {"const": "transaction"},
+        "transaction_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "events": {
+          "type": "array", "minItems": 1,
+          "items": {"oneOf": [
+            {"$ref": "#/$defs/registrationEvent"},
+            {"$ref": "#/$defs/dispositionEvent"}
+          ]}
+        }
+      }
     },
     "resource": {
       "type": "object",

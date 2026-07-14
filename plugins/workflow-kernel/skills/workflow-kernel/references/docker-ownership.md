@@ -18,12 +18,14 @@ Docker creates it:
 `docker run`, `docker container create`, `docker network create`, and
 `docker volume create` receive label flags in their creation argv. Compose is
 first rendered with `docker compose ... config --format json`; the kernel then
-requires and preserves the caller's explicit base `-f`/`--file` stack, creates a
+requires and preserves the caller's explicit base `-f`/`--file` stack,
+including Docker's attached `-fFILE` shorthand, creates a
 run-scoped project name, and appends a labels-only override for services, the
 default and declared networks, and named volumes. The rendered config is used
 only for validation and intent discovery; interpolated environment values are
 never copied into the override or durable plan. Caller-supplied `-p` and
-`--project-name` options are rejected so project ownership cannot be shadowed.
+`--project-name` options, including attached `-pNAME`, are rejected so project
+ownership cannot be shadowed.
 External resources, anonymous
 volumes, invalid config, and unsupported or ambiguous command forms are
 explicitly unmanaged.
@@ -70,8 +72,12 @@ kind and ID, argv, environment, owner, lifecycle, action, canonical evidence
 and capability SHA-256 digests, explicit preconditions, dependency ordering,
 and predecessor-result identity. Chunk 05 must refresh exact Git or
 Docker evidence and call the adapter revalidation contract immediately before
-executing the argv; any changed ref count, object identity, label, lease/use
-state, inspect result, or resource identity invalidates the action.
+executing the argv. Actions for records with declared dependents bind both the
+exact dependent-node IDs and the planning-time active-node snapshot. Execution
+requires a fresh, readable `ActiveNodeProof` plus the exact registry record;
+any active dependent or changed dependency/active-node snapshot invalidates the
+action. Changed ref count, object identity, label, lease/use state, inspect
+result, or resource identity likewise invalidates it.
 
 Cleanup uses only exact IDs:
 

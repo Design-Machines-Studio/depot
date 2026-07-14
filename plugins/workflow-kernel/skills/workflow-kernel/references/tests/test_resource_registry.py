@@ -267,6 +267,23 @@ class ResourceRegistryTests(unittest.TestCase):
         self.assertEqual(["none", "remove_exact_id"], persisted_disposition["action"]["enum"])
         self.assertEqual(["none", "remove_exact_id"], receipt_disposition["action"]["enum"])
 
+    def test_registry_schema_rejects_fields_from_other_event_variants(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+        )
+        payload = {
+            "event": "registered",
+            "resource": {
+                "resource_id": "shared", "kind": "container",
+                "run_id": "run-1", "node_id": "node-1",
+                "lifecycle": "chunk", "cleanup_policy": "retain",
+                "created_at": "2026-07-15T01:02:03Z",
+                "dependent_node_ids": [], "labels": {},
+            },
+            "transaction_id": "sha256:" + "0" * 64,
+        }
+        self.assertFalse(schema_matches(payload, schema))
+
     def test_receipt_digests_overdeep_cyclic_evidence_without_losing_schema(self):
         root = []
         cursor = root
