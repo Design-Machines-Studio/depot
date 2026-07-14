@@ -899,6 +899,37 @@ class StateStoreTests(unittest.TestCase):
                 store.publish(authoritative, 2, lease=lease)
             self.assertEqual(store.load(), base)
 
+    def test_replay_parent_binding_failure_after_authorization_consumes_token(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run" / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            authoritative = state_module._prepare_replay_state(store, base, -1)
+            real_bind = state_module.bind_durable_path
+            bind_calls = 0
+
+            def fail_publication_parent_bind(requested):
+                nonlocal bind_calls
+                bind_calls += 1
+                if bind_calls == 2:
+                    raise OSError("publication parent bind failed")
+                return real_bind(requested)
+
+            with RunLease(path) as lease:
+                with mock.patch(
+                        "workflow_kernel.state.bind_durable_path",
+                        side_effect=fail_publication_parent_bind), \
+                        self.assertRaises(CorruptStateError):
+                    store.publish(authoritative, -1, lease=lease)
+                self.assertEqual(bind_calls, 2)
+                self.assertFalse(path.exists())
+                with self.assertRaises(UnsafePayloadError) as raised:
+                    store.publish(authoritative, -1, lease=lease)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("prepared_state_owner_mismatch"),
+            )
+
     def test_replay_prepared_publication_is_consumed_after_success(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"

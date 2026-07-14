@@ -343,8 +343,7 @@ def _capability_types():
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
                 })
             try:
-                prepared_record = record["prepared"][prepared]
-                revision, encoded, issuance_mode, issued_expected_revision = prepared_record
+                revision, encoded, issuance_mode, issued_expected_revision = record["prepared"][prepared]
             except (KeyError, TypeError):
                 raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
@@ -360,6 +359,13 @@ def _capability_types():
                     ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                     ErrorDetailKey.REASON_CODE.value: "prepared_expected_revision_mismatch",
                 })
+            if issuance_mode is ledger_reconciliation_issuance:
+                try:
+                    record["prepared"].pop(prepared)
+                except (KeyError, TypeError):
+                    raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
+                        ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
+                    }) from None
             path = record["path"]
             if record["binding"].parent_identity is None:
                 try:
@@ -369,17 +375,6 @@ def _capability_types():
                     raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                         ErrorDetailKey.PATH.value: str(path),
                     }) from None
-            if issuance_mode is ledger_reconciliation_issuance:
-                try:
-                    consumed_record = record["prepared"].pop(prepared)
-                except (KeyError, TypeError):
-                    raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
-                        ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
-                    }) from None
-                if consumed_record is not prepared_record:
-                    raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
-                        ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
-                    })
             try:
                 with _OwnedResourceScope() as scope:
                     directory = scope.pin(record["binding"])
