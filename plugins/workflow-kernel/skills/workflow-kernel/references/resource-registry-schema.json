@@ -30,7 +30,8 @@
           "type": "array", "minItems": 1,
           "items": {"oneOf": [
             {"$ref": "#/$defs/registrationEvent"},
-            {"$ref": "#/$defs/transactionDispositionEvent"}
+            {"$ref": "#/$defs/transactionDispositionEvent"},
+            {"$ref": "#/$defs/authorityConsumedEvent"}
           ]}
         }
       }
@@ -39,6 +40,14 @@
       "type": "object", "additionalProperties": false,
       "required": ["event", "disposition"],
       "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/disposition"}}
+    },
+    "authorityConsumedEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "authority_id"],
+      "properties": {
+        "event": {"const": "authority_consumed"},
+        "authority_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
     },
     "resource": {
       "type": "object",

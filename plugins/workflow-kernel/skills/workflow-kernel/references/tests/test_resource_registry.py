@@ -327,6 +327,21 @@ class ResourceRegistryTests(unittest.TestCase):
         }
         self.assertTrue(schema_matches(transaction, schema))
 
+    def test_registry_schema_reserves_authority_consumption_for_transactions(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+        )
+        consumed = {
+            "event": "authority_consumed",
+            "authority_id": "sha256:" + "1" * 64,
+        }
+        self.assertFalse(schema_matches(consumed, schema))
+        self.assertTrue(schema_matches({
+            "event": "transaction",
+            "transaction_id": "sha256:" + "2" * 64,
+            "events": [consumed],
+        }, schema))
+
     def test_receipt_digests_overdeep_cyclic_evidence_without_losing_schema(self):
         root = []
         cursor = root
@@ -407,7 +422,7 @@ class ResourceRegistryTests(unittest.TestCase):
             def replace_lock(event):
                 first.path.with_name(first.path.name + ".lock").unlink()
                 second.register(ResourceRecord(
-                    "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                    "replacement", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
                     "stop-remove", NOW, labels={"proof": "second"},
                 ))
                 original_append(event)
@@ -416,6 +431,7 @@ class ResourceRegistryTests(unittest.TestCase):
             with self.assertRaises(InvalidSchemaError):
                 first.register(record())
             replayed = ResourceRegistry(path)
+            self.assertEqual("replacement", replayed.resources_for("run-1")[0].resource_id)
             self.assertEqual("second", replayed.resources_for("run-1")[0].labels["proof"])
             self.assertEqual(1, len(path.read_text(encoding="utf-8").splitlines()))
 

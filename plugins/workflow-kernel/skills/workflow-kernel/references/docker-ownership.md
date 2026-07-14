@@ -74,8 +74,9 @@ Every cleanup action is a proof-bound capability. Its schema carries an exact
 kind and ID, argv, environment, owner, lifecycle, action, canonical evidence
 and capability SHA-256 digests, explicit preconditions, dependency ordering,
 and predecessor-result identity. Chunk 05 must refresh exact Git or
-Docker evidence and call the adapter revalidation contract immediately before
-executing the argv. Actions for records with declared dependents bind the exact
+Docker evidence and call the guarded adapter execution contract, which performs
+final revalidation and exact argv execution as one operation. Actions for
+records with declared dependents bind the exact
 dependent-node IDs and an authoritative status row for every dependent. A
 fresh, readable `IncompleteNodeProof` treats `pending`, `ready`, `running`, and
 `waiting` nodes as incomplete; `succeeded`, `failed`, `blocked`, and `skipped`
@@ -84,8 +85,9 @@ changed dependency/status snapshot invalidates the action. Changed ref count,
 object identity, label, lease/use state, inspect result, or resource identity
 likewise invalidates it. The lifecycle coordinator accepts and forwards this
 typed proof; lower adapters expose no raw active-ID shortcut.
-Execution-time Docker revalidation atomically reloads the exact durable registry
-record and its active/retired state. Registered mode requires an active record
+Execution-time Docker authority uses a per-kind-and-ID OS-backed registry guard.
+The guard atomically reloads the exact durable registry record and its
+active/retired state. Registered mode requires an active record
 for the action owner and derives dependency-proof requirements only from that
 record. Action precondition strings, Docker labels, cached plans, and shadow
 state cannot declare a registered resource dependency-free. Stale-orphan
@@ -95,6 +97,17 @@ orphan authorization. Complete positive labels and a fresh inactive lease are
 also required. Command results remain a gap-free plan prefix
 beginning at action zero; a dependent action is accepted only after its declared
 predecessor result appears earlier and succeeded.
+
+Final fresh revalidation and exact argv execution are never separate host
+steps. Registration, reassignment, and disposition for the same kind-and-ID
+acquire the same guard and fail closed until the executor returns a result;
+other resource keys remain concurrent. The guarded result carries a short-lived
+authority ID over the full action digest, owner, registry-state generation,
+result identity, and expiry. Result recording requires that the generation is
+unchanged and consumes the authority ID in the same journal transaction, so
+replay and late persistence fail closed. The persistent lock inode is advisory
+state only: the OS releases its lock on process death, and a post-crash attempt
+must freshly inspect, revalidate, and execute.
 
 Cleanup uses only exact IDs:
 

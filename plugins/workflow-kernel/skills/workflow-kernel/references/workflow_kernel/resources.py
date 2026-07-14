@@ -8,10 +8,10 @@ import os
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Iterable, Mapping, Optional, Sequence, Tuple
 
 from workflow_kernel._files import LockHandle, PinnedDirectory, bind_durable_path
 from workflow_kernel.adapters.base import invalid_policy
@@ -81,6 +81,50 @@ class CommandResult:
         if type(self.exit_code) is not int or type(self.stdout) is not str or type(self.stderr) is not str:
             raise invalid_policy("invalid_command_result")
         object.__setattr__(self, "argv", argv)
+
+
+@dataclass(frozen=True)
+class GuardedCommandResult:
+    """One exact command result authorized under its resource execution guard."""
+
+    result: CommandResult
+    kind: ResourceKind
+    resource_id: str
+    run_id: str
+    node_id: str
+    action_digest: str
+    state_generation: str
+    issued_at: datetime
+    expires_at: datetime
+    authority_id: str
+
+    def __post_init__(self) -> None:
+        try:
+            kind = ResourceKind(self.kind)
+        except Exception:
+            raise invalid_policy("invalid_guarded_command_result") from None
+        if (
+            type(self.result) is not CommandResult
+            or not _valid_text(self.resource_id, maximum=_MAX_RESOURCE_ID)
+            or not all(_valid_text(value, maximum=_MAX_IDENTIFIER) for value in (
+                self.run_id, self.node_id,
+            ))
+            or not all(re.fullmatch(r"sha256:[0-9a-f]{64}", value or "") for value in (
+                self.action_digest, self.state_generation, self.authority_id,
+            ))
+            or not _valid_timestamp(self.issued_at)
+            or not _valid_timestamp(self.expires_at)
+            or self.expires_at <= self.issued_at
+            or self.authority_id != execution_authority_id(
+                result=self.result, kind=kind, resource_id=self.resource_id,
+                run_id=self.run_id, node_id=self.node_id,
+                action_digest=self.action_digest,
+                state_generation=self.state_generation,
+                issued_at=self.issued_at, expires_at=self.expires_at,
+            )
+        ):
+            raise invalid_policy("invalid_guarded_command_result")
+        object.__setattr__(self, "kind", kind)
 
 
 @dataclass(frozen=True)
@@ -452,6 +496,22 @@ def cleanup_result_id(argv: Tuple[str, ...], exit_code: int) -> str:
     return cleanup_proof_digest({"argv": list(argv), "exit_code": exit_code})
 
 
+def execution_authority_id(
+    *, result: CommandResult, kind: ResourceKind, resource_id: str,
+    run_id: str, node_id: str, action_digest: str, state_generation: str,
+    issued_at: datetime, expires_at: datetime,
+) -> str:
+    return cleanup_proof_digest({
+        "action_digest": action_digest,
+        "owner": {"run_id": run_id, "node_id": node_id},
+        "kind": ResourceKind(kind).value, "resource_id": resource_id,
+        "state_generation": state_generation,
+        "result_id": cleanup_result_id(result.argv, result.exit_code),
+        "issued_at": _timestamp(issued_at),
+        "expires_at": _timestamp(expires_at),
+    })
+
+
 def cleanup_action_digest(
     *, evidence_digest: str, resource_id: str, kind: ResourceKind,
     action: str, argv: Tuple[str, ...], requires_success_of: Optional[int],
@@ -571,7 +631,12 @@ class _RegistryTransaction:
 class ResourceRegistry:
     """Append-only kind+ID registry with immutable successful outcomes."""
 
-    def __init__(self, path: Path | str):
+    def __init__(
+        self, path: Path | str, *, now: Optional[Callable[[], datetime]] = None,
+        authority_ttl: timedelta = timedelta(minutes=1),
+    ):
+        if not isinstance(authority_ttl, timedelta) or authority_ttl.total_seconds() <= 0:
+            raise invalid_policy("invalid_execution_authority_ttl")
         lexical = Path(path)
         lexical.parent.mkdir(parents=True, exist_ok=True)
         self._binding = bind_durable_path(lexical)
@@ -580,7 +645,10 @@ class ResourceRegistry:
         self._records: dict[tuple[ResourceKind, str], ResourceRecord] = {}
         self._attempts: dict[tuple[ResourceKind, str], list[ResourceDisposition]] = {}
         self._transactions: set[str] = set()
+        self._consumed_authorities: set[str] = set()
         self._current_transaction: Optional[_RegistryTransaction] = None
+        self._now = now or (lambda: datetime.now(timezone.utc))
+        self.authority_ttl = authority_ttl
         with self._exclusive_lock():
             self._reload_unlocked()
 
@@ -630,10 +698,48 @@ class ResourceRegistry:
             if primary is None and cleanup_failed:
                 raise invalid_policy("resource_registry_transaction_close_failed") from None
 
+    @contextmanager
+    def _exclusive_key_locks(
+        self, keys: Iterable[tuple[ResourceKind, str]],
+    ):
+        normalized = tuple(sorted(set(
+            (ResourceKind(kind), resource_id) for kind, resource_id in keys
+        ), key=lambda item: (item[0].value, item[1])))
+        handles = []
+        primary = None
+        try:
+            for kind, resource_id in normalized:
+                if not _valid_text(resource_id, maximum=_MAX_RESOURCE_ID):
+                    raise invalid_policy("invalid_resource_identity")
+                digest = hashlib.sha256(
+                    (kind.value + "\0" + resource_id).encode("utf-8")
+                ).hexdigest()
+                binding = bind_durable_path(self.path.with_name(
+                    self.path.name + ".key-" + digest + ".lock"
+                ))
+                handles.append(LockHandle.acquire_bound(binding))
+            yield
+        except InvalidSchemaError:
+            primary = True
+            raise
+        except OSError:
+            primary = True
+            raise invalid_policy("resource_execution_guard_busy") from None
+        finally:
+            cleanup_failed = False
+            for handle in reversed(handles):
+                try:
+                    handle.release()
+                except OSError:
+                    cleanup_failed = True
+            if primary is None and cleanup_failed:
+                raise invalid_policy("resource_execution_guard_release_failed") from None
+
     def _reload_unlocked(self) -> None:
         self._records = {}
         self._attempts = {}
         self._transactions = set()
+        self._consumed_authorities = set()
         try:
             transaction = self._require_transaction()
             raw = transaction.read()
@@ -679,6 +785,16 @@ class ResourceRegistry:
                 raise invalid_policy("terminal_disposition_requires_cleanup_transaction")
             self._apply_disposition(disposition, persist=False)
             return
+        if set(event) == {"event", "authority_id"} and event["event"] == "authority_consumed":
+            authority_id = event["authority_id"]
+            if (
+                not in_transaction or type(authority_id) is not str
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", authority_id)
+                or authority_id in self._consumed_authorities
+            ):
+                raise invalid_policy("invalid_execution_authority_consumption")
+            self._consumed_authorities.add(authority_id)
+            return
         if set(event) == {"event", "transaction_id", "events"} and event["event"] == "transaction":
             transaction_id = event["transaction_id"]
             nested = event["events"]
@@ -690,6 +806,7 @@ class ResourceRegistry:
                 raise invalid_policy("invalid_resource_registry_transaction")
             saved_records = dict(self._records)
             saved_attempts = {key: list(values) for key, values in self._attempts.items()}
+            saved_authorities = set(self._consumed_authorities)
             try:
                 for item in nested:
                     if type(item) is not dict or item.get("event") == "transaction":
@@ -698,6 +815,7 @@ class ResourceRegistry:
             except Exception:
                 self._records = saved_records
                 self._attempts = saved_attempts
+                self._consumed_authorities = saved_authorities
                 raise
             self._transactions.add(transaction_id)
             return
@@ -707,9 +825,10 @@ class ResourceRegistry:
         if type(resource) is not ResourceRecord:
             raise invalid_policy("invalid_resource_record")
         resource = _record_from_json(_resource_json(resource))
-        with self._exclusive_lock():
-            self._reload_unlocked()
-            self._apply_registration(resource, persist=True)
+        with self._exclusive_key_locks(((resource.kind, resource.resource_id),)):
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                self._apply_registration(resource, persist=True)
 
     def _apply_registration(self, resource: ResourceRecord, *, persist: bool) -> None:
         key = (resource.kind, resource.resource_id)
@@ -753,15 +872,83 @@ class ResourceRegistry:
             record = self._records.get(key)
             return record, record is not None and not self._is_retired(key)
 
+    def _state_generation_unlocked(
+        self, key: tuple[ResourceKind, str],
+    ) -> str:
+        record = self._records.get(key)
+        return cleanup_proof_digest({
+            "record": None if record is None else _resource_json(record),
+            "attempts": [
+                _disposition_json(value) for value in self._attempts.get(key, ())
+            ],
+        })
+
+    def execute_guarded_action(
+        self, adapter: object, action: CleanupAction, resource: object,
+        executor: Callable[[Tuple[str, ...]], CommandResult],
+        lease_proof: object = None, predecessor_result: object = None, *,
+        action_index: Optional[int] = None,
+        incomplete_node_proof: object = None, orphan_mode: bool = False,
+    ) -> GuardedCommandResult:
+        """Revalidate and execute one exact argv while its resource key is locked."""
+        from workflow_kernel.adapters.docker import DockerAdapter
+
+        if type(adapter) is not DockerAdapter or type(action) is not CleanupAction or not callable(executor):
+            raise invalid_policy("invalid_guarded_cleanup_execution")
+        action = CleanupAction(
+            action.resource_id, action.kind, action.action, tuple(action.argv),
+            action.requires_success_of, action.run_id, action.node_id,
+            action.lifecycle, action.proof_digest, tuple(action.preconditions),
+            dict(action.environment), action.predecessor_result_id,
+            action.evidence_digest,
+        )
+        key = (action.kind, action.resource_id)
+        with self._exclusive_key_locks((key,)):
+            adapter.revalidate_action(
+                action, resource, lease_proof=lease_proof,
+                predecessor_result=predecessor_result,
+                action_index=action_index, registry=self,
+                incomplete_node_proof=incomplete_node_proof,
+                orphan_mode=orphan_mode,
+            )
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                generation = self._state_generation_unlocked(key)
+            result = executor(action.argv)
+            if type(result) is not CommandResult:
+                raise invalid_policy("invalid_guarded_cleanup_result")
+            result = CommandResult(
+                tuple(result.argv), result.exit_code, result.stdout, result.stderr,
+            )
+            if result.argv != action.argv:
+                raise invalid_policy("guarded_cleanup_argv_changed")
+            issued_at = self._now()
+            if not _valid_timestamp(issued_at):
+                raise invalid_policy("resource_registry_clock_invalid")
+            expires_at = issued_at + self.authority_ttl
+            authority_id = execution_authority_id(
+                result=result, kind=action.kind,
+                resource_id=action.resource_id, run_id=action.run_id,
+                node_id=action.node_id, action_digest=action.proof_digest,
+                state_generation=generation, issued_at=issued_at,
+                expires_at=expires_at,
+            )
+            return GuardedCommandResult(
+                result, action.kind, action.resource_id, action.run_id,
+                action.node_id, action.proof_digest, generation, issued_at,
+                expires_at, authority_id,
+            )
+
     def record_disposition(self, value: ResourceDisposition) -> ResourceDisposition:
         if type(value) is not ResourceDisposition:
             raise invalid_policy("invalid_resource_disposition")
         if value.disposition in TERMINAL_DISPOSITIONS:
             raise invalid_policy("terminal_disposition_requires_cleanup_receipt")
         value = _disposition_from_json(_disposition_json(value))
-        with self._exclusive_lock():
-            self._reload_unlocked()
-            return self._apply_disposition(value, persist=True)
+        with self._exclusive_key_locks(((value.kind, value.resource_id),)):
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                return self._apply_disposition(value, persist=True)
 
     def record_receipt(self, receipt: CleanupReceipt) -> Tuple[ResourceDisposition, ...]:
         """Detached receipts are evidence only and never authorize persistence."""
@@ -772,34 +959,116 @@ class ResourceRegistry:
         before: object, after: object,
     ) -> CleanupReceipt:
         """Recompute and atomically persist one exact cleanup result transaction."""
+        return self._record_results(adapter, plan, results, before, after, ())
+
+    def record_guarded_results(
+        self, adapter: object, plan: CleanupPlan,
+        guarded_results: Tuple[GuardedCommandResult, ...],
+        before: object, after: object,
+    ) -> CleanupReceipt:
+        """Persist results only with fresh, generation-bound execution authority."""
+        if type(guarded_results) is not tuple or any(
+            type(value) is not GuardedCommandResult for value in guarded_results
+        ):
+            raise invalid_policy("invalid_guarded_cleanup_results")
+        try:
+            guarded_results = tuple(GuardedCommandResult(
+                CommandResult(
+                    tuple(value.result.argv), value.result.exit_code,
+                    value.result.stdout, value.result.stderr,
+                ),
+                value.kind, value.resource_id, value.run_id, value.node_id,
+                value.action_digest, value.state_generation, value.issued_at,
+                value.expires_at, value.authority_id,
+            ) for value in guarded_results)
+        except InvalidSchemaError:
+            raise
+        except Exception:
+            raise invalid_policy("invalid_guarded_cleanup_results") from None
+        return self._record_results(
+            adapter, plan, tuple(value.result for value in guarded_results),
+            before, after, guarded_results,
+        )
+
+    def _record_results(
+        self, adapter: object, plan: CleanupPlan, results: Tuple[CommandResult, ...],
+        before: object, after: object,
+        authorities: Tuple[GuardedCommandResult, ...],
+    ) -> CleanupReceipt:
         from workflow_kernel.adapters.docker import DockerAdapter
 
-        if type(adapter) is not DockerAdapter:
+        if type(adapter) is not DockerAdapter or type(plan) is not CleanupPlan:
             raise invalid_policy("invalid_cleanup_result_adapter")
-        receipt, observed = adapter._reconcile_results(plan, results, before, after)
-        transaction_id = adapter._result_transaction_id(plan, results, before, after)
-        with self._exclusive_lock():
-            self._reload_unlocked()
-            if transaction_id in self._transactions:
-                raise invalid_policy("cleanup_result_transaction_already_recorded")
-            nested = []
-            for resource in observed:
-                key = (resource.kind, resource.resource_id)
-                if key not in self._records:
-                    nested.append({"event": "registered", "resource": _resource_json(resource)})
-            nested.extend(
-                {"event": "disposition", "disposition": _disposition_json(value)}
-                for value in receipt.dispositions
+        keys = tuple(
+            (value.kind, value.resource_id)
+            for value in plan.actions + plan.dispositions
+        )
+        with self._exclusive_key_locks(keys):
+            receipt, observed = adapter._reconcile_results(
+                plan, results, before, after,
             )
-            if not nested:
-                raise invalid_policy("empty_cleanup_result_transaction")
-            frame = {
-                "event": "transaction", "transaction_id": transaction_id,
-                "events": nested,
-            }
-            self._apply_registry_event(frame)
-            self._append_unlocked(frame)
-        return receipt
+            transaction_id = adapter._result_transaction_id(
+                plan, results, before, after,
+            )
+            if authorities:
+                transaction_id = cleanup_proof_digest({
+                    "result_transaction_id": transaction_id,
+                    "authority_ids": [value.authority_id for value in authorities],
+                })
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                if transaction_id in self._transactions:
+                    raise invalid_policy("cleanup_result_transaction_already_recorded")
+                if authorities:
+                    self._validate_execution_authorities(
+                        plan, results, authorities,
+                    )
+                nested = [
+                    {"event": "authority_consumed", "authority_id": value.authority_id}
+                    for value in authorities
+                ]
+                for resource in observed:
+                    key = (resource.kind, resource.resource_id)
+                    if key not in self._records:
+                        nested.append({"event": "registered", "resource": _resource_json(resource)})
+                nested.extend(
+                    {"event": "disposition", "disposition": _disposition_json(value)}
+                    for value in receipt.dispositions
+                )
+                if not nested:
+                    raise invalid_policy("empty_cleanup_result_transaction")
+                frame = {
+                    "event": "transaction", "transaction_id": transaction_id,
+                    "events": nested,
+                }
+                self._apply_registry_event(frame)
+                self._append_unlocked(frame)
+            return receipt
+
+    def _validate_execution_authorities(
+        self, plan: CleanupPlan, results: Tuple[CommandResult, ...],
+        authorities: Tuple[GuardedCommandResult, ...],
+    ) -> None:
+        if len(authorities) != len(results):
+            raise invalid_policy("guarded_cleanup_authority_missing")
+        by_argv = {value.argv: value for value in plan.actions}
+        current = self._now()
+        if not _valid_timestamp(current):
+            raise invalid_policy("resource_registry_clock_invalid")
+        for result, authority in zip(results, authorities):
+            action = by_argv.get(result.argv)
+            key = (authority.kind, authority.resource_id)
+            if (
+                action is None or authority.result != result
+                or authority.authority_id in self._consumed_authorities
+                or not authority.issued_at <= current <= authority.expires_at
+                or authority.action_digest != action.proof_digest
+                or key != (action.kind, action.resource_id)
+                or (authority.run_id, authority.node_id)
+                != (action.run_id, action.node_id)
+                or authority.state_generation != self._state_generation_unlocked(key)
+            ):
+                raise invalid_policy("guarded_cleanup_authority_changed")
 
     def _apply_disposition(self, value: ResourceDisposition, *, persist: bool) -> ResourceDisposition:
         key = (value.kind, value.resource_id)
