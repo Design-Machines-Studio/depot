@@ -256,7 +256,7 @@ class StateStoreTests(unittest.TestCase):
             base = RunState.new("run-1", "2026-07-14T00:00:00Z")
             with RunLease(path) as lease:
                 store.write(base, -1, lease=lease)
-            authoritative = state_module._prepare_replay_state(store, base)
+            authoritative = state_module._prepare_replay_state(store, base, 0)
             interloper = replace(base, revision=2)
             replacement = Path(directory) / "interloper.json"
             replacement.write_bytes(encode_state(interloper))
@@ -277,6 +277,12 @@ class StateStoreTests(unittest.TestCase):
                     self.assertRaises(RevisionConflictError):
                 store.publish(authoritative, 0, lease=lease)
             self.assertEqual(store.load().revision, 2)
+            with RunLease(path) as lease, self.assertRaises(UnsafePayloadError) as raised:
+                store.publish(authoritative, 2, lease=lease)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("prepared_state_owner_mismatch"),
+            )
 
     @unittest.skipUnless(hasattr(os, "fork"), "requires POSIX fork")
     def test_fork_child_explicit_release_only_closes_inherited_lease_descriptor(self):
@@ -863,6 +869,55 @@ class StateStoreTests(unittest.TestCase):
                 with self.assertRaises(RevisionConflictError):
                     store.publish(ordinary, 2, lease=lease)
             self.assertEqual(path.read_bytes(), before)
+
+    def test_replay_prepared_publication_requires_issued_expected_revision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            current = replace(base, revision=2)
+            with RunLease(path) as lease:
+                store.write(current, -1, lease=lease)
+            authoritative = state_module._prepare_replay_state(store, base, 2)
+
+            with RunLease(path) as lease, self.assertRaises(RevisionConflictError):
+                store.publish(authoritative, 1, lease=lease)
+            self.assertEqual(store.load().revision, 2)
+
+    def test_replay_prepared_publication_is_consumed_after_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            current = replace(base, revision=2)
+            with RunLease(path) as lease:
+                store.write(current, -1, lease=lease)
+            authoritative = state_module._prepare_replay_state(store, base, 2)
+
+            with RunLease(path) as lease:
+                store.publish(authoritative, 2, lease=lease)
+            with RunLease(path) as lease, self.assertRaises(UnsafePayloadError) as raised:
+                store.publish(authoritative, 0, lease=lease)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("prepared_state_owner_mismatch"),
+            )
+
+    def test_ordinary_prepared_publication_capability_remains_reusable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            candidate = replace(base, revision=1)
+            with RunLease(path) as lease:
+                store.write(base, -1, lease=lease)
+            ordinary = store.prepare(candidate)
+
+            with RunLease(path) as lease:
+                store.publish(ordinary, 0, lease=lease)
+            with RunLease(path) as lease:
+                store.publish(ordinary, 1, lease=lease)
+            self.assertEqual(store.load().revision, 1)
 
     def test_hard_linked_state_and_lease_are_rejected_without_touching_victims(self):
         with tempfile.TemporaryDirectory() as directory:

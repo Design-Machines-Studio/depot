@@ -57,10 +57,11 @@ initial state before appending the first event. Append proceeds only when an
 existing materialization exactly matches the replay-derived state; otherwise
 stop before ledger mutation and run `replay` to reconcile the materialization.
 After validating and reconstructing the ledger, replay uses private
-ledger-derived prepared issuance and the one public publication path to perform
-a lease-protected authoritative replacement for missing, behind, ahead, or
-equal-revision divergent materialization while retaining expected-revision CAS
-checks. There is no public rollback API.
+ledger-derived prepared issuance and the one public publication path. Its
+revision-bound, one-shot capability must be published immediately under the
+same live lease, and performs a lease-protected authoritative replacement for
+missing, behind, ahead, or equal-revision divergent materialization while
+retaining expected-revision CAS checks. There is no public rollback API.
 
 Treat event files and CLI input as untrusted. Reject schema drift, sequence gaps,
 conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
@@ -123,7 +124,8 @@ errors as stable JSON. Treat `--help` output as plain text.
   state. It returns an opaque exact-type identity capability with no exposed
   state or encoded-byte fields. A closure-owned weak registry keyed by the
   exact store and capability owns only the captured revision, exact bytes, and
-  immutable issuance mode;
+  immutable issuance mode. A replay capability also owns the materialized
+  expected revision observed by the CLI;
   it never retains or later consults the caller's `RunState`. Pass only that
   capability to the one public publication path,
   `StateStore.publish(prepared, expected_revision, lease=lease)`; ordinary publication rejects backward revisions. After successful ledger validation
@@ -132,7 +134,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   immutable issuance mode, so the same public `publish()` operation permits
   that ledger-authoritative replacement in either revision direction without a
   caller flag, alternate mutation method, or weakened path identity, lease, or
-  cooperating-writer CAS enforcement. There is no public rollback API.
+  cooperating-writer CAS enforcement. Replay issuance is revision-bound and
+  one-shot: publication requires the issued expected revision and consumes the
+  capability before filesystem observation or temporary-file work, so success
+  and any later publication failure both make it unusable. Ordinary prepared
+  capabilities retain their existing reusable behavior. There is no public
+  rollback API.
   Preparation uses the same field-wise bounded snapshot-and-encode helper as
   `encode_state()` but does not acquire or replace the live run lease.
   Coordinated CLI append prepares before event publication while holding that

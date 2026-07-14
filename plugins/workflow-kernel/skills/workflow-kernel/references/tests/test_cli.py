@@ -512,6 +512,8 @@ class CliTests(unittest.TestCase):
             self.assertIn("ordinary publication rejects backward revisions", document)
             self.assertIn("one public publication path", document)
             self.assertIn("private ledger-derived prepared issuance", document)
+            self.assertIn("one-shot", document)
+            self.assertIn("revision-bound", document)
             self.assertNotIn("StateStore.reconcile", document)
         self.assertIn("one lookahead item", skill)
         self.assertIn("MAX_RECONSTRUCTION_WORK", skill)
@@ -558,7 +560,7 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = state
             self.assertEqual(command_replay(SimpleNamespace(directory="unused")), 0)
         self.assertFalse(active["lease"])
-        prepare_replay.assert_called_once_with(states, state)
+        prepare_replay.assert_called_once_with(states, state, state.revision)
         states.prepare.assert_not_called()
         states.publish.assert_called_once_with(
             prepared, state.revision, lease=mock.ANY,

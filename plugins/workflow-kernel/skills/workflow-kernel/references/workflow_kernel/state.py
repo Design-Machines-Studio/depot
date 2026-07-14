@@ -67,7 +67,7 @@ def _capability_types():
     monotonic_issuance = object()
     ledger_reconciliation_issuance = object()
 
-    def issue_prepared(record, state, issuance_mode):
+    def issue_prepared(record, state, issuance_mode, expected_revision=None):
         snapshot, encoded = _snapshot_and_encode_state(state)
         if len(encoded) > MAX_STATE_BYTES:
             raise UnsafePayloadError(ErrorMessage.STATE_SIZE_LIMIT, {
@@ -75,7 +75,7 @@ def _capability_types():
             })
         prepared = object.__new__(PreparedState)
         record["prepared"][prepared] = (
-            snapshot.revision, encoded, issuance_mode,
+            snapshot.revision, encoded, issuance_mode, expected_revision,
         )
         return prepared
 
@@ -343,7 +343,8 @@ def _capability_types():
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
                 })
             try:
-                revision, encoded, issuance_mode = record["prepared"][prepared]
+                prepared_record = record["prepared"][prepared]
+                revision, encoded, issuance_mode, issued_expected_revision = prepared_record
             except (KeyError, TypeError):
                 raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
@@ -352,6 +353,12 @@ def _capability_types():
             if type(expected_revision) is not int or expected_revision < -1:
                 raise RevisionConflictError(ErrorMessage.INVALID_EXPECTED_REVISION, {
                     ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                })
+            if (issuance_mode is ledger_reconciliation_issuance
+                    and expected_revision != issued_expected_revision):
+                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                    ErrorDetailKey.EXPECTED_REVISION.value: issued_expected_revision,
+                    ErrorDetailKey.ACTUAL_REVISION.value: expected_revision,
                 })
             path = record["path"]
             if record["binding"].parent_identity is None:
@@ -362,6 +369,17 @@ def _capability_types():
                     raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                         ErrorDetailKey.PATH.value: str(path),
                     }) from None
+            if issuance_mode is ledger_reconciliation_issuance:
+                try:
+                    consumed_record = record["prepared"].pop(prepared)
+                except (KeyError, TypeError):
+                    raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
+                        ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
+                    }) from None
+                if consumed_record is not prepared_record:
+                    raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
+                        ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
+                    })
             try:
                 with _OwnedResourceScope() as scope:
                     directory = scope.pin(record["binding"])
@@ -446,7 +464,7 @@ def _capability_types():
                 store_records[self], state, monotonic_issuance,
             )
 
-    def prepare_replay_state(store, state) -> PreparedState:
+    def prepare_replay_state(store, state, expected_revision) -> PreparedState:
         """Issue a private ledger-reconciliation capability for CLI replay."""
         if type(store) is not StateStore:
             raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
@@ -454,6 +472,7 @@ def _capability_types():
             })
         return issue_prepared(
             store_records[store], state, ledger_reconciliation_issuance,
+            expected_revision,
         )
 
     return PreparedState, RunLease, StateStore, require_run_lease, prepare_replay_state

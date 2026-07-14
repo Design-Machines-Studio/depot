@@ -146,7 +146,7 @@ def command_replay(args):
         reconstructed = engine.reconstruct(events.replay())
         materialized = _load_optional_state(states)
         expected = materialized.revision if materialized is not None else -1
-        prepared = _prepare_replay_state(states, reconstructed)
+        prepared = _prepare_replay_state(states, reconstructed, expected)
         evidence = states.publish(prepared, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})
