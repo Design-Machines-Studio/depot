@@ -416,6 +416,24 @@ class VerificationProfileTests(unittest.TestCase):
                         policy_path=ROOT / "workflow-policy.json",
                     ).discover(project)
 
+    def test_unsupported_or_malformed_frontmatter_containers_fail_closed(self):
+        replacements = (
+            ("auth_fields:\n  - session_cookie", "auth_fields: [session_cookie]"),
+            ("auth_fields:\n  - session_cookie", "auth_fields:\n  nested: session_cookie"),
+            ("preconditions:\n  - \"A signed-in member has a proposal to review\"",
+             "preconditions:\n  viewport: 375x812"),
+        )
+        for old, new in replacements:
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                task.write_text(task.read_text().replace(old, new, 1))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
     def test_identifier_and_route_runtime_and_schema_boundaries_match(self):
         PersonaCase("p" * 128, "s" * 128, "m" * 128, "/" + "a" * 2047,
                     "chromium", "1440x900", True)
@@ -471,6 +489,59 @@ class VerificationProfileTests(unittest.TestCase):
             ).to_dict()
             payload["cases"][0]["route"] = route
             self.assertFalse(schema_matches(payload, schema), route)
+
+    def test_route_decoding_corpus_matches_runtime_and_schema(self):
+        schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
+        safe = PersonaCase(
+            "p", "s", "member", "/safe", "chromium", "1440x900", True,
+        )
+        invalid_routes = (
+            "/safe/%2fadmin", "/safe/%5cadmin", "/safe/%252fadmin",
+            "/safe/%252e%252e/admin", "/safe/%2e./admin",
+            "/safe/.%2e/admin", "/safe/%00admin", "/safe/%2500admin",
+            "/%73k-live-secret", "/Bearer%20credential", "/safe/%",
+            "/safe/%2", "/safe/%GG", "/safe/\x1fcontrol",
+        )
+        for route in invalid_routes:
+            with self.subTest(route=route), self.assertRaises(InvalidSchemaError):
+                PersonaCase(
+                    "p", "s", "member", route, "chromium", "1440x900", True,
+                )
+            payload = VerificationProfile(
+                1, "project_declaration", (safe,), (),
+            ).to_dict()
+            payload["cases"][0]["route"] = route
+            self.assertFalse(schema_matches(payload, schema), route)
+
+    def test_declaration_root_pin_rejects_ancestor_swap_before_open(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            ux = project / "tests" / "ux"
+            shutil.copytree(FIXTURES / "assembly", ux)
+            victim = ux / "tasks" / "governance" / "sample-task.md"
+            outside = Path(directory) / "outside-tasks"
+            shutil.copytree(ux / "tasks", outside)
+            injected = outside / "governance" / "sample-task.md"
+            injected.write_text(injected.read_text().replace(
+                "/governance/proposals/sample", "/outside-swapped",
+            ))
+            original = os.open
+            swapped = []
+
+            def swap_ancestor(path, *args, **kwargs):
+                if (not swapped and path == "tasks"
+                        and kwargs.get("dir_fd") is not None):
+                    (ux / "tasks").rename(ux / "tasks-owned")
+                    (ux / "tasks").symlink_to(outside, target_is_directory=True)
+                    swapped.append(True)
+                return original(path, *args, **kwargs)
+
+            with mock.patch("os.open", side_effect=swap_ancestor), \
+                    self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(
+                    policy_path=ROOT / "workflow-policy.json",
+                ).discover(project)
+            self.assertTrue(swapped)
 
     def test_declaration_reads_reject_hardlinks_for_every_owned_document(self):
         relative_paths = (
@@ -580,6 +651,15 @@ class VerificationProfileTests(unittest.TestCase):
                 self.assertIn("target unavailable", text)
                 self.assertIn("human_help_required", text)
                 self.assertIn("exact missing", text)
+
+    def test_dm_review_matrix_is_diagnostic_and_task_declarations_are_authority(self):
+        reviewer = ROOT.parents[3] / "dm-review" / "agents" / "review" / "ux-quality-reviewer.md"
+        text = reviewer.read_text()
+        self.assertIn("task declarations", text.lower())
+        self.assertIn("diagnostic", text.lower())
+        self.assertIn("never emit a P1, P2, or P3 finding from `coverage-matrix.md`", text)
+        self.assertNotIn("A reviewed page has no corresponding row in the coverage matrix (P3)", text)
+        self.assertNotIn("New routes added in the diff have zero persona coverage in the matrix (P2)", text)
 
 
 if __name__ == "__main__":

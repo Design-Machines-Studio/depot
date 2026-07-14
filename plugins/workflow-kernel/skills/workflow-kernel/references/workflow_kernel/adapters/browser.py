@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from typing import Optional, Protocol, Tuple
 from urllib.parse import urlsplit
 
@@ -31,6 +31,10 @@ _RECEIPT_REASONS = frozenset({
     "browser_verified_first_pass", "primary_recovered_degraded",
     "alternate_engine_recovered_degraded", "human_help_required",
 })
+
+
+def _field_values(value, expected_type):
+    return tuple(getattr(value, field.name) for field in fields(expected_type))
 
 
 def _safe_case_id(value):
@@ -211,6 +215,10 @@ class BrowserAttempt:
             value = getattr(self, name)
             if value is not None:
                 object.__setattr__(self, name, normalize_evidence_reference(value))
+        _register_origin(self, "BrowserAttempt", self._origin_primitives())
+
+    def _origin_primitives(self):
+        return _field_values(self, BrowserAttempt)
 
     @property
     def engine(self):
@@ -223,9 +231,22 @@ class BrowserAttempt:
         return self.reason_code
 
     def to_dict(self):
-        payload = {name: getattr(self, name) for name in self.__dataclass_fields__}
+        payload = {field.name: getattr(self, field.name) for field in fields(BrowserAttempt)}
         payload["configured_engines"] = list(self.configured_engines)
         return payload
+
+
+def snapshot_browser_attempt(value):
+    if type(value) is not BrowserAttempt:
+        raise ValueError("invalid browser attempt")
+    try:
+        captured = _field_values(value, BrowserAttempt)
+        _validate_capture(
+            value, "BrowserAttempt", captured, value._origin_primitives(),
+        )
+        return BrowserAttempt(*captured)
+    except Exception:
+        raise ValueError("invalid browser attempt") from None
 
 
 @dataclass(frozen=True)
@@ -315,9 +336,31 @@ class BrowserLifecycleEvidence:
                 raise ValueError("inconsistent browser lifecycle freshness")
         elif self.fresh_profile is not None:
             raise ValueError("unexpected browser lifecycle freshness")
+        _register_origin(
+            self, "BrowserLifecycleEvidence", self._origin_primitives(),
+        )
+
+    def _origin_primitives(self):
+        return _field_values(self, BrowserLifecycleEvidence)
 
     def to_dict(self):
-        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+        return {
+            field.name: getattr(self, field.name)
+            for field in fields(BrowserLifecycleEvidence)
+        }
+
+
+def snapshot_browser_lifecycle(value):
+    if type(value) is not BrowserLifecycleEvidence:
+        raise ValueError("invalid browser lifecycle evidence")
+    try:
+        captured = _field_values(value, BrowserLifecycleEvidence)
+        _validate_capture(
+            value, "BrowserLifecycleEvidence", captured, value._origin_primitives(),
+        )
+        return BrowserLifecycleEvidence(*captured)
+    except Exception:
+        raise ValueError("invalid browser lifecycle evidence") from None
 
 
 @dataclass(frozen=True)
@@ -334,18 +377,8 @@ class BrowserRecoveryReceipt:
         try:
             if type(self.attempts) is not tuple or type(self.lifecycle) is not tuple:
                 raise ValueError
-            attempts = tuple(
-                BrowserAttempt(**{
-                    name: getattr(item, name) for name in item.__dataclass_fields__
-                })
-                for item in self.attempts if type(item) is BrowserAttempt
-            )
-            lifecycle = tuple(
-                BrowserLifecycleEvidence(**{
-                    name: getattr(item, name) for name in item.__dataclass_fields__
-                })
-                for item in self.lifecycle if type(item) is BrowserLifecycleEvidence
-            )
+            attempts = tuple(snapshot_browser_attempt(item) for item in self.attempts)
+            lifecycle = tuple(snapshot_browser_lifecycle(item) for item in self.lifecycle)
             if len(attempts) != len(self.attempts) or len(lifecycle) != len(self.lifecycle):
                 raise ValueError
             object.__setattr__(self, "attempts", attempts)
@@ -378,6 +411,20 @@ class BrowserRecoveryReceipt:
                 or any(_safe_case_id(item) != item for item in self.missing_case_ids)):
             raise ValueError("browser receipt case mismatch")
         self._validate_history()
+        _register_origin(
+            self, "BrowserRecoveryReceipt", self._origin_primitives(),
+        )
+
+    def _origin_primitives(self):
+        return (
+            self.schema_version, self.status, self.reason_code, self.case_id,
+            self.requested_engine, self.actual_engine, self.substitution_provenance,
+            tuple(item._origin_primitives() for item in self.attempts),
+            tuple(item._origin_primitives() for item in self.lifecycle),
+            self.missing_case_ids, self.verification_profile_id,
+            self.configured_engines, self.target_url_digest,
+            self.target_route_digest, self.viewport, self.target_origin_digest,
+        )
 
     def _validate_history(self):
         attempts = self.attempts
@@ -392,124 +439,139 @@ class BrowserRecoveryReceipt:
                     or item.viewport != self.viewport
                     or (number == 1 and item.actual_engine != self.requested_engine)):
                 raise ValueError("browser attempt history mismatch")
+        passed = tuple(item for item in attempts if item.result == "passed")
+        if self.status == "clean":
+            if not (len(attempts) == 1 and passed == attempts
+                    and self.reason_code == "browser_verified_first_pass"
+                    and self.actual_engine == self.requested_engine
+                    and self.substitution_provenance is None
+                    and not self.lifecycle and not self.missing_case_ids):
+                raise ValueError("inconsistent browser recovery receipt")
+            return
+
+        if attempts[0].result == "passed" or not self.lifecycle:
+            raise ValueError("browser recovery lacks initial failed attempt")
         first_session = attempts[0].session_id
-        if self.status != "clean" and (
-                not self.lifecycle
-                or self.lifecycle[0].action not in {"browser_process_quit", "application_restart"}):
-            raise ValueError("browser recovery lacks initial quit evidence")
-        launched = {}
-        primary_quit_confirmed = False
-        secondary_started = False
-        for index, item in enumerate(self.lifecycle):
+        for item in self.lifecycle:
             if (item.requested_engine != self.requested_engine
                     or item.actual_engine not in self.configured_engines):
                 raise ValueError("browser lifecycle profile mismatch")
-            if index and item.action in {"browser_process_quit", "application_restart"}:
-                raise ValueError("browser quit must be the first lifecycle action")
-            is_secondary = (
-                item.actual_engine != self.requested_engine
-                or item.action == "secondary_engine"
-            )
-            if is_secondary:
-                secondary_started = True
-            elif secondary_started:
-                raise ValueError("primary lifecycle action follows secondary recovery")
-            if item.action in {"browser_process_quit", "application_restart"} and (
-                    item.actual_engine != self.requested_engine
-                    or item.session_id != first_session or item.previous_session_id != first_session):
-                raise ValueError("browser quit session mismatch")
-            if item.action == "browser_process_quit" and item.result == "confirmed":
-                primary_quit_confirmed = True
-            if item.action == "browser_process_launch" and item.result == "launched":
-                if (item.previous_session_id != first_session
-                        or item.session_id == item.previous_session_id
-                        or item.session_id in launched or item.session_id == first_session):
-                    raise ValueError("browser launch session mismatch")
-                launched[item.session_id] = item.actual_engine
-        attempted_launches = {
-            item.session_id: item.actual_engine for item in attempts[1:]
-        }
-        if launched != attempted_launches:
-            raise ValueError("browser launch lacks exactly one bound attempt")
-        for item in attempts[1:]:
-            if (launched.get(item.session_id) != item.actual_engine
-                    and item.reason_code != "session_identity_mismatch"):
-                raise ValueError("browser attempt lacks launch session")
-            if item.actual_engine == self.requested_engine and not primary_quit_confirmed:
-                raise ValueError("primary retry lacks confirmed quit")
-        passed = tuple(item for item in attempts if item.result == "passed")
-        primary_retry_attempted = any(
-            item.actual_engine == self.requested_engine for item in attempts[1:]
+
+        lifecycle_index = 0
+        attempt_index = 1
+        initial = self.lifecycle[lifecycle_index]
+        lifecycle_index += 1
+        if (initial.action not in {"browser_process_quit", "application_restart"}
+                or initial.actual_engine != self.requested_engine
+                or initial.session_id != first_session
+                or initial.previous_session_id != first_session):
+            raise ValueError("browser quit session mismatch")
+
+        primary_retry = None
+        primary_restart_proved = (
+            initial.action == "browser_process_quit" and initial.result == "confirmed"
         )
-        restart_unavailable_recorded = any(
-            item.action == "primary_restart"
-            and item.result == "primary_restart_unavailable"
-            for item in self.lifecycle
-        )
-        if (self.status != "clean" and not primary_retry_attempted
-                and not restart_unavailable_recorded):
-            raise ValueError("browser receipt omits unavailable primary restart")
-        if self.status == "blocked" and len(self.configured_engines) > 1:
-            alternate_attempted = any(
-                item.actual_engine != self.requested_engine for item in attempts[1:]
+        if primary_restart_proved:
+            if lifecycle_index >= len(self.lifecycle):
+                raise ValueError("browser receipt omits primary launch evidence")
+            launch = self.lifecycle[lifecycle_index]
+            lifecycle_index += 1
+            if (launch.actual_engine != self.requested_engine
+                    or launch.action not in {"browser_process_launch", "session_validation"}
+                    or launch.previous_session_id != first_session):
+                raise ValueError("browser primary launch order mismatch")
+            if launch.result == "launched":
+                if (launch.action != "browser_process_launch"
+                        or launch.session_id == first_session
+                        or attempt_index >= len(attempts)):
+                    raise ValueError("browser primary launch session mismatch")
+                primary_retry = attempts[attempt_index]
+                attempt_index += 1
+                if (primary_retry.actual_engine != self.requested_engine
+                        or primary_retry.session_id != launch.session_id):
+                    raise ValueError("browser primary retry session mismatch")
+            else:
+                primary_restart_proved = False
+
+        if not primary_restart_proved:
+            if lifecycle_index >= len(self.lifecycle):
+                raise ValueError("browser receipt omits unavailable primary restart")
+            gap = self.lifecycle[lifecycle_index]
+            lifecycle_index += 1
+            if (gap.actual_engine != self.requested_engine
+                    or gap.action != "primary_restart"
+                    or gap.result != "primary_restart_unavailable"
+                    or gap.session_id != first_session
+                    or gap.previous_session_id != first_session):
+                raise ValueError("browser primary restart gap mismatch")
+
+        if primary_retry is not None and primary_retry.result == "passed":
+            valid = (
+                lifecycle_index == len(self.lifecycle)
+                and attempt_index == len(attempts)
+                and passed == (primary_retry,)
+                and self.status == "recovered"
+                and self.reason_code == "primary_recovered_degraded"
+                and self.actual_engine == self.requested_engine
+                and self.substitution_provenance is None
+                and not self.missing_case_ids
             )
-            alternate_unavailable_recorded = any(
-                item.actual_engine != self.requested_engine
-                and item.action in {"browser_process_launch", "session_validation"}
-                and item.result != "launched"
-                for item in self.lifecycle
-            )
-            if not alternate_attempted and not alternate_unavailable_recorded:
-                raise ValueError("browser receipt omits alternate engine evidence")
-        status_reason = {
-            "clean": "browser_verified_first_pass",
-            "blocked": "human_help_required",
-        }
-        if self.status in status_reason and self.reason_code != status_reason[self.status]:
-            raise ValueError("browser receipt status mismatch")
-        if self.status == "clean":
-            valid = (len(attempts) == 1 and passed == attempts
-                     and self.actual_engine == self.requested_engine
-                     and self.substitution_provenance is None and not self.lifecycle
-                     and not self.missing_case_ids)
-        elif self.status == "recovered":
-            expected_reason = (
-                "primary_recovered_degraded" if self.actual_engine == self.requested_engine
-                else "alternate_engine_recovered_degraded"
-            )
-            history_valid = (
-                len(attempts) == 2 and attempts[-1].actual_engine == self.requested_engine
-                if self.actual_engine == self.requested_engine else
-                len(attempts) in {2, 3}
-                and attempts[-1].actual_engine != self.requested_engine
-                and all(item.actual_engine == self.requested_engine for item in attempts[:-1])
-            )
-            valid = (history_valid and passed == (attempts[-1],)
-                     and self.reason_code == expected_reason
-                     and self.actual_engine == attempts[-1].actual_engine
-                     and self.substitution_provenance == attempts[-1].substitution_provenance
-                     and not self.missing_case_ids)
+            if not valid:
+                raise ValueError("inconsistent browser primary recovery receipt")
+            return
+
+        alternate_attempt = None
+        if len(self.configured_engines) == 1:
+            if lifecycle_index >= len(self.lifecycle):
+                raise ValueError("browser receipt omits unavailable secondary")
+            secondary = self.lifecycle[lifecycle_index]
+            lifecycle_index += 1
+            if (secondary.actual_engine != self.requested_engine
+                    or secondary.action != "secondary_engine"
+                    or secondary.result != "secondary_engine_unavailable"
+                    or secondary.session_id != first_session
+                    or secondary.previous_session_id != first_session):
+                raise ValueError("browser unavailable secondary mismatch")
         else:
-            history_valid = (
-                len(attempts) == 1
-                or len(attempts) == 2
-                or len(attempts) == 3
-                and attempts[1].actual_engine == self.requested_engine
-                and attempts[2].actual_engine != self.requested_engine
+            if lifecycle_index >= len(self.lifecycle):
+                raise ValueError("browser receipt omits alternate engine evidence")
+            alternate = self.lifecycle[lifecycle_index]
+            lifecycle_index += 1
+            if (alternate.actual_engine == self.requested_engine
+                    or alternate.action not in {"browser_process_launch", "session_validation"}
+                    or alternate.previous_session_id != first_session):
+                raise ValueError("browser alternate launch order mismatch")
+            if alternate.result == "launched":
+                if (alternate.action != "browser_process_launch"
+                        or alternate.session_id == first_session
+                        or attempt_index >= len(attempts)):
+                    raise ValueError("browser alternate launch session mismatch")
+                alternate_attempt = attempts[attempt_index]
+                attempt_index += 1
+                if (alternate_attempt.actual_engine != alternate.actual_engine
+                        or alternate_attempt.session_id != alternate.session_id):
+                    raise ValueError("browser alternate attempt session mismatch")
+
+        if lifecycle_index != len(self.lifecycle) or attempt_index != len(attempts):
+            raise ValueError("browser recovery contains out-of-order evidence")
+        if alternate_attempt is not None and alternate_attempt.result == "passed":
+            valid = (
+                passed == (alternate_attempt,)
+                and self.status == "recovered"
+                and self.reason_code == "alternate_engine_recovered_degraded"
+                and self.actual_engine == alternate_attempt.actual_engine
+                and self.substitution_provenance == _SUBSTITUTION
+                and not self.missing_case_ids
             )
-            valid = (history_valid and not passed
-                     and all(item.actual_engine == self.requested_engine
-                             for item in attempts[:-1])
-                     and self.actual_engine == attempts[-1].actual_engine
-                     and self.substitution_provenance is None
-                     and self.missing_case_ids == (self.case_id,))
-            if len(self.configured_engines) == 1:
-                valid = valid and any(
-                    item.action == "secondary_engine"
-                    and item.result == "secondary_engine_unavailable"
-                    for item in self.lifecycle
-                )
-        if not valid:
+            if not valid:
+                raise ValueError("inconsistent browser alternate recovery receipt")
+            return
+
+        if not (not passed and self.status == "blocked"
+                and self.reason_code == "human_help_required"
+                and self.actual_engine == attempts[-1].actual_engine
+                and self.substitution_provenance is None
+                and self.missing_case_ids == (self.case_id,)):
             raise ValueError("inconsistent browser recovery receipt")
 
     def to_dict(self):
@@ -534,26 +596,14 @@ def snapshot_browser_recovery_receipt(value):
     if type(value) is not BrowserRecoveryReceipt:
         raise ValueError("invalid browser recovery receipt")
     try:
-        payload = {
-            name: getattr(value, name) for name in value.__dataclass_fields__
-        }
-        attempts = []
-        for item in payload["attempts"]:
-            if type(item) is not BrowserAttempt:
-                raise ValueError
-            attempts.append(BrowserAttempt(**{
-                name: getattr(item, name) for name in item.__dataclass_fields__
-            }))
-        lifecycle = []
-        for item in payload["lifecycle"]:
-            if type(item) is not BrowserLifecycleEvidence:
-                raise ValueError
-            lifecycle.append(BrowserLifecycleEvidence(**{
-                name: getattr(item, name) for name in item.__dataclass_fields__
-            }))
-        payload["attempts"] = tuple(attempts)
-        payload["lifecycle"] = tuple(lifecycle)
-        return BrowserRecoveryReceipt(**payload)
+        captured = _field_values(value, BrowserRecoveryReceipt)
+        _validate_capture(
+            value, "BrowserRecoveryReceipt", captured, value._origin_primitives(),
+        )
+        attempts = tuple(snapshot_browser_attempt(item) for item in captured[7])
+        lifecycle = tuple(snapshot_browser_lifecycle(item) for item in captured[8])
+        captured = captured[:7] + (attempts, lifecycle) + captured[9:]
+        return BrowserRecoveryReceipt(*captured)
     except Exception:
         raise ValueError("invalid browser recovery receipt") from None
 
@@ -585,9 +635,7 @@ class BrowserRecovery:
             )
         if type(item) is BrowserAttempt:
             try:
-                item = BrowserAttempt(**{
-                    name: getattr(item, name) for name in item.__dataclass_fields__
-                })
+                item = snapshot_browser_attempt(item)
             except Exception:
                 return self._unavailable_attempt(
                     request, engine, number, "invalid_adapter_evidence",

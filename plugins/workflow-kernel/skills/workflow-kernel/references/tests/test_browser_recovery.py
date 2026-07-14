@@ -9,6 +9,7 @@ from tests import schema_matches
 from workflow_kernel.adapters.browser import (
     BrowserAttempt, BrowserLaunchEvidence, BrowserLifecycleEvidence,
     BrowserQuitEvidence, BrowserRecovery, BrowserRecoveryReceipt, BrowserRequest,
+    snapshot_browser_recovery_receipt,
 )
 
 
@@ -503,6 +504,107 @@ class BrowserRecoveryTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             replace(recovered, lifecycle=(recovered.lifecycle[0], wrong_engine_launch))
+
+    def test_origin_seals_reject_attempt_lifecycle_and_receipt_promotion(self):
+        mutated = attempt(1, "chromium", "failed", session="primary-1")
+        request = BrowserRequest(
+            "case-1", TARGET_URL, VIEWPORT, "chromium", None,
+            PROFILE_ID, ("chromium",), TARGET_ORIGIN_DIGEST,
+        )
+        mutated = replace(mutated, configured_engines=("chromium",))
+        object.__setattr__(mutated, "result", "passed")
+        object.__setattr__(mutated, "reason_code", None)
+        object.__setattr__(mutated, "failure_detail", None)
+        receipt = BrowserRecovery().run(
+            request,
+            FakeBrowserAdapter(
+                [mutated],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+            ),
+        )
+        self.assertEqual(receipt.status, "blocked")
+        self.assertEqual(receipt.attempts[0].reason_code, "invalid_adapter_evidence")
+
+        clean = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter([
+                attempt(1, "chromium", "passed", session="primary-1"),
+            ]),
+        )
+        object.__setattr__(clean.attempts[0], "result", "failed")
+        object.__setattr__(clean.attempts[0], "reason_code", "browser_tool_failure")
+        with self.assertRaises(ValueError):
+            snapshot_browser_recovery_receipt(clean)
+
+        recovered = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "chromium", "passed", session="primary-2"),
+                ],
+                launches=[BrowserLaunchEvidence("chromium", True, True, "primary-2")],
+            ),
+        )
+        object.__setattr__(recovered.lifecycle[-1], "fresh_profile", False)
+        with self.assertRaises(ValueError):
+            snapshot_browser_recovery_receipt(recovered)
+
+        blocked = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [attempt(1, "chromium", "failed", session="primary-1")],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+                launches=[RuntimeError("alternate unavailable")],
+            ),
+        )
+        object.__setattr__(blocked, "status", "clean")
+        object.__setattr__(blocked, "reason_code", "browser_verified_first_pass")
+        object.__setattr__(blocked, "lifecycle", ())
+        object.__setattr__(blocked, "missing_case_ids", ())
+        object.__setattr__(blocked.attempts[0], "result", "passed")
+        object.__setattr__(blocked.attempts[0], "reason_code", None)
+        object.__setattr__(blocked.attempts[0], "failure_detail", None)
+        with self.assertRaises(ValueError):
+            snapshot_browser_recovery_receipt(blocked)
+
+    def test_transition_grammar_rejects_impossible_restart_and_branch_order(self):
+        recovered = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "chromium", "passed", session="primary-2"),
+                ],
+                launches=[BrowserLaunchEvidence("chromium", True, True, "primary-2")],
+            ),
+        )
+        impossible_gap = BrowserLifecycleEvidence(
+            "case-1", "chromium", "chromium", "primary_restart",
+            "primary_restart_unavailable", "primary-1", "primary-1",
+        )
+        with self.assertRaises(ValueError):
+            replace(recovered, lifecycle=recovered.lifecycle + (impossible_gap,))
+
+        alternate = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "firefox", "passed", session="secondary-1"),
+                ],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+                launches=[BrowserLaunchEvidence("firefox", True, True, "secondary-1")],
+            ),
+        )
+        forged_quit = BrowserLifecycleEvidence(
+            "case-1", "chromium", "chromium", "browser_process_quit",
+            "confirmed", "primary-1", "primary-1",
+        )
+        with self.assertRaises(ValueError):
+            replace(alternate, lifecycle=(forged_quit,) + alternate.lifecycle[1:])
+        with self.assertRaises(ValueError):
+            replace(alternate, lifecycle=alternate.lifecycle + (impossible_gap,))
 
     def test_runtime_receipt_matches_strict_schema_and_empty_evidence_does_not(self):
         adapter = FakeBrowserAdapter(

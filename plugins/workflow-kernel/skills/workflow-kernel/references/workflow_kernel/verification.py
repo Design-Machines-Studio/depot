@@ -27,6 +27,10 @@ _CREDENTIAL_VALUE = re.compile(
     r"(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)", re.IGNORECASE,
 )
 _PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_PERCENT_BYTE = re.compile(r"%([0-9A-Fa-f]{2})")
+_UNRESERVED_BYTES = frozenset(
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+)
 _COVERAGE_DIAGNOSTICS = frozenset({"coverage_matrix_mismatch"})
 
 
@@ -60,8 +64,18 @@ def _validate_route(route):
             or _PERCENT_ESCAPE.search(route)):
         _invalid("invalid_verification_target")
     for raw_part in route.split("/"):
-        part = unquote(raw_part)
-        if (part in {".", ".."} or "?" in part or "#" in part
+        for match in _PERCENT_BYTE.finditer(raw_part):
+            byte = int(match.group(1), 16)
+            if (byte in _UNRESERVED_BYTES or byte < 32 or byte == 127
+                    or byte in {ord("/"), ord("\\"), ord("%")}):
+                _invalid("invalid_verification_target")
+        try:
+            part = unquote(raw_part, errors="strict")
+        except UnicodeError:
+            _invalid("invalid_verification_target")
+        if (part in {".", ".."} or "/" in part or "\\" in part
+                or "?" in part or "#" in part
+                or any(ord(character) < 32 or ord(character) == 127 for character in part)
                 or _CREDENTIAL_VALUE.match(part)):
             _invalid("invalid_verification_target")
     return route

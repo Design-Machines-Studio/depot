@@ -176,13 +176,13 @@ For governance pages specifically, check these heuristics from `tests/ux/heurist
 
 If `tests/ux/tasks/` contains task files relevant to the pages under review, reference their success criteria and expected friction points per persona.
 
-### Active Coverage Matrix Validation
+### Coverage Matrix Diagnostics
 
-Compare authoritative task declarations against the routes/pages under review,
-using `coverage-matrix.md` only to locate candidates. Flag gaps where:
-- A reviewed page has no corresponding row in the coverage matrix (P3)
-- A coverage matrix row lists a persona but no task file exists in `tests/ux/tasks/` for that flow (P2)
-- New routes added in the diff have zero persona coverage in the matrix (P2)
+Derive runnable cases and review findings only from authoritative task
+declarations; task declarations are the sole case authority. Use
+`coverage-matrix.md` only to locate candidate declarations and
+emit the advisory `coverage_matrix_mismatch` diagnostic when it drifts from task
+frontmatter; never emit a P1, P2, or P3 finding from `coverage-matrix.md`.
 
 ### Persona Task Friction Tracking
 

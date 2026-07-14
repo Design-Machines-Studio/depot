@@ -18,11 +18,15 @@ An existing incomplete `tests/ux/` tree is invalid. Only an absent declaration
 tree is `not_declared`. Discovery rejects symlinks
 in every ancestor from the project root through the UX declaration and all
 descendants, plus any resolved path outside the owned UX tree, before reading
-it. Declaration reads are descriptor-relative and no-follow, reject hardlinks,
-and revalidate file and directory identity after reading so path swaps cannot
-replace validated config, index, persona, task, suite, or matrix content.
-Duplicate scalar or list-section frontmatter keys and malformed scalar or
-container types fail with `invalid_verification_declaration`. Task `personas:`
+it. The UX declaration root is pinned once for the complete discovery operation.
+Every declaration read beneath it is descriptor-relative and no-follow, rejects
+hardlinks, and revalidates file, ancestor-directory, and pinned-root identity
+after reading so path swaps cannot replace validated config, index, persona,
+task, suite, or matrix content. Duplicate scalar or list-section frontmatter
+keys and malformed scalar or container types fail with
+`invalid_verification_declaration`. Only the supported indented scalar-list form
+is accepted; inline arrays, mappings beneath scalar lists, nested containers,
+and empty list items fail closed. Task `personas:`
 assignments are parsed only from that exact nested section: the live descriptive
 `reason` field is accepted but never retained; duplicate or unknown keys,
 duplicate IDs, invalid `expected` values, invalid `required` booleans, or missing
@@ -67,6 +71,15 @@ credentials, query, fragment, control characters, credential-shaped values, or
 literal/encoded `.` or `..` traversal segments. Ordinary semantic segments such
 as `/monkey` and `/account/password` remain valid.
 
+`ProjectPersonaAdapter.execute(case)` never owns or launches a live browser. It
+requires an injected executor and a previously discovered profile with a bound
+target origin, snapshots the requested case and profile, and delegates only the
+exact declared case. Returned evidence is independently snapshotted and must
+match the case, profile identity, configured engines, target-origin digest,
+expected evaluation, authentication requirement, and browser proof kind.
+Execution without bound discovery context, or evidence for a different case or
+target, fails with `invalid_verification_evidence`.
+
 Profiles retain auth field names only. Cookie values, bearer tokens, passwords,
 credential usernames, fixture secrets, and URL credentials never enter profiles,
 events, exceptions, stderr, snapshots, or recovery receipts.
@@ -83,9 +96,12 @@ For a required browser failure, preserve safe attempt evidence first, then:
 5. if it fails or is unavailable, return blocked `human_help_required` with all
    attempts and exact missing case IDs.
 
-The browser adapter canonically snapshots and reconstructs each sealed
-`BrowserRequest` before any browser call. Mutation of its URL, target origin, or
-other bound input therefore fails before an adapter can observe the request.
+The browser adapter canonically snapshots and reconstructs each origin-sealed
+`BrowserRequest` before any browser call. `BrowserAttempt`,
+`BrowserLifecycleEvidence`, and `BrowserRecoveryReceipt` are origin-sealed at
+construction and revalidated whenever nested or snapshotted. Mutation of a URL,
+target origin, attempt result, lifecycle proof, terminal status, or other bound
+input therefore fails before it can promote failed or blocked evidence.
 
 Quit evidence must identify the initial session, launch evidence must identify a
 different fresh session, and the following attempt must identify that launched
@@ -115,6 +131,12 @@ must agree, attempts are ordered and retain all failures before the sole winning
 attempt, action/result pairs are coherent, relaunch sessions are fresh and bind
 the following attempt, recovered/clean receipts have no missing cases, and a
 blocked human-help receipt names the exact missing case.
+Receipt history follows one exact grammar: initial attempt; on failure, primary
+quit; primary launch or `primary_restart_unavailable`; primary retry only after
+a proved fresh launch; then alternate launch and attempt, or the exact
+single-engine/unavailable marker; then the matching clean, recovered, or blocked
+terminal. Missing, duplicated, reordered, or branch-incompatible actions are
+invalid even if their individual fields look plausible.
 
 Every browser `EvidenceRef`, including clean first-pass primary evidence, carries
 a complete `BrowserRecoveryReceipt`. The verification gate canonically

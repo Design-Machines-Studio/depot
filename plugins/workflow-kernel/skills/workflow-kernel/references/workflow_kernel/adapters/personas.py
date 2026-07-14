@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Protocol
 
@@ -12,7 +13,8 @@ from ..limits import parse_json_document
 from ..policies import PolicyDocument, _snapshot_policy_document, load_policy
 from ..verification import (
     EvidenceRef, PersonaCase, VerificationProfile, digest_target_origin,
-    validate_viewport,
+    validate_viewport, _snapshot_evidence_ref, _snapshot_persona_case,
+    _snapshot_verification_profile,
 )
 
 _TOP = re.compile(r"^([a-z_]+):\s*(.*?)\s*$", re.M)
@@ -71,39 +73,149 @@ def _reject_symlinks(root):
         _fail()
 
 
-def _read_owned_text(path, root):
-    _owned_path(path, root)
-    descriptor = None
-    try:
-        with PinnedDirectory.open(path.parent) as directory:
-            descriptor = directory.open_regular(path.name, os.O_RDONLY)
+class _DeclarationTree:
+    """One pinned UX root with descriptor-relative, no-follow descendant reads."""
+
+    def __init__(self, root):
+        self.root = root
+        self._pinned_root = PinnedDirectory.open(root)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self._pinned_root.close()
+
+    def _parts(self, path):
+        try:
+            relative = path.absolute().relative_to(self.root.absolute())
+        except (OSError, ValueError):
+            _fail()
+        if relative.is_absolute() or not relative.parts or any(
+                part in {"", ".", ".."} for part in relative.parts):
+            _fail()
+        return relative.parts
+
+    def _open_parent(self, path):
+        parts = self._parts(path)
+        descriptors = [os.dup(self._pinned_root.descriptor)]
+        chain = []
+        current = descriptors[0]
+        current_path = self.root
+        try:
+            for part in parts[:-1]:
+                flags = (os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+                         | getattr(os, "O_NOFOLLOW", 0))
+                child = os.open(part, flags, dir_fd=current)
+                descriptors.append(child)
+                opened = os.fstat(child)
+                entry = os.stat(part, dir_fd=current, follow_symlinks=False)
+                identity = (opened.st_dev, opened.st_ino)
+                if (not stat.S_ISDIR(opened.st_mode)
+                        or not stat.S_ISDIR(entry.st_mode)
+                        or identity != (entry.st_dev, entry.st_ino)):
+                    _fail()
+                chain.append((current, part, child, identity))
+                current = child
+                current_path = current_path / part
+            return parts[-1], current_path, descriptors, chain
+        except BaseException:
+            for descriptor in reversed(descriptors):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            raise
+
+    def _revalidate(self, chain):
+        for parent, name, child, identity in chain:
+            opened = os.fstat(child)
+            entry = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            if (not stat.S_ISDIR(opened.st_mode)
+                    or not stat.S_ISDIR(entry.st_mode)
+                    or (opened.st_dev, opened.st_ino) != identity
+                    or (entry.st_dev, entry.st_ino) != identity):
+                _fail()
+        self._pinned_root.revalidate()
+
+    def revalidate(self):
+        self._pinned_root.revalidate()
+
+    def regular_exists(self, path):
+        descriptors = []
+        try:
+            name, _parent_path, descriptors, chain = self._open_parent(path)
+            try:
+                entry = os.stat(name, dir_fd=descriptors[-1], follow_symlinks=False)
+            except FileNotFoundError:
+                self._revalidate(chain)
+                return False
+            if (not stat.S_ISREG(entry.st_mode) or entry.st_nlink != 1):
+                _fail()
+            self._revalidate(chain)
+            return True
+        except (OSError, ValueError):
+            _fail()
+        finally:
+            for descriptor in reversed(descriptors):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+    def read_text(self, path):
+        descriptors = []
+        file_descriptor = None
+        try:
+            name, parent_path, descriptors, chain = self._open_parent(path)
+            parent_stat = os.fstat(descriptors[-1])
+            parent = PinnedDirectory(
+                parent_path, descriptors[-1],
+                (parent_stat.st_dev, parent_stat.st_ino),
+            )
+            file_descriptor = parent.open_regular(name, os.O_RDONLY)
             chunks = []
             total = 0
             while True:
-                chunk = os.read(descriptor, min(65_536, _MAX_DECLARATION_BYTES + 1 - total))
+                chunk = os.read(
+                    file_descriptor,
+                    min(65_536, _MAX_DECLARATION_BYTES + 1 - total),
+                )
                 if not chunk:
                     break
                 chunks.append(chunk)
                 total += len(chunk)
                 if total > _MAX_DECLARATION_BYTES:
                     _fail()
-            directory.require_identity(descriptor, path.name)
-            directory.revalidate()
-            os.close(descriptor)
-            descriptor = None
-        return b"".join(chunks).decode("utf-8")
-    except (OSError, UnicodeError, ValueError):
+            parent.require_identity(file_descriptor, name)
+            self._revalidate(chain)
+            os.close(file_descriptor)
+            file_descriptor = None
+            return b"".join(chunks).decode("utf-8")
+        except (OSError, UnicodeError, ValueError):
+            _fail()
+        finally:
+            if file_descriptor is not None:
+                try:
+                    os.close(file_descriptor)
+                except OSError:
+                    pass
+            for descriptor in reversed(descriptors):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+
+
+def _read_owned_text(path, declarations):
+    try:
+        return declarations.read_text(path)
+    except Exception:
         _fail()
-    finally:
-        if descriptor is not None:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
 
 
-def _frontmatter(path, root, *, optional=False):
-    text = _read_owned_text(path, root)
+def _frontmatter(path, declarations, *, optional=False):
+    text = _read_owned_text(path, declarations)
     if not text.startswith("---\n"):
         if optional:
             return None
@@ -132,6 +244,12 @@ def _scalars(frontmatter):
 
 def _list(frontmatter, key):
     lines = frontmatter.splitlines()
+    inline = [
+        line for line in lines
+        if re.match(r"^" + re.escape(key) + r":\s+.+$", line) is not None
+    ]
+    if inline:
+        _fail()
     starts = [index for index, line in enumerate(lines) if line == key + ":"]
     if len(starts) > 1:
         _fail()
@@ -141,9 +259,14 @@ def _list(frontmatter, key):
     result = []
     for line in lines[start:]:
         if line.startswith("  - "):
-            result.append(line[4:].strip().strip('"\''))
-        elif line.startswith(" ") or not line.strip():
+            value = line[4:].strip().strip('"\'')
+            if not value:
+                _fail()
+            result.append(value)
+        elif not line.strip():
             continue
+        elif line.startswith(" "):
+            _fail()
         else:
             break
     return result
@@ -197,8 +320,8 @@ def _assignments(frontmatter):
     return normalized
 
 
-def _task_at(path, root):
-    frontmatter = _frontmatter(path, root, optional=True)
+def _task_at(path, declarations):
+    frontmatter = _frontmatter(path, declarations, optional=True)
     if frontmatter is None:
         return None
     values = _scalars(frontmatter)
@@ -220,12 +343,12 @@ def _task_at(path, root):
             "auth_fields": _list(frontmatter, "auth_fields")}
 
 
-def _persona_index(root):
+def _persona_index(root, declarations):
     directory = root / "personas"
     _owned_path(directory, root, directory=True)
     index = directory / "_index.md"
     _owned_path(index, root)
-    text = _read_owned_text(index, root)
+    text = _read_owned_text(index, declarations)
     declared = []
     for line in text.splitlines():
         if not line.lstrip().startswith("|"):
@@ -246,10 +369,10 @@ def _persona_index(root):
     return tuple(directory / name for name in sorted(declared))
 
 
-def _persona_defaults(root, persona_paths):
+def _persona_defaults(declarations, persona_paths):
     result = {}
     for path in persona_paths:
-        values = _scalars(_frontmatter(path, root)); persona_id = values.get("id")
+        values = _scalars(_frontmatter(path, declarations)); persona_id = values.get("id")
         if not persona_id or persona_id in result or path.stem != persona_id:
             _fail()
         viewport = None
@@ -260,14 +383,14 @@ def _persona_defaults(root, persona_paths):
     return result
 
 
-def _coverage_matrix_diagnostics(root, tasks):
+def _coverage_matrix_diagnostics(root, tasks, declarations):
     path = root / "coverage-matrix.md"
     if path.is_symlink():
         _fail()
-    if not path.exists():
+    if not declarations.regular_exists(path):
         return ()
     _owned_path(path, root)
-    lines = _read_owned_text(path, root).splitlines()
+    lines = _read_owned_text(path, declarations).splitlines()
     direct_rows, indexed_rows = set(), {}
     mismatch = False
     header = None
@@ -320,10 +443,10 @@ def _coverage_matrix_diagnostics(root, tasks):
     return ("coverage_matrix_mismatch",) if mismatch else ()
 
 
-def _suite(root, suite_id):
+def _suite(root, suite_id, declarations):
     matches = []
     for path in sorted((root / "suites").glob("*.md")) if (root / "suites").is_dir() else ():
-        frontmatter = _frontmatter(path, root)
+        frontmatter = _frontmatter(path, declarations)
         if _scalars(frontmatter).get("id") == suite_id:
             matches.append({item.lower() for item in _list(frontmatter, "task_ids")})
     if len(matches) != 1 or not matches[0]:
@@ -337,7 +460,7 @@ class PersonaAdapter(Protocol):
 
 
 class ProjectPersonaAdapter:
-    def __init__(self, *, policy_path=None, policy_document=None):
+    def __init__(self, *, policy_path=None, policy_document=None, executor=None):
         if (policy_path is None) == (policy_document is None):
             _fail()
         if policy_document is not None and type(policy_document) is not PolicyDocument:
@@ -350,15 +473,58 @@ class ProjectPersonaAdapter:
                 _fail()
         else:
             self._policy_document = None
+        if executor is not None and not callable(getattr(executor, "execute", None)):
+            _fail()
+        self._executor = executor
+        self._profile = None
 
     def discover(self, project_root, *, target_origin=None, declaration_root=None):
         try:
-            return self._discover(
+            profile = self._discover(
                 project_root, target_origin=target_origin,
                 declaration_root=declaration_root,
             )
+            self._profile = _snapshot_verification_profile(profile)
+            return _snapshot_verification_profile(profile)
         except Exception:
             _fail()
+
+    def execute(self, case):
+        try:
+            if self._executor is None or self._profile is None:
+                raise ValueError
+            profile = _snapshot_verification_profile(self._profile)
+            supplied = _snapshot_persona_case(case)
+            if profile.target_origin_digest is None:
+                raise ValueError
+            matches = tuple(
+                item for item in profile.cases if item.case_id == supplied.case_id
+            )
+            if (len(matches) != 1
+                    or matches[0]._origin_primitives() != supplied._origin_primitives()):
+                raise ValueError
+            bound_case = _snapshot_persona_case(matches[0])
+            result = _snapshot_evidence_ref(
+                self._executor.execute(bound_case, profile),
+            )
+            if (
+                result.case_id != bound_case.case_id
+                or result.persona_id != bound_case.persona_id
+                or result.scenario_id != bound_case.scenario_id
+                or result.route != bound_case.route
+                or result.browser_engine != bound_case.browser_engine
+                or result.viewport != bound_case.viewport
+                or result.evaluation != bound_case.expected_outcome
+                or result.authenticated != bound_case.requires_auth
+                or result.proof_kind != "browser"
+                or result.verification_profile_id != profile.profile_id
+                or result.configured_engines != profile.configured_engines
+                or result.target_origin_digest != profile.target_origin_digest
+            ):
+                raise ValueError
+            return result
+        except Exception:
+            raise invalid_policy("invalid_verification_evidence")
 
     def _discover(self, project_root, *, target_origin=None, declaration_root=None):
         project = Path(project_root)
@@ -390,6 +556,12 @@ class ProjectPersonaAdapter:
         _owned_path(ux / "tasks", ux, directory=True)
         _owned_path(ux / "personas", ux, directory=True)
         _reject_symlinks(ux)
+        with _DeclarationTree(ux) as declarations:
+            return self._discover_declarations(
+                ux, declarations, target_origin=target_origin,
+            )
+
+    def _discover_declarations(self, ux, declarations, *, target_origin=None):
         try:
             document = self._policy_document or load_policy(self._policy_path)
             defaults_map = document.verification_defaults
@@ -406,10 +578,11 @@ class ProjectPersonaAdapter:
         config_path = ux / "verification.json"
         if config_path.is_symlink():
             _fail()
-        if config_path.exists():
+        config_exists = declarations.regular_exists(config_path)
+        if config_exists:
             _owned_path(config_path, ux)
             try:
-                config = parse_json_document(_read_owned_text(config_path, ux))
+                config = parse_json_document(_read_owned_text(config_path, declarations))
             except Exception:
                 _fail()
             allowed = {
@@ -449,19 +622,27 @@ class ProjectPersonaAdapter:
             for item in viewports: validate_viewport(item)
         else:
             validate_viewport(policy.get("desktop_viewport")); validate_viewport(policy.get("mobile_viewport"))
-        defaults = _persona_defaults(ux, _persona_index(ux))
-        selected = _suite(ux, selected_suite) if selected_suite else None
+        defaults = _persona_defaults(
+            declarations, _persona_index(ux, declarations),
+        )
+        selected = _suite(ux, selected_suite, declarations) if selected_suite else None
         task_paths = sorted((ux / "tasks").rglob("*.md"))
         for path in task_paths:
             _owned_path(path, ux)
-        tasks = [task for path in task_paths if (task := _task_at(path, ux)) is not None]
+        declarations.revalidate()
+        tasks = [
+            task for path in task_paths
+            if (task := _task_at(path, declarations)) is not None
+        ]
         if not tasks:
             _fail()
         ids = [task["id"] for task in tasks]
         if len(ids) != len(set(ids)):
             _fail()
-        coverage_diagnostics = _coverage_matrix_diagnostics(ux, tasks)
-        if selected is None and config_path.exists() and "include_statuses" in config:
+        coverage_diagnostics = _coverage_matrix_diagnostics(
+            ux, tasks, declarations,
+        )
+        if selected is None and config_exists and "include_statuses" in config:
             runnable_present = {
                 task["status"] or "current" for task in tasks
                 if (task["status"] or "current") in _RUNNABLE

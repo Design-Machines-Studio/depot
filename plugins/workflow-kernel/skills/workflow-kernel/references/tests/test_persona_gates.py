@@ -259,6 +259,43 @@ class PersonaGateTests(unittest.TestCase):
         self.assertNotIn("member@example.invalid", serialized)
         self.assertNotIn(SECRET, repr(profile))
 
+    def test_project_persona_adapter_executes_through_injected_executor(self):
+        calls = []
+
+        class Executor:
+            def execute(self, case, profile):
+                calls.append((case.case_id, profile.profile_id))
+                return evidence(case, profile=profile)
+
+        adapter = ProjectPersonaAdapter(
+            policy_path=ROOT / "workflow-policy.json", executor=Executor(),
+        )
+        profile = adapter.discover(
+            FIXTURE, declaration_root=".", target_origin=TARGET_ORIGIN,
+        )
+        result = adapter.execute(profile.cases[0])
+        self.assertEqual(result.case_id, profile.cases[0].case_id)
+        self.assertEqual(result.verification_profile_id, profile.profile_id)
+        self.assertEqual(calls, [(profile.cases[0].case_id, profile.profile_id)])
+
+    def test_project_persona_adapter_execute_fails_closed_without_bound_context(self):
+        class Executor:
+            def execute(self, case, profile):
+                return evidence(case, profile=profile)
+
+        adapter = ProjectPersonaAdapter(
+            policy_path=ROOT / "workflow-policy.json", executor=Executor(),
+        )
+        case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        with self.assertRaises(InvalidSchemaError):
+            adapter.execute(case)
+        profile = adapter.discover(FIXTURE, declaration_root=".")
+        with self.assertRaises(InvalidSchemaError):
+            adapter.execute(profile.cases[0])
+
 
 if __name__ == "__main__":
     unittest.main()
