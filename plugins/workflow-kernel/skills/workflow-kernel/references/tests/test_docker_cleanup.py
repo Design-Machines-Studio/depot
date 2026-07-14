@@ -570,6 +570,20 @@ class DockerLifecycleTests(unittest.TestCase):
                 registry=registered, orphan_mode=True,
             )
 
+        registered_elsewhere = ResourceRegistry(
+            Path(self.directory.name) / "registered-elsewhere.jsonl",
+        )
+        other_labels = owned_labels(run_id="run-2")
+        registered_elsewhere.register(ResourceRecord(
+            orphan.resource_id, orphan.kind, "run-2", "node-1", "chunk",
+            "stop-remove", NOW, labels=other_labels,
+        ))
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                plan.actions[0], orphan, lease_proof=inactive_lease(),
+                registry=registered_elsewhere, orphan_mode=True,
+            )
+
     def test_dependent_cleanup_without_complete_node_proof_is_blocked(self):
         labels = owned_labels()
         value = resource(labels=labels)
@@ -706,6 +720,30 @@ class DockerLifecycleTests(unittest.TestCase):
             self.registry.record_results(
                 self.adapter, plan, reversed_results,
                 DockerInventory((value,)), exact_absent(),
+            )
+
+    def test_result_recording_rejects_trace_that_starts_after_action_zero(self):
+        first, _ = self.register(resource("ctr-a"))
+        second = resource("ctr-b")
+        self.registry.register(ResourceRecord(
+            second.resource_id, second.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=second.labels,
+        ))
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((first, second)), "run-1", "node-1",
+        )
+        queried = tuple((value.kind, value.resource_id) for value in (first, second))
+        after = DockerInventory(
+            (), queried, queried, "registered_exact",
+            tuple(CommandResult(
+                ("docker", "container", "inspect", value.resource_id),
+                1, "", "Error: No such container: " + value.resource_id,
+            ) for value in (first, second)),
+        )
+
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.record_results(
+                plan, (CommandResult(plan.actions[1].argv, 0, "", ""),), after,
             )
 
     def test_transport_no_such_is_not_authoritative_absence(self):

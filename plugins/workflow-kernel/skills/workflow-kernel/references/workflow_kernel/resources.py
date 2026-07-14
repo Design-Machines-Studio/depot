@@ -739,6 +739,18 @@ class ResourceRegistry:
                 key=lambda value: (value.created_at, value.kind.value, value.resource_id),
             ))
 
+    def resource_for_exact(
+        self, kind: ResourceKind, resource_id: str,
+    ) -> Optional[ResourceRecord]:
+        """Reload and return one record by its daemon-global identity."""
+        if type(kind) is not ResourceKind or not _valid_text(
+            resource_id, maximum=_MAX_RESOURCE_ID,
+        ):
+            raise invalid_policy("invalid_resource_identity")
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            return self._records.get((kind, resource_id))
+
     def record_disposition(self, value: ResourceDisposition) -> ResourceDisposition:
         if type(value) is not ResourceDisposition:
             raise invalid_policy("invalid_resource_disposition")

@@ -141,11 +141,13 @@ automatically a semantic gap; normalize known host mechanism labels while
 preserving required transition/evidence semantics.
 
 Cleanup execution uses a stable, one-action-at-a-time authority boundary.
-`next-cleanup-action` validates the ordered result trace and returns only the
-next dependency-eligible action and its immutable plan index.
+`next-cleanup-action` validates a gap-free result prefix beginning at action
+zero and returns only the next dependency-eligible action and its immutable plan
+index.
 `revalidate-cleanup-action` is the single non-splittable authorization step for
-that index: it reloads the exact durable registry record (or proves its absence
-for explicit stale-orphan mode), consumes a fresh exact-ID inventory, requires
+that index: it reloads the exact kind-and-ID registry record regardless
+of owner (or proves its global absence for explicit stale-orphan mode), consumes
+a fresh exact-ID inventory, requires
 a complete fresh authoritative node-status proof for every dependency, and
 binds the exact successful predecessor result when the action declares one.
 The host executes only the exact argv returned by that revalidation immediately

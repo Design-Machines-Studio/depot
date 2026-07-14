@@ -889,13 +889,10 @@ class DockerAdapter:
 
         if type(registry) is not ResourceRegistry:
             raise invalid_policy("docker_cleanup_precondition_changed")
-        records = tuple(
-            value for value in registry.resources_for(action.run_id, action.node_id)
-            if (value.kind, value.resource_id) == (action.kind, action.resource_id)
-        )
+        record = registry.resource_for_exact(action.kind, action.resource_id)
         if orphan_mode:
             if (
-                records or incomplete_node_proof is not None
+                record is not None or incomplete_node_proof is not None
                 or not _valid_ownership_labels(resource.labels)
             ):
                 raise invalid_policy("docker_cleanup_precondition_changed")
@@ -903,9 +900,10 @@ class DockerAdapter:
         else:
             if lease_proof is not None:
                 raise invalid_policy("docker_cleanup_precondition_changed")
-            if len(records) != 1:
+            if record is None or (record.run_id, record.node_id) != (
+                action.run_id, action.node_id,
+            ):
                 raise invalid_policy("docker_cleanup_precondition_changed")
-            record = records[0]
 
         requires_incomplete_nodes = bool(record.dependent_node_ids)
         if requires_incomplete_nodes:
@@ -1087,7 +1085,7 @@ class DockerAdapter:
             raise invalid_policy("cleanup_result_not_planned")
         action_indexes = {argv: index for index, argv in enumerate(planned_argv)}
         result_indexes = tuple(action_indexes[argv] for argv in result_argv)
-        if result_indexes != tuple(sorted(result_indexes)):
+        if result_indexes != tuple(range(len(result_indexes))):
             raise invalid_policy("cleanup_results_out_of_order")
         results_by_index = {
             index: result for index, result in zip(result_indexes, normalized_results)

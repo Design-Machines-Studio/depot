@@ -83,6 +83,19 @@ def append_terminal_transaction(path, outcome):
 
 
 class ResourceRegistryTests(unittest.TestCase):
+    def test_global_exact_lookup_reloads_before_returning_owner(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            reader = ResourceRegistry(path)
+            writer = ResourceRegistry(path)
+            expected = record("shared", run_id="run-2")
+            writer.register(expected)
+
+            self.assertEqual(
+                expected,
+                reader.resource_for_exact(ResourceKind.CONTAINER, "shared"),
+            )
+
     def test_preopened_registries_cannot_interleave_conflicting_registration(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resources.jsonl"

@@ -88,10 +88,11 @@ Execution-time Docker revalidation reloads the exact durable registry record
 for the action owner and derives dependency-proof requirements only from that
 record. Action precondition strings, Docker labels, cached plans, and shadow
 state cannot declare a registered resource dependency-free. Stale-orphan
-revalidation is an explicit separate mode: it proves the registry has no exact
-record and requires complete positive labels plus a fresh inactive lease.
-Command results remain an ordered plan trace; a dependent action is accepted
-only after its declared predecessor result appears earlier and succeeded.
+revalidation is an explicit separate mode: it proves the registry has no
+exact kind-and-ID record under any owner and requires complete positive labels
+plus a fresh inactive lease. Command results remain a gap-free plan prefix
+beginning at action zero; a dependent action is accepted only after its declared
+predecessor result appears earlier and succeeded.
 
 Cleanup uses only exact IDs:
 
