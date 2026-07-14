@@ -36,6 +36,27 @@ class CliTests(unittest.TestCase):
             self.assertNotEqual(bad.returncode, 0)
             self.assertNotIn("fixture-secret", bad.stderr)
 
+    def test_validate_rejects_missing_empty_and_state_without_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = self.run_cli("validate", directory)
+            self.assertNotEqual(missing.returncode, 0)
+            Path(directory, "events.jsonl").write_text("")
+            empty = self.run_cli("validate", directory)
+            self.assertNotEqual(empty.returncode, 0)
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(self.run_cli("init", directory, "--run-id", "run-1", "--occurred-at", "2026-07-14T00:00:00Z").returncode, 0)
+            Path(directory, "events.jsonl").write_text("")
+            result = self.run_cli("validate", directory)
+            self.assertNotEqual(result.returncode, 0)
+
+    def test_argparse_error_does_not_echo_rejected_value(self):
+        sentinel = "NEVER-PRINT-THIS-SECRET"
+        result = self.run_cli("init", "/tmp/unused", "--run-id", "run-1",
+                              "--occurred-at", "2026-07-14T00:00:00Z", "--mode", sentinel)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn(sentinel, result.stderr)
+        self.assertEqual(json.loads(result.stderr)["error"]["details"]["reason_code"], "invalid_argument")
+
 
 if __name__ == "__main__":
     unittest.main()

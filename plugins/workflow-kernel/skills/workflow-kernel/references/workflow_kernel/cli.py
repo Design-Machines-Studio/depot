@@ -4,18 +4,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 from .events import EventStore
-from .schema import InvalidSchemaError, KernelError, RunMode, RunState, UnsafePayloadError, WorkflowEvent
+from .schema import CorruptEventError, InvalidSchemaError, KernelError, RunMode, UnsafePayloadError, WorkflowEvent
 from .state import RunLease, StateStore
 from .transitions import TransitionEngine
 
 
 class KernelArgumentParser(argparse.ArgumentParser):
     def error(self, message):
-        raise InvalidSchemaError("invalid command arguments", {"reason": message})
+        match = re.search(r"argument ([^:]+)", message)
+        option = match.group(1) if match else "command"
+        raise InvalidSchemaError("invalid command arguments", {
+            "reason_code": "invalid_argument", "option": option,
+        })
 
 
 def _paths(directory):
@@ -28,8 +33,8 @@ def _emit(value, stream=sys.stdout):
 
 
 def _write_state(store, state, expected_revision):
-    with RunLease(store.path):
-        return store.write(state, expected_revision)
+    with RunLease(store.path) as lease:
+        return store.write(state, expected_revision, lease=lease)
 
 
 def command_init(args):
@@ -39,9 +44,9 @@ def command_init(args):
         raise InvalidSchemaError("run directory is already initialized", {"directory": str(root)})
     event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
     state = TransitionEngine().reconstruct((event,))
-    with RunLease(states.path):
+    with RunLease(states.path) as lease:
         events.append(event, 0)
-        evidence = states.write(state, -1)
+        evidence = states.write(state, -1, lease=lease)
     _emit({"run_id": state.run_id, "mode": state.mode.value, "status": state.status.value, "revision": state.revision,
            "durability": evidence})
     return 0
@@ -50,8 +55,10 @@ def command_init(args):
 def command_validate(args):
     _, events, states = _paths(args.directory)
     replayed, notes = events.validate(recovery=args.recovery)
-    state = TransitionEngine().reconstruct(replayed) if replayed else None
-    if states.path.exists() and state is not None and states.load() != state:
+    if not replayed:
+        raise CorruptEventError("authoritative event ledger is missing or empty")
+    state = TransitionEngine().reconstruct(replayed)
+    if states.path.exists() and states.load() != state:
         raise InvalidSchemaError("materialized state does not match event ledger", {
             "materialized_revision": states.load().revision, "ledger_revision": state.revision,
         })
@@ -66,7 +73,7 @@ def command_append(args):
     except json.JSONDecodeError as exc:
         raise InvalidSchemaError("event is not valid JSON", {"offset": exc.pos}) from exc
     event = WorkflowEvent.from_dict(data)
-    with RunLease(states.path):
+    with RunLease(states.path) as lease:
         existing = events.replay()
         if not existing:
             raise InvalidSchemaError("run directory is not initialized")
@@ -74,7 +81,7 @@ def command_append(args):
         next_state = TransitionEngine().apply(state, event)
         events.append(event, expected_sequence=len(existing))
         expected = states.load().revision if states.path.exists() else -1
-        evidence = states.write(next_state, expected)
+        evidence = states.write(next_state, expected, lease=lease)
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})
     return 0

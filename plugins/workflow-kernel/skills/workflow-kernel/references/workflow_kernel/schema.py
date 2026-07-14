@@ -8,7 +8,10 @@ from enum import Enum
 from types import MappingProxyType
 from typing import Any, Mapping, Optional, Tuple
 
-from .redaction import redact
+from .redaction import (
+    MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
+    freeze_json, redact, thaw, validate_reference,
+)
 
 
 SCHEMA_VERSION = 1
@@ -98,7 +101,7 @@ def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
 def _string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
     if optional and value is None:
         return None
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
         raise InvalidSchemaError("invalid string field", {"field": name})
     return value
 
@@ -125,22 +128,18 @@ def _payload(value: object) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise InvalidSchemaError("payload must be a mapping", {"field": "payload"})
     try:
-        safe = redact(value)
-    except TypeError as exc:
+        safe = freeze_json(value, max_depth=MAX_PAYLOAD_DEPTH,
+                           max_items=MAX_PAYLOAD_ITEMS,
+                           max_string_length=MAX_STRING_LENGTH)
+    except (TypeError, ValueError) as exc:
         raise UnsafePayloadError("payload contains a non-JSON-safe value") from exc
-    return MappingProxyType(safe)
+    return safe
 
 
 def _plain(value: object) -> object:
-    if isinstance(value, Mapping):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, tuple):
-        return [_plain(item) for item in value]
-    if isinstance(value, list):
-        return [_plain(item) for item in value]
     if isinstance(value, Enum):
         return value.value
-    return value
+    return thaw(value)
 
 
 @dataclass(frozen=True)
@@ -185,6 +184,16 @@ class NodeState:
     dependencies: Tuple[str, ...] = ()
     evidence: Tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "node_id", _string(self.node_id, "node_id"))
+        try:
+            status = self.status if isinstance(self.status, NodeStatus) else NodeStatus(self.status)
+        except (ValueError, TypeError) as exc:
+            raise InvalidSchemaError("unknown node status", {"status": self.status}) from exc
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "dependencies", _string_tuple(self.dependencies, "dependencies"))
+        object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
+
     @classmethod
     def from_dict(cls, data: object) -> "NodeState":
         if not isinstance(data, Mapping):
@@ -204,10 +213,15 @@ class NodeState:
                 "dependencies": list(self.dependencies), "evidence": list(self.evidence)}
 
 
-def _string_tuple(value: object, name: str) -> Tuple[str, ...]:
+def _string_tuple(value: object, name: str, *, references: bool = False) -> Tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         raise InvalidSchemaError("field must be a list", {"field": name})
     result = tuple(_string(item, name) for item in value)
+    if references:
+        try:
+            result = tuple(validate_reference(item) for item in result)
+        except ValueError as exc:
+            raise UnsafePayloadError("evidence reference is unsafe") from exc
     if len(result) != len(set(result)):
         raise InvalidSchemaError("field contains duplicates", {"field": name})
     return result
@@ -227,8 +241,31 @@ class RunState:
     cleanup_reconciled: bool = False
 
     def __post_init__(self) -> None:
-        if not isinstance(self.nodes, MappingProxyType):
-            object.__setattr__(self, "nodes", MappingProxyType(dict(self.nodes)))
+        version = _strict_int(self.schema_version, "schema_version", minimum=1)
+        if version != SCHEMA_VERSION:
+            raise InvalidSchemaError("unsupported schema version", {"schema_version": version})
+        object.__setattr__(self, "schema_version", version)
+        object.__setattr__(self, "revision", _strict_int(self.revision, "revision"))
+        object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
+        try:
+            mode = self.mode if isinstance(self.mode, RunMode) else RunMode(self.mode)
+            status = self.status if isinstance(self.status, RunStatus) else RunStatus(self.status)
+        except (ValueError, TypeError) as exc:
+            raise InvalidSchemaError("unknown run enum", {"mode": self.mode, "status": self.status}) from exc
+        object.__setattr__(self, "mode", mode)
+        object.__setattr__(self, "status", status)
+        object.__setattr__(self, "created_at", _timestamp(self.created_at, "created_at"))
+        object.__setattr__(self, "updated_at", _timestamp(self.updated_at, "updated_at"))
+        if not isinstance(self.nodes, Mapping):
+            raise InvalidSchemaError("nodes must be an object")
+        nodes = dict(self.nodes)
+        if any(not isinstance(key, str) or not isinstance(node, NodeState) or key != node.node_id
+               for key, node in nodes.items()):
+            raise InvalidSchemaError("node keys must match immutable node states")
+        object.__setattr__(self, "nodes", MappingProxyType(nodes))
+        object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
+        if not isinstance(self.cleanup_reconciled, bool):
+            raise InvalidSchemaError("cleanup_reconciled must be boolean")
 
     @classmethod
     def new(cls, run_id: str, occurred_at: str, mode: RunMode = RunMode.SHADOW) -> "RunState":
@@ -237,8 +274,8 @@ class RunState:
                 mode = RunMode(mode)
             except (ValueError, TypeError) as exc:
                 raise InvalidSchemaError("unknown run mode", {"mode": mode}) from exc
-        return cls(SCHEMA_VERSION, 0, _string(run_id, "run_id"), mode, RunStatus.PLANNED,
-                   _timestamp(occurred_at, "created_at"), _timestamp(occurred_at, "updated_at"), MappingProxyType({}))
+        return cls(SCHEMA_VERSION, 0, run_id, mode, RunStatus.PLANNED,
+                   occurred_at, occurred_at, MappingProxyType({}))
 
     @classmethod
     def from_dict(cls, data: object) -> "RunState":
@@ -264,7 +301,7 @@ class RunState:
             raise InvalidSchemaError("cleanup_reconciled must be boolean")
         return cls(version, _strict_int(data["revision"], "revision"), _string(data["run_id"], "run_id"),
                    mode, status, _timestamp(data["created_at"], "created_at"), _timestamp(data["updated_at"], "updated_at"),
-                   MappingProxyType(nodes), _string_tuple(data["evidence"], "evidence"), cleanup)
+                   MappingProxyType(nodes), _string_tuple(data["evidence"], "evidence", references=True), cleanup)
 
     def to_dict(self) -> dict:
         return {

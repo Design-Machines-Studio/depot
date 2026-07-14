@@ -14,7 +14,31 @@ from .schema import (
 
 TERMINAL_RUN = frozenset({RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.BLOCKED,
                           RunStatus.CANCELLED, RunStatus.INTERRUPTED})
-TERMINAL_NODE = frozenset({NodeStatus.SUCCEEDED, NodeStatus.FAILED, NodeStatus.BLOCKED, NodeStatus.SKIPPED})
+RUN_TERMINAL_TARGETS = {
+    "run.succeeded": RunStatus.SUCCEEDED,
+    "run.failed": RunStatus.FAILED,
+    "run.blocked": RunStatus.BLOCKED,
+    "run.cancelled": RunStatus.CANCELLED,
+    "run.interrupted": RunStatus.INTERRUPTED,
+}
+NODE_TARGETS = {
+    "node.ready": NodeStatus.READY,
+    "node.started": NodeStatus.RUNNING,
+    "node.waiting": NodeStatus.WAITING,
+    "node.succeeded": NodeStatus.SUCCEEDED,
+    "node.failed": NodeStatus.FAILED,
+    "node.blocked": NodeStatus.BLOCKED,
+    "node.skipped": NodeStatus.SKIPPED,
+}
+LEGAL_NODE_SOURCES = {
+    NodeStatus.READY: {NodeStatus.PENDING},
+    NodeStatus.RUNNING: {NodeStatus.READY, NodeStatus.WAITING},
+    NodeStatus.WAITING: {NodeStatus.RUNNING},
+    NodeStatus.SUCCEEDED: {NodeStatus.RUNNING, NodeStatus.WAITING},
+    NodeStatus.FAILED: {NodeStatus.RUNNING, NodeStatus.WAITING},
+    NodeStatus.BLOCKED: {NodeStatus.PENDING, NodeStatus.READY, NodeStatus.RUNNING, NodeStatus.WAITING},
+    NodeStatus.SKIPPED: {NodeStatus.PENDING, NodeStatus.READY},
+}
 
 
 def _strings(payload: Mapping[str, object], key: str, *, required: bool = False) -> Tuple[str, ...]:
@@ -44,12 +68,20 @@ class TransitionEngine:
             })
         if state.status in TERMINAL_RUN and event.kind not in {"evidence.recorded", "cleanup.reconciled"}:
             raise IllegalTransitionError("terminal run rejects mutation", {"kind": event.kind, "status": state.status.value})
+        if event.kind.startswith("run."):
+            return self._apply_run(state, event)
+        if event.kind.startswith("node."):
+            return self._apply_node(state, event)
+        if event.kind == "evidence.recorded":
+            return self._apply_evidence(state, event)
+        if event.kind == "cleanup.reconciled":
+            return self._apply_cleanup(state, event)
+        raise IllegalTransitionError("unknown event kind", {"kind": event.kind})
 
-        nodes = dict(state.nodes)
-        status = state.status
-        evidence = state.evidence
-        cleanup = state.cleanup_reconciled
+    def _advance(self, state: RunState, event: WorkflowEvent, **changes) -> RunState:
+        return replace(state, revision=state.revision + 1, updated_at=event.occurred_at, **changes)
 
+    def _apply_run(self, state: RunState, event: WorkflowEvent) -> RunState:
         if event.kind == "run.initialized":
             _require(state.revision == 0 and state.status == RunStatus.PLANNED and event.node_id is None, state, event)
             mode_value = event.payload.get("mode", state.mode.value)
@@ -57,79 +89,67 @@ class TransitionEngine:
                 mode = RunMode(mode_value)
             except (ValueError, TypeError) as exc:
                 raise IllegalTransitionError("event specifies unknown run mode", {"mode": mode_value}) from exc
-            state = replace(state, mode=mode)
-        elif event.kind == "run.started":
-            _require(status in {RunStatus.PLANNED, RunStatus.WAITING} and event.node_id is None, state, event)
-            status = RunStatus.RUNNING
-        elif event.kind == "run.waiting":
-            _require(status == RunStatus.RUNNING and event.node_id is None, state, event)
-            status = RunStatus.WAITING
-        elif event.kind.startswith("run."):
-            targets = {
-                "run.succeeded": RunStatus.SUCCEEDED, "run.failed": RunStatus.FAILED,
-                "run.blocked": RunStatus.BLOCKED, "run.cancelled": RunStatus.CANCELLED,
-                "run.interrupted": RunStatus.INTERRUPTED,
-            }
-            if event.kind not in targets:
-                raise IllegalTransitionError("unknown event kind", {"kind": event.kind})
-            target = targets[event.kind]
-            allowed = status in {RunStatus.RUNNING, RunStatus.WAITING}
-            if target in {RunStatus.CANCELLED, RunStatus.INTERRUPTED, RunStatus.BLOCKED}:
-                allowed = allowed or status == RunStatus.PLANNED
-            _require(allowed and event.node_id is None, state, event)
-            if target == RunStatus.SUCCEEDED:
-                refs = _strings(event.payload, "evidence", required=True)
-                _require(all(node.status in {NodeStatus.SUCCEEDED, NodeStatus.SKIPPED} for node in nodes.values()), state, event)
-                evidence = tuple(dict.fromkeys(evidence + refs))
-            status = target
-        elif event.kind == "node.added":
-            _require(status not in TERMINAL_RUN and event.node_id is not None and event.node_id not in nodes, state, event)
+            return self._advance(state, event, mode=mode)
+        if event.kind == "run.started":
+            _require(state.status in {RunStatus.PLANNED, RunStatus.WAITING} and event.node_id is None, state, event)
+            return self._advance(state, event, status=RunStatus.RUNNING)
+        if event.kind == "run.waiting":
+            _require(state.status == RunStatus.RUNNING and event.node_id is None, state, event)
+            return self._advance(state, event, status=RunStatus.WAITING)
+        if event.kind not in RUN_TERMINAL_TARGETS:
+            raise IllegalTransitionError("unknown event kind", {"kind": event.kind})
+        target = RUN_TERMINAL_TARGETS[event.kind]
+        allowed = state.status in {RunStatus.RUNNING, RunStatus.WAITING}
+        if target in {RunStatus.CANCELLED, RunStatus.INTERRUPTED, RunStatus.BLOCKED}:
+            allowed = allowed or state.status == RunStatus.PLANNED
+        _require(allowed and event.node_id is None, state, event)
+        evidence = state.evidence
+        if target == RunStatus.SUCCEEDED:
+            refs = _strings(event.payload, "evidence", required=True)
+            _require(all(node.status in {NodeStatus.SUCCEEDED, NodeStatus.SKIPPED}
+                         for node in state.nodes.values()), state, event)
+            evidence = tuple(dict.fromkeys(evidence + refs))
+        return self._advance(state, event, status=target, evidence=evidence)
+
+    def _apply_node(self, state: RunState, event: WorkflowEvent) -> RunState:
+        nodes = dict(state.nodes)
+        if event.kind == "node.added":
+            _require(state.status not in TERMINAL_RUN and event.node_id is not None and event.node_id not in nodes, state, event)
             dependencies = _strings(event.payload, "dependencies")
             if event.node_id in dependencies or any(item not in nodes for item in dependencies):
                 raise IllegalTransitionError("node dependency is invalid", {"node_id": event.node_id})
             nodes[event.node_id] = NodeState(event.node_id, dependencies=dependencies)
-        elif event.kind.startswith("node."):
-            _require(event.node_id is not None and event.node_id in nodes, state, event)
-            node = nodes[event.node_id]
-            target_by_kind = {
-                "node.ready": NodeStatus.READY, "node.started": NodeStatus.RUNNING,
-                "node.waiting": NodeStatus.WAITING, "node.succeeded": NodeStatus.SUCCEEDED,
-                "node.failed": NodeStatus.FAILED, "node.blocked": NodeStatus.BLOCKED,
-                "node.skipped": NodeStatus.SKIPPED,
-            }
-            if event.kind not in target_by_kind:
-                raise IllegalTransitionError("unknown event kind", {"kind": event.kind})
-            target = target_by_kind[event.kind]
-            legal = {
-                NodeStatus.READY: {NodeStatus.PENDING}, NodeStatus.RUNNING: {NodeStatus.READY, NodeStatus.WAITING},
-                NodeStatus.WAITING: {NodeStatus.RUNNING}, NodeStatus.SUCCEEDED: {NodeStatus.RUNNING, NodeStatus.WAITING},
-                NodeStatus.FAILED: {NodeStatus.RUNNING, NodeStatus.WAITING}, NodeStatus.BLOCKED: {NodeStatus.PENDING, NodeStatus.READY, NodeStatus.RUNNING, NodeStatus.WAITING},
-                NodeStatus.SKIPPED: {NodeStatus.PENDING, NodeStatus.READY},
-            }
-            _require(node.status in legal[target], state, event)
-            if target == NodeStatus.READY:
-                _require(all(nodes[item].status == NodeStatus.SUCCEEDED for item in node.dependencies), state, event)
-            refs = node.evidence
-            if target == NodeStatus.SUCCEEDED:
-                refs = tuple(dict.fromkeys(refs + _strings(event.payload, "evidence", required=True)))
-            nodes[event.node_id] = replace(node, status=target, evidence=refs)
-        elif event.kind == "evidence.recorded":
-            refs = _strings(event.payload, "evidence", required=True)
-            if event.node_id is None:
-                evidence = tuple(dict.fromkeys(evidence + refs))
-            else:
-                _require(event.node_id in nodes, state, event)
-                nodes[event.node_id] = replace(nodes[event.node_id], evidence=tuple(dict.fromkeys(nodes[event.node_id].evidence + refs)))
-        elif event.kind == "cleanup.reconciled":
-            _require(event.node_id is None and not cleanup, state, event)
-            refs = _strings(event.payload, "evidence", required=True)
-            evidence = tuple(dict.fromkeys(evidence + refs))
-            cleanup = True
-        else:
+            return self._advance(state, event, nodes=MappingProxyType(nodes))
+        _require(event.node_id is not None and event.node_id in nodes, state, event)
+        if event.kind not in NODE_TARGETS:
             raise IllegalTransitionError("unknown event kind", {"kind": event.kind})
+        node = nodes[event.node_id]
+        target = NODE_TARGETS[event.kind]
+        _require(node.status in LEGAL_NODE_SOURCES[target], state, event)
+        if target == NodeStatus.READY:
+            _require(all(nodes[item].status == NodeStatus.SUCCEEDED for item in node.dependencies), state, event)
+        refs = node.evidence
+        if target == NodeStatus.SUCCEEDED:
+            refs = tuple(dict.fromkeys(refs + _strings(event.payload, "evidence", required=True)))
+        nodes[event.node_id] = replace(node, status=target, evidence=refs)
+        return self._advance(state, event, nodes=MappingProxyType(nodes))
 
-        return replace(state, revision=state.revision + 1, status=status, updated_at=event.occurred_at,
-                       nodes=MappingProxyType(nodes), evidence=evidence, cleanup_reconciled=cleanup)
+    def _apply_evidence(self, state: RunState, event: WorkflowEvent) -> RunState:
+        refs = _strings(event.payload, "evidence", required=True)
+        if event.node_id is None:
+            evidence = tuple(dict.fromkeys(state.evidence + refs))
+            return self._advance(state, event, evidence=evidence)
+        nodes = dict(state.nodes)
+        _require(event.node_id in nodes, state, event)
+        node = nodes[event.node_id]
+        nodes[event.node_id] = replace(node, evidence=tuple(dict.fromkeys(node.evidence + refs)))
+        return self._advance(state, event, nodes=MappingProxyType(nodes))
+
+    def _apply_cleanup(self, state: RunState, event: WorkflowEvent) -> RunState:
+        _require(event.node_id is None and not state.cleanup_reconciled, state, event)
+        refs = _strings(event.payload, "evidence", required=True)
+        evidence = tuple(dict.fromkeys(state.evidence + refs))
+        return self._advance(state, event, evidence=evidence, cleanup_reconciled=True)
 
     def reconstruct(self, events: Iterable[WorkflowEvent]) -> RunState:
         sequence = tuple(events)

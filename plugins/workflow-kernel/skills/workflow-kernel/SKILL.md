@@ -21,10 +21,16 @@ for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cach
   KERNEL_REFS=$(ls -td "$CACHE_ROOT"/workflow-kernel/*/skills/workflow-kernel/references 2>/dev/null | head -1)
   [ -n "$KERNEL_REFS" ] && break
 done
+if [ -z "$KERNEL_REFS" ]; then
+  echo "workflow-kernel runtime not found in Claude or Codex plugin cache" >&2
+  exit 1
+fi
+export PYTHONPATH="$KERNEL_REFS${PYTHONPATH:+:$PYTHONPATH}"
+python3 -m workflow_kernel --help
 ```
 
-For repository-local development, set `PYTHONPATH` to
-`plugins/workflow-kernel/skills/workflow-kernel/references`.
+For repository-local development, invoke the module with
+`PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m workflow_kernel`.
 
 ## Operating Contract
 
@@ -40,7 +46,27 @@ conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
 evidence attachment and one cleanup reconciliation.
 
 Use `python -m workflow_kernel --help` for the `init`, `validate`, `append`,
-`replay`, and `status` commands. Consume stdout and stderr as stable JSON.
+`replay`, and `status` commands. Consume successful operational output and
+errors as stable JSON. Treat `--help` output as plain text.
+
+## Public API and Contracts
+
+- Construct immutable `WorkflowEvent`, `NodeState`, and `RunState` schema
+  objects; unknown fields, enums, versions, unsafe references, and invalid
+  JSON shapes fail with a stable `KernelError.code`.
+- Use `EventStore.append(event, expected_sequence)` to append exactly the next
+  event. Use `EventStore.replay()` to reject gaps, corruption, conflicting run
+  IDs, and bounded-input violations.
+- Acquire `RunLease(state_path)` and pass that live capability to
+  `StateStore.write(state, expected_revision, lease=lease)`. A lease for a
+  different path or a released lease never authorizes a write. POSIX advisory
+  locks release on process exit, so crash residue does not become a lock.
+- Use `TransitionEngine.apply(state, event)` for one pure transition and
+  `TransitionEngine.reconstruct(events)` for deterministic replay. Event
+  sequence equals the prior state revision; each accepted event increments the
+  revision by one.
+- Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
+  errors. Do not expose raw parser exceptions or rejected values.
 
 ## Security and Portability
 

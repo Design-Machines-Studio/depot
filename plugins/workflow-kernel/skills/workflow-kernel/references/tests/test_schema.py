@@ -10,6 +10,8 @@ from workflow_kernel.schema import (
     WorkflowEvent,
 )
 from workflow_kernel.receipts import encode_receipt
+from workflow_kernel.events import encode_event
+from workflow_kernel.schema import NodeState
 
 
 class SchemaTests(unittest.TestCase):
@@ -59,3 +61,31 @@ class SchemaTests(unittest.TestCase):
         receipt_json = encode_receipt({"event": event.to_dict(), "cookie": fixture}).decode()
         self.assertNotIn(fixture, event_json)
         self.assertNotIn(fixture, receipt_json)
+
+    def test_event_payload_is_recursively_immutable_and_encoding_is_stable(self):
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z",
+                              {"nested": {"items": ["one", "two"]}})
+        with self.assertRaises(TypeError):
+            event.payload["nested"]["items"][0] = "changed"
+        self.assertEqual(encode_event(event), encode_event(event))
+
+    def test_direct_schema_constructors_validate_and_freeze(self):
+        with self.assertRaises(InvalidSchemaError):
+            NodeState("")
+        with self.assertRaises(InvalidSchemaError):
+            RunState(1, -1, "run-1", RunMode.SHADOW, RunStatus.PLANNED,
+                     "2026-07-14T00:00:00Z", "2026-07-14T00:00:00Z")
+
+    def test_credential_bearing_evidence_references_are_rejected(self):
+        unsafe = (
+            "https://user:password@example.invalid/proof",
+            "https://example.invalid/proof?access_token=never-print-this-fixture",
+            "https://example.invalid/proof?signature=never-print-this-fixture",
+        )
+        for reference in unsafe:
+            with self.subTest(reference=reference), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
+                              "2026-07-14T00:00:00Z", {"evidence": [reference]})
+            with self.subTest(receipt=reference), self.assertRaises(UnsafePayloadError):
+                encode_receipt({"reference": reference})
