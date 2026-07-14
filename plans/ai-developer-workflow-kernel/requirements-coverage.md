@@ -128,11 +128,15 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       Origin and canonical projection share one exact-type classifier, reject
       cycles, and enforce Chunk 01's depth `16` and aggregate item budget `10000`
       for injected and file-loaded graphs.
-      Policy and workflow-class files share an iterative, string/escape-aware
-      16-level JSON scan and a 4,096-digit integer ceiling (minus sign excluded).
-      Over-depth structure maps to each document reason; syntax, oversized
-      integers, and parser `ValueError`/`RecursionError` map to each loader's
-      stable JSON reason on Python 3.9 and 3.12. Safety anchors are projected once
+      Policy and workflow-class files import one neutral bounded JSON API from
+      `workflow_kernel/limits.py`. Its iterative tokenizer and typed-container
+      grammar reserve each document reason for balanced, fully valid structure
+      above depth `16`; mismatches, underflow, unterminated strings or escapes,
+      remaining openers, balanced grammar errors, oversized integers, and parser
+      failures retain each stable JSON reason. Its signed decimal parser manually
+      accumulates at most 4,096 digits excluding the minus sign, so Python 3.9 and
+      3.12 agree with the integer-string limit defaulted, set to `640`, or
+      disabled. Safety anchors are projected once
       before projected stage sets are wrapped, preserving actual-budget parity.
       Ordered fields reject sets and frozensets; only canonical forbidden
       downgrades accept a frozenset. Exact tuples project without re-entry; any

@@ -13,9 +13,10 @@ from .adapters.base import (
     WorkflowClass, WorkflowContext, _snapshot_workflow_context, invalid_policy,
     _normalize_enum, normalize_executor_constraint,
 )
-from .policies import (
-    GatePolicy, _JSONDocumentDepthError, _load_json_document, load_policy,
+from .limits import (
+    JSONDocumentDepthError, JSONDocumentSyntaxError, load_json_document,
 )
+from .policies import GatePolicy, load_policy
 
 
 WORKFLOW_CLASSES_SCHEMA_VERSION = 1
@@ -245,10 +246,13 @@ def _load_templates(
 ) -> dict[WorkflowClass, tuple[dict, ...]]:
     source = Path(path) if path is not None else DEFAULT_CLASSES_PATH
     try:
-        payload = _load_json_document(source)
-    except _JSONDocumentDepthError:
+        payload = load_json_document(source)
+    except JSONDocumentDepthError:
         raise invalid_policy("invalid_workflow_classes_document") from None
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, RecursionError):
+    except (
+        OSError, UnicodeError, JSONDocumentSyntaxError, json.JSONDecodeError,
+        ValueError, RecursionError,
+    ):
         raise invalid_policy("invalid_workflow_classes_json") from None
     if type(payload) is not dict or set(payload) != {
         "schema_version", "classes", "promotion",

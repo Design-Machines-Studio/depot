@@ -30,6 +30,35 @@ class WorkflowClassTests(unittest.TestCase):
                     '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
                     "invalid_workflow_classes_document",
                 ),
+                "mismatched_over_depth": (
+                    "[" * 17 + "}" * 17,
+                    "invalid_workflow_classes_json",
+                ),
+                "underflow": ("]", "invalid_workflow_classes_json"),
+                "unterminated_string": (
+                    '{"value":"open', "invalid_workflow_classes_json",
+                ),
+                "unterminated_escape": (
+                    '{"value":"open\\', "invalid_workflow_classes_json",
+                ),
+                "remaining_opener": ("[0", "invalid_workflow_classes_json"),
+                "malformed_number": (
+                    canonical.replace('"schema_version": 1',
+                                      '"schema_version": 01', 1),
+                    "invalid_workflow_classes_json",
+                ),
+                "balanced_grammar_error": (
+                    "[" * 17 + "0 1" + "]" * 17,
+                    "invalid_workflow_classes_json",
+                ),
+                "thousand_digit_version": (
+                    canonical.replace(
+                        '"schema_version": 1',
+                        '"schema_version": ' + "9" * 1_000,
+                        1,
+                    ),
+                    "unsupported_policy_version",
+                ),
             }
             for name, (content, reason) in documents.items():
                 path = root / f"{name}.json"

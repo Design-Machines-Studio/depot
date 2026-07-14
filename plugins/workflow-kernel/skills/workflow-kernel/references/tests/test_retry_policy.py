@@ -1,3 +1,4 @@
+import importlib
 import json
 import os
 import subprocess
@@ -330,12 +331,13 @@ class RetryPolicyTests(unittest.TestCase):
     def test_policy_json_loader_has_explicit_parser_boundaries(self):
         source = Path(__file__).parents[1] / "workflow-policy.json"
         canonical = source.read_text(encoding="utf-8")
-        loader = getattr(policy_module, "_load_json_document", None)
-        depth_error = getattr(policy_module, "_JSONDocumentDepthError", None)
-        max_depth = getattr(policy_module, "MAX_JSON_DOCUMENT_DEPTH", None)
-        self.assertIsNotNone(loader)
-        self.assertIsNotNone(depth_error)
-        self.assertIs(type(max_depth), int)
+        self.assertFalse(hasattr(policy_module, "_load_json_document"))
+        self.assertIsNotNone(importlib.util.find_spec("workflow_kernel.limits"))
+        limits = importlib.import_module("workflow_kernel.limits")
+        loader = limits.load_json_document
+        depth_error = limits.JSONDocumentDepthError
+        syntax_error = limits.JSONDocumentSyntaxError
+        max_depth = limits.MAX_JSON_DOCUMENT_DEPTH
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -352,6 +354,31 @@ class RetryPolicyTests(unittest.TestCase):
                 "over_depth": (
                     '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
                     "invalid_policy_document",
+                ),
+                "mismatched_over_depth": (
+                    "[" * 17 + "}" * 17,
+                    "invalid_policy_json",
+                ),
+                "underflow": ("]", "invalid_policy_json"),
+                "unterminated_string": ('{"value":"open', "invalid_policy_json"),
+                "unterminated_escape": ('{"value":"open\\', "invalid_policy_json"),
+                "remaining_opener": ("[0", "invalid_policy_json"),
+                "malformed_number": (
+                    canonical.replace('"schema_version": 1',
+                                      '"schema_version": 01', 1),
+                    "invalid_policy_json",
+                ),
+                "balanced_grammar_error": (
+                    "[" * 17 + "0 1" + "]" * 17,
+                    "invalid_policy_json",
+                ),
+                "thousand_digit_version": (
+                    canonical.replace(
+                        '"schema_version": 1',
+                        '"schema_version": ' + "9" * 1_000,
+                        1,
+                    ),
+                    "unsupported_policy_version",
                 ),
             }
             for name, (content, reason) in documents.items():
@@ -393,22 +420,57 @@ class RetryPolicyTests(unittest.TestCase):
 
             integer_boundary = root / "integer-boundary.json"
             integer_boundary.write_text(
-                "-" + "9" * policy_module.MAX_JSON_INTEGER_DIGITS,
+                "-" + "9" * limits.MAX_JSON_INTEGER_DIGITS,
                 encoding="utf-8",
             )
             parsed_integer = loader(integer_boundary)
             self.assertLess(parsed_integer, 0)
-            self.assertEqual(
-                len(str(abs(parsed_integer))),
-                policy_module.MAX_JSON_INTEGER_DIGITS,
-            )
+            digit_count = 0
+            remaining = abs(parsed_integer)
+            while remaining:
+                remaining //= 10
+                digit_count += 1
+            self.assertEqual(digit_count, limits.MAX_JSON_INTEGER_DIGITS)
 
             mismatched = root / "mismatched.json"
             mismatched.write_text("{]", encoding="utf-8")
-            with self.assertRaises(json.JSONDecodeError):
+            with self.assertRaises(syntax_error):
                 loader(mismatched)
 
         self.assertEqual(load_policy(source), load_policy())
+
+    def test_large_policy_and_class_integers_ignore_interpreter_digit_limits(self):
+        if not hasattr(sys, "set_int_max_str_digits"):
+            self.skipTest("interpreter integer digit controls unavailable")
+        root = Path(__file__).parents[1]
+        policy = (root / "workflow-policy.json").read_text(encoding="utf-8")
+        classes = (root / "workflow-classes.json").read_text(encoding="utf-8")
+        cases = (
+            ("policy", policy, load_policy),
+            ("classes", classes, WorkflowTemplates),
+        )
+        original = sys.get_int_max_str_digits()
+        try:
+            for digit_limit in (640, 0):
+                sys.set_int_max_str_digits(digit_limit)
+                for name, canonical, load in cases:
+                    document = canonical.replace(
+                        '"schema_version": 1',
+                        '"schema_version": ' + "9" * 1_000,
+                        1,
+                    )
+                    with self.subTest(limit=digit_limit, loader=name), \
+                            tempfile.TemporaryDirectory() as directory:
+                        path = Path(directory) / f"{name}.json"
+                        path.write_text(document, encoding="utf-8")
+                        with self.assertRaises(InvalidSchemaError) as raised:
+                            load(path)
+                        self.assertEqual(
+                            raised.exception.details["reason_code"],
+                            detail_digest("unsupported_policy_version"),
+                        )
+        finally:
+            sys.set_int_max_str_digits(original)
 
     def test_economics_mode_requires_an_exact_proposal_only_string(self):
         document = load_policy()

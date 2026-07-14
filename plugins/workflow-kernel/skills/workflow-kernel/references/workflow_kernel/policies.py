@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,51 +17,15 @@ from .adapters.base import (
 )
 from .schema import InvalidSchemaError
 from .redaction import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
+from .limits import (
+    JSONDocumentDepthError, JSONDocumentSyntaxError, load_json_document,
+)
 
 
 POLICY_SCHEMA_VERSION = 1
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "workflow-policy.json"
-MAX_JSON_DOCUMENT_DEPTH = MAX_PAYLOAD_DEPTH
-MAX_JSON_INTEGER_DIGITS = 4_096
 _MAPPING_PROXY_TYPE = type(MappingProxyType({}))
 _MALFORMED_POLICY_VALUE = object()
-
-
-class _JSONDocumentDepthError(ValueError):
-    pass
-
-
-def _bounded_json_int(value: str) -> int:
-    """Parse a JSON integer with a version-independent 4,096-digit ceiling."""
-    digits = value[1:] if value.startswith("-") else value
-    if len(digits) > MAX_JSON_INTEGER_DIGITS:
-        raise ValueError("JSON integer exceeds the document digit limit")
-    return int(value)
-
-
-def _load_json_document(path: Path) -> object:
-    """Load JSON after an iterative, string-aware 16-level nesting scan."""
-    document = path.read_text(encoding="utf-8")
-    depth = 0
-    in_string = False
-    escaped = False
-    for character in document:
-        if in_string:
-            if escaped:
-                escaped = False
-            elif character == "\\":
-                escaped = True
-            elif character == '"':
-                in_string = False
-        elif character == '"':
-            in_string = True
-        elif character in "[{":
-            depth += 1
-            if depth > MAX_JSON_DOCUMENT_DEPTH:
-                raise _JSONDocumentDepthError
-        elif character in "]}":
-            depth = max(0, depth - 1)
-    return json.loads(document, parse_int=_bounded_json_int)
 
 
 class _TrustedPolicyMap(tuple, MappingABC):
@@ -672,10 +635,10 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
 def load_policy(path: Optional[Path] = None) -> PolicyDocument:
     source = Path(path) if path is not None else DEFAULT_POLICY_PATH
     try:
-        payload = _load_json_document(source)
-    except _JSONDocumentDepthError:
+        payload = load_json_document(source)
+    except JSONDocumentDepthError:
         raise invalid_policy("invalid_policy_document") from None
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, RecursionError):
+    except (OSError, UnicodeError, JSONDocumentSyntaxError, ValueError, RecursionError):
         raise invalid_policy("invalid_policy_json") from None
     try:
         return _normalize_policy_payload(payload)

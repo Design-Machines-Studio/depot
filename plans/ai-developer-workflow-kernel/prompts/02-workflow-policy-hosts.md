@@ -27,6 +27,7 @@ builder session handles. Provide fake adapters and complete deterministic tests.
 
 | File | Action | Notes |
 |------|--------|-------|
+| `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/limits.py` | Create | Review-required neutral owner for shared JSON grammar, depth, and integer limits |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/policies.py` | Create | Retry, convergence, risk, gate, and degradation decisions |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/workflows.py` | Create | Seven workflow templates and dependency expansion |
 | `plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/__init__.py` | Create | Adapter exports |
@@ -169,12 +170,18 @@ returns none.
   Both traversals and canonical normalization enforce Chunk 01's maximum depth
   `16` and aggregate item budget `10000`, reject cycles, and map over-depth or
   oversized graphs to stable policy errors without leaking `RecursionError`.
-  Policy and workflow-class files share one iterative, string/escape-aware JSON
-  loader with the same 16-level structural ceiling and a 4,096-digit integer
-  ceiling (excluding a leading minus sign). Over-depth structure maps to
-  `invalid_policy_document` or `invalid_workflow_classes_document`; syntax,
-  oversized integers, and parser `ValueError`/`RecursionError` map to the
-  corresponding `invalid_*_json` reason on Python 3.9 and 3.12.
+  Policy and workflow-class files import one neutral loader from `limits.py`.
+  Its iterative tokenizer and typed-container grammar validate delimiters,
+  strings/escapes, numbers, literals, keys, separators, and root completion
+  before assigning the 16-level depth outcome. Only syntactically valid,
+  balanced over-depth structure maps to `invalid_policy_document` or
+  `invalid_workflow_classes_document`; mismatches, underflow, unterminated
+  strings, remaining openers, balanced grammar errors, oversized integers, and
+  parser failures map to the corresponding `invalid_*_json` reason. Signed
+  decimal integers have a 4,096-digit ceiling excluding the minus sign and use
+  owned manual accumulation, so a 1,000-digit schema version reaches the same
+  semantic `unsupported_policy_version` reason with Python's integer-string
+  limit defaulted, set to `640`, or disabled on Python 3.9 and 3.12.
   Project the safety anchor exactly once, then add only its already-projected
   stage-set wrappers, so file and injected forms consume the same canonical item
   budget. Ordered policy fields accept exact lists or normalized tuples, never
