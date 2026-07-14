@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional, Tuple
 
 from .redaction import (
     MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
-    MAX_TOTAL_STRING_BYTES, NOOP_WORK_BUDGET, bounded_iterable,
+    MAX_TOTAL_STRING_BYTES, NOOP_WORK_BUDGET, bounded_iterable, charge_text_work,
     freeze_error_details, freeze_json, normalize_durable_string, normalize_evidence_reference, redact, thaw,
     validate_durable_key,
 )
@@ -308,16 +308,19 @@ def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
     return value
 
 
-def _validated_string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
+def _validated_string(value: object, name: str, *, optional: bool = False,
+                      work=NOOP_WORK_BUDGET) -> Optional[str]:
     if optional and value is None:
         return None
     if type(value) is not str or not value or len(value) > MAX_STRING_LENGTH:
         raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD, {ErrorDetailKey.FIELD.value: name})
+    charge_text_work(value, work)
     return value
 
 
-def _string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
-    text = _validated_string(value, name, optional=optional)
+def _string(value: object, name: str, *, optional: bool = False,
+            work=NOOP_WORK_BUDGET) -> Optional[str]:
+    text = _validated_string(value, name, optional=optional, work=work)
     if text is None:
         return None
     try:
@@ -326,8 +329,9 @@ def _string(value: object, name: str, *, optional: bool = False) -> Optional[str
         raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD.value: name}) from None
 
 
-def _timestamp(value: object, name: str = "occurred_at") -> str:
-    text = _validated_string(value, name)
+def _timestamp(value: object, name: str = "occurred_at",
+               work=NOOP_WORK_BUDGET) -> str:
+    text = _validated_string(value, name, work=work)
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
@@ -430,10 +434,10 @@ def _validated_workflow_event_projection(schema_version, sequence, run_id, node_
     return (
         version,
         _strict_int(sequence, "sequence"),
-        _string(run_id, "run_id"),
-        _string(node_id, "node_id", optional=True),
-        _string(kind, "kind"),
-        _timestamp(occurred_at),
+        _string(run_id, "run_id", work=work),
+        _string(node_id, "node_id", optional=True, work=work),
+        _string(kind, "kind", work=work),
+        _timestamp(occurred_at, work=work),
         _payload(payload, work),
     )
 

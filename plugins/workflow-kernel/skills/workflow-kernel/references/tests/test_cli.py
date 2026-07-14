@@ -211,6 +211,32 @@ class CliTests(unittest.TestCase):
         self.assertEqual(rebuilt["revision"], 2)
         self.assertEqual(rebuilt["status"], "running")
 
+    def test_replay_reconciles_every_materialization_direction_to_ledger(self):
+        mutations = (
+            ("missing", None),
+            ("behind", lambda data: data.update(revision=data["revision"] - 1)),
+            ("equal-revision-divergent", lambda data: data.update(mode="enforce")),
+            ("ahead", lambda data: data.update(revision=data["revision"] + 1)),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                initialized = self.run_cli(
+                    "init", directory, "--run-id", "run-1",
+                    "--occurred-at", "2026-07-14T00:00:00Z",
+                )
+                self.assertEqual(initialized.returncode, 0, initialized.stderr)
+                state_path = Path(directory) / "run-state.json"
+                authoritative = json.loads(state_path.read_text())
+                if mutate is None:
+                    state_path.unlink()
+                else:
+                    materialized = dict(authoritative)
+                    mutate(materialized)
+                    state_path.write_text(json.dumps(materialized, sort_keys=True) + "\n")
+                replayed = self.run_cli("replay", directory)
+                self.assertEqual(replayed.returncode, 0, replayed.stderr)
+                self.assertEqual(json.loads(state_path.read_text()), authoritative)
+
     def test_non_init_commands_do_not_create_a_missing_run_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing-run"
@@ -460,9 +486,12 @@ class CliTests(unittest.TestCase):
             self.assertNotIn("interlopers are never overwritten", document)
             self.assertIn("verified absence preflight", document)
             self.assertIn("exactly matches the replay-derived state", document)
+            self.assertIn("lease-protected authoritative replacement", document)
+            self.assertIn("ordinary publication rejects backward revisions", document)
         self.assertIn("one lookahead item", skill)
         self.assertIn("MAX_RECONSTRUCTION_WORK", skill)
         self.assertIn("event payload snapshot", skill)
+        self.assertIn("scalar event snapshot", skill)
         self.assertIn("trusted node updates", skill)
 
     def test_replay_holds_run_lease_across_observation_and_publication(self):
@@ -502,7 +531,11 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = state
             self.assertEqual(command_replay(SimpleNamespace(directory="unused")), 0)
         self.assertFalse(active["lease"])
-        states.prepare.assert_not_called()
+        states.prepare.assert_called_once_with(state)
+        states.reconcile.assert_called_once_with(
+            states.prepare.return_value, state.revision, lease=mock.ANY,
+        )
+        states.write.assert_not_called()
 
     def test_append_observes_state_before_publishing_event(self):
         order = []
@@ -511,7 +544,7 @@ class CliTests(unittest.TestCase):
             "kind": "run.started", "occurred_at": "2026-07-14T00:00:01Z", "payload": {},
         }
         events = mock.Mock()
-        events.replay.return_value = (object(),)
+        events.validate.return_value = ((object(),), ())
         events.append.side_effect = lambda *_args, **_kwargs: order.append("event")
         current = mock.Mock(revision=1)
         states = mock.Mock()
@@ -532,6 +565,7 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = current
             engine.return_value.apply.return_value = next_state
             self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
+        engine.assert_called_once_with()
         self.assertEqual(order, ["state", "prepare", "event", "publish"])
         self.assertIs(events.append.call_args.kwargs["lease"], coordinator.__enter__.return_value)
         states.publish.assert_called_once_with(prepared, 1, lease=coordinator.__enter__.return_value)

@@ -126,7 +126,9 @@ class PinnedDirectory:
         try:
             entry = os.stat(name, dir_fd=self.descriptor, follow_symlinks=False)
         except FileNotFoundError:
+            self.revalidate()
             return
+        self.revalidate()
         _require_exclusive_regular(entry, entry, self.path / name)
         raise FileExistsError(errno.EEXIST, "durable file already exists", str(self.path / name))
 

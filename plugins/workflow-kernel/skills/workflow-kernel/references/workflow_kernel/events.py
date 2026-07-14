@@ -126,7 +126,6 @@ def _event_store_type():
                 with _OwnedResourceScope() as scope:
                     directory = scope.pin(record["binding"])
                     directory.require_absent(record["path"].name)
-                    directory.revalidate()
             except FileExistsError:
                 raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {
                     ErrorDetailKey.DIRECTORY.value: str(record["root"]),

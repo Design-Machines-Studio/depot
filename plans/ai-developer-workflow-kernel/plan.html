@@ -156,11 +156,13 @@ class PreparedState: opaque identity; closure registry captures only revision an
 command_validate: hold one RunLease across ledger validation and state comparison
 command_init: run verified absence preflight for ledger and state under the lease; prepare state before first append
 command_append: require any materialization exactly matches the replay-derived state before mutation; replay reconciles missing or stale state
+command_replay: prepare ledger-derived state and use lease-protected authoritative replacement for missing, behind, ahead, or equal-revision divergent materialization while expected-revision CAS still rejects concurrent change
 reducers and event/state writers: shared field-wise bounded snapshots before comparison or projection
 state graph: nodes + dependency edges + state evidence share one aggregate item budget and one-pass node projection
 public recursive text: exact scalars; 4 MiB cumulative UTF-8 budget before retained allocation
 public collections: counted before allocation; bounded iterables accept at most N items but may consume one lookahead item; reconstruction limit: 100,000 events
-trusted reducer updates: incrementally maintained node, edge, text, and evidence counters enforce state bounds; event payload snapshot, node-update creation, graph copy/access, evidence parse/copy/membership, and dependency membership work is charged against MAX_RECONSTRUCTION_WORK=50100000; already-normalized node tuples are reused without rescanning
+trusted reducer updates: incrementally maintained node, edge, text, and evidence counters enforce state bounds; scalar event snapshot, recursive payload snapshot, node-update creation, graph copy/access, evidence parse/copy/membership, and dependency membership work is charged against MAX_RECONSTRUCTION_WORK=50100000; already-normalized node tuples are reused without rescanning
+state publication: ordinary publication rejects backward revisions; replay-only reconciliation permits authoritative replacement in either direction without weakening lease, pinned identity, or cooperating-writer CAS checks
 durable reads/writes: open descriptor must remain the authoritative exclusive pathname before success
 durable parent capability: verified directory descriptor and identity own descriptor-relative open/stat/unlink/replace/fsync operations
 atomic state publication: one pinned parent spans observation, temp write/fsync, revision re-observation, rename, and directory fsync

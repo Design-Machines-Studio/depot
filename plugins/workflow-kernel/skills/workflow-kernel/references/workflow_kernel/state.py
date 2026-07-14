@@ -277,7 +277,6 @@ def _capability_types():
                 with _OwnedResourceScope() as scope:
                     directory = scope.pin(record["binding"])
                     directory.require_absent(path.name)
-                    directory.revalidate()
             except FileExistsError:
                 raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {
                     ErrorDetailKey.DIRECTORY.value: str(path.parent),
@@ -324,6 +323,19 @@ def _capability_types():
 
         def publish(self, prepared: PreparedState, expected_revision: int,
                     *, lease: RunLease = None) -> dict:
+            return self._publish_prepared(
+                prepared, expected_revision, lease=lease, allow_backward=False,
+            )
+
+        def reconcile(self, prepared: PreparedState, expected_revision: int,
+                      *, lease: RunLease = None) -> dict:
+            """Publish ledger-authoritative state while retaining CAS checks."""
+            return self._publish_prepared(
+                prepared, expected_revision, lease=lease, allow_backward=True,
+            )
+
+        def _publish_prepared(self, prepared: PreparedState, expected_revision: int,
+                              *, lease: RunLease, allow_backward: bool) -> dict:
             record = store_records[self]
             if type(prepared) is not PreparedState:
                 raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
@@ -366,7 +378,7 @@ def _capability_types():
                                 ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                                 ErrorDetailKey.ACTUAL_REVISION.value: actual,
                             })
-                        if revision < actual:
+                        if not allow_backward and revision < actual:
                             raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
                                 ErrorDetailKey.CANDIDATE_REVISION.value: revision,
                                 ErrorDetailKey.ACTUAL_REVISION.value: actual,

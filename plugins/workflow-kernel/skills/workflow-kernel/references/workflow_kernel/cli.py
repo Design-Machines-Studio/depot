@@ -57,6 +57,16 @@ def _require_materialized_matches_ledger(materialized, reconstructed):
         })
 
 
+def _observe_consistent_run(events, states, engine, *, recovery, empty_error):
+    replayed, notes = events.validate(recovery=recovery)
+    if not replayed:
+        raise empty_error
+    reconstructed = engine.reconstruct(replayed)
+    materialized = _load_optional_state(states)
+    _require_materialized_matches_ledger(materialized, reconstructed)
+    return replayed, notes, reconstructed, materialized
+
+
 def _append_and_publish(events, states, event, next_state, *,
                         expected_sequence, expected_revision, lease):
     prepared = states.prepare(next_state)
@@ -91,13 +101,12 @@ def command_init(args):
 
 def command_validate(args):
     _, events, states = _paths(args.directory)
+    engine = TransitionEngine()
     with _coordinated_run(states):
-        replayed, notes = events.validate(recovery=args.recovery)
-        if not replayed:
-            raise CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING)
-        state = TransitionEngine().reconstruct(replayed)
-        materialized = _load_optional_state(states)
-        _require_materialized_matches_ledger(materialized, state)
+        replayed, notes, _, _ = _observe_consistent_run(
+            events, states, engine, recovery=args.recovery,
+            empty_error=CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING),
+        )
     _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
     return 0
 
@@ -113,15 +122,14 @@ def command_append(args):
             ErrorDetailKey.REASON_CODE.value: "recursion_limit",
         }) from None
     event = WorkflowEvent.from_dict(data)
+    engine = TransitionEngine()
     with _coordinated_run(states) as lease:
-        existing = events.replay()
-        if not existing:
-            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
-        state = TransitionEngine().reconstruct(existing)
-        materialized = _load_optional_state(states)
-        _require_materialized_matches_ledger(materialized, state)
+        existing, _, state, materialized = _observe_consistent_run(
+            events, states, engine, recovery=False,
+            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
+        )
         expected = materialized.revision if materialized is not None else -1
-        next_state = TransitionEngine().apply(state, event)
+        next_state = engine.apply(state, event)
         evidence = _append_and_publish(
             events, states, event, next_state, expected_sequence=len(existing),
             expected_revision=expected, lease=lease,
@@ -133,11 +141,13 @@ def command_append(args):
 
 def command_replay(args):
     _, events, states = _paths(args.directory)
+    engine = TransitionEngine()
     with _coordinated_run(states) as lease:
-        reconstructed = TransitionEngine().reconstruct(events.replay())
+        reconstructed = engine.reconstruct(events.replay())
         materialized = _load_optional_state(states)
         expected = materialized.revision if materialized is not None else -1
-        evidence = states.write(reconstructed, expected, lease=lease)
+        prepared = states.prepare(reconstructed)
+        evidence = states.reconcile(prepared, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})
     return 0

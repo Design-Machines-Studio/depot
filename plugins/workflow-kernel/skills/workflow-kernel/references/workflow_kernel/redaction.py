@@ -54,6 +54,16 @@ class _NoOpWorkBudget:
 NOOP_WORK_BUDGET = _NoOpWorkBudget()
 
 
+def charge_text_work(value: str, work=NOOP_WORK_BUDGET) -> int:
+    """Charge exact character and UTF-8 byte traversal before normalization."""
+    character_count = len(value)
+    work.charge(character_count)
+    encoded_count = len(value.encode("utf-8"))
+    if encoded_count > character_count:
+        work.charge(encoded_count - character_count)
+    return encoded_count
+
+
 def bounded_iterable(value, *, max_items: int = MAX_PAYLOAD_ITEMS):
     """Yield at most max_items values and fail before unbounded allocation."""
     for index, item in enumerate(value):
@@ -267,12 +277,7 @@ class _Traversal:
     work: Any = NOOP_WORK_BUDGET
 
     def consume_text(self, value: str) -> None:
-        character_count = len(value)
-        self.work.charge(character_count)
-        encoded_count = len(value.encode("utf-8"))
-        if encoded_count > character_count:
-            self.work.charge(encoded_count - character_count)
-        self.text_bytes += encoded_count
+        self.text_bytes += charge_text_work(value, self.work)
         if self.text_bytes > self.max_total_string_bytes:
             raise TypeError("payload exceeds maximum total string bytes")
 

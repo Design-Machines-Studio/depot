@@ -93,6 +93,19 @@ class TransitionTests(unittest.TestCase):
             self.engine.reconstruct((candidate,))
         self.assertLess(values.reads, len(values))
 
+    def test_reconstruction_charges_all_multibyte_scalar_event_fields(self):
+        for field in ("run_id", "node_id", "kind", "occurred_at"):
+            candidate = event(0, "run.initialized")
+            object.__setattr__(candidate, field, "é" * 100)
+            with self.subTest(field=field):
+                with mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", 150), \
+                        self.assertRaises(UnsafePayloadError) as raised:
+                    self.engine.reconstruct((candidate,))
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("reconstruction_work_limit"),
+                )
+
     def test_reconstruction_charges_repeated_event_and_node_update_work(self):
         stream = [
             event(0, "run.initialized"), event(1, "run.started"),

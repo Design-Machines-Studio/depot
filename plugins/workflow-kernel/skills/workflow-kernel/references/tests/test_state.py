@@ -45,6 +45,33 @@ class StateStoreTests(unittest.TestCase):
                 with self.assertRaises(error_type):
                     StateStore(path).require_absent()
 
+    def test_require_absent_revalidates_parent_before_existing_entry_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "run"
+            parent.mkdir()
+            (parent / "run-state.json").touch()
+            moved = root / "moved"
+            store = StateStore(parent / "run-state.json")
+            original_stat = os.stat
+            swapped = False
+
+            def swap_after_entry_stat(path, *args, **kwargs):
+                nonlocal swapped
+                result = original_stat(path, *args, **kwargs)
+                if path == "run-state.json" and kwargs.get("dir_fd") is not None and not swapped:
+                    swapped = True
+                    parent.rename(moved)
+                    parent.mkdir()
+                    (parent / "run-state.json").touch()
+                return result
+
+            with mock.patch("workflow_kernel._files.os.stat",
+                            side_effect=swap_after_entry_stat), \
+                    self.assertRaises(CorruptStateError):
+                store.require_absent()
+
+
     def test_missing_state_primary_survives_parent_close_failure(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(
                 PinnedDirectory, "close", side_effect=OSError("cleanup-sentinel")):
@@ -223,6 +250,35 @@ class StateStoreTests(unittest.TestCase):
                     "workflow_kernel.state.os.fsync", side_effect=inject_after_temp_write), \
                     self.assertRaises(RevisionConflictError):
                 store.write(candidate, 0, lease=lease)
+            self.assertEqual(store.load().revision, 2)
+
+    def test_reconcile_rejects_revision_interloper_created_after_temp_fsync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            with RunLease(path) as lease:
+                store.write(base, -1, lease=lease)
+            authoritative = store.prepare(base)
+            interloper = replace(base, revision=2)
+            replacement = Path(directory) / "interloper.json"
+            replacement.write_bytes(encode_state(interloper))
+            original_fsync = os.fsync
+            original_replace = os.replace
+            injected = False
+
+            def inject_after_temp_write(descriptor):
+                nonlocal injected
+                result = original_fsync(descriptor)
+                if not injected:
+                    injected = True
+                    original_replace(replacement, path)
+                return result
+
+            with RunLease(path) as lease, mock.patch(
+                    "workflow_kernel.state.os.fsync", side_effect=inject_after_temp_write), \
+                    self.assertRaises(RevisionConflictError):
+                store.reconcile(authoritative, 0, lease=lease)
             self.assertEqual(store.load().revision, 2)
 
     @unittest.skipUnless(hasattr(os, "fork"), "requires POSIX fork")
