@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from dataclasses import dataclass
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, Callable
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import urlsplit
 
 
 REDACTED = "[REDACTED]"
@@ -19,6 +20,8 @@ _SECRET_PARTS = (
     "token", "key", "secret", "password", "authorization", "cookie", "dsn",
     "environment_value", "environment-value", "env_value",
 )
+_CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
+_ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 
 
 def is_secret_key(key: str) -> bool:
@@ -26,25 +29,37 @@ def is_secret_key(key: str) -> bool:
     return any(part.replace("-", "_") in normalized for part in _SECRET_PARTS)
 
 
-def _normalized_name(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "_", value.casefold()).strip("_")
-
-
 def validate_reference(reference: str) -> str:
-    """Reject credential-bearing URLs before they enter durable artifacts."""
+    """Return one safe artifact ID, relative path, or opaque URL digest."""
     if not isinstance(reference, str) or not reference or len(reference) > MAX_STRING_LENGTH:
         raise ValueError("evidence reference is invalid")
-    parsed = urlsplit(reference)
-    if parsed.username is not None or parsed.password is not None:
-        raise ValueError("evidence reference contains URL credentials")
-    if parsed.fragment:
+    if "\\" in reference or any(ord(character) < 32 or ord(character) == 127 for character in reference):
+        raise ValueError("evidence reference contains ambiguous characters")
+    if "?" in reference:
+        raise ValueError("evidence reference contains a URL query")
+    if "#" in reference:
         raise ValueError("evidence reference contains a URL fragment")
-    for key, _ in parse_qsl(parsed.query, keep_blank_values=True):
-        normalized = _normalized_name(key)
-        if is_secret_key(normalized) or normalized == "sig" or any(
-            part in normalized for part in ("signature", "credential", "auth")
-        ):
-            raise ValueError("evidence reference contains a sensitive query parameter")
+    if _CONTENT_ID.fullmatch(reference):
+        return reference
+    try:
+        parsed = urlsplit(reference)
+    except ValueError as exc:
+        raise ValueError("evidence reference is invalid") from exc
+    if parsed.scheme:
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.hostname is None:
+            raise ValueError("evidence reference uses an unsupported URL")
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError("evidence reference contains URL credentials")
+        try:
+            parsed.port
+        except ValueError as exc:
+            raise ValueError("evidence reference contains an invalid URL port") from exc
+        return "url-sha256:" + hashlib.sha256(reference.encode("utf-8")).hexdigest()
+    if parsed.netloc or parsed.query or parsed.fragment or reference.startswith("/"):
+        raise ValueError("evidence reference is not a run-relative artifact path")
+    segments = reference.split("/")
+    if any(not _ARTIFACT_SEGMENT.fullmatch(segment) for segment in segments):
+        raise ValueError("evidence reference is not a run-relative artifact path")
     return reference
 
 
@@ -87,7 +102,7 @@ class _Traversal:
             if len(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
             if key.casefold() == "reference":
-                validate_reference(value)
+                return validate_reference(value)
             return value
         if isinstance(value, int):
             return value
@@ -106,8 +121,7 @@ class _Traversal:
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
             if key.casefold() == "evidence":
-                for reference in value:
-                    validate_reference(reference)
+                value = tuple(validate_reference(reference) for reference in value)
             result = tuple(self.normalize(item, depth=depth + 1) for item in value)
             return self.wrap_sequence(result)
         raise TypeError("value is not JSON-safe")

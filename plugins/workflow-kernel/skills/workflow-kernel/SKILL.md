@@ -96,8 +96,16 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 Pass only evidence references into the ledger. Recursively redact token, key,
 secret, password, authorization, cookie, DSN, and environment-value fields.
-Never report a raw secret in errors or receipts. Evidence references containing
-URL fragments are rejected before durable encoding.
+Never report a raw secret in errors or receipts. A run-relative artifact path is
+one or more `/`-separated ASCII segments matching
+`[A-Za-z0-9_][A-Za-z0-9._-]*`; absolute paths, empty or dot segments,
+backslashes, controls, and ambiguous query or fragment syntax are rejected.
+Content IDs use exactly `sha256:<64 lowercase hex>`. Replay also accepts the
+kernel-generated `url-sha256:<64 lowercase hex>` form. An `http` or `https`
+reference must have an authority and valid port with no userinfo, query, or
+fragment; the kernel immediately replaces the entire original UTF-8 reference
+with its deterministic `url-sha256:` digest. No URL component enters events,
+receipts, or state. All other schemes are rejected.
 
 Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and

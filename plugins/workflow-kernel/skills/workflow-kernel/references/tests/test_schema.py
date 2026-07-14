@@ -1,3 +1,4 @@
+import hashlib
 import json
 import unittest
 from dataclasses import replace
@@ -13,9 +14,10 @@ from workflow_kernel.schema import (
     UnsafePayloadError,
     WorkflowEvent,
 )
-from workflow_kernel.receipts import encode_receipt
+from workflow_kernel.receipts import encode_receipt, evidence_receipt
 from workflow_kernel.events import encode_event
 from workflow_kernel.schema import NodeState
+from workflow_kernel.state import encode_state
 
 
 class SchemaTests(unittest.TestCase):
@@ -101,6 +103,62 @@ class SchemaTests(unittest.TestCase):
             event = WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
                                   "2026-07-14T00:00:00Z", {"evidence": [reference]})
             encode_event(event)
+
+    def test_evidence_url_rejects_empty_query_and_fragment_delimiters(self):
+        for reference in ("https://example.invalid/proof?", "https://example.invalid/proof#"):
+            with self.subTest(reference=reference), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
+                              "2026-07-14T00:00:00Z", {"evidence": [reference]})
+
+    def test_url_evidence_is_normalized_before_event_and_receipt_output(self):
+        sentinel = "never-persist-this-webhook-token"
+        reference = "https://hooks.example.invalid/services/" + sentinel
+        expected = "url-sha256:" + hashlib.sha256(reference.encode("utf-8")).hexdigest()
+
+        event = WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
+                              "2026-07-14T00:00:00Z", {"evidence": [reference]})
+        receipt = evidence_receipt("run-1", "test", reference)
+
+        self.assertEqual(event.payload["evidence"], (expected,))
+        self.assertEqual(receipt["reference"], expected)
+        for encoded in (encode_event(event), encode_receipt(receipt)):
+            self.assertNotIn(sentinel.encode(), encoded)
+            self.assertNotIn(reference.encode(), encoded)
+            self.assertIn(expected.encode(), encoded)
+
+    def test_url_evidence_is_normalized_by_direct_and_from_dict_state(self):
+        sentinel = "never-persist-this-state-token"
+        reference = "https://artifacts.example.invalid/download/" + sentinel
+        expected = "url-sha256:" + hashlib.sha256(reference.encode("utf-8")).hexdigest()
+        base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+
+        direct = replace(base, evidence=(reference,))
+        data = base.to_dict()
+        data["evidence"] = [reference]
+        parsed = RunState.from_dict(data)
+
+        for state in (direct, parsed):
+            self.assertEqual(state.evidence, (expected,))
+            encoded = encode_state(state)
+            self.assertNotIn(sentinel.encode(), encoded)
+            self.assertNotIn(reference.encode(), encoded)
+            self.assertIn(expected.encode(), encoded)
+
+    def test_evidence_reference_policy_accepts_safe_ids_and_rejects_unsafe_paths(self):
+        digest = "sha256:" + "a" * 64
+        for reference in ("receipt.json", "artifacts/review/report-01.json", digest):
+            with self.subTest(allowed=reference):
+                event = WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
+                                      "2026-07-14T00:00:00Z", {"evidence": [reference]})
+                self.assertEqual(event.payload["evidence"], (reference,))
+
+        unsafe = ("", "/absolute/report.json", "../report.json", "artifacts/../report.json",
+                  "artifacts\\report.json", "artifacts//report.json", "report\n.json",
+                  "s3://bucket/report.json", "sha256:" + "A" * 64)
+        for reference in unsafe:
+            with self.subTest(rejected=reference), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
+                              "2026-07-14T00:00:00Z", {"evidence": [reference]})
 
     def test_corrupt_state_error_has_stable_public_code(self):
         self.assertEqual(CorruptStateError("bad state").code, "corrupt_state")
