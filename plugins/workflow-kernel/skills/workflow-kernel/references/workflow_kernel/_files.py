@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import os
+import secrets
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,6 +51,119 @@ class DurablePathBinding:
                 or (parent.st_dev, parent.st_ino) != self.parent_identity):
             raise UnsafeFileError(errno.ESTALE, "durable parent identity changed")
 
+    def pin_parent(self) -> "PinnedDirectory":
+        """Open and verify the bound parent, retaining its descriptor."""
+        return PinnedDirectory.open(self.path.parent, self.parent_identity)
+
+
+class PinnedDirectory:
+    """Owned directory descriptor used for all durable child operations."""
+
+    __slots__ = ("path", "identity", "_descriptor")
+
+    def __init__(self, path: Path, descriptor: int, identity: object):
+        self.path = Path(path)
+        self.identity = identity
+        self._descriptor = descriptor
+
+    @classmethod
+    def open(cls, path: Path, expected_identity=None) -> "PinnedDirectory":
+        path = Path(path)
+        flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        descriptor = os.open(str(path), flags)
+        try:
+            opened = os.fstat(descriptor)
+            entry = os.lstat(str(path))
+            identity = (opened.st_dev, opened.st_ino)
+            if (not stat.S_ISDIR(opened.st_mode) or not stat.S_ISDIR(entry.st_mode)
+                    or identity != (entry.st_dev, entry.st_ino)
+                    or (expected_identity is not None and identity != expected_identity)):
+                raise UnsafeFileError(errno.ESTALE, "durable parent identity changed")
+            return cls(path, descriptor, identity)
+        except Exception:
+            os.close(descriptor)
+            raise
+
+    @property
+    def descriptor(self) -> int:
+        if self._descriptor is None:
+            raise UnsafeFileError(errno.EBADF, "durable parent handle is closed")
+        return self._descriptor
+
+    def revalidate(self) -> None:
+        opened = os.fstat(self.descriptor)
+        entry = os.lstat(str(self.path))
+        if (not stat.S_ISDIR(opened.st_mode) or not stat.S_ISDIR(entry.st_mode)
+                or (opened.st_dev, opened.st_ino) != self.identity
+                or (entry.st_dev, entry.st_ino) != self.identity):
+            raise UnsafeFileError(errno.ESTALE, "durable parent identity changed")
+
+    def open_regular(self, name: str, flags: int, mode: int = 0o600) -> int:
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(name, flags | nofollow, mode, dir_fd=self.descriptor)
+        try:
+            self.require_identity(descriptor, name)
+            return descriptor
+        except Exception:
+            os.close(descriptor)
+            raise
+
+    def require_identity(self, descriptor: int, name: str) -> None:
+        opened = os.fstat(descriptor)
+        entry = os.stat(name, dir_fd=self.descriptor, follow_symlinks=False)
+        _require_exclusive_regular(opened, entry, self.path / name)
+
+    def regular_exists(self, name: str) -> bool:
+        try:
+            entry = os.stat(name, dir_fd=self.descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        _require_exclusive_regular(entry, entry, self.path / name)
+        return True
+
+    def create_temporary(self, prefix: str, suffix: str) -> tuple[int, str]:
+        for _ in range(100):
+            name = prefix + secrets.token_hex(12) + suffix
+            try:
+                descriptor = self.open_regular(name, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            except FileExistsError:
+                continue
+            return descriptor, name
+        raise UnsafeFileError(errno.EEXIST, "could not create durable temporary file")
+
+    def replace(self, source: str, target: str) -> None:
+        os.rename(source, target, src_dir_fd=self.descriptor, dst_dir_fd=self.descriptor)
+
+    def unlink(self, name: str) -> None:
+        os.unlink(name, dir_fd=self.descriptor)
+
+    def fsync(self) -> str:
+        try:
+            os.fsync(self.descriptor)
+            return "completed"
+        except OSError as exc:
+            unsupported = {errno.EINVAL, errno.EBADF, errno.EPERM}
+            for name in ("ENOTSUP", "EOPNOTSUPP"):
+                value = getattr(errno, name, None)
+                if value is not None:
+                    unsupported.add(value)
+            if exc.errno in unsupported:
+                return "unsupported"
+            raise
+
+    def close(self) -> None:
+        if self._descriptor is None:
+            return
+        descriptor = self._descriptor
+        self._descriptor = None
+        os.close(descriptor)
+
+    def __enter__(self) -> "PinnedDirectory":
+        return self
+
+    def __exit__(self, *_args) -> None:
+        self.close()
+
 
 def bind_durable_path(path: Path) -> DurablePathBinding:
     """Resolve an existing parent without following the final durable-file name."""
@@ -77,22 +191,8 @@ def _require_exclusive_regular(opened, entry, path: Path) -> None:
 def open_verified_regular(path: Path, flags: int, mode: int = 0o600) -> int:
     """Open a single-link regular file relative to its verified parent handle."""
     path = Path(path)
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    directory = os.open(str(path.parent), directory_flags)
-    descriptor = None
-    try:
-        nofollow = getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(path.name, flags | nofollow, mode, dir_fd=directory)
-        opened = os.fstat(descriptor)
-        entry = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
-        _require_exclusive_regular(opened, entry, path)
-        return descriptor
-    except Exception:
-        if descriptor is not None:
-            os.close(descriptor)
-        raise
-    finally:
-        os.close(directory)
+    with PinnedDirectory.open(path.parent) as directory:
+        return directory.open_regular(path.name, flags, mode)
 
 
 def require_descriptor_path_identity(descriptor: int, path: Path) -> None:
@@ -105,9 +205,10 @@ def require_descriptor_path_identity(descriptor: int, path: Path) -> None:
 class LockHandle:
     """An open lock descriptor bound to its canonical pathname and inode."""
 
-    def __init__(self, path: Path, descriptor: int):
+    def __init__(self, path: Path, descriptor: int, directory: PinnedDirectory = None):
         self.path = canonical_path(path)
         self._descriptor = descriptor
+        self._directory = directory
         self._locked = False
         opened = os.fstat(descriptor)
         self.identity = (opened.st_dev, opened.st_ino)
@@ -115,12 +216,24 @@ class LockHandle:
     @classmethod
     def open(cls, path: Path) -> "LockHandle":
         canonical = canonical_path(path)
-        descriptor = open_verified_regular(canonical, os.O_CREAT | os.O_RDWR)
+        binding = bind_durable_path(canonical)
+        return cls.open_bound(binding)
+
+    @classmethod
+    def open_bound(cls, binding: DurablePathBinding) -> "LockHandle":
+        directory = binding.pin_parent()
+        descriptor = None
         try:
-            return cls(canonical, descriptor)
+            descriptor = directory.open_regular(binding.path.name, os.O_CREAT | os.O_RDWR)
+            return cls(binding.path, descriptor, directory)
         except Exception:
             try:
-                os.close(descriptor)
+                if descriptor is not None:
+                    os.close(descriptor)
+            except OSError:
+                pass
+            try:
+                directory.close()
             except OSError:
                 pass
             raise
@@ -130,7 +243,15 @@ class LockHandle:
         """Open, exclusively lock, and revalidate one persistent lock file."""
         if fcntl is None:
             raise LockingUnsupportedError(errno.ENOSYS, "crash-safe locking is unavailable", str(path))
-        handle = cls.open(path)
+        return cls.acquire_bound(bind_durable_path(path))
+
+    @classmethod
+    def acquire_bound(cls, binding: DurablePathBinding) -> "LockHandle":
+        """Acquire a lock while retaining the verified parent descriptor."""
+        path = binding.path
+        if fcntl is None:
+            raise LockingUnsupportedError(errno.ENOSYS, "crash-safe locking is unavailable", str(path))
+        handle = cls.open_bound(binding)
         try:
             fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             handle._locked = True
@@ -156,12 +277,20 @@ class LockHandle:
             raise UnsafeFileError(errno.EBADF, "lock handle is closed", str(self.path))
         return self._descriptor
 
+    @property
+    def directory(self) -> PinnedDirectory:
+        return self._directory
+
     def revalidate(self) -> None:
         """Require the canonical path to still name this exclusive regular inode."""
         descriptor = self.descriptor
         opened = os.fstat(descriptor)
-        entry = os.lstat(str(self.path))
-        _require_exclusive_regular(opened, entry, self.path)
+        if self._directory is None:
+            entry = os.lstat(str(self.path))
+            _require_exclusive_regular(opened, entry, self.path)
+        else:
+            self._directory.revalidate()
+            self._directory.require_identity(descriptor, self.path.name)
         if (opened.st_dev, opened.st_ino) != self.identity:
             raise UnsafeFileError(errno.ESTALE, "lock descriptor identity changed", str(self.path))
 
@@ -170,7 +299,25 @@ class LockHandle:
             return
         descriptor = self._descriptor
         self._descriptor = None
-        os.close(descriptor)
+        failure = None
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            failure = exc
+        try:
+            if self._directory is not None:
+                self._directory.close()
+                self._directory = None
+        except OSError:
+            if failure is None:
+                raise
+        if failure is not None:
+            raise failure
+
+    def close_inherited(self) -> None:
+        """Close a post-fork inherited descriptor without changing its flock."""
+        self._locked = False
+        self.close()
 
     def release(self) -> None:
         """Unlock and close without unlinking the persistent lock pathname."""

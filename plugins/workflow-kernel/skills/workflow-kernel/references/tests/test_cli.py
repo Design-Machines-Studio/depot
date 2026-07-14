@@ -237,6 +237,7 @@ class CliTests(unittest.TestCase):
             package = refs / "workflow_kernel"
             package.mkdir(parents=True)
             (package / "__init__.py").write_text("")
+            (package / "cli.py").write_text("")
             (package / "__main__.py").write_text("print('codex-only-runtime')\n")
             caller = Path(directory) / "caller"
             conflicting = caller / "workflow_kernel"
@@ -250,6 +251,48 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-only-runtime", result.stdout)
         self.assertNotIn("caller-runtime", result.stdout)
+
+    def test_documented_cache_resolver_skips_incomplete_newer_candidates(self):
+        skill = Path(__file__).parents[2] / "SKILL.md"
+        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            incomplete = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel/9.9.9/skills/workflow-kernel/references"
+            incomplete.mkdir(parents=True)
+            refs = Path(directory) / ".codex/plugins/cache/depot/workflow-kernel/0.1.0/skills/workflow-kernel/references"
+            package = refs / "workflow_kernel"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text("")
+            (package / "cli.py").write_text("")
+            (package / "__main__.py").write_text("print('fallback-runtime')\n")
+            result = subprocess.run(
+                ["zsh", "-c", snippet], text=True, capture_output=True,
+                env=dict(os.environ, HOME=directory), check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertIn("fallback-runtime", result.stdout)
+
+    def test_documented_cache_resolver_falls_through_unimportable_candidate_in_one_root(self):
+        skill = Path(__file__).parents[2] / "SKILL.md"
+        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        with tempfile.TemporaryDirectory() as directory:
+            cache = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel"
+            broken = cache / "9.9.9/skills/workflow-kernel/references/workflow_kernel"
+            broken.mkdir(parents=True)
+            (broken / "__init__.py").write_text("")
+            (broken / "__main__.py").write_text("raise RuntimeError('broken')\n")
+            good = cache / "0.1.0/skills/workflow-kernel/references/workflow_kernel"
+            good.mkdir(parents=True)
+            (good / "__init__.py").write_text("")
+            (good / "cli.py").write_text("")
+            (good / "__main__.py").write_text("print('older-viable-runtime')\n")
+            result = subprocess.run(
+                ["zsh", "-c", snippet], text=True, capture_output=True,
+                env=dict(os.environ, HOME=directory), check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertIn("older-viable-runtime", result.stdout)
 
     def test_replay_holds_run_lease_across_observation_and_publication(self):
         active = {"lease": False}

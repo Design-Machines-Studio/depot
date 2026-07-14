@@ -53,6 +53,26 @@ class CountingStr(str):
             yield character
 
 class SchemaTests(unittest.TestCase):
+    def test_state_text_length_guard_precedes_utf8_aggregate_count(self):
+        budget = schema._StateItemBudget()
+        with mock.patch.object(schema, "MAX_STRING_LENGTH", 3), \
+                mock.patch.object(schema, "MAX_TOTAL_STRING_BYTES", 3), \
+                self.assertRaises(InvalidSchemaError) as raised:
+            budget.consume_text("four")
+        self.assertEqual(raised.exception.message, schema.ErrorMessage.INVALID_STRING_FIELD.value)
+
+    def test_state_from_dict_validates_dependency_graph_once(self):
+        data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+        data["nodes"] = {
+            "a": {"node_id": "a", "status": "pending", "dependencies": [], "evidence": []},
+        }
+        with mock.patch.object(
+                schema, "_validate_dependency_graph", wraps=schema._validate_dependency_graph,
+        ) as validate:
+            state = RunState.from_dict(data)
+        self.assertEqual(state.nodes["a"].node_id, "a")
+        self.assertEqual(validate.call_count, 1)
+
     def test_public_limit_constants_are_exported(self):
         for name in (
             "MAX_PAYLOAD_DEPTH", "MAX_PAYLOAD_ITEMS", "MAX_STRING_LENGTH",

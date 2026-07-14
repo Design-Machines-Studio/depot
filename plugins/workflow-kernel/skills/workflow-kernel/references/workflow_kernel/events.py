@@ -11,8 +11,7 @@ from typing import List, Tuple
 
 from ._files import (
     LockContentionError, LockHandle, LockIdentityError,
-    LockingUnsupportedError, bind_durable_path, open_verified_regular,
-    require_descriptor_path_identity,
+    LockingUnsupportedError, bind_durable_path,
 )
 from .redaction import redact
 from .schema import (
@@ -93,7 +92,7 @@ def _event_store_type():
                 record["path"].parent.mkdir(parents=True, exist_ok=True)
                 if record["binding"].parent_identity is None:
                     record["binding"] = bind_durable_path(record["path"])
-                return LockHandle.acquire(record["lock_path"])
+                return LockHandle.acquire_bound(bind_durable_path(record["lock_path"]))
             except LockingUnsupportedError:
                 raise SequenceConflictError(ErrorMessage.EVENT_LOCKING_UNAVAILABLE, {
                     ErrorDetailKey.REASON_CODE.value: "locking_unsupported",
@@ -123,7 +122,7 @@ def _event_store_type():
                 }) from None
 
         def _read_descriptor(self, descriptor: int, *, recovery: bool,
-                             path: Path, duplicate: bool):
+                             path: Path, duplicate: bool, directory=None):
             read_descriptor = None
             try:
                 read_descriptor = os.dup(descriptor) if duplicate else descriptor
@@ -140,7 +139,9 @@ def _event_store_type():
                 }) from None
             failure = None
             try:
-                return self._validate_handle(handle, recovery, path=path)
+                return self._validate_handle(
+                    handle, recovery, path=path, directory=directory,
+                )
             except BaseException as exc:
                 failure = exc
                 raise
@@ -170,8 +171,8 @@ def _event_store_type():
             try:
                 self._require_current_lock(lock)
                 try:
-                    descriptor = open_verified_regular(
-                        record["path"], os.O_CREAT | os.O_APPEND | os.O_RDWR,
+                    descriptor = lock.directory.open_regular(
+                        record["path"].name, os.O_CREAT | os.O_APPEND | os.O_RDWR,
                     )
                 except OSError:
                     raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
@@ -180,6 +181,7 @@ def _event_store_type():
                 try:
                     events, _ = self._read_descriptor(
                         descriptor, recovery=False, path=record["path"], duplicate=True,
+                        directory=lock.directory,
                     )
                     actual = len(events)
                     if expected_sequence != actual or event_snapshot.sequence != actual:
@@ -198,13 +200,14 @@ def _event_store_type():
                         })
                     self._require_current_lock(lock)
                     _require_run_lease(lease, record["state_path"])
-                    record["binding"].revalidate_parent()
-                    require_descriptor_path_identity(descriptor, record["path"])
+                    lock.directory.revalidate()
+                    lock.directory.require_identity(descriptor, record["path"].name)
                     written = 0
                     while written < len(data):
                         written += os.write(descriptor, data[written:])
                     os.fsync(descriptor)
-                    require_descriptor_path_identity(descriptor, record["path"])
+                    lock.directory.revalidate()
+                    lock.directory.require_identity(descriptor, record["path"].name)
                 except OSError:
                     raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
                         ErrorDetailKey.PATH.value: str(record["path"]),
@@ -237,28 +240,48 @@ def _event_store_type():
         def validate(self, recovery: bool = False):
             record = records[self]
             path = record["path"]
+            directory = None
             try:
-                record["binding"].revalidate_parent()
-                descriptor = open_verified_regular(path, os.O_RDONLY)
-            except FileNotFoundError:
-                return (), ()
+                directory = record["binding"].pin_parent()
             except OSError:
                 raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
-            return self._read_descriptor(
-                descriptor, recovery=recovery, path=path, duplicate=False,
-            )
-
-        def _validate_handle(self, handle, recovery: bool, *, path=None):
             try:
-                return self._validate_handle_unchecked(handle, recovery, path=path)
+                descriptor = directory.open_regular(path.name, os.O_RDONLY)
+            except FileNotFoundError:
+                directory.close()
+                return (), ()
+            except OSError:
+                directory.close()
+                raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
+            try:
+                return self._read_descriptor(
+                    descriptor, recovery=recovery, path=path, duplicate=False,
+                    directory=directory,
+                )
+            finally:
+                try:
+                    directory.close()
+                except OSError:
+                    if sys.exc_info()[0] is None:
+                        raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(path),
+                        }) from None
+
+        def _validate_handle(self, handle, recovery: bool, *, path=None, directory=None):
+            try:
+                return self._validate_handle_unchecked(
+                    handle, recovery, path=path, directory=directory,
+                )
             except OSError:
                 raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path or records[self]["path"]),
                 }) from None
 
-        def _validate_handle_unchecked(self, handle, recovery: bool, *, path=None):
+        def _validate_handle_unchecked(self, handle, recovery: bool, *, path=None, directory=None):
             size = os.fstat(handle.fileno()).st_size
             if size > MAX_LEDGER_BYTES:
                 raise CorruptEventError(ErrorMessage.LEDGER_SIZE_LIMIT, {
@@ -317,8 +340,13 @@ def _event_store_type():
                 index += 1
                 line = next_line
             if path is not None:
-                records[self]["binding"].revalidate_parent()
-                require_descriptor_path_identity(handle.fileno(), path)
+                if directory is None:
+                    records[self]["binding"].revalidate_parent()
+                    with records[self]["binding"].pin_parent() as pinned:
+                        pinned.require_identity(handle.fileno(), path.name)
+                else:
+                    directory.revalidate()
+                    directory.require_identity(handle.fileno(), path.name)
             return tuple(events), tuple(notes)
 
     return EventStore

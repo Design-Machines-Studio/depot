@@ -16,9 +16,149 @@ from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import PreparedState, RunLease, StateStore, encode_state
-from workflow_kernel._files import LockHandle
+from workflow_kernel._files import LockHandle, PinnedDirectory
 
 class StateStoreTests(unittest.TestCase):
+    def test_missing_file_in_live_bound_parent_remains_missing_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaises(FileNotFoundError):
+                StateStore(Path(directory) / "run-state.json").load()
+
+    def test_publish_parent_swap_cannot_redirect_atomic_replace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "run"
+            parent.mkdir()
+            path = parent / "run-state.json"
+            moved = root / "moved"
+            store = StateStore(path)
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            original_fsync = os.fsync
+            injected = False
+
+            def swap_parent_after_temp_write(descriptor):
+                nonlocal injected
+                result = original_fsync(descriptor)
+                if not injected:
+                    injected = True
+                    parent.rename(moved)
+                    parent.mkdir()
+                    temporary = next(moved.glob(".run-state.json.*.tmp"))
+                    (parent / temporary.name).write_text("replacement-parent-sentinel")
+                return result
+
+            with RunLease(path) as lease, mock.patch(
+                    "workflow_kernel.state.os.fsync", side_effect=swap_parent_after_temp_write), \
+                    self.assertRaises((CorruptStateError, LeaseConflictError)):
+                store.write(state, -1, lease=lease)
+            self.assertFalse(path.exists())
+            self.assertEqual(
+                next(parent.glob(".run-state.json.*.tmp")).read_text(),
+                "replacement-parent-sentinel",
+            )
+            self.assertEqual(list(moved.glob(".run-state.json.*.tmp")), [])
+
+    def test_missing_bound_parent_is_normalized_as_corrupt_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / "run"
+            parent.mkdir()
+            store = StateStore(parent / "run-state.json")
+            parent.rmdir()
+            with self.assertRaises(CorruptStateError) as raised:
+                store.load()
+            self.assertIsNone(raised.exception.__cause__)
+
+    def test_publish_preserves_revision_interloper_created_after_temp_fsync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            with RunLease(path) as lease:
+                store.write(base, -1, lease=lease)
+            candidate = replace(base, revision=1)
+            interloper = replace(base, revision=2)
+            replacement = Path(directory) / "interloper.json"
+            replacement.write_bytes(encode_state(interloper))
+            original_fsync = os.fsync
+            original_replace = os.replace
+            injected = False
+
+            def inject_after_temp_write(descriptor):
+                nonlocal injected
+                result = original_fsync(descriptor)
+                if not injected:
+                    injected = True
+                    original_replace(replacement, path)
+                return result
+
+            with RunLease(path) as lease, mock.patch(
+                    "workflow_kernel.state.os.fsync", side_effect=inject_after_temp_write), \
+                    self.assertRaises(RevisionConflictError):
+                store.write(candidate, 0, lease=lease)
+            self.assertEqual(store.load().revision, 2)
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires POSIX fork")
+    def test_fork_child_explicit_release_only_closes_inherited_lease_descriptor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            lease = RunLease(path).acquire()
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    lease.release()
+                finally:
+                    os._exit(0)
+            os.waitpid(pid, 0)
+            try:
+                with self.assertRaises(LeaseConflictError):
+                    RunLease(path).acquire()
+            finally:
+                lease.release()
+
+    @unittest.skipUnless(hasattr(os, "fork"), "requires POSIX fork")
+    def test_fork_child_gc_only_closes_inherited_lease_descriptor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            lease = RunLease(path).acquire()
+            pid = os.fork()
+            if pid == 0:
+                try:
+                    del lease
+                    gc.collect()
+                finally:
+                    os._exit(0)
+            os.waitpid(pid, 0)
+            try:
+                with self.assertRaises(LeaseConflictError):
+                    RunLease(path).acquire()
+            finally:
+                lease.release()
+
+    def test_lease_setup_cleanup_failure_does_not_replace_stable_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            handle = mock.Mock(descriptor=7)
+            handle.release.side_effect = OSError("cleanup-sentinel")
+            with mock.patch.object(LockHandle, "acquire_bound", return_value=handle), \
+                    mock.patch("workflow_kernel.state.os.ftruncate", side_effect=OSError("setup-sentinel")), \
+                    self.assertRaises(LeaseConflictError) as raised:
+                RunLease(path).acquire()
+            rendered = "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            ))
+            self.assertNotIn("cleanup-sentinel", rendered)
+            self.assertNotIn("setup-sentinel", rendered)
+
+    def test_context_exit_preserves_body_error_when_release_also_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            body_error = RuntimeError("body-sentinel")
+            with mock.patch.object(LockHandle, "release", side_effect=OSError("cleanup-sentinel")):
+                with self.assertRaises(RuntimeError) as raised:
+                    with RunLease(path):
+                        raise body_error
+            self.assertIs(raised.exception, body_error)
+
     def test_state_and_lease_binding_errors_are_normalized(self):
         sentinel = "never-render-state-binding"
         for constructor, error_type in (
@@ -58,15 +198,16 @@ class StateStoreTests(unittest.TestCase):
             state = RunState.new("run-1", "2026-07-14T00:00:00Z")
             replacement = Path(directory) / "replacement.json"
             replacement.write_text("replacement")
-            original_fsync = store._fsync_directory
+            original_fsync = PinnedDirectory.fsync
 
-            def replace_then_fsync():
-                result = original_fsync()
+            def replace_then_fsync(directory):
+                result = original_fsync(directory)
                 os.replace(replacement, path)
                 return result
 
             with RunLease(path) as lease, mock.patch.object(
-                    StateStore, "_fsync_directory", side_effect=replace_then_fsync), \
+                    PinnedDirectory, "fsync", autospec=True,
+                    side_effect=replace_then_fsync), \
                     self.assertRaises(CorruptStateError):
                 store.write(state, -1, lease=lease)
             self.assertEqual(path.read_text(), "replacement")
@@ -387,7 +528,7 @@ class StateStoreTests(unittest.TestCase):
             before = path.read_bytes()
             sentinel = "never-render-state-replace"
             with RunLease(path) as lease, mock.patch(
-                    "workflow_kernel.state.os.replace", side_effect=OSError(sentinel)):
+                    "workflow_kernel._files.os.rename", side_effect=OSError(sentinel)):
                 with self.assertRaises(CorruptStateError) as raised:
                     store.write(original, original.revision, lease=lease)
             rendered = "".join(traceback.format_exception(
@@ -469,8 +610,8 @@ class StateStoreTests(unittest.TestCase):
             path = root / "run-state.json"
             store = StateStore(path)
             prepared = store.prepare(RunState.new("run-1", "2026-07-14T00:00:00Z"))
-            with RunLease(path) as lease, mock.patch(
-                    "workflow_kernel.state.tempfile.mkstemp", side_effect=OSError(sentinel)):
+            with RunLease(path) as lease, mock.patch.object(
+                    PinnedDirectory, "create_temporary", side_effect=OSError(sentinel)):
                 with self.assertRaises(CorruptStateError) as state_error:
                     store.publish(prepared, -1, lease=lease)
 

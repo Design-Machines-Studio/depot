@@ -159,6 +159,12 @@ state graph: nodes + dependency edges + state evidence share one aggregate item 
 public recursive text: exact scalars; 4 MiB cumulative UTF-8 budget before retained allocation
 public collections: counted before allocation; reconstruction limit: 100,000 events
 durable reads/writes: open descriptor must remain the authoritative exclusive pathname before success
+durable parent capability: verified directory descriptor and identity own descriptor-relative open/stat/unlink/replace/fsync operations
+atomic state publication: one pinned parent spans observation, temp write/fsync, revision re-observation, rename, and directory fsync
+revision races: valid state interlopers remain RevisionConflictError and are never overwritten
+lease fork safety: child explicit release and GC close inherited descriptors without LOCK_UN; primary errors outrank cleanup errors
+state validation: direct/from_dict share one projection; reducers use trusted construction after one public-boundary graph validation
+cache resolution: candidates are checked for a runnable package in priority order and incomplete installs fall through
 public filesystem operations: setup, descriptor I/O, identity, fsync, close, and release use cause-suppressed KernelError boundaries</code></pre>
         <ol class="steps">
           <li>Write failing <code>unittest</code> cases for schema versions, strict enum parsing, secret redaction, legal transitions, illegal transitions, duplicate/gapped sequences, truncated JSONL tails, and deterministic receipt serialization.</li>

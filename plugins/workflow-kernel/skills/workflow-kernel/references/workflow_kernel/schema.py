@@ -488,6 +488,8 @@ class _StateItemBudget:
     def consume_text(self, value: object) -> None:
         if type(value) is not str:
             raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD)
+        if len(value) > MAX_STRING_LENGTH:
+            raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD)
         self.text_bytes += len(value.encode("utf-8"))
         if self.text_bytes > MAX_TOTAL_STRING_BYTES:
             raise InvalidSchemaError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
@@ -614,6 +616,76 @@ def _node_state_from_mapping(data: object,
     )
 
 
+def _trusted_run_state(values) -> "RunState":
+    state = object.__new__(RunState)
+    for name, value in zip(
+        ("schema_version", "revision", "run_id", "mode", "status", "created_at",
+         "updated_at", "nodes", "evidence", "cleanup_reconciled"), values,
+    ):
+        object.__setattr__(state, name, value)
+    return state
+
+
+def _validated_run_projection(schema_version, revision, run_id, mode, status,
+                              created_at, updated_at, raw_nodes, raw_evidence,
+                              cleanup_reconciled, *, nodes_from_dict=False,
+                              budget=None, node_keys_budgeted=False):
+    version = _strict_int(schema_version, "schema_version", minimum=1)
+    if version != SCHEMA_VERSION:
+        raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
+            ErrorDetailKey.SCHEMA_VERSION.value: version,
+        })
+    revision = _strict_int(revision, "revision")
+    run_id = _string(run_id, "run_id")
+    try:
+        mode = mode if type(mode) is RunMode else RunMode(mode) if type(mode) is str else None
+        status = status if type(status) is RunStatus else RunStatus(status) if type(status) is str else None
+        if mode is None or status is None:
+            raise TypeError("run enum must be an exact enum or string")
+    except (ValueError, TypeError):
+        raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
+            ErrorDetailKey.MODE.value: mode, ErrorDetailKey.STATUS.value: status,
+        }) from None
+    created_at = _timestamp(created_at, "created_at")
+    updated_at = _timestamp(updated_at, "updated_at")
+    if not isinstance(raw_nodes, Mapping):
+        raise InvalidSchemaError(ErrorMessage.NODES_OBJECT_REQUIRED)
+    budget = budget if budget is not None else _StateItemBudget(MAX_PAYLOAD_ITEMS)
+    nodes = {}
+    try:
+        for key in bounded_iterable(raw_nodes, max_items=MAX_PAYLOAD_ITEMS):
+            budget.consume()
+            if type(key) is not str:
+                raise InvalidSchemaError(ErrorMessage.NODE_KEYS_STRINGS)
+            if not node_keys_budgeted:
+                budget.consume_text(key)
+            value = raw_nodes[key]
+            nodes[key] = (_node_state_from_mapping(value, budget) if nodes_from_dict
+                          else _snapshot_node_state(value, budget))
+    except InvalidSchemaError:
+        raise
+    except (KeyError, TypeError, ValueError, RecursionError):
+        raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
+    try:
+        for key in nodes:
+            validate_durable_key(key)
+    except ValueError:
+        raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
+    if any(key != node.node_id for key, node in nodes.items()):
+        raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
+    evidence = _string_tuple(raw_evidence, "evidence", references=True, budget=budget)
+    _validate_dependency_graph(nodes)
+    if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
+        raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
+            ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
+            ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,
+        })
+    if type(cleanup_reconciled) is not bool:
+        raise InvalidSchemaError(ErrorMessage.CLEANUP_RECONCILED_BOOLEAN)
+    return (version, revision, run_id, mode, status, created_at, updated_at,
+            MappingProxyType(nodes), evidence, cleanup_reconciled)
+
+
 @dataclass(frozen=True)
 class RunState:
     schema_version: int
@@ -631,68 +703,13 @@ class RunState:
         raise TypeError("RunState is final")
 
     def __post_init__(self) -> None:
-        version = _strict_int(self.schema_version, "schema_version", minimum=1)
-        if version != SCHEMA_VERSION:
-            raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
-                ErrorDetailKey.SCHEMA_VERSION.value: version,
-            })
-        object.__setattr__(self, "schema_version", version)
-        object.__setattr__(self, "revision", _strict_int(self.revision, "revision"))
-        object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
-        try:
-            if type(self.mode) is RunMode:
-                mode = self.mode
-            elif type(self.mode) is str:
-                mode = RunMode(self.mode)
-            else:
-                raise TypeError("run mode must be an exact enum or string")
-            if type(self.status) is RunStatus:
-                status = self.status
-            elif type(self.status) is str:
-                status = RunStatus(self.status)
-            else:
-                raise TypeError("run status must be an exact enum or string")
-        except (ValueError, TypeError):
-            raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
-                ErrorDetailKey.MODE.value: self.mode, ErrorDetailKey.STATUS.value: self.status,
-            }) from None
-        object.__setattr__(self, "mode", mode)
-        object.__setattr__(self, "status", status)
-        object.__setattr__(self, "created_at", _timestamp(self.created_at, "created_at"))
-        object.__setattr__(self, "updated_at", _timestamp(self.updated_at, "updated_at"))
-        if not isinstance(self.nodes, Mapping):
-            raise InvalidSchemaError(ErrorMessage.NODES_OBJECT_REQUIRED)
-        nodes = {}
-        budget = _StateItemBudget(MAX_PAYLOAD_ITEMS)
-        try:
-            for key in bounded_iterable(self.nodes, max_items=MAX_PAYLOAD_ITEMS):
-                budget.consume()
-                if type(key) is not str:
-                    raise InvalidSchemaError(ErrorMessage.NODE_KEYS_STRINGS)
-                budget.consume_text(key)
-                nodes[key] = _snapshot_node_state(self.nodes[key], budget)
-        except InvalidSchemaError:
-            raise
-        except (KeyError, TypeError, ValueError, RecursionError):
-            raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
-        try:
-            for key in nodes:
-                validate_durable_key(key)
-        except ValueError:
-            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
-        if any(key != node.node_id for key, node in nodes.items()):
-            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
-        evidence = _string_tuple(self.evidence, "evidence", references=True, budget=budget)
-        _validate_dependency_graph(nodes)
-        if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
-            raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
-                ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
-                ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,
-            })
-        object.__setattr__(self, "nodes", MappingProxyType(nodes))
-        object.__setattr__(self, "evidence", evidence)
-        if not isinstance(self.cleanup_reconciled, bool):
-            raise InvalidSchemaError(ErrorMessage.CLEANUP_RECONCILED_BOOLEAN)
+        values = _validated_run_projection(
+            self.schema_version, self.revision, self.run_id, self.mode, self.status,
+            self.created_at, self.updated_at, self.nodes, self.evidence,
+            self.cleanup_reconciled,
+        )
+        for name, value in zip(self.__dataclass_fields__, values):
+            object.__setattr__(self, name, value)
 
     @classmethod
     def new(cls, run_id: str, occurred_at: str, mode: RunMode = RunMode.SHADOW) -> "RunState":
@@ -706,35 +723,15 @@ class RunState:
         _only(snapshot, fields, fields)
         budget = _StateItemBudget(MAX_PAYLOAD_ITEMS)
         raw_nodes = _bounded_mapping(
-            snapshot["nodes"], ErrorMessage.NODES_OBJECT_REQUIRED,
-            text_budget=budget,
+            snapshot["nodes"], ErrorMessage.NODES_OBJECT_REQUIRED, text_budget=budget,
         )
-        base = cls(snapshot["schema_version"], snapshot["revision"], snapshot["run_id"],
-                   snapshot["mode"], snapshot["status"], snapshot["created_at"],
-                   snapshot["updated_at"], MappingProxyType({}), (),
-                   snapshot["cleanup_reconciled"])
-        nodes = {}
-        for key, value in raw_nodes.items():
-            budget.consume()
-            nodes[key] = _node_state_from_mapping(value, budget)
-        evidence = _string_tuple(snapshot["evidence"], "evidence", references=True,
-                                 budget=budget)
-        try:
-            for key in nodes:
-                validate_durable_key(key)
-        except ValueError:
-            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
-        if any(key != node.node_id for key, node in nodes.items()):
-            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
-        _validate_dependency_graph(nodes)
-        if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
-            raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
-                ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
-                ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,
-            })
-        object.__setattr__(base, "nodes", MappingProxyType(nodes))
-        object.__setattr__(base, "evidence", evidence)
-        return base
+        return _trusted_run_state(_validated_run_projection(
+            snapshot["schema_version"], snapshot["revision"], snapshot["run_id"],
+            snapshot["mode"], snapshot["status"], snapshot["created_at"],
+            snapshot["updated_at"], raw_nodes, snapshot["evidence"],
+            snapshot["cleanup_reconciled"], nodes_from_dict=True, budget=budget,
+            node_keys_budgeted=True,
+        ))
 
     def to_dict(self) -> dict:
         return {
@@ -751,12 +748,30 @@ def _snapshot_run_state(state: RunState) -> RunState:
     if type(state) is not RunState:
         raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_RUN_STATE_REQUIRED)
     try:
-        return RunState(
+        return _trusted_run_state(_validated_run_projection(
             state.schema_version, state.revision, state.run_id, state.mode, state.status,
             state.created_at, state.updated_at, state.nodes, state.evidence,
             state.cleanup_reconciled,
-        )
+        ))
     except KernelError:
         raise
     except (AttributeError, TypeError, ValueError, RecursionError):
         raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
+
+
+def _trusted_run_state_update(state: RunState, **changes) -> RunState:
+    """Internal reducer update after one public-boundary state validation."""
+    values = {
+        "schema_version": state.schema_version, "revision": state.revision,
+        "run_id": state.run_id, "mode": state.mode, "status": state.status,
+        "created_at": state.created_at, "updated_at": state.updated_at,
+        "nodes": state.nodes, "evidence": state.evidence,
+        "cleanup_reconciled": state.cleanup_reconciled,
+    }
+    values.update(changes)
+    if "nodes" in changes and type(values["nodes"]) is not MappingProxyType:
+        values["nodes"] = MappingProxyType(dict(values["nodes"]))
+    return _trusted_run_state(tuple(values[name] for name in (
+        "schema_version", "revision", "run_id", "mode", "status", "created_at",
+        "updated_at", "nodes", "evidence", "cleanup_reconciled",
+    )))

@@ -31,6 +31,47 @@ def append_event(store, value, expected_sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def test_missing_file_in_live_bound_parent_is_an_empty_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(event_store(Path(directory) / "events.jsonl").validate(), ((), ()))
+
+    def test_append_parent_swap_cannot_redirect_ledger_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            parent = root / "run"
+            parent.mkdir()
+            moved = root / "moved"
+            store = event_store(parent / "events.jsonl")
+            original_write = os.write
+            injected = False
+
+            def swap_parent_before_write(descriptor, data):
+                nonlocal injected
+                if not injected:
+                    injected = True
+                    parent.rename(moved)
+                    parent.mkdir()
+                    (parent / "events.jsonl").write_text("replacement-parent-sentinel")
+                return original_write(descriptor, data)
+
+            with RunLease(store.state_path) as lease, mock.patch(
+                    "workflow_kernel.events.os.write", side_effect=swap_parent_before_write), \
+                    self.assertRaises(CorruptEventError):
+                store.append(event(0), 0, lease=lease)
+            self.assertEqual(
+                (parent / "events.jsonl").read_text(), "replacement-parent-sentinel",
+            )
+
+    def test_missing_bound_parent_is_normalized_as_corrupt_event(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory) / "run"
+            parent.mkdir()
+            store = event_store(parent / "events.jsonl")
+            parent.rmdir()
+            with self.assertRaises(CorruptEventError) as raised:
+                store.validate()
+            self.assertIsNone(raised.exception.__cause__)
+
     def assert_stable_event_error(self, operation, error_type=CorruptEventError):
         sentinel = "never-render-descriptor-event-error"
         with self.assertRaises(error_type) as raised:

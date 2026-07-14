@@ -18,9 +18,17 @@ cache. Avoid hardcoded version directories:
 ```sh
 KERNEL_REFS=""
 for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  KERNEL_REFS=$(find "$CACHE_ROOT/workflow-kernel" -type d \
+  while IFS= read -r CANDIDATE; do
+    if [ -f "$CANDIDATE/workflow_kernel/__init__.py" ] && \
+       [ -f "$CANDIDATE/workflow_kernel/__main__.py" ] && \
+       (cd "$CANDIDATE" && PYTHONPATH="$CANDIDATE" \
+         python3 -c 'import workflow_kernel.cli') >/dev/null 2>&1; then
+      KERNEL_REFS="$CANDIDATE"
+      break
+    fi
+  done < <(find "$CACHE_ROOT/workflow-kernel" -type d \
     -path "*/skills/workflow-kernel/references" -prune \
-    -exec ls -td {} + 2>/dev/null | head -1)
+    -exec ls -td {} + 2>/dev/null)
   [ -n "$KERNEL_REFS" ] && break
 done
 if [ -z "$KERNEL_REFS" ]; then
@@ -81,16 +89,23 @@ errors as stable JSON. Treat `--help` output as plain text.
   state path before mutation and is revalidated immediately before the write.
   The open ledger descriptor must still match its exclusive pathname
   immediately before writing and after `fsync`; validation performs the same
-  identity check after parsing and before returning.
+  identity check after parsing and before returning. These operations retain a
+  verified parent-directory descriptor and use descriptor-relative child opens
+  and stats, so a parent rename or replacement cannot redirect the ledger.
   Records and projected ledgers that exceed durable read limits are rejected.
   Use `EventStore.replay()` to reject gaps, corruption, conflicting run IDs,
   and bounded-input violations.
 - Use `StateStore.load()` to read the bounded materialization. Unsafe paths or
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
   A loaded descriptor is revalidated after parsing. Publication keeps the
-  temporary descriptor open across replacement and directory sync, then
+  verified parent and observed-state descriptors open through temporary-file
+  creation, write and sync, a second revision observation, descriptor-relative
+  replacement, and directory sync, then
   requires that descriptor to remain the authoritative state pathname before
-  reporting success.
+  reporting success. A valid revision interloper remains a
+  `RevisionConflictError`; it is never overwritten or collapsed into generic
+  filesystem corruption. A missing file in a verified live parent remains the
+  public missing/empty case, while a missing bound parent is corruption.
   Use `StateStore.prepare(state)` before publishing an event that derives the
   state. It returns an opaque exact-type identity capability with no exposed
   state or encoded-byte fields. A closure-owned weak registry keyed by the
@@ -116,7 +131,9 @@ errors as stable JSON. Treat `--help` output as plain text.
   manual `acquire()` is necessary, call `release()` in `finally`; a weakref
   finalizer releases the underlying lock if an acquired lease is garbage
   collected, and explicit release or context exit invokes that finalizer only
-  once. Lease setup and explicit release errors are normalized to
+  once. In a forked child, explicit release and GC only close the inherited
+  descriptor without issuing `LOCK_UN` against the parent's lock ownership.
+  Lease setup and explicit release errors are normalized to
   cause-suppressed `LeaseConflictError`; cleanup failures never replace an
   already-active primary kernel error.
 - Hold the same run lease across authoritative ledger replay, current-state
@@ -133,12 +150,19 @@ errors as stable JSON. Treat `--help` output as plain text.
   node state; transitions exceeding that aggregate limit fail before state
   reconstruction. Reconstruction streams at most 100,000 events and never
   eagerly exhausts a caller iterable.
+  Public `apply` validates the input state graph once and then constructs the
+  legal output through a private trusted path. Reconstruction snapshots each
+  untrusted event but does not revalidate the accumulated graph after every
+  accepted event.
 - One run-wide state-tree budget counts nodes, dependency edges, node evidence,
   and run evidence against `MAX_PAYLOAD_ITEMS` before dependency-graph helper
   structures are allocated. Node mappings and snapshots share one validated
   projection and private trusted frozen construction path, so dependencies and
   evidence are normalized once. The same aggregate bound applies to direct
   `RunState` construction, parsed state, and writer snapshots.
+  Direct construction and `from_dict` share one run-state projection and one
+  private trusted constructor. Exact strings are checked against
+  `MAX_STRING_LENGTH` before UTF-8 encoding or aggregate byte counting.
 - Recursive payload, raw-receipt, public-metadata, error-detail, and state-tree
   traversal has a cumulative 4,194,304-byte UTF-8 text budget. Mapping keys and
   string values consume that budget before they are retained; the independent

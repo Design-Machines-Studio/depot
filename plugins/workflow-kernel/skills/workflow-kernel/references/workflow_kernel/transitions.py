@@ -11,7 +11,7 @@ from .schema import (
     ErrorDetailKey, ErrorMessage, IllegalTransitionError, MissingEvidenceError, NodeState,
     NodeStatus, MAX_EVIDENCE_ITEMS, RunMode, RunState, RunStatus,
     SequenceConflictError, UnsafePayloadError, WorkflowEvent,
-    _snapshot_run_state, _snapshot_workflow_event,
+    _snapshot_run_state, _snapshot_workflow_event, _trusted_run_state_update,
 )
 
 MAX_EVENT_ITEMS = 100_000
@@ -98,6 +98,9 @@ class TransitionEngine:
     def apply(self, state: RunState, event: WorkflowEvent) -> RunState:
         state = _snapshot_run_state(state)
         event = _snapshot_workflow_event(event)
+        return self._apply_validated(state, event)
+
+    def _apply_validated(self, state: RunState, event: WorkflowEvent) -> RunState:
         if event.run_id != state.run_id:
             raise IllegalTransitionError(ErrorMessage.EVENT_RUN_ID_STATE_MISMATCH, {ErrorDetailKey.KIND.value: event.kind})
         if event.sequence != state.revision:
@@ -119,7 +122,9 @@ class TransitionEngine:
         raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND.value: event.kind})
 
     def _advance(self, state: RunState, event: WorkflowEvent, **changes) -> RunState:
-        return replace(state, revision=state.revision + 1, updated_at=event.occurred_at, **changes)
+        return _trusted_run_state_update(
+            state, revision=state.revision + 1, updated_at=event.occurred_at, **changes,
+        )
 
     def _apply_run(self, state: RunState, event: WorkflowEvent) -> RunState:
         if event.kind == "run.initialized":
@@ -215,7 +220,7 @@ class TransitionEngine:
                 ErrorDetailKey.KIND.value: first.kind, ErrorDetailKey.SEQUENCE.value: first.sequence,
             })
         state = RunState.new(first.run_id, first.occurred_at)
-        state = self.apply(state, first)
+        state = self._apply_validated(state, first)
         while True:
             try:
                 event = next(sequence)
@@ -225,5 +230,5 @@ class TransitionEngine:
                 raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
                     ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVENT_ITEMS,
                 }) from None
-            state = self.apply(state, event)
+            state = self._apply_validated(state, _snapshot_workflow_event(event))
         return state

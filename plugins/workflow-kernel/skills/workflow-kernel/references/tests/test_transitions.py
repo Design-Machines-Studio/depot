@@ -4,7 +4,7 @@ from types import MappingProxyType
 from unittest import mock
 
 from tests import detail_digest
-from workflow_kernel import transitions
+from workflow_kernel import schema, transitions
 from workflow_kernel.schema import (
     IllegalTransitionError, KernelError, MissingEvidenceError, NodeState, NodeStatus,
     RunState, RunStatus, UnsafePayloadError, WorkflowEvent,
@@ -21,6 +21,27 @@ def event(sequence, kind, *, node_id=None, payload=None):
 class TransitionTests(unittest.TestCase):
     def setUp(self):
         self.engine = TransitionEngine()
+
+    def test_apply_validates_the_input_graph_once_without_revalidating_output(self):
+        state = RunState.new("run-1", NOW)
+        with mock.patch(
+                "workflow_kernel.schema._validate_dependency_graph",
+                wraps=schema._validate_dependency_graph,
+        ) as validate:
+            result = self.engine.apply(state, event(0, "run.initialized"))
+        self.assertEqual(result.revision, 1)
+        self.assertEqual(validate.call_count, 1)
+
+    def test_reconstruct_does_not_revalidate_the_whole_graph_per_event(self):
+        stream = [event(0, "run.initialized"), event(1, "run.started")]
+        stream.extend(event(index + 2, "node.added", node_id=f"n-{index}") for index in range(20))
+        with mock.patch(
+                "workflow_kernel.schema._validate_dependency_graph",
+                wraps=schema._validate_dependency_graph,
+        ) as validate:
+            result = self.engine.reconstruct(stream)
+        self.assertEqual(len(result.nodes), 20)
+        self.assertLessEqual(validate.call_count, 1)
 
     def test_run_and_node_legal_path(self):
         events = (

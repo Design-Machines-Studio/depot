@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-import errno
 import json
 import os
-import tempfile
 import weakref
 from pathlib import Path
 
 from ._files import (
     LockContentionError, LockHandle, LockIdentityError, LockingUnsupportedError,
-    bind_durable_path, open_verified_regular, require_descriptor_path_identity,
-    verified_regular_exists,
+    bind_durable_path,
 )
 from .schema import (
     CorruptStateError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
@@ -35,17 +32,48 @@ def encode_state(state: RunState) -> bytes:
     return encoded
 
 
+def _read_state_descriptor(descriptor: int, path: Path) -> RunState:
+    if os.fstat(descriptor).st_size > MAX_STATE_BYTES:
+        raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
+            ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
+        })
+    chunks = []
+    remaining = MAX_STATE_BYTES + 1
+    while remaining:
+        chunk = os.read(descriptor, min(65_536, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    raw_bytes = b"".join(chunks)
+    if len(raw_bytes) > MAX_STATE_BYTES:
+        raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
+            ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
+        })
+    try:
+        return RunState.from_dict(json.loads(raw_bytes.decode("utf-8")))
+    except CorruptStateError:
+        raise
+    except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError):
+        raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {
+            ErrorDetailKey.PATH.value: str(path),
+        }) from None
+
+
 def _capability_types():
     lease_records = weakref.WeakKeyDictionary()
     store_records = weakref.WeakKeyDictionary()
 
-    def finalize_lease(record, handle) -> None:
+    def finalize_lease(record, handle, owner_pid) -> None:
         if record.get("handle") is handle:
             record["handle"] = None
             record["owner_pid"] = None
             record["finalizer"] = None
         try:
-            handle.release()
+            if owner_pid == os.getpid():
+                handle.release()
+            else:
+                handle.close_inherited()
         except OSError:
             pass
 
@@ -109,7 +137,7 @@ def _capability_types():
                 record["path"].parent.mkdir(parents=True, exist_ok=True)
                 if record["binding"].parent_identity is None:
                     record["binding"] = bind_durable_path(record["state_path"])
-                handle = LockHandle.acquire(record["path"])
+                handle = LockHandle.acquire_bound(bind_durable_path(record["path"]))
             except LockingUnsupportedError:
                 raise LeaseConflictError(ErrorMessage.RUN_LOCKING_UNAVAILABLE, {
                     ErrorDetailKey.REASON_CODE.value: "locking_unsupported",
@@ -132,16 +160,24 @@ def _capability_types():
                 os.write(handle.descriptor, (str(os.getpid()) + "\n").encode("ascii"))
                 os.fsync(handle.descriptor)
             except OSError:
-                handle.release()
+                try:
+                    handle.release()
+                except BaseException:
+                    pass
                 raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(record["path"]),
                 }) from None
             except Exception:
-                handle.release()
+                try:
+                    handle.release()
+                except BaseException:
+                    pass
                 raise
             record["handle"] = handle
             record["owner_pid"] = os.getpid()
-            record["finalizer"] = weakref.finalize(self, finalize_lease, record, handle)
+            record["finalizer"] = weakref.finalize(
+                self, finalize_lease, record, handle, record["owner_pid"],
+            )
             return self
 
         def release(self):
@@ -149,6 +185,7 @@ def _capability_types():
             if record is None or record["handle"] is None:
                 return
             handle = record["handle"]
+            owner_pid = record["owner_pid"]
             record["handle"] = None
             record["owner_pid"] = None
             finalizer = record["finalizer"]
@@ -156,7 +193,10 @@ def _capability_types():
             if finalizer is not None and finalizer.alive:
                 finalizer.detach()
             try:
-                handle.release()
+                if owner_pid == os.getpid():
+                    handle.release()
+                else:
+                    handle.close_inherited()
             except OSError:
                 raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(record["path"]),
@@ -166,7 +206,11 @@ def _capability_types():
             return self.acquire()
 
         def __exit__(self, exc_type, exc, traceback):
-            self.release()
+            try:
+                self.release()
+            except BaseException:
+                if exc_type is None:
+                    raise
             return False
 
     def require_run_lease(lease, state_path) -> None:
@@ -228,38 +272,28 @@ def _capability_types():
         def load(self) -> RunState:
             record = store_records[self]
             path = record["path"]
+            directory = None
             try:
-                record["binding"].revalidate_parent()
-                descriptor = open_verified_regular(path, os.O_RDONLY)
+                directory = record["binding"].pin_parent()
+            except OSError:
+                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
+            try:
+                descriptor = directory.open_regular(path.name, os.O_RDONLY)
             except FileNotFoundError:
+                directory.close()
                 raise
             except OSError:
+                directory.close()
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
             failure = None
             try:
-                if os.fstat(descriptor).st_size > MAX_STATE_BYTES:
-                    raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
-                        ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
-                    })
-                chunks = []
-                remaining = MAX_STATE_BYTES + 1
-                while remaining:
-                    chunk = os.read(descriptor, min(65_536, remaining))
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                    remaining -= len(chunk)
-                raw_bytes = b"".join(chunks)
-                if len(raw_bytes) > MAX_STATE_BYTES:
-                    raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
-                        ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
-                    })
-                data = json.loads(raw_bytes.decode("utf-8"))
-                result = RunState.from_dict(data)
-                record["binding"].revalidate_parent()
-                require_descriptor_path_identity(descriptor, path)
+                result = _read_state_descriptor(descriptor, path)
+                directory.revalidate()
+                directory.require_identity(descriptor, path.name)
                 return result
             except CorruptStateError:
                 failure = True
@@ -277,6 +311,13 @@ def _capability_types():
             finally:
                 try:
                     os.close(descriptor)
+                except OSError:
+                    if failure is None:
+                        raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                            ErrorDetailKey.PATH.value: str(path),
+                        }) from None
+                try:
+                    directory.close()
                 except OSError:
                     if failure is None:
                         raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
@@ -305,62 +346,121 @@ def _capability_types():
                 raise RevisionConflictError(ErrorMessage.INVALID_EXPECTED_REVISION, {
                     ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                 })
-            try:
-                record["binding"].revalidate_parent()
-                exists = verified_regular_exists(record["path"])
-            except OSError:
-                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
-                    ErrorDetailKey.PATH.value: str(record["path"]),
-                }) from None
-            if exists:
-                actual = self.load().revision
-                if actual != expected_revision:
-                    raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
-                        ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                        ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                    })
-                if revision < actual:
-                    raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
-                        ErrorDetailKey.CANDIDATE_REVISION.value: revision,
-                        ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                    })
-            elif expected_revision != -1:
-                raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {
-                    ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
-                })
-
             path = record["path"]
+            if record["binding"].parent_identity is None:
+                try:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    record["binding"] = bind_durable_path(path)
+                except OSError:
+                    raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                        ErrorDetailKey.PATH.value: str(path),
+                    }) from None
+            directory = None
+            observed = None
             descriptor = None
             temporary = None
             failure = None
             try:
-                record["binding"].revalidate_parent()
-                path.parent.mkdir(parents=True, exist_ok=True)
-                if record["binding"].parent_identity is None:
-                    record["binding"] = bind_durable_path(path)
-                descriptor, temporary = tempfile.mkstemp(
-                    prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent),
+                directory = record["binding"].pin_parent()
+                try:
+                    observed = directory.open_regular(path.name, os.O_RDONLY)
+                except FileNotFoundError:
+                    observed = None
+                if observed is not None:
+                    actual = _read_state_descriptor(observed, path).revision
+                    directory.require_identity(observed, path.name)
+                    if actual != expected_revision:
+                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                        })
+                    if revision < actual:
+                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
+                            ErrorDetailKey.CANDIDATE_REVISION.value: revision,
+                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                        })
+                elif expected_revision != -1:
+                    raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {
+                        ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                    })
+                descriptor, temporary = directory.create_temporary(
+                    prefix=f".{path.name}.", suffix=".tmp",
                 )
             except OSError:
+                if observed is not None:
+                    try:
+                        os.close(observed)
+                    except OSError:
+                        pass
+                if directory is not None:
+                    try:
+                        directory.close()
+                    except OSError:
+                        pass
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
+            except BaseException:
+                if observed is not None:
+                    try:
+                        os.close(observed)
+                    except OSError:
+                        pass
+                if directory is not None:
+                    try:
+                        directory.close()
+                    except OSError:
+                        pass
+                raise
             try:
                 with os.fdopen(descriptor, "wb", closefd=False) as handle:
                     handle.write(encoded)
                     handle.flush()
                     os.fsync(handle.fileno())
-                require_descriptor_path_identity(descriptor, Path(temporary))
+                directory.require_identity(descriptor, temporary)
                 require_run_lease(lease, path)
-                os.replace(temporary, path)
-                directory_fsync = self._fsync_directory()
-                record["binding"].revalidate_parent()
-                require_descriptor_path_identity(descriptor, path)
+                directory.revalidate()
+                if observed is None:
+                    if directory.regular_exists(path.name):
+                        current = directory.open_regular(path.name, os.O_RDONLY)
+                        try:
+                            actual = _read_state_descriptor(current, path).revision
+                        finally:
+                            os.close(current)
+                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                        })
+                else:
+                    try:
+                        directory.require_identity(observed, path.name)
+                    except OSError:
+                        current = directory.open_regular(path.name, os.O_RDONLY)
+                        try:
+                            actual = _read_state_descriptor(current, path).revision
+                        finally:
+                            os.close(current)
+                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                        }) from None
+                    os.lseek(observed, 0, os.SEEK_SET)
+                    actual = _read_state_descriptor(observed, path).revision
+                    if actual != expected_revision:
+                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                            ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                        })
+                directory.replace(temporary, path.name)
+                temporary = None
+                directory_fsync = directory.fsync()
+                directory.revalidate()
+                directory.require_identity(descriptor, path.name)
             except OSError:
                 failure = True
                 try:
                     if temporary is not None:
-                        os.unlink(temporary)
+                        directory.unlink(temporary)
                 except OSError:
                     pass
                 raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
@@ -370,7 +470,7 @@ def _capability_types():
                 failure = True
                 try:
                     if temporary is not None:
-                        os.unlink(temporary)
+                        directory.unlink(temporary)
                 except OSError:
                     pass
                 raise
@@ -378,6 +478,22 @@ def _capability_types():
                 if descriptor is not None:
                     try:
                         os.close(descriptor)
+                    except OSError:
+                        if failure is None:
+                            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                                ErrorDetailKey.PATH.value: str(path),
+                            }) from None
+                if observed is not None:
+                    try:
+                        os.close(observed)
+                    except OSError:
+                        if failure is None:
+                            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                                ErrorDetailKey.PATH.value: str(path),
+                            }) from None
+                if directory is not None:
+                    try:
+                        directory.close()
                     except OSError:
                         if failure is None:
                             raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
@@ -395,27 +511,6 @@ def _capability_types():
             prepared = object.__new__(PreparedState)
             store_records[self]["prepared"][prepared] = (snapshot.revision, encoded)
             return prepared
-
-        def _fsync_directory(self) -> str:
-            path = store_records[self]["path"]
-            flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-            descriptor = None
-            try:
-                descriptor = os.open(str(path.parent), flags)
-                os.fsync(descriptor)
-                return "completed"
-            except OSError as exc:
-                unsupported = {errno.EINVAL, errno.EBADF, errno.EPERM}
-                if hasattr(errno, "ENOTSUP"):
-                    unsupported.add(errno.ENOTSUP)
-                if hasattr(errno, "EOPNOTSUPP"):
-                    unsupported.add(errno.EOPNOTSUPP)
-                if exc.errno in unsupported:
-                    return "unsupported"
-                raise
-            finally:
-                if descriptor is not None:
-                    os.close(descriptor)
 
     return PreparedState, RunLease, StateStore, require_run_lease
 
