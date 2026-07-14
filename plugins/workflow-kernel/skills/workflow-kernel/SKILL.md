@@ -125,20 +125,27 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 Pass only evidence references into the ledger. Recursively redact token, key,
 secret, password, authorization, cookie, DSN, and environment-value fields.
-Never report a raw secret in errors or receipts. Every receipt path uses the
-same public metadata sanitizer and returns plain JSON-safe dictionaries and
-lists: sensitive keyed values become `[REDACTED]`, every arbitrary string value
-becomes `value-sha256:<64 lowercase hex>`, and every key outside an explicitly
-supplied exact built-in-string vocabulary becomes
-`key-sha256:<64 lowercase hex>`. `encode_receipt()` first applies the durable URI
-policy, then the sanitizer, so generic receipt content is both URI-safe and
-opaque. `evidence_receipt()` value-digests caller `run_id` and `evidence_type`,
-sanitizes arbitrary metadata, and preserves only a separately validated evidence
-reference. `transition_receipt()` sanitizes the full event, including its
-payload, and accepts `state_digest` only in the exact canonical form
-`sha256:<64 lowercase hex>`; raw, uppercase, other-prefix, and non-string values
-fail closed. Re-encoding sanitized receipts preserves canonical `sha256:`,
-`url-sha256:`, `value-sha256:`, and `key-sha256:` tokens. A run-relative artifact path is
+Never report a raw secret in errors or receipts. Every receipt path uses one
+recursive sanitizer traversal that composes durable-string normalization with
+public-value digesting: sensitive keyed values become `[REDACTED]`, every other
+string value becomes `value-sha256:<64 lowercase hex>`, and every key outside
+the selected exact built-in-string schema becomes
+`key-sha256:<64 lowercase hex>`. `ReceiptField` and `WorkflowEventField` own the
+explicit evidence, transition, and nested-event vocabularies; arbitrary
+metadata and payload mappings use no trusted field vocabulary.
+`evidence_receipt()` and `transition_receipt()` return deeply immutable
+`SafeReceipt` mapping capabilities constructed only by the owned sanitizer.
+`encode_receipt()` encodes a `SafeReceipt` directly and byte-idempotently; every
+ordinary `Mapping`, including parsed JSON copied from a safe receipt, is raw and
+is sanitized exactly once. Raw `key-sha256:` keys and all raw digest-shaped or
+marker-shaped values are therefore re-digested and cannot infer provenance from
+their shape. Only the sensitive-key branch emits `[REDACTED]`.
+`evidence_receipt()` value-digests caller `run_id` and `evidence_type`, sanitizes
+arbitrary metadata, and preserves only a separately validated evidence
+reference. `transition_receipt()` sanitizes the full event through the shared
+event schema, including its arbitrary payload, and accepts `state_digest` only
+in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,
+other-prefix, and non-string values fail closed. A run-relative artifact path is
 one or more `/`-separated ASCII segments matching
 `[A-Za-z0-9_][A-Za-z0-9._-]*`; absolute paths, empty or dot segments,
 backslashes, controls, and ambiguous query or fragment syntax are rejected.

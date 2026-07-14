@@ -179,6 +179,21 @@ class NodeStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+class WorkflowEventField(str, Enum):
+    """Developer-owned field vocabulary for serialized workflow events."""
+
+    SCHEMA_VERSION = "schema_version"
+    SEQUENCE = "sequence"
+    RUN_ID = "run_id"
+    NODE_ID = "node_id"
+    KIND = "kind"
+    OCCURRED_AT = "occurred_at"
+    PAYLOAD = "payload"
+
+
+WORKFLOW_EVENT_FIELDS = frozenset(field.value for field in WorkflowEventField)
+
+
 @dataclass(frozen=True)
 class ErrorEnvelope:
     code: ErrorCode
@@ -410,14 +425,11 @@ class WorkflowEvent:
     def from_dict(cls, data: object) -> "WorkflowEvent":
         if not isinstance(data, Mapping):
             raise InvalidSchemaError(ErrorMessage.EVENT_MUST_BE_OBJECT)
-        fields = {"schema_version", "sequence", "run_id", "node_id", "kind", "occurred_at", "payload"}
-        _only(data, fields, fields)
+        _only(data, WORKFLOW_EVENT_FIELDS, WORKFLOW_EVENT_FIELDS)
         return cls(**dict(data))
 
     def to_dict(self) -> dict:
-        return {name: _plain(getattr(self, name)) for name in (
-            "schema_version", "sequence", "run_id", "node_id", "kind", "occurred_at", "payload"
-        )}
+        return {field.value: _plain(getattr(self, field.value)) for field in WorkflowEventField}
 
 
 @dataclass(frozen=True)

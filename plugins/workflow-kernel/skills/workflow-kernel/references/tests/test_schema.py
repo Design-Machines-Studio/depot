@@ -9,7 +9,7 @@ from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
 from tests import detail_digest, detail_key_digest
-from workflow_kernel import redaction, schema
+from workflow_kernel import receipts, redaction, schema
 from workflow_kernel.schema import (
     CorruptStateError,
     InvalidSchemaError,
@@ -347,6 +347,75 @@ class SchemaTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(UnsafePayloadError):
                 transition_receipt(event, invalid)
 
+    def test_safe_receipt_is_factory_owned_deeply_immutable_provenance(self):
+        self.assertTrue(hasattr(receipts, "SafeReceipt"))
+        with self.assertRaises(TypeError):
+            receipts.SafeReceipt({"receipt_type": "forged"})
+
+        receipt = evidence_receipt(
+            "run-1", "test", "receipt.json", metadata={"nested": {"count": 1}},
+        )
+        self.assertIsInstance(receipt, receipts.SafeReceipt)
+        with self.assertRaises(TypeError):
+            receipt["run_id"] = "forged"
+        with self.assertRaises(TypeError):
+            receipt["metadata"][detail_key_digest("nested")][detail_key_digest("count")] = 2
+
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {})
+        transition = transition_receipt(event, "sha256:" + "a" * 64)
+        self.assertIsInstance(transition, receipts.SafeReceipt)
+        self.assertEqual(encode_receipt(transition), encode_receipt(transition))
+
+    def test_raw_receipt_cannot_infer_safe_provenance_from_schema_shapes(self):
+        receipt = evidence_receipt("run-1", "test", "receipt.json")
+        trusted = encode_receipt(receipt)
+        raw = encode_receipt(dict(receipt))
+
+        self.assertEqual(encode_receipt(receipt), trusted)
+        self.assertNotEqual(raw, trusted)
+        self.assertNotIn("run_id", json.loads(raw))
+
+    def test_raw_digest_key_and_marker_literals_are_re_digested(self):
+        digest_key = detail_key_digest("caller-controlled-key")
+        encoded = json.loads(encode_receipt({
+            digest_key: "[REDACTED]",
+            "marker": "[UNSAFE]",
+            "api_token": "[UNSAFE]",
+        }))
+
+        self.assertEqual(encoded[detail_key_digest(digest_key)], detail_digest("[REDACTED]"))
+        self.assertEqual(encoded[detail_key_digest("marker")], detail_digest("[UNSAFE]"))
+        self.assertEqual(encoded[detail_key_digest("api_token")], "[REDACTED]")
+
+    def test_receipt_sanitizer_composes_uri_normalization_and_value_digest_once(self):
+        self.assertTrue(hasattr(receipts, "normalize_durable_string"))
+        source = "See https://example.invalid/one-pass now"
+        with mock.patch(
+                "workflow_kernel.receipts.normalize_durable_string",
+                wraps=redaction.normalize_durable_string,
+        ) as normalize:
+            encoded = encode_receipt({"note": source})
+
+        self.assertEqual([call.args[0] for call in normalize.call_args_list].count(source), 1)
+        normalized = redaction.normalize_durable_string(source)
+        self.assertEqual(json.loads(encoded)[detail_key_digest("note")], detail_digest(normalized))
+
+    def test_receipt_and_event_field_vocabularies_match_runtime_schemas(self):
+        for name in ("ReceiptField", "EVIDENCE_RECEIPT_FIELDS", "TRANSITION_RECEIPT_FIELDS"):
+            self.assertTrue(hasattr(receipts, name), name)
+        self.assertTrue(hasattr(schema, "WORKFLOW_EVENT_FIELDS"))
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {})
+        transition = transition_receipt(event, "sha256:" + "a" * 64)
+        evidence = evidence_receipt("run-1", "test", "receipt.json")
+
+        self.assertEqual(set(event.to_dict()), set(schema.WORKFLOW_EVENT_FIELDS))
+        self.assertEqual(set(transition), set(receipts.TRANSITION_RECEIPT_FIELDS))
+        self.assertEqual(set(evidence), set(receipts.EVIDENCE_RECEIPT_FIELDS))
+        self.assertEqual({field.value for field in receipts.ReceiptField},
+                         set(receipts.EVIDENCE_RECEIPT_FIELDS) | set(receipts.TRANSITION_RECEIPT_FIELDS))
+
     def test_event_payload_is_recursively_immutable_and_encoding_is_stable(self):
         event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
                               "2026-07-14T00:00:00Z",
@@ -429,8 +498,8 @@ class SchemaTests(unittest.TestCase):
         sentinel = "never-persist-this-metadata-token"
         source_url = "https://metadata.example.invalid/" + sentinel
         nested_url = "https://nested.example.invalid/" + sentinel
-        source_digest = detail_digest(source_url)
-        nested_digest = detail_digest(nested_url)
+        source_digest = detail_digest(redaction.normalize_durable_string(source_url))
+        nested_digest = detail_digest(redaction.normalize_durable_string(nested_url))
 
         receipt = evidence_receipt("run-1", "test", "receipt.json", metadata={
             "source_url": source_url,
@@ -514,7 +583,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(event.payload["note"], normalized)
         self.assertEqual(json.loads(receipt)[detail_key_digest("note")], detail_digest(normalized))
         self.assertEqual(state.run_id, normalized)
-        self.assertEqual(encode_receipt(json.loads(receipt)), receipt)
+        self.assertNotEqual(encode_receipt(json.loads(receipt)), receipt)
         for encoded in (encode_event(event), encode_state(state)):
             self.assertNotIn(b"example.invalid", encoded)
             self.assertNotIn(b"never-persist-network", encoded)
@@ -614,7 +683,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(event.payload["note"], normalized)
         self.assertEqual(json.loads(receipt)[detail_key_digest("note")], detail_digest(normalized))
         self.assertEqual(state.run_id, normalized)
-        self.assertEqual(encode_receipt(json.loads(receipt)), receipt)
+        self.assertNotEqual(encode_receipt(json.loads(receipt)), receipt)
         for encoded in (encode_event(event), encode_state(state)):
             self.assertNotIn(first.encode(), encoded)
             self.assertNotIn(second.encode(), encoded)
@@ -736,7 +805,7 @@ class SchemaTests(unittest.TestCase):
         node_key_calls = [call for call in validate.call_args_list if call.args == ("node-1",)]
         self.assertEqual(len(node_key_calls), 1)
 
-    def test_multiple_embedded_urls_preserve_punctuation_and_are_idempotent(self):
+    def test_multiple_embedded_urls_preserve_punctuation_and_raw_receipts_stay_untrusted(self):
         first = "https://one.example.invalid/path"
         second = "http://two.example.invalid/report"
         first_digest = "url-sha256:" + hashlib.sha256(first.encode("utf-8")).hexdigest()
@@ -752,7 +821,7 @@ class SchemaTests(unittest.TestCase):
 
         self.assertEqual(first_event.payload["note"], normalized)
         self.assertEqual(second_event.payload["note"], normalized)
-        self.assertEqual(first_receipt, second_receipt)
+        self.assertNotEqual(first_receipt, second_receipt)
         self.assertEqual(encode_event(first_event), encode_event(second_event))
 
     def test_embedded_unsafe_and_unsupported_uris_fail_without_echoing_values(self):
@@ -889,7 +958,7 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(receipt["metadata"][detail_key_digest("plain")], detail_digest("[UNSAFE]"))
         self.assertEqual(receipt["metadata"][detail_key_digest("api_token")], "[REDACTED]")
         encoded = encode_receipt(receipt)
-        self.assertEqual(encode_receipt(json.loads(encoded)), encoded)
+        self.assertEqual(encode_receipt(receipt), encoded)
 
         generic = encode_receipt({"note": "[UNSAFE]"})
         self.assertEqual(json.loads(generic)[detail_key_digest("note")], detail_digest("[UNSAFE]"))
