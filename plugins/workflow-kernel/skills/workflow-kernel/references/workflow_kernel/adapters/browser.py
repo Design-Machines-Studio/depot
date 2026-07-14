@@ -438,6 +438,29 @@ class BrowserRecoveryReceipt:
             if item.actual_engine == self.requested_engine and not primary_quit_confirmed:
                 raise ValueError("primary retry lacks confirmed quit")
         passed = tuple(item for item in attempts if item.result == "passed")
+        primary_retry_attempted = any(
+            item.actual_engine == self.requested_engine for item in attempts[1:]
+        )
+        restart_unavailable_recorded = any(
+            item.action == "primary_restart"
+            and item.result == "primary_restart_unavailable"
+            for item in self.lifecycle
+        )
+        if (self.status != "clean" and not primary_retry_attempted
+                and not restart_unavailable_recorded):
+            raise ValueError("browser receipt omits unavailable primary restart")
+        if self.status == "blocked" and len(self.configured_engines) > 1:
+            alternate_attempted = any(
+                item.actual_engine != self.requested_engine for item in attempts[1:]
+            )
+            alternate_unavailable_recorded = any(
+                item.actual_engine != self.requested_engine
+                and item.action in {"browser_process_launch", "session_validation"}
+                and item.result != "launched"
+                for item in self.lifecycle
+            )
+            if not alternate_attempted and not alternate_unavailable_recorded:
+                raise ValueError("browser receipt omits alternate engine evidence")
         status_reason = {
             "clean": "browser_verified_first_pass",
             "blocked": "human_help_required",

@@ -193,6 +193,25 @@ class BrowserRecoveryTests(unittest.TestCase):
             [item.result for item in receipt.lifecycle],
         )
 
+    def test_blocked_multi_engine_receipt_requires_alternate_and_restart_gap_evidence(self):
+        receipt = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [attempt(1, "chromium", "failed", session="primary-1")],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+                launches=[RuntimeError("alternate unavailable")],
+            ),
+        )
+        self.assertEqual(receipt.status, "blocked")
+        self.assertIn(
+            "primary_restart_unavailable",
+            [item.result for item in receipt.lifecycle],
+        )
+        with self.assertRaises(ValueError):
+            replace(receipt, lifecycle=receipt.lifecycle[:2])
+        with self.assertRaises(ValueError):
+            replace(receipt, lifecycle=(receipt.lifecycle[0], receipt.lifecycle[-1]))
+
     def test_invalid_primary_launch_is_not_recorded_as_successful(self):
         adapter = FakeBrowserAdapter(
             [

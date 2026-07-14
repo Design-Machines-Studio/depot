@@ -6,10 +6,10 @@ import json
 import re
 from dataclasses import dataclass, replace
 from typing import Iterable, Tuple
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from .adapters.base import _register_origin, _validate_capture, invalid_policy
-from .redaction import is_secret_key, normalize_evidence_reference
+from .redaction import normalize_evidence_reference
 
 _ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
 VIEWPORT_DIMENSION_PATTERN = (
@@ -23,6 +23,11 @@ _OUTCOMES = frozenset({"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"})
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
 _CASE_ID = re.compile(r"case-sha256:[0-9a-f]{64}\Z")
 _ORIGIN_ID = re.compile(r"origin-sha256:[0-9a-f]{64}\Z")
+_CREDENTIAL_VALUE = re.compile(
+    r"(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)", re.IGNORECASE,
+)
+_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
+_COVERAGE_DIAGNOSTICS = frozenset({"coverage_matrix_mismatch"})
 
 
 def _invalid(reason="invalid_verification_declaration"):
@@ -49,10 +54,16 @@ def validate_viewport(value):
 
 def _validate_route(route):
     if (type(route) is not str or len(route) > 2_048
-            or not route.startswith("/") or "?" in route
-            or "#" in route or any(part in {".", ".."} for part in route.split("/"))
-            or any(is_secret_key(part) for part in route.split("/") if part)):
+            or not route.startswith("/") or route.startswith("//")
+            or "?" in route or "#" in route or "\\" in route
+            or any(ord(character) < 32 or ord(character) == 127 for character in route)
+            or _PERCENT_ESCAPE.search(route)):
         _invalid("invalid_verification_target")
+    for raw_part in route.split("/"):
+        part = unquote(raw_part)
+        if (part in {".", ".."} or "?" in part or "#" in part
+                or _CREDENTIAL_VALUE.match(part)):
+            _invalid("invalid_verification_target")
     return route
 
 
@@ -116,6 +127,10 @@ class PersonaCase:
             _invalid()
         if self.viewport_source not in {"project_config", "task_declaration", "persona_default", "workflow_policy_default"}:
             _invalid()
+        _register_origin(self, "PersonaCase", self._origin_primitives())
+
+    def _origin_primitives(self):
+        return tuple(getattr(self, name) for name in self.__dataclass_fields__)
 
     @property
     def case_id(self):
@@ -143,6 +158,7 @@ class VerificationProfile:
     selection_status: str = "runnable_cases"
     configured_engines: Tuple[str, ...] = ("chromium", "firefox")
     target_origin_digest: str | None = None
+    coverage_diagnostics: Tuple[str, ...] = ()
 
     def __post_init__(self):
         if type(self.schema_version) is not int or self.schema_version != 1:
@@ -155,6 +171,14 @@ class VerificationProfile:
             _invalid()
         if type(self.cases) is not tuple or any(type(case) is not PersonaCase for case in self.cases):
             _invalid()
+        try:
+            canonical_cases = tuple(sorted(
+                (_snapshot_persona_case(case) for case in self.cases),
+                key=lambda case: case.case_id,
+            ))
+        except Exception:
+            _invalid()
+        object.__setattr__(self, "cases", canonical_cases)
         if (type(self.configured_engines) is not tuple
                 or not self.configured_engines and self.discovery_status == "declared"
                 or any(type(engine) is not str or engine not in _ENGINES
@@ -168,9 +192,17 @@ class VerificationProfile:
         if (type(self.auth_field_names) is not tuple
                 or any(type(name) is not str or len(name) > 128
                        or _ID.fullmatch(name) is None for name in self.auth_field_names)
-                or tuple(sorted(self.auth_field_names)) != self.auth_field_names
                 or len(self.auth_field_names) != len(set(self.auth_field_names))):
             _invalid()
+        object.__setattr__(self, "auth_field_names", tuple(sorted(self.auth_field_names)))
+        if (type(self.coverage_diagnostics) is not tuple
+                or any(type(item) is not str or item not in _COVERAGE_DIAGNOSTICS
+                       for item in self.coverage_diagnostics)
+                or len(self.coverage_diagnostics) != len(set(self.coverage_diagnostics))):
+            _invalid()
+        object.__setattr__(
+            self, "coverage_diagnostics", tuple(sorted(self.coverage_diagnostics)),
+        )
         if (self.target_origin_digest is not None and (
                 type(self.target_origin_digest) is not str
                 or _ORIGIN_ID.fullmatch(self.target_origin_digest) is None)):
@@ -191,6 +223,16 @@ class VerificationProfile:
         if self.selection_status == "runnable_cases" and (
                 not self.cases or not any(case.required for case in self.cases)):
             _invalid()
+        _register_origin(self, "VerificationProfile", self._origin_primitives())
+
+    def _origin_primitives(self):
+        return (
+            self.schema_version, self.source,
+            tuple(case._origin_primitives() for case in self.cases),
+            self.auth_field_names, self.discovery_status, self.selection_status,
+            self.configured_engines, self.target_origin_digest,
+            self.coverage_diagnostics,
+        )
 
     def to_dict(self):
         return {"schema_version": self.schema_version, "profile_id": self.profile_id,
@@ -200,7 +242,8 @@ class VerificationProfile:
                 "cases": [case.to_dict() for case in self.cases],
                 "auth_field_names": list(self.auth_field_names),
                 "configured_engines": list(self.configured_engines),
-                "target_origin_digest": self.target_origin_digest}
+                "target_origin_digest": self.target_origin_digest,
+                "coverage_diagnostics": list(self.coverage_diagnostics)}
 
     @property
     def profile_id(self):
@@ -224,7 +267,7 @@ class VerificationProfile:
         expected = {
             "schema_version", "profile_id", "source", "discovery_status",
             "selection_status", "configured_engines", "target_origin_digest",
-            "cases", "auth_field_names",
+            "cases", "auth_field_names", "coverage_diagnostics",
         }
         try:
             if type(payload) is not dict or set(payload) != expected:
@@ -246,19 +289,47 @@ class VerificationProfile:
                 if type(raw["case_id"]) is not str or raw["case_id"] != case.case_id:
                     raise ValueError
                 cases.append(case)
-            if type(payload["configured_engines"]) is not list or type(payload["auth_field_names"]) is not list:
+            if (type(payload["configured_engines"]) is not list
+                    or type(payload["auth_field_names"]) is not list
+                    or type(payload["coverage_diagnostics"]) is not list):
                 raise ValueError
             profile = cls(
                 payload["schema_version"], payload["source"], tuple(cases),
                 tuple(payload["auth_field_names"]), payload["discovery_status"],
                 payload["selection_status"], tuple(payload["configured_engines"]),
-                payload["target_origin_digest"],
+                payload["target_origin_digest"], tuple(payload["coverage_diagnostics"]),
             )
             if type(payload["profile_id"]) is not str or payload["profile_id"] != profile.profile_id:
                 raise ValueError
             return profile
         except Exception:
             _invalid("invalid_verification_profile")
+
+
+def _snapshot_persona_case(value):
+    if type(value) is not PersonaCase:
+        _invalid("invalid_verification_profile")
+    try:
+        captured = tuple(getattr(value, name) for name in value.__dataclass_fields__)
+        _validate_capture(value, "PersonaCase", captured, value._origin_primitives())
+        return PersonaCase(*captured)
+    except Exception:
+        _invalid("invalid_verification_profile")
+
+
+def _snapshot_verification_profile(value):
+    if type(value) is not VerificationProfile:
+        _invalid("invalid_verification_gate")
+    try:
+        captured = tuple(getattr(value, name) for name in value.__dataclass_fields__)
+        cases = tuple(_snapshot_persona_case(case) for case in captured[2])
+        captured = captured[:2] + (cases,) + captured[3:]
+        _validate_capture(
+            value, "VerificationProfile", captured, value._origin_primitives(),
+        )
+        return VerificationProfile(*captured)
+    except Exception:
+        _invalid("invalid_verification_profile")
 
 
 @dataclass(frozen=True)
@@ -388,8 +459,9 @@ class CoverageDecision:
 
 class VerificationGate:
     def evaluate(self, profile, evidence: Iterable[EvidenceRef], *, work_kind="ui"):
-        if type(profile) is not VerificationProfile or work_kind not in {"ui", "integration", "logic", "documentation"}:
+        if work_kind not in {"ui", "integration", "logic", "documentation"}:
             _invalid("invalid_verification_gate")
+        profile = _snapshot_verification_profile(profile)
         try:
             supplied = tuple(_snapshot_evidence_ref(item) for item in evidence)
         except Exception:

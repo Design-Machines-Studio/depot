@@ -48,14 +48,88 @@ class VerificationProfileTests(unittest.TestCase):
 
     def test_legacy_assembly_task_is_runnable_required_and_matrix_is_not_authority(self):
         adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
-        profile = adapter.discover(FIXTURES / "assembly")
+        profile = adapter.discover(FIXTURES / "assembly", declaration_root=".")
         self.assertEqual(len(profile.cases), 2)
         self.assertEqual({case.browser_engine for case in profile.cases}, {"chromium", "firefox"})
         self.assertTrue(all(case.required for case in profile.cases))
         self.assertTrue(all(case.legacy_status_defaulted for case in profile.cases))
         self.assertEqual({case.persona_id for case in profile.cases}, {"casual-member"})
         self.assertEqual({case.expected_outcome for case in profile.cases}, {"FRICTION"})
+        self.assertEqual({case.role for case in profile.cases}, {"member"})
         self.assertEqual(profile.auth_field_names, ("session_cookie",))
+
+    def test_profile_identity_canonicalizes_case_and_auth_name_sets(self):
+        first = PersonaCase(
+            "member-b", "scenario-b", "member", "/b", "firefox",
+            "1440x900", True,
+        )
+        second = PersonaCase(
+            "member-a", "scenario-a", "member", "/a", "chromium",
+            "1440x900", True,
+        )
+        left = VerificationProfile(
+            1, "project_declaration", (first, second), ("session_cookie", "csrf_token"),
+        )
+        right = VerificationProfile(
+            1, "project_declaration", (second, first), ("csrf_token", "session_cookie"),
+        )
+        self.assertEqual(left.profile_id, right.profile_id)
+        self.assertEqual(left.cases, tuple(sorted(left.cases, key=lambda case: case.case_id)))
+        self.assertEqual(left.auth_field_names, ("csrf_token", "session_cookie"))
+
+    def test_live_assignment_shape_legacy_role_and_supporting_markdown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+            task.write_text(task.read_text().replace(
+                "requires_auth: true", "requires_auth: false",
+            ).replace("route: /governance/proposals/sample", "route: /register"))
+            (task.parent / "supporting-checklist.md").write_text(
+                "# Supporting checklist\n\nThis is not a task declaration.\n"
+            )
+            profile = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(project)
+        self.assertEqual({case.role for case in profile.cases}, {"public"})
+        self.assertEqual({case.scenario_id for case in profile.cases}, {"gov-sample-001"})
+
+    def test_only_tests_ux_is_implicit_and_alternate_fixture_root_is_explicit(self):
+        adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
+        implicit = adapter.discover(FIXTURES / "assembly")
+        explicit = adapter.discover(FIXTURES / "assembly", declaration_root=".")
+        self.assertEqual(implicit.discovery_status, "not_declared")
+        self.assertEqual(explicit.discovery_status, "declared")
+
+    def test_coverage_matrix_drift_is_diagnostic_not_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            baseline = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(project)
+            matrix = project / "tests" / "ux" / "coverage-matrix.md"
+            matrix.write_text(matrix.read_text().replace("FRICTION", "SUCCESS"))
+            profile = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(project)
+        self.assertEqual(profile.coverage_diagnostics, ("coverage_matrix_mismatch",))
+        self.assertEqual({case.expected_outcome for case in profile.cases}, {"FRICTION"})
+        self.assertEqual(profile.profile_id, baseline.profile_id)
+
+    def test_live_assembly_declaration_shapes_are_readable_when_available(self):
+        repositories = (
+            Path("/Users/trav/Websites/design-machines/assembly"),
+            Path("/Users/trav/Websites/design-machines/assembly-baseplate"),
+        )
+        adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
+        for repository in repositories:
+            if not (repository / "tests" / "ux").is_dir():
+                continue
+            with self.subTest(repository=repository.name):
+                profile = adapter.discover(repository)
+                self.assertEqual(profile.discovery_status, "declared")
+                self.assertTrue(profile.cases)
 
     def test_config_suite_and_viewport_precedence_expand_complete_matrix(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -145,7 +219,7 @@ class VerificationProfileTests(unittest.TestCase):
             with self.assertRaises(InvalidSchemaError):
                 ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
 
-    def test_persona_index_and_coverage_matrix_drift_fail_closed(self):
+    def test_persona_index_drift_fails_closed_and_matrix_drift_is_advisory(self):
         def project_copy(directory):
             project = Path(directory)
             shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
@@ -170,8 +244,10 @@ class VerificationProfileTests(unittest.TestCase):
             project = project_copy(directory)
             matrix = project / "tests" / "ux" / "coverage-matrix.md"
             matrix.write_text(matrix.read_text().replace("FRICTION", "SUCCESS"))
-            with self.assertRaises(InvalidSchemaError):
-                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+            profile = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(project)
+            self.assertEqual(profile.coverage_diagnostics, ("coverage_matrix_mismatch",))
 
         with tempfile.TemporaryDirectory() as directory:
             project = project_copy(directory)
@@ -184,8 +260,10 @@ class VerificationProfileTests(unittest.TestCase):
             matrix.write_text(
                 "| Task ID | CM |\n| --- | --- |\n| GOV-SAMPLE-001 | F |\n"
             )
-            with self.assertRaises(InvalidSchemaError):
-                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+            profile = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(project)
+            self.assertEqual(profile.coverage_diagnostics, ("coverage_matrix_mismatch",))
 
     def test_persona_and_task_discovery_reject_symlinks_before_reading(self):
         for target_kind in ("persona", "task", "directory"):
@@ -265,7 +343,9 @@ class VerificationProfileTests(unittest.TestCase):
             path = Path(directory) / "policy.json"
             path.write_text(json.dumps(policy))
             with self.assertRaises(InvalidSchemaError):
-                ProjectPersonaAdapter(policy_path=path).discover(FIXTURES / "assembly")
+                ProjectPersonaAdapter(policy_path=path).discover(
+                    FIXTURES / "assembly", declaration_root=".",
+                )
 
     def test_injected_policy_document_is_snapshotted_against_its_origin(self):
         document = load_policy(ROOT / "workflow-policy.json")
@@ -284,7 +364,7 @@ class VerificationProfileTests(unittest.TestCase):
                 shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
                 task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
                 task.write_text(task.read_text().replace(
-                    "requires_role: member", "requires_role: " + role,
+                    "requires_auth: true", "requires_auth: true\nrequires_role: " + role,
                 ))
                 with self.assertRaises(InvalidSchemaError):
                     ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
@@ -366,6 +446,32 @@ class VerificationProfileTests(unittest.TestCase):
                 1, "project_declaration", (case,), ("a" * 129,),
             )
 
+    def test_routes_reject_secret_values_without_rejecting_benign_names(self):
+        schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
+        for route in ("/monkey", "/account/password", "/keys/overview"):
+            case = PersonaCase(
+                "p", "s", "member", route, "chromium", "1440x900", True,
+            )
+            profile = VerificationProfile(1, "project_declaration", (case,), ())
+            self.assertTrue(schema_matches(profile.to_dict(), schema), route)
+        for route in (
+            "/sk-live-secret", "/session/sk-live-secret",
+            "/token/ghp_abcdefghijklmnopqrstuvwxyz",
+            "//member:password@example.invalid/private", "/safe/%2e%2e/admin",
+        ):
+            with self.subTest(route=route), self.assertRaises(InvalidSchemaError):
+                PersonaCase(
+                    "p", "s", "member", route, "chromium", "1440x900", True,
+                )
+            safe = PersonaCase(
+                "p", "s", "member", "/safe", "chromium", "1440x900", True,
+            )
+            payload = VerificationProfile(
+                1, "project_declaration", (safe,), (),
+            ).to_dict()
+            payload["cases"][0]["route"] = route
+            self.assertFalse(schema_matches(payload, schema), route)
+
     def test_declaration_reads_reject_hardlinks_for_every_owned_document(self):
         relative_paths = (
             "verification.json", "personas/_index.md", "personas/casual-member.md",
@@ -436,7 +542,7 @@ class VerificationProfileTests(unittest.TestCase):
 
     def test_runtime_target_origin_binding_is_opaque_and_part_of_profile_identity(self):
         profile = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
-            FIXTURES / "assembly"
+            FIXTURES / "assembly", declaration_root=".",
         )
         self.assertIsNone(profile.target_origin_digest)
         bound = profile.bind_target_origin("https://assembly.example.invalid")
@@ -446,6 +552,7 @@ class VerificationProfileTests(unittest.TestCase):
 
         direct = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
             FIXTURES / "assembly", target_origin="https://assembly.example.invalid",
+            declaration_root=".",
         )
         self.assertEqual(bound.target_origin_digest, direct.target_origin_digest)
 

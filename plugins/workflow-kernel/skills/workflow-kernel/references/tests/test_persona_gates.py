@@ -68,6 +68,30 @@ def evidence(
 
 
 class PersonaGateTests(unittest.TestCase):
+    def test_gate_snapshots_profile_and_nested_cases_before_coverage(self):
+        case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (), configured_engines=("chromium",),
+        ).bind_target_origin(TARGET_ORIGIN)
+
+        object.__setattr__(profile.cases[0], "required", False)
+        with self.assertRaises(InvalidSchemaError):
+            VerificationGate().evaluate(profile, ())
+
+        case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (), configured_engines=("chromium",),
+        ).bind_target_origin(TARGET_ORIGIN)
+        object.__setattr__(profile, "cases", ())
+        with self.assertRaises(InvalidSchemaError):
+            VerificationGate().evaluate(profile, ())
+
     def test_complete_set_requires_every_required_case_not_a_sample_count(self):
         cases = (
             PersonaCase("p1", "s1", "member", "/one", "chromium", "1440x900", True),
@@ -227,7 +251,9 @@ class PersonaGateTests(unittest.TestCase):
         self.assertTrue(VerificationGate().evaluate(profile, (), work_kind="logic").allowed)
 
     def test_discovery_outputs_and_failures_do_not_retain_auth_values(self):
-        profile = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(FIXTURE)
+        profile = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
+            FIXTURE, declaration_root=".",
+        )
         serialized = json.dumps(profile.to_dict(), sort_keys=True)
         self.assertNotIn(SECRET, serialized)
         self.assertNotIn("member@example.invalid", serialized)

@@ -63,13 +63,16 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 11. Declared personas block incomplete UI/integration verification
     - Chunks: 04, 05
     - Evidence: Chunk 04 `Persona Discovery Contract` and coverage acceptance;
-      Chunk 05 verification integration preserves the blocking gate.
+      task frontmatter remains authoritative over diagnostic indexes, profile
+      inputs are canonically snapshotted, and Chunk 05 verification integration
+      preserves the blocking gate.
 
 12. Browser failure captures evidence, restarts primary, tries another engine,
     then asks for help
     - Chunks: 04, 05, 06
     - Evidence: Chunk 04 `Browser Recovery Contract`, Chunk 05 verification
-      integration, and Chunk 06 browser-exhaustion scenarios.
+      integration, blocked-history alternate/restart proof, and Chunk 06
+      browser-exhaustion scenarios.
 
 13. Accepted cleanup-boundary feedback: Docker cleanup at end-of-chunk repo
     cleanup, with final reconciliation

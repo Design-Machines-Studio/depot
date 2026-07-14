@@ -102,9 +102,11 @@ def _read_owned_text(path, root):
                 pass
 
 
-def _frontmatter(path, root):
+def _frontmatter(path, root, *, optional=False):
     text = _read_owned_text(path, root)
     if not text.startswith("---\n"):
+        if optional:
+            return None
         _fail()
     pieces = text.split("---\n", 2)
     if len(pieces) != 3:
@@ -172,15 +174,18 @@ def _assignments(frontmatter):
             seen_ids.add(persona_id)
             current = {"id": persona_id}
             continue
-        match = re.fullmatch(r"    (expected|required):\s*(\S+)", line)
+        match = re.fullmatch(r"    (expected|required|reason):\s*(.+)", line)
         if match is None or current is None or match.group(1) in current:
             _fail()
-        current[match.group(1)] = match.group(2)
+        value = match.group(2).strip()
+        if not value or len(value) > 4_096:
+            _fail()
+        current[match.group(1)] = value
     if current is not None:
         result.append(current)
     normalized = []
     for item in result:
-        if (set(item) - {"id", "expected", "required"}
+        if (set(item) - {"id", "expected", "required", "reason"}
                 or item.get("expected") not in {"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"}
                 or "required" in item and item["required"] not in {"true", "false"}):
             _fail()
@@ -193,17 +198,22 @@ def _assignments(frontmatter):
 
 
 def _task_at(path, root):
-    frontmatter = _frontmatter(path, root); values = _scalars(frontmatter)
+    frontmatter = _frontmatter(path, root, optional=True)
+    if frontmatter is None:
+        return None
+    values = _scalars(frontmatter)
     assignments = _assignments(frontmatter)
-    if not {"id", "title", "route", "requires_auth", "requires_role"} <= set(values) or not assignments:
+    if not {"id", "title", "route", "requires_auth"} <= set(values) or not assignments:
         _fail()
     if values["requires_auth"] not in {"true", "false"}:
         _fail()
     status = values.get("implementation_status")
     if status is not None and status not in _KNOWN_STATUSES:
         _fail()
+    requires_auth = values["requires_auth"] == "true"
     return {"id": values["id"].lower(), "route": values["route"],
-            "role": values["requires_role"], "requires_auth": values["requires_auth"] == "true",
+            "role": values.get("requires_role", "member" if requires_auth else "public"),
+            "requires_auth": requires_auth,
             "status": status, "legacy": "implementation_status" not in values,
             "personas": assignments, "tags": _list(frontmatter, "tags"),
             "preconditions": _list(frontmatter, "preconditions"),
@@ -250,15 +260,16 @@ def _persona_defaults(root, persona_paths):
     return result
 
 
-def _validate_coverage_matrix(root, tasks):
+def _coverage_matrix_diagnostics(root, tasks):
     path = root / "coverage-matrix.md"
     if path.is_symlink():
         _fail()
     if not path.exists():
-        return
+        return ()
     _owned_path(path, root)
     lines = _read_owned_text(path, root).splitlines()
     direct_rows, indexed_rows = set(), {}
+    mismatch = False
     header = None
     for line in lines:
         if not line.lstrip().startswith("|"):
@@ -273,7 +284,7 @@ def _validate_coverage_matrix(root, tasks):
         if header == ("Task", "Persona", "Expected") and len(cells) >= 3:
             row = (cells[0].lower(), cells[1], cells[2])
             if row in direct_rows:
-                _fail()
+                mismatch = True
             direct_rows.add(row)
             continue
         if header is not None and header[0] == "Task ID" and len(cells) == len(header):
@@ -285,26 +296,28 @@ def _validate_coverage_matrix(root, tasks):
                     continue
                 outcome = _MATRIX_OUTCOMES.get(cells[index])
                 if outcome is None:
-                    _fail()
+                    mismatch = True
+                    continue
                 persona_rows.add((task_id, persona_id, outcome))
             if persona_rows:
                 if task_id in indexed_rows:
-                    _fail()
+                    mismatch = True
                 indexed_rows[task_id] = persona_rows
     expected = {
         (task["id"], persona_id, outcome)
         for task in tasks for persona_id, outcome, _required in task["personas"]
     }
     if direct_rows and direct_rows != expected:
-        _fail()
+        mismatch = True
     for task_id, rows in indexed_rows.items():
         authoritative = {row for row in expected if row[0] == task_id}
         if not authoritative or rows != authoritative:
-            _fail()
+            mismatch = True
     if indexed_rows and set().union(*indexed_rows.values()) != expected:
-        _fail()
+        mismatch = True
     if not direct_rows and not indexed_rows:
-        _fail()
+        mismatch = True
+    return ("coverage_matrix_mismatch",) if mismatch else ()
 
 
 def _suite(root, suite_id):
@@ -338,22 +351,36 @@ class ProjectPersonaAdapter:
         else:
             self._policy_document = None
 
-    def discover(self, project_root, *, target_origin=None):
+    def discover(self, project_root, *, target_origin=None, declaration_root=None):
         try:
-            return self._discover(project_root, target_origin=target_origin)
+            return self._discover(
+                project_root, target_origin=target_origin,
+                declaration_root=declaration_root,
+            )
         except Exception:
             _fail()
 
-    def _discover(self, project_root, *, target_origin=None):
+    def _discover(self, project_root, *, target_origin=None, declaration_root=None):
         project = Path(project_root)
-        declared_root = project / "tests" / "ux"
+        if declaration_root is None:
+            declared_root = project / "tests" / "ux"
+            explicit_root = False
+        else:
+            if type(declaration_root) is not str:
+                _fail()
+            relative = Path(declaration_root)
+            if (relative.is_absolute() or any(part == ".." for part in relative.parts)
+                    or str(relative) not in {"."}):
+                _fail()
+            declared_root = project
+            explicit_root = True
         if declared_root.is_symlink():
             _fail()
         if declared_root.exists():
             _owned_path(declared_root, project, directory=True)
             ux = declared_root
-        elif any((project / name).exists() for name in ("tasks", "personas", "coverage-matrix.md")):
-            ux = project
+        elif explicit_root:
+            _fail()
         else:
             profile = VerificationProfile(
                 1, "not_declared", (), (), "not_declared", "not_declared", (),
@@ -427,13 +454,13 @@ class ProjectPersonaAdapter:
         task_paths = sorted((ux / "tasks").rglob("*.md"))
         for path in task_paths:
             _owned_path(path, ux)
-        tasks = [_task_at(path, ux) for path in task_paths]
+        tasks = [task for path in task_paths if (task := _task_at(path, ux)) is not None]
         if not tasks:
             _fail()
         ids = [task["id"] for task in tasks]
         if len(ids) != len(set(ids)):
             _fail()
-        _validate_coverage_matrix(ux, tasks)
+        coverage_diagnostics = _coverage_matrix_diagnostics(ux, tasks)
         if selected is None and config_path.exists() and "include_statuses" in config:
             runnable_present = {
                 task["status"] or "current" for task in tasks
@@ -475,5 +502,5 @@ class ProjectPersonaAdapter:
         return VerificationProfile(
             1, "project_declaration", tuple(cases), tuple(sorted(auth_names)),
             "declared", selection_status, tuple(engines),
-            runtime_origin or configured_origin,
+            runtime_origin or configured_origin, coverage_diagnostics,
         )

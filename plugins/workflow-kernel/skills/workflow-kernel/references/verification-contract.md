@@ -2,16 +2,20 @@
 
 ## Declared coverage
 
-The kernel discovers `tests/ux/personas/_index.md`, persona frontmatter,
-`tests/ux/tasks/**/*.md`, optional `suites/*.md`, and optional
-`tests/ux/verification.json`. Task frontmatter is authoritative;
-`coverage-matrix.md` is a generated index and never changes required coverage.
-The persona index must exactly name the available persona files, and a present
-coverage matrix must agree with task/persona/outcome declarations; index drift
-fails closed rather than changing task authority. An existing incomplete
-`tests/ux/` tree is invalid. Only an absent declaration tree is `not_declared`.
-The matrix must represent the complete authoritative task and assignment set;
-a compact matrix that omits a task or row is drift. Discovery rejects symlinks
+The kernel implicitly discovers only `tests/ux/personas/_index.md`, persona
+frontmatter, actual frontmatter declarations in `tests/ux/tasks/**/*.md`,
+optional `suites/*.md`, and optional `tests/ux/verification.json`. A sanitized
+fixture tree at another root requires the explicit `declaration_root="."`
+adapter argument; unrelated root `tasks/` or `personas/` paths are
+`not_declared`. Markdown under the task tree without frontmatter is supporting
+material and is ignored. Task frontmatter is authoritative;
+`coverage-matrix.md` is a generated index and never changes or invalidates
+required coverage. The persona index must exactly name the available persona
+files. Matrix drift is reduced to the safe `coverage_matrix_mismatch`
+diagnostic that is excluded from profile identity, while authoritative cases
+continue to come from task frontmatter.
+An existing incomplete `tests/ux/` tree is invalid. Only an absent declaration
+tree is `not_declared`. Discovery rejects symlinks
 in every ancestor from the project root through the UX declaration and all
 descendants, plus any resolved path outside the owned UX tree, before reading
 it. Declaration reads are descriptor-relative and no-follow, reject hardlinks,
@@ -19,9 +23,12 @@ and revalidate file and directory identity after reading so path swaps cannot
 replace validated config, index, persona, task, suite, or matrix content.
 Duplicate scalar or list-section frontmatter keys and malformed scalar or
 container types fail with `invalid_verification_declaration`. Task `personas:`
-assignments are parsed only from that exact nested section: duplicate or unknown
-keys, duplicate IDs, invalid `expected` values, invalid `required` booleans, or
-missing assignments fail closed rather than being inferred from nearby text.
+assignments are parsed only from that exact nested section: the live descriptive
+`reason` field is accepted but never retained; duplicate or unknown keys,
+duplicate IDs, invalid `expected` values, invalid `required` booleans, or missing
+assignments fail closed rather than being inferred from nearby text. A missing
+legacy `requires_role` defaults to `member` for authenticated tasks and `public`
+for unauthenticated tasks.
 Selected `current`, `redirected-current`, and statusless legacy tasks expand every
 persona assignment across every configured browser and viewport. Statusless tasks
 record `legacy_status_defaulted=true`. `required` defaults to true; only explicit
@@ -41,7 +48,8 @@ Precedence is project config, task declaration, selected suite IDs, persona
 device/viewport defaults, then workflow-policy defaults. Undeclared browser and
 viewport values are recorded as `workflow_policy_default`. The canonical defaults
 are Chromium plus Firefox, desktop `1440x900`, and mobile `375x812`.
-Each normalized profile retains the ordered configured-engine set and derives a
+Each normalized profile retains the ordered configured-engine set, sorts its
+case set by `case_id`, sorts unique auth-field names, and derives a
 content-addressed `profile-sha256` identity from its complete safe declaration.
 The authoritative runtime origin is reduced to an opaque `origin-sha256` digest
 and included in that identity; configured and runtime origins must agree. Raw
@@ -55,8 +63,9 @@ failed, unauthenticated, or non-evaluative required evidence. No UX directory is
 `not_declared`; no personas are fabricated, and non-UI work remains unblocked.
 Persona, scenario, role, and auth field identifiers are at most 128 characters.
 Routes are at most 2048 characters, are absolute and origin-relative, contain no
-query or fragment, and reject `.` or `..` traversal segments in both runtime
-validation and the published schema.
+credentials, query, fragment, control characters, credential-shaped values, or
+literal/encoded `.` or `..` traversal segments. Ordinary semantic segments such
+as `/monkey` and `/account/password` remain valid.
 
 Profiles retain auth field names only. Cookie values, bearer tokens, passwords,
 credential usernames, fixture secrets, and URL credentials never enter profiles,
@@ -122,3 +131,10 @@ A recovered run retains the failed attempts and is degraded, never first-pass
 clean. Application/container restart is a separate diagnostic action and cannot
 stand in for browser restart. Required browser work is never translated to
 skipped, approved, or curl-verified.
+
+The verification gate snapshots and revalidates the sealed profile plus every
+nested persona case before evaluating coverage. Low-level mutation of a frozen
+profile or case is rejected instead of changing which cases are required.
+Blocked multi-engine receipts prove either an alternate attempt or explicit
+alternate-launch unavailability. If no primary retry occurred, the history also
+contains `primary_restart_unavailable`.
