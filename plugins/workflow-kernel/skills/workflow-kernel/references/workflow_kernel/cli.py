@@ -15,7 +15,7 @@ from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
     RunMode, UnsafePayloadError, WorkflowEvent, serialize_kernel_error,
 )
-from .state import RunLease, StateStore
+from .state import RunLease, StateStore, _prepare_replay_state
 from .transitions import TransitionEngine
 
 
@@ -146,8 +146,8 @@ def command_replay(args):
         reconstructed = engine.reconstruct(events.replay())
         materialized = _load_optional_state(states)
         expected = materialized.revision if materialized is not None else -1
-        prepared = states.prepare(reconstructed)
-        evidence = states.reconcile(prepared, expected, lease=lease)
+        prepared = _prepare_replay_state(states, reconstructed)
+        evidence = states.publish(prepared, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})
     return 0

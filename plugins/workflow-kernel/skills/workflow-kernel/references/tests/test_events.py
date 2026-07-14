@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
-from tests import detail_digest
+from tests import detail_digest, swap_parent_after_relative_stat
 from workflow_kernel.events import EventStore, encode_event
 from workflow_kernel.schema import (
     CorruptEventError, InvalidSchemaError, KernelError, LeaseConflictError,
@@ -56,31 +56,19 @@ class EventStoreTests(unittest.TestCase):
                 with self.assertRaises(error_type):
                     EventStore(root).require_absent()
 
-    def test_require_absent_revalidates_parent_before_existing_entry_error(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            parent = root / "run"
-            parent.mkdir()
-            (parent / "events.jsonl").touch()
-            moved = root / "moved"
-            store = EventStore(parent)
-            original_stat = os.stat
-            swapped = False
-
-            def swap_after_entry_stat(path, *args, **kwargs):
-                nonlocal swapped
-                result = original_stat(path, *args, **kwargs)
-                if path == "events.jsonl" and kwargs.get("dir_fd") is not None and not swapped:
-                    swapped = True
-                    parent.rename(moved)
-                    parent.mkdir()
+    def test_require_absent_revalidates_parent_on_present_and_missing_branches(self):
+        for present in (True, False):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as directory:
+                parent = Path(directory) / "run"
+                parent.mkdir()
+                if present:
                     (parent / "events.jsonl").touch()
-                return result
-
-            with mock.patch("workflow_kernel._files.os.stat",
-                            side_effect=swap_after_entry_stat), \
-                    self.assertRaises(CorruptEventError):
-                store.require_absent()
+                store = EventStore(parent)
+                with mock.patch(
+                        "workflow_kernel._files.os.stat",
+                        side_effect=swap_parent_after_relative_stat(parent, "events.jsonl")), \
+                        self.assertRaises(CorruptEventError):
+                    store.require_absent()
 
 
     def test_empty_ledger_revalidates_file_identity_before_returning(self):

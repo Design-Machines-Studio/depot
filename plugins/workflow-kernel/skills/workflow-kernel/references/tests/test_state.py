@@ -11,7 +11,9 @@ from pathlib import Path
 from dataclasses import replace
 from unittest import mock
 
-from tests import detail_digest
+from tests import detail_digest, swap_parent_after_relative_stat
+import workflow_kernel
+import workflow_kernel.state as state_module
 from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import InvalidSchemaError, LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
@@ -45,31 +47,26 @@ class StateStoreTests(unittest.TestCase):
                 with self.assertRaises(error_type):
                     StateStore(path).require_absent()
 
-    def test_require_absent_revalidates_parent_before_existing_entry_error(self):
+    def test_require_absent_revalidates_parent_on_present_and_missing_branches(self):
+        for present in (True, False):
+            with self.subTest(present=present), tempfile.TemporaryDirectory() as directory:
+                parent = Path(directory) / "run"
+                parent.mkdir()
+                path = parent / "run-state.json"
+                if present:
+                    path.touch()
+                store = StateStore(path)
+                with mock.patch(
+                        "workflow_kernel._files.os.stat",
+                        side_effect=swap_parent_after_relative_stat(parent, path.name)), \
+                        self.assertRaises(CorruptStateError):
+                    store.require_absent()
+
+    def test_state_store_exposes_one_public_publication_path(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            parent = root / "run"
-            parent.mkdir()
-            (parent / "run-state.json").touch()
-            moved = root / "moved"
-            store = StateStore(parent / "run-state.json")
-            original_stat = os.stat
-            swapped = False
-
-            def swap_after_entry_stat(path, *args, **kwargs):
-                nonlocal swapped
-                result = original_stat(path, *args, **kwargs)
-                if path == "run-state.json" and kwargs.get("dir_fd") is not None and not swapped:
-                    swapped = True
-                    parent.rename(moved)
-                    parent.mkdir()
-                    (parent / "run-state.json").touch()
-                return result
-
-            with mock.patch("workflow_kernel._files.os.stat",
-                            side_effect=swap_after_entry_stat), \
-                    self.assertRaises(CorruptStateError):
-                store.require_absent()
+            store = StateStore(Path(directory) / "run-state.json")
+        self.assertFalse(hasattr(store, "reconcile"))
+        self.assertFalse(hasattr(workflow_kernel, "_prepare_replay_state"))
 
 
     def test_missing_state_primary_survives_parent_close_failure(self):
@@ -252,14 +249,14 @@ class StateStoreTests(unittest.TestCase):
                 store.write(candidate, 0, lease=lease)
             self.assertEqual(store.load().revision, 2)
 
-    def test_reconcile_rejects_revision_interloper_created_after_temp_fsync(self):
+    def test_replay_prepared_publication_rejects_revision_interloper_after_temp_fsync(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
             store = StateStore(path)
             base = RunState.new("run-1", "2026-07-14T00:00:00Z")
             with RunLease(path) as lease:
                 store.write(base, -1, lease=lease)
-            authoritative = store.prepare(base)
+            authoritative = state_module._prepare_replay_state(store, base)
             interloper = replace(base, revision=2)
             replacement = Path(directory) / "interloper.json"
             replacement.write_bytes(encode_state(interloper))
@@ -278,7 +275,7 @@ class StateStoreTests(unittest.TestCase):
             with RunLease(path) as lease, mock.patch(
                     "workflow_kernel.state.os.fsync", side_effect=inject_after_temp_write), \
                     self.assertRaises(RevisionConflictError):
-                store.reconcile(authoritative, 0, lease=lease)
+                store.publish(authoritative, 0, lease=lease)
             self.assertEqual(store.load().revision, 2)
 
     @unittest.skipUnless(hasattr(os, "fork"), "requires POSIX fork")
@@ -859,9 +856,12 @@ class StateStoreTests(unittest.TestCase):
             with RunLease(path) as lease:
                 store.write(current, -1, lease=lease)
             before = path.read_bytes()
+            ordinary = store.prepare(candidate)
+            with self.assertRaises(TypeError):
+                store.prepare(candidate, reconciliation=True)
             with RunLease(path) as lease:
                 with self.assertRaises(RevisionConflictError):
-                    store.write(candidate, 2, lease=lease)
+                    store.publish(ordinary, 2, lease=lease)
             self.assertEqual(path.read_bytes(), before)
 
     def test_hard_linked_state_and_lease_are_rejected_without_touching_victims(self):

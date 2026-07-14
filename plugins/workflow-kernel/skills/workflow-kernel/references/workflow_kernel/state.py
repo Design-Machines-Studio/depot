@@ -64,6 +64,20 @@ def _read_state_descriptor(descriptor: int, path: Path) -> RunState:
 def _capability_types():
     lease_records = weakref.WeakKeyDictionary()
     store_records = weakref.WeakKeyDictionary()
+    monotonic_issuance = object()
+    ledger_reconciliation_issuance = object()
+
+    def issue_prepared(record, state, issuance_mode):
+        snapshot, encoded = _snapshot_and_encode_state(state)
+        if len(encoded) > MAX_STATE_BYTES:
+            raise UnsafePayloadError(ErrorMessage.STATE_SIZE_LIMIT, {
+                ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
+            })
+        prepared = object.__new__(PreparedState)
+        record["prepared"][prepared] = (
+            snapshot.revision, encoded, issuance_mode,
+        )
+        return prepared
 
     def finalize_lease(record, handle, owner_pid) -> None:
         if record.get("handle") is handle:
@@ -323,26 +337,13 @@ def _capability_types():
 
         def publish(self, prepared: PreparedState, expected_revision: int,
                     *, lease: RunLease = None) -> dict:
-            return self._publish_prepared(
-                prepared, expected_revision, lease=lease, allow_backward=False,
-            )
-
-        def reconcile(self, prepared: PreparedState, expected_revision: int,
-                      *, lease: RunLease = None) -> dict:
-            """Publish ledger-authoritative state while retaining CAS checks."""
-            return self._publish_prepared(
-                prepared, expected_revision, lease=lease, allow_backward=True,
-            )
-
-        def _publish_prepared(self, prepared: PreparedState, expected_revision: int,
-                              *, lease: RunLease, allow_backward: bool) -> dict:
             record = store_records[self]
             if type(prepared) is not PreparedState:
                 raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
                 })
             try:
-                revision, encoded = record["prepared"][prepared]
+                revision, encoded, issuance_mode = record["prepared"][prepared]
             except (KeyError, TypeError):
                 raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
@@ -378,7 +379,8 @@ def _capability_types():
                                 ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                                 ErrorDetailKey.ACTUAL_REVISION.value: actual,
                             })
-                        if not allow_backward and revision < actual:
+                        if (issuance_mode is not ledger_reconciliation_issuance
+                                and revision < actual):
                             raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
                                 ErrorDetailKey.CANDIDATE_REVISION.value: revision,
                                 ErrorDetailKey.ACTUAL_REVISION.value: actual,
@@ -440,17 +442,22 @@ def _capability_types():
                     "directory_fsync": directory_fsync}
 
         def prepare(self, state: RunState) -> PreparedState:
-            snapshot, encoded = _snapshot_and_encode_state(state)
-            if len(encoded) > MAX_STATE_BYTES:
-                raise UnsafePayloadError(ErrorMessage.STATE_SIZE_LIMIT, {
-                    ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
-                })
-            prepared = object.__new__(PreparedState)
-            store_records[self]["prepared"][prepared] = (snapshot.revision, encoded)
-            return prepared
+            return issue_prepared(
+                store_records[self], state, monotonic_issuance,
+            )
 
-    return PreparedState, RunLease, StateStore, require_run_lease
+    def prepare_replay_state(store, state) -> PreparedState:
+        """Issue a private ledger-reconciliation capability for CLI replay."""
+        if type(store) is not StateStore:
+            raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
+                ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
+            })
+        return issue_prepared(
+            store_records[store], state, ledger_reconciliation_issuance,
+        )
+
+    return PreparedState, RunLease, StateStore, require_run_lease, prepare_replay_state
 
 
-PreparedState, RunLease, StateStore, _require_run_lease = _capability_types()
+PreparedState, RunLease, StateStore, _require_run_lease, _prepare_replay_state = _capability_types()
 del _capability_types

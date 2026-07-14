@@ -20,17 +20,21 @@ class CliTests(unittest.TestCase):
         env["PYTHONPATH"] = str(Path(__file__).parents[1])
         return subprocess.run([sys.executable, "-m", "workflow_kernel", *args], text=True, capture_output=True, env=env, check=False)
 
-    def install_cached_runtime(self, home, cache, version, main_source=None):
+    def install_cached_runtime(self, home, cache, version, main_source=None, *, mtime=None):
         refs = (Path(home) / cache / "plugins/cache/depot/workflow-kernel" /
                 version / "skills/workflow-kernel/references")
         if main_source is None:
             refs.mkdir(parents=True)
+            if mtime is not None:
+                os.utime(refs, (mtime, mtime))
             return refs
         package = refs / "workflow_kernel"
         package.mkdir(parents=True)
         (package / "__init__.py").write_text("")
         (package / "cli.py").write_text("")
         (package / "__main__.py").write_text(main_source)
+        if mtime is not None:
+            os.utime(refs, (mtime, mtime))
         return refs
 
     def run_cache_resolver(self, home, *, cwd=None, **environment):
@@ -441,14 +445,32 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(
                 directory, ".claude", "9.9.9", "raise RuntimeError('broken')\n",
+                mtime=200,
             )
             self.install_cached_runtime(
                 directory, ".claude", "0.1.0", "print('older-viable-runtime')\n",
+                mtime=100,
             )
             result = self.run_cache_resolver(directory)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("older-viable-runtime", result.stdout)
+
+    def test_documented_cache_resolver_prioritizes_valid_claude_over_newer_codex(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.0", "print('claude-priority-runtime')\n",
+                mtime=100,
+            )
+            self.install_cached_runtime(
+                directory, ".codex", "9.9.9", "print('codex-newer-runtime')\n",
+                mtime=200,
+            )
+            result = self.run_cache_resolver(directory)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        self.assertIn("claude-priority-runtime", result.stdout)
+        self.assertNotIn("codex-newer-runtime", result.stdout)
 
     def test_documented_cache_resolver_quietly_rejects_broken_main(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -488,6 +510,9 @@ class CliTests(unittest.TestCase):
             self.assertIn("exactly matches the replay-derived state", document)
             self.assertIn("lease-protected authoritative replacement", document)
             self.assertIn("ordinary publication rejects backward revisions", document)
+            self.assertIn("one public publication path", document)
+            self.assertIn("private ledger-derived prepared issuance", document)
+            self.assertNotIn("StateStore.reconcile", document)
         self.assertIn("one lookahead item", skill)
         self.assertIn("MAX_RECONSTRUCTION_WORK", skill)
         self.assertIn("event payload snapshot", skill)
@@ -524,16 +549,19 @@ class CliTests(unittest.TestCase):
         states.write.side_effect = lambda *_args, **_kwargs: (
             ObservedPath.assert_active(), {"directory_fsync": "completed"}
         )[1]
+        prepared = object()
         with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
                 mock.patch("workflow_kernel.cli.RunLease", return_value=Lease()), \
+                mock.patch("workflow_kernel.cli._prepare_replay_state", return_value=prepared) as prepare_replay, \
                 mock.patch("workflow_kernel.cli.TransitionEngine") as engine, \
                 mock.patch("workflow_kernel.cli._emit"):
             engine.return_value.reconstruct.return_value = state
             self.assertEqual(command_replay(SimpleNamespace(directory="unused")), 0)
         self.assertFalse(active["lease"])
-        states.prepare.assert_called_once_with(state)
-        states.reconcile.assert_called_once_with(
-            states.prepare.return_value, state.revision, lease=mock.ANY,
+        prepare_replay.assert_called_once_with(states, state)
+        states.prepare.assert_not_called()
+        states.publish.assert_called_once_with(
+            prepared, state.revision, lease=mock.ANY,
         )
         states.write.assert_not_called()
 
