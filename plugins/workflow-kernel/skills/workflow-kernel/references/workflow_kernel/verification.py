@@ -10,7 +10,12 @@ from .adapters.base import invalid_policy
 from .redaction import normalize_evidence_reference
 
 _ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
-_VIEWPORT = re.compile(r"([1-9][0-9]{1,4})x([1-9][0-9]{1,4})\Z")
+VIEWPORT_DIMENSION_PATTERN = (
+    r"(?:[1-9][0-9]{1,3}|1[0-5][0-9]{3}|16[0-2][0-9]{2}|"
+    r"163[0-7][0-9]|1638[0-4])"
+)
+VIEWPORT_PATTERN = VIEWPORT_DIMENSION_PATTERN + "x" + VIEWPORT_DIMENSION_PATTERN
+_VIEWPORT = re.compile("(" + VIEWPORT_DIMENSION_PATTERN + ")x(" + VIEWPORT_DIMENSION_PATTERN + r")\Z")
 _ENGINES = frozenset({"chromium", "firefox", "webkit"})
 _OUTCOMES = frozenset({"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"})
 
@@ -92,11 +97,16 @@ class VerificationProfile:
     cases: Tuple[PersonaCase, ...]
     auth_field_names: Tuple[str, ...]
     discovery_status: str = "declared"
+    selection_status: str = "runnable_cases"
 
     def __post_init__(self):
         if self.schema_version != 1:
             _invalid("unsupported_verification_profile_version")
-        if self.source not in {"project_declaration", "not_declared"} or self.discovery_status not in {"declared", "not_declared"}:
+        if (self.source not in {"project_declaration", "not_declared"}
+                or self.discovery_status not in {"declared", "not_declared"}
+                or self.selection_status not in {
+                    "runnable_cases", "optional_cases_only", "no_runnable_tasks", "not_declared",
+                }):
             _invalid()
         if type(self.cases) is not tuple or any(type(case) is not PersonaCase for case in self.cases):
             _invalid()
@@ -107,12 +117,24 @@ class VerificationProfile:
                 or any(type(name) is not str or _ID.fullmatch(name) is None for name in self.auth_field_names)
                 or tuple(sorted(set(self.auth_field_names))) != self.auth_field_names):
             _invalid()
-        if self.discovery_status == "not_declared" and self.cases:
+        if self.discovery_status == "not_declared" and (
+                self.source != "not_declared" or self.selection_status != "not_declared" or self.cases):
+            _invalid()
+        if self.discovery_status == "declared" and self.source != "project_declaration":
+            _invalid()
+        if self.selection_status == "no_runnable_tasks" and self.cases:
+            _invalid()
+        if self.selection_status == "optional_cases_only" and (
+                not self.cases or any(case.required for case in self.cases)):
+            _invalid()
+        if self.selection_status == "runnable_cases" and (
+                not self.cases or not any(case.required for case in self.cases)):
             _invalid()
 
     def to_dict(self):
         return {"schema_version": self.schema_version, "source": self.source,
                 "discovery_status": self.discovery_status,
+                "selection_status": self.selection_status,
                 "cases": [case.to_dict() for case in self.cases],
                 "auth_field_names": list(self.auth_field_names)}
 
@@ -122,6 +144,8 @@ class EvidenceRef:
     case_id: str; persona_id: str; scenario_id: str; route: str
     browser_engine: str; viewport: str; attempt: int; evaluation: str
     authenticated: bool; reference: str; proof_kind: str = "browser"
+    actual_browser_engine: str | None = None
+    substitution_provenance: str | None = None
 
     def __post_init__(self):
         if type(self.case_id) is not str or not self.case_id.startswith("case-sha256:"):
@@ -129,6 +153,12 @@ class EvidenceRef:
         _validate_id(self.persona_id); _validate_id(self.scenario_id)
         if type(self.route) is not str or not self.route.startswith("/") or self.browser_engine not in _ENGINES:
             _invalid("invalid_verification_evidence")
+        actual = self.browser_engine if self.actual_browser_engine is None else self.actual_browser_engine
+        if actual not in _ENGINES or self.substitution_provenance not in {None, "alternate_engine_recovery"}:
+            _invalid("invalid_verification_evidence")
+        if self.substitution_provenance == "alternate_engine_recovery" and actual == self.browser_engine:
+            _invalid("invalid_verification_evidence")
+        object.__setattr__(self, "actual_browser_engine", actual)
         validate_viewport(self.viewport)
         if type(self.attempt) is not int or self.attempt < 1 or type(self.evaluation) is not str or type(self.authenticated) is not bool:
             _invalid("invalid_verification_evidence")
@@ -153,6 +183,8 @@ class VerificationGate:
         if profile.discovery_status == "not_declared":
             return CoverageDecision(work_kind not in {"ui", "integration"},
                                     "persona_declarations_not_declared" if work_kind in {"ui", "integration"} else "persona_declarations_not_applicable")
+        if profile.selection_status == "no_runnable_tasks":
+            return CoverageDecision(True, "no_runnable_persona_cases_declared")
         supplied = tuple(evidence)
         if any(type(item) is not EvidenceRef for item in supplied):
             _invalid("invalid_verification_evidence")
@@ -162,13 +194,24 @@ class VerificationGate:
             case = required.get(item.case_id)
             if case is None:
                 continue
+            engine_matches = (
+                item.browser_engine == case.browser_engine
+                and (
+                    item.actual_browser_engine == case.browser_engine
+                    and item.substitution_provenance is None
+                    or item.actual_browser_engine != case.browser_engine
+                    and item.substitution_provenance == "alternate_engine_recovery"
+                )
+            )
             matches = (item.persona_id == case.persona_id and item.scenario_id == case.scenario_id
                        and item.route == case.route and item.browser_engine == case.browser_engine
                        and item.viewport == case.viewport and item.proof_kind == "browser"
                        and item.evaluation == case.expected_outcome
-                       and (not case.requires_auth or item.authenticated))
+                       and engine_matches and (not case.requires_auth or item.authenticated))
             (passing if matches else invalid).add(case.case_id)
         missing = tuple(sorted(set(required) - passing))
         if missing:
             return CoverageDecision(False, "missing_required_persona_evidence", missing, tuple(sorted(invalid)))
+        if not required:
+            return CoverageDecision(True, "optional_persona_cases_only")
         return CoverageDecision(True, "required_persona_coverage_complete")

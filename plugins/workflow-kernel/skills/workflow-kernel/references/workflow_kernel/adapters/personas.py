@@ -7,12 +7,24 @@ from typing import Protocol
 
 from .base import invalid_policy
 from ..limits import load_json_document
+from ..policies import PolicyDocument, load_policy
 from ..verification import EvidenceRef, PersonaCase, VerificationProfile, validate_viewport
 
 _TOP = re.compile(r"^([a-z_]+):\s*(.*?)\s*$", re.M)
 _PERSONA = re.compile(r"^  - id:\s*([a-z0-9-]+)\s*$", re.M)
 _VIEWPORT = re.compile(r"([1-9][0-9]{1,4})x([1-9][0-9]{1,4})")
 _RUNNABLE = frozenset({"current", "redirected-current"})
+_KNOWN_STATUSES = frozenset({
+    "current", "redirected-current", "current-gap", "future-product",
+    "future-fixture-ui",
+})
+_INDEX_LINK = re.compile(r"\[[^\]]+\]\(([^)]+\.md)\)\Z")
+_MATRIX_PERSONAS = {
+    "EC": "engaged-chair", "PS": "power-secretary",
+    "RB": "reluctant-board-member", "CM": "casual-member",
+    "NP": "new-probationary", "NT": "numbers-treasurer",
+}
+_MATRIX_OUTCOMES = {"S": "SUCCESS", "F": "FRICTION", "B": "BLOCKED", "P": "PARTIAL"}
 
 
 def _fail():
@@ -73,21 +85,46 @@ def _task(path):
         _fail()
     if values["requires_auth"] not in {"true", "false"}:
         _fail()
+    status = values.get("implementation_status")
+    if status is not None and status not in _KNOWN_STATUSES:
+        _fail()
     return {"id": values["id"].lower(), "route": values["route"],
             "role": values["requires_role"], "requires_auth": values["requires_auth"] == "true",
-            "status": values.get("implementation_status"), "legacy": "implementation_status" not in values,
+            "status": status, "legacy": "implementation_status" not in values,
             "personas": assignments, "tags": _list(frontmatter, "tags"),
             "preconditions": _list(frontmatter, "preconditions"),
             "auth_fields": _list(frontmatter, "auth_fields")}
 
 
-def _persona_defaults(root):
-    result = {}
-    for path in sorted((root / "personas").glob("*.md")):
-        if path.name == "_index.md":
+def _persona_index(root):
+    directory = root / "personas"
+    index = directory / "_index.md"
+    try:
+        text = index.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        _fail()
+    declared = []
+    for line in text.splitlines():
+        if not line.lstrip().startswith("|"):
             continue
+        first_cell = line.strip().strip("|").split("|", 1)[0].strip()
+        match = _INDEX_LINK.fullmatch(first_cell)
+        if match is not None:
+            declared.append(match.group(1))
+    if (not declared or len(declared) != len(set(declared))
+            or any(Path(name).name != name or name == "_index.md" for name in declared)):
+        _fail()
+    actual = {path.name for path in directory.glob("*.md") if path.name != "_index.md"}
+    if set(declared) != actual:
+        _fail()
+    return tuple(directory / name for name in sorted(declared))
+
+
+def _persona_defaults(root, persona_paths):
+    result = {}
+    for path in persona_paths:
         values = _scalars(_frontmatter(path)); persona_id = values.get("id")
-        if not persona_id or persona_id in result:
+        if not persona_id or persona_id in result or path.stem != persona_id:
             _fail()
         viewport = None
         match = re.search(r"width:\s*([0-9]+),\s*height:\s*([0-9]+)", values.get("viewport", ""))
@@ -95,6 +132,61 @@ def _persona_defaults(root):
             viewport = match.group(1) + "x" + match.group(2); validate_viewport(viewport)
         result[persona_id] = (values.get("device", ""), viewport)
     return result
+
+
+def _validate_coverage_matrix(root, tasks):
+    path = root / "coverage-matrix.md"
+    if not path.exists():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        _fail()
+    direct_rows, indexed_rows = set(), {}
+    header = None
+    for line in lines:
+        if not line.lstrip().startswith("|"):
+            header = None
+            continue
+        cells = tuple(cell.strip() for cell in line.strip().strip("|").split("|"))
+        if not cells or set(cells[0]) <= {"-", ":"}:
+            continue
+        if cells[:3] == ("Task", "Persona", "Expected") or cells[0] == "Task ID":
+            header = cells
+            continue
+        if header == ("Task", "Persona", "Expected") and len(cells) >= 3:
+            row = (cells[0].lower(), cells[1], cells[2])
+            if row in direct_rows:
+                _fail()
+            direct_rows.add(row)
+            continue
+        if header is not None and header[0] == "Task ID" and len(cells) == len(header):
+            task_id = cells[0].lower()
+            persona_rows = set()
+            for index, column in enumerate(header):
+                persona_id = _MATRIX_PERSONAS.get(column)
+                if persona_id is None or cells[index] == "-":
+                    continue
+                outcome = _MATRIX_OUTCOMES.get(cells[index])
+                if outcome is None:
+                    _fail()
+                persona_rows.add((task_id, persona_id, outcome))
+            if persona_rows:
+                if task_id in indexed_rows:
+                    _fail()
+                indexed_rows[task_id] = persona_rows
+    expected = {
+        (task["id"], persona_id, outcome)
+        for task in tasks for persona_id, outcome, _required in task["personas"]
+    }
+    if direct_rows and direct_rows != expected:
+        _fail()
+    for task_id, rows in indexed_rows.items():
+        authoritative = {row for row in expected if row[0] == task_id}
+        if not authoritative or rows != authoritative:
+            _fail()
+    if not direct_rows and not indexed_rows:
+        _fail()
 
 
 def _suite(root, suite_id):
@@ -114,19 +206,38 @@ class PersonaAdapter(Protocol):
 
 
 class ProjectPersonaAdapter:
-    def __init__(self, *, policy_path):
-        self._policy_path = Path(policy_path)
+    def __init__(self, *, policy_path=None, policy_document=None):
+        if (policy_path is None) == (policy_document is None):
+            _fail()
+        if policy_document is not None and type(policy_document) is not PolicyDocument:
+            _fail()
+        self._policy_path = Path(policy_path) if policy_path is not None else None
+        self._policy_document = policy_document
 
     def discover(self, project_root):
         project = Path(project_root)
-        ux = project / "tests" / "ux" if (project / "tests" / "ux").is_dir() else project
+        declared_root = project / "tests" / "ux"
+        if declared_root.exists():
+            if not declared_root.is_dir():
+                _fail()
+            ux = declared_root
+        elif any((project / name).exists() for name in ("tasks", "personas", "coverage-matrix.md")):
+            ux = project
+        else:
+            return VerificationProfile(
+                1, "not_declared", (), (), "not_declared", "not_declared",
+            )
         if not ux.is_dir() or not (ux / "tasks").is_dir() or not (ux / "personas").is_dir():
-            return VerificationProfile(1, "not_declared", (), (), "not_declared")
-        try:
-            policy = load_json_document(self._policy_path)["verification"]
-        except Exception:
             _fail()
-        if type(policy) is not dict or set(policy) != {"browser_engines", "desktop_viewport", "mobile_viewport"}:
+        try:
+            document = self._policy_document or load_policy(self._policy_path)
+            defaults_map = document.verification_defaults
+            policy = {
+                "browser_engines": list(defaults_map["browser_engines"]),
+                "desktop_viewport": defaults_map["desktop_viewport"],
+                "mobile_viewport": defaults_map["mobile_viewport"],
+            }
+        except Exception:
             _fail()
         engines = policy["browser_engines"]; viewports = None
         browser_source = "workflow_policy_default"; viewport_source = "workflow_policy_default"
@@ -146,7 +257,13 @@ class ProjectPersonaAdapter:
             if "viewports" in config:
                 viewports = config["viewports"]; viewport_source = "project_config"
             if "include_statuses" in config:
-                statuses = set(config["include_statuses"])
+                configured_statuses = config["include_statuses"]
+                if (type(configured_statuses) is not list or not configured_statuses
+                        or len(configured_statuses) != len(set(configured_statuses))
+                        or any(type(item) is not str or item not in _KNOWN_STATUSES
+                               for item in configured_statuses)):
+                    _fail()
+                statuses = set(configured_statuses)
         if type(engines) is not list or not engines or len(engines) != len(set(engines)) or any(item not in {"chromium", "firefox", "webkit"} for item in engines):
             _fail()
         if viewports is not None:
@@ -155,11 +272,22 @@ class ProjectPersonaAdapter:
             for item in viewports: validate_viewport(item)
         else:
             validate_viewport(policy.get("desktop_viewport")); validate_viewport(policy.get("mobile_viewport"))
-        defaults = _persona_defaults(ux); selected = _suite(ux, selected_suite) if selected_suite else None
+        defaults = _persona_defaults(ux, _persona_index(ux))
+        selected = _suite(ux, selected_suite) if selected_suite else None
         tasks = [_task(path) for path in sorted((ux / "tasks").rglob("*.md"))]
+        if not tasks:
+            _fail()
         ids = [task["id"] for task in tasks]
         if len(ids) != len(set(ids)):
             _fail()
+        _validate_coverage_matrix(ux, tasks)
+        if selected is None and config_path.exists() and "include_statuses" in config:
+            runnable_present = {
+                task["status"] or "current" for task in tasks
+                if (task["status"] or "current") in _RUNNABLE
+            }
+            if not runnable_present <= statuses:
+                _fail()
         cases, auth_names = [], set()
         for task in tasks:
             if selected is not None and task["id"] not in selected: continue
@@ -182,4 +310,13 @@ class ProjectPersonaAdapter:
                                                  source, task["legacy"]))
         if selected is not None and not selected <= set(ids): _fail()
         cases.sort(key=lambda item: item.case_id)
-        return VerificationProfile(1, "project_declaration", tuple(cases), tuple(sorted(auth_names)))
+        if not cases:
+            selection_status = "no_runnable_tasks"
+        elif any(case.required for case in cases):
+            selection_status = "runnable_cases"
+        else:
+            selection_status = "optional_cases_only"
+        return VerificationProfile(
+            1, "project_declaration", tuple(cases), tuple(sorted(auth_names)),
+            "declared", selection_status,
+        )

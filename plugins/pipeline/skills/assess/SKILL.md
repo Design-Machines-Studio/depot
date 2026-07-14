@@ -59,7 +59,7 @@ Produce a **Current State Report** covering:
 - Dependencies (internal and external)
 - Known issues from project history
 
-**Agent 2: UX Assessment** (conditional -- dev server AND UI-touching feature)
+**Agent 2: UX Assessment** (conditional -- UI-touching feature)
 
 **Skip rule (token budget):** if the feature's scope is entirely backend/logic -- none of the planned work touches templates, CSS, JS modules, or rendered pages -- skip the UX assessment. Log one line: `UX assessment: skipped (no UI/Integration surface detected).`
 
@@ -70,7 +70,9 @@ Heuristic (applied on the user's feature description since the chunk classificat
 
 When in doubt, run the UX assessment -- false positives are cheaper than missing a regression. But a strict backend-only assessment (e.g. "add a new migration column for vote_count") should NOT trigger 3-viewport screenshots.
 
-Only runs if a dev server is detected or a URL is provided. Read `references/ux-assessment-protocol.md` for the full protocol. In summary:
+Run discovery whenever the feature is UI/integration work. Execute browser proof
+when a dev server is detected or a URL is provided. Read
+`references/ux-assessment-protocol.md` for the full protocol. In summary:
 
 - Use Playwright MCP tools to navigate and screenshot the affected area
 - Evaluate: visual hierarchy, spacing, typography, interaction states, responsiveness
@@ -85,7 +87,10 @@ Produce a **Current UX Report** covering:
 - Accessibility quick-check (color contrast, focus indicators, semantic structure)
 - UX debt inventory
 
-If no dev server is available, skip this agent and note: "UX assessment skipped -- no dev server detected."
+If no dev server or supplied URL is available, discovery may continue, but the
+required UI/integration target is unavailable. Record a blocked
+`human_help_required` outcome and ask the user to start/provide the target; never
+mark required browser proof skipped or replace it with curl reachability.
 
 #### Baseline Screenshot Persistence
 
@@ -167,7 +172,8 @@ The brief is written as **HTML with a JSON data island**, not markdown -- assemb
 [From Code Assessment agent]
 
 ## UX State
-[From UX Assessment agent, or "Skipped" if no dev server or no UI surface]
+[From UX Assessment agent; use "Skipped" only for no UI/integration surface.
+For an unavailable required target, record blocked `human_help_required`.]
 
 ## Test Personas
 [From Fixture Discovery, or "No dev-mode auth bypass detected."]
@@ -183,8 +189,10 @@ screenshots inline. Use a `<div class="grid" style="--grid-min: 22rem;">` of
 src="baselines/<file>" alt="<route> at <viewport>" loading="lazy"
 style="width:100%;height:auto;border:1px solid;"></a>` plus a `<figcaption>`
 naming the route. Show the desktop 1440 shot per route; the mobile 375/320 files
-still go in the `baselineScreenshots` island array. If no baselines: "No
-baselines -- skipped UX assessment."]
+still go in the `baselineScreenshots` island array. If the required target is
+unavailable: "No baselines -- target unavailable; human_help_required." If the
+work has no UI/integration surface: "No baselines -- UX assessment not
+applicable."]
 
 ## Key Findings
 - [Top 3-5 findings that should inform planning]

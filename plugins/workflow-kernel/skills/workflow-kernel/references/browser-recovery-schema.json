@@ -1,14 +1,90 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://designmachines.ca/schemas/browser-recovery-schema.json",
-  "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "status", "reason_code", "attempts", "lifecycle", "missing_case_ids"],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "status", "reason_code", "case_id", "requested_engine",
+    "actual_engine", "substitution_provenance", "attempts", "lifecycle",
+    "missing_case_ids"
+  ],
   "properties": {
     "schema_version": {"const": 1},
     "status": {"enum": ["clean", "recovered", "blocked"]},
-    "reason_code": {"type": "string"},
-    "attempts": {"type": "array", "items": {"type": "object"}},
-    "lifecycle": {"type": "array", "items": {"type": "object"}},
-    "missing_case_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string"}}
+    "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded", "alternate_engine_recovered_degraded", "human_help_required"]},
+    "case_id": {"$ref": "#/$defs/case_id"},
+    "requested_engine": {"$ref": "#/$defs/engine"},
+    "actual_engine": {"$ref": "#/$defs/engine"},
+    "substitution_provenance": {"type": ["string", "null"], "enum": [null, "alternate_engine_recovery"]},
+    "attempts": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/attempt"}},
+    "lifecycle": {"type": "array", "items": {"$ref": "#/$defs/lifecycle"}},
+    "missing_case_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/case_id"}}
+  },
+  "$defs": {
+    "case_id": {"type": "string", "minLength": 1, "pattern": "^[^\\s/?#@]{1,128}$"},
+    "engine": {"enum": ["chromium", "firefox", "webkit"]},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "safe_reference": {
+      "type": ["string", "null"],
+      "pattern": "^(?:(?:[A-Za-z0-9_][A-Za-z0-9._-]*/)*[A-Za-z0-9_][A-Za-z0-9._-]*|(?:sha256|url-sha256):[0-9a-f]{64})$"
+    },
+    "reason_code": {
+      "type": ["string", "null"],
+      "enum": [
+        null, "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
+        "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch"
+      ]
+    },
+    "failure_detail": {
+      "type": ["string", "null"],
+      "pattern": "^(?:value-sha256|sha256|url-sha256):[0-9a-f]{64}$"
+    },
+    "attempt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id", "attempt_number", "requested_engine", "actual_engine", "action",
+        "result", "reason_code", "failure_detail", "screenshot_reference",
+        "trace_reference", "console_reference", "session_id", "proof_kind",
+        "substitution_provenance"
+      ],
+      "properties": {
+        "case_id": {"$ref": "#/$defs/case_id"},
+        "attempt_number": {"type": "integer", "minimum": 1},
+        "requested_engine": {"$ref": "#/$defs/engine"},
+        "actual_engine": {"$ref": "#/$defs/engine"},
+        "action": {"const": "verify"},
+        "result": {"enum": ["passed", "failed", "unavailable"]},
+        "reason_code": {"$ref": "#/$defs/reason_code"},
+        "failure_detail": {"$ref": "#/$defs/failure_detail"},
+        "screenshot_reference": {"$ref": "#/$defs/safe_reference"},
+        "trace_reference": {"$ref": "#/$defs/safe_reference"},
+        "console_reference": {"$ref": "#/$defs/safe_reference"},
+        "session_id": {"$ref": "#/$defs/session_id"},
+        "proof_kind": {"enum": ["browser", "curl", "reachability"]},
+        "substitution_provenance": {"type": ["string", "null"], "enum": [null, "alternate_engine_recovery"]}
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id", "requested_engine", "actual_engine", "action", "result",
+        "session_id", "previous_session_id", "reason_code", "failure_detail",
+        "substitution_provenance"
+      ],
+      "properties": {
+        "case_id": {"$ref": "#/$defs/case_id"},
+        "requested_engine": {"$ref": "#/$defs/engine"},
+        "actual_engine": {"$ref": "#/$defs/engine"},
+        "action": {"enum": ["browser_process_quit", "browser_process_launch", "application_restart", "primary_restart", "session_validation"]},
+        "result": {"enum": ["confirmed", "unconfirmed", "launched", "unavailable", "primary_restart_unavailable", "session_identity_mismatch"]},
+        "session_id": {"$ref": "#/$defs/session_id"},
+        "previous_session_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "reason_code": {"$ref": "#/$defs/reason_code"},
+        "failure_detail": {"$ref": "#/$defs/failure_detail"},
+        "substitution_provenance": {"type": ["string", "null"], "enum": [null, "alternate_engine_recovery"]}
+      }
+    }
   }
 }

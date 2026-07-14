@@ -1,4 +1,5 @@
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -27,7 +28,7 @@ class VerificationProfileTests(unittest.TestCase):
         )
         profile = VerificationProfile(1, "project_declaration", (case,), ("session_cookie",))
         self.assertTrue(schema_matches(profile.to_dict(), profile_schema))
-        self.assertTrue(schema_matches({
+        self.assertFalse(schema_matches({
             "schema_version": 1, "status": "blocked",
             "reason_code": "human_help_required", "attempts": [],
             "lifecycle": [], "missing_case_ids": [case.case_id],
@@ -36,6 +37,9 @@ class VerificationProfileTests(unittest.TestCase):
         self.assertEqual(policy["verification"]["browser_engines"], ["chromium", "firefox"])
         self.assertEqual(policy["verification"]["desktop_viewport"], "1440x900")
         self.assertEqual(policy["verification"]["mobile_viewport"], "375x812")
+        viewport_pattern = policy_schema["properties"]["verification"]["properties"]["desktop_viewport"]["pattern"]
+        self.assertIsNotNone(re.fullmatch(viewport_pattern, "16384x16384"))
+        self.assertIsNone(re.fullmatch(viewport_pattern, "16385x16384"))
         retained = load_policy(ROOT / "workflow-policy.json").verification_defaults
         self.assertEqual(tuple(retained["browser_engines"]), ("chromium", "firefox"))
 
@@ -62,6 +66,13 @@ class VerificationProfileTests(unittest.TestCase):
             shutil.copytree(
                 FIXTURES / "assembly-baseplate" / "suites",
                 project / "tests" / "ux" / "suites",
+            )
+            (project / "tests" / "ux" / "coverage-matrix.md").write_text(
+                "# Coverage Matrix\n\n"
+                "| Task | Persona | Expected |\n"
+                "| --- | --- | --- |\n"
+                "| GOV-SAMPLE-001 | casual-member | FRICTION |\n"
+                "| BP-MOBILE-001 | casual-member | SUCCESS |\n"
             )
             (project / "tests" / "ux" / "verification.json").write_text(json.dumps({
                 "schema_version": 1,
@@ -106,6 +117,96 @@ class VerificationProfileTests(unittest.TestCase):
                     raised.exception.details["reason_code"],
                     detail_digest("invalid_verification_declaration"),
                 )
+
+    def test_status_filters_and_unknown_task_statuses_fail_closed(self):
+        mutations = (
+            {"include_statuses": []},
+            {"include_statuses": ["currnet"]},
+            {"include_statuses": "current"},
+            {"include_statuses": ["future-product"]},
+        )
+        for config_update in mutations:
+            with self.subTest(config_update=config_update), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                config = {"schema_version": 1, **config_update}
+                (project / "tests" / "ux" / "verification.json").write_text(json.dumps(config))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+            task.write_text(task.read_text().replace("route:", "implementation_status: currnet\nroute:"))
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_persona_index_and_coverage_matrix_drift_fail_closed(self):
+        def project_copy(directory):
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            return project
+
+        with tempfile.TemporaryDirectory() as directory:
+            project = project_copy(directory)
+            (project / "tests" / "ux" / "personas" / "casual-member.md").unlink()
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+        with tempfile.TemporaryDirectory() as directory:
+            project = project_copy(directory)
+            source = project / "tests" / "ux" / "personas" / "casual-member.md"
+            (source.parent / "stray-member.md").write_text(
+                source.read_text().replace("id: casual-member", "id: stray-member")
+            )
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+        with tempfile.TemporaryDirectory() as directory:
+            project = project_copy(directory)
+            matrix = project / "tests" / "ux" / "coverage-matrix.md"
+            matrix.write_text(matrix.read_text().replace("FRICTION", "SUCCESS"))
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_existing_incomplete_ux_tree_is_invalid_not_not_declared(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / "tests" / "ux" / "personas").mkdir(parents=True)
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_policy_viewport_limit_is_shared_with_verification_runtime(self):
+        canonical = json.loads((ROOT / "workflow-policy.json").read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "policy.json"
+            canonical["verification"]["desktop_viewport"] = "16384x16384"
+            path.write_text(json.dumps(canonical))
+            self.assertEqual(
+                load_policy(path).verification_defaults["desktop_viewport"],
+                "16384x16384",
+            )
+            canonical["verification"]["desktop_viewport"] = "16385x16384"
+            path.write_text(json.dumps(canonical))
+            with self.assertRaises(InvalidSchemaError):
+                load_policy(path)
+
+    def test_persona_discovery_uses_canonical_policy_normalization(self):
+        policy = json.loads((ROOT / "workflow-policy.json").read_text())
+        policy["verification"]["browser_engines"] = ["webkit"]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "policy.json"
+            path.write_text(json.dumps(policy))
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=path).discover(FIXTURES / "assembly")
+
+    def test_assessment_instruction_never_skips_required_target_unavailable(self):
+        assess = ROOT.parents[3] / "pipeline" / "skills" / "assess" / "SKILL.md"
+        text = assess.read_text()
+        self.assertNotIn("UX assessment skipped -- no dev server detected", text)
+        self.assertIn("target unavailable", text)
+        self.assertIn("human_help_required", text)
 
 
 if __name__ == "__main__":

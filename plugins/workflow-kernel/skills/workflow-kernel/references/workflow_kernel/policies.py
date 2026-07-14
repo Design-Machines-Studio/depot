@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 from pathlib import Path
-import re
 from types import MappingProxyType
 from typing import Mapping, Optional, Tuple
 
@@ -19,6 +18,7 @@ from .adapters.base import (
 from .schema import InvalidSchemaError
 from .redaction import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
 from .limits import JSONDocumentDepthError, load_json_document
+from .verification import validate_viewport
 
 
 POLICY_SCHEMA_VERSION = 1
@@ -640,16 +640,19 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
         "invalid_verification_policy",
     )
     engines = verification["browser_engines"]
-    viewport_pattern = re.compile(r"[1-9][0-9]{1,4}x[1-9][0-9]{1,4}\Z")
-    if (type(engines) is not list or engines != ["chromium", "firefox"]
-            or any(type(verification[name]) is not str
-                   or viewport_pattern.fullmatch(verification[name]) is None
-                   for name in ("desktop_viewport", "mobile_viewport"))):
+    try:
+        viewports = tuple(
+            validate_viewport(verification[name])
+            for name in ("desktop_viewport", "mobile_viewport")
+        )
+    except Exception:
+        raise invalid_policy("invalid_verification_policy") from None
+    if type(engines) is not list or engines != ["chromium", "firefox"]:
         raise invalid_policy("invalid_verification_policy")
     verification_defaults = _TrustedPolicyMap({
         "browser_engines": tuple(engines),
-        "desktop_viewport": verification["desktop_viewport"],
-        "mobile_viewport": verification["mobile_viewport"],
+        "desktop_viewport": viewports[0],
+        "mobile_viewport": viewports[1],
     })
     return PolicyDocument(
         _TrustedPolicyMap(safe_budgets), convergence_limit, tuple(risk_values), order,
