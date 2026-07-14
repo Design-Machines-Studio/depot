@@ -47,7 +47,7 @@ conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
 `interrupted` as its own terminal outcome. Permit terminal mutation only for
 evidence attachment and one cleanup reconciliation.
 
-Use `python -m workflow_kernel --help` for the `init`, `validate`, `append`,
+Use `python3 -m workflow_kernel --help` for the `init`, `validate`, `append`,
 `replay`, and `status` commands. Consume successful operational output and
 errors as stable JSON. Treat `--help` output as plain text.
 
@@ -70,6 +70,10 @@ errors as stable JSON. Treat `--help` output as plain text.
   locks release on process exit, so crash residue does not become a lock. Hosts
   without POSIX `fcntl` locking fail closed with a stable conflict error; the
   kernel never falls back to crash-stale sentinel locking.
+- Hold the same run lease across authoritative ledger replay, current-state
+  observation, event append or reduction, and materialized-state publication.
+  Mutable lock, ledger, and state paths must be exclusive regular files; the
+  kernel rejects symbolic links, hard links, and identity changes.
 - Use `TransitionEngine.apply(state, event)` for one pure transition and
   `TransitionEngine.reconstruct(events)` for deterministic replay. Event
   sequence equals the prior state revision; each accepted event increments the

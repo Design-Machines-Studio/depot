@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 from .events import EventStore
@@ -32,19 +33,21 @@ def _emit(value, stream=sys.stdout):
     stream.write(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
 
 
-def _write_state(store, state, expected_revision):
-    with RunLease(store.path) as lease:
-        return store.write(state, expected_revision, lease=lease)
+@contextmanager
+def _coordinated_run(states):
+    """Hold the run lease from mutable observation through publication."""
+    with RunLease(states.path) as lease:
+        yield lease
 
 
 def command_init(args):
     root, events, states = _paths(args.directory)
     root.mkdir(parents=True, exist_ok=True)
-    if events.path.exists() or states.path.exists():
-        raise InvalidSchemaError("run directory is already initialized", {"directory": str(root)})
-    event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
-    state = TransitionEngine().reconstruct((event,))
-    with RunLease(states.path) as lease:
+    with _coordinated_run(states) as lease:
+        if events.path.exists() or states.path.exists():
+            raise InvalidSchemaError("run directory is already initialized", {"directory": str(root)})
+        event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
+        state = TransitionEngine().reconstruct((event,))
         events.append(event, 0)
         evidence = states.write(state, -1, lease=lease)
     _emit({"run_id": state.run_id, "mode": state.mode.value, "status": state.status.value, "revision": state.revision,
@@ -75,14 +78,14 @@ def command_append(args):
     except json.JSONDecodeError as exc:
         raise InvalidSchemaError("event is not valid JSON", {"offset": exc.pos}) from exc
     event = WorkflowEvent.from_dict(data)
-    with RunLease(states.path) as lease:
+    with _coordinated_run(states) as lease:
         existing = events.replay()
         if not existing:
             raise InvalidSchemaError("run directory is not initialized")
+        expected = states.load().revision if states.path.exists() else -1
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
         events.append(event, expected_sequence=len(existing))
-        expected = states.load().revision if states.path.exists() else -1
         evidence = states.write(next_state, expected, lease=lease)
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})
@@ -91,9 +94,10 @@ def command_append(args):
 
 def command_replay(args):
     _, events, states = _paths(args.directory)
-    reconstructed = TransitionEngine().reconstruct(events.replay())
-    expected = states.load().revision if states.path.exists() else -1
-    evidence = _write_state(states, reconstructed, expected)
+    with _coordinated_run(states) as lease:
+        reconstructed = TransitionEngine().reconstruct(events.replay())
+        expected = states.load().revision if states.path.exists() else -1
+        evidence = states.write(reconstructed, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})
     return 0

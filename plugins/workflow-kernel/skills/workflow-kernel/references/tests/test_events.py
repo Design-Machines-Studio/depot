@@ -135,3 +135,17 @@ class EventStoreTests(unittest.TestCase):
             with mock.patch.object(store, "replay", side_effect=swap_after_replay):
                 store.append(event(1), 1)
             self.assertEqual(target.read_bytes(), before)
+
+    def test_hard_linked_ledger_is_rejected_without_mutating_target(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "other-run.jsonl"
+            EventStore(target).append(event(0), 0)
+            before = target.read_bytes()
+            alias = root / "events.jsonl"
+            os.link(target, alias)
+            with self.assertRaises(CorruptEventError):
+                EventStore(alias).validate()
+            with self.assertRaises(CorruptEventError):
+                EventStore(alias).append(event(1), 1)
+            self.assertEqual(target.read_bytes(), before)

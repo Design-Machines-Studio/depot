@@ -127,7 +127,15 @@ class TransitionEngine:
         target = NODE_TARGETS[event.kind]
         _require(node.status in LEGAL_NODE_SOURCES[target], state, event)
         if target == NodeStatus.READY:
-            _require(all(nodes[item].status == NodeStatus.SUCCEEDED for item in node.dependencies), state, event)
+            try:
+                dependencies_succeeded = all(
+                    nodes[item].status == NodeStatus.SUCCEEDED for item in node.dependencies
+                )
+            except KeyError as exc:
+                raise IllegalTransitionError("node dependency is missing", {
+                    "reason_code": "missing_dependency",
+                }) from exc
+            _require(dependencies_succeeded, state, event)
         refs = node.evidence
         if target == NodeStatus.SUCCEEDED:
             refs = tuple(dict.fromkeys(refs + _strings(event.payload, "evidence", required=True)))

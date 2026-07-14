@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 
 from workflow_kernel.schema import (
     CorruptStateError,
@@ -110,3 +111,37 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaises(InvalidSchemaError) as raised:
             WorkflowEvent.from_dict({})
         self.assertEqual(raised.exception.code, "invalid_schema")
+
+    def test_dependency_graph_rejects_dangling_self_and_cycles(self):
+        base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+        with self.assertRaises(InvalidSchemaError):
+            replace(base, nodes={"a": NodeState("a", dependencies=("missing",))})
+
+        def node(node_id, dependencies):
+            return {"node_id": node_id, "status": "pending", "dependencies": dependencies, "evidence": []}
+
+        for nodes in (
+            {"a": node("a", ["a"])},
+            {"a": node("a", ["b"]), "b": node("b", ["a"])},
+        ):
+            data = base.to_dict()
+            data["nodes"] = nodes
+            with self.subTest(nodes=nodes), self.assertRaises(InvalidSchemaError):
+                RunState.from_dict(data)
+
+    def test_untrusted_mapping_keys_fail_with_stable_schema_error(self):
+        event_data = {
+            "schema_version": 1, "sequence": 0, "run_id": "run-1", "node_id": None,
+            "kind": "run.initialized", "occurred_at": "2026-07-14T00:00:00Z", "payload": {},
+            1: "mixed-key",
+        }
+        state_data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+        state_data[1] = "mixed-key"
+        for parser, data in ((WorkflowEvent.from_dict, event_data), (RunState.from_dict, state_data)):
+            with self.subTest(parser=parser.__qualname__), self.assertRaises(InvalidSchemaError) as raised:
+                parser(data)
+            self.assertEqual(raised.exception.code, "invalid_schema")
+            self.assertEqual(raised.exception.message, "schema keys must be strings")
+
+    def test_new_delegates_mode_validation_to_constructor(self):
+        self.assertEqual(RunState.new("run-1", "2026-07-14T00:00:00Z", mode="enforce").mode, RunMode.ENFORCE)

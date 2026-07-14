@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from workflow_kernel.cli import command_validate
+from workflow_kernel.cli import command_append, command_replay, command_validate
 from workflow_kernel.schema import InvalidSchemaError
 
 
@@ -93,6 +93,71 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-only-runtime", result.stdout)
+
+    def test_replay_holds_run_lease_across_observation_and_publication(self):
+        active = {"lease": False}
+
+        class ObservedPath:
+            def exists(self):
+                self.assert_active()
+                return True
+
+            @staticmethod
+            def assert_active():
+                if not active["lease"]:
+                    raise AssertionError("state observed outside run lease")
+
+        class Lease:
+            def __enter__(self):
+                active["lease"] = True
+                return self
+
+            def __exit__(self, *_):
+                active["lease"] = False
+
+        state = mock.Mock(run_id="run-1", revision=1)
+        state.status.value = "planned"
+        events = mock.Mock()
+        events.replay.side_effect = lambda: (ObservedPath.assert_active(), (object(),))[1]
+        states = mock.Mock(path=ObservedPath())
+        states.load.side_effect = lambda: (ObservedPath.assert_active(), state)[1]
+        states.write.side_effect = lambda *_args, **_kwargs: (
+            ObservedPath.assert_active(), {"directory_fsync": "completed"}
+        )[1]
+        with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
+                mock.patch("workflow_kernel.cli.RunLease", return_value=Lease()), \
+                mock.patch("workflow_kernel.cli.TransitionEngine") as engine, \
+                mock.patch("workflow_kernel.cli._emit"):
+            engine.return_value.reconstruct.return_value = state
+            self.assertEqual(command_replay(SimpleNamespace(directory="unused")), 0)
+        self.assertFalse(active["lease"])
+
+    def test_append_observes_state_before_publishing_event(self):
+        order = []
+        event_data = {
+            "schema_version": 1, "sequence": 1, "run_id": "run-1", "node_id": None,
+            "kind": "run.started", "occurred_at": "2026-07-14T00:00:01Z", "payload": {},
+        }
+        events = mock.Mock()
+        events.replay.return_value = (object(),)
+        events.append.side_effect = lambda *_args, **_kwargs: order.append("event")
+        current = mock.Mock(revision=1)
+        states = mock.Mock()
+        states.path.exists.return_value = True
+        states.load.side_effect = lambda: (order.append("state"), current)[1]
+        states.write.return_value = {"directory_fsync": "completed"}
+        next_state = mock.Mock(revision=2)
+        next_state.status.value = "running"
+        coordinator = mock.MagicMock()
+        coordinator.__enter__.return_value = object()
+        with mock.patch("workflow_kernel.cli._paths", return_value=(mock.Mock(), events, states)), \
+                mock.patch("workflow_kernel.cli._coordinated_run", return_value=coordinator), \
+                mock.patch("workflow_kernel.cli.TransitionEngine") as engine, \
+                mock.patch("workflow_kernel.cli._emit"):
+            engine.return_value.reconstruct.return_value = mock.Mock()
+            engine.return_value.apply.return_value = next_state
+            self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
+        self.assertEqual(order, ["state", "event"])
 
 
 if __name__ == "__main__":

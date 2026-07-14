@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections import deque
 from datetime import datetime
 from enum import Enum
 from types import MappingProxyType
@@ -122,8 +123,11 @@ def _timestamp(value: object, name: str = "occurred_at") -> str:
 
 
 def _only(data: Mapping[str, object], fields: set, required: set) -> None:
-    unknown = sorted(set(data) - fields)
-    missing = sorted(required - set(data))
+    keys = tuple(data)
+    if any(not isinstance(key, str) for key in keys):
+        raise InvalidSchemaError("schema keys must be strings")
+    unknown = sorted(set(keys) - fields)
+    missing = sorted(required - set(keys))
     if unknown or missing:
         raise InvalidSchemaError("schema fields do not match", {"unknown": unknown, "missing": missing})
 
@@ -144,6 +148,29 @@ def _plain(value: object) -> object:
     if isinstance(value, Enum):
         return value.value
     return thaw(value)
+
+
+def _validate_dependency_graph(nodes: Mapping[str, "NodeState"]) -> None:
+    indegree = {node_id: len(node.dependencies) for node_id, node in nodes.items()}
+    dependents = {node_id: [] for node_id in nodes}
+    for node_id, node in nodes.items():
+        for dependency in node.dependencies:
+            if dependency == node_id:
+                raise InvalidSchemaError("node dependency graph is invalid", {"reason_code": "self_dependency"})
+            if dependency not in nodes:
+                raise InvalidSchemaError("node dependency graph is invalid", {"reason_code": "missing_dependency"})
+            dependents[dependency].append(node_id)
+    ready = deque(node_id for node_id, count in indegree.items() if count == 0)
+    visited = 0
+    while ready:
+        dependency = ready.popleft()
+        visited += 1
+        for dependent in dependents[dependency]:
+            indegree[dependent] -= 1
+            if indegree[dependent] == 0:
+                ready.append(dependent)
+    if visited != len(nodes):
+        raise InvalidSchemaError("node dependency graph is invalid", {"reason_code": "dependency_cycle"})
 
 
 @dataclass(frozen=True)
@@ -260,6 +287,7 @@ class RunState:
         if any(not isinstance(key, str) or not isinstance(node, NodeState) or key != node.node_id
                for key, node in nodes.items()):
             raise InvalidSchemaError("node keys must match immutable node states")
+        _validate_dependency_graph(nodes)
         object.__setattr__(self, "nodes", MappingProxyType(nodes))
         object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
         if not isinstance(self.cleanup_reconciled, bool):
@@ -267,11 +295,6 @@ class RunState:
 
     @classmethod
     def new(cls, run_id: str, occurred_at: str, mode: RunMode = RunMode.SHADOW) -> "RunState":
-        if not isinstance(mode, RunMode):
-            try:
-                mode = RunMode(mode)
-            except (ValueError, TypeError) as exc:
-                raise InvalidSchemaError("unknown run mode", {"mode": mode}) from exc
         return cls(SCHEMA_VERSION, 0, run_id, mode, RunStatus.PLANNED,
                    occurred_at, occurred_at, MappingProxyType({}))
 

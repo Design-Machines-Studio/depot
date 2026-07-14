@@ -5,11 +5,11 @@ from __future__ import annotations
 import errno
 import json
 import os
-import stat
 import tempfile
 from pathlib import Path
 
-from .schema import CorruptStateError, InvalidSchemaError, LeaseConflictError, RevisionConflictError, RunState
+from ._files import open_verified_regular, verified_regular_exists
+from .schema import CorruptStateError, KernelError, LeaseConflictError, RevisionConflictError, RunState
 
 try:
     import fcntl
@@ -18,38 +18,6 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 
 
 MAX_STATE_BYTES = 4_194_304
-
-
-def _open_regular(path: Path, flags: int, mode: int = 0o600) -> int:
-    """Open one regular file relative to its directory without following links."""
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    directory = os.open(str(path.parent), directory_flags)
-    descriptor = None
-    try:
-        nofollow = getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(path.name, flags | nofollow, mode, dir_fd=directory)
-        opened = os.fstat(descriptor)
-        entry = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
-        if (not stat.S_ISREG(opened.st_mode) or stat.S_ISLNK(entry.st_mode)
-                or (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino)):
-            raise OSError(errno.ELOOP, "refusing non-regular or linked file", str(path))
-        return descriptor
-    except Exception:
-        if descriptor is not None:
-            os.close(descriptor)
-        raise
-    finally:
-        os.close(directory)
-
-
-def _exists_regular(path: Path) -> bool:
-    try:
-        entry = os.lstat(str(path))
-    except FileNotFoundError:
-        return False
-    if not stat.S_ISREG(entry.st_mode):
-        raise CorruptStateError("materialized state path is not a regular file", {"path": str(path)})
-    return True
 
 
 def encode_state(state: RunState) -> bytes:
@@ -73,7 +41,7 @@ class RunLease:
             })
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            descriptor = _open_regular(self.path, os.O_CREAT | os.O_RDWR)
+            descriptor = open_verified_regular(self.path, os.O_CREAT | os.O_RDWR)
         except OSError as exc:
             raise LeaseConflictError("run lease path is unsafe", {"path": str(self.path)}) from exc
         try:
@@ -125,7 +93,7 @@ class StateStore:
 
     def load(self) -> RunState:
         try:
-            descriptor = _open_regular(self.path, os.O_RDONLY)
+            descriptor = open_verified_regular(self.path, os.O_RDONLY)
         except FileNotFoundError:
             raise
         except OSError as exc:
@@ -147,7 +115,9 @@ class StateStore:
             raw = raw_bytes.decode("utf-8")
             data = json.loads(raw)
             return RunState.from_dict(data)
-        except (UnicodeDecodeError, json.JSONDecodeError, InvalidSchemaError) as exc:
+        except CorruptStateError:
+            raise
+        except (UnicodeDecodeError, json.JSONDecodeError, KernelError) as exc:
             raise CorruptStateError("materialized state is corrupt", {"path": str(self.path)}) from exc
         finally:
             os.close(descriptor)
@@ -157,10 +127,18 @@ class StateStore:
             raise LeaseConflictError("state write requires its acquired run lease", {"path": str(self.path)})
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < -1:
             raise RevisionConflictError("invalid expected revision", {"expected_revision": expected_revision})
-        if _exists_regular(self.path):
+        try:
+            exists = verified_regular_exists(self.path)
+        except OSError as exc:
+            raise CorruptStateError("materialized state path is unsafe", {"path": str(self.path)}) from exc
+        if exists:
             actual = self.load().revision
             if actual != expected_revision:
                 raise RevisionConflictError("state revision changed", {"expected_revision": expected_revision, "actual_revision": actual})
+            if state.revision < actual:
+                raise RevisionConflictError("state revision cannot move backward", {
+                    "candidate_revision": state.revision, "actual_revision": actual,
+                })
         elif expected_revision != -1:
             raise RevisionConflictError("state does not exist at expected revision", {"expected_revision": expected_revision})
 

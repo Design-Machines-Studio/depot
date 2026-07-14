@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import json
 import os
-import stat
-import errno
 from pathlib import Path
 from typing import List, Tuple
 
+from ._files import open_verified_regular
 from .redaction import redact
 from .schema import CorruptEventError, KernelError, SequenceConflictError, UnsafePayloadError, WorkflowEvent
 
@@ -20,28 +19,6 @@ except ImportError:  # pragma: no cover - non-POSIX fallback
 
 MAX_RECORD_BYTES = 1_048_576
 MAX_LEDGER_BYTES = 16_777_216
-
-
-def _open_regular(path: Path, flags: int, mode: int = 0o600) -> int:
-    """Open one regular file relative to its directory without following links."""
-    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-    directory = os.open(str(path.parent), directory_flags)
-    descriptor = None
-    try:
-        nofollow = getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(path.name, flags | nofollow, mode, dir_fd=directory)
-        opened = os.fstat(descriptor)
-        entry = os.stat(path.name, dir_fd=directory, follow_symlinks=False)
-        if (not stat.S_ISREG(opened.st_mode) or stat.S_ISLNK(entry.st_mode)
-                or (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino)):
-            raise OSError(errno.ELOOP, "refusing non-regular or linked file", str(path))
-        return descriptor
-    except Exception:
-        if descriptor is not None:
-            os.close(descriptor)
-        raise
-    finally:
-        os.close(directory)
 
 
 def encode_event(event: WorkflowEvent) -> bytes:
@@ -64,7 +41,7 @@ class EventStore:
             })
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            descriptor = _open_regular(self._lock_path, os.O_CREAT | os.O_RDWR)
+            descriptor = open_verified_regular(self._lock_path, os.O_CREAT | os.O_RDWR)
         except OSError as exc:
             raise SequenceConflictError("event lock path is unsafe", {"path": str(self.path)}) from exc
         try:
@@ -84,7 +61,7 @@ class EventStore:
         lock = self._acquire()
         try:
             try:
-                descriptor = _open_regular(self.path, os.O_CREAT | os.O_APPEND | os.O_RDWR)
+                descriptor = open_verified_regular(self.path, os.O_CREAT | os.O_APPEND | os.O_RDWR)
             except OSError as exc:
                 raise CorruptEventError("event ledger path is unsafe", {"path": str(self.path)}) from exc
             try:
@@ -114,7 +91,7 @@ class EventStore:
 
     def validate(self, recovery: bool = False):
         try:
-            descriptor = _open_regular(self.path, os.O_RDONLY)
+            descriptor = open_verified_regular(self.path, os.O_RDONLY)
         except FileNotFoundError:
             return (), ()
         except OSError as exc:

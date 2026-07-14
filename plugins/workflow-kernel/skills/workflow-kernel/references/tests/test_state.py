@@ -1,9 +1,11 @@
 import tempfile
 import unittest
+import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+from dataclasses import replace
 from unittest import mock
 
 from workflow_kernel import CorruptStateError
@@ -116,3 +118,48 @@ class StateStoreTests(unittest.TestCase):
                     RunLease(path).acquire()
             self.assertEqual(raised.exception.details["reason_code"], "locking_unsupported")
             self.assertFalse(path.with_name(path.name + ".lease").exists())
+
+    def test_candidate_revision_cannot_downgrade_materialized_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            current = replace(base, revision=2)
+            candidate = replace(base, revision=1)
+            with RunLease(path) as lease:
+                store.write(current, -1, lease=lease)
+            before = path.read_bytes()
+            with RunLease(path) as lease:
+                with self.assertRaises(RevisionConflictError):
+                    store.write(candidate, 2, lease=lease)
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_hard_linked_state_and_lease_are_rejected_without_touching_victims(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_victim = root / "state-victim.json"
+            state_victim.write_text(json.dumps(RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()))
+            state_path = root / "run-state.json"
+            os.link(state_victim, state_path)
+            before_state = state_victim.read_bytes()
+            with self.assertRaises(CorruptStateError):
+                StateStore(state_path).load()
+            self.assertEqual(state_victim.read_bytes(), before_state)
+
+            lease_victim = root / "lease-victim.txt"
+            lease_victim.write_text("do-not-touch")
+            os.link(lease_victim, state_path.with_name(state_path.name + ".lease"))
+            before_lease = lease_victim.read_bytes()
+            with self.assertRaises(LeaseConflictError):
+                RunLease(state_path).acquire()
+            self.assertEqual(lease_victim.read_bytes(), before_lease)
+
+    def test_unsafe_reference_in_state_is_normalized_to_corruption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+            data["evidence"] = ["https://user:credential@example.invalid/proof"]
+            path.write_text(json.dumps(data))
+            with self.assertRaises(CorruptStateError) as raised:
+                StateStore(path).load()
+            self.assertEqual(raised.exception.code, "corrupt_state")

@@ -1,8 +1,9 @@
 import unittest
 import json
+from types import MappingProxyType
 
 from workflow_kernel.schema import (
-    IllegalTransitionError, MissingEvidenceError, NodeStatus,
+    IllegalTransitionError, MissingEvidenceError, NodeState, NodeStatus,
     RunState, RunStatus, WorkflowEvent,
 )
 from workflow_kernel.transitions import TransitionEngine
@@ -64,3 +65,11 @@ class TransitionTests(unittest.TestCase):
         ))
         with self.assertRaises(IllegalTransitionError):
             self.engine.apply(state, event(4, "node.ready", node_id="b"))
+
+    def test_unexpected_missing_dependency_is_a_stable_transition_error(self):
+        state = self.engine.reconstruct((event(0, "run.initialized"), event(1, "run.started")))
+        object.__setattr__(state, "nodes", MappingProxyType({
+            "b": NodeState("b", dependencies=("missing",)),
+        }))
+        with self.assertRaises(IllegalTransitionError):
+            self.engine.apply(state, event(2, "node.ready", node_id="b"))
