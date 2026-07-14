@@ -1,9 +1,11 @@
 import unittest
 
+from tests import detail_digest
 from workflow_kernel.adapters.base import (
     HostCapabilities, HostCapability, IsolationMode, IsolationRequirements,
 )
 from workflow_kernel.adapters.isolation import IsolationSelector
+from workflow_kernel.schema import InvalidSchemaError
 
 
 MODE_CAPABILITY = {
@@ -53,6 +55,27 @@ class IsolationTests(unittest.TestCase):
         )
         self.assertTrue(decision.blocked)
         self.assertEqual(decision.reason_code, "isolation_degradation_disallowed")
+
+    def test_selector_revalidates_mutated_public_inputs(self):
+        requirements = IsolationRequirements(IsolationMode.REMOTE_SANDBOX)
+        object.__setattr__(requirements, "preferred", object())
+        with self.assertRaises(InvalidSchemaError) as bad_requirements:
+            IsolationSelector().select(requirements, HostCapabilities("host", ()))
+        self.assertEqual(
+            bad_requirements.exception.details["reason_code"],
+            detail_digest("invalid_isolation_requirements"),
+        )
+
+        capabilities = HostCapabilities("host", (HostCapability.REMOTE_SANDBOX,))
+        object.__setattr__(capabilities, "capabilities", object())
+        with self.assertRaises(InvalidSchemaError) as bad_capabilities:
+            IsolationSelector().select(
+                IsolationRequirements(IsolationMode.REMOTE_SANDBOX), capabilities,
+            )
+        self.assertEqual(
+            bad_capabilities.exception.details["reason_code"],
+            detail_digest("invalid_host_capabilities"),
+        )
 
 
 if __name__ == "__main__":

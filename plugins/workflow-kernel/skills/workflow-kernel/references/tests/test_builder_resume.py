@@ -1,4 +1,6 @@
+import hashlib
 import inspect
+import json
 import unittest
 
 from tests import detail_digest
@@ -189,6 +191,30 @@ class BuilderResumeTests(unittest.TestCase):
             builder_node(), receipt_context(),
         )
         self.assertEqual(decision.reason_code, "adapter_capabilities_failed")
+
+    def test_authorized_context_translates_snapshot_failures_per_public_method(self):
+        manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        dispatch_context = receipt_context()
+        object.__setattr__(dispatch_context, "node_id", object())
+        with self.assertRaises(InvalidSchemaError) as dispatch_error:
+            manager.dispatch(builder_node(), dispatch_context)
+        self.assertEqual(
+            dispatch_error.exception.details["reason_code"],
+            detail_digest("invalid_builder_dispatch_request"),
+        )
+
+        resume_context = receipt_context()
+        object.__setattr__(resume_context, "node_id", object())
+        with self.assertRaises(InvalidSchemaError) as resume_error:
+            manager.resume_or_replace(
+                builder_node(), None,
+                ValidationFeedback("build", "deterministic_validation_failure"),
+                context=resume_context, now=NOW,
+            )
+        self.assertEqual(
+            resume_error.exception.details["reason_code"],
+            detail_digest("invalid_builder_resume_request"),
+        )
 
     def test_builder_evidence_event_rejects_foreign_run_or_node(self):
         from workflow_kernel.adapters.base import BuilderSessionDecision
@@ -677,6 +703,34 @@ class BuilderResumeTests(unittest.TestCase):
             rejected.exception.details["reason_code"],
             detail_digest("foreign_session_resume_state"),
         )
+
+    def test_resume_state_version_is_exact_and_checksum_protected(self):
+        manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
+        durable = manager.serialize_resume_state(handle())
+        payload = json.loads(durable.to_trusted_bytes())
+        checked = {
+            "schema_version": payload["schema_version"],
+            "context": payload["context"],
+            "handle": payload["handle"],
+        }
+        self.assertEqual(
+            payload["checksum"],
+            hashlib.sha256(json.dumps(
+                checked, sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest(),
+        )
+        for version in (True, 2):
+            mutation = json.loads(json.dumps(payload))
+            mutation["schema_version"] = version
+            raw = json.dumps(mutation, sort_keys=True, separators=(",", ":")).encode()
+            with self.subTest(version=version), self.assertRaises(
+                InvalidSchemaError,
+            ) as rejected:
+                manager.restore_resume_state(raw, receipt_context())
+            self.assertEqual(
+                rejected.exception.details["reason_code"],
+                detail_digest("invalid_session_resume_state"),
+            )
 
     def test_resume_state_rejects_wrong_same_host_context_and_oversize_or_deep_bytes(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))

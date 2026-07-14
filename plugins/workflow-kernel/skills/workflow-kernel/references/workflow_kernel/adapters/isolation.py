@@ -7,7 +7,8 @@ from typing import Optional
 
 from .base import (
     HostCapabilities, HostCapability, IsolationDecision, IsolationMode,
-    IsolationRequirements, invalid_policy,
+    IsolationRequirements, _snapshot_host_capabilities,
+    _snapshot_isolation_requirements,
 )
 from ..policies import load_policy
 
@@ -31,12 +32,10 @@ class IsolationSelector:
         requirements: IsolationRequirements,
         capabilities: HostCapabilities,
     ) -> IsolationDecision:
-        if type(requirements) is not IsolationRequirements:
-            raise invalid_policy("invalid_isolation_requirements")
-        if type(capabilities) is not HostCapabilities:
-            raise invalid_policy("invalid_host_capabilities")
+        requirements = _snapshot_isolation_requirements(requirements)
+        capabilities = _snapshot_host_capabilities(capabilities)
         preferred = requirements.preferred
-        if capabilities.supports(_MODE_CAPABILITY[preferred]):
+        if _MODE_CAPABILITY[preferred] in capabilities.capabilities:
             return IsolationDecision(preferred, False, "preferred_isolation_available")
         if not requirements.allow_degradation:
             return IsolationDecision(
@@ -44,7 +43,7 @@ class IsolationSelector:
             )
         start = self._order.index(preferred) + 1
         for candidate in self._order[start:]:
-            if not capabilities.supports(_MODE_CAPABILITY[candidate]):
+            if _MODE_CAPABILITY[candidate] not in capabilities.capabilities:
                 continue
             if (preferred, candidate) in self._forbidden:
                 return IsolationDecision(

@@ -8,12 +8,18 @@ from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
 )
 import workflow_kernel.policies as policy_module
-from workflow_kernel.policies import RetryPolicy
+from workflow_kernel.policies import RetryPolicy, load_policy
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
 
 
-def schema_matches(value, schema):
+def schema_matches(value, schema, root=None):
+    root = schema if root is None else root
+    if "$ref" in schema:
+        target = root
+        for part in schema["$ref"].removeprefix("#/").split("/"):
+            target = target[part]
+        return schema_matches(value, target, root)
     expected_type = schema.get("type")
     if expected_type is not None:
         names = expected_type if isinstance(expected_type, list) else [expected_type]
@@ -31,6 +37,11 @@ def schema_matches(value, schema):
         return False
     if "enum" in schema and value not in schema["enum"]:
         return False
+    if any(not schema_matches(value, item, root) for item in schema.get("allOf", [])):
+        return False
+    if "if" in schema and schema_matches(value, schema["if"], root):
+        if not schema_matches(value, schema.get("then", {}), root):
+            return False
     if type(value) is int and value < schema.get("minimum", value):
         return False
     if type(value) is dict:
@@ -42,7 +53,7 @@ def schema_matches(value, schema):
         ):
             return False
         if any(
-            name in properties and not schema_matches(item, properties[name])
+            name in properties and not schema_matches(item, properties[name], root)
             for name, item in value.items()
         ):
             return False
@@ -56,7 +67,7 @@ def schema_matches(value, schema):
         ) for item in value}) != len(value):
             return False
         if "items" in schema and any(
-            not schema_matches(item, schema["items"]) for item in value
+            not schema_matches(item, schema["items"], root) for item in value
         ):
             return False
     return True
@@ -137,6 +148,16 @@ class RetryPolicyTests(unittest.TestCase):
                 detail_digest("invalid_attempt_ledger"),
             )
 
+    def test_retry_policy_revalidates_mutated_attempt_ledger(self):
+        ledger = AttemptLedger()
+        object.__setattr__(ledger, "counts", object())
+        with self.assertRaises(InvalidSchemaError) as raised:
+            RetryPolicy().decide(FailureReason.CLEANUP, ledger, None)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_attempt_ledger"),
+        )
+
     def test_runtime_rejects_duplicate_capability_names_like_json_schema(self):
         source = Path(__file__).parents[1] / "workflow-policy.json"
         payload = json.loads(source.read_text(encoding="utf-8"))
@@ -193,6 +214,36 @@ class RetryPolicyTests(unittest.TestCase):
         invalid = json.loads(json.dumps(payload))
         invalid["retry"]["budgets"]["cleanup"] = "two"
         self.assertFalse(schema_matches(invalid, schema))
+
+    def test_policy_schema_and_runtime_validate_the_safety_anchor_shape(self):
+        root = Path(__file__).parents[1]
+        payload = json.loads((root / "workflow-policy.json").read_text())
+        schema = json.loads((root / "workflow-policy-schema.json").read_text())
+        self.assertTrue(schema_matches(payload, schema))
+        mutations = []
+        boolean_version = json.loads(json.dumps(payload))
+        boolean_version["workflow_safety_anchor"]["schema_version"] = True
+        mutations.append(boolean_version)
+        missing_override = json.loads(json.dumps(payload))
+        del missing_override["workflow_safety_anchor"]["classes"]["hotfix"][
+            "stages"
+        ][0]["executor_overridable"]
+        mutations.append(missing_override)
+        impossible_tuple = json.loads(json.dumps(payload))
+        stage = next(
+            item for item in impossible_tuple["workflow_safety_anchor"]["classes"][
+                "hotfix"
+            ]["stages"] if item["id"] == "review"
+        )
+        stage["required_dispatch_capability"] = "companion_dispatch"
+        mutations.append(impossible_tuple)
+        for mutation in mutations:
+            self.assertFalse(schema_matches(mutation, schema))
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "policy.json"
+                path.write_text(json.dumps(mutation), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError):
+                    load_policy(path)
 
 
 if __name__ == "__main__":

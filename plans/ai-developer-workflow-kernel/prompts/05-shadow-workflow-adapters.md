@@ -166,8 +166,11 @@ emit it explicitly for new manifests. Legacy manifests default to `feature`
 with `workflow_class_defaulted=true`; there is no content heuristic. Pipeline
 and pipeline-run validate and pass it unchanged into `translate_manifest`,
 `RunSpec`, events, receipts, and metrics. Security retains its existing provider
-and approval overrides regardless of host. Tests cover all seven classes, the
-legacy default, invalid values, and security override preservation.
+and approval overrides regardless of host. Chunk 02's separately versioned
+trusted-policy safety anchor remains authoritative; Chunk 05 must not recreate
+stage constants from `workflow-classes.json`. Tests cover all seven classes, the
+legacy default, invalid values, full hotfix and migration stage/ancestry/
+`executor_overridable` protection, and security override preservation.
 
 ## Builder Continuity Integration
 
@@ -188,7 +191,9 @@ dispatch, resume unavailable, gate/capability block, or adapter failure.
 Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
 only in permission-restricted package-owned storage with explicit retention and
 deletion. Restore requires exact run/node/attempt/provider/rail/capability
-context before any adapter call. Never place blob bytes in ordinary artifacts,
+context before any adapter call, plus an exact integer blob schema version whose
+value is included with context and handle payload in the corruption checksum.
+Never place blob bytes in ordinary artifacts,
 shadow reports, events, receipts, Airlift payloads, or checkpoints; those paths
 may carry only the safe digest projection and authoritative receipt reference.
 

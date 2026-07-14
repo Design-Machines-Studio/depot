@@ -4,7 +4,7 @@
   "title": "Workflow Kernel Class Templates",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "classes", "promotion", "requirements"],
+  "required": ["schema_version", "classes", "promotion"],
   "properties": {
     "schema_version": {"const": 1},
     "classes": {
@@ -26,75 +26,18 @@
       "additionalProperties": false,
       "required": ["investigation"],
       "properties": {"investigation": {"$ref": "#/$defs/workflow"}}
-    },
-    "requirements": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["global", "classes", "promotion"],
-      "properties": {
-        "global": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["cleanup"],
-          "properties": {"cleanup": {"$ref": "#/$defs/requirement_stage"}}
-        },
-        "classes": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["hotfix", "security", "migration"],
-          "properties": {
-            "hotfix": {"$ref": "#/$defs/semantic_requirement"},
-            "security": {"$ref": "#/$defs/semantic_requirement"},
-            "migration": {"$ref": "#/$defs/semantic_requirement"}
-          }
-        },
-        "promotion": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["investigation"],
-          "properties": {
-            "investigation": {"$ref": "#/$defs/semantic_requirement"}
-          }
-        }
-      }
     }
   },
   "$defs": {
     "gate_kind": {"enum": ["cleanup", "deterministic_validation", "evidence", "human_approval", "investigation_promotion", "next_action", "risk"]},
-    "semantic_requirement": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["stages"],
-      "properties": {
-        "stages": {
-          "type": "array", "minItems": 1, "uniqueItems": true,
-          "items": {"$ref": "#/$defs/requirement_stage"}
-        }
-      }
-    },
     "executor_constraint": {
       "allOf": [
-        {"if": {"properties": {"executor": {"const": null}}}, "then": {"properties": {"required_capability": {"const": null}, "required_dispatch_capability": {"const": null}}}},
-        {"if": {"properties": {"executor": {"const": "codex"}}}, "then": {"properties": {"required_capability": {"const": "codex_execution"}}}},
-        {"if": {"properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}, "required_dispatch_capability": {"enum": [null, "openrouter_exec"]}}}},
-        {"if": {"properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}}}},
-        {"if": {"properties": {"required_capability": {"const": "anthropic_native_execution"}}}, "then": {"properties": {"executor": {"const": "claude"}, "required_dispatch_capability": {"const": "native_dispatch"}}}}
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": null}}}, "then": {"properties": {"required_capability": {"const": null}, "required_dispatch_capability": {"const": null}}}},
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": "codex"}}}, "then": {"properties": {"required_capability": {"const": "codex_execution"}, "required_dispatch_capability": {"enum": [null, "native_dispatch", "companion_dispatch", "openrouter_exec"]}}}},
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}, "required_dispatch_capability": {"enum": [null, "openrouter_exec"]}}}},
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}, "required_dispatch_capability": {"enum": [null, "native_dispatch", "openrouter_exec"]}}}},
+        {"if": {"required": ["required_capability"], "properties": {"required_capability": {"const": "anthropic_native_execution"}}}, "then": {"properties": {"executor": {"const": "claude"}, "required_dispatch_capability": {"const": "native_dispatch"}}}}
       ]
-    },
-    "requirement_stage": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["id", "gate_kind", "required_evidence", "executor", "required_capability", "required_dispatch_capability", "required_ancestors"],
-      "properties": {
-        "id": {"type": "string", "minLength": 1},
-        "gate_kind": {"type": ["string", "null"], "enum": [null, "cleanup", "deterministic_validation", "evidence", "human_approval", "investigation_promotion", "next_action", "risk"]},
-        "required_evidence": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
-        "executor": {"type": ["string", "null"], "enum": [null, "claude", "codex", "openrouter"]},
-        "required_capability": {"type": ["string", "null"], "enum": [null, "claude_execution", "codex_execution", "openrouter_execution", "anthropic_native_execution"]},
-        "required_dispatch_capability": {"type": ["string", "null"], "enum": [null, "native_dispatch", "companion_dispatch", "wrapper_dispatch", "openrouter_exec"]},
-        "required_ancestors": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
-      },
-      "allOf": [{"$ref": "#/$defs/executor_constraint"}]
     },
     "workflow": {
       "type": "object",
@@ -120,7 +63,8 @@
       },
       "allOf": [
         {"$ref": "#/$defs/executor_constraint"},
-        {"if": {"properties": {"executor": {"const": null}}}, "then": {"properties": {"executor_overridable": {"const": false}}}}
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": null}}}, "then": {"properties": {"executor_overridable": {"const": false}}}},
+        {"if": {"required": ["gate_kind"], "properties": {"gate_kind": {"enum": ["deterministic_validation", "evidence", "human_approval", "investigation_promotion", "next_action", "risk"]}}}, "then": {"properties": {"required_evidence": {"minItems": 1}}}}
       ]
     }
   }

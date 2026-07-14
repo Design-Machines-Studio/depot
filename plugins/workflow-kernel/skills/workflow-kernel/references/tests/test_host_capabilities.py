@@ -5,11 +5,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from tests import detail_digest
 import workflow_kernel.adapters.base as adapter_base
-from workflow_kernel.adapters.base import HostCapabilities, HostCapability, HostRoute
+from workflow_kernel.adapters.base import (
+    HostCapabilities, HostCapability, HostRoute, NodeSpec, route_satisfies_node,
+)
 from workflow_kernel.adapters.host import capabilities_from_harness_profile
 from workflow_kernel.schema import InvalidSchemaError
 
@@ -90,6 +93,31 @@ class HostCapabilityTests(unittest.TestCase):
         with self.assertRaises(InvalidSchemaError):
             _ = route.agentic
         self.assertEqual(repr(route), "HostRoute([INVALID])")
+
+    def test_route_authorization_and_aggregate_snapshot_each_route_once(self):
+        route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
+        original = adapter_base._snapshot_host_route
+        with patch.object(adapter_base, "_snapshot_host_route", wraps=original) as snapshot:
+            capabilities = HostCapabilities("test", (), routes=(route,))
+        self.assertEqual(snapshot.call_count, 1)
+        node = NodeSpec(
+            "build", executor="codex",
+            required_capability=HostCapability.CODEX_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        with patch.object(adapter_base, "_snapshot_host_route", wraps=original) as snapshot:
+            self.assertTrue(route_satisfies_node(next(iter(capabilities.routes)), node))
+        self.assertEqual(snapshot.call_count, 1)
+
+    def test_supports_revalidates_mutated_host_capabilities(self):
+        capabilities = HostCapabilities("test", (HostCapability.WORKTREE,))
+        object.__setattr__(capabilities, "capabilities", object())
+        with self.assertRaises(InvalidSchemaError) as raised:
+            capabilities.supports(HostCapability.WORKTREE)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_host_capabilities"),
+        )
 
     def test_openrouter_exec_is_a_distinct_dispatch_rail_capability(self):
         values = {capability.value for capability in HostCapability}

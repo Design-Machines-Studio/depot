@@ -11,7 +11,7 @@ from typing import Mapping, Optional, Tuple
 from .adapters.base import (
     AttemptLedger, FailureReason, GATE_KINDS, GateDecision, HostCapability,
     IsolationMode, RetryDecision, WorkflowClass, WorkflowContext,
-    _snapshot_workflow_context, invalid_policy,
+    _snapshot_workflow_context, invalid_policy, normalize_executor_constraint,
 )
 
 
@@ -26,6 +26,7 @@ class PolicyDocument:
     risk_human_approval: Tuple[str, ...]
     isolation_order: Tuple[IsolationMode, ...]
     forbidden_downgrades: frozenset[tuple[IsolationMode, IsolationMode]]
+    workflow_safety_anchor: Mapping[str, object]
     economics_mode: str
 
 
@@ -33,6 +34,91 @@ def _exact_keys(value: object, expected: set[str], reason: str) -> dict:
     if type(value) is not dict or set(value) != expected:
         raise invalid_policy(reason)
     return value
+
+
+def _safety_stage(value: object) -> Mapping[str, object]:
+    value = _exact_keys(value, {
+        "id", "gate_kind", "required_evidence", "executor",
+        "required_capability", "required_dispatch_capability",
+        "executor_overridable", "required_ancestors",
+    }, "invalid_workflow_safety_anchor")
+    if type(value["id"]) is not str or not value["id"]:
+        raise invalid_policy("invalid_workflow_safety_anchor")
+    gate_kind = value["gate_kind"]
+    if gate_kind is not None and (
+        type(gate_kind) is not str or gate_kind not in GATE_KINDS
+    ):
+        raise invalid_policy("invalid_workflow_safety_anchor")
+    normalized_lists = {}
+    for field in ("required_evidence", "required_ancestors"):
+        items = value[field]
+        if not isinstance(items, list) or any(
+            type(item) is not str or not item for item in items
+        ) or len(items) != len(set(items)):
+            raise invalid_policy("invalid_workflow_safety_anchor")
+        normalized_lists[field] = tuple(items)
+    if gate_kind not in (None, "cleanup") and not normalized_lists["required_evidence"]:
+        raise invalid_policy("invalid_workflow_safety_anchor")
+    try:
+        executor, capability, dispatch = normalize_executor_constraint(
+            value["executor"], value["required_capability"],
+            value["required_dispatch_capability"],
+        )
+    except Exception:
+        raise invalid_policy("invalid_workflow_safety_anchor") from None
+    if type(value["executor_overridable"]) is not bool or (
+        executor is None and value["executor_overridable"]
+    ):
+        raise invalid_policy("invalid_workflow_safety_anchor")
+    return MappingProxyType({
+        "id": value["id"],
+        "gate_kind": gate_kind,
+        "required_evidence": normalized_lists["required_evidence"],
+        "executor": executor,
+        "required_capability": capability,
+        "required_dispatch_capability": dispatch,
+        "executor_overridable": value["executor_overridable"],
+        "required_ancestors": normalized_lists["required_ancestors"],
+    })
+
+
+def _safety_stage_set(value: object) -> tuple[Mapping[str, object], ...]:
+    value = _exact_keys(value, {"stages"}, "invalid_workflow_safety_anchor")
+    if not isinstance(value["stages"], list) or not value["stages"]:
+        raise invalid_policy("invalid_workflow_safety_anchor")
+    stages = tuple(_safety_stage(stage) for stage in value["stages"])
+    if len({stage["id"] for stage in stages}) != len(stages):
+        raise invalid_policy("invalid_workflow_safety_anchor")
+    return stages
+
+
+def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
+    value = _exact_keys(
+        value, {"schema_version", "common", "classes", "promotion"},
+        "invalid_workflow_safety_anchor",
+    )
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise invalid_policy("unsupported_safety_anchor_version")
+    classes = _exact_keys(
+        value["classes"], {"hotfix", "security", "migration"},
+        "invalid_workflow_safety_anchor",
+    )
+    promotion = _exact_keys(
+        value["promotion"], {"investigation"},
+        "invalid_workflow_safety_anchor",
+    )
+    return MappingProxyType({
+        "schema_version": 1,
+        "common": _safety_stage_set(value["common"]),
+        "classes": MappingProxyType({
+            WorkflowClass(name): _safety_stage_set(stage_set)
+            for name, stage_set in classes.items()
+        }),
+        "promotion": MappingProxyType({
+            name: _safety_stage_set(stage_set)
+            for name, stage_set in promotion.items()
+        }),
+    })
 
 
 def load_policy(path: Optional[Path] = None) -> PolicyDocument:
@@ -43,7 +129,7 @@ def load_policy(path: Optional[Path] = None) -> PolicyDocument:
         raise invalid_policy("invalid_policy_json") from None
     payload = _exact_keys(payload, {
         "schema_version", "retry", "gates", "isolation", "capability_names",
-        "economics",
+        "workflow_safety_anchor", "economics",
     }, "invalid_policy_document")
     if type(payload["schema_version"]) is not int or payload["schema_version"] != POLICY_SCHEMA_VERSION:
         raise invalid_policy("unsupported_policy_version")
@@ -105,7 +191,8 @@ def load_policy(path: Optional[Path] = None) -> PolicyDocument:
         raise invalid_policy("economics_must_be_proposal_only")
     return PolicyDocument(
         MappingProxyType(safe_budgets), convergence_limit, tuple(risk_values), order,
-        frozenset(forbidden), economics["mode"],
+        frozenset(forbidden), _workflow_safety_anchor(payload["workflow_safety_anchor"]),
+        economics["mode"],
     )
 
 
@@ -129,6 +216,10 @@ class RetryPolicy:
             raise invalid_policy("unknown_failure_reason") from None
         if type(attempts) is not AttemptLedger:
             raise invalid_policy("invalid_attempt_ledger")
+        try:
+            attempts = AttemptLedger(attempts.counts, attempts.signatures)
+        except Exception:
+            raise invalid_policy("invalid_attempt_ledger") from None
         if signature is not None and (type(signature) is not str or not signature):
             raise invalid_policy("invalid_failure_signature")
         count = attempts.count(normalized)
@@ -151,8 +242,18 @@ class RetryPolicy:
 
 
 class GatePolicy:
-    def __init__(self, path: Optional[Path] = None):
-        self._policy = load_policy(path)
+    def __init__(
+        self,
+        path: Optional[Path] = None,
+        *,
+        policy_document: Optional[PolicyDocument] = None,
+    ):
+        if policy_document is not None:
+            if path is not None or type(policy_document) is not PolicyDocument:
+                raise invalid_policy("invalid_policy_document")
+            self._policy = policy_document
+        else:
+            self._policy = load_policy(path)
 
     def decide(
         self,

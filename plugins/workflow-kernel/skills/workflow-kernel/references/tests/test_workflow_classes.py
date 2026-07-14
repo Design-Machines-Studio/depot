@@ -25,6 +25,7 @@ def schema_matches(value, schema, root=None):
             "object": type(value) is dict,
             "array": type(value) is list,
             "string": type(value) is str,
+            "integer": type(value) is int,
             "boolean": type(value) is bool,
             "null": value is None,
         }
@@ -33,6 +34,8 @@ def schema_matches(value, schema, root=None):
     if "const" in schema and value != schema["const"]:
         return False
     if "enum" in schema and value not in schema["enum"]:
+        return False
+    if type(value) is str and len(value) < schema.get("minLength", 0):
         return False
     if any(not schema_matches(value, item, root) for item in schema.get("allOf", [])):
         return False
@@ -57,7 +60,9 @@ def schema_matches(value, schema, root=None):
         ):
             return False
     if type(value) is list:
-        if len(value) < schema.get("minItems", 0):
+        if not schema.get("minItems", 0) <= len(value) <= schema.get(
+            "maxItems", len(value)
+        ):
             return False
         if schema.get("uniqueItems") and len({json.dumps(
             item, sort_keys=True,
@@ -230,65 +235,58 @@ class WorkflowClassTests(unittest.TestCase):
                          else None),
                     )
 
-    def test_authoritative_json_has_no_schema_boundary_mirror(self):
+    def test_trusted_policy_owns_the_only_versioned_safety_anchor(self):
+        root = Path(__file__).parents[1]
+        document = json.loads((root / "workflow-classes.json").read_text())
+        policy = json.loads((root / "workflow-policy.json").read_text())
+        class_schema = json.loads((root / "workflow-classes-schema.json").read_text())
+        policy_schema = json.loads((root / "workflow-policy-schema.json").read_text())
+        self.assertNotIn("requirements", document)
+        self.assertNotIn("requirements", class_schema["properties"])
+        anchor = policy["workflow_safety_anchor"]
+        self.assertEqual(anchor["schema_version"], 1)
+        self.assertEqual(set(anchor), {"schema_version", "common", "classes", "promotion"})
+        self.assertEqual(set(anchor["classes"]), {"hotfix", "security", "migration"})
+        self.assertEqual(set(anchor["promotion"]), {"investigation"})
+        expected = {
+            "hotfix": {"build", "focused_validation", "risk_gate", "review"},
+            "security": {"threat_risk_evidence", "security_build", "validation",
+                         "security_review", "human_gate"},
+            "migration": {"preflight", "schema_data_change", "compatibility_validation",
+                          "rollback_evidence", "review", "human_gate"},
+        }
+        for name, stage_ids in expected.items():
+            self.assertEqual(
+                {stage["id"] for stage in anchor["classes"][name]["stages"]},
+                stage_ids,
+            )
+        self.assertEqual(
+            {stage["id"] for stage in anchor["common"]["stages"]}, {"cleanup"},
+        )
+        self.assertEqual(
+            {stage["id"] for stage in anchor["promotion"]["investigation"]["stages"]},
+            {"promotion_gate", "promoted_build"},
+        )
+        self.assertTrue(schema_matches(document, class_schema))
+        self.assertTrue(schema_matches(policy, policy_schema))
+
+    def test_schema_and_runtime_reject_empty_gated_evidence_and_impossible_routes(self):
         root = Path(__file__).parents[1]
         document = json.loads((root / "workflow-classes.json").read_text())
         schema = json.loads((root / "workflow-classes-schema.json").read_text())
-        self.assertIn("requirements", document)
-        self.assertIn("requirements", schema["properties"])
-        self.assertNotIn("x-kernel-boundaries", schema)
-        node_schema = schema["$defs"]["node"]
-        self.assertIn("allOf", node_schema)
-
-        requirements = schema["properties"]["requirements"]["properties"]
-        class_schema = requirements["classes"]
-        self.assertEqual(
-            class_schema["required"], ["hotfix", "security", "migration"],
-        )
-        self.assertFalse(class_schema["additionalProperties"])
-        promotion_schema = requirements["promotion"]
-        self.assertEqual(promotion_schema["required"], ["investigation"])
-        self.assertFalse(promotion_schema["additionalProperties"])
-        self.assertIn("executor_constraint", schema["$defs"])
-        self.assertEqual(
-            node_schema["allOf"][0], {"$ref": "#/$defs/executor_constraint"},
-        )
-
-    def test_workflow_schema_default_and_runtime_share_exact_requirement_contract(self):
-        root = Path(__file__).parents[1]
-        document = json.loads((root / "workflow-classes.json").read_text())
-        schema = json.loads((root / "workflow-classes-schema.json").read_text())
-        self.assertIn("stages", document["requirements"]["classes"]["security"])
-        self.assertTrue(schema_matches(document, schema))
-
         mutations = []
-        missing = json.loads(json.dumps(document))
-        del missing["requirements"]["classes"]["hotfix"]
-        mutations.append(missing)
-        unknown = json.loads(json.dumps(document))
-        unknown["requirements"]["classes"]["bug"] = unknown["requirements"][
-            "classes"
-        ]["hotfix"]
-        mutations.append(unknown)
-        invalid_tuple = json.loads(json.dumps(document))
-        stage = next(
-            item for item in invalid_tuple["requirements"]["classes"]["security"][
-                "stages"
-            ] if item["id"] == "security_build"
-        )
-        stage["executor"] = "codex"
-        mutations.append(invalid_tuple)
-        unknown_stage_key = json.loads(json.dumps(document))
-        unknown_stage_key["requirements"]["classes"]["hotfix"]["stages"][0][
-            "optional"
-        ] = True
-        mutations.append(unknown_stage_key)
-        missing_stage_key = json.loads(json.dumps(document))
-        del missing_stage_key["requirements"]["classes"]["migration"]["stages"][0][
-            "required_ancestors"
-        ]
-        mutations.append(missing_stage_key)
-
+        empty = json.loads(json.dumps(document))
+        empty["classes"]["feature"]["nodes"][1]["required_evidence"] = []
+        mutations.append(empty)
+        claude_companion = json.loads(json.dumps(document))
+        review = claude_companion["classes"]["feature"]["nodes"][4]
+        review["required_dispatch_capability"] = "companion_dispatch"
+        mutations.append(claude_companion)
+        codex_wrapper = json.loads(json.dumps(document))
+        codex_wrapper["classes"]["feature"]["nodes"][2][
+            "required_dispatch_capability"
+        ] = "wrapper_dispatch"
+        mutations.append(codex_wrapper)
         for payload in mutations:
             self.assertFalse(schema_matches(payload, schema))
             with tempfile.TemporaryDirectory() as directory:
@@ -456,58 +454,50 @@ class WorkflowClassTests(unittest.TestCase):
                     raised.exception.details["reason_code"], detail_digest(reason),
                 )
 
-    def test_canonical_safety_anchor_rejects_joint_graph_and_requirement_weakening(self):
+    def test_trusted_safety_anchor_rejects_removed_rewired_or_weakened_stages(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
 
-        placeholder = json.loads(json.dumps(base))
-        for node in placeholder["classes"]["security"]["nodes"]:
-            if node["gate_kind"] in ("evidence", "human_approval"):
-                node["required_evidence"] = ["placeholder"]
-        for stage in placeholder["requirements"]["classes"]["security"]["stages"]:
-            if stage["gate_kind"] in ("evidence", "human_approval"):
-                stage["required_evidence"] = ["placeholder"]
-        mutations.append(placeholder)
-
-        removed_security_review = json.loads(json.dumps(base))
-        security = removed_security_review["classes"]["security"]["nodes"]
-        security[:] = [node for node in security if node["id"] != "security_review"]
-        next(node for node in security if node["id"] == "human_gate")[
+        removed = json.loads(json.dumps(base))
+        hotfix = removed["classes"]["hotfix"]["nodes"]
+        hotfix[:] = [node for node in hotfix if node["id"] != "build"]
+        next(node for node in hotfix if node["id"] == "focused_validation")[
             "depends_on"
-        ] = ["validation"]
-        security_requirements = removed_security_review["requirements"]["classes"][
-            "security"
-        ]["stages"]
-        security_requirements[:] = [
-            stage for stage in security_requirements
-            if stage["id"] != "security_review"
-        ]
-        mutations.append(removed_security_review)
+        ] = ["reproduce_impact"]
+        mutations.append(removed)
 
-        removed_rollback = json.loads(json.dumps(base))
-        migration = removed_rollback["classes"]["migration"]["nodes"]
-        migration[:] = [node for node in migration if node["id"] != "rollback_evidence"]
-        next(node for node in migration if node["id"] == "review")["depends_on"] = [
-            "compatibility_validation"
-        ]
-        migration_requirements = removed_rollback["requirements"]["classes"][
-            "migration"
-        ]["stages"]
-        migration_requirements[:] = [
-            stage for stage in migration_requirements
-            if stage["id"] != "rollback_evidence"
-        ]
-        mutations.append(removed_rollback)
+        rewired = json.loads(json.dumps(base))
+        next(node for node in rewired["classes"]["migration"]["nodes"]
+             if node["id"] == "compatibility_validation")["depends_on"] = ["preflight"]
+        next(node for node in rewired["classes"]["migration"]["nodes"]
+             if node["id"] == "human_gate")["depends_on"].append("schema_data_change")
+        mutations.append(rewired)
 
-        removed_hotfix = json.loads(json.dumps(base))
-        hotfix = removed_hotfix["classes"]["hotfix"]["nodes"]
-        hotfix[:] = [node for node in hotfix if node["id"] != "risk_gate"]
-        next(node for node in hotfix if node["id"] == "review")["depends_on"] = [
-            "focused_validation"
-        ]
-        del removed_hotfix["requirements"]["classes"]["hotfix"]
-        mutations.append(removed_hotfix)
+        changed_executor = json.loads(json.dumps(base))
+        security_build = next(
+            node for node in changed_executor["classes"]["security"]["nodes"]
+            if node["id"] == "security_build"
+        )
+        security_build.update({
+            "executor": "codex", "required_capability": "codex_execution",
+            "required_dispatch_capability": "native_dispatch",
+        })
+        mutations.append(changed_executor)
+
+        removed_execution = json.loads(json.dumps(base))
+        build = next(node for node in removed_execution["classes"]["hotfix"]["nodes"]
+                     if node["id"] == "build")
+        build.update({
+            "executor": None, "required_capability": None,
+            "required_dispatch_capability": None, "executor_overridable": False,
+        })
+        mutations.append(removed_execution)
+
+        flipped_override = json.loads(json.dumps(base))
+        next(node for node in flipped_override["classes"]["migration"]["nodes"]
+             if node["id"] == "schema_data_change")["executor_overridable"] = False
+        mutations.append(flipped_override)
 
         for payload in mutations:
             with tempfile.TemporaryDirectory() as directory:
@@ -515,10 +505,9 @@ class WorkflowClassTests(unittest.TestCase):
                 path.write_text(json.dumps(payload), encoding="utf-8")
                 with self.assertRaises(InvalidSchemaError) as raised:
                     WorkflowTemplates(path)
-                self.assertIn(
+                self.assertEqual(
                     raised.exception.details["reason_code"],
-                    {detail_digest("invalid_workflow_requirements"),
-                     detail_digest("workflow_requirement_unsatisfied")},
+                    detail_digest("workflow_requirement_unsatisfied"),
                 )
 
     def test_canonical_safety_anchor_rejects_removed_cleanup_and_promotion(self):
@@ -527,14 +516,12 @@ class WorkflowClassTests(unittest.TestCase):
 
         no_cleanup = json.loads(json.dumps(base))
         no_cleanup["classes"]["chore"]["nodes"][-1]["id"] = "finish"
-        no_cleanup["requirements"]["global"]["cleanup"]["id"] = "finish"
 
         no_promotion = json.loads(json.dumps(base))
         no_promotion["promotion"]["investigation"]["nodes"].pop(0)
         no_promotion["promotion"]["investigation"]["nodes"][0]["depends_on"] = [
             "evidence_gathering"
         ]
-        no_promotion["requirements"]["promotion"]["investigation"]["stages"].pop(0)
 
         for payload in (no_cleanup, no_promotion):
             with tempfile.TemporaryDirectory() as directory:

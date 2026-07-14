@@ -210,13 +210,20 @@ def _snapshot_host_route(route: HostRoute) -> HostRoute:
 
 def route_satisfies_node(route: HostRoute, node: "NodeSpec") -> bool:
     """Apply the one centralized route/executor/capability constraint."""
-    if type(route) is not HostRoute or type(node) is not NodeSpec or not route.agentic:
+    if type(route) is not HostRoute or type(node) is not NodeSpec:
+        return False
+    try:
+        route = _snapshot_host_route(route)
+    except InvalidSchemaError:
+        return False
+    if route.rail not in AGENTIC_DISPATCH_RAILS:
         return False
     if node.executor is None or route.capability is not node.required_capability:
         return False
     if (
         node.required_dispatch_capability is not None
-        and route.dispatch_capability is not node.required_dispatch_capability
+        and DISPATCH_RAIL_CAPABILITIES[route.rail]
+        is not node.required_dispatch_capability
     ):
         return False
     return True
@@ -251,9 +258,17 @@ def normalize_executor_constraint(
         raise invalid_policy("inconsistent_executor_capability")
     if executor is not None and capability not in EXECUTOR_CAPABILITIES[executor]:
         raise invalid_policy("inconsistent_executor_capability")
-    if executor == "openrouter" and dispatch not in {
-        None, HostCapability.OPENROUTER_EXEC,
-    }:
+    allowed_dispatch = {
+        "claude": {
+            None, HostCapability.NATIVE_DISPATCH, HostCapability.OPENROUTER_EXEC,
+        },
+        "codex": {
+            None, HostCapability.NATIVE_DISPATCH,
+            HostCapability.COMPANION_DISPATCH, HostCapability.OPENROUTER_EXEC,
+        },
+        "openrouter": {None, HostCapability.OPENROUTER_EXEC},
+    }
+    if executor is not None and dispatch not in allowed_dispatch[executor]:
         raise invalid_policy("inconsistent_dispatch_capability")
     if capability is HostCapability.ANTHROPIC_NATIVE_EXECUTION and (
         executor != "claude" or dispatch is not HostCapability.NATIVE_DISPATCH
@@ -554,12 +569,20 @@ class HostCapabilities:
         derived = set(values)
         for route in routes:
             derived.add(route.capability)
-            derived.add(route.dispatch_capability)
+            derived.add(DISPATCH_RAIL_CAPABILITIES[route.rail])
         object.__setattr__(self, "capabilities", frozenset(derived))
         object.__setattr__(self, "routes", routes)
 
     def supports(self, capability: HostCapability) -> bool:
-        return capability in self.capabilities
+        snapshot = _snapshot_host_capabilities(self)
+        try:
+            capability = (
+                capability if type(capability) is HostCapability
+                else HostCapability(capability)
+            )
+        except (TypeError, ValueError):
+            raise invalid_policy("unknown_capability_name") from None
+        return capability in snapshot.capabilities
 
     def supports_route(self, route: HostRoute) -> bool:
         try:
@@ -579,7 +602,7 @@ def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilit
             capabilities.evidence_model_version,
             capabilities.routes,
         )
-    except (AttributeError, TypeError):
+    except Exception:
         raise invalid_policy("invalid_host_capabilities") from None
 
 
@@ -599,6 +622,19 @@ class IsolationRequirements:
         if type(self.allow_degradation) is not bool:
             raise invalid_policy("invalid_isolation_requirements")
         object.__setattr__(self, "preferred", preferred)
+
+
+def _snapshot_isolation_requirements(
+    requirements: IsolationRequirements,
+) -> IsolationRequirements:
+    if type(requirements) is not IsolationRequirements:
+        raise invalid_policy("invalid_isolation_requirements")
+    try:
+        return IsolationRequirements(
+            requirements.preferred, requirements.allow_degradation,
+        )
+    except Exception:
+        raise invalid_policy("invalid_isolation_requirements") from None
 
 
 @dataclass(frozen=True)

@@ -153,11 +153,14 @@ returns none.
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both
   boundaries.
-- Keep a compact safety declaration in `workflow-classes.json` under the generic
-  `requirements` shape. An independent immutable runtime anchor protects common
-  cleanup plus mandatory hotfix, security, migration, and investigation-
-  promotion stage IDs, gate/evidence identities, executor tuples, and ancestry.
-  Apply it generically without mirroring the full templates.
+- Keep `workflow-classes.json` templates-only. The separately versioned,
+  schema-validated `workflow_safety_anchor` in trusted `workflow-policy.json` is
+  the one independent safety declaration. Python parses it into immutable generic
+  records and validates common cleanup; hotfix build/validation/risk/review;
+  security threat/build/validation/review/human; migration preflight/change/
+  compatibility/rollback/review/human; and investigation promotion/build IDs,
+  gate/evidence identities, executor/capability/dispatch tuples,
+  `executor_overridable`, and ancestry without mirroring stage values in code.
 - Retry budgets are keyed by normalized reason: provider unavailable,
   deterministic validation failure, reviewer finding, browser recovery,
   cleanup, and infrastructure. A global “try three times” rule is forbidden.
@@ -171,6 +174,8 @@ returns none.
   from/to modes and a reason. If policy forbids a downgrade, return blocked.
 - Builder resume feeds deterministic validation feedback to the original handle.
   A fresh builder is not a resume and must be labeled as replacement dispatch.
+  Protected resume blobs require an exact integer schema version and checksum the
+  version together with context and handle payload.
 - Authorize builder work by one exact immutable
   `(provider, executor capability, dispatch rail)` route from the harness role.
   `capabilities` is a derived compatibility view, never an authorization proof.
@@ -237,13 +242,17 @@ returns none.
 - [ ] Every builder decision is bound to its request context; event projection
       rejects a different run or node, and restore rejects expected/stored/handle
       context mismatch before probing adapter capabilities.
+- [ ] Public policy methods snapshot and revalidate workflow, retry-ledger,
+      isolation, host-capability, route, session, and decision inputs; hostile
+      mutation fails with the method-specific stable reason.
 - [ ] Economics aggregation fields remain proposal-only and no test observes a
       policy file mutation.
 - [ ] Invalid policy versions, circular template dependencies, missing node IDs,
       or unknown capability names fail closed with stable reason codes.
-- [ ] Joint graph/declaration weakening, placeholder mandatory evidence,
-      unknown or missing requirement keys, and incoherent requirement executor
-      tuples fail against both schema-facing tests and runtime validation.
+- [ ] Removing or rewiring protected stages, changing/removing their executor
+      tuple, or flipping `executor_overridable` fails against the independent
+      trusted-policy anchor. Empty gated evidence, malformed anchor records, and
+      impossible executor/dispatch tuples fail at both schema and runtime.
 - [ ] Full kernel tests pass using:
 
 ```bash

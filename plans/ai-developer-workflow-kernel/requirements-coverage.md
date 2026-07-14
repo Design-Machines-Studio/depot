@@ -84,7 +84,9 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       credential-safe validation feedback, bind every decision including blocks
       to that context, reject same-host wrong-rail receipts and foreign event
       projection, and compare expected/stored/handle context before adapter
-      capability probes. Exact immutable harness routes authorize dispatch,
+      capability probes. Resume blobs require an exact integer schema version and
+      checksum that version with context and handle payload. Exact immutable
+      harness routes authorize dispatch,
       resume, and restore; callers declare only non-route features, aggregate
       executor/dispatch capabilities derive exclusively from routes, and wrapper
       routes remain analysis-only. Chunk 05 `Builder Continuity
@@ -98,12 +100,16 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 
 15. Route all seven top-level workflow classes end to end
     - Chunks: 02, 05, 06
-    - Evidence: Chunk 02 defines class templates plus a compact JSON safety
-      declaration and independent immutable runtime anchor for cleanup, hotfix,
-      security, migration, and investigation promotion. Generic validation binds
-      exact mandatory stage IDs, evidence identities, gate/executor tuples, and
-      ancestry, with joint graph/declaration weakening and placeholder-evidence
-      mutation tests. Ordinary executor nodes remain open to any compatible
+    - Evidence: Chunk 02 keeps class JSON templates-only and defines one
+      separately versioned safety declaration in trusted `workflow-policy.json`.
+      Generic Python validation parses that immutable policy data and binds exact
+      common cleanup; hotfix build/validation/risk/review; security
+      threat/build/validation/review/human; migration preflight/change/
+      compatibility/rollback/review/human; and investigation promotion/build
+      stage IDs, evidence identities, executor/capability/dispatch tuples,
+      `executor_overridable`, and ancestry. Removal, rewiring, execution removal,
+      executor change, and override-flip tests fail independently of templates.
+      Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
       Anthropic native Claude. Chunk 05 adds the explicit
       `workflowClass` manifest field and promptcraft → pipeline → RunSpec → event
@@ -135,7 +141,8 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
 
 20. Keep policy/expertise in Markdown and mechanics in executable code
     - Chunks: 01, 02, 05
-    - Evidence: Markdown retains workflow policy and stable stage anchors while
+    - Evidence: Markdown retains workflow policy rationale, trusted JSON retains
+      the single versioned executable stage anchor, and
       reducers, event replay, adapters, planning, comparison, and metrics are
       importable Python with behavioral tests and CLI entrypoints.
 

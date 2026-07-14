@@ -5,17 +5,15 @@ from __future__ import annotations
 import fnmatch
 import json
 from collections import deque
-from dataclasses import dataclass
 from pathlib import Path
-from types import MappingProxyType
-from typing import Optional
+from typing import Mapping, Optional
 
 from .adapters.base import (
     DEFAULT_EXECUTOR_CAPABILITY, GATE_KINDS, HostCapability, NodeSpec,
     WorkflowClass, WorkflowContext, _snapshot_workflow_context, invalid_policy,
     normalize_executor_constraint,
 )
-from .policies import GatePolicy
+from .policies import GatePolicy, load_policy
 
 
 WORKFLOW_CLASSES_SCHEMA_VERSION = 1
@@ -179,151 +177,6 @@ def _validate_promotion(records: tuple[dict, ...]) -> None:
             raise invalid_policy("promotion_gate_required")
 
 
-@dataclass(frozen=True)
-class _StageRequirement:
-    node_id: str
-    gate_kind: Optional[str]
-    required_evidence: tuple[str, ...]
-    executor: Optional[str]
-    required_capability: Optional[HostCapability]
-    required_dispatch_capability: Optional[HostCapability]
-    required_ancestors: tuple[str, ...]
-
-
-def _anchor(
-    node_id: str,
-    gate_kind: Optional[str],
-    required_evidence: tuple[str, ...] = (),
-    executor: Optional[str] = None,
-    capability: Optional[HostCapability] = None,
-    dispatch: Optional[HostCapability] = None,
-    ancestors: tuple[str, ...] = (),
-) -> _StageRequirement:
-    return _StageRequirement(
-        node_id, gate_kind, required_evidence, executor, capability, dispatch,
-        ancestors,
-    )
-
-
-_CLEANUP_REQUIREMENT = _anchor("cleanup", "cleanup")
-_CANONICAL_CLASS_REQUIREMENTS = MappingProxyType({
-    WorkflowClass.HOTFIX: (
-        _anchor(
-            "focused_validation", "deterministic_validation",
-            ("focused_validation_evidence",), ancestors=("build",),
-        ),
-        _anchor(
-            "risk_gate", "risk", ("risk_assessment",),
-            ancestors=("focused_validation",),
-        ),
-    ),
-    WorkflowClass.SECURITY: (
-        _anchor(
-            "threat_risk_evidence", "evidence",
-            ("threat_model", "risk_assessment"),
-        ),
-        _anchor(
-            "security_build", None, executor="claude",
-            capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
-            dispatch=HostCapability.NATIVE_DISPATCH,
-            ancestors=("threat_risk_evidence",),
-        ),
-        _anchor(
-            "validation", "deterministic_validation", ("validation_evidence",),
-            ancestors=("security_build",),
-        ),
-        _anchor(
-            "security_review", "evidence", ("security_review",),
-            executor="claude",
-            capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
-            dispatch=HostCapability.NATIVE_DISPATCH,
-            ancestors=("validation",),
-        ),
-        _anchor(
-            "human_gate", "human_approval",
-            ("risk_assessment", "security_review"),
-            ancestors=("security_review",),
-        ),
-    ),
-    WorkflowClass.MIGRATION: (
-        _anchor("preflight", "evidence", ("migration_preflight",)),
-        _anchor(
-            "compatibility_validation", "deterministic_validation",
-            ("compatibility_evidence",), ancestors=("schema_data_change",),
-        ),
-        _anchor(
-            "rollback_evidence", "evidence", ("rollback_evidence",),
-            ancestors=("compatibility_validation",),
-        ),
-        _anchor(
-            "review", "evidence", ("review_evidence",), executor="claude",
-            capability=HostCapability.CLAUDE_EXECUTION,
-            ancestors=("rollback_evidence",),
-        ),
-        _anchor(
-            "human_gate", "human_approval",
-            ("rollback_evidence", "review_evidence"), ancestors=("review",),
-        ),
-    ),
-})
-_CANONICAL_PROMOTION_REQUIREMENTS = MappingProxyType({
-    "investigation": (
-        _anchor(
-            "promotion_gate", "investigation_promotion",
-            ("promotion_decision",), ancestors=("evidence_gathering",),
-        ),
-        _anchor(
-            "promoted_build", None, executor="codex",
-            capability=HostCapability.CODEX_EXECUTION,
-            ancestors=("promotion_gate",),
-        ),
-    ),
-})
-
-
-def _stage_requirement(value: object) -> _StageRequirement:
-    expected = {
-        "id", "gate_kind", "required_evidence", "executor",
-        "required_capability", "required_dispatch_capability",
-        "required_ancestors",
-    }
-    if type(value) is not dict or set(value) != expected:
-        raise invalid_policy("invalid_workflow_requirements")
-    if type(value["id"]) is not str or not value["id"]:
-        raise invalid_policy("invalid_workflow_requirements")
-    gate_kind = value["gate_kind"]
-    if gate_kind is not None and (type(gate_kind) is not str or gate_kind not in GATE_KINDS):
-        raise invalid_policy("invalid_workflow_requirements")
-    for field in ("required_evidence", "required_ancestors"):
-        items = value[field]
-        if not isinstance(items, list) or any(
-            type(item) is not str or not item for item in items
-        ) or len(items) != len(set(items)):
-            raise invalid_policy("invalid_workflow_requirements")
-    try:
-        executor, capability, dispatch = normalize_executor_constraint(
-            value["executor"], value["required_capability"],
-            value["required_dispatch_capability"],
-        )
-    except Exception:
-        raise invalid_policy("invalid_workflow_requirements") from None
-    return _StageRequirement(
-        value["id"], gate_kind, tuple(value["required_evidence"]), executor,
-        capability, dispatch, tuple(value["required_ancestors"]),
-    )
-
-
-def _requirement_record(value: object) -> tuple[_StageRequirement, ...]:
-    if type(value) is not dict or set(value) != {"stages"} or not isinstance(
-        value["stages"], list
-    ) or not value["stages"]:
-        raise invalid_policy("invalid_workflow_requirements")
-    stages = tuple(_stage_requirement(item) for item in value["stages"])
-    if len({stage.node_id for stage in stages}) != len(stages):
-        raise invalid_policy("invalid_workflow_requirements")
-    return stages
-
-
 def _ancestors(record: dict, by_id: dict[str, dict]) -> set[str]:
     result = set()
     pending = list(record["depends_on"])
@@ -338,69 +191,47 @@ def _ancestors(record: dict, by_id: dict[str, dict]) -> set[str]:
 
 
 def _validate_required_stages(
-    records: tuple[dict, ...], requirements: tuple[_StageRequirement, ...],
+    records: tuple[dict, ...], requirements: tuple[Mapping[str, object], ...],
 ) -> None:
     by_id = {record["id"]: record for record in records}
     for required in requirements:
-        record = by_id.get(required.node_id)
+        record = by_id.get(required["id"])
         if record is None or (
-            record["gate_kind"] != required.gate_kind
-            or record["required_evidence"] != required.required_evidence
-            or record["executor"] != required.executor
-            or record["required_capability"] != required.required_capability
+            record["gate_kind"] != required["gate_kind"]
+            or record["required_evidence"] != required["required_evidence"]
+            or record["executor"] != required["executor"]
+            or record["required_capability"] != required["required_capability"]
             or record["required_dispatch_capability"]
-            != required.required_dispatch_capability
-            or not set(required.required_ancestors) <= _ancestors(record, by_id)
+            != required["required_dispatch_capability"]
+            or record["executor_overridable"] != required["executor_overridable"]
+            or not set(required["required_ancestors"]) <= _ancestors(record, by_id)
         ):
             raise invalid_policy("workflow_requirement_unsatisfied")
 
 
-def _validate_requirements(
-    requirements: object,
+def _validate_safety_anchor(
+    anchor: Mapping[str, object],
     classes: dict[WorkflowClass, tuple[dict, ...]],
     promotion: tuple[dict, ...],
 ) -> None:
-    if type(requirements) is not dict or set(requirements) != {
-        "global", "classes", "promotion",
-    }:
-        raise invalid_policy("invalid_workflow_requirements")
-    global_requirement = requirements["global"]
-    if type(global_requirement) is not dict or set(global_requirement) != {"cleanup"}:
-        raise invalid_policy("invalid_workflow_requirements")
-    cleanup_requirement = _stage_requirement(global_requirement["cleanup"])
-    if cleanup_requirement != _CLEANUP_REQUIREMENT:
-        raise invalid_policy("invalid_workflow_requirements")
-    class_requirements = requirements["classes"]
-    expected_classes = {kind.value for kind in _CANONICAL_CLASS_REQUIREMENTS}
-    if type(class_requirements) is not dict or set(class_requirements) != expected_classes:
-        raise invalid_policy("invalid_workflow_requirements")
-    promotion_requirements = requirements["promotion"]
-    if type(promotion_requirements) is not dict or set(promotion_requirements) != set(
-        _CANONICAL_PROMOTION_REQUIREMENTS
-    ):
-        raise invalid_policy("invalid_workflow_requirements")
     for records in classes.values():
-        _validate_required_stages(records, (cleanup_requirement,))
-    for kind, canonical in _CANONICAL_CLASS_REQUIREMENTS.items():
-        declared = _requirement_record(class_requirements[kind.value])
-        if declared != canonical:
-            raise invalid_policy("invalid_workflow_requirements")
-        _validate_required_stages(classes[kind], declared)
-    for name, canonical in _CANONICAL_PROMOTION_REQUIREMENTS.items():
-        declared = _requirement_record(promotion_requirements[name])
-        if declared != canonical:
-            raise invalid_policy("invalid_workflow_requirements")
-        _validate_required_stages(promotion, declared)
+        _validate_required_stages(records, anchor["common"])
+    for kind, required in anchor["classes"].items():
+        _validate_required_stages(classes[kind], required)
+    for required in anchor["promotion"].values():
+        _validate_required_stages(promotion, required)
 
 
-def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...]]:
+def _load_templates(
+    path: Optional[Path], safety_anchor: Mapping[str, object],
+) -> dict[WorkflowClass, tuple[dict, ...]]:
     source = Path(path) if path is not None else DEFAULT_CLASSES_PATH
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         raise invalid_policy("invalid_workflow_classes_json") from None
     if type(payload) is not dict or set(payload) != {
-        "schema_version", "classes", "promotion", "requirements",
+        "schema_version", "classes", "promotion",
     }:
         raise invalid_policy("invalid_workflow_classes_document")
     if type(payload["schema_version"]) is not int or payload["schema_version"] != WORKFLOW_CLASSES_SCHEMA_VERSION:
@@ -426,7 +257,7 @@ def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...
         raise invalid_policy("invalid_promotion_policy")
     promotion_nodes = tuple(_node_record(item) for item in promoted["nodes"])
     _validate_promotion(promotion_nodes)
-    _validate_requirements(payload["requirements"], result, promotion_nodes)
+    _validate_safety_anchor(safety_anchor, result, promotion_nodes)
     result["promotion"] = promotion_nodes
     return result
 
@@ -439,8 +270,9 @@ class WorkflowTemplates:
         policy_path: Optional[Path] = None,
         routing_policy_path: Optional[Path] = None,
     ):
-        self._templates = _load_templates(path)
-        self._gate_policy = GatePolicy(policy_path)
+        policy = load_policy(policy_path)
+        self._templates = _load_templates(path, policy.workflow_safety_anchor)
+        self._gate_policy = GatePolicy(policy_document=policy)
         self._sensitive_globs = _load_sensitive_globs(routing_policy_path)
 
     def expand(

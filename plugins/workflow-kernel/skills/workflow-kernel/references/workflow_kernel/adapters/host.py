@@ -17,6 +17,7 @@ from .base import (
     _snapshot_session_result, route_satisfies_node,
     _snapshot_validation_feedback, invalid_policy,
 )
+from ..schema import InvalidSchemaError
 
 
 def _repository_file(relative: str) -> Path:
@@ -215,7 +216,7 @@ class BuilderSessionManager:
     ) -> ResumeStateContext:
         try:
             context = _snapshot_resume_context(context)
-        except (KeyError, TypeError):
+        except (InvalidSchemaError, KeyError, TypeError):
             raise invalid_policy(reason_code) from None
         if (
             node.executor is None
@@ -296,7 +297,7 @@ class BuilderSessionManager:
     ) -> bool:
         if handle is None or type(handle) is not SessionHandle:
             return False
-        if not capabilities.supports(HostCapability.SESSION_RESUME):
+        if HostCapability.SESSION_RESUME not in capabilities.capabilities:
             return False
         if (
             not handle.resume_capable
@@ -368,14 +369,13 @@ class BuilderSessionManager:
             "created_at": snapshot.created_at,
             "resume_capable": snapshot.resume_capable,
         }
-        payload = {
+        checked = {
             "schema_version": 1,
             "context": context.to_dict(),
             "handle": handle_payload,
-            "checksum": hashlib.sha256(
-                _canonical_json({"context": context.to_dict(), "handle": handle_payload})
-            ).hexdigest(),
         }
+        payload = dict(checked)
+        payload["checksum"] = hashlib.sha256(_canonical_json(checked)).hexdigest()
         return ResumeStateBlob(_canonical_json(payload))
 
     def restore_resume_state(
@@ -399,7 +399,7 @@ class BuilderSessionManager:
             payload = json.loads(raw.decode("utf-8"))
             if type(payload) is not dict or set(payload) != {
                 "schema_version", "context", "handle", "checksum",
-            } or payload["schema_version"] != 1:
+            } or type(payload["schema_version"]) is not int or payload["schema_version"] != 1:
                 raise ValueError
             context_payload = payload["context"]
             if type(context_payload) is not dict or set(context_payload) != {
@@ -413,7 +413,11 @@ class BuilderSessionManager:
                 "host_name", "opaque_handle", "created_at", "resume_capable",
             } or type(payload["checksum"]) is not str:
                 raise ValueError
-            checked = {"context": stored_context.to_dict(), "handle": handle_payload}
+            checked = {
+                "schema_version": payload["schema_version"],
+                "context": stored_context.to_dict(),
+                "handle": handle_payload,
+            }
             if hashlib.sha256(_canonical_json(checked)).hexdigest() != payload["checksum"]:
                 raise ValueError
             handle = SessionHandle(context=stored_context, **handle_payload)
@@ -424,10 +428,7 @@ class BuilderSessionManager:
             if getattr(error, "details", None) is not None:
                 raise invalid_policy("invalid_session_resume_state") from None
             raise
-        if (
-            stored_context != expected_context
-            or handle.context != stored_context
-        ):
+        if stored_context != expected_context:
             raise invalid_policy("foreign_session_resume_state")
         capabilities = self._safe_capabilities()
         if capabilities is None:
