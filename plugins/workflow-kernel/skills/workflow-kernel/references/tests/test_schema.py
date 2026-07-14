@@ -1,3 +1,4 @@
+import gc
 import hashlib
 import io
 import inspect
@@ -5,6 +6,7 @@ import json
 import logging
 import pickle
 import unittest
+import weakref
 from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
@@ -373,6 +375,32 @@ class SchemaTests(unittest.TestCase):
             class ForgedReceipt(receipts.SafeReceipt):
                 pass
 
+    def test_safe_receipt_has_only_weak_identity_storage(self):
+        self.assertEqual(receipts.SafeReceipt.__slots__, ("__weakref__",))
+        receipt = evidence_receipt("run-1", "test", "receipt.json")
+        self.assertFalse(hasattr(receipt, "__dict__"))
+        self.assertFalse(any(hasattr(receipt, name) for name in (
+            "_encoded", "_projection", "_issuance",
+        )))
+
+    def test_safe_receipt_legacy_token_cannot_be_reused(self):
+        legacy_authority = getattr(receipts, "_SAFE_RECEIPT_CAPABILITY", object())
+        for _ in range(2):
+            with self.assertRaises(TypeError):
+                receipts.SafeReceipt(
+                    {"receipt_type": "forged"}, b"forged\n",
+                    _capability=legacy_authority,
+                )
+
+    def test_safe_receipt_identity_is_not_mapping_value_equality(self):
+        first = evidence_receipt("run-1", "test", "receipt.json")
+        second = evidence_receipt("run-1", "test", "receipt.json")
+
+        self.assertIsNot(first, second)
+        self.assertNotEqual(first, second)
+        self.assertIs(receipts.SafeReceipt.__hash__, object.__hash__)
+        self.assertIs(receipts.SafeReceipt.__eq__, object.__eq__)
+
     def test_safe_receipt_has_no_mutable_dict_base_or_stale_digest_path(self):
         receipt = evidence_receipt("run-1", "test", "receipt.json")
         before = encode_receipt(receipt)
@@ -383,6 +411,41 @@ class SchemaTests(unittest.TestCase):
 
         self.assertEqual(encode_receipt(receipt), before)
         self.assertEqual(receipt["digest"], digest)
+
+    def test_safe_receipt_slots_cannot_replace_registry_owned_state(self):
+        for name, value in (
+            ("_encoded", b'{"api_token":"never-emit-slot-forgery"}\n'),
+            ("_projection", {"api_token": "never-emit-slot-forgery"}),
+            ("_issuance", object()),
+        ):
+            receipt = evidence_receipt("run-1", "test", "receipt.json")
+            before = encode_receipt(receipt)
+            digest = receipt["digest"]
+            with self.subTest(name=name):
+                with self.assertRaises((AttributeError, TypeError)):
+                    object.__setattr__(receipt, name, value)
+                self.assertEqual(encode_receipt(receipt), before)
+                self.assertEqual(receipt["digest"], digest)
+
+    def test_safe_receipt_registry_does_not_extend_object_lifetime(self):
+        self.assertIn("__weakref__", receipts.SafeReceipt.__slots__)
+        receipt = evidence_receipt("run-1", "test", "receipt.json")
+        reference = weakref.ref(receipt)
+
+        del receipt
+        gc.collect()
+
+        self.assertIsNone(reference())
+
+    def test_evidence_receipt_issues_only_the_complete_final_projection(self):
+        with mock.patch(
+                "workflow_kernel.receipts._make_safe_receipt",
+                wraps=receipts._make_safe_receipt,
+        ) as issue:
+            receipt = evidence_receipt("run-1", "test", "receipt.json")
+
+        self.assertEqual(issue.call_count, 1)
+        self.assertIn("digest", receipt)
 
     def test_unissued_safe_receipt_objects_cannot_bypass_encoding(self):
         constructors = (
@@ -402,10 +465,13 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(rejected, len(constructors))
 
     def test_receipts_use_the_shared_redaction_traversal(self):
-        self.assertFalse(hasattr(receipts, "_ReceiptSanitizer"))
         encoded = encode_receipt({"note": "shared traversal"})
         self.assertEqual(json.loads(encoded)[detail_key_digest("note")],
                          detail_digest("shared traversal"))
+
+    def test_shared_traversal_policy_api_does_not_allocate_paths(self):
+        parameters = inspect.signature(redaction._Traversal.normalize).parameters
+        self.assertNotIn("path", parameters)
 
     def test_raw_receipt_cannot_infer_safe_provenance_from_schema_shapes(self):
         receipt = evidence_receipt("run-1", "test", "receipt.json")

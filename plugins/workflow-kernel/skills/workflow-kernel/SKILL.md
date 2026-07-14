@@ -136,12 +136,23 @@ explicit evidence, transition, and nested-event vocabularies; arbitrary
 metadata and payload mappings use no trusted field vocabulary.
 `evidence_receipt()` and `transition_receipt()` return exact-type, final
 `SafeReceipt` mapping capabilities constructed only by the owned factory. A
-capability contains a recursively immutable `MappingProxyType`/tuple projection
-and the canonical bytes computed at issuance; it has no mutable `dict` base and
-cannot be subclassed. `encode_receipt()` trusts only a valid, issued object whose
-type is exactly `SafeReceipt`, returning its stored bytes byte-idempotently.
-Unissued objects fail closed. Every ordinary `Mapping`, including parsed JSON
-copied from a safe receipt, is raw and is sanitized exactly once. Raw
+capability object contains no projection, encoded bytes, issuance token, or
+other authority: its only slot supports weak identity. A closure-owned
+`WeakKeyDictionary` binds each exact factory-issued identity to its recursively
+immutable `MappingProxyType`/tuple projection and canonical bytes. The private
+issuer freezes the projection first and derives those bytes from that immutable
+value; it never accepts caller-provided encoded bytes. Evidence receipts are
+issued only after their digest is part of the complete final projection. Public
+construction always fails, capabilities cannot be subclassed, identity equality
+and hashing prevent mapping-value aliases, and weak registry keys do not extend
+object lifetime. `encode_receipt()` and mapping access trust only a registered
+object whose type is exactly `SafeReceipt`, returning registry-owned bytes
+byte-idempotently. Unissued `object.__new__` instances and attempts to add or
+replace projection, byte, or issuance slots fail closed. The closure-owned
+issuer and registry accessors are trusted private in-process implementation
+boundaries, not extension points; callers use only the public receipt factories.
+Every ordinary `Mapping`, including parsed JSON copied from a safe receipt, is
+raw and is sanitized exactly once. Raw
 `key-sha256:` keys and all raw digest-shaped or marker-shaped values are therefore
 re-digested and cannot infer provenance from their shape. Only the sensitive-key
 branch emits `[REDACTED]`.

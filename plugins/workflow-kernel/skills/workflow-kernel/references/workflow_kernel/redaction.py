@@ -238,14 +238,13 @@ class _Traversal:
     string_normalizer: Optional[Callable[[str], str]] = None
     key_normalizer: Optional[Callable[[str], str]] = None
     preserve_redacted: bool = False
-    string_policy: Optional[Callable[[str, str, Tuple[str, ...], Any], str]] = None
-    mapping_policy: Optional[Callable[[str, Tuple[str, ...], Any], Tuple[str, Any]]] = None
-    value_policy: Optional[Callable[[Any, str, Tuple[str, ...], Any], None]] = None
+    string_policy: Optional[Callable[[str, str, Any], str]] = None
+    mapping_policy: Optional[Callable[[str, Any], Tuple[str, Any]]] = None
+    value_policy: Optional[Callable[[Any, str, Any], None]] = None
     count: int = 0
 
     def normalize(self, value: Any, *, key: str = "", depth: int = 0,
-                  path: Tuple[str, ...] = (), schema: Any = None,
-                  policy: Any = None) -> Any:
+                  schema: Any = None, policy: Any = None) -> Any:
         if depth > self.max_depth:
             raise TypeError("payload exceeds maximum depth")
         self.count += 1
@@ -255,7 +254,7 @@ class _Traversal:
                 and is_secret_key(key)):
             return REDACTED
         if self.value_policy is not None:
-            self.value_policy(value, key, path, policy)
+            self.value_policy(value, key, policy)
         if (self.preserve_redacted and type(key) is str and _KEY_DIGEST.fullmatch(key)
                 and type(value) is str and value == REDACTED):
             return REDACTED
@@ -265,7 +264,7 @@ class _Traversal:
             if str.__len__(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
             if self.string_policy is not None:
-                return self.string_policy(value, key, path, policy)
+                return self.string_policy(value, key, policy)
             if self.string_normalizer is not None:
                 return self.string_normalizer(value)
             if key.casefold() == "reference":
@@ -286,7 +285,7 @@ class _Traversal:
                     raise TypeError("mapping key exceeds maximum length")
                 child_policy = None
                 if self.mapping_policy is not None:
-                    normalized_key, child_policy = self.mapping_policy(child_key, path, schema)
+                    normalized_key, child_policy = self.mapping_policy(child_key, schema)
                 else:
                     normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
                                       else validate_durable_key(child_key))
@@ -295,7 +294,7 @@ class _Traversal:
                 child_schema = child_policy if isinstance(child_policy, Mapping) else None
                 result[normalized_key] = self.normalize(
                     item, key=child_key, depth=depth + 1,
-                    path=path + (child_key,), schema=child_schema, policy=child_policy,
+                    schema=child_schema, policy=child_policy,
                 )
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
@@ -303,8 +302,8 @@ class _Traversal:
                     and key.casefold() == "evidence"):
                 value = tuple(normalize_evidence_reference(reference) for reference in value)
             result = tuple(self.normalize(
-                item, depth=depth + 1, path=path + (str(index),),
-            ) for index, item in enumerate(value))
+                item, depth=depth + 1,
+            ) for item in value)
             return self.wrap_sequence(result)
         raise TypeError("value is not JSON-safe")
 
