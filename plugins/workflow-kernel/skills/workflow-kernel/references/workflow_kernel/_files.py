@@ -121,6 +121,15 @@ class PinnedDirectory:
         _require_exclusive_regular(entry, entry, self.path / name)
         return True
 
+    def require_absent(self, name: str) -> None:
+        """Require one descriptor-relative name to have no directory entry."""
+        try:
+            entry = os.stat(name, dir_fd=self.descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            return
+        _require_exclusive_regular(entry, entry, self.path / name)
+        raise FileExistsError(errno.EEXIST, "durable file already exists", str(self.path / name))
+
     def create_temporary(self, prefix: str, suffix: str) -> tuple[int, str]:
         for _ in range(100):
             name = prefix + secrets.token_hex(12) + suffix

@@ -49,6 +49,21 @@ def _load_optional_state(states):
         return None
 
 
+def _require_materialized_matches_ledger(materialized, reconstructed):
+    if materialized is not None and materialized != reconstructed:
+        raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
+            ErrorDetailKey.MATERIALIZED_REVISION.value: materialized.revision,
+            ErrorDetailKey.LEDGER_REVISION.value: reconstructed.revision,
+        })
+
+
+def _append_and_publish(events, states, event, next_state, *,
+                        expected_sequence, expected_revision, lease):
+    prepared = states.prepare(next_state)
+    events.append(event, expected_sequence=expected_sequence, lease=lease)
+    return states.publish(prepared, expected_revision, lease=lease)
+
+
 @contextmanager
 def _coordinated_run(states):
     """Hold the run lease from mutable observation through publication."""
@@ -61,14 +76,14 @@ def command_init(args):
     root.mkdir(parents=True, exist_ok=True)
     root, events, states = _paths(root)
     with _coordinated_run(states) as lease:
-        if events.path.exists() or states.path.exists():
-            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {
-                ErrorDetailKey.DIRECTORY.value: str(root),
-            })
+        events.require_absent()
+        states.require_absent()
         event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
         state = TransitionEngine().reconstruct((event,))
-        events.append(event, 0, lease=lease)
-        evidence = states.write(state, -1, lease=lease)
+        evidence = _append_and_publish(
+            events, states, event, state, expected_sequence=0,
+            expected_revision=-1, lease=lease,
+        )
     _emit({"run_id": state.run_id, "mode": state.mode.value, "status": state.status.value, "revision": state.revision,
            "durability": evidence})
     return 0
@@ -82,12 +97,7 @@ def command_validate(args):
             raise CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING)
         state = TransitionEngine().reconstruct(replayed)
         materialized = _load_optional_state(states)
-        if materialized is not None:
-            if materialized != state:
-                raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
-                    ErrorDetailKey.MATERIALIZED_REVISION.value: materialized.revision,
-                    ErrorDetailKey.LEDGER_REVISION.value: state.revision,
-                })
+        _require_materialized_matches_ledger(materialized, state)
     _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
     return 0
 
@@ -107,13 +117,15 @@ def command_append(args):
         existing = events.replay()
         if not existing:
             raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
-        materialized = _load_optional_state(states)
-        expected = materialized.revision if materialized is not None else -1
         state = TransitionEngine().reconstruct(existing)
+        materialized = _load_optional_state(states)
+        _require_materialized_matches_ledger(materialized, state)
+        expected = materialized.revision if materialized is not None else -1
         next_state = TransitionEngine().apply(state, event)
-        prepared = states.prepare(next_state)
-        events.append(event, expected_sequence=len(existing), lease=lease)
-        evidence = states.publish(prepared, expected, lease=lease)
+        evidence = _append_and_publish(
+            events, states, event, next_state, expected_sequence=len(existing),
+            expected_revision=expected, lease=lease,
+        )
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})
     return 0

@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional, Tuple
 
 from .redaction import (
     MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
-    MAX_TOTAL_STRING_BYTES, bounded_iterable,
+    MAX_TOTAL_STRING_BYTES, NOOP_WORK_BUDGET, bounded_iterable,
     freeze_error_details, freeze_json, normalize_durable_string, normalize_evidence_reference, redact, thaw,
     validate_durable_key,
 )
@@ -354,13 +354,13 @@ def _only(data: Mapping[str, object], fields: set, required: set) -> None:
         })
 
 
-def _payload(value: object) -> Mapping[str, object]:
+def _payload(value: object, work=NOOP_WORK_BUDGET) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
         raise InvalidSchemaError(ErrorMessage.PAYLOAD_MAPPING_REQUIRED, {ErrorDetailKey.FIELD.value: "payload"})
     try:
         safe = freeze_json(value, max_depth=MAX_PAYLOAD_DEPTH,
                            max_items=MAX_PAYLOAD_ITEMS,
-                           max_string_length=MAX_STRING_LENGTH)
+                           max_string_length=MAX_STRING_LENGTH, work=work)
     except (TypeError, ValueError):
         raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
     return safe
@@ -419,6 +419,35 @@ def _validate_dependency_graph(nodes: Mapping[str, "NodeState"]) -> None:
         })
 
 
+def _validated_workflow_event_projection(schema_version, sequence, run_id, node_id,
+                                         kind, occurred_at, payload,
+                                         work=NOOP_WORK_BUDGET):
+    version = _strict_int(schema_version, "schema_version", minimum=1)
+    if version != SCHEMA_VERSION:
+        raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
+            ErrorDetailKey.SCHEMA_VERSION.value: version,
+        })
+    return (
+        version,
+        _strict_int(sequence, "sequence"),
+        _string(run_id, "run_id"),
+        _string(node_id, "node_id", optional=True),
+        _string(kind, "kind"),
+        _timestamp(occurred_at),
+        _payload(payload, work),
+    )
+
+
+def _trusted_workflow_event(values) -> "WorkflowEvent":
+    event = object.__new__(WorkflowEvent)
+    for name, value in zip(
+        ("schema_version", "sequence", "run_id", "node_id", "kind",
+         "occurred_at", "payload"), values,
+    ):
+        object.__setattr__(event, name, value)
+    return event
+
+
 @dataclass(frozen=True)
 class WorkflowEvent:
     schema_version: int
@@ -433,17 +462,12 @@ class WorkflowEvent:
         raise TypeError("WorkflowEvent is final")
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "schema_version", _strict_int(self.schema_version, "schema_version", minimum=1))
-        if self.schema_version != SCHEMA_VERSION:
-            raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
-                ErrorDetailKey.SCHEMA_VERSION.value: self.schema_version,
-            })
-        object.__setattr__(self, "sequence", _strict_int(self.sequence, "sequence"))
-        object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
-        object.__setattr__(self, "node_id", _string(self.node_id, "node_id", optional=True))
-        object.__setattr__(self, "kind", _string(self.kind, "kind"))
-        object.__setattr__(self, "occurred_at", _timestamp(self.occurred_at))
-        object.__setattr__(self, "payload", _payload(self.payload))
+        values = _validated_workflow_event_projection(
+            self.schema_version, self.sequence, self.run_id, self.node_id,
+            self.kind, self.occurred_at, self.payload,
+        )
+        for name, value in zip(self.__dataclass_fields__, values):
+            object.__setattr__(self, name, value)
 
     @classmethod
     def from_dict(cls, data: object) -> "WorkflowEvent":
@@ -455,15 +479,16 @@ class WorkflowEvent:
         return {field.value: _plain(getattr(self, field.value)) for field in WorkflowEventField}
 
 
-def _snapshot_workflow_event(event: WorkflowEvent) -> WorkflowEvent:
+def _snapshot_workflow_event(event: WorkflowEvent,
+                             work=NOOP_WORK_BUDGET) -> WorkflowEvent:
     """Rebuild one exact event field-wise before any public projection."""
     if type(event) is not WorkflowEvent:
         raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA)
     try:
-        return WorkflowEvent(
+        return _trusted_workflow_event(_validated_workflow_event_projection(
             event.schema_version, event.sequence, event.run_id, event.node_id,
-            event.kind, event.occurred_at, event.payload,
-        )
+            event.kind, event.occurred_at, event.payload, work,
+        ))
     except KernelError:
         raise
     except (AttributeError, TypeError, ValueError, RecursionError):
@@ -683,7 +708,7 @@ def _validated_run_projection(schema_version, revision, run_id, mode, status,
         raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
     evidence = _string_tuple(raw_evidence, "evidence", references=True, budget=budget)
     _validate_dependency_graph(nodes)
-    if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
+    if len(evidence) + node_evidence_count > MAX_EVIDENCE_ITEMS:
         raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
             ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
             ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,

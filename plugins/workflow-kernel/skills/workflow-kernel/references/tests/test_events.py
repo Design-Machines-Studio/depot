@@ -9,8 +9,8 @@ from unittest import mock
 from tests import detail_digest
 from workflow_kernel.events import EventStore, encode_event
 from workflow_kernel.schema import (
-    CorruptEventError, KernelError, LeaseConflictError, SequenceConflictError,
-    UnsafePayloadError, WorkflowEvent,
+    CorruptEventError, InvalidSchemaError, KernelError, LeaseConflictError,
+    SequenceConflictError, UnsafePayloadError, WorkflowEvent,
 )
 from workflow_kernel.state import RunLease
 from workflow_kernel._files import LockHandle, PinnedDirectory
@@ -31,6 +31,31 @@ def append_event(store, value, expected_sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def test_require_absent_accepts_missing_and_classifies_existing_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            EventStore(directory).require_absent()
+
+        for entry_type, error_type in (
+                ("empty", InvalidSchemaError),
+                ("dangling", CorruptEventError),
+                ("hardlink", CorruptEventError),
+                ("directory", CorruptEventError)):
+            with self.subTest(entry_type=entry_type), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "events.jsonl"
+                if entry_type == "empty":
+                    path.touch()
+                elif entry_type == "dangling":
+                    path.symlink_to("missing-ledger")
+                elif entry_type == "hardlink":
+                    target = root / "target"
+                    target.touch()
+                    os.link(target, path)
+                else:
+                    path.mkdir()
+                with self.assertRaises(error_type):
+                    EventStore(root).require_absent()
+
     def test_empty_ledger_revalidates_file_identity_before_returning(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

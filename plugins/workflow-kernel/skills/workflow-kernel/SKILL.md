@@ -51,6 +51,11 @@ Initialize every run in shadow mode unless the caller explicitly selects
 Acquire the run lease before publishing materialized state. Supply the expected
 revision on every state write. Reconstruct state from the ledger after an
 interruption rather than trusting a potentially stale materialization.
+Initialization performs a descriptor-relative verified absence preflight for
+both ledger and materialized-state names under the run lease, then prepares the
+initial state before appending the first event. Append proceeds only when an
+existing materialization exactly matches the replay-derived state; otherwise
+stop before ledger mutation and run `replay` to reconcile the materialization.
 
 Treat event files and CLI input as untrusted. Reject schema drift, sequence gaps,
 conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
@@ -159,10 +164,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   untrusted event but does not revalidate the accumulated graph after every
   accepted event. The reducer maintains node, dependency-edge, evidence, and
   UTF-8 text counters before every trusted update. Reconstruction also charges
-  graph copy and access operations against `MAX_RECONSTRUCTION_WORK=50100000`.
-  Charged work includes evidence parsing, copying existing evidence into a set,
-  membership scans, and dependency membership/access scans, bounding total
-  replay work by the supported state and event limits.
+  the event payload snapshot, node-update creation, and graph copy/access
+  operations against `MAX_RECONSTRUCTION_WORK=50100000`. Charged work includes
+  evidence parsing, copying existing evidence into a set, membership scans,
+  and dependency membership/access scans. Private trusted node updates reuse
+  already-normalized dependency and evidence tuples without rescanning them,
+  bounding total replay work by the supported state and event limits.
 - One run-wide state-tree budget counts nodes, dependency edges, node evidence,
   and run evidence against `MAX_PAYLOAD_ITEMS` before dependency-graph helper
   structures are allocated. Node mappings and snapshots share one validated

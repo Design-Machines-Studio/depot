@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Iterable, Mapping, Tuple
 
-from .redaction import MAX_PAYLOAD_ITEMS, MAX_TOTAL_STRING_BYTES, bounded_iterable
+from .redaction import (
+    MAX_PAYLOAD_ITEMS, MAX_TOTAL_STRING_BYTES, NOOP_WORK_BUDGET,
+    bounded_iterable,
+)
 from .schema import (
     ErrorDetailKey, ErrorMessage, IllegalTransitionError, MissingEvidenceError, NodeState,
     NodeStatus, MAX_EVIDENCE_ITEMS, RunMode, RunState, RunStatus,
     SequenceConflictError, UnsafePayloadError, WorkflowEvent,
-    _snapshot_run_state, _snapshot_workflow_event, _trusted_run_state_update,
+    _snapshot_run_state, _snapshot_workflow_event, _trusted_node_state,
+    _trusted_run_state_update,
 )
 
 MAX_EVENT_ITEMS = 100_000
@@ -99,13 +103,12 @@ LEGAL_NODE_SOURCES = {
 
 
 def _strings(payload: Mapping[str, object], key: str, *, required: bool = False,
-             work=None) -> Tuple[str, ...]:
+             work) -> Tuple[str, ...]:
     value = payload.get(key, [])
     if not isinstance(value, (list, tuple)):
         raise IllegalTransitionError(ErrorMessage.EVENT_PAYLOAD_STRING_LIST, {ErrorDetailKey.FIELD.value: key})
     limit = MAX_EVIDENCE_ITEMS if key == "evidence" else MAX_PAYLOAD_ITEMS
-    if work is not None:
-        work.charge(len(value))
+    work.charge(len(value))
     result = []
     try:
         for item in bounded_iterable(value, max_items=limit):
@@ -133,14 +136,12 @@ def _require(condition: bool, state: RunState, event: WorkflowEvent) -> None:
 
 
 def _merge_evidence(counters: _StateCounters, current: Tuple[str, ...],
-                    refs: Tuple[str, ...], work=None) -> tuple[Tuple[str, ...], Tuple[str, ...]]:
+                    refs: Tuple[str, ...], work) -> tuple[Tuple[str, ...], Tuple[str, ...]]:
     """Merge references only after enforcing the run-wide attachment bound."""
-    if work is not None:
-        work.charge(len(current))
+    work.charge(len(current))
     known = set(current)
     additions = []
-    if work is not None:
-        work.charge(len(refs))
+    work.charge(len(refs))
     for reference in refs:
         if reference not in known:
             known.add(reference)
@@ -157,12 +158,14 @@ def _merge_evidence(counters: _StateCounters, current: Tuple[str, ...],
 class TransitionEngine:
     def apply(self, state: RunState, event: WorkflowEvent) -> RunState:
         state, accumulated = _snapshot_run_state(state, include_counters=True)
-        event = _snapshot_workflow_event(event)
+        event = _snapshot_workflow_event(event, NOOP_WORK_BUDGET)
         counters = _StateCounters(*accumulated)
-        return self._apply_validated(state, event, counters)
+        return self._apply_validated(
+            state, event, counters, NOOP_WORK_BUDGET,
+        )
 
     def _apply_validated(self, state: RunState, event: WorkflowEvent,
-                         counters: _StateCounters, work=None) -> RunState:
+                         counters: _StateCounters, work) -> RunState:
         if event.run_id != state.run_id:
             raise IllegalTransitionError(ErrorMessage.EVENT_RUN_ID_STATE_MISMATCH, {ErrorDetailKey.KIND.value: event.kind})
         if event.sequence != state.revision:
@@ -220,8 +223,7 @@ class TransitionEngine:
         additions = ()
         if target == RunStatus.SUCCEEDED:
             refs = _strings(event.payload, "evidence", required=True, work=work)
-            if work is not None:
-                work.charge(len(state.nodes))
+            work.charge(len(state.nodes))
             _require(all(node.status in {NodeStatus.SUCCEEDED, NodeStatus.SKIPPED}
                          for node in state.nodes.values()), state, event)
             evidence, additions = _merge_evidence(counters, evidence, refs, work)
@@ -234,18 +236,20 @@ class TransitionEngine:
 
     def _apply_node(self, state: RunState, event: WorkflowEvent,
                     counters: _StateCounters, work) -> RunState:
-        if work is not None:
-            work.charge(len(state.nodes))
+        work.charge(len(state.nodes))
         nodes = dict(state.nodes)
         if event.kind == "node.added":
             _require(state.status not in TERMINAL_RUN and event.node_id is not None and event.node_id not in nodes, state, event)
             dependencies = _strings(event.payload, "dependencies", work=work)
-            if work is not None:
-                work.charge(len(dependencies))
-            if event.node_id in dependencies or any(item not in nodes for item in dependencies):
+            work.charge(len(dependencies))
+            if any(item == event.node_id or item not in nodes
+                   for item in dependencies):
                 raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_INVALID, {ErrorDetailKey.NODE_ID.value: event.node_id})
             text_bytes = _text_size((event.node_id, event.node_id, *dependencies))
-            nodes[event.node_id] = NodeState(event.node_id, dependencies=dependencies)
+            work.charge(1)
+            nodes[event.node_id] = _trusted_node_state(
+                event.node_id, NodeStatus.PENDING, dependencies, (),
+            )
             return self._advance(
                 state, event, counters, nodes=MappingProxyType(nodes),
                 counter_delta={
@@ -259,8 +263,7 @@ class TransitionEngine:
         target = NODE_TARGETS[event.kind]
         _require(node.status in LEGAL_NODE_SOURCES[target], state, event)
         if target == NodeStatus.READY:
-            if work is not None:
-                work.charge(len(node.dependencies))
+            work.charge(len(node.dependencies))
             try:
                 dependencies_succeeded = all(
                     nodes[item].status == NodeStatus.SUCCEEDED for item in node.dependencies
@@ -277,7 +280,10 @@ class TransitionEngine:
                 counters, refs,
                 _strings(event.payload, "evidence", required=True, work=work), work,
             )
-        nodes[event.node_id] = replace(node, status=target, evidence=refs)
+        work.charge(1)
+        nodes[event.node_id] = _trusted_node_state(
+            node.node_id, target, node.dependencies, refs,
+        )
         return self._advance(
             state, event, counters, nodes=MappingProxyType(nodes),
             counter_delta={
@@ -298,13 +304,15 @@ class TransitionEngine:
                     "evidence": len(additions), "text_bytes": _text_size(additions),
                 },
             )
-        if work is not None:
-            work.charge(len(state.nodes))
+        work.charge(len(state.nodes))
         nodes = dict(state.nodes)
         _require(event.node_id in nodes, state, event)
         node = nodes[event.node_id]
         merged, additions = _merge_evidence(counters, node.evidence, refs, work)
-        nodes[event.node_id] = replace(node, evidence=merged)
+        work.charge(1)
+        nodes[event.node_id] = _trusted_node_state(
+            node.node_id, node.status, node.dependencies, merged,
+        )
         return self._advance(
             state, event, counters, nodes=MappingProxyType(nodes),
             counter_delta={
@@ -337,8 +345,8 @@ class TransitionEngine:
             raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
                 ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVENT_ITEMS,
             }) from None
-        first = _snapshot_workflow_event(first)
         work.charge(1)
+        first = _snapshot_workflow_event(first, work)
         if first.sequence != 0 or first.kind != "run.initialized":
             raise IllegalTransitionError(ErrorMessage.FIRST_EVENT_INITIALIZE, {
                 ErrorDetailKey.KIND.value: first.kind, ErrorDetailKey.SEQUENCE.value: first.sequence,
@@ -357,6 +365,6 @@ class TransitionEngine:
                 }) from None
             work.charge(1)
             state = self._apply_validated(
-                state, _snapshot_workflow_event(event), counters, work,
+                state, _snapshot_workflow_event(event, work), counters, work,
             )
         return state

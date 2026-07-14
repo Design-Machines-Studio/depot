@@ -14,8 +14,8 @@ from ._files import (
 )
 from .redaction import redact
 from .schema import (
-    CorruptEventError, ErrorDetailKey, ErrorMessage, KernelError, SequenceConflictError,
-    UnsafePayloadError, WorkflowEvent, _snapshot_workflow_event,
+    CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
+    SequenceConflictError, UnsafePayloadError, WorkflowEvent, _snapshot_workflow_event,
 )
 from .state import RunLease, _require_run_lease
 
@@ -120,11 +120,27 @@ def _event_store_type():
                     ErrorDetailKey.REASON_CODE.value: "lock_identity_changed",
                 }) from None
 
+        def require_absent(self) -> None:
+            record = records[self]
+            try:
+                with _OwnedResourceScope() as scope:
+                    directory = scope.pin(record["binding"])
+                    directory.require_absent(record["path"].name)
+                    directory.revalidate()
+            except FileExistsError:
+                raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {
+                    ErrorDetailKey.DIRECTORY.value: str(record["root"]),
+                }) from None
+            except OSError:
+                raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(record["path"]),
+                }) from None
+
         def _read_descriptor(self, descriptor: int, *, recovery: bool,
-                             path: Path, duplicate: bool, directory=None):
+                             path: Path, directory):
             read_descriptor = None
             try:
-                read_descriptor = os.dup(descriptor) if duplicate else descriptor
+                read_descriptor = os.dup(descriptor)
                 handle = os.fdopen(read_descriptor, "rb")
                 read_descriptor = None
             except OSError:
@@ -185,7 +201,7 @@ def _event_store_type():
                         }),
                     )
                     events, _ = self._read_descriptor(
-                        descriptor, recovery=False, path=record["path"], duplicate=True,
+                        descriptor, recovery=False, path=record["path"],
                         directory=lock.directory,
                     )
                     actual = len(events)
@@ -235,7 +251,7 @@ def _event_store_type():
                         return (), ()
                     scope.own(descriptor)
                     return self._read_descriptor(
-                        descriptor, recovery=recovery, path=path, duplicate=True,
+                        descriptor, recovery=recovery, path=path,
                         directory=directory,
                     )
             except CorruptEventError:
@@ -245,17 +261,18 @@ def _event_store_type():
                     ErrorDetailKey.PATH.value: str(path),
                 }) from None
 
-        def _validate_handle(self, handle, recovery: bool, *, path=None, directory=None):
+        def _validate_handle(self, handle, recovery: bool, *, path: Path, directory):
             try:
                 return self._validate_handle_unchecked(
                     handle, recovery, path=path, directory=directory,
                 )
             except OSError:
                 raise CorruptEventError(ErrorMessage.LEDGER_PATH_UNSAFE, {
-                    ErrorDetailKey.PATH.value: str(path or records[self]["path"]),
+                    ErrorDetailKey.PATH.value: str(path),
                 }) from None
 
-        def _validate_handle_unchecked(self, handle, recovery: bool, *, path=None, directory=None):
+        def _validate_handle_unchecked(self, handle, recovery: bool, *,
+                                       path: Path, directory):
             size = os.fstat(handle.fileno()).st_size
             if size > MAX_LEDGER_BYTES:
                 raise CorruptEventError(ErrorMessage.LEDGER_SIZE_LIMIT, {
@@ -311,14 +328,8 @@ def _event_store_type():
                 offset += len(line)
                 index += 1
                 line = next_line
-            if path is not None:
-                if directory is None:
-                    records[self]["binding"].revalidate_parent()
-                    with records[self]["binding"].pin_parent() as pinned:
-                        pinned.require_identity(handle.fileno(), path.name)
-                else:
-                    directory.revalidate()
-                    directory.require_identity(handle.fileno(), path.name)
+            directory.revalidate()
+            directory.require_identity(handle.fileno(), path.name)
             return tuple(events), tuple(notes)
 
     return EventStore

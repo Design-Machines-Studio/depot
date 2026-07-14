@@ -12,8 +12,9 @@ from ._files import (
     _OwnedResourceScope, bind_durable_path,
 )
 from .schema import (
-    CorruptStateError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
-    RevisionConflictError, RunState, UnsafePayloadError, _snapshot_run_state,
+    CorruptStateError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
+    LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError,
+    _snapshot_run_state,
 )
 
 
@@ -268,6 +269,23 @@ def _capability_types():
         @property
         def path(self):
             return store_records[self]["path"]
+
+        def require_absent(self) -> None:
+            record = store_records[self]
+            path = record["path"]
+            try:
+                with _OwnedResourceScope() as scope:
+                    directory = scope.pin(record["binding"])
+                    directory.require_absent(path.name)
+                    directory.revalidate()
+            except FileExistsError:
+                raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {
+                    ErrorDetailKey.DIRECTORY.value: str(path.parent),
+                }) from None
+            except OSError:
+                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
 
         def load(self) -> RunState:
             record = store_records[self]

@@ -117,6 +117,100 @@ class CliTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stderr)["error"]["code"], "corrupt_state")
         self.assertEqual(after, before)
 
+    def test_init_rejects_dangling_state_before_creating_ledger(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state_path = root / "run-state.json"
+            state_path.symlink_to("missing-state-target")
+            result = self.run_cli(
+                "init", directory, "--run-id", "run-1",
+                "--occurred-at", "2026-07-14T00:00:00Z",
+            )
+            self.assertFalse((root / "events.jsonl").exists())
+            self.assertTrue(state_path.is_symlink())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stderr)["error"]["code"], "corrupt_state")
+
+    def test_init_rejects_dangling_ledger_without_creating_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ledger_path = root / "events.jsonl"
+            ledger_path.symlink_to("missing-ledger-target")
+            result = self.run_cli(
+                "init", directory, "--run-id", "run-1",
+                "--occurred-at", "2026-07-14T00:00:00Z",
+            )
+            self.assertTrue(ledger_path.is_symlink())
+            self.assertFalse((root / "run-state.json").exists())
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stderr)["error"]["code"], "corrupt_event")
+
+    def test_init_prepares_state_before_creating_ledger(self):
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch("workflow_kernel.state.MAX_STATE_BYTES", 1):
+            with self.assertRaises(UnsafePayloadError):
+                command_init(SimpleNamespace(
+                    directory=directory, run_id="run-1", mode="shadow",
+                    occurred_at="2026-07-14T00:00:00Z",
+                ))
+            self.assertFalse((Path(directory) / "events.jsonl").exists())
+
+    def test_append_rejects_every_materialized_ledger_mismatch_before_mutation(self):
+        mutations = (
+            ("ahead", lambda data: data.update(revision=data["revision"] + 1)),
+            ("behind", lambda data: data.update(revision=data["revision"] - 1)),
+            ("equal-revision-different-content", lambda data: data.update(mode="enforce")),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                initialized = self.run_cli(
+                    "init", directory, "--run-id", "run-1",
+                    "--occurred-at", "2026-07-14T00:00:00Z",
+                )
+                self.assertEqual(initialized.returncode, 0, initialized.stderr)
+                root = Path(directory)
+                ledger_path = root / "events.jsonl"
+                state_path = root / "run-state.json"
+                state = json.loads(state_path.read_text())
+                mutate(state)
+                state_path.write_text(json.dumps(state, sort_keys=True) + "\n")
+                before = ledger_path.read_bytes()
+                candidate = {
+                    "schema_version": 1, "sequence": 1, "run_id": "run-1",
+                    "node_id": None, "kind": "run.started",
+                    "occurred_at": "2026-07-14T00:00:01Z", "payload": {},
+                }
+                result = self.run_cli(
+                    "append", directory, "--event", json.dumps(candidate),
+                )
+                self.assertEqual(ledger_path.read_bytes(), before)
+                self.assertNotEqual(result.returncode, 0)
+                error = json.loads(result.stderr)["error"]
+                self.assertEqual(error["code"], "invalid_schema")
+                self.assertEqual(error["message"], "materialized state does not match event ledger")
+
+    def test_append_rebuilds_missing_materialization_from_candidate_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            initialized = self.run_cli(
+                "init", directory, "--run-id", "run-1",
+                "--occurred-at", "2026-07-14T00:00:00Z",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            state_path = Path(directory) / "run-state.json"
+            state_path.unlink()
+            candidate = {
+                "schema_version": 1, "sequence": 1, "run_id": "run-1",
+                "node_id": None, "kind": "run.started",
+                "occurred_at": "2026-07-14T00:00:01Z", "payload": {},
+            }
+            appended = self.run_cli(
+                "append", directory, "--event", json.dumps(candidate),
+            )
+            self.assertEqual(appended.returncode, 0, appended.stderr)
+            rebuilt = json.loads(state_path.read_text())
+        self.assertEqual(rebuilt["revision"], 2)
+        self.assertEqual(rebuilt["status"], "running")
+
     def test_non_init_commands_do_not_create_a_missing_run_directory(self):
         with tempfile.TemporaryDirectory() as directory:
             missing = Path(directory) / "missing-run"
@@ -364,8 +458,12 @@ class CliTests(unittest.TestCase):
             self.assertIn("cooperating writers", document)
             self.assertIn("non-cooperating filesystem mutation", document)
             self.assertNotIn("interlopers are never overwritten", document)
+            self.assertIn("verified absence preflight", document)
+            self.assertIn("exactly matches the replay-derived state", document)
         self.assertIn("one lookahead item", skill)
         self.assertIn("MAX_RECONSTRUCTION_WORK", skill)
+        self.assertIn("event payload snapshot", skill)
+        self.assertIn("trusted node updates", skill)
 
     def test_replay_holds_run_lease_across_observation_and_publication(self):
         active = {"lease": False}
@@ -431,7 +529,7 @@ class CliTests(unittest.TestCase):
                 mock.patch("workflow_kernel.cli._coordinated_run", return_value=coordinator), \
                 mock.patch("workflow_kernel.cli.TransitionEngine") as engine, \
                 mock.patch("workflow_kernel.cli._emit"):
-            engine.return_value.reconstruct.return_value = mock.Mock()
+            engine.return_value.reconstruct.return_value = current
             engine.return_value.apply.return_value = next_state
             self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
         self.assertEqual(order, ["state", "prepare", "event", "publish"])

@@ -14,12 +14,37 @@ from unittest import mock
 from tests import detail_digest
 from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
-from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
+from workflow_kernel.schema import InvalidSchemaError, LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import PreparedState, RunLease, StateStore, encode_state
 from workflow_kernel import _files
 from workflow_kernel._files import LockHandle, PinnedDirectory
 
 class StateStoreTests(unittest.TestCase):
+    def test_require_absent_accepts_missing_and_classifies_existing_entries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            StateStore(Path(directory) / "run-state.json").require_absent()
+
+        for entry_type, error_type in (
+                ("empty", InvalidSchemaError),
+                ("dangling", CorruptStateError),
+                ("hardlink", CorruptStateError),
+                ("directory", CorruptStateError)):
+            with self.subTest(entry_type=entry_type), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "run-state.json"
+                if entry_type == "empty":
+                    path.touch()
+                elif entry_type == "dangling":
+                    path.symlink_to("missing-state")
+                elif entry_type == "hardlink":
+                    target = root / "target"
+                    target.touch()
+                    os.link(target, path)
+                else:
+                    path.mkdir()
+                with self.assertRaises(error_type):
+                    StateStore(path).require_absent()
+
     def test_missing_state_primary_survives_parent_close_failure(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch.object(
                 PinnedDirectory, "close", side_effect=OSError("cleanup-sentinel")):

@@ -1,5 +1,6 @@
 import unittest
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from types import MappingProxyType
 from unittest import mock
@@ -73,6 +74,39 @@ class TransitionTests(unittest.TestCase):
             self.engine.reconstruct(stream())
         self.assertLess(reads, 52)
 
+    def test_reconstruction_charges_event_snapshot_before_exhausting_irrelevant_payload(self):
+        class CountingList(list):
+            def __init__(self, values):
+                super().__init__(values)
+                self.reads = 0
+
+            def __iter__(self):
+                for item in super().__iter__():
+                    self.reads += 1
+                    yield item
+
+        values = CountingList(range(1_000))
+        candidate = event(0, "run.initialized")
+        object.__setattr__(candidate, "payload", {"irrelevant": values})
+        with mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", 25), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct((candidate,))
+        self.assertLess(values.reads, len(values))
+
+    def test_reconstruction_charges_repeated_event_and_node_update_work(self):
+        stream = [
+            event(0, "run.initialized"), event(1, "run.started"),
+            event(2, "node.added", node_id="n"),
+            event(3, "node.ready", node_id="n"),
+            event(4, "node.started", node_id="n"),
+        ]
+        for _ in range(100):
+            stream.append(event(len(stream), "node.waiting", node_id="n"))
+            stream.append(event(len(stream), "node.started", node_id="n"))
+        with mock.patch.object(transitions, "MAX_RECONSTRUCTION_WORK", 450), \
+                self.assertRaises(UnsafePayloadError):
+            self.engine.reconstruct(stream)
+
     def test_reconstruction_charges_new_evidence_before_materializing_it(self):
         references = [f"artifact-{index}" for index in range(500)]
         stream = (
@@ -114,44 +148,32 @@ class TransitionTests(unittest.TestCase):
         self.engine = TransitionEngine()
 
     def test_apply_graph_validation_work_scales_with_input_graph(self):
-        state = replace(
-            RunState.new("run-1", NOW),
-            nodes={f"n-{index}": NodeState(f"n-{index}") for index in range(20)},
-        )
-        validated_nodes = 0
-        validate_graph = schema._validate_dependency_graph
+        class CountingNodes(Mapping):
+            def __init__(self, values):
+                self.values = values
+                self.accesses = 0
 
-        def observe(nodes):
-            nonlocal validated_nodes
-            validated_nodes += len(nodes)
-            return validate_graph(nodes)
+            def __iter__(self):
+                for key in self.values:
+                    self.accesses += 1
+                    yield key
 
-        with mock.patch(
-                "workflow_kernel.schema._validate_dependency_graph",
-                side_effect=observe,
-        ):
-            result = self.engine.apply(state, event(0, "run.initialized"))
+            def __len__(self):
+                return len(self.values)
+
+            def __getitem__(self, key):
+                self.accesses += 1
+                return self.values[key]
+
+        nodes = CountingNodes({
+            f"n-{index}": NodeState(f"n-{index}") for index in range(20)
+        })
+        state = RunState.new("run-1", NOW)
+        object.__setattr__(state, "nodes", nodes)
+        result = self.engine.apply(state, event(0, "run.initialized"))
         self.assertEqual(result.revision, 1)
-        self.assertLessEqual(validated_nodes, len(state.nodes))
-
-    def test_reconstruct_graph_validation_work_does_not_scale_quadratically(self):
-        stream = [event(0, "run.initialized"), event(1, "run.started")]
-        stream.extend(event(index + 2, "node.added", node_id=f"n-{index}") for index in range(20))
-        validated_nodes = 0
-        validate_graph = schema._validate_dependency_graph
-
-        def observe(nodes):
-            nonlocal validated_nodes
-            validated_nodes += len(nodes)
-            return validate_graph(nodes)
-
-        with mock.patch(
-                "workflow_kernel.schema._validate_dependency_graph",
-                side_effect=observe,
-        ):
-            result = self.engine.reconstruct(stream)
         self.assertEqual(len(result.nodes), 20)
-        self.assertLessEqual(validated_nodes, len(result.nodes))
+        self.assertLessEqual(nodes.accesses, 2 * len(nodes))
 
     def test_run_and_node_legal_path(self):
         events = (

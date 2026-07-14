@@ -43,6 +43,17 @@ _CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
 _KEY_DIGEST = re.compile(r"key-sha256:[0-9a-f]{64}\Z")
 
 
+class _NoOpWorkBudget:
+    __slots__ = ()
+
+    @staticmethod
+    def charge(_amount: int) -> None:
+        return None
+
+
+NOOP_WORK_BUDGET = _NoOpWorkBudget()
+
+
 def bounded_iterable(value, *, max_items: int = MAX_PAYLOAD_ITEMS):
     """Yield at most max_items values and fail before unbounded allocation."""
     for index, item in enumerate(value):
@@ -253,9 +264,15 @@ class _Traversal:
     value_policy: Optional[Callable[[Any, str, Any], None]] = None
     count: int = 0
     text_bytes: int = 0
+    work: Any = NOOP_WORK_BUDGET
 
     def consume_text(self, value: str) -> None:
-        self.text_bytes += len(value.encode("utf-8"))
+        character_count = len(value)
+        self.work.charge(character_count)
+        encoded_count = len(value.encode("utf-8"))
+        if encoded_count > character_count:
+            self.work.charge(encoded_count - character_count)
+        self.text_bytes += encoded_count
         if self.text_bytes > self.max_total_string_bytes:
             raise TypeError("payload exceeds maximum total string bytes")
 
@@ -263,6 +280,7 @@ class _Traversal:
                   schema: Any = None, policy: Any = None) -> Any:
         if depth > self.max_depth:
             raise TypeError("payload exceeds maximum depth")
+        self.work.charge(1)
         self.count += 1
         if self.count > self.max_items:
             raise TypeError("payload exceeds maximum item count")
@@ -343,12 +361,13 @@ def redact(value: Any, *, _key: str = "") -> Any:
 def freeze_json(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                 max_items: int = MAX_PAYLOAD_ITEMS,
                 max_string_length: int = MAX_STRING_LENGTH,
-                max_total_string_bytes: Optional[int] = None) -> Any:
+                max_total_string_bytes: Optional[int] = None,
+                work=NOOP_WORK_BUDGET) -> Any:
     """Return a recursively immutable, redacted, JSON-safe value."""
     total_bytes = (MAX_TOTAL_STRING_BYTES if max_total_string_bytes is None
                    else max_total_string_bytes)
     return _Traversal(max_depth, max_items, max_string_length, total_bytes,
-                      _frozen_mapping, _frozen_sequence).normalize(value)
+                      _frozen_mapping, _frozen_sequence, work=work).normalize(value)
 
 
 def _sanitize_public_metadata(value: Any, *, max_depth: int, max_items: int,
