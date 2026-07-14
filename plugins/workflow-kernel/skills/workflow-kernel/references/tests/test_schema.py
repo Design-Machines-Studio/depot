@@ -126,6 +126,77 @@ class SchemaTests(unittest.TestCase):
             self.assertNotIn(reference.encode(), encoded)
             self.assertIn(expected.encode(), encoded)
 
+    def test_url_values_are_normalized_under_arbitrary_event_payload_keys(self):
+        sentinel = "never-persist-this-payload-token"
+        source_url = "https://source.example.invalid/" + sentinel
+        nested_url = "http://nested.example.invalid/" + sentinel
+        source_digest = "url-sha256:" + hashlib.sha256(source_url.encode("utf-8")).hexdigest()
+        nested_digest = "url-sha256:" + hashlib.sha256(nested_url.encode("utf-8")).hexdigest()
+
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {
+                                  "source_url": source_url,
+                                  "metadata": {"arbitrary_name": nested_url},
+                              })
+
+        self.assertEqual(event.payload["source_url"], source_digest)
+        self.assertEqual(event.payload["metadata"]["arbitrary_name"], nested_digest)
+        encoded = encode_event(event)
+        self.assertNotIn(sentinel.encode(), encoded)
+        self.assertNotIn(b"source.example.invalid", encoded)
+        self.assertNotIn(b"nested.example.invalid", encoded)
+
+    def test_url_values_are_normalized_in_receipt_metadata(self):
+        sentinel = "never-persist-this-metadata-token"
+        source_url = "https://metadata.example.invalid/" + sentinel
+        nested_url = "https://nested.example.invalid/" + sentinel
+        source_digest = "url-sha256:" + hashlib.sha256(source_url.encode("utf-8")).hexdigest()
+        nested_digest = "url-sha256:" + hashlib.sha256(nested_url.encode("utf-8")).hexdigest()
+
+        receipt = evidence_receipt("run-1", "test", "receipt.json", metadata={
+            "source_url": source_url,
+            "nested": {"arbitrary_name": nested_url},
+        })
+
+        self.assertEqual(receipt["metadata"]["source_url"], source_digest)
+        self.assertEqual(receipt["metadata"]["nested"]["arbitrary_name"], nested_digest)
+        encoded = encode_receipt(receipt)
+        self.assertNotIn(sentinel.encode(), encoded)
+        self.assertNotIn(b"metadata.example.invalid", encoded)
+        self.assertNotIn(b"nested.example.invalid", encoded)
+
+    def test_url_value_policy_rejects_unsupported_schemes_and_preserves_prose(self):
+        preserved = {
+            "note": "See https://example.invalid/proof for context",
+            "leading_url_prose": "https://example.invalid/proof is documented here",
+            "local": "artifacts/review/report.json",
+        }
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", preserved)
+        self.assertEqual(event.to_dict()["payload"], preserved)
+
+        for value in ("s3://bucket/report.json", "ftp://example.invalid/report.json"):
+            with self.subTest(value=value), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"source_url": value})
+
+    def test_url_values_are_normalized_in_state_identity_and_evidence(self):
+        sentinel = "never-persist-this-state-identity"
+        run_url = "https://runs.example.invalid/" + sentinel
+        evidence_url = "https://artifacts.example.invalid/" + sentinel
+        run_digest = "url-sha256:" + hashlib.sha256(run_url.encode("utf-8")).hexdigest()
+        evidence_digest = "url-sha256:" + hashlib.sha256(evidence_url.encode("utf-8")).hexdigest()
+
+        state = replace(RunState.new(run_url, "2026-07-14T00:00:00Z"),
+                        evidence=(evidence_url,))
+
+        self.assertEqual(state.run_id, run_digest)
+        self.assertEqual(state.evidence, (evidence_digest,))
+        encoded = encode_state(state)
+        self.assertNotIn(sentinel.encode(), encoded)
+        self.assertNotIn(b"runs.example.invalid", encoded)
+        self.assertNotIn(b"artifacts.example.invalid", encoded)
+
     def test_url_evidence_is_normalized_by_direct_and_from_dict_state(self):
         sentinel = "never-persist-this-state-token"
         reference = "https://artifacts.example.invalid/download/" + sentinel

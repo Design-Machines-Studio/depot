@@ -22,6 +22,7 @@ _SECRET_PARTS = (
 )
 _CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
 _ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
+_URL_VALUE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S*\Z")
 
 
 def is_secret_key(key: str) -> bool:
@@ -29,7 +30,7 @@ def is_secret_key(key: str) -> bool:
     return any(part.replace("-", "_") in normalized for part in _SECRET_PARTS)
 
 
-def validate_reference(reference: str) -> str:
+def normalize_evidence_reference(reference: str) -> str:
     """Return one safe artifact ID, relative path, or opaque URL digest."""
     if not isinstance(reference, str) or not reference or len(reference) > MAX_STRING_LENGTH:
         raise ValueError("evidence reference is invalid")
@@ -55,12 +56,19 @@ def validate_reference(reference: str) -> str:
         except ValueError as exc:
             raise ValueError("evidence reference contains an invalid URL port") from exc
         return "url-sha256:" + hashlib.sha256(reference.encode("utf-8")).hexdigest()
-    if parsed.netloc or parsed.query or parsed.fragment or reference.startswith("/"):
+    if reference.startswith("/"):
         raise ValueError("evidence reference is not a run-relative artifact path")
     segments = reference.split("/")
     if any(not _ARTIFACT_SEGMENT.fullmatch(segment) for segment in segments):
         raise ValueError("evidence reference is not a run-relative artifact path")
     return reference
+
+
+def normalize_url_value(value: str) -> str:
+    """Normalize a standalone URL value while preserving prose and local strings."""
+    if _URL_VALUE.fullmatch(value):
+        return normalize_evidence_reference(value)
+    return value
 
 
 def _mutable_mapping(value: dict) -> dict:
@@ -102,8 +110,8 @@ class _Traversal:
             if len(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
             if key.casefold() == "reference":
-                return validate_reference(value)
-            return value
+                return normalize_evidence_reference(value)
+            return normalize_url_value(value)
         if isinstance(value, int):
             return value
         if isinstance(value, float):
@@ -121,7 +129,7 @@ class _Traversal:
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
             if key.casefold() == "evidence":
-                value = tuple(validate_reference(reference) for reference in value)
+                value = tuple(normalize_evidence_reference(reference) for reference in value)
             result = tuple(self.normalize(item, depth=depth + 1) for item in value)
             return self.wrap_sequence(result)
         raise TypeError("value is not JSON-safe")

@@ -11,7 +11,7 @@ from typing import Any, Mapping, Optional, Tuple
 
 from .redaction import (
     MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
-    freeze_json, redact, thaw, validate_reference,
+    freeze_json, normalize_evidence_reference, normalize_url_value, redact, thaw,
 )
 
 
@@ -109,7 +109,10 @@ def _string(value: object, name: str, *, optional: bool = False) -> Optional[str
         return None
     if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
         raise InvalidSchemaError("invalid string field", {"field": name})
-    return value
+    try:
+        return normalize_url_value(value)
+    except ValueError as exc:
+        raise UnsafePayloadError("string field contains an unsafe URL", {"field": name}) from exc
 
 
 def _timestamp(value: object, name: str = "occurred_at") -> str:
@@ -245,7 +248,7 @@ def _string_tuple(value: object, name: str, *, references: bool = False) -> Tupl
     result = tuple(_string(item, name) for item in value)
     if references:
         try:
-            result = tuple(validate_reference(item) for item in result)
+            result = tuple(normalize_evidence_reference(item) for item in result)
         except ValueError as exc:
             raise UnsafePayloadError("evidence reference is unsafe") from exc
     if len(result) != len(set(result)):
