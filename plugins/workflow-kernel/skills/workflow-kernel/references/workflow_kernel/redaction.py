@@ -24,6 +24,9 @@ _SECRET_PARTS = (
     "environment_value", "environment-value", "env_value",
 )
 _CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
+_DURABLE_DIGEST = re.compile(
+    r"(?:sha256|url-sha256|value-sha256|key-sha256):[0-9a-f]{64}\Z"
+)
 _ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 _WHOLE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:\S*\Z")
 _WHOLE_NETWORK_PATH = re.compile(r"//\S+\Z")
@@ -40,7 +43,7 @@ _SAFE_DETAIL_MARKERS = frozenset({REDACTED, UNSAFE})
 
 
 def is_secret_key(key: str) -> bool:
-    normalized = key.casefold().replace("-", "_")
+    normalized = str.replace(str.casefold(key), "-", "_")
     return any(part.replace("-", "_") in normalized for part in _SECRET_PARTS)
 
 
@@ -151,7 +154,7 @@ def _iter_uri_token_spans(value: str) -> Iterator[Tuple[int, int, int]]:
 def _reject_remaining_uri_shapes(value: str) -> None:
     """Fail closed if normalization leaves any non-content-ID URI shape."""
     for token_start, token_end, _ in _iter_uri_token_spans(value):
-        if not _CONTENT_ID.fullmatch(value[token_start:token_end]):
+        if not _DURABLE_DIGEST.fullmatch(value[token_start:token_end]):
             raise ValueError("durable string contains an unhandled URI")
 
 
@@ -162,7 +165,7 @@ def _normalize_uri_tokens(value: str) -> str:
 
     for token_start, token_end, raw_end in _iter_uri_token_spans(value):
         token = value[token_start:token_end]
-        normalized = token if _CONTENT_ID.fullmatch(token) else normalize_evidence_reference(token)
+        normalized = token if _DURABLE_DIGEST.fullmatch(token) else normalize_evidence_reference(token)
         pieces.extend((value[cursor:token_start], normalized, value[token_end:raw_end]))
         cursor = raw_end
 
@@ -177,10 +180,10 @@ def normalize_durable_string(value: str) -> str:
     if _ISO_TIMESTAMP.fullmatch(value):
         return value
     stripped = value.strip()
-    if stripped != value and (_CONTENT_ID.fullmatch(stripped) or _WHOLE_URI.fullmatch(stripped)
+    if stripped != value and (_DURABLE_DIGEST.fullmatch(stripped) or _WHOLE_URI.fullmatch(stripped)
                               or _WHOLE_NETWORK_PATH.fullmatch(stripped)):
         raise ValueError("standalone URI contains surrounding whitespace")
-    if _CONTENT_ID.fullmatch(value):
+    if _DURABLE_DIGEST.fullmatch(value):
         return value
     if _WHOLE_URI.fullmatch(value):
         return normalize_evidence_reference(value)
@@ -199,14 +202,14 @@ def validate_durable_key(key: str) -> str:
 
 def digest_error_detail_string(value: str) -> str:
     """Return a stable correlation digest without retaining original text."""
-    if value in _SAFE_DETAIL_MARKERS:
+    if type(value) is str and value in _SAFE_DETAIL_MARKERS:
         return value
-    return VALUE_DIGEST_PREFIX + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return VALUE_DIGEST_PREFIX + hashlib.sha256(str.encode(value, "utf-8")).hexdigest()
 
 
 def digest_error_detail_key(value: str) -> str:
     """Return an opaque key that cannot retain attacker-controlled text."""
-    return KEY_DIGEST_PREFIX + hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return KEY_DIGEST_PREFIX + hashlib.sha256(str.encode(value, "utf-8")).hexdigest()
 
 
 def _mutable_mapping(value: dict) -> dict:
@@ -247,7 +250,7 @@ class _Traversal:
         if value is None or isinstance(value, bool):
             return value
         if isinstance(value, str):
-            if len(value) > self.max_string_length:
+            if str.__len__(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
             if self.string_normalizer is not None:
                 return self.string_normalizer(value)
@@ -265,7 +268,7 @@ class _Traversal:
             for child_key, item in value.items():
                 if not isinstance(child_key, str):
                     raise TypeError("mapping keys must be strings")
-                if len(child_key) > self.max_string_length:
+                if str.__len__(child_key) > self.max_string_length:
                     raise TypeError("mapping key exceeds maximum length")
                 normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
                                   else validate_durable_key(child_key))
@@ -295,19 +298,42 @@ def freeze_json(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                       _frozen_mapping, _frozen_sequence).normalize(value)
 
 
+def _sanitize_public_metadata(value: Any, *, max_depth: int, max_items: int,
+                              max_string_length: int, known_keys,
+                              wrap_mapping, wrap_sequence) -> Any:
+    """Apply the shared public metadata policy with selectable containers."""
+    safe_keys = frozenset(key for key in known_keys if type(key) is str)
+
+    def normalize_key(key: str) -> str:
+        return key if type(key) is str and key in safe_keys else digest_error_detail_key(key)
+
+    return _Traversal(max_depth, max_items, max_string_length,
+                      wrap_mapping, wrap_sequence,
+                      digest_error_detail_string, normalize_key).normalize(value)
+
+
+def sanitize_public_metadata(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
+                             max_items: int = MAX_PAYLOAD_ITEMS,
+                             max_string_length: int = MAX_STRING_LENGTH,
+                             known_keys=()) -> Any:
+    """Return plain JSON-safe public metadata with strings and unknown keys digested."""
+    return _sanitize_public_metadata(
+        value, max_depth=max_depth, max_items=max_items,
+        max_string_length=max_string_length, known_keys=known_keys,
+        wrap_mapping=_mutable_mapping, wrap_sequence=_mutable_sequence,
+    )
+
+
 def freeze_error_details(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                          max_items: int = MAX_PAYLOAD_ITEMS,
                          max_string_length: int = MAX_STRING_LENGTH,
                          known_keys=()) -> Any:
-    """Return immutable public details with every nonsensitive string digested."""
-    safe_keys = frozenset(known_keys)
-
-    def normalize_key(key: str) -> str:
-        return str.__str__(key) if key in safe_keys else digest_error_detail_key(key)
-
-    return _Traversal(max_depth, max_items, max_string_length,
-                      _frozen_mapping, _frozen_sequence,
-                      digest_error_detail_string, normalize_key).normalize(value)
+    """Return immutable error metadata using the shared public policy."""
+    return _sanitize_public_metadata(
+        value, max_depth=max_depth, max_items=max_items,
+        max_string_length=max_string_length, known_keys=known_keys,
+        wrap_mapping=_frozen_mapping, wrap_sequence=_frozen_sequence,
+    )
 
 
 def thaw(value: Any) -> Any:

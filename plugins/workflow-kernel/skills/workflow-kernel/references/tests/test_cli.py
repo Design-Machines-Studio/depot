@@ -11,7 +11,7 @@ from unittest import mock
 from tests import detail_digest, detail_key_digest
 from workflow_kernel import cli
 from workflow_kernel.cli import command_append, command_init, command_replay, command_validate
-from workflow_kernel.schema import ErrorMessage, InvalidSchemaError, KernelError, UnsafePayloadError
+from workflow_kernel.schema import ErrorMessage, InvalidSchemaError, UnsafePayloadError
 
 
 class CliTests(unittest.TestCase):
@@ -88,20 +88,15 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(sentinel, rejected.stderr)
         self.assertEqual(json.loads(rejected.stderr)["error"]["details"]["kind"], digest)
 
-    def test_main_uses_base_owned_error_serialization(self):
-        class ExternalError(KernelError):
-            pass
-
-        error = ExternalError(ErrorMessage.INVALID_STRING_FIELD, {"field": "safe"})
+    def test_main_uses_normal_builtin_error_serialization(self):
+        error = UnsafePayloadError(ErrorMessage.INVALID_STRING_FIELD, {"field": "safe"})
         parsed = SimpleNamespace(handler=mock.Mock(side_effect=error))
-        with mock.patch.object(ExternalError, "to_dict", return_value={"secret": "never-persist"}), \
-                mock.patch("workflow_kernel.cli.parser") as parser, \
+        with mock.patch("workflow_kernel.cli.parser") as parser, \
                 mock.patch("workflow_kernel.cli._emit") as emit:
             parser.return_value.parse_args.return_value = parsed
             self.assertEqual(cli.main([]), 2)
         emitted = emit.call_args.args[0]
-        self.assertEqual(emitted["error"]["code"], "kernel_error")
-        self.assertNotIn("never-persist", json.dumps(emitted))
+        self.assertEqual(emitted["error"]["code"], "unsafe_payload")
 
     def test_main_hashes_unknown_error_detail_keys(self):
         sentinel = "never-persist-cli-detail-key"

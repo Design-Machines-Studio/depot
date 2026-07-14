@@ -45,18 +45,18 @@ LEGAL_NODE_SOURCES = {
 def _strings(payload: Mapping[str, object], key: str, *, required: bool = False) -> Tuple[str, ...]:
     value = payload.get(key, [])
     if not isinstance(value, (list, tuple)) or any(not isinstance(item, str) or not item for item in value):
-        raise IllegalTransitionError(ErrorMessage.EVENT_PAYLOAD_STRING_LIST, {ErrorDetailKey.FIELD: key})
+        raise IllegalTransitionError(ErrorMessage.EVENT_PAYLOAD_STRING_LIST, {ErrorDetailKey.FIELD.value: key})
     result = tuple(value)
     if required and not result:
-        raise MissingEvidenceError(ErrorMessage.TRANSITION_EVIDENCE_REQUIRED, {ErrorDetailKey.FIELD: key})
+        raise MissingEvidenceError(ErrorMessage.TRANSITION_EVIDENCE_REQUIRED, {ErrorDetailKey.FIELD.value: key})
     return result
 
 
 def _require(condition: bool, state: RunState, event: WorkflowEvent) -> None:
     if not condition:
         raise IllegalTransitionError(ErrorMessage.ILLEGAL_FOR_STATE, {
-            ErrorDetailKey.KIND: event.kind, ErrorDetailKey.RUN_STATUS: state.status.value,
-            ErrorDetailKey.NODE_ID: event.node_id,
+            ErrorDetailKey.KIND.value: event.kind, ErrorDetailKey.RUN_STATUS.value: state.status.value,
+            ErrorDetailKey.NODE_ID.value: event.node_id,
         })
 
 
@@ -71,8 +71,8 @@ def _merge_evidence(state: RunState, current: Tuple[str, ...], refs: Tuple[str, 
     total = len(state.evidence) + sum(len(node.evidence) for node in state.nodes.values())
     if total + len(additions) > MAX_EVIDENCE_ITEMS:
         raise IllegalTransitionError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
-            ErrorDetailKey.REASON_CODE: "evidence_limit_exceeded",
-            ErrorDetailKey.LIMIT_ITEMS: MAX_EVIDENCE_ITEMS,
+            ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
+            ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,
         })
     return current + tuple(additions)
 
@@ -80,14 +80,14 @@ def _merge_evidence(state: RunState, current: Tuple[str, ...], refs: Tuple[str, 
 class TransitionEngine:
     def apply(self, state: RunState, event: WorkflowEvent) -> RunState:
         if event.run_id != state.run_id:
-            raise IllegalTransitionError(ErrorMessage.EVENT_RUN_ID_STATE_MISMATCH, {ErrorDetailKey.KIND: event.kind})
+            raise IllegalTransitionError(ErrorMessage.EVENT_RUN_ID_STATE_MISMATCH, {ErrorDetailKey.KIND.value: event.kind})
         if event.sequence != state.revision:
             raise SequenceConflictError(ErrorMessage.EVENT_SEQUENCE_STATE_MISMATCH, {
-                ErrorDetailKey.EVENT_SEQUENCE: event.sequence, ErrorDetailKey.REVISION: state.revision,
+                ErrorDetailKey.EVENT_SEQUENCE.value: event.sequence, ErrorDetailKey.REVISION.value: state.revision,
             })
         if state.status in TERMINAL_RUN and event.kind not in {"evidence.recorded", "cleanup.reconciled"}:
             raise IllegalTransitionError(ErrorMessage.TERMINAL_RUN_MUTATION, {
-                ErrorDetailKey.KIND: event.kind, ErrorDetailKey.STATUS: state.status.value,
+                ErrorDetailKey.KIND.value: event.kind, ErrorDetailKey.STATUS.value: state.status.value,
             })
         if event.kind.startswith("run."):
             return self._apply_run(state, event)
@@ -97,7 +97,7 @@ class TransitionEngine:
             return self._apply_evidence(state, event)
         if event.kind == "cleanup.reconciled":
             return self._apply_cleanup(state, event)
-        raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND: event.kind})
+        raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND.value: event.kind})
 
     def _advance(self, state: RunState, event: WorkflowEvent, **changes) -> RunState:
         return replace(state, revision=state.revision + 1, updated_at=event.occurred_at, **changes)
@@ -109,7 +109,7 @@ class TransitionEngine:
             try:
                 mode = RunMode(mode_value)
             except (ValueError, TypeError) as exc:
-                raise IllegalTransitionError(ErrorMessage.EVENT_UNKNOWN_RUN_MODE, {ErrorDetailKey.MODE: mode_value}) from exc
+                raise IllegalTransitionError(ErrorMessage.EVENT_UNKNOWN_RUN_MODE, {ErrorDetailKey.MODE.value: mode_value}) from exc
             return self._advance(state, event, mode=mode)
         if event.kind == "run.started":
             _require(state.status in {RunStatus.PLANNED, RunStatus.WAITING} and event.node_id is None, state, event)
@@ -118,7 +118,7 @@ class TransitionEngine:
             _require(state.status == RunStatus.RUNNING and event.node_id is None, state, event)
             return self._advance(state, event, status=RunStatus.WAITING)
         if event.kind not in RUN_TERMINAL_TARGETS:
-            raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND: event.kind})
+            raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND.value: event.kind})
         target = RUN_TERMINAL_TARGETS[event.kind]
         allowed = state.status in {RunStatus.RUNNING, RunStatus.WAITING}
         if target in {RunStatus.CANCELLED, RunStatus.INTERRUPTED, RunStatus.BLOCKED}:
@@ -138,12 +138,12 @@ class TransitionEngine:
             _require(state.status not in TERMINAL_RUN and event.node_id is not None and event.node_id not in nodes, state, event)
             dependencies = _strings(event.payload, "dependencies")
             if event.node_id in dependencies or any(item not in nodes for item in dependencies):
-                raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_INVALID, {ErrorDetailKey.NODE_ID: event.node_id})
+                raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_INVALID, {ErrorDetailKey.NODE_ID.value: event.node_id})
             nodes[event.node_id] = NodeState(event.node_id, dependencies=dependencies)
             return self._advance(state, event, nodes=MappingProxyType(nodes))
         _require(event.node_id is not None and event.node_id in nodes, state, event)
         if event.kind not in NODE_TARGETS:
-            raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND: event.kind})
+            raise IllegalTransitionError(ErrorMessage.UNKNOWN_EVENT_KIND, {ErrorDetailKey.KIND.value: event.kind})
         node = nodes[event.node_id]
         target = NODE_TARGETS[event.kind]
         _require(node.status in LEGAL_NODE_SOURCES[target], state, event)
@@ -154,7 +154,7 @@ class TransitionEngine:
                 )
             except KeyError as exc:
                 raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_MISSING, {
-                    ErrorDetailKey.REASON_CODE: "missing_dependency",
+                    ErrorDetailKey.REASON_CODE.value: "missing_dependency",
                 }) from exc
             _require(dependencies_succeeded, state, event)
         refs = node.evidence
@@ -187,7 +187,7 @@ class TransitionEngine:
         first = sequence[0]
         if first.sequence != 0 or first.kind != "run.initialized":
             raise IllegalTransitionError(ErrorMessage.FIRST_EVENT_INITIALIZE, {
-                ErrorDetailKey.KIND: first.kind, ErrorDetailKey.SEQUENCE: first.sequence,
+                ErrorDetailKey.KIND.value: first.kind, ErrorDetailKey.SEQUENCE.value: first.sequence,
             })
         state = RunState.new(first.run_id, first.occurred_at)
         for event in sequence:

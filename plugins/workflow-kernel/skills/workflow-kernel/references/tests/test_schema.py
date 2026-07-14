@@ -1,6 +1,9 @@
 import hashlib
+import io
 import inspect
 import json
+import logging
+import pickle
 import unittest
 from dataclasses import FrozenInstanceError, replace
 from unittest import mock
@@ -138,11 +141,6 @@ class SchemaTests(unittest.TestCase):
         raw = UnsafePayloadError("invalid string field")
         self.assertEqual(raw.message, "workflow kernel error")
 
-        class ExternalError(schema.KernelError):
-            _error_code = schema.ErrorCode.INVALID_SCHEMA
-
-        self.assertEqual(ExternalError(message).code, "invalid_schema")
-
     def test_error_envelope_is_the_single_frozen_public_boundary_value(self):
         error = UnsafePayloadError(schema.ErrorMessage.INVALID_STRING_FIELD, {"field": "safe"})
         envelope = error._envelope
@@ -153,14 +151,39 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaises(FrozenInstanceError):
             envelope.code = schema.ErrorCode.KERNEL_ERROR
 
-    def test_external_subclasses_cannot_override_error_boundary_surfaces(self):
-        forbidden = (
-            "__init__", "__new__", "message", "code", "details", "to_dict", "__str__",
-            "args", "_envelope", "__getattribute__", "__setattr__", "__delattr__",
+    def test_error_hierarchy_is_final_after_builtin_subclasses_load(self):
+        for base in (schema.KernelError, schema.InvalidSchemaError, schema.UnsafePayloadError):
+            with self.subTest(base=base.__name__), self.assertRaises(TypeError):
+                type("ExternalKernelError", (base,), {})
+
+    def test_base_exception_surfaces_contain_only_the_safe_message(self):
+        sentinel = "never-persist-base-exception"
+        error = UnsafePayloadError(sentinel, {"note": "Bearer " + sentinel})
+        expected = "workflow kernel error"
+        self.assertEqual(BaseException.args.__get__(error, type(error)), (expected,))
+        round_trip = pickle.loads(pickle.dumps(error))
+        self.assertEqual(round_trip.message, error.message)
+        self.assertEqual(round_trip.code, error.code)
+        self.assertNotIn(sentinel, json.dumps(round_trip.to_dict(), sort_keys=True))
+
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        logger = logging.getLogger("workflow-kernel-safe-error-test")
+        logger.setLevel(logging.ERROR)
+        logger.addHandler(handler)
+        try:
+            logger.error("%r | %s", error, error)
+        finally:
+            logger.removeHandler(handler)
+
+        surfaces = (
+            repr(error), str(error), format(error), repr(error.__reduce__()),
+            pickle.dumps(error).decode("latin-1"), stream.getvalue(),
         )
-        for name in forbidden:
-            with self.subTest(name=name), self.assertRaises(TypeError):
-                type("ExternalBoundaryOverride", (schema.KernelError,), {name: object()})
+        for surface in surfaces:
+            with self.subTest(surface=surface[:24]):
+                self.assertNotIn(sentinel, surface)
+        self.assertEqual(str(error), expected)
 
     def test_error_output_survives_public_and_envelope_mutation_attempts(self):
         message = schema.ErrorMessage.INVALID_STRING_FIELD
@@ -194,31 +217,6 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(str(error), fallback)
             self.assertNotIn("never-persist", json.dumps(error.to_dict()))
             self.assertNotIn("never-persist", str(error))
-
-    def test_error_message_and_details_cannot_be_mutated_after_construction(self):
-        message = schema.ErrorMessage.INVALID_STRING_FIELD
-        error = UnsafePayloadError(message, {"field": "safe"})
-        sentinel = "never-persist-mutated-error"
-
-        with self.assertRaises(AttributeError):
-            error.message = sentinel
-        with self.assertRaises(AttributeError):
-            error.args = (sentinel,)
-        with self.assertRaises(AttributeError):
-            error.code = sentinel
-        with self.assertRaises(AttributeError):
-            error._error_code = sentinel
-        with self.assertRaises(AttributeError):
-            error.details = {"password": sentinel}
-        with self.assertRaises(TypeError):
-            error.details["password"] = sentinel
-        with self.assertRaises(AttributeError):
-            del error._envelope
-
-        self.assertEqual(error.message, message.value)
-        self.assertEqual(error.args, (message.value,))
-        self.assertEqual(str(error), message.value)
-        self.assertNotIn(sentinel, json.dumps(error.to_dict()))
 
     def test_error_details_hash_every_nonsensitive_string_and_stay_frozen(self):
         sentinel = "never-persist-arbitrary-plain-secret"
@@ -289,6 +287,29 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(len(error.details), 2)
         self.assertIn(digest_shaped, error.details)
         self.assertIn(detail_key_digest(digest_shaped), error.details)
+
+    def test_hostile_str_subclass_keys_cannot_forge_known_key_classification(self):
+        sentinel = "never-persist-hostile-detail-label"
+
+        class HostileKey(str):
+            def __hash__(self):
+                return hash("field")
+
+            def __eq__(self, other):
+                return other == "field"
+
+            def __str__(self):
+                return "forged-field"
+
+            def encode(self, *_args, **_kwargs):
+                return b"field"
+
+        key = HostileKey(sentinel)
+        error = UnsafePayloadError(schema.ErrorMessage.INVALID_STRING_FIELD, {key: "value"})
+        encoded = json.dumps(error.to_dict(), sort_keys=True)
+        self.assertNotIn(sentinel, encoded)
+        self.assertNotIn("forged-field", encoded)
+        self.assertIn(detail_key_digest(sentinel), error.details)
 
     def test_recursive_redaction_covers_events_and_receipts(self):
         fixture = "never-print-this-fixture"
@@ -382,16 +403,20 @@ class SchemaTests(unittest.TestCase):
         sentinel = "never-persist-this-metadata-token"
         source_url = "https://metadata.example.invalid/" + sentinel
         nested_url = "https://nested.example.invalid/" + sentinel
-        source_digest = "url-sha256:" + hashlib.sha256(source_url.encode("utf-8")).hexdigest()
-        nested_digest = "url-sha256:" + hashlib.sha256(nested_url.encode("utf-8")).hexdigest()
+        source_digest = detail_digest(source_url)
+        nested_digest = detail_digest(nested_url)
 
         receipt = evidence_receipt("run-1", "test", "receipt.json", metadata={
             "source_url": source_url,
             "nested": {"arbitrary_name": nested_url},
         })
 
-        self.assertEqual(receipt["metadata"]["source_url"], source_digest)
-        self.assertEqual(receipt["metadata"]["nested"]["arbitrary_name"], nested_digest)
+        metadata = receipt["metadata"]
+        self.assertEqual(metadata[detail_key_digest("source_url")], source_digest)
+        self.assertEqual(
+            metadata[detail_key_digest("nested")][detail_key_digest("arbitrary_name")],
+            nested_digest,
+        )
         encoded = encode_receipt(receipt)
         self.assertNotIn(sentinel.encode(), encoded)
         self.assertNotIn(b"metadata.example.invalid", encoded)
@@ -773,7 +798,8 @@ class SchemaTests(unittest.TestCase):
 
         unsafe = ("", "/absolute/report.json", "../report.json", "artifacts/../report.json",
                   "artifacts\\report.json", "artifacts//report.json", "report\n.json",
-                  "s3://bucket/report.json", "sha256:" + "A" * 64)
+                  "s3://bucket/report.json", "sha256:" + "A" * 64,
+                  "value-sha256:" + "a" * 64, "key-sha256:" + "a" * 64)
         for reference in unsafe:
             with self.subTest(rejected=reference), self.assertRaises(UnsafePayloadError):
                 WorkflowEvent(1, 0, "run-1", None, "evidence.recorded",
@@ -795,6 +821,38 @@ class SchemaTests(unittest.TestCase):
             error.details[detail_key_digest("reference")],
             detail_digest("https://user:" + fixture + "@example.invalid/proof"),
         )
+
+    def test_public_metadata_sanitizer_returns_plain_secret_safe_containers(self):
+        sentinel = "never-persist-public-metadata"
+        uri_key = "https://example.invalid/" + sentinel
+        safe = redaction.sanitize_public_metadata({
+            "note": "Bearer " + sentinel,
+            "plain": sentinel,
+            "api_token": sentinel,
+            uri_key: "value",
+        })
+        encoded = json.dumps(safe, sort_keys=True)
+        self.assertIs(type(safe), dict)
+        self.assertNotIn(sentinel, encoded)
+        self.assertEqual(safe[detail_key_digest("note")], detail_digest("Bearer " + sentinel))
+        self.assertEqual(safe[detail_key_digest("plain")], detail_digest(sentinel))
+        self.assertEqual(safe[detail_key_digest("api_token")], "[REDACTED]")
+        self.assertIn(detail_key_digest(uri_key), safe)
+
+    def test_evidence_receipt_sanitizes_metadata_and_top_level_caller_strings(self):
+        sentinel = "never-persist-receipt-caller"
+        receipt = evidence_receipt(
+            sentinel,
+            "Bearer " + sentinel,
+            "receipt.json",
+            metadata={"note": "Bearer " + sentinel, "plain": sentinel},
+        )
+        encoded = encode_receipt(receipt).decode()
+        self.assertNotIn(sentinel, encoded)
+        self.assertEqual(receipt["run_id"], detail_digest(sentinel))
+        self.assertEqual(receipt["evidence_type"], detail_digest("Bearer " + sentinel))
+        self.assertEqual(receipt["metadata"][detail_key_digest("note")], detail_digest("Bearer " + sentinel))
+        self.assertEqual(receipt["metadata"][detail_key_digest("plain")], detail_digest(sentinel))
 
     def test_python_signature_errors_are_native_but_from_dict_is_stable(self):
         with self.assertRaises(TypeError):

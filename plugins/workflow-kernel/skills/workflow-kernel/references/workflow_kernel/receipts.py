@@ -6,7 +6,10 @@ import hashlib
 import json
 from typing import Mapping, Optional
 
-from .redaction import redact
+from .redaction import (
+    digest_error_detail_string, normalize_evidence_reference, redact,
+    sanitize_public_metadata,
+)
 from .schema import ErrorMessage, UnsafePayloadError, WorkflowEvent
 
 
@@ -19,10 +22,19 @@ def encode_receipt(receipt: Mapping[str, object]) -> bytes:
 
 
 def evidence_receipt(run_id: str, evidence_type: str, reference: str, *, metadata: Optional[Mapping[str, object]] = None) -> dict:
-    receipt = {"schema_version": 1, "receipt_type": "evidence", "run_id": run_id,
-               "evidence_type": evidence_type, "reference": reference, "metadata": dict(metadata or {})}
     try:
-        safe = redact(receipt)
+        if not all(type(value) is str for value in (run_id, evidence_type, reference)):
+            raise TypeError("receipt caller fields must be strings")
+        if metadata is not None and not isinstance(metadata, Mapping):
+            raise TypeError("receipt metadata must be a mapping")
+        safe = {
+            "schema_version": 1,
+            "receipt_type": "evidence",
+            "run_id": digest_error_detail_string(run_id),
+            "evidence_type": digest_error_detail_string(evidence_type),
+            "reference": normalize_evidence_reference(reference),
+            "metadata": sanitize_public_metadata(dict(metadata or {})),
+        }
     except (TypeError, ValueError) as exc:
         raise UnsafePayloadError(ErrorMessage.EVIDENCE_RECEIPT_UNSAFE) from exc
     safe["digest"] = "sha256:" + hashlib.sha256(encode_receipt(safe)).hexdigest()

@@ -149,6 +149,7 @@ class ErrorDetailKey(str, Enum):
 
 
 _ERROR_DETAIL_KEYS = frozenset(key.value for key in ErrorDetailKey)
+_ERROR_HIERARCHY_SEALED = False
 
 
 class RunMode(str, Enum):
@@ -191,17 +192,10 @@ class KernelError(Exception):
     _PROTECTED_NAMES = frozenset({
         "_envelope", "_error_code", "message", "code", "details", "args",
     })
-    _SEALED_SUBCLASS_NAMES = (
-        "__init__", "__new__", "message", "code", "details", "to_dict", "__str__",
-        "args", "_envelope", "__getattribute__", "__setattr__", "__delattr__",
-        "_PROTECTED_NAMES", "_SEALED_SUBCLASS_NAMES",
-    )
-
     def __init_subclass__(cls, **kwargs):
+        if _ERROR_HIERARCHY_SEALED:
+            raise TypeError("kernel error hierarchy is final")
         super().__init_subclass__(**kwargs)
-        overridden = sorted(set(cls.__dict__).intersection(KernelError._SEALED_SUBCLASS_NAMES))
-        if overridden:
-            raise TypeError("kernel error boundary is sealed: " + ", ".join(overridden))
 
     def __init__(self, message: object, details: Optional[Mapping[str, object]] = None):
         safe_message = message if isinstance(message, ErrorMessage) else ErrorMessage.GENERIC
@@ -214,6 +208,7 @@ class KernelError(Exception):
                 {ErrorDetailKey.DETAIL.value: "[UNSAFE]"}, known_keys=_ERROR_DETAIL_KEYS,
             )
         object.__setattr__(self, "_envelope", ErrorEnvelope(safe_code, safe_message, safe_details))
+        Exception.__init__(self, safe_message.value)
 
     def __setattr__(self, name: str, value: object) -> None:
         if name in KernelError._PROTECTED_NAMES:
@@ -242,10 +237,6 @@ class KernelError(Exception):
     def details(self) -> Mapping[str, object]:
         return object.__getattribute__(self, "_envelope").details
 
-    @property
-    def args(self) -> tuple:
-        return (object.__getattribute__(self, "_envelope").message.value,)
-
     def __str__(self) -> str:
         return object.__getattribute__(self, "_envelope").message.value
 
@@ -253,6 +244,10 @@ class KernelError(Exception):
         envelope = object.__getattribute__(self, "_envelope")
         return {"error": {"code": envelope.code.value, "message": envelope.message.value,
                           "details": thaw(envelope.details)}}
+
+    def __reduce__(self):
+        envelope = object.__getattribute__(self, "_envelope")
+        return (type(self), (envelope.message,))
 
 
 class InvalidSchemaError(KernelError):
@@ -291,10 +286,13 @@ class UnsafePayloadError(KernelError):
     _error_code = ErrorCode.UNSAFE_PAYLOAD
 
 
+_ERROR_HIERARCHY_SEALED = True
+
+
 def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
         raise InvalidSchemaError(ErrorMessage.INVALID_INTEGER_FIELD, {
-            ErrorDetailKey.FIELD: name, ErrorDetailKey.MINIMUM: minimum,
+            ErrorDetailKey.FIELD.value: name, ErrorDetailKey.MINIMUM.value: minimum,
         })
     return value
 
@@ -303,7 +301,7 @@ def _validated_string(value: object, name: str, *, optional: bool = False) -> Op
     if optional and value is None:
         return None
     if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
-        raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD, {ErrorDetailKey.FIELD: name})
+        raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD, {ErrorDetailKey.FIELD.value: name})
     return value
 
 
@@ -314,7 +312,7 @@ def _string(value: object, name: str, *, optional: bool = False) -> Optional[str
     try:
         return normalize_durable_string(text)
     except ValueError as exc:
-        raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD: name}) from exc
+        raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD.value: name}) from exc
 
 
 def _timestamp(value: object, name: str = "occurred_at") -> str:
@@ -322,9 +320,9 @@ def _timestamp(value: object, name: str = "occurred_at") -> str:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {ErrorDetailKey.FIELD: name}) from exc
+        raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {ErrorDetailKey.FIELD.value: name}) from exc
     if parsed.tzinfo is None:
-        raise InvalidSchemaError(ErrorMessage.TIMESTAMP_TIMEZONE_REQUIRED, {ErrorDetailKey.FIELD: name})
+        raise InvalidSchemaError(ErrorMessage.TIMESTAMP_TIMEZONE_REQUIRED, {ErrorDetailKey.FIELD.value: name})
     return text
 
 
@@ -341,13 +339,13 @@ def _only(data: Mapping[str, object], fields: set, required: set) -> None:
     missing = sorted(required - set(keys))
     if unknown or missing:
         raise InvalidSchemaError(ErrorMessage.SCHEMA_FIELDS_MISMATCH, {
-            ErrorDetailKey.UNKNOWN: unknown, ErrorDetailKey.MISSING: missing,
+            ErrorDetailKey.UNKNOWN.value: unknown, ErrorDetailKey.MISSING.value: missing,
         })
 
 
 def _payload(value: object) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
-        raise InvalidSchemaError(ErrorMessage.PAYLOAD_MAPPING_REQUIRED, {ErrorDetailKey.FIELD: "payload"})
+        raise InvalidSchemaError(ErrorMessage.PAYLOAD_MAPPING_REQUIRED, {ErrorDetailKey.FIELD.value: "payload"})
     try:
         safe = freeze_json(value, max_depth=MAX_PAYLOAD_DEPTH,
                            max_items=MAX_PAYLOAD_ITEMS,
@@ -370,11 +368,11 @@ def _validate_dependency_graph(nodes: Mapping[str, "NodeState"]) -> None:
         for dependency in node.dependencies:
             if dependency == node_id:
                 raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {
-                    ErrorDetailKey.REASON_CODE: "self_dependency",
+                    ErrorDetailKey.REASON_CODE.value: "self_dependency",
                 })
             if dependency not in nodes:
                 raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {
-                    ErrorDetailKey.REASON_CODE: "missing_dependency",
+                    ErrorDetailKey.REASON_CODE.value: "missing_dependency",
                 })
             dependents[dependency].append(node_id)
     ready = deque(node_id for node_id, count in indegree.items() if count == 0)
@@ -388,7 +386,7 @@ def _validate_dependency_graph(nodes: Mapping[str, "NodeState"]) -> None:
                 ready.append(dependent)
     if visited != len(nodes):
         raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {
-            ErrorDetailKey.REASON_CODE: "dependency_cycle",
+            ErrorDetailKey.REASON_CODE.value: "dependency_cycle",
         })
 
 
@@ -406,7 +404,7 @@ class WorkflowEvent:
         object.__setattr__(self, "schema_version", _strict_int(self.schema_version, "schema_version", minimum=1))
         if self.schema_version != SCHEMA_VERSION:
             raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
-                ErrorDetailKey.SCHEMA_VERSION: self.schema_version,
+                ErrorDetailKey.SCHEMA_VERSION.value: self.schema_version,
             })
         object.__setattr__(self, "sequence", _strict_int(self.sequence, "sequence"))
         object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
@@ -441,7 +439,7 @@ class NodeState:
         try:
             status = self.status if isinstance(self.status, NodeStatus) else NodeStatus(self.status)
         except (ValueError, TypeError) as exc:
-            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS: self.status}) from exc
+            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS.value: self.status}) from exc
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "dependencies", _string_tuple(self.dependencies, "dependencies"))
         object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
@@ -461,7 +459,7 @@ class NodeState:
 
 def _string_tuple(value: object, name: str, *, references: bool = False) -> Tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
-        raise InvalidSchemaError(ErrorMessage.FIELD_LIST_REQUIRED, {ErrorDetailKey.FIELD: name})
+        raise InvalidSchemaError(ErrorMessage.FIELD_LIST_REQUIRED, {ErrorDetailKey.FIELD.value: name})
     result = tuple(_string(item, name) for item in value)
     if references:
         try:
@@ -469,7 +467,7 @@ def _string_tuple(value: object, name: str, *, references: bool = False) -> Tupl
         except ValueError as exc:
             raise UnsafePayloadError(ErrorMessage.EVIDENCE_REFERENCE_UNSAFE) from exc
     if len(result) != len(set(result)):
-        raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {ErrorDetailKey.FIELD: name})
+        raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {ErrorDetailKey.FIELD.value: name})
     return result
 
 
@@ -490,7 +488,7 @@ class RunState:
         version = _strict_int(self.schema_version, "schema_version", minimum=1)
         if version != SCHEMA_VERSION:
             raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
-                ErrorDetailKey.SCHEMA_VERSION: version,
+                ErrorDetailKey.SCHEMA_VERSION.value: version,
             })
         object.__setattr__(self, "schema_version", version)
         object.__setattr__(self, "revision", _strict_int(self.revision, "revision"))
@@ -500,7 +498,7 @@ class RunState:
             status = self.status if isinstance(self.status, RunStatus) else RunStatus(self.status)
         except (ValueError, TypeError) as exc:
             raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
-                ErrorDetailKey.MODE: self.mode, ErrorDetailKey.STATUS: self.status,
+                ErrorDetailKey.MODE.value: self.mode, ErrorDetailKey.STATUS.value: self.status,
             }) from exc
         object.__setattr__(self, "mode", mode)
         object.__setattr__(self, "status", status)
@@ -523,8 +521,8 @@ class RunState:
         evidence = _string_tuple(self.evidence, "evidence", references=True)
         if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
             raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
-                ErrorDetailKey.REASON_CODE: "evidence_limit_exceeded",
-                ErrorDetailKey.LIMIT_ITEMS: MAX_EVIDENCE_ITEMS,
+                ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
+                ErrorDetailKey.LIMIT_ITEMS.value: MAX_EVIDENCE_ITEMS,
             })
         object.__setattr__(self, "nodes", MappingProxyType(nodes))
         object.__setattr__(self, "evidence", evidence)

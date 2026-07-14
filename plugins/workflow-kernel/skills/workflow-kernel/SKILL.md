@@ -94,19 +94,25 @@ errors as stable JSON. Treat `--help` output as plain text.
   for public text and machine codes; raw or unknown candidates become the
   generic `workflow kernel error` / `kernel_error` pair. Dynamic, parser, and
   rejected-input context belongs only in recursively immutable details. Each
-  error captures one frozen `ErrorEnvelope`; message, code, exception arguments,
-  details, `to_dict()`, and `str(error)` delegate to that envelope. The error
-  boundary is sealed against subclass overrides of construction, attribute
-  access, mutation, serialization, and those public properties. Subclasses may
-  select only a closed private `_error_code`; CLI exception handling invokes the
-  base-owned `KernelError.to_dict(error)` serializer.
+  error captures one frozen `ErrorEnvelope`; message, code, details,
+  `to_dict()`, and `str(error)` delegate to that envelope. `BaseException` is
+  initialized only with the catalogue-owned safe message, so inherited
+  `args`, `repr`, formatting, logging, and pickle surfaces never retain raw
+  constructor messages or details; pickle intentionally omits details. The
+  built-in error classes are declared while the module initializes and then the
+  complete hierarchy is final: every later direct or indirect subclass attempt
+  fails before class creation. CLI exception handling therefore uses the normal
+  `error.to_dict()` dispatch safely.
   Sensitive-key paths become `[REDACTED]`; every other string value becomes a
   deterministic `value-sha256:<64 lowercase hex>` digest, while numbers,
   booleans, and null remain typed. `ErrorDetailKey` is the developer-owned
-  vocabulary whose keys remain readable. Every unknown error-detail key at any
-  depth becomes a deterministic `key-sha256:<64 lowercase hex>` digest; even an
-  input already shaped like a key digest is hashed again, preventing collision
-  with the digest of another input. Use these digests only for stable correlation
+  vocabulary whose exact built-in `str` values remain readable. A `str`
+  subclass is always unknown, even when its content equals a known key, and is
+  digested without invoking attacker-defined equality, hashing, string, or
+  encoding methods. Every unknown error-detail key at any depth becomes a
+  deterministic `key-sha256:<64 lowercase hex>` digest; even an input already
+  shaped like a key digest is hashed again, preventing collision with the digest
+  of another input. Use these digests only for stable correlation
   across receipts and logs—the original plaintext is never recoverable from the
   public error. Do not expose raw parser exceptions or rejected values.
 
@@ -114,7 +120,13 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 Pass only evidence references into the ledger. Recursively redact token, key,
 secret, password, authorization, cookie, DSN, and environment-value fields.
-Never report a raw secret in errors or receipts. A run-relative artifact path is
+Never report a raw secret in errors or receipts. Receipt metadata uses the same
+public sanitizer as error details but returns plain JSON-safe dictionaries and
+lists: sensitive keyed values become `[REDACTED]`, every arbitrary string value
+becomes `value-sha256:...`, and every key outside an explicitly supplied exact
+built-in-string vocabulary becomes `key-sha256:...`. Receipt `run_id` and
+`evidence_type` strings are value digests, while `reference` follows the evidence
+reference policy below. A run-relative artifact path is
 one or more `/`-separated ASCII segments matching
 `[A-Za-z0-9_][A-Za-z0-9._-]*`; absolute paths, empty or dot segments,
 backslashes, controls, and ambiguous query or fragment syntax are rejected.
