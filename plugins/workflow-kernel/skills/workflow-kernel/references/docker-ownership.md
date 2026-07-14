@@ -18,10 +18,12 @@ Docker creates it:
 `docker run`, `docker container create`, `docker network create`, and
 `docker volume create` receive label flags in their creation argv. Compose is
 first rendered with `docker compose ... config --format json`; the kernel then
-creates a run-scoped project name and materializes that complete rendered
-configuration with ownership labels merged into services, the default and
-declared networks, and named volumes. The planned command uses that full config,
-so images, commands, mounts, and every other inspected setting remain present.
+requires and preserves the caller's explicit base `-f`/`--file` stack, creates a
+run-scoped project name, and appends a labels-only override for services, the
+default and declared networks, and named volumes. The rendered config is used
+only for validation and intent discovery; interpolated environment values are
+never copied into the override or durable plan. Caller-supplied `-p` and
+`--project-name` options are rejected so project ownership cannot be shadowed.
 External resources, anonymous
 volumes, invalid config, and unsupported or ambiguous command forms are
 explicitly unmanaged.
@@ -34,9 +36,10 @@ removable only when its kind and ID, complete ownership-label snapshot, and
 inspected creation time agree with its durable registry record. The registry
 keys identity by kind plus ID. Each registration or disposition takes an
 exclusive registry lock bound to one physical parent and exclusive regular-file
-inode, reloads and validates the full journal with exact event keys, then
-appends, flushes, and fsyncs while still holding that lock. Symlink, hardlink,
-parent replacement, journal replacement, and lock replacement are rejected.
+inode. The transaction retains both lock and journal descriptors, reloads and
+validates the full journal with exact event keys, then revalidates both names
+immediately before and after append, flush, and fsync. Symlink, hardlink, parent
+replacement, journal replacement, and lock replacement are rejected.
 This keeps owner conflicts,
 attempt history, and terminal dispositions immutable across concurrent kernel
 instances. A stale orphan may lack a registry record only
@@ -63,8 +66,9 @@ executor of these plans; Chunk 03 performs inventory, pure planning, durable
 registration, and pure result recording.
 
 Every cleanup action is a proof-bound capability. Its schema carries an exact
-kind and ID, argv, owner, lifecycle, a canonical SHA-256 proof digest, explicit
-preconditions, and dependency ordering. Chunk 05 must refresh exact Git or
+kind and ID, argv, environment, owner, lifecycle, action, canonical evidence
+and capability SHA-256 digests, explicit preconditions, dependency ordering,
+and predecessor-result identity. Chunk 05 must refresh exact Git or
 Docker evidence and call the adapter revalidation contract immediately before
 executing the argv; any changed ref count, object identity, label, lease/use
 state, inspect result, or resource identity invalidates the action.
@@ -78,8 +82,10 @@ Cleanup uses only exact IDs:
   inspected are retained or blocked with a reason; volume use is proven by an
   authoritative container-mount query, never inferred from absent inspect data;
 - missing objects are an idempotent successful end state only after a registered
-  kind+ID inspection proves absence; filtered managed-label inventory is used
-  only for orphan reconciliation;
+  kind+ID inspect command returns exit code 1 and an exact Docker not-found
+  response for that same kind and ID; transport failures and caller-asserted
+  inventory source strings never prove absence;
+- filtered managed-label inventory is used only for orphan reconciliation;
 - volumes are removed by explicit IDs only.
 
 Broad cleanup is forbidden. The kernel never emits `docker system prune`, any
@@ -93,8 +99,12 @@ reason, command evidence, and nested evidence—is traversed through the shared
 bounded redaction policy. Cookie, bearer, DSN, environment-secret, overlong,
 cyclic, and otherwise unsafe values are redacted or hashed before durable
 persistence while safe resource identities remain available as evidence.
-`REMOVED` and `MISSING` cannot be written through the public disposition API.
-They become durable only through the authorized result-recording receipt
-transaction, after one result per planned command and an exact post-cleanup
-inventory have been reconstructed and revalidated. If an object reappears, the
-terminal disposition is downgraded to blocked.
+`REMOVED` and `MISSING` cannot be written through the public disposition API or
+a detached receipt. They become durable only inside a registry-owned,
+single-use result transaction after the canonical plan, exact command results,
+and before/after inventories have been reconstructed. All observed orphan
+registrations and outcomes are written in the same framed journal event. A
+truncated final frame is ignored as interrupted; interior corruption fails
+closed, so a multi-resource result can never partially retire ownership. If an
+object reappears or exact absence evidence is missing, the terminal disposition
+is downgraded to blocked.

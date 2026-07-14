@@ -8,7 +8,6 @@ from unittest import mock
 
 from tests import detail_digest, schema_matches
 from workflow_kernel.resources import (
-    _CLEANUP_RECEIPT_AUTHORITY,
     CleanupDisposition,
     CleanupAction,
     CleanupReceipt,
@@ -18,6 +17,7 @@ from workflow_kernel.resources import (
     ResourceKind,
     ResourceRecord,
     ResourceRegistry,
+    cleanup_proof_digest,
 )
 from workflow_kernel.redaction import freeze_json
 from workflow_kernel.schema import InvalidSchemaError
@@ -60,8 +60,26 @@ def authoritative_receipt(value, outcome):
     return CleanupReceipt(
         CleanupScope(value.run_id, value.node_id),
         (value.kind.value + ":" + value.resource_id,), after, (outcome,),
-        _authority=_CLEANUP_RECEIPT_AUTHORITY,
     )
+
+
+def append_terminal_transaction(path, outcome):
+    disposition_payload = {
+        "resource_id": outcome.resource_id, "kind": outcome.kind.value,
+        "run_id": outcome.run_id, "node_id": outcome.node_id,
+        "lifecycle": outcome.lifecycle, "disposition": outcome.disposition.value,
+        "action": outcome.action, "reason": outcome.reason,
+        "command": list(outcome.command), "evidence": list(outcome.evidence),
+    }
+    frame = {
+        "event": "transaction",
+        "transaction_id": cleanup_proof_digest({
+            "resource_id": outcome.resource_id, "reason": outcome.reason,
+        }),
+        "events": [{"event": "disposition", "disposition": disposition_payload}],
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(frame, sort_keys=True) + "\n")
 
 
 class ResourceRegistryTests(unittest.TestCase):
@@ -83,7 +101,7 @@ class ResourceRegistryTests(unittest.TestCase):
             )
             self.assertEqual(1, len(path.read_text(encoding="utf-8").splitlines()))
 
-    def test_preopened_registries_reload_history_before_terminal_disposition(self):
+    def test_preopened_registries_reload_terminal_transaction_and_reject_detached_receipt(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resources.jsonl"
             first = ResourceRegistry(path)
@@ -91,14 +109,14 @@ class ResourceRegistryTests(unittest.TestCase):
             value = record()
             first.register(value)
             removed = disposition(value, CleanupDisposition.REMOVED, "confirmed_removed")
-            first.record_receipt(authoritative_receipt(value, removed))
-            self.assertEqual((removed,), second.record_receipt(authoritative_receipt(value, removed)))
+            append_terminal_transaction(path, removed)
+            self.assertEqual(removed, second.disposition_for(ResourceKind.CONTAINER, "shared"))
             with self.assertRaises(InvalidSchemaError) as caught:
                 second.record_receipt(authoritative_receipt(
                     value, disposition(value, CleanupDisposition.MISSING, "later_missing"),
                 ))
             self.assertEqual(
-                detail_digest("terminal_resource_disposition_immutable"),
+                detail_digest("cleanup_receipt_not_authoritative"),
                 caught.exception.details["reason_code"],
             )
             self.assertEqual(2, len(path.read_text(encoding="utf-8").splitlines()))
@@ -137,9 +155,9 @@ class ResourceRegistryTests(unittest.TestCase):
             registry.record_disposition(disposition(value, CleanupDisposition.BLOCKED, "remove_failed"))
             registry.record_disposition(disposition(value, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "active_node"))
             self.assertEqual((value,), registry.resources_for("run-1"))
-            registry.record_receipt(authoritative_receipt(
-                value, disposition(value, CleanupDisposition.REMOVED, "confirmed_removed"),
-            ))
+            append_terminal_transaction(
+                path, disposition(value, CleanupDisposition.REMOVED, "confirmed_removed"),
+            )
             self.assertEqual((), registry.resources_for("run-1"))
             self.assertEqual(3, len(registry.disposition_history(ResourceKind.CONTAINER, "shared")))
             with self.assertRaises(InvalidSchemaError):
@@ -318,6 +336,69 @@ class ResourceRegistryTests(unittest.TestCase):
             )
         with self.assertRaises(InvalidSchemaError):
             CleanupReceipt(CleanupScope("run-1"), [], (), ())
+
+    def test_lock_replacement_aborts_original_transaction_before_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            first = ResourceRegistry(path)
+            second = ResourceRegistry(path)
+            original_append = first._append_unlocked
+
+            def replace_lock(event):
+                first.path.with_name(first.path.name + ".lock").unlink()
+                second.register(ResourceRecord(
+                    "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                    "stop-remove", NOW, labels={"proof": "second"},
+                ))
+                original_append(event)
+
+            first._append_unlocked = replace_lock
+            with self.assertRaises(InvalidSchemaError):
+                first.register(record())
+            replayed = ResourceRegistry(path)
+            self.assertEqual("second", replayed.resources_for("run-1")[0].labels["proof"])
+            self.assertEqual(1, len(path.read_text(encoding="utf-8").splitlines()))
+
+    def test_journal_replacement_aborts_before_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            registry = ResourceRegistry(path)
+            registry.register(record("first"))
+            original_append = registry._append_unlocked
+
+            def replace_journal(event):
+                replacement = path.with_name("replacement.jsonl")
+                replacement.write_text("", encoding="utf-8")
+                os.replace(replacement, path)
+                original_append(event)
+
+            registry._append_unlocked = replace_journal
+            with self.assertRaises(InvalidSchemaError):
+                registry.register(record("second"))
+            self.assertEqual("", path.read_text(encoding="utf-8"))
+
+    def test_incomplete_final_transaction_frame_is_ignored_but_interior_corruption_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            ResourceRegistry(path).register(record())
+            with path.open("ab") as handle:
+                handle.write(b'{"event":"transaction","transaction_id":"sha256:')
+            self.assertEqual(1, len(ResourceRegistry(path).resources_for("run-1")))
+            with path.open("ab") as handle:
+                handle.write(b'\n')
+            with self.assertRaises(InvalidSchemaError):
+                ResourceRegistry(path)
+
+    def test_cleanup_plan_serialization_preserves_disposition_only_decisions(self):
+        value = record()
+        plan = CleanupPlan(
+            CleanupScope("run-1", "node-1"), ("container:shared",), (),
+            (disposition(value, CleanupDisposition.BLOCKED, "blocked"),),
+        )
+        payload = plan.to_dict()
+        self.assertEqual("blocked", payload["dispositions"][0]["disposition"])
+        schema = json.loads((Path(__file__).parents[1] / "cleanup-plan-schema.json").read_text())
+        self.assertTrue(schema_matches(payload, schema))
 
 
 if __name__ == "__main__":

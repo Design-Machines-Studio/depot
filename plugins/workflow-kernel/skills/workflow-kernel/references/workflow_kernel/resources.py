@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
-from workflow_kernel._files import LockHandle, bind_durable_path
+from workflow_kernel._files import LockHandle, PinnedDirectory, bind_durable_path
 from workflow_kernel.adapters.base import invalid_policy
 from workflow_kernel.redaction import (
     contains_secret_shape, digest_error_detail_string, is_secret_key,
@@ -49,7 +49,6 @@ _MAX_RESOURCE_ID = 4096
 _VALID_DISPOSITION_ACTIONS = {"none", "remove_exact_id"}
 _VALID_CLEANUP_ACTIONS = {"stop", "remove"}
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
-_CLEANUP_RECEIPT_AUTHORITY = object()
 
 
 def _valid_text(value: object, *, maximum: int) -> bool:
@@ -218,13 +217,20 @@ class CleanupAction:
     lifecycle: str = "chunk"
     proof_digest: str = ""
     preconditions: Tuple[str, ...] = ()
+    environment: Mapping[str, str] = field(default_factory=dict)
+    predecessor_result_id: Optional[str] = None
+    evidence_digest: str = ""
 
     def __post_init__(self) -> None:
         try:
             kind = ResourceKind(self.kind)
-            if type(self.argv) is not tuple or type(self.preconditions) is not tuple:
+            if (
+                type(self.argv) is not tuple or type(self.preconditions) is not tuple
+                or type(self.environment) is not dict
+            ):
                 raise TypeError
             argv = self.argv
+            environment = dict(self.environment)
         except Exception:
             raise invalid_policy("invalid_cleanup_action") from None
         if (
@@ -237,14 +243,25 @@ class CleanupAction:
             or not all(_valid_text(value, maximum=_MAX_IDENTIFIER) for value in (self.run_id, self.node_id))
             or self.lifecycle not in VALID_LIFECYCLES
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.proof_digest)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.evidence_digest)
             or not self.preconditions
             or len(set(self.preconditions)) != len(self.preconditions)
             or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in self.preconditions)
+            or any(
+                not _valid_text(key, maximum=_MAX_IDENTIFIER) or type(value) is not str
+                or len(value) > _MAX_RESOURCE_ID or _CONTROL.search(value)
+                or is_secret_key(key) or contains_secret_shape(value)
+                for key, value in environment.items()
+            )
+            or (self.predecessor_result_id is not None and not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", self.predecessor_result_id,
+            ))
         ):
             raise invalid_policy("invalid_cleanup_action")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "argv", argv)
         object.__setattr__(self, "preconditions", self.preconditions)
+        object.__setattr__(self, "environment", environment)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -254,6 +271,9 @@ class CleanupAction:
             "owner": {"run_id": self.run_id, "node_id": self.node_id},
             "lifecycle": self.lifecycle, "proof_digest": self.proof_digest,
             "preconditions": list(self.preconditions),
+            "environment": dict(self.environment),
+            "predecessor_result_id": self.predecessor_result_id,
+            "evidence_digest": self.evidence_digest,
         }
 
 
@@ -306,6 +326,7 @@ class CleanupPlan:
             },
             "before": list(self.before),
             "actions": [value.to_dict() for value in self.actions],
+            "dispositions": [_raw_receipt_disposition(value) for value in self.dispositions],
         }
 
 
@@ -316,7 +337,6 @@ class CleanupReceipt:
     after: Tuple[str, ...]
     dispositions: Tuple[ResourceDisposition, ...]
     schema_version: int = 1
-    _authority: object = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not all(type(value) is tuple for value in (self.before, self.after, self.dispositions)):
@@ -417,6 +437,117 @@ def cleanup_proof_digest(payload: Mapping[str, object]) -> str:
     return "sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
+def cleanup_result_id(argv: Tuple[str, ...], exit_code: int) -> str:
+    if type(argv) is not tuple or type(exit_code) is not int:
+        raise invalid_policy("invalid_cleanup_result_identity")
+    return cleanup_proof_digest({"argv": list(argv), "exit_code": exit_code})
+
+
+def cleanup_action_digest(
+    *, evidence_digest: str, resource_id: str, kind: ResourceKind,
+    action: str, argv: Tuple[str, ...], requires_success_of: Optional[int],
+    run_id: str, node_id: str, lifecycle: str, preconditions: Tuple[str, ...],
+    environment: Mapping[str, str], predecessor_result_id: Optional[str],
+) -> str:
+    return cleanup_proof_digest({
+        "evidence_digest": evidence_digest,
+        "capability": {
+            "resource_id": resource_id, "kind": ResourceKind(kind).value,
+            "action": action, "argv": list(argv),
+            "requires_success_of": requires_success_of,
+            "owner": {"run_id": run_id, "node_id": node_id},
+            "lifecycle": lifecycle, "preconditions": list(preconditions),
+            "environment": dict(sorted(environment.items())),
+            "predecessor_result_id": predecessor_result_id,
+        },
+    })
+
+
+def build_cleanup_action(
+    *, evidence: Mapping[str, object], resource_id: str, kind: ResourceKind,
+    action: str, argv: Tuple[str, ...], requires_success_of: Optional[int],
+    run_id: str, node_id: str, lifecycle: str, preconditions: Tuple[str, ...],
+    environment: Optional[Mapping[str, str]] = None,
+    predecessor_result_id: Optional[str] = None,
+) -> CleanupAction:
+    environment = {} if environment is None else dict(environment)
+    evidence_digest = cleanup_proof_digest(dict(evidence))
+    proof_digest = cleanup_action_digest(
+        evidence_digest=evidence_digest, resource_id=resource_id, kind=kind,
+        action=action, argv=argv, requires_success_of=requires_success_of,
+        run_id=run_id, node_id=node_id, lifecycle=lifecycle,
+        preconditions=preconditions, environment=environment,
+        predecessor_result_id=predecessor_result_id,
+    )
+    return CleanupAction(
+        resource_id, kind, action, argv, requires_success_of,
+        run_id, node_id, lifecycle, proof_digest, preconditions,
+        environment, predecessor_result_id, evidence_digest,
+    )
+
+
+def reseal_cleanup_action(
+    value: CleanupAction, *, requires_success_of: Optional[int],
+) -> CleanupAction:
+    if type(value) is not CleanupAction:
+        raise invalid_policy("invalid_cleanup_action")
+    proof_digest = cleanup_action_digest(
+        evidence_digest=value.evidence_digest, resource_id=value.resource_id,
+        kind=value.kind, action=value.action, argv=value.argv,
+        requires_success_of=requires_success_of, run_id=value.run_id,
+        node_id=value.node_id, lifecycle=value.lifecycle,
+        preconditions=value.preconditions, environment=value.environment,
+        predecessor_result_id=value.predecessor_result_id,
+    )
+    return replace(value, requires_success_of=requires_success_of, proof_digest=proof_digest)
+
+
+class _RegistryTransaction:
+    """Pinned lock and journal descriptors for one registry transaction."""
+
+    __slots__ = ("lock", "directory", "descriptor", "path")
+
+    def __init__(
+        self, lock: LockHandle, directory: PinnedDirectory,
+        descriptor: int, path: Path,
+    ):
+        self.lock = lock
+        self.directory = directory
+        self.descriptor = descriptor
+        self.path = path
+
+    def revalidate(self) -> None:
+        self.lock.revalidate()
+        self.directory.revalidate()
+        self.directory.require_identity(self.descriptor, self.path.name)
+
+    def read(self) -> bytes:
+        self.revalidate()
+        size = os.fstat(self.descriptor).st_size
+        chunks = []
+        offset = 0
+        while offset < size:
+            chunk = os.pread(self.descriptor, min(65_536, size - offset), offset)
+            if not chunk:
+                raise OSError("resource registry read made no progress")
+            chunks.append(chunk)
+            offset += len(chunk)
+        self.revalidate()
+        return b"".join(chunks)
+
+    def append(self, encoded: bytes) -> None:
+        self.revalidate()
+        pending = memoryview(encoded)
+        while pending:
+            written = os.write(self.descriptor, pending)
+            if written <= 0:
+                raise OSError("resource registry write made no progress")
+            pending = pending[written:]
+        os.fsync(self.descriptor)
+        self.revalidate()
+        self.directory.fsync()
+
+
 class ResourceRegistry:
     """Append-only kind+ID registry with immutable successful outcomes."""
 
@@ -428,19 +559,30 @@ class ResourceRegistry:
         self._lock_binding = bind_durable_path(self.path.with_name(self.path.name + ".lock"))
         self._records: dict[tuple[ResourceKind, str], ResourceRecord] = {}
         self._attempts: dict[tuple[ResourceKind, str], list[ResourceDisposition]] = {}
+        self._transactions: set[str] = set()
+        self._current_transaction: Optional[_RegistryTransaction] = None
         with self._exclusive_lock():
             self._reload_unlocked()
 
     @contextmanager
     def _exclusive_lock(self):
         handle = None
+        directory = None
+        descriptor = None
         primary = None
         try:
             self._binding.revalidate_parent()
             self._lock_binding.revalidate_parent()
             handle = LockHandle.acquire_bound(self._lock_binding)
-            handle.revalidate()
-            yield handle
+            directory = self._binding.pin_parent()
+            descriptor = directory.open_regular(
+                self.path.name, os.O_APPEND | os.O_CREAT | os.O_RDWR,
+            )
+            transaction = _RegistryTransaction(handle, directory, descriptor, self.path)
+            transaction.revalidate()
+            self._current_transaction = transaction
+            yield transaction
+            transaction.revalidate()
         except InvalidSchemaError:
             primary = True
             raise
@@ -448,39 +590,41 @@ class ResourceRegistry:
             primary = True
             raise invalid_policy("resource_registry_path_or_lock_unsafe") from None
         finally:
+            self._current_transaction = None
+            cleanup_failed = False
+            if descriptor is not None:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    cleanup_failed = True
+            if directory is not None:
+                try:
+                    directory.close()
+                except OSError:
+                    cleanup_failed = True
             if handle is not None:
                 try:
                     handle.release()
                 except OSError:
-                    if primary is None:
-                        raise invalid_policy("resource_registry_lock_release_failed") from None
+                    cleanup_failed = True
+            if primary is None and cleanup_failed:
+                raise invalid_policy("resource_registry_transaction_close_failed") from None
 
     def _reload_unlocked(self) -> None:
         self._records = {}
         self._attempts = {}
+        self._transactions = set()
         try:
-            with self._binding.pin_parent() as directory:
-                if not directory.regular_exists(self.path.name):
-                    return
-                descriptor = directory.open_regular(self.path.name, os.O_RDONLY)
-                try:
-                    with os.fdopen(descriptor, "r", encoding="utf-8") as handle:
-                        descriptor = None
-                        lines = handle.read().splitlines()
-                    directory.revalidate()
-                finally:
-                    if descriptor is not None:
-                        os.close(descriptor)
-            for line in lines:
-                event = json.loads(line)
-                if type(event) is not dict:
-                    raise invalid_policy("invalid_resource_registry_event")
-                if set(event) == {"event", "resource"} and event["event"] == "registered":
-                    self._apply_registration(_record_from_json(event["resource"]), persist=False)
-                elif set(event) == {"event", "disposition"} and event["event"] == "disposition":
-                    self._apply_disposition(_disposition_from_json(event["disposition"]), persist=False)
-                else:
-                    raise invalid_policy("invalid_resource_registry_event")
+            transaction = self._require_transaction()
+            raw = transaction.read()
+            complete_lines = raw.split(b"\n")
+            if raw and not raw.endswith(b"\n"):
+                complete_lines = complete_lines[:-1]
+            for encoded_line in complete_lines:
+                if not encoded_line:
+                    continue
+                event = json.loads(encoded_line.decode("utf-8"))
+                self._apply_registry_event(event)
         except InvalidSchemaError:
             raise
         except Exception:
@@ -494,23 +638,48 @@ class ResourceRegistry:
             json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
             for event in events
         )
-        with self._binding.pin_parent() as directory:
-            descriptor = directory.open_regular(
-                self.path.name, os.O_APPEND | os.O_CREAT | os.O_WRONLY,
-            )
+        self._require_transaction().append(encoded.encode("utf-8"))
+
+    def _require_transaction(self) -> _RegistryTransaction:
+        if self._current_transaction is None:
+            raise invalid_policy("resource_registry_transaction_required")
+        return self._current_transaction
+
+    def _apply_registry_event(self, event: object, *, in_transaction: bool = False) -> None:
+        if type(event) is not dict:
+            raise invalid_policy("invalid_resource_registry_event")
+        if set(event) == {"event", "resource"} and event["event"] == "registered":
+            self._apply_registration(_record_from_json(event["resource"]), persist=False)
+            return
+        if set(event) == {"event", "disposition"} and event["event"] == "disposition":
+            disposition = _disposition_from_json(event["disposition"])
+            if disposition.disposition in TERMINAL_DISPOSITIONS and not in_transaction:
+                raise invalid_policy("terminal_disposition_requires_cleanup_transaction")
+            self._apply_disposition(disposition, persist=False)
+            return
+        if set(event) == {"event", "transaction_id", "events"} and event["event"] == "transaction":
+            transaction_id = event["transaction_id"]
+            nested = event["events"]
+            if (
+                type(transaction_id) is not str
+                or not re.fullmatch(r"sha256:[0-9a-f]{64}", transaction_id)
+                or type(nested) is not list or not nested or transaction_id in self._transactions
+            ):
+                raise invalid_policy("invalid_resource_registry_transaction")
+            saved_records = dict(self._records)
+            saved_attempts = {key: list(values) for key, values in self._attempts.items()}
             try:
-                directory.require_identity(descriptor, self.path.name)
-                pending = memoryview(encoded.encode("utf-8"))
-                while pending:
-                    written = os.write(descriptor, pending)
-                    if written <= 0:
-                        raise OSError("resource registry write made no progress")
-                    pending = pending[written:]
-                os.fsync(descriptor)
-                directory.require_identity(descriptor, self.path.name)
-                directory.fsync()
-            finally:
-                os.close(descriptor)
+                for item in nested:
+                    if type(item) is not dict or item.get("event") == "transaction":
+                        raise invalid_policy("invalid_resource_registry_transaction")
+                    self._apply_registry_event(item, in_transaction=True)
+            except Exception:
+                self._records = saved_records
+                self._attempts = saved_attempts
+                raise
+            self._transactions.add(transaction_id)
+            return
+        raise invalid_policy("invalid_resource_registry_event")
 
     def register(self, resource: ResourceRecord) -> None:
         if type(resource) is not ResourceRecord:
@@ -559,33 +728,42 @@ class ResourceRegistry:
             return self._apply_disposition(value, persist=True)
 
     def record_receipt(self, receipt: CleanupReceipt) -> Tuple[ResourceDisposition, ...]:
-        """Atomically persist terminal outcomes issued by result reconciliation."""
-        if type(receipt) is not CleanupReceipt or receipt._authority is not _CLEANUP_RECEIPT_AUTHORITY:
-            raise invalid_policy("cleanup_receipt_not_authoritative")
-        values = tuple(_disposition_from_json(_disposition_json(value)) for value in receipt.dispositions)
-        after = set(receipt.after)
-        if any(
-            value.disposition in TERMINAL_DISPOSITIONS
-            and value.kind.value + ":" + value.resource_id in after
-            for value in values
-        ):
-            raise invalid_policy("terminal_resource_still_present")
+        """Detached receipts are evidence only and never authorize persistence."""
+        raise invalid_policy("cleanup_receipt_not_authoritative")
+
+    def record_results(
+        self, adapter: object, plan: CleanupPlan, results: Tuple[CommandResult, ...],
+        before: object, after: object,
+    ) -> CleanupReceipt:
+        """Recompute and atomically persist one exact cleanup result transaction."""
+        from workflow_kernel.adapters.docker import DockerAdapter
+
+        if type(adapter) is not DockerAdapter:
+            raise invalid_policy("invalid_cleanup_result_adapter")
+        receipt, observed = adapter._reconcile_results(plan, results, before, after)
+        transaction_id = adapter._result_transaction_id(plan, results, before, after)
         with self._exclusive_lock():
             self._reload_unlocked()
-            saved = {key: list(history) for key, history in self._attempts.items()}
-            try:
-                applied = tuple(self._apply_disposition(value, persist=False) for value in values)
-            except Exception:
-                self._attempts = saved
-                raise
-            events = tuple(
+            if transaction_id in self._transactions:
+                raise invalid_policy("cleanup_result_transaction_already_recorded")
+            nested = []
+            for resource in observed:
+                key = (resource.kind, resource.resource_id)
+                if key not in self._records:
+                    nested.append({"event": "registered", "resource": _resource_json(resource)})
+            nested.extend(
                 {"event": "disposition", "disposition": _disposition_json(value)}
-                for value in applied
-                if value not in saved.get((value.kind, value.resource_id), ())
+                for value in receipt.dispositions
             )
-            if events:
-                self._append_events_unlocked(events)
-            return applied
+            if not nested:
+                raise invalid_policy("empty_cleanup_result_transaction")
+            frame = {
+                "event": "transaction", "transaction_id": transaction_id,
+                "events": nested,
+            }
+            self._apply_registry_event(frame)
+            self._append_unlocked(frame)
+        return receipt
 
     def _apply_disposition(self, value: ResourceDisposition, *, persist: bool) -> ResourceDisposition:
         key = (value.kind, value.resource_id)

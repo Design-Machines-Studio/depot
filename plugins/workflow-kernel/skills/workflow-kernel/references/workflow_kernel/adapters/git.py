@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import PurePosixPath
 import re
@@ -10,9 +10,9 @@ from typing import Callable, Tuple
 
 from workflow_kernel.adapters.base import invalid_policy
 from workflow_kernel.resources import (
-    CleanupAction, CleanupDisposition, CleanupPlan, CleanupScope,
+    CleanupAction, CleanupDisposition, CleanupPlan, CleanupScope, CommandResult,
     ResourceDisposition, ResourceKind, ResourceRecord, ResourceRegistry,
-    cleanup_proof_digest, disposition_for,
+    build_cleanup_action, cleanup_result_id, disposition_for,
 )
 
 
@@ -34,6 +34,7 @@ class GitProof:
     base_oid: str
     merge_target_oid: str
     worktree_prunable: bool
+    worktree_present: bool = True
 
     def __post_init__(self) -> None:
         if not _valid_git_proof(self):
@@ -72,6 +73,8 @@ class GitAdapter:
     ) -> CleanupPlan:
         if type(proof) is not GitProof or not _valid_git_proof(proof):
             raise invalid_policy("invalid_git_proof")
+        if not proof.worktree_present:
+            raise invalid_policy("git_worktree_absent_before_cleanup")
         records = registry.resources_for(scope)
         worktrees = tuple(item for item in records if item.kind is ResourceKind.WORKTREE)
         branches = tuple(item for item in records if item.kind is ResourceKind.BRANCH)
@@ -125,16 +128,13 @@ class GitAdapter:
                 disposition_for(branch, CleanupDisposition.BLOCKED, "none", "worktree_must_be_removed_first"),
             ))
 
-        proof_digest = self._proof_digest(proof)
         preconditions = (
             "registered_kind_and_exact_id", "proof_fresh", "worktree_clean",
             "authoritative_worktree_inventory_unchanged",
         )
-        actions = [CleanupAction(
-            worktree.resource_id, ResourceKind.WORKTREE, "remove",
-            ("git", "worktree", "remove", "--", worktree.resource_id),
-            run_id=worktree.run_id, node_id=worktree.node_id, lifecycle=worktree.lifecycle,
-            proof_digest=proof_digest, preconditions=preconditions,
+        worktree_argv = ("git", "worktree", "remove", "--", worktree.resource_id)
+        actions = [_git_action(
+            worktree, "remove", worktree_argv, None, preconditions, proof,
         )]
         dispositions = []
         if branch.labels["ref-role"] == "feature-branch":
@@ -143,18 +143,20 @@ class GitAdapter:
                 "feature_branch_orchestrator_disposition_only",
             ))
         elif proof.ancestor_of_merge_target:
-            actions.append(CleanupAction(
-                branch.resource_id, ResourceKind.BRANCH, "remove",
-                ("git", "branch", "-d", "--", branch.resource_id), 0,
-                branch.run_id, branch.node_id, branch.lifecycle, proof_digest,
-                preconditions + ("branch_ancestor_of_merge_target",),
+            actions.append(_git_action(
+                branch, "remove", ("git", "branch", "-d", "--", branch.resource_id),
+                0, preconditions + (
+                    "worktree_absent_after_predecessor", "branch_ancestor_of_merge_target",
+                ), replace(proof, worktree_present=False),
+                cleanup_result_id(worktree_argv, 0),
             ))
         elif proof.unique_commit_count == 0:
-            actions.append(CleanupAction(
-                branch.resource_id, ResourceKind.BRANCH, "remove",
-                ("git", "branch", "-D", "--", branch.resource_id), 0,
-                branch.run_id, branch.node_id, branch.lifecycle, proof_digest,
-                preconditions + ("branch_unique_commit_count_zero",),
+            actions.append(_git_action(
+                branch, "remove", ("git", "branch", "-D", "--", branch.resource_id),
+                0, preconditions + (
+                    "worktree_absent_after_predecessor", "branch_unique_commit_count_zero",
+                ), replace(proof, worktree_present=False),
+                cleanup_result_id(worktree_argv, 0),
             ))
         else:
             dispositions.append(disposition_for(
@@ -163,18 +165,71 @@ class GitAdapter:
             ))
         return CleanupPlan(scope, before, tuple(actions), tuple(dispositions))
 
-    def revalidate_action(self, action: CleanupAction, proof: GitProof) -> None:
+    def revalidate_action(
+        self, action: CleanupAction, proof: GitProof,
+        predecessor_result: CommandResult | None = None,
+    ) -> None:
         """Fail closed unless execution-time Git proof is byte-for-byte equivalent."""
-        if type(action) is not CleanupAction or type(proof) is not GitProof:
+        if type(action) is not CleanupAction or type(proof) is not GitProof or not _valid_git_proof(proof):
             raise invalid_policy("invalid_git_cleanup_revalidation")
-        if not self._proof_is_fresh(proof) or action.proof_digest != self._proof_digest(proof):
+        try:
+            action = CleanupAction(
+                action.resource_id, action.kind, action.action, tuple(action.argv),
+                action.requires_success_of, action.run_id, action.node_id,
+                action.lifecycle, action.proof_digest, tuple(action.preconditions),
+                dict(action.environment), action.predecessor_result_id,
+                action.evidence_digest,
+            )
+        except Exception:
+            raise invalid_policy("invalid_git_cleanup_revalidation") from None
+        if not self._proof_is_fresh(proof):
             raise invalid_policy("git_cleanup_precondition_changed")
-        if action.resource_id not in {proof.worktree_path, proof.branch}:
+        preconditions = (
+            "registered_kind_and_exact_id", "proof_fresh", "worktree_clean",
+            "authoritative_worktree_inventory_unchanged",
+        )
+        expected = None
+        if action.kind is ResourceKind.WORKTREE and proof.worktree_present and not proof.dirty and proof.readable:
+            expected = _git_action(
+                ResourceRecord(
+                    proof.worktree_path, ResourceKind.WORKTREE, action.run_id,
+                    action.node_id, action.lifecycle, "retain", proof.captured_at,
+                    labels={},
+                ),
+                "remove", ("git", "worktree", "remove", "--", proof.worktree_path),
+                None, preconditions, proof,
+            )
+        elif action.kind is ResourceKind.BRANCH and not proof.worktree_present:
+            if (
+                type(predecessor_result) is not CommandResult
+                or predecessor_result.exit_code != 0
+                or predecessor_result.argv != ("git", "worktree", "remove", "--", proof.worktree_path)
+                or cleanup_result_id(predecessor_result.argv, 0) != action.predecessor_result_id
+            ):
+                raise invalid_policy("git_cleanup_precondition_changed")
+            if proof.ancestor_of_merge_target:
+                argv = ("git", "branch", "-d", "--", proof.branch)
+                branch_condition = "branch_ancestor_of_merge_target"
+            elif proof.unique_commit_count == 0:
+                argv = ("git", "branch", "-D", "--", proof.branch)
+                branch_condition = "branch_unique_commit_count_zero"
+            else:
+                raise invalid_policy("git_cleanup_precondition_changed")
+            expected = _git_action(
+                ResourceRecord(
+                    proof.branch, ResourceKind.BRANCH, action.run_id, action.node_id,
+                    action.lifecycle, "retain", proof.captured_at, labels={},
+                ),
+                "remove", argv, action.requires_success_of,
+                preconditions + ("worktree_absent_after_predecessor", branch_condition),
+                proof, action.predecessor_result_id,
+            )
+        if expected is None or action != expected:
             raise invalid_policy("git_cleanup_precondition_changed")
 
     @staticmethod
-    def _proof_digest(proof: GitProof) -> str:
-        return cleanup_proof_digest({
+    def _proof_evidence(proof: GitProof) -> dict[str, object]:
+        return {
             "worktree_path": proof.worktree_path, "branch": proof.branch,
             "readable": proof.readable, "dirty": proof.dirty,
             "branch_is_feature": proof.branch_is_feature,
@@ -182,11 +237,11 @@ class GitAdapter:
             "unique_commit_count": proof.unique_commit_count,
             "base_ref": proof.base_ref, "merge_target": proof.merge_target,
             "ownership_namespace": proof.ownership_namespace,
-            "captured_at": proof.captured_at.isoformat(),
             "worktree_head_oid": proof.worktree_head_oid, "branch_oid": proof.branch_oid,
             "base_oid": proof.base_oid, "merge_target_oid": proof.merge_target_oid,
             "worktree_prunable": proof.worktree_prunable,
-        })
+            "worktree_present": proof.worktree_present,
+        }
 
     def _proof_matches_scope(
         self, proof: GitProof, worktree: ResourceRecord, branch: ResourceRecord,
@@ -223,6 +278,20 @@ class GitAdapter:
         return timedelta(0) <= age <= self.max_proof_age
 
 
+def _git_action(
+    record: ResourceRecord, action: str, argv: Tuple[str, ...],
+    requires_success_of: int | None, preconditions: Tuple[str, ...],
+    proof: GitProof, predecessor_result_id: str | None = None,
+) -> CleanupAction:
+    return build_cleanup_action(
+        evidence=GitAdapter._proof_evidence(proof),
+        resource_id=record.resource_id, kind=record.kind, action=action,
+        argv=argv, requires_success_of=requires_success_of,
+        run_id=record.run_id, node_id=record.node_id, lifecycle=record.lifecycle,
+        preconditions=preconditions, predecessor_result_id=predecessor_result_id,
+    )
+
+
 def _normalized_absolute_path(value: object) -> bool:
     if (
         type(value) is not str or not value or len(value) > 4096
@@ -254,6 +323,7 @@ def _valid_git_proof(proof: object) -> bool:
         and all(type(value) is bool for value in (
             proof.readable, proof.dirty, proof.branch_is_feature,
             proof.ancestor_of_merge_target, proof.worktree_prunable,
+            proof.worktree_present,
         ))
         and type(proof.unique_commit_count) is int and proof.unique_commit_count >= 0
         and type(proof.captured_at) is datetime

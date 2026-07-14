@@ -1,10 +1,11 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from workflow_kernel.adapters.git import GitAdapter, GitProof
-from workflow_kernel.resources import CleanupDisposition, CleanupScope, ResourceKind, ResourceRecord, ResourceRegistry
+from workflow_kernel.resources import CleanupDisposition, CleanupScope, CommandResult, ResourceKind, ResourceRecord, ResourceRegistry
 from workflow_kernel.schema import InvalidSchemaError
 
 
@@ -175,6 +176,18 @@ class GitCleanupTests(unittest.TestCase):
     def test_option_looking_refs_are_rejected(self):
         with self.assertRaises(InvalidSchemaError):
             proof(branch="--delete")
+
+    def test_revalidation_rejects_forged_argv_even_with_original_digest(self):
+        plan = self.adapter.cleanup_owned(self.registry, self.scope, proof())
+        forged = replace(plan.actions[0], argv=("git", "worktree", "remove", "--", ROOT + "/foreign"))
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(forged, proof())
+
+    def test_branch_stage_revalidates_after_worktree_removal(self):
+        plan = self.adapter.cleanup_owned(self.registry, self.scope, proof())
+        predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
+        after_removal = proof(worktree_present=False)
+        self.adapter.revalidate_action(plan.actions[1], after_removal, predecessor)
 
 
 if __name__ == "__main__":

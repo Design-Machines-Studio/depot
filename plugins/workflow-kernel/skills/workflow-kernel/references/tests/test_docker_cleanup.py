@@ -1,8 +1,11 @@
 import json
+import os
 import tempfile
 import unittest
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from tests import schema_matches
 from workflow_kernel.adapters.docker import (
@@ -12,7 +15,10 @@ from workflow_kernel.adapters.docker import (
     DockerResource,
     LeaseProof,
 )
-from workflow_kernel.resources import CleanupDisposition, CommandResult, ResourceKind, ResourceRecord, ResourceRegistry
+from workflow_kernel.resources import (
+    CleanupDisposition, CleanupReceipt, CommandResult, ResourceDisposition,
+    ResourceKind, ResourceRecord, ResourceRegistry,
+)
 from workflow_kernel.schema import InvalidSchemaError
 
 
@@ -64,7 +70,15 @@ def inactive_lease(run_id="run-1"):
 
 def exact_absent(kind=ResourceKind.CONTAINER, resource_id="ctr-1"):
     key = ((kind, resource_id),)
-    return DockerInventory((), key, key, "registered_exact")
+    inspect = (
+        ("docker", "container", "inspect", resource_id)
+        if kind is ResourceKind.CONTAINER else
+        ("docker", kind.value, "inspect", resource_id)
+    )
+    return DockerInventory(
+        (), key, key, "registered_exact",
+        (CommandResult(inspect, 1, "", "Error: No such " + kind.value + ": " + resource_id),),
+    )
 
 
 class DockerLifecycleTests(unittest.TestCase):
@@ -103,17 +117,16 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertTrue(receipt.command_succeeded)
 
     def test_failed_compose_command_registers_only_correlated_partial_creation(self):
-        config_argv = ("docker", "compose", "config", "--format", "json")
+        config_argv = ("docker", "compose", "-f", "compose.yml", "config", "--format", "json")
         config = {
             "services": {"app": {"image": "app:1", "command": ["serve"]}, "worker": {"image": "worker:1"}},
             "networks": {}, "volumes": {},
         }
         runner = FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),))
         adapter = DockerAdapter(runner, now=lambda: NOW, lease_reader=self.leases)
-        plan = adapter.plan_compose(("docker", "compose", "up"), "run-1", "node-1", "chunk", "stop-remove")
+        plan = adapter.plan_compose(("docker", "compose", "-f", "compose.yml", "up"), "run-1", "node-1", "chunk", "stop-remove")
         materialized = json.loads(plan.compose_override_content)
-        self.assertEqual("app:1", materialized["services"]["app"]["image"])
-        self.assertEqual(["serve"], materialized["services"]["app"]["command"])
+        self.assertEqual({"labels"}, set(materialized["services"]["app"]))
         labels = {**owned_labels(), "com.docker.compose.service": "app"}
         app = resource("app-id", labels=labels, name="depot-run-1-node-1-app-1")
         outcome = adapter.record_creation(
@@ -302,12 +315,12 @@ class DockerLifecycleTests(unittest.TestCase):
         absent_without_result = self.adapter.record_results(plan, (), DockerInventory(()))
         self.assertEqual(CleanupDisposition.BLOCKED, absent_without_result.dispositions[0].disposition)
 
-        receipt = self.adapter.record_results(
-            plan, (CommandResult(action.argv, 0, "", ""),), exact_absent()
+        receipt = self.registry.record_results(
+            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
+            DockerInventory((value,)), exact_absent(),
         )
         removed = receipt.dispositions[0]
         self.assertEqual(CleanupDisposition.REMOVED, removed.disposition)
-        self.registry.record_receipt(receipt)
         self.assertEqual(CleanupDisposition.REMOVED, self.registry.disposition_for(ResourceKind.CONTAINER, "ctr-1").disposition)
 
         rerun = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory(()), "run-1", "node-1")
@@ -366,6 +379,167 @@ class DockerLifecycleTests(unittest.TestCase):
             self.adapter.record_results(mutated, (), exact_absent())
         schema = json.loads((Path(__file__).parents[1] / "cleanup-plan-schema.json").read_text())
         self.assertTrue(schema_matches(plan.to_dict(), schema))
+
+    def test_revalidation_binds_argv_and_accepts_expected_stop_transition(self):
+        value, _ = self.register(resource(running=True))
+        plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
+        forged = replace(plan.actions[1], argv=("docker", "rm", "foreign-container"))
+        stopped = replace(value, running=False)
+        predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(forged, stopped, predecessor_result=predecessor)
+        self.adapter.revalidate_action(plan.actions[1], stopped, predecessor_result=predecessor)
+
+    def test_compose_preserves_base_files_but_override_contains_labels_only(self):
+        config_argv = ("docker", "compose", "-f", "compose.yml", "config", "--format", "json")
+        secret = "super-secret-password"
+        config = {
+            "services": {"app": {"image": "app:1", "environment": {"PASSWORD": secret}}},
+            "networks": {}, "volumes": {},
+        }
+        runner = FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),))
+        adapter = DockerAdapter(runner, now=lambda: NOW)
+        plan = adapter.plan_compose(
+            ("docker", "compose", "-f", "compose.yml", "up"),
+            "run-1", "node-1", "chunk", "stop-remove",
+        )
+        self.assertTrue(plan.managed)
+        self.assertEqual("compose.yml", plan.argv[plan.argv.index("-f") + 1])
+        self.assertNotIn(secret, plan.compose_override_content)
+        override = json.loads(plan.compose_override_content)
+        self.assertEqual({"labels"}, set(override["services"]["app"]))
+
+    def test_compose_requires_base_file_and_rejects_caller_project_name(self):
+        for argv, reason in (
+            (("docker", "compose", "up"), "compose_file_required"),
+            (("docker", "compose", "-f", "compose.yml", "-p", "foreign", "up"), "caller_project_name_forbidden"),
+        ):
+            plan = self.adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove")
+            self.assertFalse(plan.managed)
+            self.assertEqual(reason, plan.reason)
+
+    def test_transport_no_such_is_not_authoritative_absence(self):
+        value, _ = self.register()
+        inspect = ("docker", "container", "inspect", value.resource_id)
+        runner = FakeRunner((CommandResult(
+            inspect, 1, "", "Cannot connect: dial unix /var/run/docker.sock: no such file or directory",
+        ),))
+        adapter = DockerAdapter(runner, now=lambda: NOW)
+        inventory = adapter.inventory_registered(tuple(self.registry.resources_for("run-1")))
+        self.assertEqual((), inventory.absent)
+        self.assertFalse(inventory.resources[0].inspect_ok)
+
+    def test_caller_claimed_absence_and_mutated_receipt_cannot_retire(self):
+        value, _ = self.register()
+        key = ((ResourceKind.CONTAINER, value.resource_id),)
+        claimed = DockerInventory((), key, key, "registered_exact")
+        plan = self.adapter.plan_chunk_cleanup(self.registry, claimed, "run-1", "node-1")
+        self.assertEqual(CleanupDisposition.BLOCKED, plan.dispositions[0].disposition)
+        forged = CleanupReceipt(
+            plan.scope, plan.before, (),
+            (ResourceDisposition(
+                value.resource_id, value.kind, "run-1", "node-1", "chunk",
+                CleanupDisposition.REMOVED, "remove_exact_id", "forged",
+                command=("docker", "rm", value.resource_id),
+            ),),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_receipt(forged)
+
+    def test_registry_owned_result_transaction_retires_once(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
+        action = plan.actions[0]
+        inspect = ("docker", "container", "inspect", value.resource_id)
+        after = DockerInventory(
+            (), ((ResourceKind.CONTAINER, value.resource_id),),
+            ((ResourceKind.CONTAINER, value.resource_id),), "registered_exact",
+            evidence=(CommandResult(inspect, 1, "", "Error: No such container: ctr-1"),),
+        )
+        receipt = self.registry.record_results(
+            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
+            DockerInventory((value,)), after,
+        )
+        self.assertEqual(CleanupDisposition.REMOVED, receipt.dispositions[0].disposition)
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_results(
+                self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
+                DockerInventory((value,)), after,
+            )
+
+    def test_terminal_orphan_result_atomically_registers_and_retires(self):
+        orphan_registry = ResourceRegistry(Path(self.directory.name) / "orphan.jsonl")
+        orphan = resource("orphan-1")
+        plan = self.adapter.plan_reconcile_run(
+            orphan_registry, DockerInventory((orphan,), source="managed_orphan_sweep"),
+            "run-1", active_node_ids=(), terminal=True,
+        )
+        action = plan.actions[0]
+        inspect = ("docker", "container", "inspect", "orphan-1")
+        after = DockerInventory(
+            (), ((ResourceKind.CONTAINER, "orphan-1"),),
+            ((ResourceKind.CONTAINER, "orphan-1"),), "registered_exact",
+            evidence=(CommandResult(inspect, 1, "", "Error: No such container: orphan-1"),),
+        )
+        receipt = orphan_registry.record_results(
+            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
+            DockerInventory((orphan,), source="managed_orphan_sweep"), after,
+        )
+        self.assertEqual(CleanupDisposition.REMOVED, receipt.dispositions[0].disposition)
+        self.assertEqual((), orphan_registry.resources_for("run-1"))
+
+    def test_interrupted_result_frame_never_partially_retires(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
+        result = CommandResult(plan.actions[0].argv, 0, "", "")
+        real_write = os.write
+        wrote_partial = False
+
+        def interrupt(descriptor, payload):
+            nonlocal wrote_partial
+            if not wrote_partial and bytes(payload).startswith(b'{"event":"transaction"'):
+                wrote_partial = True
+                real_write(descriptor, bytes(payload)[:31])
+                raise OSError("simulated interrupted transaction write")
+            return real_write(descriptor, payload)
+
+        with mock.patch("workflow_kernel.resources.os.write", side_effect=interrupt):
+            with self.assertRaises(InvalidSchemaError):
+                self.registry.record_results(
+                    self.adapter, plan, (result,), DockerInventory((value,)), exact_absent(),
+                )
+        replayed = ResourceRegistry(self.registry.path)
+        self.assertEqual((value.resource_id,), tuple(
+            item.resource_id for item in replayed.resources_for("run-1")
+        ))
+
+    def test_multi_resource_results_persist_as_one_transaction_frame(self):
+        first = resource("ctr-1")
+        self.register(first)
+        second = resource("ctr-2")
+        self.registry.register(ResourceRecord(
+            "ctr-2", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=second.labels,
+        ))
+        before = DockerInventory((first, second))
+        plan = self.adapter.plan_chunk_cleanup(self.registry, before, "run-1", "node-1")
+        keys = tuple((value.kind, value.resource_id) for value in (first, second))
+        evidence = tuple(CommandResult(
+            ("docker", "container", "inspect", value.resource_id), 1, "",
+            "Error: No such container: " + value.resource_id,
+        ) for value in (first, second))
+        after = DockerInventory((), keys, keys, "registered_exact", evidence)
+        receipt = self.registry.record_results(
+            self.adapter, plan,
+            tuple(CommandResult(action.argv, 0, "", "") for action in plan.actions),
+            before, after,
+        )
+        self.assertEqual(2, len(receipt.dispositions))
+        lines = self.registry.path.read_text(encoding="utf-8").splitlines()
+        frame = json.loads(lines[-1])
+        self.assertEqual("transaction", frame["event"])
+        self.assertEqual(2, len(frame["events"]))
+        self.assertEqual((), ResourceRegistry(self.registry.path).resources_for("run-1"))
 
 
 if __name__ == "__main__":

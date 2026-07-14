@@ -61,7 +61,13 @@ class TerminalCleanupTests(unittest.TestCase):
             key = ((ResourceKind.CONTAINER, "ctr-1"),)
             receipt = self.adapter.record_results(
                 plan, (CommandResult(action.argv, 0, "", ""),),
-                DockerInventory((), key, key, "registered_exact"),
+                DockerInventory(
+                    (), key, key, "registered_exact",
+                    (CommandResult(
+                        ("docker", "container", "inspect", "ctr-1"), 1, "",
+                        "Error: No such container: ctr-1",
+                    ),),
+                ),
             )
             self.assertTrue(receipt.scope.terminal)
             self.assertEqual(CleanupDisposition.REMOVED, receipt.dispositions[0].disposition)

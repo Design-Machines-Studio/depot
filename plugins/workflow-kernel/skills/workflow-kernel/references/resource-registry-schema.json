@@ -6,17 +6,36 @@
   "additionalProperties": false,
   "required": ["event"],
   "properties": {
-    "event": {"enum": ["registered", "disposition"]},
+    "event": {"enum": ["registered", "disposition", "transaction"]},
     "resource": {"$ref": "#/$defs/resource"},
-    "disposition": {"$ref": "#/$defs/disposition"}
+    "disposition": {"$ref": "#/$defs/disposition"},
+    "transaction_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "events": {
+      "type": "array", "minItems": 1,
+      "items": {"oneOf": [
+        {"$ref": "#/$defs/registrationEvent"},
+        {"$ref": "#/$defs/dispositionEvent"}
+      ]}
+    }
   },
   "oneOf": [
     {"required": ["event", "resource"], "properties": {"event": {"const": "registered"}}},
-    {"required": ["event", "disposition"], "properties": {"event": {"const": "disposition"}}}
+    {"required": ["event", "disposition"], "properties": {"event": {"const": "disposition"}}},
+    {"required": ["event", "transaction_id", "events"], "properties": {"event": {"const": "transaction"}}}
   ],
   "$defs": {
     "kind": {"enum": ["worktree", "branch", "container", "network", "volume"]},
     "lifecycle": {"enum": ["chunk", "run"]},
+    "registrationEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "resource"],
+      "properties": {"event": {"const": "registered"}, "resource": {"$ref": "#/$defs/resource"}}
+    },
+    "dispositionEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "disposition"],
+      "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/disposition"}}
+    },
     "resource": {
       "type": "object",
       "additionalProperties": false,
