@@ -4,11 +4,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Tuple
+from urllib.parse import urlsplit
 
 from .adapters.base import invalid_policy
-from .redaction import normalize_evidence_reference
+from .redaction import is_secret_key, normalize_evidence_reference
 
 _ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
 VIEWPORT_DIMENSION_PATTERN = (
@@ -20,14 +21,19 @@ _VIEWPORT = re.compile("(" + VIEWPORT_DIMENSION_PATTERN + ")x(" + VIEWPORT_DIMEN
 _ENGINES = frozenset({"chromium", "firefox", "webkit"})
 _OUTCOMES = frozenset({"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"})
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
+_CASE_ID = re.compile(r"case-sha256:[0-9a-f]{64}\Z")
+_ORIGIN_ID = re.compile(r"origin-sha256:[0-9a-f]{64}\Z")
 
 
 def _invalid(reason="invalid_verification_declaration"):
     raise invalid_policy(reason)
 
 
-def _validate_id(value):
-    if type(value) is not str or _ID.fullmatch(value) is None:
+def _validate_id(value, *, reject_secret_shape=False):
+    secret_parts = {"token", "key", "secret", "password", "authorization", "cookie", "dsn"}
+    if (type(value) is not str or _ID.fullmatch(value) is None
+            or reject_secret_shape
+            and any(part in secret_parts for part in re.split(r"[._-]", value.casefold()))):
         _invalid()
     return value
 
@@ -41,11 +47,40 @@ def validate_viewport(value):
     return value
 
 
-def digest_target_route(route):
+def _validate_route(route):
     if (type(route) is not str or not route.startswith("/") or "?" in route
-            or "#" in route or any(part == ".." for part in route.split("/"))):
+            or "#" in route or any(part == ".." for part in route.split("/"))
+            or any(is_secret_key(part) for part in route.split("/") if part)):
         _invalid("invalid_verification_target")
+    return route
+
+
+def digest_target_route(route):
+    _validate_route(route)
     return "sha256:" + hashlib.sha256(route.encode("utf-8")).hexdigest()
+
+
+def digest_target_origin(origin):
+    if type(origin) is not str or not origin or len(origin) > 2_048:
+        _invalid("invalid_verification_target")
+    try:
+        parsed = urlsplit(origin)
+        if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+                or parsed.hostname is None or parsed.username is not None
+                or parsed.password is not None or parsed.path not in {"", "/"}
+                or parsed.query or parsed.fragment):
+            _invalid("invalid_verification_target")
+        port = parsed.port
+    except (TypeError, ValueError):
+        _invalid("invalid_verification_target")
+    host = parsed.hostname.lower()
+    if ":" in host and not host.startswith("["):
+        host = "[" + host + "]"
+    default_port = 80 if parsed.scheme == "http" else 443
+    canonical = parsed.scheme + "://" + host
+    if port is not None and port != default_port:
+        canonical += ":" + str(port)
+    return "origin-sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -65,12 +100,8 @@ class PersonaCase:
 
     def __post_init__(self):
         _validate_id(self.persona_id); _validate_id(self.scenario_id)
-        if type(self.role) is not str or not self.role:
-            _invalid()
-        if (type(self.route) is not str or not self.route.startswith("/")
-                or "?" in self.route or "#" in self.route
-                or any(part == ".." for part in self.route.split("/"))):
-            _invalid()
+        _validate_id(self.role, reject_secret_shape=True)
+        _validate_route(self.route)
         if self.browser_engine not in _ENGINES:
             _invalid()
         validate_viewport(self.viewport)
@@ -110,6 +141,7 @@ class VerificationProfile:
     discovery_status: str = "declared"
     selection_status: str = "runnable_cases"
     configured_engines: Tuple[str, ...] = ("chromium", "firefox")
+    target_origin_digest: str | None = None
 
     def __post_init__(self):
         if type(self.schema_version) is not int or self.schema_version != 1:
@@ -124,9 +156,9 @@ class VerificationProfile:
             _invalid()
         if (type(self.configured_engines) is not tuple
                 or not self.configured_engines and self.discovery_status == "declared"
-                or len(self.configured_engines) != len(set(self.configured_engines))
                 or any(type(engine) is not str or engine not in _ENGINES
                        for engine in self.configured_engines)
+                or len(self.configured_engines) != len(set(self.configured_engines))
                 or any(case.browser_engine not in self.configured_engines for case in self.cases)):
             _invalid()
         ids = tuple(case.case_id for case in self.cases)
@@ -134,13 +166,20 @@ class VerificationProfile:
             _invalid()
         if (type(self.auth_field_names) is not tuple
                 or any(type(name) is not str or _ID.fullmatch(name) is None for name in self.auth_field_names)
-                or tuple(sorted(set(self.auth_field_names))) != self.auth_field_names):
+                or tuple(sorted(self.auth_field_names)) != self.auth_field_names
+                or len(self.auth_field_names) != len(set(self.auth_field_names))):
             _invalid()
+        if (self.target_origin_digest is not None and (
+                type(self.target_origin_digest) is not str
+                or _ORIGIN_ID.fullmatch(self.target_origin_digest) is None)):
+            _invalid("invalid_verification_target")
         if self.discovery_status == "not_declared" and (
                 self.source != "not_declared" or self.selection_status != "not_declared"
                 or self.cases or self.configured_engines):
             _invalid()
         if self.discovery_status == "declared" and self.source != "project_declaration":
+            _invalid()
+        if self.discovery_status == "declared" and self.selection_status == "not_declared":
             _invalid()
         if self.selection_status == "no_runnable_tasks" and self.cases:
             _invalid()
@@ -158,7 +197,8 @@ class VerificationProfile:
                 "selection_status": self.selection_status,
                 "cases": [case.to_dict() for case in self.cases],
                 "auth_field_names": list(self.auth_field_names),
-                "configured_engines": list(self.configured_engines)}
+                "configured_engines": list(self.configured_engines),
+                "target_origin_digest": self.target_origin_digest}
 
     @property
     def profile_id(self):
@@ -167,11 +207,56 @@ class VerificationProfile:
             "discovery_status": self.discovery_status,
             "selection_status": self.selection_status,
             "configured_engines": list(self.configured_engines),
+            "target_origin_digest": self.target_origin_digest,
             "cases": [case.to_dict() for case in self.cases],
             "auth_field_names": list(self.auth_field_names),
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "profile-sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def bind_target_origin(self, origin):
+        return replace(self, target_origin_digest=digest_target_origin(origin))
+
+    @classmethod
+    def from_dict(cls, payload):
+        expected = {
+            "schema_version", "profile_id", "source", "discovery_status",
+            "selection_status", "configured_engines", "target_origin_digest",
+            "cases", "auth_field_names",
+        }
+        try:
+            if type(payload) is not dict or set(payload) != expected:
+                raise ValueError
+            raw_cases = payload["cases"]
+            if type(raw_cases) is not list:
+                raise ValueError
+            case_keys = {
+                "case_id", "persona_id", "scenario_id", "role", "route",
+                "browser_engine", "viewport", "required", "expected_outcome",
+                "requires_auth", "browser_source", "viewport_source",
+                "legacy_status_defaulted",
+            }
+            cases = []
+            for raw in raw_cases:
+                if type(raw) is not dict or set(raw) != case_keys:
+                    raise ValueError
+                case = PersonaCase(**{key: raw[key] for key in case_keys if key != "case_id"})
+                if type(raw["case_id"]) is not str or raw["case_id"] != case.case_id:
+                    raise ValueError
+                cases.append(case)
+            if type(payload["configured_engines"]) is not list or type(payload["auth_field_names"]) is not list:
+                raise ValueError
+            profile = cls(
+                payload["schema_version"], payload["source"], tuple(cases),
+                tuple(payload["auth_field_names"]), payload["discovery_status"],
+                payload["selection_status"], tuple(payload["configured_engines"]),
+                payload["target_origin_digest"],
+            )
+            if type(payload["profile_id"]) is not str or payload["profile_id"] != profile.profile_id:
+                raise ValueError
+            return profile
+        except Exception:
+            _invalid("invalid_verification_profile")
 
 
 @dataclass(frozen=True)
@@ -184,6 +269,7 @@ class EvidenceRef:
     verification_profile_id: str = ""
     configured_engines: Tuple[str, ...] = ()
     recovery_receipt: object | None = None
+    target_origin_digest: str = ""
 
     def __post_init__(self):
         if type(self.case_id) is not str or not self.case_id.startswith("case-sha256:"):
@@ -203,6 +289,9 @@ class EvidenceRef:
                        for engine in self.configured_engines)
                 or self.browser_engine not in self.configured_engines
                 or actual not in self.configured_engines):
+            _invalid("invalid_verification_evidence")
+        if (type(self.target_origin_digest) is not str
+                or _ORIGIN_ID.fullmatch(self.target_origin_digest) is None):
             _invalid("invalid_verification_evidence")
         if self.substitution_provenance == "alternate_engine_recovery" and actual == self.browser_engine:
             _invalid("invalid_verification_evidence")
@@ -229,6 +318,7 @@ class EvidenceRef:
                     or receipt.actual_engine != actual
                     or receipt.substitution_provenance != self.substitution_provenance
                     or receipt.viewport != self.viewport
+                    or receipt.target_origin_digest != self.target_origin_digest
                     or receipt.target_route_digest != digest_target_route(self.route)
                     or not receipt.attempts
                     or receipt.attempts[-1].attempt_number != self.attempt
@@ -258,6 +348,10 @@ class VerificationGate:
         if any(type(item) is not EvidenceRef for item in supplied):
             _invalid("invalid_verification_evidence")
         required = {case.case_id: case for case in profile.cases if case.required}
+        if required and profile.target_origin_digest is None:
+            return CoverageDecision(
+                False, "verification_target_unbound", tuple(sorted(required)), (),
+            )
         passing, invalid = set(), set()
         for item in supplied:
             case = required.get(item.case_id)
@@ -269,6 +363,7 @@ class VerificationGate:
                 and item.configured_engines == profile.configured_engines
                 and item.browser_engine in profile.configured_engines
                 and item.actual_browser_engine in profile.configured_engines
+                and item.target_origin_digest == profile.target_origin_digest
                 and (
                     item.actual_browser_engine == case.browser_engine
                     and item.substitution_provenance is None

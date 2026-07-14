@@ -14,6 +14,8 @@ from workflow_kernel.schema import InvalidSchemaError
 ROOT = Path(__file__).parents[1]
 FIXTURE = Path(__file__).parent / "fixtures" / "ux" / "assembly"
 SECRET = "sk-fixture-persona-password-must-not-survive"
+TARGET_ORIGIN = "https://example.invalid"
+TARGET_ORIGIN_DIGEST = "origin-sha256:" + hashlib.sha256(TARGET_ORIGIN.encode()).hexdigest()
 
 
 def evidence(
@@ -30,6 +32,7 @@ def evidence(
         authenticated, "proof/screenshot.png", proof_kind,
         actual_engine or case.browser_engine, substitution, profile_id,
         configured, recovery_receipt,
+        profile.target_origin_digest if profile is not None else TARGET_ORIGIN_DIGEST,
     )
 
 
@@ -40,7 +43,7 @@ class PersonaGateTests(unittest.TestCase):
             PersonaCase("p2", "s2", "member", "/two", "firefox", "375x812", True),
             PersonaCase("p3", "s3", "member", "/three", "firefox", "375x812", False),
         )
-        profile = VerificationProfile(1, "project_declaration", cases, ())
+        profile = VerificationProfile(1, "project_declaration", cases, ()).bind_target_origin(TARGET_ORIGIN)
         missing = VerificationGate().evaluate(profile, [evidence(cases[0], profile=profile)])
         self.assertFalse(missing.allowed)
         self.assertEqual(missing.reason_code, "missing_required_persona_evidence")
@@ -55,7 +58,7 @@ class PersonaGateTests(unittest.TestCase):
             "new-member", "vote", "probationary", "/vote", "chromium",
             "375x812", True, expected_outcome="BLOCKED", requires_auth=True,
         )
-        profile = VerificationProfile(1, "project_declaration", (case,), ())
+        profile = VerificationProfile(1, "project_declaration", (case,), ()).bind_target_origin(TARGET_ORIGIN)
         gate = VerificationGate()
         self.assertTrue(gate.evaluate(profile, [evidence(case, profile=profile)]).allowed)
         self.assertFalse(gate.evaluate(profile, [evidence(case, profile=profile, authenticated=False)]).allowed)
@@ -70,7 +73,7 @@ class PersonaGateTests(unittest.TestCase):
         profile = VerificationProfile(
             1, "project_declaration", (case,), (),
             configured_engines=("chromium", "firefox"),
-        )
+        ).bind_target_origin(TARGET_ORIGIN)
         generic_mismatch = evidence(case, profile=profile, actual_engine="firefox")
         self.assertFalse(VerificationGate().evaluate(profile, [generic_mismatch]).allowed)
         with self.assertRaises(InvalidSchemaError):
@@ -91,7 +94,7 @@ class PersonaGateTests(unittest.TestCase):
         profile = VerificationProfile(
             1, "project_declaration", (case,), (),
             configured_engines=("chromium", "firefox"),
-        )
+        ).bind_target_origin(TARGET_ORIGIN)
         url = "https://example.invalid/dashboard"
         url_digest = "url-sha256:" + hashlib.sha256(url.encode()).hexdigest()
         route_digest = "sha256:" + hashlib.sha256(b"/dashboard").hexdigest()
@@ -109,7 +112,7 @@ class PersonaGateTests(unittest.TestCase):
                     "primary-1" if self.count == 1 else "secondary-1", "browser",
                     None if engine == "chromium" else "alternate_engine_recovery",
                     profile.profile_id, profile.configured_engines,
-                    url_digest, route_digest, case.viewport,
+                    url_digest, TARGET_ORIGIN_DIGEST, route_digest, case.viewport,
                 )
             def quit_engine(self, engine):
                 return BrowserQuitEvidence(engine, False, "primary-1")
@@ -118,7 +121,7 @@ class PersonaGateTests(unittest.TestCase):
 
         request = BrowserRequest(
             case.case_id, url, case.viewport, "chromium", "firefox",
-            profile.profile_id, profile.configured_engines,
+            profile.profile_id, profile.configured_engines, TARGET_ORIGIN_DIGEST,
         )
         receipt = BrowserRecovery().run(request, Adapter())
         valid = evidence(
@@ -129,7 +132,7 @@ class PersonaGateTests(unittest.TestCase):
         other = VerificationProfile(
             1, "project_declaration", (case,), (),
             configured_engines=("chromium", "webkit"),
-        )
+        ).bind_target_origin(TARGET_ORIGIN)
         with self.assertRaises(InvalidSchemaError):
             evidence(
                 case, profile=other, actual_engine="firefox",
@@ -145,6 +148,12 @@ class PersonaGateTests(unittest.TestCase):
         decision = VerificationGate().evaluate(non_runnable, (), work_kind="ui")
         self.assertTrue(decision.allowed)
         self.assertEqual(decision.reason_code, "no_runnable_persona_cases_declared")
+
+    def test_declared_profile_cannot_claim_not_declared_selection(self):
+        with self.assertRaises(InvalidSchemaError):
+            VerificationProfile(
+                1, "project_declaration", (), (), "declared", "not_declared",
+            )
 
     def test_not_declared_blocks_ui_but_not_non_ui_and_fabricates_no_personas(self):
         with tempfile.TemporaryDirectory() as directory:

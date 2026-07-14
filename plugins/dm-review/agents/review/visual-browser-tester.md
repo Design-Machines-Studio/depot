@@ -41,7 +41,10 @@ A dev server must be running for this agent to work. Before any testing, attempt
 
 Use `browser_navigate` to try each URL. Use the first one that loads successfully.
 
-If none respond, report: "No dev server detected. Start the application and re-run the review." and stop.
+If none respond, record `target unavailable` and emit a blocked
+`human_help_required` receipt naming the exact missing persona/scenario/route/
+engine/viewport cases. Ask the user to start the application or provide the
+authoritative target URL. Never return a bare stop, skip, approval, or pass.
 
 If a specific URL was provided in the prompt context, use that directly and skip detection.
 
@@ -459,7 +462,7 @@ ToolSearch query: "+pw browser_navigate"
 
 ## Rules
 
-1. Always verify the dev server is running before testing -- if not available, report and stop. If Playwright fails, follow the Browser Fallback Chain before giving up.
+1. Always verify the dev server is running before testing. If the target is unavailable, emit blocked `human_help_required` with the exact missing cases and ask for help. If Playwright fails, follow the Browser Fallback Chain before giving up.
 2. Test every discovered URL, not just the homepage
 3. Take screenshots at all four breakpoints for every URL when CSS changes are involved
 4. Use the accessibility snapshot to find interactive elements -- never hardcode CSS selectors

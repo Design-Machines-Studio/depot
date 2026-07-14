@@ -7,8 +7,11 @@ from typing import Protocol
 
 from .base import invalid_policy
 from ..limits import load_json_document
-from ..policies import PolicyDocument, load_policy
-from ..verification import EvidenceRef, PersonaCase, VerificationProfile, validate_viewport
+from ..policies import PolicyDocument, _snapshot_policy_document, load_policy
+from ..verification import (
+    EvidenceRef, PersonaCase, VerificationProfile, digest_target_origin,
+    validate_viewport,
+)
 
 _TOP = re.compile(r"^([a-z_]+):\s*(.*?)\s*$", re.M)
 _PERSONA = re.compile(r"^  - id:\s*([a-z0-9-]+)\s*$", re.M)
@@ -33,8 +36,17 @@ def _fail():
 
 def _owned_path(path, root, *, directory=False):
     try:
-        if path.is_symlink():
+        lexical_root = root.absolute()
+        lexical_path = path.absolute()
+        if lexical_path != lexical_root and lexical_root not in lexical_path.parents:
             _fail()
+        current = lexical_root
+        if current.is_symlink():
+            _fail()
+        for part in lexical_path.relative_to(lexical_root).parts:
+            current = current / part
+            if current.is_symlink():
+                _fail()
         resolved_root = root.resolve(strict=True)
         resolved = path.resolve(strict=True)
     except (OSError, RuntimeError):
@@ -68,19 +80,33 @@ def _frontmatter(path, root):
     pieces = text.split("---\n", 2)
     if len(pieces) != 3:
         _fail()
-    return pieces[1]
+    frontmatter = pieces[1]
+    keys = [
+        match.group(1)
+        for line in frontmatter.splitlines()
+        if (match := re.match(r"^([a-z_]+):(?:\s|$)", line)) is not None
+    ]
+    if len(keys) != len(set(keys)):
+        _fail()
+    return frontmatter
 
 
 def _scalars(frontmatter):
-    return {key: value.strip().strip('"\'') for key, value in _TOP.findall(frontmatter)}
+    pairs = _TOP.findall(frontmatter)
+    keys = [key for key, _value in pairs]
+    if len(keys) != len(set(keys)):
+        _fail()
+    return {key: value.strip().strip('"\'') for key, value in pairs}
 
 
 def _list(frontmatter, key):
     lines = frontmatter.splitlines()
-    try:
-        start = lines.index(key + ":") + 1
-    except ValueError:
+    starts = [index for index, line in enumerate(lines) if line == key + ":"]
+    if len(starts) > 1:
+        _fail()
+    if not starts:
         return []
+    start = starts[0] + 1
     result = []
     for line in lines[start:]:
         if line.startswith("  - "):
@@ -249,9 +275,21 @@ class ProjectPersonaAdapter:
         if policy_document is not None and type(policy_document) is not PolicyDocument:
             _fail()
         self._policy_path = Path(policy_path) if policy_path is not None else None
-        self._policy_document = policy_document
+        if policy_document is not None:
+            try:
+                self._policy_document = _snapshot_policy_document(policy_document)
+            except Exception:
+                _fail()
+        else:
+            self._policy_document = None
 
-    def discover(self, project_root):
+    def discover(self, project_root, *, target_origin=None):
+        try:
+            return self._discover(project_root, target_origin=target_origin)
+        except Exception:
+            _fail()
+
+    def _discover(self, project_root, *, target_origin=None):
         project = Path(project_root)
         declared_root = project / "tests" / "ux"
         if declared_root.is_symlink():
@@ -262,9 +300,10 @@ class ProjectPersonaAdapter:
         elif any((project / name).exists() for name in ("tasks", "personas", "coverage-matrix.md")):
             ux = project
         else:
-            return VerificationProfile(
+            profile = VerificationProfile(
                 1, "not_declared", (), (), "not_declared", "not_declared", (),
             )
+            return profile if target_origin is None else profile.bind_target_origin(target_origin)
         _owned_path(ux, project if ux == declared_root else ux, directory=True)
         _owned_path(ux / "tasks", ux, directory=True)
         _owned_path(ux / "personas", ux, directory=True)
@@ -281,7 +320,7 @@ class ProjectPersonaAdapter:
             _fail()
         engines = policy["browser_engines"]; viewports = None
         browser_source = "workflow_policy_default"; viewport_source = "workflow_policy_default"
-        selected_suite = None; statuses = set(_RUNNABLE)
+        selected_suite = None; statuses = set(_RUNNABLE); configured_origin = None
         config_path = ux / "verification.json"
         if config_path.is_symlink():
             _fail()
@@ -291,12 +330,17 @@ class ProjectPersonaAdapter:
                 config = load_json_document(config_path)
             except Exception:
                 _fail()
-            allowed = {"schema_version", "suite", "browser_engines", "viewports", "include_statuses"}
+            allowed = {
+                "schema_version", "suite", "browser_engines", "viewports",
+                "include_statuses", "target_origin",
+            }
             if (type(config) is not dict or set(config) - allowed
                     or type(config.get("schema_version")) is not int
                     or config.get("schema_version") != 1):
                 _fail()
             selected_suite = config.get("suite")
+            if selected_suite is not None and (type(selected_suite) is not str or not selected_suite):
+                _fail()
             if "browser_engines" in config:
                 engines = config["browser_engines"]; browser_source = "project_config"
             if "viewports" in config:
@@ -304,12 +348,18 @@ class ProjectPersonaAdapter:
             if "include_statuses" in config:
                 configured_statuses = config["include_statuses"]
                 if (type(configured_statuses) is not list or not configured_statuses
-                        or len(configured_statuses) != len(set(configured_statuses))
                         or any(type(item) is not str or item not in _KNOWN_STATUSES
-                               for item in configured_statuses)):
+                               for item in configured_statuses)
+                        or len(configured_statuses) != len(set(configured_statuses))):
                     _fail()
                 statuses = set(configured_statuses)
-        if type(engines) is not list or not engines or len(engines) != len(set(engines)) or any(item not in {"chromium", "firefox", "webkit"} for item in engines):
+            if "target_origin" in config:
+                if type(config["target_origin"]) is not str:
+                    _fail()
+                configured_origin = digest_target_origin(config["target_origin"])
+        if (type(engines) is not list or not engines
+                or any(type(item) is not str or item not in {"chromium", "firefox", "webkit"} for item in engines)
+                or len(engines) != len(set(engines))):
             _fail()
         if viewports is not None:
             if type(viewports) is not list or not viewports:
@@ -364,7 +414,11 @@ class ProjectPersonaAdapter:
             selection_status = "runnable_cases"
         else:
             selection_status = "optional_cases_only"
+        runtime_origin = None if target_origin is None else digest_target_origin(target_origin)
+        if configured_origin is not None and runtime_origin is not None and configured_origin != runtime_origin:
+            _fail()
         return VerificationProfile(
             1, "project_declaration", tuple(cases), tuple(sorted(auth_names)),
             "declared", selection_status, tuple(engines),
+            runtime_origin or configured_origin,
         )

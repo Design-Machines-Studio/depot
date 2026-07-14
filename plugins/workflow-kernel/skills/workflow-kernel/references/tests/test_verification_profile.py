@@ -205,6 +205,16 @@ class VerificationProfileTests(unittest.TestCase):
                 with self.assertRaises(InvalidSchemaError):
                     ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
 
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / "project"
+            project.mkdir()
+            real_tests = project / "real-tests"
+            real_tests.mkdir()
+            shutil.copytree(FIXTURES / "assembly", real_tests / "ux")
+            (project / "tests").symlink_to(real_tests, target_is_directory=True)
+            with self.assertRaises(InvalidSchemaError):
+                ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
     def test_exact_bool_and_schema_version_types_fail_closed(self):
         with self.assertRaises(InvalidSchemaError):
             PersonaCase(
@@ -254,12 +264,107 @@ class VerificationProfileTests(unittest.TestCase):
             with self.assertRaises(InvalidSchemaError):
                 ProjectPersonaAdapter(policy_path=path).discover(FIXTURES / "assembly")
 
+    def test_injected_policy_document_is_snapshotted_against_its_origin(self):
+        document = load_policy(ROOT / "workflow-policy.json")
+        object.__setattr__(document, "verification_defaults", {
+            "browser_engines": ("webkit",),
+            "desktop_viewport": "1440x900",
+            "mobile_viewport": "375x812",
+        })
+        with self.assertRaises(InvalidSchemaError):
+            ProjectPersonaAdapter(policy_document=document)
+
+    def test_secret_shaped_durable_declaration_fields_fail_closed(self):
+        for role in ("API_TOKEN=leaked-secret", "api_token"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                task.write_text(task.read_text().replace(
+                    "requires_role: member", "requires_role: " + role,
+                ))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_malformed_config_containers_are_normalized_before_deduplication(self):
+        for field in ("browser_engines", "include_statuses"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                (project / "tests" / "ux" / "verification.json").write_text(
+                    json.dumps({"schema_version": 1, field: [{}]})
+                )
+                try:
+                    ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+                except BaseException as error:
+                    self.assertIsInstance(error, InvalidSchemaError)
+                else:
+                    self.fail("malformed config was accepted")
+
+    def test_duplicate_frontmatter_scalar_and_list_keys_fail_closed(self):
+        for duplicate in (
+            "route: /governance/proposals/sample\n",
+            "tags:\n  - mobile\ntags:\n  - responsive\n",
+        ):
+            with self.subTest(duplicate=duplicate), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                text = task.read_text()
+                task.write_text(text.replace("title:", duplicate + "title:", 1))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_profile_runtime_loader_rejects_schema_valid_cross_field_drift(self):
+        case = PersonaCase(
+            "casual-member", "gov-sample-001", "member", "/dashboard",
+            "chromium", "1440x900", True,
+        )
+        profile = VerificationProfile(1, "project_declaration", (case,), ("session_cookie",))
+        payload = profile.to_dict()
+        payload["selection_status"] = "optional_cases_only"
+        with self.assertRaises(InvalidSchemaError):
+            VerificationProfile.from_dict(payload)
+
+    def test_runtime_target_origin_binding_is_opaque_and_part_of_profile_identity(self):
+        profile = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
+            FIXTURES / "assembly"
+        )
+        self.assertIsNone(profile.target_origin_digest)
+        bound = profile.bind_target_origin("https://assembly.example.invalid")
+        self.assertRegex(bound.target_origin_digest, r"^origin-sha256:[0-9a-f]{64}$")
+        self.assertNotEqual(profile.profile_id, bound.profile_id)
+        self.assertNotIn("assembly.example.invalid", json.dumps(bound.to_dict()))
+
+        direct = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
+            FIXTURES / "assembly", target_origin="https://assembly.example.invalid",
+        )
+        self.assertEqual(bound.target_origin_digest, direct.target_origin_digest)
+
+        payload = profile.to_dict()
+        payload["cases"][0]["case_id"] = "case-sha256:" + "0" * 64
+        with self.assertRaises(InvalidSchemaError):
+            VerificationProfile.from_dict(payload)
+
     def test_assessment_instruction_never_skips_required_target_unavailable(self):
         assess = ROOT.parents[3] / "pipeline" / "skills" / "assess" / "SKILL.md"
         text = assess.read_text()
         self.assertNotIn("UX assessment skipped -- no dev server detected", text)
         self.assertIn("target unavailable", text)
         self.assertIn("human_help_required", text)
+
+    def test_dm_review_instructions_emit_terminal_receipt_when_target_is_unavailable(self):
+        dm_review = ROOT.parents[3] / "dm-review"
+        paths = (
+            dm_review / "agents" / "review" / "visual-browser-tester.md",
+            dm_review / "skills" / "visual-test" / "SKILL.md",
+        )
+        for path in paths:
+            with self.subTest(path=path):
+                text = path.read_text()
+                self.assertIn("target unavailable", text)
+                self.assertIn("human_help_required", text)
+                self.assertIn("exact missing", text)
 
 
 if __name__ == "__main__":

@@ -43,7 +43,10 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 3. `https://[project-name].ddev.site` (Craft CMS DDEV)
 4. `http://localhost:5173` (Vite)
 
-Use the first URL that loads successfully. If none respond, ask the user for the URL.
+Use the first URL that loads successfully. If none respond, record `target unavailable`
+and emit a blocked `human_help_required` receipt naming the exact
+missing persona/scenario/route/engine/viewport cases, then ask the user for the
+authoritative URL. Never return a bare stop, skip, approval, or pass.
 
 If Playwright tools fail, follow
 `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`

@@ -16,6 +16,7 @@ PROFILE_ID = "profile-sha256:" + "a" * 64
 ENGINES = ("chromium", "firefox")
 TARGET_URL = "https://example.invalid/page"
 TARGET_URL_DIGEST = "url-sha256:" + hashlib.sha256(TARGET_URL.encode()).hexdigest()
+TARGET_ORIGIN_DIGEST = "origin-sha256:" + hashlib.sha256(b"https://example.invalid").hexdigest()
 TARGET_ROUTE_DIGEST = "sha256:" + hashlib.sha256(b"/page").hexdigest()
 VIEWPORT = "375x812"
 
@@ -61,7 +62,7 @@ def attempt(
         detail if result != "passed" else None,
         "proof/screenshot.png", "proof/trace.zip", "proof/console.txt",
         session, proof_kind, substitution, PROFILE_ID, ENGINES,
-        TARGET_URL_DIGEST, TARGET_ROUTE_DIGEST, VIEWPORT,
+        TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST, TARGET_ROUTE_DIGEST, VIEWPORT,
     )
 
 
@@ -77,7 +78,7 @@ class BrowserRecoveryTests(unittest.TestCase):
     def setUp(self):
         self.request = BrowserRequest(
             "case-1", TARGET_URL, VIEWPORT, "chromium", "firefox",
-            PROFILE_ID, ENGINES,
+            PROFILE_ID, ENGINES, TARGET_ORIGIN_DIGEST,
         )
 
     def test_primary_first_pass_is_clean_without_recovery(self):
@@ -103,6 +104,7 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.reason_code, "primary_recovered_degraded")
         self.assertEqual([item.result for item in receipt.attempts], ["failed", "passed"])
         self.assertEqual(receipt.attempts[-1].session_id, receipt.lifecycle[-1].session_id)
+        self.assertIs(receipt.lifecycle[-1].fresh_profile, True)
         self.assertEqual(adapter.calls, [
             ("attempt", "chromium"), ("quit_engine", "chromium"),
             ("launch_engine", "chromium", True), ("attempt", "chromium"),
@@ -160,12 +162,76 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.attempts[0].failure_reason, "curl_not_browser_evidence")
         with self.assertRaises(ValueError):
             BrowserRequest("case", TARGET_URL, "1440x900", "chromium", "chromium",
-                           PROFILE_ID, ENGINES)
+                           PROFILE_ID, ENGINES, TARGET_ORIGIN_DIGEST)
 
     def test_request_rejects_engines_outside_authoritative_profile(self):
         with self.assertRaises(ValueError):
             BrowserRequest("case", TARGET_URL, VIEWPORT, "chromium", "firefox",
-                           PROFILE_ID, ("chromium",))
+                           PROFILE_ID, ("chromium",), TARGET_ORIGIN_DIGEST)
+
+    def test_single_engine_profile_records_secondary_unavailable_and_human_help(self):
+        request = BrowserRequest(
+            "case-1", TARGET_URL, VIEWPORT, "chromium", None,
+            PROFILE_ID, ("chromium",), TARGET_ORIGIN_DIGEST,
+        )
+        primary = replace(
+            attempt(1, "chromium", "failed", session="primary-1"),
+            configured_engines=("chromium",),
+        )
+        receipt = BrowserRecovery().run(
+            request,
+            FakeBrowserAdapter(
+                [primary],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+            ),
+        )
+        self.assertEqual("blocked", receipt.status)
+        self.assertEqual("human_help_required", receipt.reason_code)
+        self.assertIn(
+            "secondary_engine_unavailable",
+            [item.result for item in receipt.lifecycle],
+        )
+
+    def test_invalid_primary_launch_is_not_recorded_as_successful(self):
+        adapter = FakeBrowserAdapter(
+            [
+                attempt(1, "chromium", "failed", session="primary-1"),
+                attempt(2, "firefox", "passed", session="secondary-1"),
+            ],
+            launches=[
+                BrowserLaunchEvidence("chromium", True, True, "primary-1"),
+                BrowserLaunchEvidence("firefox", True, True, "secondary-1"),
+            ],
+        )
+        receipt = BrowserRecovery().run(self.request, adapter)
+        self.assertEqual("alternate_engine_recovered_degraded", receipt.reason_code)
+        self.assertIn("session_identity_mismatch", [item.result for item in receipt.lifecycle])
+        self.assertFalse(any(
+            item.action == "browser_process_launch"
+            and item.actual_engine == "chromium"
+            and item.result == "launched"
+            for item in receipt.lifecycle
+        ))
+
+    def test_nonfresh_launch_is_normalized_and_cannot_recover(self):
+        request = BrowserRequest(
+            "case-1", TARGET_URL, VIEWPORT, "chromium", None,
+            PROFILE_ID, ("chromium",), TARGET_ORIGIN_DIGEST,
+        )
+        primary = replace(
+            attempt(1, "chromium", "failed", session="primary-1"),
+            configured_engines=("chromium",),
+        )
+        receipt = BrowserRecovery().run(
+            request,
+            FakeBrowserAdapter(
+                [primary],
+                launches=[BrowserLaunchEvidence("chromium", True, False, "primary-2")],
+            ),
+        )
+        self.assertEqual("blocked", receipt.status)
+        self.assertIn("fresh_profile_unavailable", [item.result for item in receipt.lifecycle])
+        self.assertFalse(any(item.result == "launched" for item in receipt.lifecycle))
 
     def test_app_restart_is_distinct_diagnostic_not_browser_relaunch(self):
         adapter = FakeBrowserAdapter(
@@ -254,26 +320,21 @@ class BrowserRecoveryTests(unittest.TestCase):
                     json.dumps(receipt.to_dict()),
                 )
 
-    def test_attempt_and_receipt_bind_safe_target_metadata(self):
+    def test_request_rejects_secret_bearing_target_without_persisting_it(self):
         secret_url = "https://member:password@example.invalid/private?token=secret"
-        request = BrowserRequest(
-            "case-1", secret_url, VIEWPORT, "chromium", "firefox",
-            PROFILE_ID, ENGINES,
-        )
-        url_digest = "url-sha256:" + hashlib.sha256(secret_url.encode()).hexdigest()
-        route_digest = "sha256:" + hashlib.sha256(b"/private").hexdigest()
-        bound = replace(
-            attempt(1, "chromium", "passed", session="primary-1"),
-            target_url_digest=url_digest, target_route_digest=route_digest,
-        )
-        receipt = BrowserRecovery().run(request, FakeBrowserAdapter([bound]))
-        serialized = json.dumps(receipt.to_dict(), sort_keys=True)
-        self.assertEqual(receipt.target_url_digest, url_digest)
-        self.assertEqual(receipt.target_route_digest, route_digest)
-        self.assertEqual(receipt.viewport, VIEWPORT)
-        self.assertNotIn("password", serialized)
-        self.assertNotIn("token=secret", serialized)
-        self.assertNotIn("example.invalid", serialized)
+        with self.assertRaises(ValueError):
+            BrowserRequest(
+                "case-1", secret_url, VIEWPORT, "chromium", "firefox",
+                PROFILE_ID, ENGINES, TARGET_ORIGIN_DIGEST,
+            )
+
+    def test_request_rejects_url_from_wrong_authoritative_origin(self):
+        wrong = "https://wrong-environment.invalid/page"
+        with self.assertRaises(ValueError):
+            BrowserRequest(
+                "case-1", wrong, VIEWPORT, "chromium", "firefox",
+                PROFILE_ID, ENGINES, TARGET_ORIGIN_DIGEST,
+            )
 
     def test_runtime_receipt_rejects_cross_field_and_session_chain_contradictions(self):
         adapter = FakeBrowserAdapter([attempt(1, "chromium", "passed", session="primary-1")])

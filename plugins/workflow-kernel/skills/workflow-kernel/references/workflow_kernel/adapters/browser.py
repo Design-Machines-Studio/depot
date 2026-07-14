@@ -8,17 +8,19 @@ from typing import Optional, Protocol, Tuple
 from urllib.parse import urlsplit
 
 from ..redaction import digest_error_detail_string, normalize_evidence_reference
-from ..verification import digest_target_route, validate_viewport
+from ..verification import digest_target_origin, digest_target_route, validate_viewport
 
 _ENGINES = frozenset({"chromium", "firefox", "webkit"})
 _RESULTS = frozenset({"passed", "failed", "unavailable"})
 _REASON_CODES = frozenset({
     "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
     "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch",
+    "fresh_profile_unavailable", "secondary_engine_unavailable",
 })
 _SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
 _TARGET_DIGEST = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
+_ORIGIN_DIGEST = re.compile(r"origin-sha256:[0-9a-f]{64}\Z")
 _SUBSTITUTION = "alternate_engine_recovery"
 _RECEIPT_REASONS = frozenset({
     "browser_verified_first_pass", "primary_recovered_degraded",
@@ -63,13 +65,22 @@ def _target_metadata(url):
         raise ValueError("invalid browser target")
     try:
         parsed = urlsplit(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.hostname is None:
+        if (parsed.scheme not in {"http", "https"} or not parsed.netloc
+                or parsed.hostname is None or parsed.username is not None
+                or parsed.password is not None):
             raise ValueError("invalid browser target")
-        parsed.port
+        port = parsed.port
     except (TypeError, ValueError):
         raise ValueError("invalid browser target") from None
+    host = parsed.hostname
+    if ":" in host and not host.startswith("["):
+        host = "[" + host + "]"
+    origin = parsed.scheme + "://" + host
+    if port is not None:
+        origin += ":" + str(port)
     return (
         "url-sha256:" + hashlib.sha256(url.encode("utf-8")).hexdigest(),
+        digest_target_origin(origin),
         digest_target_route(parsed.path or "/"),
     )
 
@@ -77,14 +88,16 @@ def _target_metadata(url):
 def _validate_profile_binding(profile_id, engines):
     if (type(profile_id) is not str or _PROFILE_ID.fullmatch(profile_id) is None
             or type(engines) is not tuple or not engines
-            or len(engines) != len(set(engines))
-            or any(type(engine) is not str or engine not in _ENGINES for engine in engines)):
+            or any(type(engine) is not str or engine not in _ENGINES for engine in engines)
+            or len(engines) != len(set(engines))):
         raise ValueError("invalid verification profile binding")
 
 
-def _validate_target_binding(url_digest, route_digest, viewport):
+def _validate_target_binding(url_digest, origin_digest, route_digest, viewport):
     if (type(url_digest) is not str or not url_digest.startswith("url-sha256:")
             or _TARGET_DIGEST.fullmatch(url_digest) is None
+            or type(origin_digest) is not str
+            or _ORIGIN_DIGEST.fullmatch(origin_digest) is None
             or type(route_digest) is not str or not route_digest.startswith("sha256:")
             or _TARGET_DIGEST.fullmatch(route_digest) is None):
         raise ValueError("invalid browser target binding")
@@ -93,17 +106,26 @@ def _validate_target_binding(url_digest, route_digest, viewport):
 
 @dataclass(frozen=True)
 class BrowserRequest:
-    case_id: str; url: str; viewport: str; primary_engine: str; secondary_engine: str
+    case_id: str; url: str; viewport: str; primary_engine: str; secondary_engine: Optional[str]
     verification_profile_id: str; configured_engines: Tuple[str, ...]
+    target_origin_digest: str
 
     def __post_init__(self):
         _safe_case_id(self.case_id)
         _target_metadata(self.url)
         validate_viewport(self.viewport)
         _validate_profile_binding(self.verification_profile_id, self.configured_engines)
-        if (self.primary_engine not in _ENGINES or self.secondary_engine not in _ENGINES
+        metadata = _target_metadata(self.url)
+        if metadata[1] != self.target_origin_digest:
+            raise ValueError("browser target origin mismatch")
+        if (self.primary_engine not in _ENGINES
+                or self.primary_engine not in self.configured_engines):
+            raise ValueError("browser engines must be genuinely different")
+        if len(self.configured_engines) == 1:
+            if self.secondary_engine is not None:
+                raise ValueError("single engine profile cannot name a secondary")
+        elif (self.secondary_engine not in _ENGINES
                 or self.primary_engine == self.secondary_engine
-                or self.primary_engine not in self.configured_engines
                 or self.secondary_engine not in self.configured_engines):
             raise ValueError("browser engines must be genuinely different")
 
@@ -113,7 +135,7 @@ class BrowserRequest:
 
     @property
     def target_route_digest(self):
-        return _target_metadata(self.url)[1]
+        return _target_metadata(self.url)[2]
 
 
 @dataclass(frozen=True)
@@ -126,13 +148,17 @@ class BrowserAttempt:
     verification_profile_id: str = ""
     configured_engines: Tuple[str, ...] = ()
     target_url_digest: str = ""
+    target_origin_digest: str = ""
     target_route_digest: str = ""
     viewport: str = ""
 
     def __post_init__(self):
         _safe_case_id(self.case_id); _safe_session_id(self.session_id)
         _validate_profile_binding(self.verification_profile_id, self.configured_engines)
-        _validate_target_binding(self.target_url_digest, self.target_route_digest, self.viewport)
+        _validate_target_binding(
+            self.target_url_digest, self.target_origin_digest,
+            self.target_route_digest, self.viewport,
+        )
         if (type(self.attempt_number) is not int or self.attempt_number < 1
                 or self.requested_engine not in _ENGINES or self.actual_engine not in _ENGINES
                 or self.requested_engine not in self.configured_engines
@@ -201,6 +227,7 @@ class BrowserLifecycleEvidence:
     session_id: str; previous_session_id: Optional[str] = None
     reason_code: Optional[str] = None; failure_detail: Optional[str] = None
     substitution_provenance: Optional[str] = None
+    fresh_profile: Optional[bool] = None
 
     def __post_init__(self):
         _safe_case_id(self.case_id); _safe_session_id(self.session_id)
@@ -209,11 +236,12 @@ class BrowserLifecycleEvidence:
         if (self.requested_engine not in _ENGINES or self.actual_engine not in _ENGINES
                 or self.action not in {
                     "browser_process_quit", "browser_process_launch", "application_restart",
-                    "primary_restart", "session_validation",
+                    "primary_restart", "session_validation", "secondary_engine",
                 }
                 or self.result not in {
                     "confirmed", "unconfirmed", "launched", "unavailable",
                     "primary_restart_unavailable", "session_identity_mismatch",
+                    "fresh_profile_unavailable", "secondary_engine_unavailable",
                 }
                 or self.substitution_provenance not in {None, _SUBSTITUTION}):
             raise ValueError("invalid browser lifecycle evidence")
@@ -223,7 +251,9 @@ class BrowserLifecycleEvidence:
             "browser_process_launch": {"launched", "unavailable"},
             "primary_restart": {"primary_restart_unavailable"},
             "session_validation": {"session_identity_mismatch"},
+            "secondary_engine": {"secondary_engine_unavailable"},
         }
+        allowed_results["browser_process_launch"].add("fresh_profile_unavailable")
         if (self.result not in allowed_results[self.action]
                 or ((self.actual_engine == self.requested_engine)
                     != (self.substitution_provenance is None))):
@@ -236,6 +266,13 @@ class BrowserLifecycleEvidence:
             raise ValueError("inconsistent browser lifecycle result")
         if self.result == "unavailable" and self.reason_code not in _REASON_CODES:
             raise ValueError("inconsistent browser lifecycle result")
+        if self.action == "browser_process_launch":
+            if (self.result == "launched" and self.fresh_profile is not True
+                    or self.result == "fresh_profile_unavailable" and self.fresh_profile is not False
+                    or self.result == "unavailable" and self.fresh_profile is not None):
+                raise ValueError("inconsistent browser lifecycle freshness")
+        elif self.fresh_profile is not None:
+            raise ValueError("unexpected browser lifecycle freshness")
 
     def to_dict(self):
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
@@ -249,11 +286,15 @@ class BrowserRecoveryReceipt:
     missing_case_ids: Tuple[str, ...]
     verification_profile_id: str; configured_engines: Tuple[str, ...]
     target_url_digest: str; target_route_digest: str; viewport: str
+    target_origin_digest: str
 
     def __post_init__(self):
         _safe_case_id(self.case_id)
         _validate_profile_binding(self.verification_profile_id, self.configured_engines)
-        _validate_target_binding(self.target_url_digest, self.target_route_digest, self.viewport)
+        _validate_target_binding(
+            self.target_url_digest, self.target_origin_digest,
+            self.target_route_digest, self.viewport,
+        )
         if (type(self.schema_version) is not int or self.schema_version != 1
                 or self.status not in {"clean", "recovered", "blocked"}
                 or self.reason_code not in _RECEIPT_REASONS
@@ -266,6 +307,7 @@ class BrowserRecoveryReceipt:
                 or self.requested_engine not in self.configured_engines
                 or self.actual_engine not in self.configured_engines
                 or type(self.missing_case_ids) is not tuple
+                or any(type(item) is not str for item in self.missing_case_ids)
                 or len(self.missing_case_ids) != len(set(self.missing_case_ids))):
             raise ValueError("invalid browser recovery receipt")
         if (not self.attempts or len(self.attempts) > 3
@@ -282,6 +324,7 @@ class BrowserRecoveryReceipt:
                     or item.verification_profile_id != self.verification_profile_id
                     or item.configured_engines != self.configured_engines
                     or item.target_url_digest != self.target_url_digest
+                    or item.target_origin_digest != self.target_origin_digest
                     or item.target_route_digest != self.target_route_digest
                     or item.viewport != self.viewport
                     or (number == 1 and item.actual_engine != self.requested_engine)):
@@ -293,12 +336,24 @@ class BrowserRecoveryReceipt:
             raise ValueError("browser recovery lacks initial quit evidence")
         launched = {}
         primary_quit_confirmed = False
-        for item in self.lifecycle:
+        secondary_started = False
+        for index, item in enumerate(self.lifecycle):
             if (item.requested_engine != self.requested_engine
                     or item.actual_engine not in self.configured_engines):
                 raise ValueError("browser lifecycle profile mismatch")
+            if index and item.action in {"browser_process_quit", "application_restart"}:
+                raise ValueError("browser quit must be the first lifecycle action")
+            is_secondary = (
+                item.actual_engine != self.requested_engine
+                or item.action == "secondary_engine"
+            )
+            if is_secondary:
+                secondary_started = True
+            elif secondary_started:
+                raise ValueError("primary lifecycle action follows secondary recovery")
             if item.action in {"browser_process_quit", "application_restart"} and (
-                    item.session_id != first_session or item.previous_session_id != first_session):
+                    item.actual_engine != self.requested_engine
+                    or item.session_id != first_session or item.previous_session_id != first_session):
                 raise ValueError("browser quit session mismatch")
             if item.action == "browser_process_quit" and item.result == "confirmed":
                 primary_quit_confirmed = True
@@ -357,6 +412,12 @@ class BrowserRecoveryReceipt:
                      and self.actual_engine == attempts[-1].actual_engine
                      and self.substitution_provenance is None
                      and self.missing_case_ids == (self.case_id,))
+            if len(self.configured_engines) == 1:
+                valid = valid and any(
+                    item.action == "secondary_engine"
+                    and item.result == "secondary_engine_unavailable"
+                    for item in self.lifecycle
+                )
         if not valid:
             raise ValueError("inconsistent browser recovery receipt")
 
@@ -372,6 +433,7 @@ class BrowserRecoveryReceipt:
             "verification_profile_id": self.verification_profile_id,
             "configured_engines": list(self.configured_engines),
             "target_url_digest": self.target_url_digest,
+            "target_origin_digest": self.target_origin_digest,
             "target_route_digest": self.target_route_digest,
             "viewport": self.viewport,
         }
@@ -391,7 +453,8 @@ class BrowserRecovery:
             reason, detail, None, None, None, f"unavailable-{number}-{engine}", "browser",
             _SUBSTITUTION if engine != request.primary_engine else None,
             request.verification_profile_id, request.configured_engines,
-            request.target_url_digest, request.target_route_digest, request.viewport,
+            request.target_url_digest, request.target_origin_digest,
+            request.target_route_digest, request.viewport,
         )
 
     def _attempt(self, request, adapter, engine, number):
@@ -401,6 +464,16 @@ class BrowserRecovery:
             return self._unavailable_attempt(
                 request, engine, number, "adapter_exception", _sealed_exception_detail(error),
             )
+        if type(item) is BrowserAttempt:
+            try:
+                item = BrowserAttempt(**{
+                    name: getattr(item, name) for name in item.__dataclass_fields__
+                })
+            except Exception:
+                return self._unavailable_attempt(
+                    request, engine, number, "invalid_adapter_evidence",
+                    "adapter attempt failed canonical validation",
+                )
         expected_substitution = _SUBSTITUTION if engine != request.primary_engine else None
         if (type(item) is not BrowserAttempt or item.case_id != request.case_id
                 or item.attempt_number != number or item.requested_engine != request.primary_engine
@@ -408,6 +481,7 @@ class BrowserRecovery:
                 or item.verification_profile_id != request.verification_profile_id
                 or item.configured_engines != request.configured_engines
                 or item.target_url_digest != request.target_url_digest
+                or item.target_origin_digest != request.target_origin_digest
                 or item.target_route_digest != request.target_route_digest
                 or item.viewport != request.viewport
                 or item.substitution_provenance not in {None, expected_substitution}):
@@ -430,12 +504,13 @@ class BrowserRecovery:
     @staticmethod
     def _lifecycle(
         request, engine, action, result, session_id, *, previous=None, reason=None,
-        detail=None,
+        detail=None, fresh_profile=None,
     ):
         return BrowserLifecycleEvidence(
             request.case_id, request.primary_engine, engine, action, result, session_id,
             previous, reason, detail,
             _SUBSTITUTION if engine != request.primary_engine else None,
+            fresh_profile,
         )
 
     def _quit(self, request, adapter, initial):
@@ -447,6 +522,13 @@ class BrowserRecovery:
                 initial.session_id, previous=initial.session_id,
                 reason="adapter_exception", detail=_sealed_exception_detail(error),
             )
+        if type(item) is BrowserQuitEvidence:
+            try:
+                item = BrowserQuitEvidence(**{
+                    name: getattr(item, name) for name in item.__dataclass_fields__
+                })
+            except Exception:
+                item = None
         if (type(item) is not BrowserQuitEvidence or item.engine != request.primary_engine
                 or item.session_id != initial.session_id):
             return None, self._lifecycle(
@@ -462,7 +544,7 @@ class BrowserRecovery:
             reason=None if item.confirmed else "browser_unavailable",
         )
 
-    def _launch(self, request, adapter, engine, previous):
+    def _launch(self, request, adapter, engine, previous, forbidden_sessions):
         try:
             item = adapter.launch_engine(engine, True)
         except Exception as error:
@@ -471,17 +553,38 @@ class BrowserRecovery:
                 f"unavailable-launch-{engine}", previous=previous,
                 reason="adapter_exception", detail=_sealed_exception_detail(error),
             )
+        if type(item) is BrowserLaunchEvidence:
+            try:
+                item = BrowserLaunchEvidence(**{
+                    name: getattr(item, name) for name in item.__dataclass_fields__
+                })
+            except Exception:
+                item = None
         if type(item) is not BrowserLaunchEvidence or item.engine != engine:
             return None, self._lifecycle(
                 request, engine, "browser_process_launch", "unavailable",
                 f"unavailable-launch-{engine}", previous=previous,
                 reason="invalid_adapter_evidence", detail="adapter launch identity mismatch",
             )
+        if not item.launched:
+            return None, self._lifecycle(
+                request, item.engine, item.action, "unavailable", item.session_id,
+                previous=previous, reason="browser_unavailable",
+            )
+        if not item.fresh_profile:
+            return None, self._lifecycle(
+                request, item.engine, item.action, "fresh_profile_unavailable",
+                item.session_id, previous=previous,
+                reason="fresh_profile_unavailable", fresh_profile=False,
+            )
+        if item.session_id in forbidden_sessions:
+            return None, self._lifecycle(
+                request, item.engine, "session_validation", "session_identity_mismatch",
+                item.session_id, previous=previous, reason="session_identity_mismatch",
+            )
         return item, self._lifecycle(
-            request, item.engine, item.action,
-            "launched" if item.launched else "unavailable", item.session_id,
-            previous=previous,
-            reason=None if item.launched else "browser_unavailable",
+            request, item.engine, item.action, "launched", item.session_id,
+            previous=previous, fresh_profile=True,
         )
 
     @staticmethod
@@ -503,6 +606,7 @@ class BrowserRecovery:
             tuple(attempts), tuple(lifecycle), tuple(missing),
             request.verification_profile_id, request.configured_engines,
             request.target_url_digest, request.target_route_digest, request.viewport,
+            request.target_origin_digest,
         )
 
     def run(self, request, adapter):
@@ -525,12 +629,11 @@ class BrowserRecovery:
         if restart_proved:
             primary_launch, launch_lifecycle = self._launch(
                 request, adapter, request.primary_engine, initial.session_id,
+                {initial.session_id},
             )
             lifecycle.append(launch_lifecycle)
             restart_proved = (
-                primary_launch is not None and primary_launch.launched
-                and primary_launch.fresh_profile
-                and primary_launch.session_id != initial.session_id
+                primary_launch is not None
             )
         if restart_proved:
             retry = self._attempt(
@@ -552,14 +655,23 @@ class BrowserRecovery:
         previous_sessions = {initial.session_id}
         if primary_launch is not None:
             previous_sessions.add(primary_launch.session_id)
+        if request.secondary_engine is None:
+            lifecycle.append(self._lifecycle(
+                request, request.primary_engine, "secondary_engine",
+                "secondary_engine_unavailable", initial.session_id,
+                previous=initial.session_id, reason="secondary_engine_unavailable",
+            ))
+            return self._receipt(
+                request, "blocked", "human_help_required", attempts, lifecycle,
+                (request.case_id,),
+            )
         secondary_launch, launch_lifecycle = self._launch(
             request, adapter, request.secondary_engine, initial.session_id,
+            previous_sessions,
         )
         lifecycle.append(launch_lifecycle)
         secondary_proved = (
-            secondary_launch is not None and secondary_launch.launched
-            and secondary_launch.fresh_profile
-            and secondary_launch.session_id not in previous_sessions
+            secondary_launch is not None
         )
         if secondary_proved:
             secondary = self._attempt(

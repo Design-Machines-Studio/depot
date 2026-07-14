@@ -11,9 +11,11 @@ coverage matrix must agree with task/persona/outcome declarations; index drift
 fails closed rather than changing task authority. An existing incomplete
 `tests/ux/` tree is invalid. Only an absent declaration tree is `not_declared`.
 The matrix must represent the complete authoritative task and assignment set;
-a compact matrix that omits a task or row is drift. Discovery rejects symlinked
-UX directories and files, plus any resolved path outside the owned UX tree,
-before reading it.
+a compact matrix that omits a task or row is drift. Discovery rejects symlinks
+in every ancestor from the project root through the UX declaration and all
+descendants, plus any resolved path outside the owned UX tree, before reading
+it. Duplicate scalar or list-section frontmatter keys and malformed scalar or
+container types fail with `invalid_verification_declaration`.
 Selected `current`, `redirected-current`, and statusless legacy tasks expand every
 persona assignment across every configured browser and viewport. Statusless tasks
 record `legacy_status_defaulted=true`. `required` defaults to true; only explicit
@@ -23,6 +25,11 @@ Explicit status filters are non-empty known-status lists and may add future or
 inactive work without erasing default runnable declarations. A declared profile
 with no cases is valid only with `selection_status=no_runnable_tasks`; a profile
 whose cases are all optional records `selection_status=optional_cases_only`.
+The discovery/source/selection/cases matrix is exact: `not_declared` requires an
+absent tree and empty cases/engines; declared profiles use project-declaration
+provenance and exactly one of runnable, optional-only, or proven no-runnable
+selection. UI work with empty coverage blocks unless declared provenance proves
+that no runnable cases exist.
 
 Precedence is project config, task declaration, selected suite IDs, persona
 device/viewport defaults, then workflow-policy defaults. Undeclared browser and
@@ -30,6 +37,9 @@ viewport values are recorded as `workflow_policy_default`. The canonical default
 are Chromium plus Firefox, desktop `1440x900`, and mobile `375x812`.
 Each normalized profile retains the ordered configured-engine set and derives a
 content-addressed `profile-sha256` identity from its complete safe declaration.
+The authoritative runtime origin is reduced to an opaque `origin-sha256` digest
+and included in that identity; configured and runtime origins must agree. Raw
+origins, credentials, query secrets, and fragments are never persisted.
 
 Required coverage is exact set subtraction: required case IDs minus valid passing
 evidence case IDs. Evidence must bind one persona, scenario, route, engine,
@@ -49,7 +59,8 @@ For a required browser failure, preserve safe attempt evidence first, then:
 1. quit the primary browser process or engine session (a tab/context close is not proof);
 2. launch a fresh primary profile with a changed process/session identity and retry once;
 3. if restart cannot be proved, record `primary_restart_unavailable` and continue;
-4. launch one genuinely different configured engine and retry once;
+4. launch one genuinely different configured engine and retry once; a valid
+   single-engine profile instead records `secondary_engine_unavailable`;
 5. if it fails or is unavailable, return blocked `human_help_required` with all
    attempts and exact missing case IDs.
 
@@ -58,7 +69,8 @@ different fresh session, and the following attempt must identify that launched
 session. The same launch-to-attempt identity proof applies to the alternate
 engine. Every attempt and receipt binds `case_id`, requested engine, actual
 engine, configured-engine set, verification-profile identity, validated
-viewport, opaque URL digest, opaque route digest, and session ID. Raw targets
+viewport, opaque URL digest, authoritative origin digest, opaque route digest,
+and session ID. Raw targets
 never enter durable attempt or receipt data. A passing alternate is explicit
 `alternate_engine_recovery`: degraded browser-tooling proof for the requested
 case. The coverage gate accepts only that named substitution when its complete
@@ -67,6 +79,13 @@ winning attempt is bound to the proved fresh alternate session. Generic engine
 mismatch is rejected. Adapter exceptions become stable reason codes plus bounded
 digested details and continue through the ladder even when exception string or
 representation rendering itself fails; raw error text is never stored.
+Launches with a reused/invalid session identity or `fresh_profile=false` are
+recorded as `session_identity_mismatch` or `fresh_profile_unavailable`, never as
+successful launches. Successful recovery lifecycle evidence persists
+`fresh_profile=true`.
+
+Injected policy documents are canonically snapshotted and revalidated at adapter
+construction. Later mutation of a frozen object cannot alter discovery defaults.
 
 Receipt constructors and schemas reject contradictory state: status and reason
 must agree, attempts are ordered and retain all failures before the sole winning
