@@ -4,8 +4,10 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
+from unittest.mock import patch
 
 from tests import detail_digest, schema_matches
+import workflow_kernel.adapters.base as adapter_base
 from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
 )
@@ -16,6 +18,49 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 
 class RetryPolicyTests(unittest.TestCase):
+    def test_retry_reason_conversion_is_secret_safe_but_base_exceptions_propagate(self):
+        secret = "sk-secret-retry-detail"
+
+        class Hostile:
+            def __eq__(self, other):
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as raised:
+            RetryPolicy().decide(Hostile(), AttemptLedger(), None)
+        self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalConversion(BaseException):
+            pass
+
+        class Fatal:
+            def __eq__(self, other):
+                raise FatalConversion()
+
+        with self.assertRaises(FatalConversion):
+            RetryPolicy().decide(Fatal(), AttemptLedger(), None)
+
+    def test_retry_decision_snapshots_attempt_ledger_exactly_once(self):
+        snapshots = []
+        original = adapter_base._snapshot_attempt_ledger
+
+        def snapshot(value):
+            snapshots.append(value)
+            return original(value)
+
+        with (
+            patch.object(policy_module, "_snapshot_attempt_ledger", side_effect=snapshot),
+            patch.object(adapter_base, "_snapshot_attempt_ledger", side_effect=snapshot),
+        ):
+            RetryPolicy().decide(
+                FailureReason.REVIEWER_FINDING,
+                AttemptLedger(
+                    {FailureReason.REVIEWER_FINDING: 1},
+                    {FailureReason.REVIEWER_FINDING: ("signature",)},
+                ),
+                "next-signature",
+            )
+        self.assertEqual(len(snapshots), 1)
+
     def test_gate_evidence_iterator_failures_are_secret_safe(self):
         secret = "sk-secret-gate-detail"
 
@@ -66,6 +111,36 @@ class RetryPolicyTests(unittest.TestCase):
         cases.append((
             bad_limit_payload,
             replace(document, identical_signature_limit=1),
+        ))
+
+        missing_classes_payload = json.loads(json.dumps(canonical_payload))
+        del missing_classes_payload["workflow_safety_anchor"]["classes"]
+        missing_classes_anchor = dict(document.workflow_safety_anchor)
+        del missing_classes_anchor["classes"]
+        cases.append((
+            missing_classes_payload,
+            replace(
+                document,
+                workflow_safety_anchor=MappingProxyType(missing_classes_anchor),
+            ),
+        ))
+
+        bad_stage_payload = json.loads(json.dumps(canonical_payload))
+        bad_stage_payload["workflow_safety_anchor"]["common"]["stages"][0][
+            "required_evidence"
+        ] = [""]
+        bad_stage_anchor = dict(document.workflow_safety_anchor)
+        bad_common = [dict(stage) for stage in bad_stage_anchor["common"]]
+        bad_common[0]["required_evidence"] = ("",)
+        bad_stage_anchor["common"] = tuple(
+            MappingProxyType(stage) for stage in bad_common
+        )
+        cases.append((
+            bad_stage_payload,
+            replace(
+                document,
+                workflow_safety_anchor=MappingProxyType(bad_stage_anchor),
+            ),
         ))
 
         for payload, injected in cases:

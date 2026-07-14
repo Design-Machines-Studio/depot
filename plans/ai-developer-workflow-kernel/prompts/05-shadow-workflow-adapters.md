@@ -186,7 +186,9 @@ while executor and dispatch entries derive exclusively from routes. Wrapper
 routes are analysis/text-only and cannot run builder
 nodes. Treat the module-owned weak identity seals over route, node, nested gate,
 capability, context, handle, result, feedback, blob, and decision primitives or
-digests as part of this boundary; caller-added seal fields have no authority:
+digests as part of this boundary. Live identities may be registered only once,
+so direct initialization re-entry cannot reseal changed state; guarded weakref
+cleanup alone permits stale identity-slot reuse. Caller-added seal fields have no authority:
 coherent route rewrites, coordinated security-node rewrites, and nested
 gate/route mutation must fail before authorization or dispatch. Capture the
 validated `SessionHandle` returned by builder dispatch
@@ -195,8 +197,10 @@ deterministic validation failure, construct secret-safe
 `ValidationFeedback` for the same node and call the manager's resume-or-replace
 path. Preserve the closed outcome: resumed original session, replacement
 dispatch, resume unavailable, gate/capability block, or adapter failure.
-Ordinary caller-data exceptions at reconstruction and projection boundaries
-must map to stable secret-safe failures; do not intercept `BaseException`.
+Ordinary caller-data exceptions from scalar/enum conversion, membership,
+equality, hashing, iteration, or mapping access at reconstruction and projection
+boundaries must map to stable secret-safe failures; do not intercept
+`BaseException`.
 
 Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
 only in permission-restricted package-owned storage with explicit retention and

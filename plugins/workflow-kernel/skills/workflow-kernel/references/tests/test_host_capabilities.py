@@ -20,6 +20,162 @@ from workflow_kernel.schema import InvalidSchemaError
 
 
 class HostCapabilityTests(unittest.TestCase):
+    def test_live_identities_cannot_be_resealed_through_post_init(self):
+        route = HostRoute(
+            "anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION, "native",
+        )
+        object.__setattr__(route, "provider", "openai")
+        object.__setattr__(route, "capability", HostCapability.CODEX_EXECUTION)
+        with self.assertRaises(ValueError):
+            route.__post_init__()
+        with self.assertRaises(InvalidSchemaError):
+            _ = route.dispatch_capability
+
+        node = NodeSpec(
+            "security_build", executor="claude",
+            required_capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+            required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+        )
+        object.__setattr__(node, "executor", "codex")
+        object.__setattr__(node, "required_capability", HostCapability.CODEX_EXECUTION)
+        with self.assertRaises(ValueError):
+            node.__post_init__()
+        self.assertFalse(route_satisfies_node(
+            HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"), node,
+        ))
+
+        capabilities = HostCapabilities(
+            "claude", (), routes=frozenset({
+                HostRoute(
+                    "anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+                    "native",
+                ),
+            }),
+        )
+        object.__setattr__(capabilities, "capabilities", frozenset())
+        object.__setattr__(capabilities, "routes", frozenset({
+            HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"),
+        }))
+        with self.assertRaises(ValueError):
+            capabilities.__post_init__()
+        with self.assertRaises(InvalidSchemaError):
+            capabilities.supports_route(
+                HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"),
+            )
+
+        context = adapter_base.ResumeStateContext(
+            "run-1", "build", "attempt-1", "openai", "native",
+            HostCapability.CODEX_EXECUTION,
+        )
+        object.__setattr__(context, "run_id", "run-2")
+        with self.assertRaises(ValueError):
+            context.__post_init__()
+        with self.assertRaises(InvalidSchemaError):
+            context.to_dict()
+
+        handle = adapter_base.SessionHandle(
+            "codex", "opaque-one", "2026-07-14T00:00:00Z", True,
+            adapter_base.ResumeStateContext(
+                "run-1", "build", "attempt-1", "openai", "native",
+                HostCapability.CODEX_EXECUTION,
+            ),
+        )
+        object.__setattr__(handle, "opaque_handle", "opaque-two")
+        with self.assertRaises(ValueError):
+            handle.__post_init__()
+        with self.assertRaises(InvalidSchemaError):
+            handle.to_dict()
+
+    def test_identity_registry_allows_only_guarded_dead_entry_reuse(self):
+        class Token:
+            pass
+
+        registry = adapter_base._IdentitySealRegistry()
+        live = Token()
+        registry.register(live, "Token", ("first",))
+        with self.assertRaises(ValueError):
+            registry.register(live, "Token", ("first",))
+        with self.assertRaises(ValueError):
+            registry.register(live, "Token", ("second",))
+
+        stale_entry = registry._entries[id(live)]
+        stale_callback = stale_entry[0].__callback__
+        del live
+        gc.collect()
+        replacement = Token()
+        registry._entries[id(replacement)] = stale_entry
+        registry.register(replacement, "Token", ("replacement",))
+        stale_callback(stale_entry[0])
+        registry.validate(replacement, "Token", ("replacement",))
+
+    def test_hostile_capability_scalars_are_secret_safe_but_base_exceptions_propagate(self):
+        secret = "sk-secret-capability-detail"
+
+        class Hostile:
+            def __eq__(self, other):
+                raise RuntimeError(secret)
+
+        for field in ("required_capability", "required_dispatch_capability"):
+            values = {
+                "node_id": "build", "executor": "codex",
+                "required_capability": HostCapability.CODEX_EXECUTION,
+                "required_dispatch_capability": HostCapability.NATIVE_DISPATCH,
+            }
+            values[field] = Hostile()
+            with self.subTest(field=field):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    NodeSpec(**values)
+                self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalConversion(BaseException):
+            pass
+
+        class Fatal:
+            def __eq__(self, other):
+                raise FatalConversion()
+
+        with self.assertRaises(FatalConversion):
+            NodeSpec(
+                "build", executor="codex", required_capability=Fatal(),
+                required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+            )
+
+        class HostileHash:
+            def __hash__(self):
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as hash_error:
+            NodeSpec(
+                "build", executor="codex", required_capability=HostileHash(),
+                required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+            )
+        self.assertNotIn(secret, repr(hash_error.exception))
+
+        class FatalHash:
+            def __hash__(self):
+                raise FatalConversion()
+
+        with self.assertRaises(FatalConversion):
+            NodeSpec(
+                "build", executor="codex", required_capability=FatalHash(),
+                required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
+            )
+
+        class HostileIterable(tuple):
+            def __iter__(self):
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as iterable_error:
+            HostCapabilities("host", HostileIterable())
+        self.assertNotIn(secret, repr(iterable_error.exception))
+
+        class FatalIterable(tuple):
+            def __iter__(self):
+                raise FatalConversion()
+
+        with self.assertRaises(FatalConversion):
+            HostCapabilities("host", FatalIterable())
+
     def test_module_owned_seals_reject_instance_field_spoofing(self):
         companion = HostRoute(
             "openai", HostCapability.CODEX_EXECUTION, "codex_companion",

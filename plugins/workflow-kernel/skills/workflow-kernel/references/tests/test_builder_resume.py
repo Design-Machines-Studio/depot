@@ -62,6 +62,66 @@ def builder_node(**changes):
 
 
 class BuilderResumeTests(unittest.TestCase):
+    def test_handle_identity_cannot_be_resealed_through_post_init(self):
+        candidate = handle(value="opaque-one")
+        object.__setattr__(candidate, "opaque_handle", "opaque-two")
+        with self.assertRaises(ValueError):
+            candidate.__post_init__()
+        with self.assertRaises(InvalidSchemaError):
+            candidate.to_dict()
+
+    def test_hostile_session_scalars_are_secret_safe_but_base_exceptions_propagate(self):
+        secret = "sk-secret-session-detail"
+
+        class Hostile:
+            def __eq__(self, other):
+                raise RuntimeError(secret)
+
+            def __ne__(self, other):
+                raise RuntimeError(secret)
+
+        context = receipt_context()
+        cases = (
+            ("result_status", lambda value: SessionResult(value, context)),
+            ("decision_outcome", lambda value: BuilderSessionDecision(value, context)),
+            (
+                "event_run_id",
+                lambda value: BuilderSessionDecision(
+                    BuilderOutcome.NODE_GATE_BLOCKED, context,
+                ).to_evidence_event(
+                    run_id=value, sequence=1, node_id="build", occurred_at=NOW,
+                ),
+            ),
+            (
+                "event_node_id",
+                lambda value: BuilderSessionDecision(
+                    BuilderOutcome.NODE_GATE_BLOCKED, context,
+                ).to_evidence_event(
+                    run_id="run-1", sequence=1, node_id=value, occurred_at=NOW,
+                ),
+            ),
+        )
+        for name, action in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    action(Hostile())
+                self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalConversion(BaseException):
+            pass
+
+        class Fatal:
+            def __eq__(self, other):
+                raise FatalConversion()
+
+            def __ne__(self, other):
+                raise FatalConversion()
+
+        for name, action in cases:
+            with self.subTest(name=name):
+                with self.assertRaises(FatalConversion):
+                    action(Fatal())
+
     def test_module_seals_reject_nested_resume_and_decision_spoofing(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))
         expected = receipt_context()
@@ -197,6 +257,13 @@ class BuilderResumeTests(unittest.TestCase):
 
         with self.assertRaises(FatalIteration):
             ValidationFeedback("build", "validation_failed", FatalTuple())
+
+        class FatalMapping(dict):
+            def items(self):
+                raise FatalIteration()
+
+        with self.assertRaises(FatalIteration):
+            AttemptLedger(FatalMapping(), {})
 
     def test_session_receipts_require_context_and_provenance(self):
         handle_parameters = inspect.signature(SessionHandle).parameters

@@ -114,16 +114,22 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       base investigation graph to zero executable nodes independently of the
       promotion fragment, covering direct and rewired bypasses.
       File-loaded and injected policy documents share one canonical
-      payload-to-document normalizer. Ordinary executor nodes remain open to any compatible
+      payload-to-document normalizer; structural injected projection preserves
+      missing anchor sections and malformed stages so parity includes nested
+      shape errors as well as budgets and convergence. Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
       Anthropic native Claude. Routes, nodes and nested gates, capabilities,
       workflow/attempt/isolation inputs, resume contexts, handles, results,
       feedback, blobs, and decisions are bound to module-owned weak identity
-      seals over primitive tuples or payload digests; caller-owned seal fields
-      have no authority. Coherent and nested mutation tests prove rewrites fail
+      seals over primitive tuples or payload digests. Each live identity can be
+      registered only once—even with an identical seal—while guarded dead-slot
+      reuse preserves bounded lifecycle and ID-reuse safety; caller-owned seal
+      fields and direct initialization re-entry have no authority. Coherent and nested mutation tests prove rewrites fail
       before route authorization or manager dispatch, while hostile ordinary
-      iterator failures map to stable secret-safe reasons and `BaseException`
-      propagates. Chunk 05
+      scalar, enum, membership, equality, hashing, iterator, and mapping failures
+      map to stable secret-safe reasons and `BaseException` propagates. Retry
+      policy snapshots its ledger once and reads the reconstructed mappings
+      directly. Chunk 05
       adds the explicit `workflowClass` manifest field and promptcraft → pipeline
       → RunSpec → event → receipt propagation; Chunk 06 validates all classes
       and legacy defaulting.

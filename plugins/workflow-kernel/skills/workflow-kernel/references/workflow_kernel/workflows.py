@@ -11,7 +11,7 @@ from typing import Mapping, Optional
 from .adapters.base import (
     DEFAULT_EXECUTOR_CAPABILITY, GATE_KINDS, HostCapability, NodeSpec,
     WorkflowClass, WorkflowContext, _snapshot_workflow_context, invalid_policy,
-    normalize_executor_constraint,
+    _normalize_enum, normalize_executor_constraint,
 )
 from .policies import GatePolicy, load_policy
 
@@ -296,10 +296,9 @@ class WorkflowTemplates:
         kind: WorkflowClass,
         context: WorkflowContext,
     ) -> tuple[NodeSpec, ...]:
-        try:
-            normalized = kind if type(kind) is WorkflowClass else WorkflowClass(kind)
-        except (TypeError, ValueError):
-            raise invalid_policy("unknown_workflow_class") from None
+        normalized = _normalize_enum(
+            WorkflowClass, kind, "unknown_workflow_class",
+        )
         context = _snapshot_workflow_context(context)
         records = list(self._templates[normalized])
         if (

@@ -46,6 +46,32 @@ def invalid_policy(reason_code: str) -> InvalidSchemaError:
     )
 
 
+def _normalize_enum(enum_type: type[Enum], value: object, reason_code: str) -> Enum:
+    """Normalize one public enum scalar without leaking ordinary exceptions."""
+    if type(value) is enum_type:
+        return value
+    try:
+        return enum_type(value)
+    except Exception:
+        raise invalid_policy(reason_code) from None
+
+
+def _safe_membership(value: object, candidates: object, reason_code: str) -> bool:
+    """Evaluate caller-controlled membership with a stable ordinary failure."""
+    try:
+        return value in candidates
+    except Exception:
+        raise invalid_policy(reason_code) from None
+
+
+def _safe_equal(left: object, right: object, reason_code: str) -> bool:
+    """Compare a caller scalar without intercepting BaseException control flow."""
+    try:
+        return left == right
+    except Exception:
+        raise invalid_policy(reason_code) from None
+
+
 class WorkflowClass(str, Enum):
     CHORE = "chore"
     BUG = "bug"
@@ -146,6 +172,9 @@ class _IdentitySealRegistry:
 
         reference = weakref.ref(value, discard)
         with self._lock:
+            current = self._entries.get(identity)
+            if current is not None and current[0]() is not None:
+                raise ValueError
             self._entries[identity] = (reference, kind, primitives)
 
     def validate(self, value: object, kind: str, primitives: object) -> None:
@@ -303,21 +332,19 @@ def normalize_executor_constraint(
     """Normalize schema and runtime executor constraints through one rule."""
     if executor is not None and (type(executor) is not str or executor not in EXECUTORS):
         raise invalid_policy("unknown_executor")
-    try:
-        capability = (
-            None if required_capability is None
-            else required_capability
-            if type(required_capability) is HostCapability
-            else HostCapability(required_capability)
+    capability = (
+        None if required_capability is None
+        else _normalize_enum(
+            HostCapability, required_capability, "unknown_capability_name",
         )
-        dispatch = (
-            None if required_dispatch_capability is None
-            else required_dispatch_capability
-            if type(required_dispatch_capability) is HostCapability
-            else HostCapability(required_dispatch_capability)
+    )
+    dispatch = (
+        None if required_dispatch_capability is None
+        else _normalize_enum(
+            HostCapability, required_dispatch_capability,
+            "unknown_capability_name",
         )
-    except (TypeError, ValueError):
-        raise invalid_policy("unknown_capability_name") from None
+    )
     if dispatch is not None and dispatch not in set(DISPATCH_RAIL_CAPABILITIES.values()):
         raise invalid_policy("inconsistent_dispatch_capability")
     if executor is None and (capability is not None or dispatch is not None):
@@ -395,7 +422,10 @@ class WorkflowContext:
             or self.requested_executor not in EXECUTORS
         ):
             raise invalid_policy("unknown_executor")
-        if self.risk not in ("low", "medium", "high", "critical"):
+        if not _safe_membership(
+            self.risk, ("low", "medium", "high", "critical"),
+            "unknown_risk_level",
+        ):
             raise invalid_policy("unknown_risk_level")
         if type(self.human_approved) is not bool or type(self.promotion_approved) is not bool:
             raise invalid_policy("invalid_workflow_context")
@@ -888,13 +918,9 @@ class IsolationRequirements:
     allow_degradation: bool = True
 
     def __post_init__(self) -> None:
-        try:
-            preferred = (
-                self.preferred if type(self.preferred) is IsolationMode
-                else IsolationMode(self.preferred)
-            )
-        except (TypeError, ValueError):
-            raise invalid_policy("unknown_isolation_mode") from None
+        preferred = _normalize_enum(
+            IsolationMode, self.preferred, "unknown_isolation_mode",
+        )
         if type(self.allow_degradation) is not bool:
             raise invalid_policy("invalid_isolation_requirements")
         object.__setattr__(self, "preferred", preferred)
@@ -1250,10 +1276,9 @@ class SessionResult:
         raise TypeError("SessionResult is final")
 
     def __post_init__(self) -> None:
-        try:
-            status = self.status if type(self.status) is SessionStatus else SessionStatus(self.status)
-        except (TypeError, ValueError):
-            raise invalid_policy("invalid_session_result") from None
+        status = _normalize_enum(
+            SessionStatus, self.status, "invalid_session_result",
+        )
         if type(self.context) is not ResumeStateContext:
             raise invalid_policy("invalid_session_result")
         values = _normalize_safe_evidence(self.evidence, "invalid_session_result")
@@ -1455,10 +1480,9 @@ class BuilderSessionDecision:
         raise TypeError("BuilderSessionDecision is final")
 
     def __post_init__(self) -> None:
-        try:
-            outcome = self.outcome if type(self.outcome) is BuilderOutcome else BuilderOutcome(self.outcome)
-        except (TypeError, ValueError):
-            raise invalid_policy("invalid_builder_session_decision") from None
+        outcome = _normalize_enum(
+            BuilderOutcome, self.outcome, "invalid_builder_session_decision",
+        )
         if type(self.context) is not ResumeStateContext:
             raise invalid_policy("invalid_builder_session_decision")
         object.__setattr__(self, "context", _snapshot_resume_context(self.context))
@@ -1523,7 +1547,13 @@ class BuilderSessionDecision:
         This helper never fabricates that receipt or treats observations as it.
         """
         facts, decision = _snapshot_builder_decision(self)
-        if run_id != decision.context.run_id or node_id != decision.context.node_id:
+        if not _safe_equal(
+            run_id, decision.context.run_id,
+            "invalid_builder_session_event_context",
+        ) or not _safe_equal(
+            node_id, decision.context.node_id,
+            "invalid_builder_session_event_context",
+        ):
             raise invalid_policy("invalid_builder_session_event_context")
         return WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,

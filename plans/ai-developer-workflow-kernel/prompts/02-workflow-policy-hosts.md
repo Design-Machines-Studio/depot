@@ -150,8 +150,10 @@ returns none.
 - Load policy from versioned JSON and validate before expansion. Do not hide
   policy in Python constants beyond enum and default schema versions.
 - Normalize file-loaded and injected policy documents through one canonical
-  payload-to-`PolicyDocument` path so both boundaries reject the same malformed
-  values with the same stable reason.
+  payload-to-`PolicyDocument` path. The injected-document projector preserves
+  malformed nested anchor shape without dereferencing required keys first, so
+  missing sections, malformed stages, budgets, and convergence limits reach the
+  same normalizer and stable reason at both boundaries.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both
@@ -189,14 +191,19 @@ returns none.
   Bind routes, nodes and nested gate state, capabilities, workflow/attempt/
   isolation inputs, resume contexts, handles, results, feedback, blobs, and
   builder decisions to module-owned weak identity seals over immutable primitive
-  tuples or payload digests. Never trust a caller-owned seal attribute.
+  tuples or payload digests. Registration is one-shot for each live identity,
+  including identical re-registration, so direct `__post_init__` re-entry cannot
+  reseal changed state; only dead/stale identity slots may be replaced, with the
+  weakref callback identity guard intact. Never trust a caller-owned seal attribute.
   `HostCapabilities` seals primitive route tuples rather than route-object
   aliases. Snapshot/property/repr,
   authorization, and manager tests must reject coherent route rewrites,
   coordinated security-node rewrites, and nested gate/route mutations before
   dispatch. Public reconstruction and projection boundaries map ordinary
-  iterator/data exceptions to stable secret-safe failures while allowing
-  `BaseException` control flow to propagate.
+  scalar, enum, membership, equality, hashing, iterator, and mapping exceptions
+  to stable secret-safe failures while allowing `BaseException` control flow to
+  propagate. Retry decisions snapshot the attempt ledger once, then read the
+  sealed reconstructed mappings directly.
   `capabilities` is a derived compatibility view, never an authorization proof.
   Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
   analysis/text-only. Ordinary nodes may use any compatible declared agentic

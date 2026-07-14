@@ -17,6 +17,27 @@ MODE_CAPABILITY = {
 
 
 class IsolationTests(unittest.TestCase):
+    def test_hostile_mode_conversion_is_secret_safe_but_base_exceptions_propagate(self):
+        secret = "sk-secret-isolation-detail"
+
+        class Hostile:
+            def __eq__(self, other):
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as raised:
+            IsolationRequirements(Hostile())
+        self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalConversion(BaseException):
+            pass
+
+        class Fatal:
+            def __eq__(self, other):
+                raise FatalConversion()
+
+        with self.assertRaises(FatalConversion):
+            IsolationRequirements(Fatal())
+
     def test_all_modes_select_when_declared(self):
         selector = IsolationSelector()
         for mode, capability in MODE_CAPABILITY.items():
