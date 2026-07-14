@@ -383,9 +383,12 @@ class DockerLifecycleTests(unittest.TestCase):
         absent_without_result = self.adapter.record_results(plan, (), DockerInventory(()))
         self.assertEqual(CleanupDisposition.BLOCKED, absent_without_result.dispositions[0].disposition)
 
-        receipt = self.registry.record_results(
-            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
-            DockerInventory((value,)), exact_absent(),
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, action, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        receipt = self.registry.record_guarded_results(
+            self.adapter, plan, (guarded,), DockerInventory((value,)), exact_absent(),
         )
         removed = receipt.dispositions[0]
         self.assertEqual(CleanupDisposition.REMOVED, removed.disposition)
@@ -713,13 +716,19 @@ class DockerLifecycleTests(unittest.TestCase):
         plan = self.adapter.plan_chunk_cleanup(
             self.registry, DockerInventory((value,)), "run-1", "node-1",
         )
-        reversed_results = tuple(
-            CommandResult(action.argv, 0, "", "")
-            for action in reversed(plan.actions)
+        first = self.registry.execute_guarded_action(
+            self.adapter, plan.actions[0], value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+            action_index=0,
+        )
+        second = self.registry.execute_guarded_action(
+            self.adapter, plan.actions[1], replace(value, running=False),
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+            predecessor_result=first.result, action_index=1,
         )
         with self.assertRaises(InvalidSchemaError):
-            self.registry.record_results(
-                self.adapter, plan, reversed_results,
+            self.registry.record_guarded_results(
+                self.adapter, plan, (second, first),
                 DockerInventory((value,)), exact_absent(),
             )
 
@@ -775,7 +784,7 @@ class DockerLifecycleTests(unittest.TestCase):
         with self.assertRaises(InvalidSchemaError):
             self.registry.record_receipt(forged)
 
-    def test_registry_owned_result_transaction_retires_once(self):
+    def test_registry_record_results_without_authority_cannot_retire(self):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
         action = plan.actions[0]
@@ -785,16 +794,76 @@ class DockerLifecycleTests(unittest.TestCase):
             ((ResourceKind.CONTAINER, value.resource_id),), "registered_exact",
             evidence=(CommandResult(inspect, 1, "", "Error: No such container: ctr-1"),),
         )
-        receipt = self.registry.record_results(
-            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
-            DockerInventory((value,)), after,
-        )
-        self.assertEqual(CleanupDisposition.REMOVED, receipt.dispositions[0].disposition)
         with self.assertRaises(InvalidSchemaError):
             self.registry.record_results(
                 self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
                 DockerInventory((value,)), after,
             )
+        self.assertEqual((value.resource_id,), tuple(
+            item.resource_id for item in self.registry.resources_for("run-1", "node-1")
+        ))
+        frame = json.loads(self.registry.path.read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual("registered", frame["event"])
+
+    def test_guarded_recording_rejects_terminal_state_without_action_authority(self):
+        value, _ = self.register()
+        absent = exact_absent()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, absent, "run-1", "node-1",
+        )
+        self.assertEqual(CleanupDisposition.MISSING, plan.dispositions[0].disposition)
+
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, plan, (), absent, absent,
+            )
+        self.assertEqual((value.resource_id,), tuple(
+            item.resource_id for item in self.registry.resources_for("run-1", "node-1")
+        ))
+
+    def test_guarded_recording_rejects_unmatched_terminal_state(self):
+        first, _ = self.register(resource("ctr-a"))
+        second = resource("ctr-b")
+        self.registry.register(ResourceRecord(
+            second.resource_id, second.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=second.labels,
+        ))
+        first_key = (first.kind, first.resource_id)
+        second_key = (second.kind, second.resource_id)
+        second_inspect = ("docker", "container", "inspect", second.resource_id)
+        before = DockerInventory(
+            (first,), (first_key, second_key), (second_key,), "registered_exact",
+            (CommandResult(
+                second_inspect, 1, "", "Error: No such container: " + second.resource_id,
+            ),),
+        )
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, before, "run-1", "node-1",
+        )
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, plan.actions[0], first,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        after = DockerInventory(
+            (), (first_key, second_key), (first_key, second_key),
+            "registered_exact", (
+                CommandResult(
+                    ("docker", "container", "inspect", first.resource_id), 1,
+                    "", "Error: No such container: " + first.resource_id,
+                ),
+                CommandResult(
+                    second_inspect, 1, "", "Error: No such container: " + second.resource_id,
+                ),
+            ),
+        )
+
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, plan, (guarded,), before, after,
+            )
+        self.assertEqual({first.resource_id, second.resource_id}, {
+            item.resource_id for item in self.registry.resources_for("run-1", "node-1")
+        })
 
     def test_retired_record_cannot_reauthorize_stale_cleanup_action(self):
         value, _ = self.register()
@@ -802,9 +871,12 @@ class DockerLifecycleTests(unittest.TestCase):
             self.registry, DockerInventory((value,)), "run-1", "node-1",
         )
         action = plan.actions[0]
-        self.registry.record_results(
-            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
-            DockerInventory((value,)), exact_absent(),
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, action, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        self.registry.record_guarded_results(
+            self.adapter, plan, (guarded,), DockerInventory((value,)), exact_absent(),
         )
         self.assertEqual((), self.registry.resources_for("run-1", "node-1"))
 
@@ -969,8 +1041,13 @@ class DockerLifecycleTests(unittest.TestCase):
             ((ResourceKind.CONTAINER, "orphan-1"),), "registered_exact",
             evidence=(CommandResult(inspect, 1, "", "Error: No such container: orphan-1"),),
         )
-        receipt = orphan_registry.record_results(
-            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
+        guarded = orphan_registry.execute_guarded_action(
+            self.adapter, action, orphan,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+            lease_proof=inactive_lease(), orphan_mode=True,
+        )
+        receipt = orphan_registry.record_guarded_results(
+            self.adapter, plan, (guarded,),
             DockerInventory((orphan,), source="managed_orphan_sweep"), after,
         )
         self.assertEqual(CleanupDisposition.REMOVED, receipt.dispositions[0].disposition)
@@ -979,7 +1056,10 @@ class DockerLifecycleTests(unittest.TestCase):
     def test_interrupted_result_frame_never_partially_retires(self):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
-        result = CommandResult(plan.actions[0].argv, 0, "", "")
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, plan.actions[0], value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
         real_write = os.write
         wrote_partial = False
 
@@ -993,8 +1073,8 @@ class DockerLifecycleTests(unittest.TestCase):
 
         with mock.patch("workflow_kernel.resources.os.write", side_effect=interrupt):
             with self.assertRaises(InvalidSchemaError):
-                self.registry.record_results(
-                    self.adapter, plan, (result,), DockerInventory((value,)), exact_absent(),
+                self.registry.record_guarded_results(
+                    self.adapter, plan, (guarded,), DockerInventory((value,)), exact_absent(),
                 )
         replayed = ResourceRegistry(self.registry.path)
         self.assertEqual((value.resource_id,), tuple(
@@ -1017,16 +1097,29 @@ class DockerLifecycleTests(unittest.TestCase):
             "Error: No such container: " + value.resource_id,
         ) for value in (first, second))
         after = DockerInventory((), keys, keys, "registered_exact", evidence)
-        receipt = self.registry.record_results(
-            self.adapter, plan,
-            tuple(CommandResult(action.argv, 0, "", "") for action in plan.actions),
-            before, after,
+        resources = {
+            (value.kind, value.resource_id): value for value in (first, second)
+        }
+        guarded = tuple(
+            self.registry.execute_guarded_action(
+                self.adapter, action,
+                resources[(action.kind, action.resource_id)],
+                lambda argv: CommandResult(tuple(argv), 0, "", ""),
+            )
+            for action in plan.actions
+        )
+        receipt = self.registry.record_guarded_results(
+            self.adapter, plan, guarded, before, after,
         )
         self.assertEqual(2, len(receipt.dispositions))
         lines = self.registry.path.read_text(encoding="utf-8").splitlines()
         frame = json.loads(lines[-1])
         self.assertEqual("transaction", frame["event"])
-        self.assertEqual(2, len(frame["events"]))
+        self.assertEqual(4, len(frame["events"]))
+        self.assertEqual(
+            ["authority_consumed", "authority_consumed"],
+            [event["event"] for event in frame["events"][:2]],
+        )
         self.assertEqual((), ResourceRegistry(self.registry.path).resources_for("run-1"))
 
 

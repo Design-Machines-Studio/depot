@@ -105,7 +105,10 @@ other resource keys remain concurrent. The guarded result carries a short-lived
 authority ID over the full action digest, owner, registry-state generation,
 result identity, and expiry. Result recording requires that the generation is
 unchanged and consumes the authority ID in the same journal transaction, so
-replay and late persistence fail closed. The persistent lock inode is advisory
+replay and late persistence fail closed. `DockerAdapter.record_results` remains
+a pure receipt reconciliation helper; `ResourceRegistry.record_results` rejects
+persistence without authority, and only `record_guarded_results` may mutate
+terminal registry state. The persistent lock inode is advisory
 state only: the OS releases its lock on process death, and a post-crash attempt
 must freshly inspect, revalidate, and execute.
 

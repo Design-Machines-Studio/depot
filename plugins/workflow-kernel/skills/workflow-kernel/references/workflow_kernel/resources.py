@@ -958,8 +958,8 @@ class ResourceRegistry:
         self, adapter: object, plan: CleanupPlan, results: Tuple[CommandResult, ...],
         before: object, after: object,
     ) -> CleanupReceipt:
-        """Recompute and atomically persist one exact cleanup result transaction."""
-        return self._record_results(adapter, plan, results, before, after, ())
+        """Reject result persistence without guarded execution authority."""
+        raise invalid_policy("guarded_cleanup_authority_required")
 
     def record_guarded_results(
         self, adapter: object, plan: CleanupPlan,
@@ -967,7 +967,7 @@ class ResourceRegistry:
         before: object, after: object,
     ) -> CleanupReceipt:
         """Persist results only with fresh, generation-bound execution authority."""
-        if type(guarded_results) is not tuple or any(
+        if not guarded_results or type(guarded_results) is not tuple or any(
             type(value) is not GuardedCommandResult for value in guarded_results
         ):
             raise invalid_policy("invalid_guarded_cleanup_results")
@@ -1007,6 +1007,15 @@ class ResourceRegistry:
             receipt, observed = adapter._reconcile_results(
                 plan, results, before, after,
             )
+            authority_keys = {
+                (value.kind, value.resource_id) for value in authorities
+            }
+            if any(
+                value.disposition in TERMINAL_DISPOSITIONS
+                and (value.kind, value.resource_id) not in authority_keys
+                for value in receipt.dispositions
+            ):
+                raise invalid_policy("guarded_cleanup_authority_missing")
             transaction_id = adapter._result_transaction_id(
                 plan, results, before, after,
             )
