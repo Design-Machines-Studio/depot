@@ -389,6 +389,51 @@ class ResourceRegistryTests(unittest.TestCase):
             with self.assertRaises(InvalidSchemaError):
                 ResourceRegistry(path)
 
+    def test_mutation_repairs_incomplete_final_frame_before_append(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            registry = ResourceRegistry(path)
+            registry.register(record("first"))
+            with path.open("ab") as handle:
+                handle.write(b'{"event":"registered","resource":')
+
+            registry.register(record("second"))
+
+            replayed = ResourceRegistry(path)
+            self.assertEqual(
+                {"first", "second"},
+                {value.resource_id for value in replayed.resources_for("run-1")},
+            )
+            self.assertTrue(path.read_bytes().endswith(b"\n"))
+
+    def test_cleanup_plan_dependencies_must_reference_an_earlier_action(self):
+        base = CleanupAction(
+            "shared", ResourceKind.CONTAINER, "remove", ("docker", "rm", "shared"),
+            None, "run-1", "node-1", "chunk", "sha256:" + "1" * 64,
+            ("proof",), {}, None, "sha256:" + "2" * 64,
+        )
+        for dependency in (0, 1, 2):
+            dependent = CleanupAction(
+                "second", ResourceKind.CONTAINER, "remove", ("docker", "rm", "second"),
+                dependency, "run-1", "node-1", "chunk", "sha256:" + "3" * 64,
+                ("proof",), {}, None, "sha256:" + "4" * 64,
+            )
+            actions = (dependent,) if dependency == 0 else (base, dependent)
+            with self.subTest(dependency=dependency), self.assertRaises(InvalidSchemaError):
+                CleanupPlan(CleanupScope("run-1", "node-1"), (), actions, ())
+
+        valid = CleanupAction(
+            "second", ResourceKind.CONTAINER, "remove", ("docker", "rm", "second"),
+            0, "run-1", "node-1", "chunk", "sha256:" + "3" * 64,
+            ("proof",), {}, None, "sha256:" + "4" * 64,
+        )
+        self.assertEqual(
+            (base, valid),
+            CleanupPlan(
+                CleanupScope("run-1", "node-1"), (), (base, valid), (),
+            ).actions,
+        )
+
     def test_cleanup_plan_serialization_preserves_disposition_only_decisions(self):
         value = record()
         plan = CleanupPlan(

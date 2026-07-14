@@ -273,7 +273,10 @@ class DockerAdapter:
         index = 2
         while index < action_index:
             value = command[index]
-            if value in {"-p", "--project-name"} or value.startswith("--project-name="):
+            if (
+                value in {"-p", "--project-name"}
+                or value.startswith(("-p=", "--project-name="))
+            ):
                 return DockerCreationPlan(
                     command, {}, lifecycle, (), managed=False,
                     reason="caller_project_name_forbidden",
@@ -284,7 +287,7 @@ class DockerAdapter:
                 compose_files.append(command[index + 1])
                 index += 2
                 continue
-            if value.startswith("--file="):
+            if value.startswith(("-f=", "--file=")):
                 compose_file = value.split("=", 1)[1]
                 if not _normalized_docker_text(compose_file, 4096):
                     return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_file_invalid")
@@ -698,9 +701,13 @@ class DockerAdapter:
         self, action: CleanupAction, resource: DockerResource,
         lease_proof: Optional[LeaseProof] = None,
         predecessor_result: Optional[CommandResult] = None,
+        *, action_index: Optional[int] = None,
     ) -> None:
         """Validate the destructive capability against a fresh exact-ID inspect."""
-        if type(action) is not CleanupAction or type(resource) is not DockerResource:
+        if (
+            type(action) is not CleanupAction or type(resource) is not DockerResource
+            or (action_index is not None and (type(action_index) is not int or action_index < 0))
+        ):
             raise invalid_policy("invalid_docker_cleanup_revalidation")
         try:
             action = CleanupAction(
@@ -750,7 +757,8 @@ class DockerAdapter:
             requires = None
             if predecessor_id is not None:
                 if (
-                    resource.kind is not ResourceKind.CONTAINER or resource.running
+                    action_index is None or action_index == 0
+                    or resource.kind is not ResourceKind.CONTAINER or resource.running
                     or type(predecessor_result) is not CommandResult
                     or predecessor_result.exit_code != 0
                     or cleanup_result_id(predecessor_result.argv, predecessor_result.exit_code) != predecessor_id
@@ -763,7 +771,7 @@ class DockerAdapter:
                 if predecessor_result.argv != expected_stop:
                     raise invalid_policy("docker_cleanup_precondition_changed")
                 preconditions += ("container_stopped_after_predecessor",)
-                requires = action.requires_success_of
+                requires = action_index - 1
             elif predecessor_result is not None:
                 raise invalid_policy("docker_cleanup_precondition_changed")
             argv = (

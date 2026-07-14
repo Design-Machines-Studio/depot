@@ -17,7 +17,7 @@ from workflow_kernel.adapters.docker import (
 )
 from workflow_kernel.resources import (
     CleanupDisposition, CleanupReceipt, CommandResult, ResourceDisposition,
-    ResourceKind, ResourceRecord, ResourceRegistry,
+    ResourceKind, ResourceRecord, ResourceRegistry, reseal_cleanup_action,
 )
 from workflow_kernel.schema import InvalidSchemaError
 
@@ -388,7 +388,9 @@ class DockerLifecycleTests(unittest.TestCase):
         predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
         with self.assertRaises(InvalidSchemaError):
             self.adapter.revalidate_action(forged, stopped, predecessor_result=predecessor)
-        self.adapter.revalidate_action(plan.actions[1], stopped, predecessor_result=predecessor)
+        self.adapter.revalidate_action(
+            plan.actions[1], stopped, predecessor_result=predecessor, action_index=1,
+        )
 
     def test_compose_preserves_base_files_but_override_contains_labels_only(self):
         config_argv = ("docker", "compose", "-f", "compose.yml", "config", "--format", "json")
@@ -413,10 +415,47 @@ class DockerLifecycleTests(unittest.TestCase):
         for argv, reason in (
             (("docker", "compose", "up"), "compose_file_required"),
             (("docker", "compose", "-f", "compose.yml", "-p", "foreign", "up"), "caller_project_name_forbidden"),
+            (("docker", "compose", "-f", "compose.yml", "-p=foreign", "up"), "caller_project_name_forbidden"),
         ):
             plan = self.adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove")
             self.assertFalse(plan.managed)
             self.assertEqual(reason, plan.reason)
+
+    def test_compose_short_file_equals_is_an_explicit_base_file(self):
+        config_argv = ("docker", "compose", "-f=compose.yml", "config", "--format", "json")
+        config = {"services": {"app": {"image": "app:1"}}, "networks": {}, "volumes": {}}
+        adapter = DockerAdapter(
+            FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),)),
+            now=lambda: NOW,
+        )
+
+        plan = adapter.plan_compose(
+            ("docker", "compose", "-f=compose.yml", "up"),
+            "run-1", "node-1", "chunk", "stop-remove",
+        )
+
+        self.assertTrue(plan.managed)
+        self.assertEqual((config_argv,), tuple(adapter.runner.calls))
+        self.assertEqual("depot-run-1-node-1", plan.environment["COMPOSE_PROJECT_NAME"])
+        self.assertIn("-f=compose.yml", plan.argv)
+
+    def test_remove_revalidation_requires_immediately_preceding_stop_index(self):
+        value, _ = self.register(resource(running=True))
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        stopped = replace(value, running=False)
+        predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
+        for dependency, action_index in ((None, 1), (0, 2)):
+            forged = reseal_cleanup_action(
+                plan.actions[1], requires_success_of=dependency,
+            )
+            with self.subTest(dependency=dependency, action_index=action_index), \
+                    self.assertRaises(InvalidSchemaError):
+                self.adapter.revalidate_action(
+                    forged, stopped, predecessor_result=predecessor,
+                    action_index=action_index,
+                )
 
     def test_transport_no_such_is_not_authoritative_absence(self):
         value, _ = self.register()

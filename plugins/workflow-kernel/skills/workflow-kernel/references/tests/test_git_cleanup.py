@@ -5,7 +5,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from workflow_kernel.adapters.git import GitAdapter, GitProof
-from workflow_kernel.resources import CleanupDisposition, CleanupScope, CommandResult, ResourceKind, ResourceRecord, ResourceRegistry
+from workflow_kernel.resources import (
+    CleanupDisposition, CleanupScope, CommandResult, ResourceKind, ResourceRecord,
+    ResourceRegistry, reseal_cleanup_action,
+)
 from workflow_kernel.schema import InvalidSchemaError
 
 
@@ -188,6 +191,24 @@ class GitCleanupTests(unittest.TestCase):
         predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
         after_removal = proof(worktree_present=False)
         self.adapter.revalidate_action(plan.actions[1], after_removal, predecessor)
+
+    def test_revalidation_rejects_plan_from_another_adapter_scope(self):
+        plan = self.adapter.cleanup_owned(self.registry, self.scope, proof())
+        foreign = GitAdapter(
+            "pipeline/other-run", "/repo/.worktrees/pipeline/other-run",
+            now=lambda: NOW, max_proof_age=timedelta(seconds=5),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            foreign.revalidate_action(plan.actions[0], proof())
+
+    def test_branch_revalidation_requires_canonical_worktree_predecessor_index(self):
+        plan = self.adapter.cleanup_owned(self.registry, self.scope, proof())
+        forged = reseal_cleanup_action(plan.actions[1], requires_success_of=None)
+        predecessor = CommandResult(plan.actions[0].argv, 0, "", "")
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                forged, proof(worktree_present=False), predecessor,
+            )
 
 
 if __name__ == "__main__":

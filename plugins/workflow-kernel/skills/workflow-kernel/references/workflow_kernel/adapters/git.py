@@ -184,6 +184,8 @@ class GitAdapter:
             raise invalid_policy("invalid_git_cleanup_revalidation") from None
         if not self._proof_is_fresh(proof):
             raise invalid_policy("git_cleanup_precondition_changed")
+        if not self._proof_in_adapter_scope(proof):
+            raise invalid_policy("git_cleanup_precondition_changed")
         preconditions = (
             "registered_kind_and_exact_id", "proof_fresh", "worktree_clean",
             "authoritative_worktree_inventory_unchanged",
@@ -220,7 +222,7 @@ class GitAdapter:
                     proof.branch, ResourceKind.BRANCH, action.run_id, action.node_id,
                     action.lifecycle, "retain", proof.captured_at, labels={},
                 ),
-                "remove", argv, action.requires_success_of,
+                "remove", argv, 0,
                 preconditions + ("worktree_absent_after_predecessor", branch_condition),
                 proof, action.predecessor_result_id,
             )
@@ -249,13 +251,18 @@ class GitAdapter:
         path_parts = PurePosixPath(proof.worktree_path).parts
         return (
             ".." not in path_parts
-            and proof.ownership_namespace == self.ownership_namespace
-            and proof.worktree_path.startswith(self.worktree_root + "/")
-            and proof.branch.startswith(self.ownership_namespace + "/")
+            and self._proof_in_adapter_scope(proof)
             and proof.worktree_path == worktree.resource_id
             and proof.branch == branch.resource_id
             and self._labels_match(worktree, proof)
             and self._labels_match(branch, proof)
+        )
+
+    def _proof_in_adapter_scope(self, proof: GitProof) -> bool:
+        return (
+            proof.ownership_namespace == self.ownership_namespace
+            and proof.worktree_path.startswith(self.worktree_root + "/")
+            and proof.branch.startswith(self.ownership_namespace + "/")
         )
 
     def _labels_match(self, record: ResourceRecord, proof: GitProof) -> bool:

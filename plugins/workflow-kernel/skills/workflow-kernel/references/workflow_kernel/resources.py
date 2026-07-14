@@ -312,6 +312,12 @@ class CleanupPlan:
             or any(type(value) is not ResourceDisposition for value in dispositions)
         ):
             raise invalid_policy("invalid_cleanup_plan")
+        if any(
+            action.requires_success_of is not None
+            and action.requires_success_of >= index
+            for index, action in enumerate(actions)
+        ):
+            raise invalid_policy("cleanup_dependency_not_earlier_action")
         object.__setattr__(self, "before", before)
         object.__setattr__(self, "actions", actions)
         object.__setattr__(self, "dispositions", dispositions)
@@ -547,6 +553,17 @@ class _RegistryTransaction:
         self.revalidate()
         self.directory.fsync()
 
+    def repair_incomplete_tail(self) -> None:
+        """Remove only a crash-torn final frame while holding the bound lock."""
+        raw = self.read()
+        if not raw or raw.endswith(b"\n"):
+            return
+        self.revalidate()
+        os.ftruncate(self.descriptor, raw.rfind(b"\n") + 1)
+        os.fsync(self.descriptor)
+        self.revalidate()
+        self.directory.fsync()
+
 
 class ResourceRegistry:
     """Append-only kind+ID registry with immutable successful outcomes."""
@@ -638,7 +655,9 @@ class ResourceRegistry:
             json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
             for event in events
         )
-        self._require_transaction().append(encoded.encode("utf-8"))
+        transaction = self._require_transaction()
+        transaction.repair_incomplete_tail()
+        transaction.append(encoded.encode("utf-8"))
 
     def _require_transaction(self) -> _RegistryTransaction:
         if self._current_transaction is None:
