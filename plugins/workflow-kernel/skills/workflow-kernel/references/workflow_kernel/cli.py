@@ -77,6 +77,8 @@ def command_append(args):
         data = json.loads(args.event)
     except json.JSONDecodeError as exc:
         raise InvalidSchemaError("event is not valid JSON", {"offset": exc.pos}) from exc
+    except RecursionError as exc:
+        raise InvalidSchemaError("event is not valid JSON", {"reason_code": "recursion_limit"}) from exc
     event = WorkflowEvent.from_dict(data)
     with _coordinated_run(states) as lease:
         existing = events.replay()
@@ -85,9 +87,9 @@ def command_append(args):
         expected = states.load().revision if states.path.exists() else -1
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
-        states.preflight(next_state)
+        prepared = states.preflight(next_state)
         events.append(event, expected_sequence=len(existing))
-        evidence = states.write(next_state, expected, lease=lease)
+        evidence = states._write_prepared(next_state, expected, prepared, lease=lease)
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})
     return 0
@@ -98,7 +100,6 @@ def command_replay(args):
     with _coordinated_run(states) as lease:
         reconstructed = TransitionEngine().reconstruct(events.replay())
         expected = states.load().revision if states.path.exists() else -1
-        states.preflight(reconstructed)
         evidence = states.write(reconstructed, expected, lease=lease)
     _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
            "status": reconstructed.status.value, "durability": evidence})

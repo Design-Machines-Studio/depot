@@ -104,7 +104,7 @@ class RunLease:
 
 class StateStore:
     def __init__(self, path):
-        self.path = Path(path)
+        self.path = canonical_path(Path(path))
 
     def load(self) -> RunState:
         try:
@@ -138,6 +138,11 @@ class StateStore:
             os.close(descriptor)
 
     def write(self, state: RunState, expected_revision: int, *, lease: RunLease = None) -> dict:
+        prepared = self.preflight(state)
+        return self._write_prepared(state, expected_revision, prepared, lease=lease)
+
+    def _write_prepared(self, state: RunState, expected_revision: int, prepared: bytes,
+                        *, lease: RunLease = None) -> dict:
         if lease is None or not isinstance(lease, RunLease):
             raise LeaseConflictError("state write requires its acquired run lease", {"path": str(self.path)})
         lease.require_authorized(self.path)
@@ -158,12 +163,11 @@ class StateStore:
         elif expected_revision != -1:
             raise RevisionConflictError("state does not exist at expected revision", {"expected_revision": expected_revision})
 
-        encoded = self.preflight(state)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent))
         try:
             with os.fdopen(descriptor, "wb") as handle:
-                handle.write(encoded)
+                handle.write(prepared)
                 handle.flush()
                 os.fsync(handle.fileno())
             lease.require_authorized(self.path)

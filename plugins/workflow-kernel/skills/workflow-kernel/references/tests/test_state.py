@@ -9,11 +9,39 @@ from dataclasses import replace
 from unittest import mock
 
 from workflow_kernel import CorruptStateError
-from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError
+from workflow_kernel.events import EventStore
+from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import RunLease, StateStore, encode_state
 
 
 class StateStoreTests(unittest.TestCase):
+    def test_relative_stores_keep_all_artifacts_bound_across_chdir(self):
+        original = Path.cwd()
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            try:
+                os.chdir(first)
+                events = EventStore("events.jsonl")
+                states = StateStore("run-state.json")
+                canonical_first = Path(first).resolve()
+                self.assertEqual(events.path, canonical_first / "events.jsonl")
+                self.assertEqual(states.path, canonical_first / "run-state.json")
+
+                os.chdir(second)
+                event = WorkflowEvent(
+                    1, 0, "run-1", None, "run.initialized",
+                    "2026-07-14T00:00:00Z", {"mode": "shadow"},
+                )
+                events.append(event, 0)
+                state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+                with RunLease(states.path) as lease:
+                    states.write(state, -1, lease=lease)
+            finally:
+                os.chdir(original)
+
+            for name in ("events.jsonl", "events.jsonl.lock", "run-state.json", "run-state.json.lease"):
+                self.assertTrue((Path(first) / name).exists(), name)
+                self.assertFalse((Path(second) / name).exists(), name)
+
     def test_revision_guard_preserves_state(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"

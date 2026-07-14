@@ -62,6 +62,13 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(sentinel, result.stderr)
         self.assertEqual(json.loads(result.stderr)["error"]["details"]["reason_code"], "invalid_argument")
 
+    def test_append_normalizes_deeply_nested_json_without_traceback(self):
+        nested = "[" * 1_200 + "0" + "]" * 1_200
+        result = self.run_cli("append", "/tmp/workflow-kernel-unused", "--event", nested)
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(json.loads(result.stderr)["error"]["code"], "invalid_schema")
+        self.assertNotIn("Traceback", result.stderr)
+
     def test_validate_loads_materialized_state_once_on_mismatch(self):
         materialized = SimpleNamespace(revision=3)
         reconstructed = SimpleNamespace(revision=4)
@@ -121,7 +128,6 @@ class CliTests(unittest.TestCase):
         events.replay.side_effect = lambda: (ObservedPath.assert_active(), (object(),))[1]
         states = mock.Mock(path=ObservedPath())
         states.load.side_effect = lambda: (ObservedPath.assert_active(), state)[1]
-        states.preflight.side_effect = lambda *_: (ObservedPath.assert_active(), None)[1]
         states.write.side_effect = lambda *_args, **_kwargs: (
             ObservedPath.assert_active(), {"directory_fsync": "completed"}
         )[1]
@@ -132,6 +138,7 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = state
             self.assertEqual(command_replay(SimpleNamespace(directory="unused")), 0)
         self.assertFalse(active["lease"])
+        states.preflight.assert_not_called()
 
     def test_append_observes_state_before_publishing_event(self):
         order = []
@@ -146,8 +153,11 @@ class CliTests(unittest.TestCase):
         states = mock.Mock()
         states.path.exists.return_value = True
         states.load.side_effect = lambda: (order.append("state"), current)[1]
-        states.preflight.side_effect = lambda *_: order.append("preflight")
-        states.write.return_value = {"directory_fsync": "completed"}
+        prepared = b"prepared-state\n"
+        states.preflight.side_effect = lambda *_: (order.append("preflight"), prepared)[1]
+        states._write_prepared.side_effect = lambda *_args, **_kwargs: (
+            order.append("state-write"), {"directory_fsync": "completed"}
+        )[1]
         next_state = mock.Mock(revision=2)
         next_state.status.value = "running"
         coordinator = mock.MagicMock()
@@ -159,7 +169,9 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = mock.Mock()
             engine.return_value.apply.return_value = next_state
             self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
-        self.assertEqual(order, ["state", "preflight", "event"])
+        self.assertEqual(order, ["state", "preflight", "event", "state-write"])
+        states._write_prepared.assert_called_once_with(next_state, 1, prepared, lease=coordinator.__enter__.return_value)
+        states.write.assert_not_called()
 
     def test_append_state_preflight_preserves_prior_ledger_and_state(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch("workflow_kernel.cli._emit"):
