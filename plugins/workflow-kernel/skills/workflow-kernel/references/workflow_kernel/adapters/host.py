@@ -34,9 +34,15 @@ def capabilities_from_harness_profile(
     path: Optional[Path] = None,
 ) -> HostCapabilities:
     host_name = _validate_host_name(host_name)
-    source = Path(path) if path is not None else _repository_file(
-        "plugins/pipeline/references/harness-profile.json"
-    )
+    if path is None:
+        source = _repository_file(
+            "plugins/pipeline/references/harness-profile.json"
+        )
+    else:
+        try:
+            source = Path(path)
+        except Exception:
+            raise invalid_policy("invalid_harness_profile") from None
     try:
         payload = load_json_document(source)
         roles = payload["hosts"][host_name]["roles"]

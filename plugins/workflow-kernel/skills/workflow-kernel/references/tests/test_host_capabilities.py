@@ -720,6 +720,101 @@ class HostCapabilityTests(unittest.TestCase):
                         self.assertNotIn(secret, repr(raised.exception))
                         self.assertEqual(calls, [])
 
+    def test_harness_profile_contains_pathlike_conversion_failures(self):
+        secret = "sk-secret-harness-path-callback"
+
+        class HostilePathLike(os.PathLike):
+            def __init__(self, outcome):
+                self.outcome = outcome
+                self.calls = 0
+
+            def __fspath__(self):
+                self.calls += 1
+                if isinstance(self.outcome, BaseException):
+                    raise self.outcome
+                return self.outcome
+
+        candidates = (
+            HostilePathLike(RuntimeError(secret)),
+            HostilePathLike(object()),
+        )
+        for candidate in candidates:
+            with self.subTest(outcome=type(candidate.outcome).__name__):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    capabilities_from_harness_profile("test", candidate)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_harness_profile"),
+                )
+                self.assertNotIn(secret, repr(raised.exception))
+                self.assertEqual(candidate.calls, 1)
+
+    def test_harness_profile_preserves_valid_pathlike_support(self):
+        class ValidPathLike(os.PathLike):
+            def __init__(self, path):
+                self.path = path
+                self.calls = 0
+
+            def __fspath__(self):
+                self.calls += 1
+                return os.fspath(self.path)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps({
+                "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
+            }), encoding="utf-8")
+            candidate = ValidPathLike(path)
+            profile = capabilities_from_harness_profile("test", candidate)
+        self.assertEqual(profile.capabilities, frozenset())
+        self.assertEqual(candidate.calls, 1)
+
+    def test_harness_profile_canonicalizes_concrete_path_subclasses(self):
+        secret = "sk-secret-path-subclass-callback"
+        calls = []
+
+        class HostilePath(type(Path())):
+            def __fspath__(self):
+                calls.append("fspath")
+                raise RuntimeError(secret)
+
+            def read_text(self, *args, **kwargs):
+                calls.append("read_text")
+                raise RuntimeError(secret)
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps({
+                "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
+            }), encoding="utf-8")
+            profile = capabilities_from_harness_profile(
+                "test", HostilePath(path),
+            )
+        self.assertEqual(profile.capabilities, frozenset())
+        self.assertEqual(calls, [])
+
+    def test_invalid_host_name_precedes_hostile_path_dispatch(self):
+        secret = "sk-secret-unreached-path-callback"
+        calls = []
+
+        class HostilePathLike(os.PathLike):
+            def __fspath__(self):
+                calls.append("fspath")
+                raise RuntimeError(secret)
+
+        for host_name in (" ", "UPPER"):
+            with self.subTest(host_name=host_name):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    capabilities_from_harness_profile(
+                        host_name, HostilePathLike(),
+                    )
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_host_name"),
+                )
+                self.assertNotIn(secret, repr(raised.exception))
+                self.assertEqual(calls, [])
+
     def test_valid_harness_names_preserve_profile_failure_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
