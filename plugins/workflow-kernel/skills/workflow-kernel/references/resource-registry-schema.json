@@ -36,7 +36,7 @@
     "disposition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["resource_id", "kind", "run_id", "node_id", "lifecycle", "disposition", "action", "reason", "evidence"],
+      "required": ["resource_id", "kind", "run_id", "node_id", "lifecycle", "disposition", "action", "reason", "command", "evidence"],
       "properties": {
         "resource_id": {"type": "string", "minLength": 1},
         "kind": {"$ref": "#/$defs/kind"},
@@ -46,7 +46,8 @@
         "disposition": {"enum": ["removed", "retained_for_dependency", "blocked", "foreign", "missing"]},
         "action": {"type": "string", "minLength": 1},
         "reason": {"type": "string", "minLength": 1},
-        "evidence": {"type": "array", "items": {"type": "string"}},
+        "command": {"type": "array", "items": {"type": "string"}, "maxItems": 32},
+        "evidence": {"type": "array", "items": {}, "maxItems": 32},
         "follow_up": {"type": "string", "minLength": 1}
       }
     }

@@ -204,9 +204,11 @@ cleanup. Containers, networks, and volumes use the workflow kernel's separate
 positive-ownership contract in `docker-ownership.md`:
 
 - creation-time ownership labels plus a durable registry record are required
-  for current-run cleanup;
+  for current-run cleanup; identity is kind plus ID and the exact non-empty
+  label snapshot and inspected creation time must agree;
 - stale-orphan cleanup requires a complete, internally consistent label set,
-  strict TTL expiry, and no active run lease;
+  strict TTL expiry, inspected-time agreement, and fresh authoritative proof
+  that the run lease is inactive; missing or unreadable proof fails closed;
 - chunk-owned cleanup is planned after validation, review, evidence capture,
   and merge disposition; all terminal outcomes plan run reconciliation;
 - cleanup plans contain bounded, exact-ID argv only. Chunk 05 is their
@@ -214,8 +216,16 @@ positive-ownership contract in `docker-ownership.md`:
 - no prune, wildcard, negative-filter, name-inference, or unrelated resource
   cleanup is permitted.
 
+Git follows the same execution boundary: its adapter derives candidates from
+the durable registry and emits a pure exact-argv plan. It never runs Git.
+Proof input carries the explicit base and merge target, ownership namespace,
+readability and dirtiness state, and a bounded capture time immediately adjacent
+to planning. Chunk 05 alone executes the validated plan and records results.
+
 Docker dispositions are `removed`, `retained_for_dependency`, `blocked`,
 `foreign`, or `missing`. Every disposition records the resource kind and ID,
 run/node owner, lifecycle, action, reason, evidence, and any follow-up. A
-resource absent after cleanup is recorded as `missing`, making retries
-idempotent rather than broadening cleanup scope.
+`removed` is recorded only after every required command succeeds and the object
+is absent. `missing` is reserved for absence before planning or a later rerun;
+a missing execution result is blocked. Blocked, retained, and foreign attempts
+remain reconcilable, while successful terminal outcomes are immutable.

@@ -25,11 +25,16 @@ explicitly unmanaged.
 
 ## Registration and cleanup proof
 
-After creation, the registry records the before/after inventory delta. A current
-run object is removable only when its complete labels agree with its durable
-registry record. A stale orphan may lack a registry record only when every label
-is complete and internally consistent, its timestamp is strictly older than the
-typed TTL, and its run has no active lease. At the exact TTL boundary it remains.
+After creation, the registry records the command result and before/after
+inventory delta against every registration intent. A current-run object is
+removable only when its kind and ID, complete ownership-label snapshot, and
+inspected creation time agree with its durable registry record. The registry
+keys identity by kind plus ID. A stale orphan may lack a registry record only
+when every label value is valid, the label timestamp agrees with Docker's
+inspected creation time, its timestamp is strictly older than the typed TTL,
+and an injected authoritative lease reader proves its run inactive. Missing,
+unreadable, active, future, or stale lease proof retains the object. At the exact
+TTL boundary it remains.
 
 Chunk resources are planned for cleanup automatically after validation, review,
 evidence capture, and merge disposition. Run resources remain while any declared
@@ -44,7 +49,8 @@ Cleanup uses only exact IDs:
   `docker stop --time N ID`, followed by `docker rm ID`;
 - a stale running container is retained and never stopped;
 - networks and volumes in use, system networks, and objects that cannot be
-  inspected are retained or blocked with a reason;
+  inspected are retained or blocked with a reason; volume use is proven by an
+  authoritative container-mount query, never inferred from absent inspect data;
 - missing objects are an idempotent successful end state;
 - volumes are discovered by the positive managed label and removed by explicit
   IDs only.
@@ -53,4 +59,7 @@ Broad cleanup is forbidden. The kernel never emits `docker system prune`, any
 unfiltered or negative prune, wildcards, shell command strings, or name-based
 ownership guesses. Receipts record kind, ID, owner, lifecycle, action, reason,
 bounded evidence, and follow-up without copying command output that may contain
-secrets.
+secrets. Runtime cleanup receipts serialize with schema version, scope, nested
+owner, kind and ID, lifecycle, disposition, exact command evidence, reason, and
+follow-up. Evidence is recursively bounded and secret-shaped values are hashed
+before durable persistence.
