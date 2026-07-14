@@ -109,6 +109,7 @@ EXECUTOR_PROVIDERS = {
     "codex": "openai",
     "openrouter": "openrouter",
 }
+PROVIDERS = frozenset(EXECUTOR_PROVIDERS.values())
 DISPATCH_RAIL_CAPABILITIES = {
     "native": HostCapability.NATIVE_DISPATCH,
     "codex_companion": HostCapability.COMPANION_DISPATCH,
@@ -127,6 +128,138 @@ GATE_KINDS = frozenset(
     }
 )
 EXECUTORS = frozenset(EXECUTOR_CAPABILITIES)
+AGENTIC_DISPATCH_RAILS = frozenset({"native", "codex_companion", "openrouter_exec"})
+
+
+@dataclass(frozen=True, repr=False)
+class HostRoute:
+    """One concrete provider/executor/dispatch authorization tuple."""
+
+    provider: str
+    capability: HostCapability
+    rail: str
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        raise TypeError("HostRoute is final")
+
+    def __post_init__(self) -> None:
+        if type(self.provider) is not str or self.provider not in PROVIDERS:
+            raise invalid_policy("invalid_host_route")
+        if type(self.rail) is not str or self.rail not in DISPATCH_RAIL_CAPABILITIES:
+            raise invalid_policy("invalid_host_route")
+        try:
+            capability = (
+                self.capability
+                if type(self.capability) is HostCapability
+                else HostCapability(self.capability)
+            )
+        except (TypeError, ValueError):
+            raise invalid_policy("invalid_host_route") from None
+        if capability not in set().union(*EXECUTOR_CAPABILITIES.values()):
+            raise invalid_policy("invalid_host_route")
+        coherent = (
+            self.rail == "native"
+            and (
+                self.provider == "anthropic"
+                and capability in EXECUTOR_CAPABILITIES["claude"]
+                or self.provider == "openai"
+                and capability is HostCapability.CODEX_EXECUTION
+            )
+        ) or (
+            self.rail == "codex_companion"
+            and self.provider == "openai"
+            and capability is HostCapability.CODEX_EXECUTION
+        ) or (
+            self.rail in {"wrapper", "openrouter_exec"}
+            and self.provider == "openrouter"
+            and capability in {
+                HostCapability.OPENROUTER_EXECUTION,
+                HostCapability.CLAUDE_EXECUTION,
+                HostCapability.CODEX_EXECUTION,
+            }
+        )
+        if not coherent or (
+            capability is HostCapability.ANTHROPIC_NATIVE_EXECUTION
+            and (self.provider, self.rail) != ("anthropic", "native")
+        ):
+            raise invalid_policy("incoherent_host_route")
+        object.__setattr__(self, "capability", capability)
+
+    @property
+    def dispatch_capability(self) -> HostCapability:
+        return DISPATCH_RAIL_CAPABILITIES[self.rail]
+
+    @property
+    def agentic(self) -> bool:
+        return self.rail in AGENTIC_DISPATCH_RAILS
+
+    def __repr__(self) -> str:
+        return "HostRoute(provider={!r}, capability={!r}, rail={!r})".format(
+            self.provider, self.capability, self.rail,
+        )
+
+
+def _snapshot_host_route(route: HostRoute) -> HostRoute:
+    if type(route) is not HostRoute:
+        raise invalid_policy("invalid_host_route")
+    try:
+        return HostRoute(route.provider, route.capability, route.rail)
+    except (AttributeError, TypeError):
+        raise invalid_policy("invalid_host_route") from None
+
+
+def route_satisfies_node(route: HostRoute, node: "NodeSpec") -> bool:
+    """Apply the one centralized route/executor/capability constraint."""
+    if type(route) is not HostRoute or type(node) is not NodeSpec or not route.agentic:
+        return False
+    if node.executor is None or route.capability is not node.required_capability:
+        return False
+    if (
+        node.required_dispatch_capability is not None
+        and route.dispatch_capability is not node.required_dispatch_capability
+    ):
+        return False
+    return True
+
+
+def normalize_executor_constraint(
+    executor: object,
+    required_capability: object,
+    required_dispatch_capability: object,
+) -> tuple[Optional[str], Optional[HostCapability], Optional[HostCapability]]:
+    """Normalize schema and runtime executor constraints through one rule."""
+    if executor is not None and (type(executor) is not str or executor not in EXECUTORS):
+        raise invalid_policy("unknown_executor")
+    try:
+        capability = (
+            None if required_capability is None
+            else required_capability
+            if type(required_capability) is HostCapability
+            else HostCapability(required_capability)
+        )
+        dispatch = (
+            None if required_dispatch_capability is None
+            else required_dispatch_capability
+            if type(required_dispatch_capability) is HostCapability
+            else HostCapability(required_dispatch_capability)
+        )
+    except (TypeError, ValueError):
+        raise invalid_policy("unknown_capability_name") from None
+    if dispatch is not None and dispatch not in set(DISPATCH_RAIL_CAPABILITIES.values()):
+        raise invalid_policy("inconsistent_dispatch_capability")
+    if executor is None and (capability is not None or dispatch is not None):
+        raise invalid_policy("inconsistent_executor_capability")
+    if executor is not None and capability not in EXECUTOR_CAPABILITIES[executor]:
+        raise invalid_policy("inconsistent_executor_capability")
+    if executor == "openrouter" and dispatch not in {
+        None, HostCapability.OPENROUTER_EXEC,
+    }:
+        raise invalid_policy("inconsistent_dispatch_capability")
+    if capability is HostCapability.ANTHROPIC_NATIVE_EXECUTION and (
+        executor != "claude" or dispatch is not HostCapability.NATIVE_DISPATCH
+    ):
+        raise invalid_policy("inconsistent_dispatch_capability")
+    return executor, capability, dispatch
 
 
 @dataclass(frozen=True)
@@ -187,6 +320,24 @@ class WorkflowContext:
             type(self.economics_preference) is not str or not self.economics_preference
         ):
             raise invalid_policy("invalid_workflow_context")
+
+
+def _snapshot_workflow_context(context: WorkflowContext) -> WorkflowContext:
+    if type(context) is not WorkflowContext:
+        raise invalid_policy("invalid_workflow_context")
+    try:
+        return WorkflowContext(
+            changed_paths=context.changed_paths,
+            requested_executor=context.requested_executor,
+            risk=context.risk,
+            evidence=context.evidence,
+            human_approved=context.human_approved,
+            investigation_promotion=context.investigation_promotion,
+            promotion_approved=context.promotion_approved,
+            economics_preference=context.economics_preference,
+        )
+    except (AttributeError, TypeError):
+        raise invalid_policy("invalid_workflow_context") from None
 
 
 @dataclass(frozen=True)
@@ -266,10 +417,6 @@ class NodeSpec:
             type(self.gate_kind) is not str or self.gate_kind not in GATE_KINDS
         ):
             raise invalid_policy("unknown_gate_kind")
-        if self.executor is not None and (
-            type(self.executor) is not str or self.executor not in EXECUTORS
-        ):
-            raise invalid_policy("unknown_executor")
         if self.routing_reason is not None and (
             type(self.routing_reason) is not str or not self.routing_reason
         ):
@@ -291,48 +438,37 @@ class NodeSpec:
                 raise invalid_policy("inconsistent_gate_decision")
         elif self.gate_decision.reason_code == "gate_not_required":
             raise invalid_policy("inconsistent_gate_decision")
-        if self.required_capability is not None:
-            try:
-                required = (
-                    self.required_capability
-                    if type(self.required_capability) is HostCapability
-                    else HostCapability(self.required_capability)
-                )
-            except (TypeError, ValueError):
-                raise invalid_policy("unknown_capability_name") from None
-            object.__setattr__(self, "required_capability", required)
-        if self.required_dispatch_capability is not None:
-            try:
-                required_dispatch = (
-                    self.required_dispatch_capability
-                    if type(self.required_dispatch_capability) is HostCapability
-                    else HostCapability(self.required_dispatch_capability)
-                )
-            except (TypeError, ValueError):
-                raise invalid_policy("unknown_capability_name") from None
-            if required_dispatch not in set(DISPATCH_RAIL_CAPABILITIES.values()):
-                raise invalid_policy("inconsistent_dispatch_capability")
-            object.__setattr__(self, "required_dispatch_capability", required_dispatch)
+        executor, required, required_dispatch = normalize_executor_constraint(
+            self.executor, self.required_capability,
+            self.required_dispatch_capability,
+        )
+        object.__setattr__(self, "executor", executor)
+        object.__setattr__(self, "required_capability", required)
+        object.__setattr__(self, "required_dispatch_capability", required_dispatch)
         if type(self.executor_overridable) is not bool:
             raise invalid_policy("invalid_node_spec")
-        expected_capabilities = EXECUTOR_CAPABILITIES.get(self.executor, frozenset())
-        if self.executor is None and (
-            self.required_capability is not None
-            or self.required_dispatch_capability is not None
-        ):
-            raise invalid_policy("inconsistent_executor_capability")
-        if self.executor is not None and (
-            self.required_capability not in expected_capabilities
-            or self.required_dispatch_capability is None
-        ):
-            raise invalid_policy("inconsistent_executor_capability")
-        if (
-            self.executor == "openrouter"
-            and self.required_dispatch_capability is not HostCapability.OPENROUTER_EXEC
-        ):
-            raise invalid_policy("inconsistent_dispatch_capability")
         if self.executor is None and self.executor_overridable:
             raise invalid_policy("inconsistent_executor_capability")
+
+
+def _snapshot_node_spec(node: NodeSpec) -> NodeSpec:
+    if type(node) is not NodeSpec:
+        raise invalid_policy("invalid_node_spec")
+    try:
+        return NodeSpec(
+            node_id=node.node_id,
+            dependencies=node.dependencies,
+            gate_kind=node.gate_kind,
+            required_evidence=node.required_evidence,
+            executor=node.executor,
+            routing_reason=node.routing_reason,
+            gate_decision=node.gate_decision,
+            required_capability=node.required_capability,
+            required_dispatch_capability=node.required_dispatch_capability,
+            executor_overridable=node.executor_overridable,
+        )
+    except (AttributeError, TypeError):
+        raise invalid_policy("invalid_node_spec") from None
 
 
 @dataclass(frozen=True)
@@ -386,6 +522,7 @@ class HostCapabilities:
     capabilities: frozenset[HostCapability]
     transition_model_version: int = 1
     evidence_model_version: int = 1
+    routes: frozenset[HostRoute] = frozenset()
 
     def __post_init__(self) -> None:
         if type(self.host_name) is not str or _HOST_NAME.fullmatch(self.host_name) is None:
@@ -401,14 +538,47 @@ class HostCapabilities:
         if len(converted) != len(set(converted)):
             raise invalid_policy("duplicate_capability_name")
         values = frozenset(converted)
+        try:
+            raw_routes = list(self.routes)
+            routes = frozenset(_snapshot_host_route(route) for route in raw_routes)
+        except (TypeError, ValueError):
+            raise invalid_policy("invalid_host_route") from None
+        if len(raw_routes) != len(routes):
+            raise invalid_policy("duplicate_host_route")
         if type(self.transition_model_version) is not int or self.transition_model_version != 1:
             raise invalid_policy("unsupported_transition_model_version")
         if type(self.evidence_model_version) is not int or self.evidence_model_version != 1:
             raise invalid_policy("unsupported_evidence_model_version")
-        object.__setattr__(self, "capabilities", values)
+        derived = set(values)
+        for route in routes:
+            derived.add(route.capability)
+            derived.add(route.dispatch_capability)
+        object.__setattr__(self, "capabilities", frozenset(derived))
+        object.__setattr__(self, "routes", routes)
 
     def supports(self, capability: HostCapability) -> bool:
         return capability in self.capabilities
+
+    def supports_route(self, route: HostRoute) -> bool:
+        try:
+            return _snapshot_host_route(route) in self.routes
+        except InvalidSchemaError:
+            return False
+
+
+def _snapshot_host_capabilities(capabilities: HostCapabilities) -> HostCapabilities:
+    if type(capabilities) is not HostCapabilities:
+        raise invalid_policy("invalid_host_capabilities")
+    try:
+        return HostCapabilities(
+            capabilities.host_name,
+            capabilities.capabilities,
+            capabilities.transition_model_version,
+            capabilities.evidence_model_version,
+            capabilities.routes,
+        )
+    except (AttributeError, TypeError):
+        raise invalid_policy("invalid_host_capabilities") from None
 
 
 @dataclass(frozen=True)
@@ -453,7 +623,7 @@ class ResumeStateContext:
         raise TypeError("ResumeStateContext is final")
 
     def __post_init__(self) -> None:
-        for name in ("run_id", "node_id", "attempt_id", "provider"):
+        for name in ("run_id", "node_id", "attempt_id"):
             value = getattr(self, name)
             if (
                 type(value) is not str
@@ -461,19 +631,17 @@ class ResumeStateContext:
                 or _CONTEXT_ID.fullmatch(value) is None
             ):
                 raise invalid_policy("invalid_session_resume_context")
-        if type(self.rail) is not str or self.rail not in DISPATCH_RAIL_CAPABILITIES:
-            raise invalid_policy("invalid_session_resume_context")
         try:
-            capability = (
-                self.capability
-                if type(self.capability) is HostCapability
-                else HostCapability(self.capability)
-            )
-        except (TypeError, ValueError):
+            route = HostRoute(self.provider, self.capability, self.rail)
+        except InvalidSchemaError:
             raise invalid_policy("invalid_session_resume_context") from None
-        if capability not in set().union(*EXECUTOR_CAPABILITIES.values()):
-            raise invalid_policy("invalid_session_resume_context")
-        object.__setattr__(self, "capability", capability)
+        object.__setattr__(self, "provider", route.provider)
+        object.__setattr__(self, "rail", route.rail)
+        object.__setattr__(self, "capability", route.capability)
+
+    @property
+    def route(self) -> HostRoute:
+        return HostRoute(self.provider, self.capability, self.rail)
 
     def __repr__(self) -> str:
         try:
@@ -858,6 +1026,7 @@ class BuilderSessionDecision:
     """Coherent closed builder outcome with observation-only projection."""
 
     outcome: BuilderOutcome
+    context: ResumeStateContext
     handle: Optional[SessionHandle] = None
     result: Optional[SessionResult] = None
 
@@ -869,6 +1038,9 @@ class BuilderSessionDecision:
             outcome = self.outcome if type(self.outcome) is BuilderOutcome else BuilderOutcome(self.outcome)
         except (TypeError, ValueError):
             raise invalid_policy("invalid_builder_session_decision") from None
+        if type(self.context) is not ResumeStateContext:
+            raise invalid_policy("invalid_builder_session_decision")
+        object.__setattr__(self, "context", _snapshot_resume_context(self.context))
         requires_handle = outcome in {
             BuilderOutcome.BUILDER_DISPATCHED,
             BuilderOutcome.SESSION_RESUMED,
@@ -882,10 +1054,9 @@ class BuilderSessionDecision:
             object.__setattr__(self, "handle", _snapshot_session_handle(self.handle))
         if self.result is not None:
             object.__setattr__(self, "result", _snapshot_session_result(self.result))
-        if (
-            outcome is BuilderOutcome.SESSION_RESUMED
-            and self.handle.context != self.result.context
-        ):
+        if self.handle is not None and self.handle.context != self.context:
+            raise invalid_policy("invalid_builder_session_decision")
+        if self.result is not None and self.result.context != self.context:
             raise invalid_policy("invalid_builder_session_decision")
 
     @property
@@ -914,8 +1085,8 @@ class BuilderSessionDecision:
         except InvalidSchemaError:
             return "BuilderSessionDecision([INVALID])"
         return (
-            "BuilderSessionDecision(outcome={!r}, handle={!r}, result={!r})"
-        ).format(decision.outcome, decision.handle, decision.result)
+            "BuilderSessionDecision(outcome={!r}, context={!r}, handle={!r}, result={!r})"
+        ).format(decision.outcome, decision.context, decision.handle, decision.result)
 
     def to_evidence_event(
         self, *, run_id: str, sequence: int, node_id: str, occurred_at: str,
@@ -926,6 +1097,8 @@ class BuilderSessionDecision:
         reference and safely merge ``result.evidence`` when a result exists.
         This helper never fabricates that receipt or treats observations as it.
         """
+        if run_id != self.context.run_id or node_id != self.context.node_id:
+            raise invalid_policy("invalid_builder_session_event_context")
         return WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,
             {"evidence": list(self.evidence_references)},
@@ -946,7 +1119,9 @@ def _snapshot_builder_decision(
         facts = _OUTCOME_FACTS.get(outcome)
         if facts is None:
             raise ValueError
-        snapshot = BuilderSessionDecision(outcome, decision.handle, decision.result)
+        snapshot = BuilderSessionDecision(
+            outcome, decision.context, decision.handle, decision.result,
+        )
         return facts, snapshot
     except (AttributeError, KeyError, TypeError, ValueError):
         raise invalid_policy("invalid_builder_session_decision") from None

@@ -10,10 +10,11 @@ from typing import Iterable, Optional
 
 from .base import (
     BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
-    DISPATCH_RAIL_CAPABILITIES, EXECUTOR_PROVIDERS, HostCapability,
+    HostRoute, HostCapability,
     MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob, ResumeStateContext,
     SessionHandle, SessionResult, ValidationFeedback, _snapshot_resume_context,
-    _snapshot_session_handle, _snapshot_session_result,
+    _snapshot_host_capabilities, _snapshot_node_spec, _snapshot_session_handle,
+    _snapshot_session_result, route_satisfies_node,
     _snapshot_validation_feedback, invalid_policy,
 )
 
@@ -50,15 +51,13 @@ def capabilities_from_harness_profile(
     if type(roles) is not dict:
         raise invalid_policy("invalid_harness_profile")
     declared = set()
+    routes = set()
     for role in roles.values():
         if type(role) is not dict or type(role.get("kind")) is not str:
             raise invalid_policy("invalid_harness_profile")
         kind = role["kind"]
         if kind not in _ROLE_CAPABILITIES:
             raise invalid_policy("unknown_capability_name")
-        capability = _ROLE_CAPABILITIES[kind]
-        if capability is not None:
-            declared.add(capability)
         if kind == "none":
             if set(role) != {"kind"}:
                 raise invalid_policy("invalid_harness_profile")
@@ -90,17 +89,34 @@ def capabilities_from_harness_profile(
         ):
             raise invalid_policy("invalid_harness_profile")
         if kind == "native" and probe == "claude":
-            declared.add(HostCapability.CLAUDE_EXECUTION)
-            declared.add(HostCapability.ANTHROPIC_NATIVE_EXECUTION)
+            routes.add(HostRoute(
+                "anthropic", HostCapability.CLAUDE_EXECUTION, "native",
+            ))
+            routes.add(HostRoute(
+                "anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION, "native",
+            ))
         elif kind in ("native", "codex_companion") and probe == "codex":
-            declared.add(HostCapability.CODEX_EXECUTION)
+            routes.add(HostRoute(
+                "openai", HostCapability.CODEX_EXECUTION, kind,
+            ))
         elif kind in ("wrapper", "openrouter_exec"):
-            declared.add(HostCapability.OPENROUTER_EXECUTION)
-        if any(model.startswith("anthropic/") for model in models):
-            declared.add(HostCapability.CLAUDE_EXECUTION)
-        if any(model.startswith("openai/") or model.startswith("gpt-") for model in models):
-            declared.add(HostCapability.CODEX_EXECUTION)
-    return HostCapabilities(host_name, frozenset(declared))
+            routes.add(HostRoute(
+                "openrouter", HostCapability.OPENROUTER_EXECUTION, kind,
+            ))
+        if kind in ("wrapper", "openrouter_exec") and any(
+            model.startswith("anthropic/") for model in models
+        ):
+            routes.add(HostRoute(
+                "openrouter", HostCapability.CLAUDE_EXECUTION, kind,
+            ))
+        if kind in ("wrapper", "openrouter_exec") and any(
+            model.startswith("openai/") or model.startswith("gpt-")
+            for model in models
+        ):
+            routes.add(HostRoute(
+                "openrouter", HostCapability.CODEX_EXECUTION, kind,
+            ))
+    return HostCapabilities(host_name, frozenset(declared), routes=frozenset(routes))
 
 
 class FakeHostAdapter:
@@ -177,20 +193,26 @@ class BuilderSessionManager:
             capabilities = self._adapter.capabilities()
         except Exception:
             return None
-        return capabilities if type(capabilities) is HostCapabilities else None
+        if type(capabilities) is not HostCapabilities:
+            return None
+        try:
+            return _snapshot_host_capabilities(capabilities)
+        except Exception:
+            return None
 
     def dispatch(
         self, node: NodeSpec, context: ResumeStateContext,
     ) -> BuilderSessionDecision:
-        if type(node) is not NodeSpec:
-            raise invalid_policy("invalid_node_spec")
+        node = _snapshot_node_spec(node)
         context = self._authorized_context(node, context, "invalid_builder_dispatch_request")
-        blocked = self._gate_preflight(node)
+        blocked = self._gate_preflight(node, context)
         if blocked is not None:
             return blocked
         capabilities = self._safe_capabilities()
         if capabilities is None:
-            return BuilderSessionDecision(BuilderOutcome.ADAPTER_CAPABILITIES_FAILED)
+            return BuilderSessionDecision(
+                BuilderOutcome.ADAPTER_CAPABILITIES_FAILED, context,
+            )
         preflight = self._capability_preflight(node, context, capabilities)
         if preflight is not None:
             return preflight
@@ -203,39 +225,33 @@ class BuilderSessionManager:
     ) -> ResumeStateContext:
         try:
             context = _snapshot_resume_context(context)
-            dispatch_capability = DISPATCH_RAIL_CAPABILITIES[context.rail]
         except (KeyError, TypeError):
             raise invalid_policy(reason_code) from None
         if (
             node.executor is None
             or context.node_id != node.node_id
-            or context.provider != EXECUTOR_PROVIDERS[node.executor]
-            or context.capability is not node.required_capability
-            or dispatch_capability is not node.required_dispatch_capability
+            or not route_satisfies_node(context.route, node)
         ):
             raise invalid_policy(reason_code)
         return context
 
     def _gate_preflight(
-        self, node: NodeSpec,
+        self, node: NodeSpec, context: ResumeStateContext,
     ) -> Optional[BuilderSessionDecision]:
         if not node.gate_decision.allowed:
-            return BuilderSessionDecision(BuilderOutcome.NODE_GATE_BLOCKED)
+            return BuilderSessionDecision(BuilderOutcome.NODE_GATE_BLOCKED, context)
         return None
 
     def _capability_preflight(
         self, node: NodeSpec, context: ResumeStateContext,
         capabilities: HostCapabilities,
     ) -> Optional[BuilderSessionDecision]:
-        if (
-            node.required_capability is None
-            or not capabilities.supports(node.required_capability)
-            or node.required_dispatch_capability is None
-            or not capabilities.supports(node.required_dispatch_capability)
-            or not capabilities.supports(context.capability)
-            or not capabilities.supports(DISPATCH_RAIL_CAPABILITIES[context.rail])
+        if not route_satisfies_node(context.route, node) or not capabilities.supports_route(
+            context.route
         ):
-            return BuilderSessionDecision(BuilderOutcome.HOST_CAPABILITY_UNAVAILABLE)
+            return BuilderSessionDecision(
+                BuilderOutcome.HOST_CAPABILITY_UNAVAILABLE, context,
+            )
         return None
 
     def _dispatch_with_capabilities(
@@ -251,34 +267,38 @@ class BuilderSessionManager:
         except Exception:
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_ADAPTER_DISPATCH_FAILED
-                if replacement else BuilderOutcome.ADAPTER_DISPATCH_FAILED
+                if replacement else BuilderOutcome.ADAPTER_DISPATCH_FAILED,
+                context,
             )
         if candidate is None:
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_SESSION_HANDLE_UNAVAILABLE
-                if replacement else BuilderOutcome.SESSION_HANDLE_UNAVAILABLE
+                if replacement else BuilderOutcome.SESSION_HANDLE_UNAVAILABLE,
+                context,
             )
         try:
             handle = _snapshot_session_handle(candidate)
         except Exception:
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
-                if replacement else BuilderOutcome.INVALID_SESSION_HANDLE
+                if replacement else BuilderOutcome.INVALID_SESSION_HANDLE,
+                context,
             )
         if (
             handle.host_name != capabilities.host_name
             or handle.context != context
-            or handle.context.capability is not node.required_capability
-            or DISPATCH_RAIL_CAPABILITIES[handle.context.rail]
-            is not node.required_dispatch_capability
+            or not capabilities.supports_route(handle.context.route)
+            or not route_satisfies_node(handle.context.route, node)
         ):
             return BuilderSessionDecision(
                 BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
-                if replacement else BuilderOutcome.INVALID_SESSION_HANDLE
+                if replacement else BuilderOutcome.INVALID_SESSION_HANDLE,
+                context,
             )
         return BuilderSessionDecision(
             BuilderOutcome.REPLACEMENT_DISPATCHED if replacement
             else BuilderOutcome.BUILDER_DISPATCHED,
+            context,
             handle,
         )
 
@@ -297,6 +317,7 @@ class BuilderSessionManager:
             not handle.resume_capable
             or handle.host_name != capabilities.host_name
             or handle.context != context
+            or not capabilities.supports_route(context.route)
         ):
             return False
         age = (_timestamp(now) - _timestamp(handle.created_at)).total_seconds()
@@ -311,20 +332,23 @@ class BuilderSessionManager:
         context: ResumeStateContext,
         now: str,
     ) -> BuilderSessionDecision:
-        if type(node) is not NodeSpec or type(feedback) is not ValidationFeedback:
+        if type(feedback) is not ValidationFeedback:
             raise invalid_policy("invalid_builder_resume_request")
+        node = _snapshot_node_spec(node)
         context = self._authorized_context(
             node, context, "invalid_builder_resume_request",
         )
         feedback = _snapshot_validation_feedback(feedback)
         if feedback.node_id != node.node_id:
             raise invalid_policy("invalid_builder_resume_request")
-        blocked = self._gate_preflight(node)
+        blocked = self._gate_preflight(node, context)
         if blocked is not None:
             return blocked
         capabilities = self._safe_capabilities()
         if capabilities is None:
-            return BuilderSessionDecision(BuilderOutcome.ADAPTER_CAPABILITIES_FAILED)
+            return BuilderSessionDecision(
+                BuilderOutcome.ADAPTER_CAPABILITIES_FAILED, context,
+            )
         preflight = self._capability_preflight(node, context, capabilities)
         if preflight is not None:
             return preflight
@@ -340,7 +364,7 @@ class BuilderSessionManager:
                     safe_result = None
                 if safe_result is not None and safe_result.context == context:
                     return BuilderSessionDecision(
-                        BuilderOutcome.SESSION_RESUMED, handle, safe_result,
+                        BuilderOutcome.SESSION_RESUMED, context, handle, safe_result,
                     )
         return self._dispatch_with_capabilities(
             node, context, capabilities, replacement=True,
@@ -416,17 +440,17 @@ class BuilderSessionManager:
             if getattr(error, "details", None) is not None:
                 raise invalid_policy("invalid_session_resume_state") from None
             raise
+        if (
+            stored_context != expected_context
+            or handle.context != stored_context
+        ):
+            raise invalid_policy("foreign_session_resume_state")
         capabilities = self._safe_capabilities()
         if capabilities is None:
             raise invalid_policy("adapter_capabilities_failed")
         if (
-            stored_context != expected_context
-            or handle.context != stored_context
-            or handle.host_name != capabilities.host_name
-            or not capabilities.supports(stored_context.capability)
-            or not capabilities.supports(
-                DISPATCH_RAIL_CAPABILITIES[stored_context.rail]
-            )
+            handle.host_name != capabilities.host_name
+            or not capabilities.supports_route(stored_context.route)
         ):
             raise invalid_policy("foreign_session_resume_state")
         return _snapshot_session_handle(handle)

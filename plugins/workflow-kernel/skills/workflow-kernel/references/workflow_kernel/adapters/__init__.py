@@ -16,7 +16,7 @@ from importlib import import_module
 from .base import (
     AttemptLedger, BuilderObservation, BuilderOutcome, BuilderSessionDecision,
     FailureReason, GateDecision,
-    HostAdapter, HostCapabilities, HostCapability, IsolationDecision, IsolationMode,
+    HostAdapter, HostCapabilities, HostCapability, HostRoute, IsolationDecision, IsolationMode,
     IsolationRequirements, NodeSpec, ResumeStateBlob, ResumeStateContext,
     RetryDecision, SessionHandle, SessionResult, SessionStatus,
     ValidationFeedback, WorkflowClass, WorkflowContext,
@@ -47,7 +47,7 @@ __all__ = [
     "AttemptLedger", "BuilderObservation", "BuilderOutcome", "BuilderSessionDecision",
     "BuilderSessionManager",
     "FailureReason", "FakeHostAdapter", "GateDecision", "HostAdapter",
-    "HostCapabilities", "HostCapability", "IsolationDecision", "IsolationMode",
+    "HostCapabilities", "HostCapability", "HostRoute", "IsolationDecision", "IsolationMode",
     "IsolationRequirements", "IsolationSelector", "NodeSpec", "RetryDecision",
     "ResumeStateBlob", "ResumeStateContext", "SessionHandle", "SessionResult",
     "SessionStatus", "ValidationFeedback", "WorkflowClass",

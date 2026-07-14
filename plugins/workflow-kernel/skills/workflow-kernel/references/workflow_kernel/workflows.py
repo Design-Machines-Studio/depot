@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Optional
 
 from .adapters.base import (
-    DEFAULT_DISPATCH_CAPABILITY, DEFAULT_EXECUTOR_CAPABILITY,
-    DISPATCH_RAIL_CAPABILITIES, EXECUTOR_CAPABILITIES, EXECUTORS, GATE_KINDS,
-    HostCapability, NodeSpec, WorkflowClass, WorkflowContext, invalid_policy,
+    DEFAULT_EXECUTOR_CAPABILITY, GATE_KINDS, HostCapability, NodeSpec,
+    WorkflowClass, WorkflowContext, _snapshot_workflow_context, invalid_policy,
+    normalize_executor_constraint,
 )
 from .policies import GatePolicy
 
@@ -73,53 +73,22 @@ def _node_record(value: object) -> dict:
         raise invalid_policy("unknown_gate_kind")
     if value["gate_kind"] not in (None, "cleanup") and not required_evidence:
         raise invalid_policy("invalid_workflow_node")
-    if value["executor"] is not None and (
-        type(value["executor"]) is not str or value["executor"] not in EXECUTORS
-    ):
-        raise invalid_policy("unknown_executor")
-    try:
-        required_capability = (
-            None if value["required_capability"] is None
-            else HostCapability(value["required_capability"])
+    executor, required_capability, required_dispatch_capability = (
+        normalize_executor_constraint(
+            value["executor"], value["required_capability"],
+            value["required_dispatch_capability"],
         )
-    except (TypeError, ValueError):
-        raise invalid_policy("unknown_capability_name") from None
-    try:
-        required_dispatch_capability = (
-            None if value["required_dispatch_capability"] is None
-            else HostCapability(value["required_dispatch_capability"])
-        )
-    except (TypeError, ValueError):
-        raise invalid_policy("unknown_capability_name") from None
-    if (
-        required_dispatch_capability is not None
-        and required_dispatch_capability not in set(DISPATCH_RAIL_CAPABILITIES.values())
-    ):
-        raise invalid_policy("inconsistent_dispatch_capability")
+    )
     if type(value["executor_overridable"]) is not bool:
         raise invalid_policy("invalid_workflow_node")
-    if value["executor"] is None and (
-        required_capability is not None or required_dispatch_capability is not None
-    ):
-        raise invalid_policy("inconsistent_executor_capability")
-    if value["executor"] is not None and (
-        required_capability not in EXECUTOR_CAPABILITIES[value["executor"]]
-        or required_dispatch_capability is None
-    ):
-        raise invalid_policy("inconsistent_executor_capability")
-    if (
-        value["executor"] == "openrouter"
-        and required_dispatch_capability is not HostCapability.OPENROUTER_EXEC
-    ):
-        raise invalid_policy("inconsistent_dispatch_capability")
-    if value["executor"] is None and value["executor_overridable"]:
+    if executor is None and value["executor_overridable"]:
         raise invalid_policy("inconsistent_executor_capability")
     return {
         "id": node_id,
         "depends_on": tuple(dependencies),
         "gate_kind": value["gate_kind"],
         "required_evidence": tuple(required_evidence),
-        "executor": value["executor"],
+        "executor": executor,
         "required_capability": required_capability,
         "required_dispatch_capability": required_dispatch_capability,
         "executor_overridable": value["executor_overridable"],
@@ -208,13 +177,96 @@ def _validate_promotion(records: tuple[dict, ...]) -> None:
             raise invalid_policy("promotion_gate_required")
 
 
+def _requirement_record(value: object) -> dict:
+    if type(value) is not dict or not set(value) <= {
+        "required_gate_kinds", "executor_constraint",
+    } or "required_gate_kinds" not in value:
+        raise invalid_policy("invalid_workflow_requirements")
+    gate_kinds = value["required_gate_kinds"]
+    if not isinstance(gate_kinds, list) or not gate_kinds or any(
+        type(kind) is not str or kind not in GATE_KINDS for kind in gate_kinds
+    ) or len(gate_kinds) != len(set(gate_kinds)):
+        raise invalid_policy("invalid_workflow_requirements")
+    constraint = value.get("executor_constraint")
+    if constraint is not None:
+        if type(constraint) is not dict or set(constraint) != {
+            "executor", "required_capability", "required_dispatch_capability",
+        }:
+            raise invalid_policy("invalid_workflow_requirements")
+        try:
+            executor, capability, dispatch = normalize_executor_constraint(
+                constraint["executor"], constraint["required_capability"],
+                constraint["required_dispatch_capability"],
+            )
+        except Exception:
+            raise invalid_policy("invalid_workflow_requirements") from None
+        if executor is None or capability is None:
+            raise invalid_policy("invalid_workflow_requirements")
+        constraint = (executor, capability, dispatch)
+    return {"required_gate_kinds": frozenset(gate_kinds),
+            "executor_constraint": constraint}
+
+
+def _validate_requirements(
+    requirements: object,
+    classes: dict[WorkflowClass, tuple[dict, ...]],
+    promotion: tuple[dict, ...],
+) -> None:
+    if type(requirements) is not dict or set(requirements) != {
+        "global", "classes", "promotion",
+    }:
+        raise invalid_policy("invalid_workflow_requirements")
+    global_requirement = requirements["global"]
+    if type(global_requirement) is not dict or set(global_requirement) != {
+        "terminal_gate_kind",
+    } or global_requirement["terminal_gate_kind"] not in GATE_KINDS:
+        raise invalid_policy("invalid_workflow_requirements")
+    class_requirements = requirements["classes"]
+    if type(class_requirements) is not dict or not class_requirements or any(
+        type(name) is not str or name not in {kind.value for kind in WorkflowClass}
+        for name in class_requirements
+    ):
+        raise invalid_policy("invalid_workflow_requirements")
+    promotion_requirements = requirements["promotion"]
+    if type(promotion_requirements) is not dict or set(promotion_requirements) != {
+        "investigation",
+    }:
+        raise invalid_policy("invalid_workflow_requirements")
+
+    terminal_gate = global_requirement["terminal_gate_kind"]
+    for records in classes.values():
+        if records[-1]["gate_kind"] != terminal_gate:
+            raise invalid_policy("workflow_requirement_unsatisfied")
+    for name, raw_requirement in class_requirements.items():
+        requirement = _requirement_record(raw_requirement)
+        records = classes[WorkflowClass(name)]
+        actual_gates = {record["gate_kind"] for record in records}
+        if not requirement["required_gate_kinds"] <= actual_gates:
+            raise invalid_policy("workflow_requirement_unsatisfied")
+        constraint = requirement["executor_constraint"]
+        if constraint is not None and any(
+            (record["executor"], record["required_capability"],
+             record["required_dispatch_capability"]) != constraint
+            for record in records if record["executor"] is not None
+        ):
+            raise invalid_policy("workflow_requirement_unsatisfied")
+    promoted_requirement = _requirement_record(
+        promotion_requirements["investigation"],
+    )
+    actual_gates = {record["gate_kind"] for record in promotion}
+    if not promoted_requirement["required_gate_kinds"] <= actual_gates:
+        raise invalid_policy("workflow_requirement_unsatisfied")
+
+
 def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...]]:
     source = Path(path) if path is not None else DEFAULT_CLASSES_PATH
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError):
         raise invalid_policy("invalid_workflow_classes_json") from None
-    if type(payload) is not dict or set(payload) != {"schema_version", "classes", "promotion"}:
+    if type(payload) is not dict or set(payload) != {
+        "schema_version", "classes", "promotion", "requirements",
+    }:
         raise invalid_policy("invalid_workflow_classes_document")
     if type(payload["schema_version"]) is not int or payload["schema_version"] != WORKFLOW_CLASSES_SCHEMA_VERSION:
         raise invalid_policy("unsupported_policy_version")
@@ -239,6 +291,7 @@ def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...
         raise invalid_policy("invalid_promotion_policy")
     promotion_nodes = tuple(_node_record(item) for item in promoted["nodes"])
     _validate_promotion(promotion_nodes)
+    _validate_requirements(payload["requirements"], result, promotion_nodes)
     result["promotion"] = promotion_nodes
     return result
 
@@ -264,8 +317,7 @@ class WorkflowTemplates:
             normalized = kind if type(kind) is WorkflowClass else WorkflowClass(kind)
         except (TypeError, ValueError):
             raise invalid_policy("unknown_workflow_class") from None
-        if type(context) is not WorkflowContext:
-            raise invalid_policy("invalid_workflow_context")
+        context = _snapshot_workflow_context(context)
         records = list(self._templates[normalized])
         if (
             normalized is WorkflowClass.INVESTIGATION
@@ -310,7 +362,7 @@ class WorkflowTemplates:
                 elif context.requested_executor is not None and executor_overridable:
                     executor = context.requested_executor
                     required_capability = DEFAULT_EXECUTOR_CAPABILITY[executor]
-                    required_dispatch_capability = DEFAULT_DISPATCH_CAPABILITY[executor]
+                    required_dispatch_capability = None
                     routing_reason = "requested_executor"
                 else:
                     routing_reason = "workflow_default"

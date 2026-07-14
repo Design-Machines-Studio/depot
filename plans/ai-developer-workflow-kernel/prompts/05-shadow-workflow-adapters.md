@@ -172,9 +172,13 @@ legacy default, invalid values, and security override preservation.
 ## Builder Continuity Integration
 
 Chunk 05 consumes the Chunk 02 adapter contract; it does not redesign or bypass
-it. Capture the validated `SessionHandle` returned by builder dispatch together
-with its immutable run/node/attempt, provider, concrete rail, and capability
-provenance. On deterministic validation failure, construct secret-safe
+it. Choose one concrete agentic `HostRoute` declared by `HostCapabilities.routes`
+and pass its provider, executor capability, and rail in `ResumeStateContext` to
+builder dispatch. Aggregate `HostCapabilities.capabilities` is derived evidence,
+not authorization; wrapper routes are analysis/text-only and cannot run builder
+nodes. Capture the validated `SessionHandle` returned by builder dispatch
+together with its immutable run/node/attempt and exact route provenance. On
+deterministic validation failure, construct secret-safe
 `ValidationFeedback` for the same node and call the manager's resume-or-replace
 path. Preserve the closed outcome: resumed original session, replacement
 dispatch, resume unavailable, gate/capability block, or adapter failure.
@@ -187,7 +191,10 @@ shadow reports, events, receipts, Airlift payloads, or checkpoints; those paths
 may carry only the safe digest projection and authoritative receipt reference.
 
 Translation must require an authoritative dispatch/resume receipt reference.
-`BuilderSessionDecision.to_evidence_event` is observation-only: it records
+Every `BuilderSessionDecision`, including blocked outcomes, owns the validated
+request context; any handle/result must match it. Its event projection rejects
+a different run or node. `BuilderSessionDecision.to_evidence_event` is
+observation-only: it records
 builder observations but cannot stand in for that receipt. When a validated
 `SessionResult` exists, merge its already-normalized evidence references with
 the observation references, deduplicate without reordering, and keep the

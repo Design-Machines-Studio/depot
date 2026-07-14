@@ -203,14 +203,16 @@ PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m 
         <pre><code>class WorkflowClass(str, Enum): CHORE; BUG; FEATURE; HOTFIX; SECURITY; INVESTIGATION; MIGRATION
 class WorkflowTemplates: expand(kind: WorkflowClass, context: WorkflowContext) -&gt; tuple[NodeSpec, ...]
 class RetryPolicy: decide(reason: FailureReason, attempts: AttemptLedger, signature: str | None) -&gt; RetryDecision
-class HostAdapter(Protocol): capabilities() -&gt; HostCapabilities; dispatch(node: NodeSpec) -&gt; SessionHandle | None; resume(handle: SessionHandle, feedback: ValidationFeedback) -&gt; SessionResult
+class HostRoute: provider: str; capability: HostCapability; rail: str
+class HostCapabilities: routes: frozenset[HostRoute]; capabilities: frozenset[HostCapability]  # derived view
+class HostAdapter(Protocol): capabilities() -&gt; HostCapabilities; dispatch(node: NodeSpec, context: ResumeStateContext) -&gt; SessionHandle | None; resume(handle: SessionHandle, feedback: ValidationFeedback) -&gt; SessionResult
 class IsolationSelector: select(requirements: IsolationRequirements, capabilities: HostCapabilities) -&gt; IsolationDecision</code></pre>
         <ol class="steps">
           <li>Write table-driven failing tests for the seven workflow classes, sensitive-path overrides, gate placement, retry exhaustion by reason, repeated failure signatures, and proposal-only economics.</li>
           <li>Write host fixtures for Claude, Codex, generic host, resumable agent, non-resumable agent, remote sandbox, container, worktree, and sequential branch.</li>
-          <li>Implement deterministic templates and policy loading with schema validation. Security routing must override class defaults.</li>
+          <li>Implement deterministic templates and policy loading with schema validation. Keep cleanup, hotfix, security, migration, and promotion invariants in the JSON requirements shape and enforce them generically. Security routing must override class defaults.</li>
           <li>Implement isolation selection in the order allowed by declared capabilities and policy; every downgrade emits a reason and never silently becomes sequential-on-branch.</li>
-          <li>Implement builder continuity: store a real session handle when supplied, send deterministic validation feedback back to that handle, and emit <code>session_resume_unavailable</code> when the host cannot resume.</li>
+          <li>Implement builder continuity with exact immutable provider/executor-capability/dispatch-rail authorization from harness roles. Aggregate capabilities are derived only; wrapper routes cannot build. Store a real session handle when supplied, bind every decision to its context, send deterministic validation feedback back to that handle, and emit <code>session_resume_unavailable</code> when the host cannot resume.</li>
           <li>Run the complete kernel suite. Expected: class, host, retry, isolation, and resume scenarios pass without external commands.</li>
           <li>Commit <code>feat(workflow-kernel): add workflow and host policy</code>.</li>
         </ol>

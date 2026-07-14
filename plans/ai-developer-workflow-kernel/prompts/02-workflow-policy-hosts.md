@@ -86,9 +86,25 @@ class RetryPolicy:
         signature: str | None,
     ) -> RetryDecision: ...
 
+@dataclass(frozen=True)
+class HostRoute:
+    provider: str
+    capability: HostCapability
+    rail: str
+
+@dataclass(frozen=True)
+class HostCapabilities:
+    host_name: str
+    capabilities: frozenset[HostCapability]  # derived aggregate view
+    routes: frozenset[HostRoute]             # authorization boundary
+
 class HostAdapter(Protocol):
     def capabilities(self) -> HostCapabilities: ...
-    def dispatch(self, node: NodeSpec) -> SessionHandle | None: ...
+    def dispatch(
+        self,
+        node: NodeSpec,
+        context: ResumeStateContext,
+    ) -> SessionHandle | None: ...
     def resume(
         self,
         handle: SessionHandle,
@@ -103,9 +119,12 @@ class IsolationSelector:
     ) -> IsolationDecision: ...
 ```
 
-`SessionHandle` must carry a host name, opaque handle value, creation time, and
-resume capability. It must serialize safely without assuming the value is a PID
-or provider ID. Never fabricate a handle when dispatch returns none.
+`SessionHandle` must carry a host name, opaque handle value, creation time,
+resume capability, and immutable `ResumeStateContext`. Every
+`BuilderSessionDecision`, including blocked outcomes, owns that same context;
+any handle or result must match it. It must serialize safely without assuming
+the opaque value is a PID or provider ID. Never fabricate a handle when dispatch
+returns none.
 
 ## Workflow Template Minimums
 
@@ -126,6 +145,13 @@ or provider ID. Never fabricate a handle when dispatch returns none.
 
 - Load policy from versioned JSON and validate before expansion. Do not hide
   policy in Python constants beyond enum and default schema versions.
+- Validate the canonical policy against its checked-in JSON Schema with the
+  standard library; the capability array is exactly the 13 enum values at both
+  schema and runtime boundaries.
+- Keep class semantic invariants in `workflow-classes.json` under the generic
+  `requirements` shape. The loader generically enforces terminal cleanup,
+  declared class gate requirements, security executor constraints, and promoted
+  execution gates; Python must not mirror a second class-by-class policy table.
 - Retry budgets are keyed by normalized reason: provider unavailable,
   deterministic validation failure, reviewer finding, browser recovery,
   cleanup, and infrastructure. A global “try three times” rule is forbidden.
@@ -139,6 +165,12 @@ or provider ID. Never fabricate a handle when dispatch returns none.
   from/to modes and a reason. If policy forbids a downgrade, return blocked.
 - Builder resume feeds deterministic validation feedback to the original handle.
   A fresh builder is not a resume and must be labeled as replacement dispatch.
+- Authorize builder work by one exact immutable
+  `(provider, executor capability, dispatch rail)` route from the harness role.
+  `capabilities` is a derived compatibility view, never an authorization proof.
+  Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
+  analysis/text-only. Ordinary nodes may use any compatible declared agentic
+  route, while security and sensitive paths require Anthropic native Claude.
 - Reliability and cost fields are observations only. This chunk must not mutate
   routing policy based on historical performance.
 
@@ -180,6 +212,9 @@ or provider ID. Never fabricate a handle when dispatch returns none.
       and human-approval boundaries; missing evidence cannot be approved away.
 - [ ] Claude, Codex, and generic host fixtures expose only capabilities they can
       actually perform and produce the same required transition/evidence model.
+- [ ] Harness roles produce coherent routes using only `anthropic`, `openai`,
+      or `openrouter`; exact route membership is checked on dispatch, resume,
+      and restore, and wrapper routes cannot execute builder nodes.
 - [ ] Isolation selection covers remote sandbox, container, worktree, and
       sequential branch, in policy order, with a reason for every downgrade.
 - [ ] A policy-forbidden isolation downgrade returns blocked rather than silently
@@ -191,6 +226,9 @@ or provider ID. Never fabricate a handle when dispatch returns none.
       original session.
 - [ ] Session handle serialization is opaque and redacted; no token or provider
       credential can enter events or receipts.
+- [ ] Every builder decision is bound to its request context; event projection
+      rejects a different run or node, and restore rejects expected/stored/handle
+      context mismatch before probing adapter capabilities.
 - [ ] Economics aggregation fields remain proposal-only and no test observes a
       policy file mutation.
 - [ ] Invalid policy versions, circular template dependencies, missing node IDs,

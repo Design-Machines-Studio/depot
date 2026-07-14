@@ -4,7 +4,7 @@
   "title": "Workflow Kernel Class Templates",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "classes", "promotion"],
+  "required": ["schema_version", "classes", "promotion", "requirements"],
   "properties": {
     "schema_version": {"const": 1},
     "classes": {
@@ -26,9 +26,54 @@
       "additionalProperties": false,
       "required": ["investigation"],
       "properties": {"investigation": {"$ref": "#/$defs/workflow"}}
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["global", "classes", "promotion"],
+      "properties": {
+        "global": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["terminal_gate_kind"],
+          "properties": {"terminal_gate_kind": {"$ref": "#/$defs/gate_kind"}}
+        },
+        "classes": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/semantic_requirement"}
+        },
+        "promotion": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/semantic_requirement"}
+        }
+      }
     }
   },
   "$defs": {
+    "gate_kind": {"enum": ["cleanup", "deterministic_validation", "evidence", "human_approval", "investigation_promotion", "next_action", "risk"]},
+    "semantic_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_gate_kinds"],
+      "properties": {
+        "required_gate_kinds": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/gate_kind"}
+        },
+        "executor_constraint": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["executor", "required_capability", "required_dispatch_capability"],
+          "properties": {
+            "executor": {"enum": ["claude", "codex", "openrouter"]},
+            "required_capability": {"enum": ["claude_execution", "codex_execution", "openrouter_execution", "anthropic_native_execution"]},
+            "required_dispatch_capability": {"type": ["string", "null"], "enum": [null, "native_dispatch", "companion_dispatch", "wrapper_dispatch", "openrouter_exec"]}
+          }
+        }
+      }
+    },
     "workflow": {
       "type": "object",
       "additionalProperties": false,
@@ -53,10 +98,10 @@
       },
       "allOf": [
         {"if": {"properties": {"executor": {"const": null}}}, "then": {"properties": {"required_capability": {"const": null}, "required_dispatch_capability": {"const": null}, "executor_overridable": {"const": false}}}},
-        {"if": {"properties": {"executor": {"enum": ["claude", "codex", "openrouter"]}}}, "then": {"properties": {"required_dispatch_capability": {"type": "string"}}}},
         {"if": {"properties": {"executor": {"const": "codex"}}}, "then": {"properties": {"required_capability": {"const": "codex_execution"}}}},
-        {"if": {"properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}, "required_dispatch_capability": {"const": "openrouter_exec"}}}},
-        {"if": {"properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}}}}
+        {"if": {"properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}, "required_dispatch_capability": {"enum": [null, "openrouter_exec"]}}}},
+        {"if": {"properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}}}},
+        {"if": {"properties": {"required_capability": {"const": "anthropic_native_execution"}}}, "then": {"properties": {"executor": {"const": "claude"}, "required_dispatch_capability": {"const": "native_dispatch"}}}}
       ]
     }
   }

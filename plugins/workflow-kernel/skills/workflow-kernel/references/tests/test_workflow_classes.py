@@ -113,6 +113,16 @@ class WorkflowClassTests(unittest.TestCase):
             raised.exception.details["reason_code"], detail_digest("invalid_changed_path"),
         )
 
+    def test_template_expansion_snapshots_and_revalidates_workflow_context(self):
+        context = WorkflowContext(changed_paths=("docs/safe.md",))
+        object.__setattr__(context, "changed_paths", object())
+        with self.assertRaises(InvalidSchemaError) as raised:
+            WorkflowTemplates().expand(WorkflowClass.CHORE, context)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_workflow_context"),
+        )
+
     def test_requested_executor_changes_only_overridable_builder_nodes(self):
         nodes = WorkflowTemplates().expand(
             WorkflowClass.FEATURE, WorkflowContext(requested_executor="openrouter"),
@@ -121,9 +131,7 @@ class WorkflowClassTests(unittest.TestCase):
         review = next(node for node in nodes if node.node_id == "review")
         self.assertEqual(build.executor, "openrouter")
         self.assertEqual(build.required_capability, HostCapability.OPENROUTER_EXECUTION)
-        self.assertEqual(
-            build.required_dispatch_capability, HostCapability.OPENROUTER_EXEC,
-        )
+        self.assertIsNone(build.required_dispatch_capability)
         self.assertEqual(review.executor, "claude")
         self.assertEqual(review.required_capability, HostCapability.CLAUDE_EXECUTION)
         self.assertEqual(review.routing_reason, "workflow_default")
@@ -145,12 +153,17 @@ class WorkflowClassTests(unittest.TestCase):
                     )
                     self.assertEqual(
                         node.required_dispatch_capability,
-                        HostCapability.NATIVE_DISPATCH if node.executor is not None else None,
+                        (HostCapability.NATIVE_DISPATCH
+                         if kind is WorkflowClass.SECURITY and node.executor is not None
+                         else None),
                     )
 
     def test_authoritative_json_has_no_schema_boundary_mirror(self):
         root = Path(__file__).parents[1]
+        document = json.loads((root / "workflow-classes.json").read_text())
         schema = json.loads((root / "workflow-classes-schema.json").read_text())
+        self.assertIn("requirements", document)
+        self.assertIn("requirements", schema["properties"])
         self.assertNotIn("x-kernel-boundaries", schema)
         node_schema = schema["$defs"]["node"]
         self.assertIn("allOf", node_schema)
@@ -259,11 +272,14 @@ class WorkflowClassTests(unittest.TestCase):
         human["required_evidence"] = []
         mutations.append(("invalid_workflow_node", erased_evidence))
 
-        missing_dispatch = json.loads(json.dumps(base))
-        build = next(node for node in missing_dispatch["classes"]["chore"]["nodes"]
-                     if node["id"] == "build")
-        build["required_dispatch_capability"] = None
-        mutations.append(("inconsistent_executor_capability", missing_dispatch))
+        weakened_security = json.loads(json.dumps(base))
+        security_build = next(
+            node for node in weakened_security["classes"]["security"]["nodes"]
+            if node["id"] == "security_build"
+        )
+        security_build["required_capability"] = "claude_execution"
+        security_build["required_dispatch_capability"] = None
+        mutations.append(("workflow_requirement_unsatisfied", weakened_security))
 
         bypassed_promotion = json.loads(json.dumps(base))
         bypassed_promotion["promotion"]["investigation"]["nodes"][1]["depends_on"] = [
@@ -278,6 +294,73 @@ class WorkflowClassTests(unittest.TestCase):
                 with self.assertRaises(InvalidSchemaError) as raised:
                     WorkflowTemplates(path)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest(reason))
+
+    def test_declared_semantic_requirements_reject_class_and_cleanup_mutations(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        mutations = []
+        for class_name, node_id, replacement in (
+            ("hotfix", "risk_gate", "evidence"),
+            ("migration", "human_gate", "risk"),
+        ):
+            payload = json.loads(json.dumps(base))
+            node = next(item for item in payload["classes"][class_name]["nodes"]
+                        if item["id"] == node_id)
+            node["gate_kind"] = replacement
+            mutations.append(("workflow_requirement_unsatisfied", payload))
+
+        cleanup = json.loads(json.dumps(base))
+        cleanup["classes"]["chore"]["nodes"][-1]["gate_kind"] = None
+        mutations.append(("workflow_requirement_unsatisfied", cleanup))
+
+        promotion = json.loads(json.dumps(base))
+        promotion["promotion"]["investigation"]["nodes"][0]["gate_kind"] = "evidence"
+        mutations.append(("promotion_gate_required", promotion))
+
+        for reason, payload in mutations:
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"], detail_digest(reason),
+                )
+
+    def test_anthropic_native_constraint_requires_claude_native_dispatch(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        for executor, dispatch in (("codex", "native_dispatch"),
+                                   ("claude", None)):
+            payload = json.loads(json.dumps(base))
+            node = payload["classes"]["security"]["nodes"][1]
+            node["executor"] = executor
+            node["required_dispatch_capability"] = dispatch
+            with self.subTest(executor=executor, dispatch=dispatch), \
+                    tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertIn(
+                    raised.exception.details["reason_code"],
+                    {detail_digest("inconsistent_executor_capability"),
+                     detail_digest("inconsistent_dispatch_capability")},
+                )
+
+        schema = json.loads(
+            (Path(__file__).parents[1] / "workflow-classes-schema.json").read_text()
+        )
+        clause = next(
+            item for item in schema["$defs"]["node"]["allOf"]
+            if item["if"]["properties"].get("required_capability")
+            == {"const": "anthropic_native_execution"}
+        )
+        self.assertEqual(
+            clause["then"]["properties"],
+            {"executor": {"const": "claude"},
+             "required_dispatch_capability": {"const": "native_dispatch"}},
+        )
 
     def test_template_loader_rejects_forward_order_and_multiple_terminal_sinks(self):
         source = Path(__file__).parents[1] / "workflow-classes.json"

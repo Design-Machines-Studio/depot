@@ -7,7 +7,7 @@ from tests import detail_digest
 from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
 )
-from workflow_kernel.policies import RetryPolicy
+from workflow_kernel.policies import RetryPolicy, validate_canonical_policy_schema
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
 
@@ -105,8 +105,8 @@ class RetryPolicyTests(unittest.TestCase):
         root = Path(__file__).parents[1]
         schema = json.loads((root / "workflow-policy-schema.json").read_text())
         capability_schema = schema["properties"]["capability_names"]
-        self.assertEqual(capability_schema["minItems"], 12)
-        self.assertEqual(capability_schema["maxItems"], 12)
+        self.assertEqual(capability_schema["minItems"], 13)
+        self.assertEqual(capability_schema["maxItems"], 13)
         self.assertTrue(capability_schema["uniqueItems"])
         self.assertEqual(
             set(capability_schema["items"]["enum"]),
@@ -123,6 +123,23 @@ class RetryPolicyTests(unittest.TestCase):
         self.assertEqual(
             raised.exception.details["reason_code"],
             detail_digest("unknown_capability_name"),
+        )
+
+    def test_canonical_policy_is_validated_against_schema_with_stdlib_only(self):
+        root = Path(__file__).parents[1]
+        validate_canonical_policy_schema()
+        schema = json.loads((root / "workflow-policy-schema.json").read_text())
+        schema["properties"]["capability_names"]["maxItems"] = 12
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "schema.json"
+            path.write_text(json.dumps(schema), encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                validate_canonical_policy_schema(
+                    root / "workflow-policy.json", path,
+                )
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("policy_schema_mismatch"),
         )
 
 

@@ -1,4 +1,5 @@
 import json
+import inspect
 import os
 import subprocess
 import sys
@@ -7,12 +8,56 @@ import unittest
 from pathlib import Path
 
 from tests import detail_digest
-from workflow_kernel.adapters.base import HostCapabilities, HostCapability
+import workflow_kernel.adapters.base as adapter_base
+from workflow_kernel.adapters.base import HostCapabilities, HostCapability, HostRoute
 from workflow_kernel.adapters.host import capabilities_from_harness_profile
 from workflow_kernel.schema import InvalidSchemaError
 
 
 class HostCapabilityTests(unittest.TestCase):
+    def test_host_authorization_exposes_immutable_concrete_routes(self):
+        self.assertTrue(hasattr(adapter_base, "HostRoute"))
+        self.assertIn("routes", inspect.signature(HostCapabilities).parameters)
+
+        explicit = HostCapabilities("test", (), routes=frozenset({
+            HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"),
+        }))
+        self.assertEqual(explicit.capabilities, frozenset({
+            HostCapability.CODEX_EXECUTION, HostCapability.NATIVE_DISPATCH,
+        }))
+        with self.assertRaises(TypeError):
+            type("HostileRoute", (HostRoute,), {})
+
+    def test_harness_routes_preserve_provider_capability_and_dispatch_coherence(self):
+        claude = capabilities_from_harness_profile("claude-code")
+        expected = {
+            HostRoute("anthropic", HostCapability.CLAUDE_EXECUTION, "native"),
+            HostRoute("anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION, "native"),
+            HostRoute("openai", HostCapability.CODEX_EXECUTION, "codex_companion"),
+            HostRoute("openrouter", HostCapability.OPENROUTER_EXECUTION,
+                      "openrouter_exec"),
+        }
+        self.assertTrue(expected.issubset(claude.routes))
+        self.assertNotIn(
+            HostRoute("openrouter", HostCapability.CLAUDE_EXECUTION,
+                      "openrouter_exec"),
+            claude.routes,
+        )
+        self.assertTrue(all(route.provider in {"anthropic", "openai", "openrouter"}
+                            for route in claude.routes))
+
+    def test_incoherent_or_credential_like_routes_fail_closed(self):
+        cases = (
+            ("sk-provider-secret", HostCapability.CODEX_EXECUTION, "native"),
+            ("anthropic", HostCapability.CODEX_EXECUTION, "native"),
+            ("openai", HostCapability.CODEX_EXECUTION, "wrapper"),
+            ("openrouter", HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+             "openrouter_exec"),
+        )
+        for values in cases:
+            with self.subTest(values=values), self.assertRaises(InvalidSchemaError):
+                HostRoute(*values)
+
     def test_openrouter_exec_is_a_distinct_dispatch_rail_capability(self):
         values = {capability.value for capability in HostCapability}
         self.assertIn("openrouter_exec", values)
