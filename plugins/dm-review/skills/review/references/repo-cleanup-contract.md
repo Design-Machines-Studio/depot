@@ -196,3 +196,26 @@ Disposition is one of `deleted`, `kept`, `blocked`. Every registered ref from se
 **pipeline-fix.** Runs on the current feature branch with `noMergeOnCompletion: true`. It creates no refs, so cleanup deletes nothing. It still emits the inventory block and the readiness checks -- a fix pass that leaves a dirty tree is the next run's problem.
 
 **dm-review.** Creates no worktrees. Its cleanup phase prunes stale registrations, deletes only the batch-cleanup branch it created once that branch is merged (decision-table row 1), asserts a clean tree, and emits the inventory. When it finds automation refs it did not create, it reports them under "Remaining after cleanup" with a follow-up command and leaves them alone.
+
+## 9. Non-Git owned resources
+
+The Git decision table above remains authoritative and is not weakened by Docker
+cleanup. Containers, networks, and volumes use the workflow kernel's separate
+positive-ownership contract in `docker-ownership.md`:
+
+- creation-time ownership labels plus a durable registry record are required
+  for current-run cleanup;
+- stale-orphan cleanup requires a complete, internally consistent label set,
+  strict TTL expiry, and no active run lease;
+- chunk-owned cleanup is planned after validation, review, evidence capture,
+  and merge disposition; all terminal outcomes plan run reconciliation;
+- cleanup plans contain bounded, exact-ID argv only. Chunk 05 is their
+  authoritative executor; planners and result recorders never execute Docker;
+- no prune, wildcard, negative-filter, name-inference, or unrelated resource
+  cleanup is permitted.
+
+Docker dispositions are `removed`, `retained_for_dependency`, `blocked`,
+`foreign`, or `missing`. Every disposition records the resource kind and ID,
+run/node owner, lifecycle, action, reason, evidence, and any follow-up. A
+resource absent after cleanup is recorded as `missing`, making retries
+idempotent rather than broadening cleanup scope.
