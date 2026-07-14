@@ -1,0 +1,205 @@
+"""Repo-local argparse interface for workflow-kernel ledgers."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from contextlib import contextmanager
+from pathlib import Path
+
+from ._files import bind_durable_path
+from .events import EventStore
+from .schema import (
+    CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
+    RunMode, UnsafePayloadError, WorkflowEvent, serialize_kernel_error,
+)
+from .state import RunLease, StateStore, _prepare_replay_state
+from .transitions import TransitionEngine
+
+
+class KernelArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        match = re.search(r"argument ([^:]+)", message)
+        option = match.group(1) if match else "command"
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument", ErrorDetailKey.OPTION.value: option,
+        })
+
+
+def _paths(directory):
+    root = Path(directory)
+    if not root.is_dir():
+        raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
+    bound_root = bind_durable_path(root / "run-state.json").path.parent
+    states = StateStore(bound_root / "run-state.json")
+    return bound_root, EventStore(bound_root), states
+
+
+def _emit(value, stream=sys.stdout):
+    stream.write(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _load_optional_state(states):
+    """Return verified state or None only for a missing file in a live parent."""
+    try:
+        return states.load()
+    except FileNotFoundError:
+        return None
+
+
+def _require_materialized_matches_ledger(materialized, reconstructed):
+    if materialized is not None and materialized != reconstructed:
+        raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
+            ErrorDetailKey.MATERIALIZED_REVISION.value: materialized.revision,
+            ErrorDetailKey.LEDGER_REVISION.value: reconstructed.revision,
+        })
+
+
+def _observe_consistent_run(events, states, engine, *, recovery, empty_error):
+    replayed, notes = events.validate(recovery=recovery)
+    if not replayed:
+        raise empty_error
+    reconstructed = engine.reconstruct(replayed)
+    materialized = _load_optional_state(states)
+    _require_materialized_matches_ledger(materialized, reconstructed)
+    return replayed, notes, reconstructed, materialized
+
+
+def _append_and_publish(events, states, event, next_state, *,
+                        expected_sequence, expected_revision, lease):
+    prepared = states.prepare(next_state)
+    events.append(event, expected_sequence=expected_sequence, lease=lease)
+    return states.publish(prepared, expected_revision, lease=lease)
+
+
+@contextmanager
+def _coordinated_run(states):
+    """Hold the run lease from mutable observation through publication."""
+    with RunLease(states.path) as lease:
+        yield lease
+
+
+def command_init(args):
+    root = Path(args.directory)
+    root.mkdir(parents=True, exist_ok=True)
+    root, events, states = _paths(root)
+    with _coordinated_run(states) as lease:
+        events.require_absent()
+        states.require_absent()
+        event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
+        state = TransitionEngine().reconstruct((event,))
+        evidence = _append_and_publish(
+            events, states, event, state, expected_sequence=0,
+            expected_revision=-1, lease=lease,
+        )
+    _emit({"run_id": state.run_id, "mode": state.mode.value, "status": state.status.value, "revision": state.revision,
+           "durability": evidence})
+    return 0
+
+
+def command_validate(args):
+    _, events, states = _paths(args.directory)
+    engine = TransitionEngine()
+    with _coordinated_run(states):
+        replayed, notes, _, _ = _observe_consistent_run(
+            events, states, engine, recovery=args.recovery,
+            empty_error=CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING),
+        )
+    _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
+    return 0
+
+
+def command_append(args):
+    _, events, states = _paths(args.directory)
+    try:
+        data = json.loads(args.event)
+    except json.JSONDecodeError as exc:
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {ErrorDetailKey.OFFSET.value: exc.pos}) from None
+    except RecursionError:
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {
+            ErrorDetailKey.REASON_CODE.value: "recursion_limit",
+        }) from None
+    event = WorkflowEvent.from_dict(data)
+    engine = TransitionEngine()
+    with _coordinated_run(states) as lease:
+        existing, _, state, materialized = _observe_consistent_run(
+            events, states, engine, recovery=False,
+            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
+        )
+        expected = materialized.revision if materialized is not None else -1
+        next_state = engine.apply(state, event)
+        evidence = _append_and_publish(
+            events, states, event, next_state, expected_sequence=len(existing),
+            expected_revision=expected, lease=lease,
+        )
+    _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
+           "durability": evidence})
+    return 0
+
+
+def command_replay(args):
+    _, events, states = _paths(args.directory)
+    engine = TransitionEngine()
+    with _coordinated_run(states) as lease:
+        reconstructed = engine.reconstruct(events.replay())
+        materialized = _load_optional_state(states)
+        expected = materialized.revision if materialized is not None else -1
+        prepared = _prepare_replay_state(states, reconstructed, expected)
+        evidence = states.publish(prepared, expected, lease=lease)
+    _emit({"run_id": reconstructed.run_id, "revision": reconstructed.revision,
+           "status": reconstructed.status.value, "durability": evidence})
+    return 0
+
+
+def command_status(args):
+    _, _, states = _paths(args.directory)
+    _emit(states.load().to_dict())
+    return 0
+
+
+def parser():
+    result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
+    commands = result.add_subparsers(dest="command", required=True)
+
+    init = commands.add_parser("init", help="initialize a shadow-mode run")
+    init.add_argument("directory")
+    init.add_argument("--run-id", required=True)
+    init.add_argument("--mode", choices=[item.value for item in RunMode], default=RunMode.SHADOW.value)
+    init.add_argument("--occurred-at", required=True, help="timezone-aware ISO-8601 timestamp")
+    init.set_defaults(handler=command_init)
+
+    validate = commands.add_parser("validate", help="validate a ledger and materialized state")
+    validate.add_argument("directory")
+    validate.add_argument("--recovery", action="store_true", help="report and ignore only a truncated final record")
+    validate.set_defaults(handler=command_validate)
+
+    append = commands.add_parser("append", help="validate and append one event JSON object")
+    append.add_argument("directory")
+    append.add_argument("--event", required=True)
+    append.set_defaults(handler=command_append)
+
+    replay = commands.add_parser("replay", help="reconstruct run-state.json from events.jsonl")
+    replay.add_argument("directory")
+    replay.set_defaults(handler=command_replay)
+
+    status = commands.add_parser("status", help="print materialized state")
+    status.add_argument("directory")
+    status.set_defaults(handler=command_status)
+    return result
+
+
+def main(argv=None):
+    try:
+        args = parser().parse_args(argv)
+        return args.handler(args)
+    except KernelError as exc:
+        _emit(serialize_kernel_error(exc), sys.stderr)
+        return 2
+    except (OSError, ValueError, TypeError) as exc:
+        error = UnsafePayloadError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.EXCEPTION_TYPE.value: type(exc).__name__,
+        })
+        _emit(serialize_kernel_error(error), sys.stderr)
+        return 1

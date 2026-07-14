@@ -140,6 +140,39 @@
 class EventStore: append(event: WorkflowEvent, expected_sequence: int) -&gt; None; replay() -&gt; list[WorkflowEvent]
 class StateStore: load() -&gt; RunState; write(state: RunState, expected_revision: int) -&gt; None
 class TransitionEngine: apply(state: RunState, event: WorkflowEvent) -&gt; RunState</code></pre>
+        <h3>As-built deviation and interface — Chunk 01</h3>
+        <p>This block records the implemented hardening without rewriting the design-time decisions above. Exact final schema values and recursive payload scalars require exact built-in types. Reducers and writers use bounded field-wise snapshots before comparison or projection; replay returns a tuple; validation observes ledger and state under one run lease; and every ledger mutation shares the registry-backed run lease used for state publication.</p>
+        <pre><code>@dataclass(frozen=True) class WorkflowEvent: payload: Mapping[str, object]  # exact final type
+class EventStore: final weakref-able slot-only identity; all run/event/state/lock paths are closure-registry owned
+    __init__(run_root)  # physically binds the existing root; derives events.jsonl and run-state.json together
+    append(event: WorkflowEvent, expected_sequence: int, *, lease: RunLease) -&gt; None
+    replay() -&gt; tuple[WorkflowEvent, ...]
+class StateStore:
+    prepare(state: RunState) -&gt; PreparedState
+    publish(prepared: PreparedState, expected_revision: int, *, lease: RunLease) -&gt; dict
+    write(state: RunState, expected_revision: int, *, lease: RunLease) -&gt; dict
+class RunLease: final slot-only identity; path, handle, PID, liveness, and one-shot GC finalizer are closure-registry owned
+class PreparedState: opaque identity; closure registry captures only revision, exact bytes, immutable issuance mode, and for replay issuance the observed materialized expected revision
+command_validate: hold one RunLease across ledger validation and state comparison
+command_init: run verified absence preflight for ledger and state under the lease; prepare state before first append
+command_append: require any materialization exactly matches the replay-derived state before mutation; replay reconciles missing or stale state
+command_replay: after ledger validation and reconstruction, use private ledger-derived prepared issuance and the one public publication path for lease-protected authoritative replacement of missing, behind, ahead, or equal-revision divergent materialization; the revision-bound, one-shot capability is published immediately under the same lease while expected-revision CAS still rejects concurrent change
+reducers and event/state writers: shared field-wise bounded snapshots before comparison or projection
+state graph: nodes + dependency edges + state evidence share one aggregate item budget and one-pass node projection
+public recursive text: exact scalars; 4 MiB cumulative UTF-8 budget before retained allocation
+public collections: counted before allocation; bounded iterables accept at most N items but may consume one lookahead item; reconstruction limit: 100,000 events
+trusted reducer updates: incrementally maintained node, edge, text, and evidence counters enforce state bounds; scalar event snapshot, recursive payload snapshot, node-update creation, graph copy/access, evidence parse/copy/membership, and dependency membership work is charged against MAX_RECONSTRUCTION_WORK=50100000; already-normalized node tuples are reused without rescanning
+state publication: one public publication path derives backward permission only from closure-registry-owned immutable issuance mode; ordinary publication rejects backward revisions and retains reusable prepared capabilities; private ledger-derived prepared issuance permits CLI replay replacement in either direction without weakening lease, pinned identity, or cooperating-writer CAS checks, binds the observed expected revision, checks prepared ownership, exact live lease/path authorization, expected-revision shape, and issuance binding without consuming, then immediately consumes its one-shot capability before publication parent setup/binding, durable state observation, or temporary-file work so success or any later failure cannot reuse it; no public rollback API exists
+durable reads/writes: open descriptor must remain the authoritative exclusive pathname before success
+durable parent capability: verified directory descriptor and identity own descriptor-relative open/stat/unlink/replace/fsync operations
+atomic state publication: one pinned parent spans observation, temp write/fsync, revision re-observation, rename, and directory fsync
+publication races: compare-and-swap and never-overwrite guarantees cover cooperating writers honoring the same RunLease; pinned checks cannot atomically exclude non-cooperating filesystem mutation in the final commit window; detected valid revision races remain RevisionConflictError
+lease fork safety: child explicit release and GC close inherited descriptors without LOCK_UN; primary errors outrank cleanup errors
+owned resource cleanup: temporary unlink, every descriptor close, owned handle release, and pinned-directory close are all attempted; primary failures win and sole cleanup failures are normalized
+missing durable files: public missing/empty results require revalidation of the still-live pinned parent; parent disappearance or replacement is corruption
+state validation: direct/from_dict share one projection; reducers use trusted construction after one public-boundary graph validation
+cache resolution: candidates are checked for a runnable package in priority order and incomplete installs fall through
+public filesystem operations: setup, descriptor I/O, identity, fsync, close, and release use cause-suppressed KernelError boundaries</code></pre>
         <ol class="steps">
           <li>Write failing <code>unittest</code> cases for schema versions, strict enum parsing, secret redaction, legal transitions, illegal transitions, duplicate/gapped sequences, truncated JSONL tails, and deterministic receipt serialization.</li>
           <li>Run the focused suite and require failures caused by missing modules, not syntax or fixture mistakes.</li>
