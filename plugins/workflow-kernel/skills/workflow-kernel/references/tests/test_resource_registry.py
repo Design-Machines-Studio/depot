@@ -7,13 +7,16 @@ from pathlib import Path
 from tests import detail_digest, schema_matches
 from workflow_kernel.resources import (
     CleanupDisposition,
+    CleanupAction,
     CleanupReceipt,
+    CleanupPlan,
     CleanupScope,
     ResourceDisposition,
     ResourceKind,
     ResourceRecord,
     ResourceRegistry,
 )
+from workflow_kernel.redaction import freeze_json
 from workflow_kernel.schema import InvalidSchemaError
 
 
@@ -48,6 +51,42 @@ def disposition(value, state, reason):
 
 
 class ResourceRegistryTests(unittest.TestCase):
+    def test_preopened_registries_cannot_interleave_conflicting_registration(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            first = ResourceRegistry(path)
+            second = ResourceRegistry(path)
+            first.register(record())
+            conflicting = ResourceRecord(
+                "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                "stop-remove", NOW, dependent_node_ids=("node-2",), labels={"proof": "owned"},
+            )
+            with self.assertRaises(InvalidSchemaError) as caught:
+                second.register(conflicting)
+            self.assertEqual(
+                detail_digest("resource_registration_conflict"),
+                caught.exception.details["reason_code"],
+            )
+            self.assertEqual(1, len(path.read_text(encoding="utf-8").splitlines()))
+
+    def test_preopened_registries_reload_history_before_terminal_disposition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "resources.jsonl"
+            first = ResourceRegistry(path)
+            second = ResourceRegistry(path)
+            value = record()
+            first.register(value)
+            removed = disposition(value, CleanupDisposition.REMOVED, "confirmed_removed")
+            first.record_disposition(removed)
+            self.assertEqual(removed, second.record_disposition(removed))
+            with self.assertRaises(InvalidSchemaError) as caught:
+                second.record_disposition(disposition(value, CleanupDisposition.MISSING, "later_missing"))
+            self.assertEqual(
+                detail_digest("terminal_resource_disposition_immutable"),
+                caught.exception.details["reason_code"],
+            )
+            self.assertEqual(2, len(path.read_text(encoding="utf-8").splitlines()))
+
     def test_identity_is_kind_plus_id_and_replays_both(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resources.jsonl"
@@ -118,12 +157,105 @@ class ResourceRegistryTests(unittest.TestCase):
         schema_path = Path(__file__).parents[1] / "cleanup-receipt-schema.json"
         schema = json.loads(schema_path.read_text())
         self.assertTrue(schema_matches(payload, schema))
+        self.assertEqual(["container:shared"], payload["before"])
+        self.assertEqual(["container:shared"], payload["after"])
         encoded = json.dumps(payload, sort_keys=True)
         self.assertNotIn("top-secret", encoded)
         self.assertNotIn("hunter2", encoded)
         self.assertNotIn("x" * 100, encoded)
         self.assertNotIn("k" * 100, encoded)
         self.assertIn("value-sha256:", encoded)
+
+    def test_receipt_redacts_secret_shapes_across_identity_scope_and_reason(self):
+        cycle = []
+        cycle.append(cycle)
+        receipt = CleanupReceipt(
+            scope=CleanupScope("run-cookie=session-secret", "node-1", terminal=True),
+            before=("container:postgres://user:password@host/db",),
+            after=("container:API_TOKEN=top-secret",),
+            dispositions=(ResourceDisposition(
+                "authorization=Bearer id-secret", ResourceKind.CONTAINER,
+                "run-cookie=session-secret", "node-1", "chunk",
+                CleanupDisposition.BLOCKED, "none",
+                "authorization=Bearer top-secret",
+                evidence=(
+                    {"cookie": "session=private", "dsn": "postgres://u:p@host/db"},
+                    "DATABASE_URL=postgres://u:p@host/db",
+                    "API_TOKEN=env-secret",
+                    cycle,
+                ),
+            ),),
+        )
+        payload = receipt.to_dict()
+        schema = json.loads((Path(__file__).parents[1] / "cleanup-receipt-schema.json").read_text())
+        self.assertTrue(schema_matches(payload, schema))
+        encoded = json.dumps(payload, sort_keys=True)
+        for secret in ("session-secret", "password@host", "top-secret", "private", "u:p@host", "env-secret"):
+            self.assertNotIn(secret, encoded)
+        self.assertIn("value-sha256:", encoded)
+
+    def test_runtime_models_reject_noncanonical_domains_and_duplicate_dependencies(self):
+        with self.assertRaises(InvalidSchemaError):
+            ResourceRecord(
+                "shared", ResourceKind.CONTAINER, " run-1", "node-1", "chunk",
+                "stop-remove", NOW, labels={},
+            )
+        with self.assertRaises(InvalidSchemaError):
+            ResourceRecord(
+                "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                "stop-remove", NOW, dependent_node_ids=("node-2", "node-2"), labels={},
+            )
+        with self.assertRaises(InvalidSchemaError):
+            ResourceDisposition(
+                "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                CleanupDisposition.BLOCKED, "arbitrary", "reason",
+            )
+        with self.assertRaises(InvalidSchemaError):
+            CleanupScope("run-1", terminal=1)
+        with self.assertRaises(InvalidSchemaError):
+            CleanupAction(
+                "shared", ResourceKind.CONTAINER, "destroy", ("docker", "rm", "shared"),
+                run_id="run-1", node_id="node-1", lifecycle="chunk",
+            )
+        with self.assertRaises(InvalidSchemaError):
+            CleanupPlan(CleanupScope("run-1"), ("container:shared", "container:shared"), (), ())
+
+    def test_registry_and_receipt_schemas_match_runtime_action_and_identity_limits(self):
+        registry_schema = json.loads((Path(__file__).parents[1] / "resource-registry-schema.json").read_text())
+        receipt_schema = json.loads((Path(__file__).parents[1] / "cleanup-receipt-schema.json").read_text())
+        resource = registry_schema["$defs"]["resource"]["properties"]
+        persisted_disposition = registry_schema["$defs"]["disposition"]["properties"]
+        receipt_disposition = receipt_schema["properties"]["dispositions"]["items"]["properties"]
+        self.assertEqual(4096, resource["resource_id"]["maxLength"])
+        self.assertEqual(256, resource["run_id"]["maxLength"])
+        self.assertEqual(["none", "remove_exact_id"], persisted_disposition["action"]["enum"])
+        self.assertEqual(["none", "remove_exact_id"], receipt_disposition["action"]["enum"])
+
+    def test_receipt_digests_overdeep_cyclic_evidence_without_losing_schema(self):
+        root = []
+        cursor = root
+        for _ in range(12):
+            child = []
+            cursor.append(child)
+            cursor = child
+        cursor.append(root)
+        receipt = CleanupReceipt(
+            CleanupScope("run-1", "node-1"), (), (),
+            (ResourceDisposition(
+                "shared", ResourceKind.CONTAINER, "run-1", "node-1", "chunk",
+                CleanupDisposition.BLOCKED, "none", "unsafe_evidence", evidence=(root,),
+            ),),
+        )
+        payload = receipt.to_dict()
+        schema = json.loads((Path(__file__).parents[1] / "cleanup-receipt-schema.json").read_text())
+        self.assertTrue(schema_matches(payload, schema))
+        self.assertIn("value-sha256:", json.dumps(payload))
+
+    def test_receipt_cycle_digest_does_not_weaken_strict_json_freezing(self):
+        cycle = []
+        cycle.append(cycle)
+        with self.assertRaises(TypeError):
+            freeze_json(cycle)
 
 
 if __name__ == "__main__":

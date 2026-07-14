@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
+import fcntl
 import json
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 from workflow_kernel.adapters.base import invalid_policy
+from workflow_kernel.redaction import digest_error_detail_string, sanitize_durable_payload
 from workflow_kernel.schema import InvalidSchemaError, RunStatus
 
 
@@ -35,10 +37,25 @@ class CleanupDisposition(str, Enum):
 TERMINAL_DISPOSITIONS = {CleanupDisposition.REMOVED, CleanupDisposition.MISSING}
 VALID_LIFECYCLES = {"chunk", "run"}
 VALID_CLEANUP_POLICIES = {"stop-remove", "remove-when-stopped", "retain"}
-_SENSITIVE = re.compile(r"(?i)(authorization|password|passwd|secret|token|api[-_]?key)")
 _MAX_RECEIPT_DEPTH = 5
 _MAX_RECEIPT_ITEMS = 32
 _MAX_RECEIPT_STRING = 256
+_MAX_IDENTIFIER = 256
+_MAX_RESOURCE_ID = 4096
+_VALID_DISPOSITION_ACTIONS = {"none", "remove_exact_id"}
+_VALID_CLEANUP_ACTIONS = {"stop", "remove"}
+_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def _valid_text(value: object, *, maximum: int) -> bool:
+    return (
+        type(value) is str and bool(value) and value == value.strip()
+        and len(value) <= maximum and _CONTROL.search(value) is None
+    )
+
+
+def _valid_timestamp(value: object) -> bool:
+    return type(value) is datetime and value.tzinfo is not None and value.utcoffset() is not None
 
 
 @dataclass(frozen=True)
@@ -47,6 +64,14 @@ class CommandResult:
     exit_code: int
     stdout: str
     stderr: str
+
+    def __post_init__(self) -> None:
+        argv = tuple(self.argv)
+        if not argv or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in argv):
+            raise invalid_policy("invalid_command_result")
+        if type(self.exit_code) is not int or type(self.stdout) is not str or type(self.stderr) is not str:
+            raise invalid_policy("invalid_command_result")
+        object.__setattr__(self, "argv", argv)
 
 
 @dataclass(frozen=True)
@@ -62,7 +87,9 @@ class ResourceRecord:
     labels: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not all(type(value) is str and value for value in (self.resource_id, self.run_id, self.node_id)):
+        if not _valid_text(self.resource_id, maximum=_MAX_RESOURCE_ID) or not all(
+            _valid_text(value, maximum=_MAX_IDENTIFIER) for value in (self.run_id, self.node_id)
+        ):
             raise invalid_policy("invalid_resource_identity")
         try:
             kind = ResourceKind(self.kind)
@@ -72,16 +99,20 @@ class ResourceRecord:
             raise invalid_policy("invalid_resource_lifecycle")
         if self.cleanup_policy not in VALID_CLEANUP_POLICIES:
             raise invalid_policy("invalid_cleanup_policy")
-        if not isinstance(self.created_at, datetime) or self.created_at.tzinfo is None:
+        if not _valid_timestamp(self.created_at):
             raise invalid_policy("resource_created_at_requires_timezone")
         dependencies = tuple(self.dependent_node_ids)
-        if any(type(value) is not str or not value for value in dependencies):
+        if any(not _valid_text(value, maximum=_MAX_IDENTIFIER) for value in dependencies) or len(set(dependencies)) != len(dependencies):
             raise invalid_policy("invalid_resource_dependency")
         try:
             labels = dict(self.labels)
         except Exception:
             raise invalid_policy("invalid_resource_labels") from None
-        if any(type(key) is not str or not key or type(value) is not str for key, value in labels.items()):
+        if any(
+            not _valid_text(key, maximum=_MAX_IDENTIFIER)
+            or type(value) is not str or len(value) > _MAX_RESOURCE_ID or _CONTROL.search(value)
+            for key, value in labels.items()
+        ):
             raise invalid_policy("invalid_resource_labels")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "dependent_node_ids", dependencies)
@@ -108,13 +139,19 @@ class ResourceDisposition:
             state = CleanupDisposition(self.disposition)
         except Exception:
             raise invalid_policy("invalid_resource_disposition") from None
-        if not all(type(value) is str and value for value in (
-            self.resource_id, self.run_id, self.node_id, self.lifecycle, self.action, self.reason,
-        )):
+        if (
+            not _valid_text(self.resource_id, maximum=_MAX_RESOURCE_ID)
+            or not all(_valid_text(value, maximum=_MAX_IDENTIFIER) for value in (self.run_id, self.node_id))
+            or self.lifecycle not in VALID_LIFECYCLES
+            or self.action not in _VALID_DISPOSITION_ACTIONS
+            or not _valid_text(self.reason, maximum=_MAX_RESOURCE_ID)
+        ):
             raise invalid_policy("invalid_resource_disposition")
         command = tuple(self.command)
-        if any(type(value) is not str or not value for value in command):
+        if len(command) > _MAX_RECEIPT_ITEMS or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in command):
             raise invalid_policy("invalid_cleanup_command")
+        if self.follow_up is not None and not _valid_text(self.follow_up, maximum=_MAX_RESOURCE_ID):
+            raise invalid_policy("invalid_resource_disposition")
         object.__setattr__(self, "kind", kind)
         object.__setattr__(self, "disposition", state)
         object.__setattr__(self, "evidence", tuple(self.evidence))
@@ -132,6 +169,27 @@ class ResourceRegistrationIntent:
     labels: Mapping[str, str]
     dependent_node_ids: Tuple[str, ...] = ()
 
+    def __post_init__(self) -> None:
+        try:
+            kind = ResourceKind(self.kind)
+            labels = dict(self.labels)
+            dependencies = tuple(self.dependent_node_ids)
+        except Exception:
+            raise invalid_policy("invalid_resource_registration_intent") from None
+        if (
+            (self.expected_name is not None and not _valid_text(self.expected_name, maximum=_MAX_RESOURCE_ID))
+            or not all(_valid_text(value, maximum=_MAX_IDENTIFIER) for value in (self.run_id, self.node_id))
+            or self.lifecycle not in VALID_LIFECYCLES
+            or self.cleanup_policy not in VALID_CLEANUP_POLICIES
+            or len(set(dependencies)) != len(dependencies)
+            or any(not _valid_text(value, maximum=_MAX_IDENTIFIER) for value in dependencies)
+            or any(not _valid_text(key, maximum=_MAX_IDENTIFIER) or type(value) is not str for key, value in labels.items())
+        ):
+            raise invalid_policy("invalid_resource_registration_intent")
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "labels", labels)
+        object.__setattr__(self, "dependent_node_ids", dependencies)
+
 
 @dataclass(frozen=True)
 class CleanupAction:
@@ -144,6 +202,26 @@ class CleanupAction:
     node_id: str = ""
     lifecycle: str = "chunk"
 
+    def __post_init__(self) -> None:
+        try:
+            kind = ResourceKind(self.kind)
+            argv = tuple(self.argv)
+        except Exception:
+            raise invalid_policy("invalid_cleanup_action") from None
+        if (
+            not _valid_text(self.resource_id, maximum=_MAX_RESOURCE_ID)
+            or self.action not in _VALID_CLEANUP_ACTIONS
+            or not argv or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in argv)
+            or (self.requires_success_of is not None and (
+                type(self.requires_success_of) is not int or self.requires_success_of < 0
+            ))
+            or not all(_valid_text(value, maximum=_MAX_IDENTIFIER) for value in (self.run_id, self.node_id))
+            or self.lifecycle not in VALID_LIFECYCLES
+        ):
+            raise invalid_policy("invalid_cleanup_action")
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "argv", argv)
+
 
 @dataclass(frozen=True)
 class CleanupScope:
@@ -152,6 +230,14 @@ class CleanupScope:
     terminal: bool = False
     stale_sweep: bool = False
 
+    def __post_init__(self) -> None:
+        if (
+            not _valid_text(self.run_id, maximum=_MAX_IDENTIFIER)
+            or (self.node_id is not None and not _valid_text(self.node_id, maximum=_MAX_IDENTIFIER))
+            or type(self.terminal) is not bool or type(self.stale_sweep) is not bool
+        ):
+            raise invalid_policy("invalid_cleanup_scope")
+
 
 @dataclass(frozen=True)
 class CleanupPlan:
@@ -159,6 +245,20 @@ class CleanupPlan:
     before: Tuple[str, ...]
     actions: Tuple[CleanupAction, ...]
     dispositions: Tuple[ResourceDisposition, ...]
+
+    def __post_init__(self) -> None:
+        before, actions, dispositions = tuple(self.before), tuple(self.actions), tuple(self.dispositions)
+        if (
+            type(self.scope) is not CleanupScope
+            or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in before)
+            or len(set(before)) != len(before)
+            or any(type(value) is not CleanupAction for value in actions)
+            or any(type(value) is not ResourceDisposition for value in dispositions)
+        ):
+            raise invalid_policy("invalid_cleanup_plan")
+        object.__setattr__(self, "before", before)
+        object.__setattr__(self, "actions", actions)
+        object.__setattr__(self, "dispositions", dispositions)
 
 
 @dataclass(frozen=True)
@@ -169,8 +269,21 @@ class CleanupReceipt:
     dispositions: Tuple[ResourceDisposition, ...]
     schema_version: int = 1
 
+    def __post_init__(self) -> None:
+        before, after, dispositions = tuple(self.before), tuple(self.after), tuple(self.dispositions)
+        if (
+            type(self.scope) is not CleanupScope or type(self.schema_version) is not int or self.schema_version != 1
+            or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in before + after)
+            or len(set(before)) != len(before) or len(set(after)) != len(after)
+            or any(type(value) is not ResourceDisposition for value in dispositions)
+        ):
+            raise invalid_policy("invalid_cleanup_receipt")
+        object.__setattr__(self, "before", before)
+        object.__setattr__(self, "after", after)
+        object.__setattr__(self, "dispositions", dispositions)
+
     def to_dict(self) -> dict[str, object]:
-        return {
+        payload = {
             "schema_version": self.schema_version,
             "scope": {
                 "run_id": self.scope.run_id,
@@ -180,8 +293,14 @@ class CleanupReceipt:
             },
             "before": list(self.before),
             "after": list(self.after),
-            "dispositions": [_receipt_disposition(value) for value in self.dispositions],
+            "dispositions": [_raw_receipt_disposition(value) for value in self.dispositions],
         }
+        return sanitize_durable_payload(
+            payload,
+            public_string_length=_MAX_RECEIPT_STRING,
+            max_depth=_MAX_RECEIPT_DEPTH + 4,
+            allowed_opaque_schemes=tuple(value.value for value in ResourceKind),
+        )
 
 
 @dataclass(frozen=True)
@@ -191,6 +310,22 @@ class CreationReceipt:
     after: Tuple[str, ...]
     registered: Tuple[ResourceRecord, ...]
     dispositions: Tuple[ResourceDisposition, ...]
+
+    def __post_init__(self) -> None:
+        before, after = tuple(self.before), tuple(self.after)
+        registered, dispositions = tuple(self.registered), tuple(self.dispositions)
+        if (
+            type(self.command_succeeded) is not bool
+            or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in before + after)
+            or len(set(before)) != len(before) or len(set(after)) != len(after)
+            or any(type(value) is not ResourceRecord for value in registered)
+            or any(type(value) is not ResourceDisposition for value in dispositions)
+        ):
+            raise invalid_policy("invalid_creation_receipt")
+        object.__setattr__(self, "before", before)
+        object.__setattr__(self, "after", after)
+        object.__setattr__(self, "registered", registered)
+        object.__setattr__(self, "dispositions", dispositions)
 
 
 def disposition_for(
@@ -225,10 +360,25 @@ class ResourceRegistry:
         self.path = Path(path)
         self._records: dict[tuple[ResourceKind, str], ResourceRecord] = {}
         self._attempts: dict[tuple[ResourceKind, str], list[ResourceDisposition]] = {}
-        if self.path.exists():
-            self._replay()
+        with self._exclusive_lock():
+            self._reload_unlocked()
 
-    def _replay(self) -> None:
+    @contextmanager
+    def _exclusive_lock(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.path.with_name(self.path.name + ".lock")
+        with lock_path.open("a+b") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _reload_unlocked(self) -> None:
+        self._records = {}
+        self._attempts = {}
+        if not self.path.exists():
+            return
         try:
             lines = self.path.read_text(encoding="utf-8").splitlines()
             for line in lines:
@@ -244,8 +394,7 @@ class ResourceRegistry:
         except Exception:
             raise invalid_policy("invalid_resource_registry") from None
 
-    def _append(self, event: Mapping[str, object]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+    def _append_unlocked(self, event: Mapping[str, object]) -> None:
         encoded = json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n"
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(encoded)
@@ -253,7 +402,9 @@ class ResourceRegistry:
             os.fsync(handle.fileno())
 
     def register(self, resource: ResourceRecord) -> None:
-        self._apply_registration(resource, persist=True)
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            self._apply_registration(resource, persist=True)
 
     def _apply_registration(self, resource: ResourceRecord, *, persist: bool) -> None:
         key = (resource.kind, resource.resource_id)
@@ -263,23 +414,30 @@ class ResourceRegistry:
                 return
             raise invalid_policy("resource_registration_conflict")
         if persist:
-            self._append({"event": "registered", "resource": _resource_json(resource)})
+            self._append_unlocked({"event": "registered", "resource": _resource_json(resource)})
         self._records[key] = resource
 
     def resources_for(self, scope: CleanupScope | str, node_id: Optional[str] = None) -> Tuple[ResourceRecord, ...]:
-        if isinstance(scope, CleanupScope):
-            run_id, node_id = scope.run_id, scope.node_id
-        else:
-            run_id = scope
-        values = (
-            value for key, value in self._records.items()
-            if value.run_id == run_id and (node_id is None or value.node_id == node_id)
-            and not self._is_retired(key)
-        )
-        return tuple(sorted(values, key=lambda value: (value.created_at, value.kind.value, value.resource_id)))
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            if isinstance(scope, CleanupScope):
+                run_id, node_id = scope.run_id, scope.node_id
+            else:
+                run_id = scope
+            values = (
+                value for key, value in self._records.items()
+                if value.run_id == run_id and (node_id is None or value.node_id == node_id)
+                and not self._is_retired(key)
+            )
+            return tuple(sorted(
+                values,
+                key=lambda value: (value.created_at, value.kind.value, value.resource_id),
+            ))
 
     def record_disposition(self, value: ResourceDisposition) -> ResourceDisposition:
-        return self._apply_disposition(value, persist=True)
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            return self._apply_disposition(value, persist=True)
 
     def _apply_disposition(self, value: ResourceDisposition, *, persist: bool) -> ResourceDisposition:
         key = (value.kind, value.resource_id)
@@ -295,16 +453,20 @@ class ResourceRegistry:
                 return terminal
             raise invalid_policy("terminal_resource_disposition_immutable")
         if persist:
-            self._append({"event": "disposition", "disposition": _disposition_json(sanitized)})
+            self._append_unlocked({"event": "disposition", "disposition": _disposition_json(sanitized)})
         self._attempts.setdefault(key, []).append(sanitized)
         return sanitized
 
     def disposition_for(self, kind: ResourceKind, resource_id: str) -> Optional[ResourceDisposition]:
-        history = self._attempts.get((ResourceKind(kind), resource_id), ())
-        return history[-1] if history else None
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            history = self._attempts.get((ResourceKind(kind), resource_id), ())
+            return history[-1] if history else None
 
     def disposition_history(self, kind: ResourceKind, resource_id: str) -> Tuple[ResourceDisposition, ...]:
-        return tuple(self._attempts.get((ResourceKind(kind), resource_id), ()))
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            return tuple(self._attempts.get((ResourceKind(kind), resource_id), ()))
 
     def _is_retired(self, key: tuple[ResourceKind, str]) -> bool:
         return any(value.disposition in TERMINAL_DISPOSITIONS for value in self._attempts.get(key, ()))
@@ -396,7 +558,7 @@ def _disposition_from_json(value: Mapping[str, object]) -> ResourceDisposition:
     )
 
 
-def _receipt_disposition(value: ResourceDisposition) -> dict[str, object]:
+def _raw_receipt_disposition(value: ResourceDisposition) -> dict[str, object]:
     sanitized = _sanitize_disposition(value)
     result = {
         "resource_id": sanitized.resource_id,
@@ -417,48 +579,29 @@ def _receipt_disposition(value: ResourceDisposition) -> dict[str, object]:
 def _sanitize_disposition(value: ResourceDisposition) -> ResourceDisposition:
     return replace(
         value,
-        evidence=tuple(_redact(item) for item in value.evidence[:_MAX_RECEIPT_ITEMS]),
-        command=tuple(_redact(item) for item in value.command[:_MAX_RECEIPT_ITEMS]),
-        follow_up=None if value.follow_up is None else _redact(value.follow_up),
+        reason=_sanitize_receipt_value(value.reason),
+        evidence=tuple(
+            _sanitize_receipt_value(item)
+            for item in value.evidence[:_MAX_RECEIPT_ITEMS]
+        ),
+        command=tuple(
+            _sanitize_receipt_value(item)
+            for item in value.command[:_MAX_RECEIPT_ITEMS]
+        ),
+        follow_up=(
+            None if value.follow_up is None
+            else _sanitize_receipt_value(value.follow_up)
+        ),
     )
 
 
-def _digest(value: object) -> str:
-    encoded = json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
-    return "value-sha256:" + hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def _redact(value: object, *, key: Optional[str] = None, depth: int = 0) -> object:
-    if key is not None and _SENSITIVE.search(key):
-        return _digest(value)
-    if depth >= _MAX_RECEIPT_DEPTH:
-        return _digest(value)
-    if type(value) is str:
-        if len(value) > _MAX_RECEIPT_STRING or _SENSITIVE.search(value):
-            return _digest(value)
-        return value
-    if type(value) is dict:
-        items = list(value.items())
-        result = {
-            _redact_key(name): _redact(item, key=str(name), depth=depth + 1)
-            for name, item in items[:_MAX_RECEIPT_ITEMS]
-        }
-        if len(items) > _MAX_RECEIPT_ITEMS:
-            result["truncated"] = _digest(items[_MAX_RECEIPT_ITEMS:])
-        return result
-    if type(value) in (list, tuple):
-        values = list(value)
-        result = [_redact(item, depth=depth + 1) for item in values[:_MAX_RECEIPT_ITEMS]]
-        if len(values) > _MAX_RECEIPT_ITEMS:
-            result.append(_digest(values[_MAX_RECEIPT_ITEMS:]))
-        return result
-    if type(value) in (int, bool) or value is None:
-        return value
-    return _digest(value)
-
-
-def _redact_key(value: object) -> str:
-    key = str(value)
-    if len(key) > _MAX_RECEIPT_STRING or _SENSITIVE.search(key):
-        return "key-sha256:" + hashlib.sha256(key.encode("utf-8")).hexdigest()
-    return key
+def _sanitize_receipt_value(value: object) -> object:
+    try:
+        return sanitize_durable_payload(
+            value,
+            public_string_length=_MAX_RECEIPT_STRING,
+            max_depth=_MAX_RECEIPT_DEPTH,
+            max_items=_MAX_RECEIPT_ITEMS * _MAX_RECEIPT_ITEMS,
+        )
+    except Exception:
+        return digest_error_detail_string("unsafe-receipt-value")

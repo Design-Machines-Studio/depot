@@ -28,6 +28,10 @@ class GitProof:
     ownership_namespace: str
     captured_at: datetime
 
+    def __post_init__(self) -> None:
+        if not _valid_git_proof(self):
+            raise invalid_policy("invalid_git_proof")
+
 
 class GitAdapter:
     def __init__(
@@ -55,18 +59,20 @@ class GitAdapter:
     def cleanup_owned(
         self, registry: ResourceRegistry, scope: CleanupScope, proof: GitProof,
     ) -> CleanupPlan:
+        if type(proof) is not GitProof or not _valid_git_proof(proof):
+            raise invalid_policy("invalid_git_proof")
         records = registry.resources_for(scope)
-        worktree = next((item for item in records if item.kind is ResourceKind.WORKTREE), None)
-        branch = next((item for item in records if item.kind is ResourceKind.BRANCH), None)
+        worktrees = tuple(item for item in records if item.kind is ResourceKind.WORKTREE)
+        branches = tuple(item for item in records if item.kind is ResourceKind.BRANCH)
+        git_records = worktrees + branches
         before = tuple(
             item.kind.value + ":" + item.resource_id for item in records
             if item.kind in (ResourceKind.WORKTREE, ResourceKind.BRANCH)
         )
-        candidates = tuple(item for item in (worktree, branch) if item is not None)
-        if worktree is None or branch is None or not self._proof_matches_scope(proof, worktree, branch):
+        if len(worktrees) != 1 or len(branches) != 1:
             dispositions = tuple(
-                disposition_for(item, CleanupDisposition.FOREIGN, "none", "git_ownership_proof_mismatch")
-                for item in candidates
+                disposition_for(item, CleanupDisposition.BLOCKED, "none", "ambiguous_registered_git_resources")
+                for item in git_records
             )
             if not dispositions:
                 dispositions = (
@@ -76,6 +82,13 @@ class GitAdapter:
                         "none", "git_resource_not_registered",
                     ),
                 )
+            return CleanupPlan(scope, before, (), dispositions)
+        worktree, branch = worktrees[0], branches[0]
+        if not self._proof_matches_scope(proof, worktree, branch):
+            dispositions = tuple(
+                disposition_for(item, CleanupDisposition.FOREIGN, "none", "git_ownership_proof_mismatch")
+                for item in git_records
+            )
             return CleanupPlan(scope, before, (), dispositions)
         if not self._proof_is_fresh(proof):
             return CleanupPlan(scope, before, (), (
@@ -96,6 +109,7 @@ class GitAdapter:
         actions = [CleanupAction(
             worktree.resource_id, ResourceKind.WORKTREE, "remove",
             ("git", "worktree", "remove", worktree.resource_id),
+            run_id=worktree.run_id, node_id=worktree.node_id, lifecycle=worktree.lifecycle,
         )]
         dispositions = []
         if branch.labels["ref-role"] == "feature-branch":
@@ -107,11 +121,13 @@ class GitAdapter:
             actions.append(CleanupAction(
                 branch.resource_id, ResourceKind.BRANCH, "remove",
                 ("git", "branch", "-d", branch.resource_id), 0,
+                branch.run_id, branch.node_id, branch.lifecycle,
             ))
         elif proof.unique_commit_count == 0:
             actions.append(CleanupAction(
                 branch.resource_id, ResourceKind.BRANCH, "remove",
                 ("git", "branch", "-D", branch.resource_id), 0,
+                branch.run_id, branch.node_id, branch.lifecycle,
             ))
         else:
             dispositions.append(disposition_for(
@@ -153,3 +169,41 @@ class GitAdapter:
             return False
         age = self.now() - proof.captured_at
         return timedelta(0) <= age <= self.max_proof_age
+
+
+def _normalized_absolute_path(value: object) -> bool:
+    if (
+        type(value) is not str or not value or len(value) > 4096
+        or value != value.strip() or "\x00" in value
+    ):
+        return False
+    path = PurePosixPath(value)
+    return path.is_absolute() and ".." not in path.parts and str(path) == value
+
+
+def _normalized_git_ref(value: object) -> bool:
+    if type(value) is not str or not value or len(value) > 256 or value != value.strip():
+        return False
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in value):
+        return False
+    return (
+        not value.startswith(("/", ".")) and not value.endswith(("/", ".", ".lock"))
+        and "//" not in value and ".." not in value and "@{" not in value and "\\" not in value
+    )
+
+
+def _valid_git_proof(proof: object) -> bool:
+    return (
+        type(proof) is GitProof
+        and _normalized_absolute_path(proof.worktree_path)
+        and all(_normalized_git_ref(value) for value in (
+            proof.branch, proof.base_ref, proof.merge_target, proof.ownership_namespace,
+        ))
+        and all(type(value) is bool for value in (
+            proof.readable, proof.dirty, proof.branch_is_feature,
+            proof.ancestor_of_merge_target,
+        ))
+        and type(proof.unique_commit_count) is int and proof.unique_commit_count >= 0
+        and type(proof.captured_at) is datetime
+        and proof.captured_at.tzinfo is not None and proof.captured_at.utcoffset() is not None
+    )

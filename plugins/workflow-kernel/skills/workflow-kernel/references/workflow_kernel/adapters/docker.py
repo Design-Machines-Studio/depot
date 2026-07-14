@@ -35,6 +35,14 @@ COMPOSE_MATCH_LABEL = {
 }
 
 
+def _normalized_docker_text(value: object, maximum: int) -> bool:
+    return (
+        type(value) is str and bool(value) and value == value.strip()
+        and len(value) <= maximum
+        and not any(ord(character) < 32 or ord(character) == 127 for character in value)
+    )
+
+
 class CommandRunner(Protocol):
     def run(self, argv: Tuple[str, ...]) -> CommandResult: ...
 
@@ -45,6 +53,20 @@ class LeaseProof:
     active: bool
     readable: bool
     observed_at: datetime
+
+    def __post_init__(self) -> None:
+        if not _valid_lease_proof(self):
+            raise invalid_policy("invalid_lease_proof")
+
+
+def _valid_lease_proof(proof: object) -> bool:
+    return (
+        type(proof) is LeaseProof
+        and _normalized_docker_text(proof.run_id, 256)
+        and type(proof.active) is bool and type(proof.readable) is bool
+        and type(proof.observed_at) is datetime
+        and proof.observed_at.tzinfo is not None and proof.observed_at.utcoffset() is not None
+    )
 
 
 class LeaseReader(Protocol):
@@ -64,10 +86,43 @@ class DockerResource:
     name: Optional[str] = None
     use_known: bool = True
 
+    def __post_init__(self) -> None:
+        try:
+            kind = ResourceKind(self.kind)
+            labels = dict(self.labels)
+        except Exception:
+            raise invalid_policy("invalid_docker_resource") from None
+        if (
+            not _normalized_docker_text(self.resource_id, 4096)
+            or kind not in KIND_ORDER
+            or any(
+                not _normalized_docker_text(key, 256)
+                or type(value) is not str or len(value) > 4096
+                or any(ord(character) < 32 or ord(character) == 127 for character in value)
+                for key, value in labels.items()
+            )
+            or type(self.created_at) is not datetime
+            or self.created_at.tzinfo is None or self.created_at.utcoffset() is None
+            or not all(type(value) is bool for value in (
+                self.running, self.in_use, self.system, self.inspect_ok, self.use_known,
+            ))
+            or (self.name is not None and not _normalized_docker_text(self.name, 4096))
+        ):
+            raise invalid_policy("invalid_docker_resource")
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "labels", labels)
+
 
 @dataclass(frozen=True)
 class DockerInventory:
     resources: Tuple[DockerResource, ...]
+
+    def __post_init__(self) -> None:
+        resources = tuple(self.resources)
+        keys = [(value.kind, value.resource_id) for value in resources if type(value) is DockerResource]
+        if len(keys) != len(resources) or len(set(keys)) != len(keys):
+            raise invalid_policy("invalid_docker_inventory")
+        object.__setattr__(self, "resources", resources)
 
 
 @dataclass(frozen=True)
@@ -82,6 +137,35 @@ class DockerCreationPlan:
     environment: Optional[Mapping[str, str]] = None
     managed: bool = True
     reason: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        try:
+            argv = tuple(self.argv)
+            labels = dict(self.labels)
+            intents = tuple(self.registration_intents)
+            environment = None if self.environment is None else dict(self.environment)
+        except Exception:
+            raise invalid_policy("invalid_docker_creation_plan") from None
+        if (
+            not argv or any(not _normalized_docker_text(value, 4096) for value in argv)
+            or any(not _normalized_docker_text(key, 256) or type(value) is not str for key, value in labels.items())
+            or self.lifecycle not in VALID_LIFECYCLES
+            or any(type(value) is not ResourceRegistrationIntent for value in intents)
+            or (self.compose_override is not None and not isinstance(self.compose_override, Path))
+            or (self.compose_override_content is not None and type(self.compose_override_content) is not str)
+            or (self.project_name is not None and not _normalized_docker_text(self.project_name, 256))
+            or (environment is not None and any(
+                not _normalized_docker_text(key, 256) or type(value) is not str
+                for key, value in environment.items()
+            ))
+            or type(self.managed) is not bool
+            or (self.reason is not None and not _normalized_docker_text(self.reason, 4096))
+        ):
+            raise invalid_policy("invalid_docker_creation_plan")
+        object.__setattr__(self, "argv", argv)
+        object.__setattr__(self, "labels", labels)
+        object.__setattr__(self, "registration_intents", intents)
+        object.__setattr__(self, "environment", environment)
 
 
 class DockerAdapter:
@@ -377,7 +461,7 @@ class DockerAdapter:
             if lease.active:
                 dispositions.append(disposition_for(record, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "none", "active_run_lease"))
                 continue
-            if now - created <= ttl:
+            if now - created <= ttl or now - resource.created_at <= ttl:
                 dispositions.append(disposition_for(record, CleanupDisposition.RETAINED_FOR_DEPENDENCY, "none", "ttl_not_expired"))
                 continue
             planned, disposition = self._plan_one(record, resource, allow_stop=False)
@@ -401,8 +485,8 @@ class DockerAdapter:
         if proof is None:
             return None, "lease_proof_missing"
         if (
-            proof.run_id != run_id or not proof.readable
-            or not isinstance(proof.observed_at, datetime) or proof.observed_at.tzinfo is None
+            type(proof) is not LeaseProof or not _valid_lease_proof(proof)
+            or proof.run_id != run_id or not proof.readable
         ):
             return None, "lease_proof_unreadable"
         age = now - proof.observed_at

@@ -29,12 +29,23 @@ After creation, the registry records the command result and before/after
 inventory delta against every registration intent. A current-run object is
 removable only when its kind and ID, complete ownership-label snapshot, and
 inspected creation time agree with its durable registry record. The registry
-keys identity by kind plus ID. A stale orphan may lack a registry record only
+keys identity by kind plus ID. Each registration or disposition takes an
+exclusive registry lock, reloads and validates the full journal, then appends,
+flushes, and fsyncs while still holding that lock. This keeps owner conflicts,
+attempt history, and terminal dispositions immutable across concurrent kernel
+instances. A stale orphan may lack a registry record only
 when every label value is valid, the label timestamp agrees with Docker's
-inspected creation time, its timestamp is strictly older than the typed TTL,
-and an injected authoritative lease reader proves its run inactive. Missing,
-unreadable, active, future, or stale lease proof retains the object. At the exact
-TTL boundary it remains.
+inspected creation time, both timestamps are strictly older than the typed TTL,
+and an injected authoritative lease reader returns an exact, fresh `LeaseProof`
+that proves its run inactive. Missing, malformed, unreadable, active, future, or
+stale lease proof retains the object. At either exact TTL boundary it remains.
+
+Git cleanup is likewise a pure plan. It requires exactly one registered
+worktree and one registered branch for the requested scope plus an exact,
+fresh `GitProof` whose normalized path, namespace, branch, base, and merge
+target agree with both registry records. Additional registered Git resources
+make the scope ambiguous: deletion is blocked and every registered worktree and
+branch receives a disposition.
 
 Chunk resources are planned for cleanup automatically after validation, review,
 evidence capture, and merge disposition. Run resources remain while any declared
@@ -61,5 +72,8 @@ ownership guesses. Receipts record kind, ID, owner, lifecycle, action, reason,
 bounded evidence, and follow-up without copying command output that may contain
 secrets. Runtime cleanup receipts serialize with schema version, scope, nested
 owner, kind and ID, lifecycle, disposition, exact command evidence, reason, and
-follow-up. Evidence is recursively bounded and secret-shaped values are hashed
-before durable persistence.
+follow-up. The complete serialized receipt—including scope, owner, identifiers,
+reason, command evidence, and nested evidence—is traversed through the shared
+bounded redaction policy. Cookie, bearer, DSN, environment-secret, overlong,
+cyclic, and otherwise unsafe values are redacted or hashed before durable
+persistence while safe resource identities remain available as evidence.

@@ -6,11 +6,13 @@ from pathlib import Path
 
 from workflow_kernel.adapters.docker import (
     DockerAdapter,
+    DockerCreationPlan,
     DockerInventory,
     DockerResource,
     LeaseProof,
 )
 from workflow_kernel.resources import CleanupDisposition, CommandResult, ResourceKind, ResourceRecord, ResourceRegistry
+from workflow_kernel.schema import InvalidSchemaError
 
 
 NOW = datetime(2026, 7, 15, 1, 2, 3, tzinfo=timezone.utc)
@@ -194,6 +196,69 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(CleanupDisposition.RETAINED_FOR_DEPENDENCY, dispositions["boundary"].disposition)
         self.assertEqual(CleanupDisposition.FOREIGN, dispositions["mismatch"].disposition)
         self.assertEqual(CleanupDisposition.FOREIGN, dispositions["invalid"].disposition)
+
+    def test_stale_sweep_requires_both_label_and_inspected_age_to_exceed_ttl(self):
+        label_created = NOW - timedelta(hours=24, seconds=1)
+        inspected_created = NOW - timedelta(hours=23, minutes=59)
+        candidate = resource(
+            "ttl-straddle", labels=owned_labels(created_at=label_created),
+            created_at=inspected_created,
+        )
+        plan = self.adapter.plan_stale_sweep(DockerInventory((candidate,)), timedelta(hours=24))
+        self.assertEqual((), plan.actions)
+        self.assertEqual("ttl_not_expired", plan.dispositions[0].reason)
+
+    def test_lease_proof_rejects_truthy_bools_and_noncanonical_identity_timestamp(self):
+        invalid = (
+            dict(run_id="run-1", active=0, readable=True, observed_at=NOW),
+            dict(run_id="run-1", active=False, readable=1, observed_at=NOW),
+            dict(run_id=" run-1", active=False, readable=True, observed_at=NOW),
+            dict(run_id="run-1", active=False, readable=True, observed_at=NOW.replace(tzinfo=None)),
+        )
+        for values in invalid:
+            with self.subTest(values=values), self.assertRaises(InvalidSchemaError):
+                LeaseProof(**values)
+
+    def test_docker_models_reject_noncanonical_booleans_timestamps_and_inventory(self):
+        with self.assertRaises(InvalidSchemaError):
+            DockerResource(
+                "ctr-1", ResourceKind.CONTAINER, owned_labels(),
+                NOW.replace(tzinfo=None),
+            )
+        with self.assertRaises(InvalidSchemaError):
+            DockerResource("ctr-1", ResourceKind.CONTAINER, owned_labels(), NOW, running=1)
+        duplicate = resource()
+        with self.assertRaises(InvalidSchemaError):
+            DockerInventory((duplicate, duplicate))
+        with self.assertRaises(InvalidSchemaError):
+            DockerCreationPlan(("docker",), {}, "anything", (), managed=1)
+
+    def test_stale_sweep_rejects_nonexact_lease_proof_type(self):
+        class DerivedLeaseProof(LeaseProof):
+            pass
+
+        created = NOW - timedelta(hours=25)
+        stale = resource("stale", labels=owned_labels(created_at=created), created_at=created)
+        derived = object.__new__(DerivedLeaseProof)
+        for name, value in inactive_lease().__dict__.items():
+            object.__setattr__(derived, name, value)
+        adapter = DockerAdapter(
+            FakeRunner(), now=lambda: NOW,
+            lease_reader=FakeLeaseReader({"run-1": derived}),
+        )
+        plan = adapter.plan_stale_sweep(DockerInventory((stale,)), timedelta(hours=24))
+        self.assertEqual((), plan.actions)
+        self.assertEqual("lease_proof_unreadable", plan.dispositions[0].reason)
+
+        mutated = LeaseProof("run-1", False, True, NOW)
+        object.__setattr__(mutated, "active", 0)
+        adapter = DockerAdapter(
+            FakeRunner(), now=lambda: NOW,
+            lease_reader=FakeLeaseReader({"run-1": mutated}),
+        )
+        plan = adapter.plan_stale_sweep(DockerInventory((stale,)), timedelta(hours=24))
+        self.assertEqual((), plan.actions)
+        self.assertEqual("lease_proof_unreadable", plan.dispositions[0].reason)
 
     def test_volume_inventory_queries_container_mounts_and_unknown_use_blocks(self):
         volume_list = ("docker", "volume", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.Name}}")

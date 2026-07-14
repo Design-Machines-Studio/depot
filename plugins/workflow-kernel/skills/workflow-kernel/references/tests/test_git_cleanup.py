@@ -5,6 +5,7 @@ from pathlib import Path
 
 from workflow_kernel.adapters.git import GitAdapter, GitProof
 from workflow_kernel.resources import CleanupDisposition, CleanupScope, ResourceKind, ResourceRecord, ResourceRegistry
+from workflow_kernel.schema import InvalidSchemaError
 
 
 NOW = datetime(2026, 7, 15, tzinfo=timezone.utc)
@@ -104,6 +105,53 @@ class GitCleanupTests(unittest.TestCase):
             self.registry, self.scope, proof(ancestor_of_merge_target=False, unique_commit_count=0)
         )
         self.assertEqual(("git", "branch", "-D", BRANCH), plan.actions[1].argv)
+
+    def test_extra_registered_git_resources_fail_closed_with_complete_dispositions(self):
+        extra_worktree = ROOT + "/node-1-extra"
+        self.registry.register(owned_record(ResourceKind.WORKTREE, extra_worktree))
+        plan = self.adapter.cleanup_owned(self.registry, self.scope, proof())
+        self.assertEqual((), plan.actions)
+        self.assertEqual(
+            {WORKTREE, extra_worktree, BRANCH},
+            {item.resource_id for item in plan.dispositions},
+        )
+        self.assertTrue(all(item.disposition is CleanupDisposition.BLOCKED for item in plan.dispositions))
+
+    def test_git_proof_rejects_truthy_bools_counts_and_noncanonical_fields(self):
+        invalid = (
+            {"readable": 1},
+            {"dirty": 0},
+            {"branch_is_feature": 1},
+            {"ancestor_of_merge_target": 1},
+            {"unique_commit_count": True},
+            {"unique_commit_count": -1},
+            {"worktree_path": ROOT + "/../foreign"},
+            {"branch": NAMESPACE + "//node-1"},
+            {"base_ref": " feature/kernel"},
+            {"merge_target": "feature/kernel "},
+            {"ownership_namespace": NAMESPACE + "/"},
+            {"base_ref": "a" * 257},
+            {"worktree_path": "/" + "a" * 4097},
+            {"captured_at": NOW.replace(tzinfo=None)},
+        )
+        for changes in invalid:
+            with self.subTest(changes=changes), self.assertRaises(InvalidSchemaError):
+                proof(**changes)
+
+    def test_cleanup_requires_exact_git_proof_type(self):
+        class DerivedGitProof(GitProof):
+            pass
+
+        derived = object.__new__(DerivedGitProof)
+        for name, value in proof().__dict__.items():
+            object.__setattr__(derived, name, value)
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.cleanup_owned(self.registry, self.scope, derived)
+
+        mutated = proof()
+        object.__setattr__(mutated, "unique_commit_count", True)
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.cleanup_owned(self.registry, self.scope, mutated)
 
 
 if __name__ == "__main__":

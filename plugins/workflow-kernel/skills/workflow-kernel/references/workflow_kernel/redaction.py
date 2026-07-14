@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Mapping
 from types import MappingProxyType
 from typing import Any, Callable, Iterator, Optional, Tuple
@@ -41,6 +41,16 @@ _TRAILING_PUNCTUATION = frozenset(".,;!?\"'")
 _OPENING_TO_CLOSING = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
 _KEY_DIGEST = re.compile(r"key-sha256:[0-9a-f]{64}\Z")
+_SECRET_VOCABULARY_PATTERN = "|".join(
+    re.escape(part) for part in _SECRET_PARTS + ("bearer", "passwd")
+)
+_SECRET_ASSIGNMENT = re.compile(
+    r"(?i)(?:^|[^a-z0-9_])(?:" + _SECRET_VOCABULARY_PATTERN + r")\s*(?:=|:|\s)"
+)
+_SECRET_ENV_ASSIGNMENT = re.compile(
+    r"(?i)(?:^|[^a-z0-9_])[a-z0-9_]*(?:" + _SECRET_VOCABULARY_PATTERN
+    + r")[a-z0-9_]*="
+)
 
 
 class _NoOpWorkBudget:
@@ -275,6 +285,8 @@ class _Traversal:
     count: int = 0
     text_bytes: int = 0
     work: Any = NOOP_WORK_BUDGET
+    active_containers: set = field(default_factory=set)
+    digest_cycles: bool = False
 
     def consume_text(self, value: str) -> None:
         self.text_bytes += charge_text_work(value, self.work)
@@ -317,42 +329,60 @@ class _Traversal:
                 raise TypeError("non-finite numbers are not JSON-safe")
             return value
         if isinstance(value, Mapping):
-            result = {}
-            for child_key in value:
-                if type(child_key) is not str:
-                    raise TypeError("mapping keys must be strings")
-                if str.__len__(child_key) > self.max_string_length:
-                    raise TypeError("mapping key exceeds maximum length")
-                self.consume_text(child_key)
-                if self.count >= self.max_items:
-                    raise TypeError("payload exceeds maximum item count")
-                item = value[child_key]
-                child_policy = None
-                if self.mapping_policy is not None:
-                    normalized_key, child_policy = self.mapping_policy(child_key, schema)
-                else:
-                    normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
-                                      else validate_durable_key(child_key))
-                if normalized_key in result:
-                    raise TypeError("mapping keys collide after normalization")
-                child_schema = child_policy if isinstance(child_policy, Mapping) else None
-                result[normalized_key] = self.normalize(
-                    item, key=child_key, depth=depth + 1,
-                    schema=child_schema, policy=child_policy,
-                )
-            return self.wrap_mapping(result)
+            identity = id(value)
+            if identity in self.active_containers:
+                if self.digest_cycles:
+                    return digest_error_detail_string("cyclic-mapping")
+                raise TypeError("payload contains a cycle")
+            self.active_containers.add(identity)
+            try:
+                result = {}
+                for child_key in value:
+                    if type(child_key) is not str:
+                        raise TypeError("mapping keys must be strings")
+                    if str.__len__(child_key) > self.max_string_length:
+                        raise TypeError("mapping key exceeds maximum length")
+                    self.consume_text(child_key)
+                    if self.count >= self.max_items:
+                        raise TypeError("payload exceeds maximum item count")
+                    item = value[child_key]
+                    child_policy = None
+                    if self.mapping_policy is not None:
+                        normalized_key, child_policy = self.mapping_policy(child_key, schema)
+                    else:
+                        normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
+                                          else validate_durable_key(child_key))
+                    if normalized_key in result:
+                        raise TypeError("mapping keys collide after normalization")
+                    child_schema = child_policy if isinstance(child_policy, Mapping) else None
+                    result[normalized_key] = self.normalize(
+                        item, key=child_key, depth=depth + 1,
+                        schema=child_schema, policy=child_policy,
+                    )
+                return self.wrap_mapping(result)
+            finally:
+                self.active_containers.remove(identity)
         if isinstance(value, (list, tuple)):
-            evidence_items = (self.string_normalizer is None and self.string_policy is None
-                              and key.casefold() == "evidence")
-            result = []
-            for item in value:
-                if evidence_items and type(item) is not str:
-                    raise TypeError("evidence items must be strings")
-                result.append(self.normalize(
-                    item, key=key if evidence_items else "", depth=depth + 1,
-                ))
-            result = tuple(result)
-            return self.wrap_sequence(result)
+            identity = id(value)
+            if identity in self.active_containers:
+                if self.digest_cycles:
+                    return digest_error_detail_string("cyclic-sequence")
+                raise TypeError("payload contains a cycle")
+            self.active_containers.add(identity)
+            try:
+                evidence_items = (self.string_normalizer is None and self.string_policy is None
+                                  and key.casefold() == "evidence")
+                result = []
+                for item in value:
+                    if evidence_items and type(item) is not str:
+                        raise TypeError("evidence items must be strings")
+                    result.append(self.normalize(
+                        item, key=key if evidence_items else "", depth=depth + 1,
+                    ))
+                result = tuple(result)
+                return self.wrap_sequence(result)
+            finally:
+                self.active_containers.remove(identity)
         raise TypeError("value is not JSON-safe")
 
 
@@ -361,6 +391,60 @@ def redact(value: Any, *, _key: str = "") -> Any:
     return _Traversal(MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
                       MAX_TOTAL_STRING_BYTES,
                       _mutable_mapping, _mutable_sequence).normalize(value, key=_key)
+
+
+def contains_secret_shape(value: str) -> bool:
+    """Return whether an untrusted durable string resembles embedded secret material."""
+    return type(value) is str and (
+        _SECRET_ASSIGNMENT.search(value) is not None
+        or _SECRET_ENV_ASSIGNMENT.search(value) is not None
+    )
+
+
+def sanitize_durable_payload(value: Any, *, public_string_length: int = 256,
+                             max_depth: int = MAX_PAYLOAD_DEPTH,
+                             max_items: int = MAX_PAYLOAD_ITEMS,
+                             allowed_opaque_schemes=()) -> Any:
+    """Return bounded JSON data with secret-shaped or unsafe strings digested."""
+    if type(public_string_length) is not int or public_string_length < 1:
+        raise TypeError("public string length is invalid")
+    schemes = tuple(allowed_opaque_schemes)
+    if any(type(scheme) is not str or not scheme for scheme in schemes):
+        raise TypeError("allowed opaque schemes are invalid")
+
+    def string_policy(item: str, _key: str, _policy: Any) -> str:
+        if len(item) > public_string_length or contains_secret_shape(item):
+            return digest_error_detail_string(item)
+        for scheme in schemes:
+            prefix = scheme + ":"
+            if item.startswith(prefix):
+                remainder = item[len(prefix):]
+                try:
+                    normalized = normalize_durable_string(remainder)
+                except (TypeError, ValueError):
+                    return digest_error_detail_string(item)
+                return item if normalized == remainder else digest_error_detail_string(item)
+        try:
+            return normalize_durable_string(item)
+        except (TypeError, ValueError):
+            return digest_error_detail_string(item)
+
+    def mapping_policy(key: str, _schema: Any) -> Tuple[str, Any]:
+        if len(key) > public_string_length:
+            return digest_error_detail_key(key), None
+        try:
+            return validate_durable_key(key), None
+        except (TypeError, ValueError):
+            return digest_error_detail_key(key), None
+
+    return apply_json_policy(
+        value,
+        string_policy=string_policy,
+        mapping_policy=mapping_policy,
+        max_depth=max_depth,
+        max_items=max_items,
+        digest_cycles=True,
+    )
 
 
 def freeze_json(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
@@ -413,7 +497,8 @@ def apply_json_policy(value: Any, *, string_policy, mapping_policy,
                       max_depth: int = MAX_PAYLOAD_DEPTH,
                       max_items: int = MAX_PAYLOAD_ITEMS,
                       max_string_length: int = MAX_STRING_LENGTH,
-                      max_total_string_bytes: Optional[int] = None) -> Any:
+                      max_total_string_bytes: Optional[int] = None,
+                      digest_cycles: bool = False) -> Any:
     """Apply caller-owned field policy through the shared bounded traversal."""
     total_bytes = (MAX_TOTAL_STRING_BYTES if max_total_string_bytes is None
                    else max_total_string_bytes)
@@ -422,6 +507,7 @@ def apply_json_policy(value: Any, *, string_policy, mapping_policy,
         _mutable_mapping, _mutable_sequence,
         string_policy=string_policy, mapping_policy=mapping_policy,
         value_policy=value_policy,
+        digest_cycles=digest_cycles,
     ).normalize(value, schema=schema)
 
 

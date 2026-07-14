@@ -22,15 +22,15 @@
       "additionalProperties": false,
       "required": ["resource_id", "kind", "run_id", "node_id", "lifecycle", "cleanup_policy", "created_at", "dependent_node_ids", "labels"],
       "properties": {
-        "resource_id": {"type": "string", "minLength": 1},
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
         "kind": {"$ref": "#/$defs/kind"},
-        "run_id": {"type": "string", "minLength": 1},
-        "node_id": {"type": "string", "minLength": 1},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
         "lifecycle": {"$ref": "#/$defs/lifecycle"},
         "cleanup_policy": {"enum": ["stop-remove", "remove-when-stopped", "retain"]},
         "created_at": {"type": "string", "format": "date-time"},
-        "dependent_node_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
-        "labels": {"type": "object", "additionalProperties": {"type": "string"}}
+        "dependent_node_ids": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 256}, "uniqueItems": true},
+        "labels": {"type": "object", "propertyNames": {"minLength": 1, "maxLength": 256}, "additionalProperties": {"type": "string", "maxLength": 4096}}
       }
     },
     "disposition": {
@@ -38,17 +38,17 @@
       "additionalProperties": false,
       "required": ["resource_id", "kind", "run_id", "node_id", "lifecycle", "disposition", "action", "reason", "command", "evidence"],
       "properties": {
-        "resource_id": {"type": "string", "minLength": 1},
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
         "kind": {"$ref": "#/$defs/kind"},
-        "run_id": {"type": "string", "minLength": 1},
-        "node_id": {"type": "string", "minLength": 1},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
         "lifecycle": {"$ref": "#/$defs/lifecycle"},
         "disposition": {"enum": ["removed", "retained_for_dependency", "blocked", "foreign", "missing"]},
-        "action": {"type": "string", "minLength": 1},
-        "reason": {"type": "string", "minLength": 1},
-        "command": {"type": "array", "items": {"type": "string"}, "maxItems": 32},
+        "action": {"enum": ["none", "remove_exact_id"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "command": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "maxItems": 32},
         "evidence": {"type": "array", "items": {}, "maxItems": 32},
-        "follow_up": {"type": "string", "minLength": 1}
+        "follow_up": {"type": "string", "minLength": 1, "maxLength": 4096}
       }
     }
   }
