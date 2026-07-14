@@ -363,7 +363,14 @@ The kernel:
 
 - Inventories Docker resources before execution.
 - Registers every created resource.
-- Removes current-run resources during node or terminal cleanup.
+- Treats the existing per-chunk repository cleanup boundary as the primary
+  Docker cleanup point, after that chunk's validation, review, evidence, and
+  merge disposition are complete.
+- Removes resources owned only by the completed chunk at that boundary.
+- Retains explicitly registered run-shared resources until their last dependent
+  chunk completes or the run reaches a terminal state.
+- Runs a final terminal reconciliation sweep so interrupted or blocked
+  per-chunk removals cannot disappear from the receipt.
 - Automatically removes Depot-managed resources older than 24 hours.
 - Allows a configurable TTL for long-running workflows.
 - Never removes unlabelled or foreign-namespace resources.
@@ -371,7 +378,10 @@ The kernel:
 - Records successful, failed, and blocked removals.
 
 Current-run cleanup failure is a cleanup failure. Inaccessible stale resources
-are reported residue, not falsely claimed as removed.
+are reported residue, not falsely claimed as removed. Per-chunk and terminal
+cleanup emit the same resource disposition schema so the final receipt can prove
+which resources were removed, retained for dependents, blocked, or left as
+foreign.
 
 ## UX personas and browser verification
 

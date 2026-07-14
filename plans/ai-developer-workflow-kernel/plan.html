@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plan: AI Developer Workflow Kernel</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f5f0e6;
+      --ink: #1d2624;
+      --muted: #5f6965;
+      --rule: #c9c0ae;
+      --panel: #fffdf7;
+      --accent: #136f63;
+      --accent-soft: #dce9e4;
+      --warn: #9a4f14;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main, footer { width: min(76rem, calc(100% - 2rem)); margin-inline: auto; }
+    header { border-bottom: 1px solid var(--rule); padding: 3.5rem 0 2rem; margin-bottom: 2rem; }
+    h1, h2, h3, h4 { line-height: 1.12; text-wrap: balance; }
+    h1 { font-size: clamp(2.3rem, 6vw, 5rem); margin: .4rem 0 1rem; max-width: 14ch; }
+    h2 { border-top: 1px solid var(--rule); padding-top: 1.4rem; margin-top: 2.8rem; }
+    h3 { margin-top: 2rem; }
+    p, li { max-width: 82ch; }
+    a { color: var(--accent); }
+    code { background: #e8e0d1; padding: .08rem .28rem; border-radius: .2rem; }
+    pre { overflow-x: auto; background: #17201e; color: #edf4f1; padding: 1rem; border-radius: .35rem; font-size: .87rem; }
+    pre code { background: transparent; padding: 0; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    th, td { border: 1px solid var(--rule); padding: .7rem; text-align: left; vertical-align: top; }
+    th { background: #e8e0d1; }
+    nav ul { display: flex; flex-wrap: wrap; gap: .5rem 1rem; list-style: none; padding: 0; }
+    .eyebrow { color: var(--accent); font-size: .8rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .lede { font-size: 1.2rem; max-width: 66ch; }
+    .card { background: var(--panel); border: 1px solid var(--rule); padding: 1rem 1.1rem; margin: 1rem 0; }
+    .chunk { border-left: .35rem solid var(--accent); }
+    .constraint { border-left: .35rem solid var(--warn); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; }
+    .tag { display: inline-block; border: 1px solid currentColor; border-radius: 999px; padding: .08rem .5rem; font-size: .76rem; font-weight: 700; }
+    .steps > li { margin-block: .7rem; }
+    .copy-button { margin: .8rem 0; padding: .55rem .8rem; border: 1px solid var(--accent); background: var(--accent-soft); color: var(--ink); cursor: pointer; font: inherit; }
+    [contenteditable="true"]:focus { outline: 3px solid var(--accent-soft); outline-offset: -3px; }
+    .artifact-footer { border-top: 1px solid var(--rule); margin-top: 3rem; padding: 1rem 0 3rem; color: var(--muted); }
+    @media (max-width: 46rem) { table { display: block; overflow-x: auto; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Pipeline · Phase 3 · Implementation Plan</div>
+      <h1>AI Developer Workflow Kernel</h1>
+      <p class="lede">Build a neutral, executable workflow kernel shared by pipeline and dm-review, then adopt it through shadow adapters before enabling enforcement. Six chunks keep the baseline runnable and make every authority change conditional on behavioral proof.</p>
+      <nav aria-label="Planning artifacts">
+        <ul>
+          <li><a href="brainstorm.html">Brainstorm</a></li>
+          <li><a href="assessment.html">Assessment</a></li>
+          <li><a href="research.html">Research</a></li>
+          <li><a href="prompts/">Execution prompts</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">Overview</h2>
+      <div class="meta">
+        <article class="card"><strong>Goal</strong><p>Replace repeatable orchestration prose with a deterministic, replayable control plane while preserving every current pipeline and dm-review guarantee.</p></article>
+        <article class="card"><strong>Architecture</strong><p>A new leaf <code>workflow-kernel</code> plugin owns versioned Python standard-library state, policy, adapter, and evidence contracts. Pipeline and dm-review remain host orchestrators and initially emit shadow observations.</p></article>
+        <article class="card"><strong>Tech stack</strong><p>Python 3 standard library, JSON/JSONL, shell validators, Git, optional Docker CLI, existing browser tool surfaces, and generated Claude/Codex plugin manifests.</p></article>
+      </div>
+    </section>
+
+    <section aria-labelledby="constraints">
+      <h2 id="constraints">Global Constraints</h2>
+      <div class="card constraint">
+        <ul>
+          <li>No third-party Python dependency, daemon, database, or external ticket ingestion.</li>
+          <li>Claude command and plugin sources remain canonical; Codex manifests and command-skill aliases remain generated.</li>
+          <li>Current Markdown orchestration remains authoritative in shadow mode.</li>
+          <li>Existing sensitive-path provider routing overrides workflow-class routing.</li>
+          <li>Event and verification artifacts may store auth field names, never auth values or secrets.</li>
+          <li>No broad Docker prune. Cleanup requires positive Depot ownership and records every disposition.</li>
+          <li>Chunk-owned Docker resources clean during per-chunk repository cleanup; run-shared resources survive through their last dependent; terminal cleanup reconciles residue.</li>
+          <li>Declared UX personas block UI/integration completion.</li>
+          <li>Required-browser failure must capture evidence, restart the primary browser, try another engine, then stop for help.</li>
+          <li>Native mode stays opt-in; changing the default requires a separate human decision.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section aria-labelledby="files">
+      <h2 id="files">File and Responsibility Map</h2>
+      <table>
+        <thead><tr><th>Surface</th><th>Responsibility</th><th>Owner chunk</th></tr></thead>
+        <tbody>
+          <tr><td><code>plugins/workflow-kernel/</code></td><td>Neutral leaf plugin, shared runtime, adapters, promotion evaluator, and release metadata; prevents a pipeline ↔ dm-review dependency cycle.</td><td>01–06</td></tr>
+          <tr><td><code>.../workflow_kernel/schema.py</code></td><td>Versioned enums and dataclasses for runs, nodes, evidence, resources, verification profiles, and events.</td><td>01</td></tr>
+          <tr><td><code>events.py</code>, <code>state.py</code>, <code>transitions.py</code></td><td>Append-only ledger, atomic materialized state, replay, revision protection, and legal transitions.</td><td>01</td></tr>
+          <tr><td><code>policies.py</code>, <code>workflows.py</code>, <code>adapters/host.py</code>, <code>adapters/isolation.py</code></td><td>Workflow classification, risk gates, retry/convergence policy, host capabilities, isolation selection, and resumable sessions; class propagation completes in Chunk 05 and validates in 06.</td><td>02, 05, 06</td></tr>
+          <tr><td><code>resources.py</code>, <code>adapters/git.py</code>, <code>adapters/docker.py</code></td><td>Ownership registry, typed Docker cleanup, Git disposition mapping, TTL sweep, and cleanup receipts.</td><td>03</td></tr>
+          <tr><td><code>verification.py</code>, <code>adapters/browser.py</code>, <code>adapters/personas.py</code></td><td>Declared-persona completeness, browser recovery state machine, and evidence coverage.</td><td>04</td></tr>
+          <tr><td><code>pipeline_adapter.py</code>, <code>dm_review_adapter.py</code>, <code>shadow.py</code></td><td>Translate existing manifests and review runs into kernel events; compare predicted vs authoritative receipts.</td><td>05</td></tr>
+          <tr><td><code>tools/validate-workflow-kernel.py</code>, <code>tools/validate-composition.sh</code></td><td>Behavioral validation, failure scenarios, release integration, and promotion checks.</td><td>06</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="chunks" class="widget--edit" data-island-key="chunks">
+      <h2 id="chunks">Chunk Decomposition</h2>
+      <p>Each chunk maps 1:1 to <code>prompts/NN-&lt;slug&gt;.md</code>. The table is editable; detailed test-first instructions follow.</p>
+      <table id="chunk-table">
+        <thead><tr><th data-field="n">N</th><th data-field="slug">Slug</th><th data-field="scope">Scope</th><th data-field="acceptance">Acceptance</th><th data-field="deps" data-list="true">Dependencies</th></tr></thead>
+        <tbody>
+          <tr><td contenteditable="true">01</td><td contenteditable="true">kernel-state-engine</td><td contenteditable="true">Neutral plugin, schemas, event ledger, atomic state, transitions, receipts, redaction, CLI</td><td contenteditable="true">State reconstructs from events; illegal transitions and revision conflicts fail; CLI validates and replays runs</td><td contenteditable="true"></td></tr>
+          <tr><td contenteditable="true">02</td><td contenteditable="true">workflow-policy-hosts</td><td contenteditable="true">Workflow classes, retry/convergence, risk gates, host capabilities, isolation, builder session continuity</td><td contenteditable="true">All seven workflow classes expand deterministically; degradation and resume decisions are explicit and tested</td><td contenteditable="true">01</td></tr>
+          <tr><td contenteditable="true">03</td><td contenteditable="true">owned-resource-lifecycle</td><td contenteditable="true">Git/Docker registry, label-aware creation, running-container stop policy, cleanup plans, terminal reconciliation, labeled TTL sweep</td><td contenteditable="true">Only proven owned resources are touched; running ephemeral containers stop after dependencies; every path emits dispositions</td><td contenteditable="true">01, 02</td></tr>
+          <tr><td contenteditable="true">04</td><td contenteditable="true">persona-browser-verification</td><td contenteditable="true">Verification profiles, project persona discovery, blocking coverage, browser restart and alternate-engine recovery</td><td contenteditable="true">Declared matrix completeness blocks; recovery order and evidence are deterministic; unresolved access stops for help</td><td contenteditable="true">01, 02</td></tr>
+          <tr><td contenteditable="true">05</td><td contenteditable="true">shadow-workflow-adapters</td><td contenteditable="true">Executable CLI, workflow-class propagation, trusted runtime resolution, translators, authoritative cleanup bridge, shadow comparison, metrics</td><td contenteditable="true">Markdown stays authoritative; shadow is side-effect free; all hosts/classes retain evidence parity</td><td contenteditable="true">01, 02, 03, 04</td></tr>
+          <tr><td contenteditable="true">06</td><td contenteditable="true">hardening-promotion-release</td><td contenteditable="true">Failure injection, behavioral validator, composition integration, manifests, versions, generated shims, docs</td><td contenteditable="true">Full validation clean; promotion gates fail closed; marketplace and Codex outputs are synchronized</td><td contenteditable="true">05</td></tr>
+        </tbody>
+      </table>
+      <button class="copy-button" type="button" data-copy-table="chunk-table">Copy table as JSON</button>
+    </section>
+
+    <section aria-labelledby="task-01">
+      <h2 id="task-01">Chunk 01: Kernel State Engine</h2>
+      <div class="card chunk">
+        <span class="tag">Runnable foundation</span>
+        <h3>Files</h3>
+        <ul>
+          <li>Create <code>plugins/workflow-kernel/.claude-plugin/plugin.json</code> and <code>plugins/workflow-kernel/skills/workflow-kernel/SKILL.md</code>.</li>
+          <li>Create <code>plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/{__init__,__main__,cli,schema,events,state,transitions,receipts,redaction}.py</code>.</li>
+          <li>Create matching tests under <code>plugins/workflow-kernel/skills/workflow-kernel/references/tests/</code>.</li>
+        </ul>
+        <h3>Interfaces</h3>
+        <pre><code>class RunMode(str, Enum): SHADOW = "shadow"; ENFORCE = "enforce"; NATIVE = "native"
+@dataclass(frozen=True) class WorkflowEvent: sequence: int; run_id: str; node_id: str | None; kind: str; occurred_at: str; payload: dict[str, object]
+class EventStore: append(event: WorkflowEvent, expected_sequence: int) -&gt; None; replay() -&gt; list[WorkflowEvent]
+class StateStore: load() -&gt; RunState; write(state: RunState, expected_revision: int) -&gt; None
+class TransitionEngine: apply(state: RunState, event: WorkflowEvent) -&gt; RunState</code></pre>
+        <ol class="steps">
+          <li>Write failing <code>unittest</code> cases for schema versions, strict enum parsing, secret redaction, legal transitions, illegal transitions, duplicate/gapped sequences, truncated JSONL tails, and deterministic receipt serialization.</li>
+          <li>Run the focused suite and require failures caused by missing modules, not syntax or fixture mistakes.</li>
+          <li>Implement immutable schema objects and a pure transition reducer. Unknown schema versions and unknown event kinds must raise normalized kernel errors.</li>
+          <li>Implement append-only JSONL with an expected sequence and materialized state writes using a same-directory temporary file, UTF-8 deterministic JSON, <code>flush</code>, <code>os.fsync</code>, <code>os.replace</code>, and best-effort Unix directory sync.</li>
+          <li>Add a run lease plus expected revision check; atomic replacement must not be treated as multi-writer protection.</li>
+          <li>Add CLI commands <code>init</code>, <code>validate</code>, <code>append</code>, <code>replay</code>, and <code>status</code>; default mode is <code>shadow</code>.</li>
+          <li>Run:
+            <pre><code>PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m unittest discover -s plugins/workflow-kernel/skills/workflow-kernel/references/tests -p 'test_*.py' -v
+PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m workflow_kernel --help</code></pre>
+            Expected: all Chunk 01 tests pass and help lists the five commands.
+          </li>
+          <li>Commit <code>feat(workflow-kernel): add durable state engine</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="task-02">
+      <h2 id="task-02">Chunk 02: Workflow Policy and Host Capabilities</h2>
+      <div class="card chunk">
+        <h3>Files</h3>
+        <ul>
+          <li>Create <code>policies.py</code>, <code>workflows.py</code>, and <code>adapters/{__init__,base,host,isolation}.py</code> in the kernel package.</li>
+          <li>Create <code>workflow-policy.json</code>, <code>workflow-classes.json</code>, and their schemas under the workflow-kernel skill references.</li>
+          <li>Add <code>test_workflow_classes.py</code>, <code>test_retry_policy.py</code>, <code>test_host_capabilities.py</code>, and <code>test_builder_resume.py</code>.</li>
+        </ul>
+        <h3>Interfaces</h3>
+        <pre><code>class WorkflowClass(str, Enum): CHORE; BUG; FEATURE; HOTFIX; SECURITY; INVESTIGATION; MIGRATION
+class WorkflowTemplates: expand(kind: WorkflowClass, context: WorkflowContext) -&gt; tuple[NodeSpec, ...]
+class RetryPolicy: decide(reason: FailureReason, attempts: AttemptLedger, signature: str | None) -&gt; RetryDecision
+class HostAdapter(Protocol): capabilities() -&gt; HostCapabilities; dispatch(node: NodeSpec) -&gt; SessionHandle | None; resume(handle: SessionHandle, feedback: ValidationFeedback) -&gt; SessionResult
+class IsolationSelector: select(requirements: IsolationRequirements, capabilities: HostCapabilities) -&gt; IsolationDecision</code></pre>
+        <ol class="steps">
+          <li>Write table-driven failing tests for the seven workflow classes, sensitive-path overrides, gate placement, retry exhaustion by reason, repeated failure signatures, and proposal-only economics.</li>
+          <li>Write host fixtures for Claude, Codex, generic host, resumable agent, non-resumable agent, remote sandbox, container, worktree, and sequential branch.</li>
+          <li>Implement deterministic templates and policy loading with schema validation. Security routing must override class defaults.</li>
+          <li>Implement isolation selection in the order allowed by declared capabilities and policy; every downgrade emits a reason and never silently becomes sequential-on-branch.</li>
+          <li>Implement builder continuity: store a real session handle when supplied, send deterministic validation feedback back to that handle, and emit <code>session_resume_unavailable</code> when the host cannot resume.</li>
+          <li>Run the complete kernel suite. Expected: class, host, retry, isolation, and resume scenarios pass without external commands.</li>
+          <li>Commit <code>feat(workflow-kernel): add workflow and host policy</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="task-03">
+      <h2 id="task-03">Chunk 03: Owned Resource Lifecycle</h2>
+      <div class="card chunk">
+        <h3>Files</h3>
+        <ul>
+          <li>Create kernel <code>resources.py</code> and <code>adapters/{git,docker}.py</code>.</li>
+          <li>Create <code>resource-registry-schema.json</code> and <code>cleanup-receipt-schema.json</code>.</li>
+          <li>Modify <code>plugins/dm-review/skills/review/references/repo-cleanup-contract.md</code> to add the sibling Docker ownership contract and chunk-boundary timing.</li>
+          <li>Add <code>test_resource_registry.py</code>, <code>test_docker_cleanup.py</code>, and <code>test_terminal_cleanup.py</code>.</li>
+        </ul>
+        <h3>Interfaces</h3>
+        <pre><code>class ResourceRegistry: register(record: ResourceRecord) -&gt; None; dispositions(scope: CleanupScope) -&gt; tuple[ResourceRecord, ...]
+class DockerAdapter: inventory() -&gt; tuple[DockerResource, ...]; plan_create(argv, run_id, node_id, lifecycle, cleanup_policy) -&gt; DockerCreationPlan; plan_compose(argv, run_id, node_id, lifecycle, cleanup_policy) -&gt; DockerCreationPlan; record_creation(plan, result, before, after) -&gt; tuple[ResourceRecord, ...]; plan_chunk_cleanup(run_id, node_id) -&gt; CleanupPlan; plan_reconcile_run(run_id) -&gt; CleanupPlan; record_results(plan, results) -&gt; CleanupReceipt
+class GitAdapter: inventory() -&gt; GitInventory; cleanup_owned(scope: CleanupScope) -&gt; CleanupReceipt</code></pre>
+        <ol class="steps">
+          <li>Write failing exact-argv tests for label-instrumented raw Docker and Compose service/network/volume creation, partial creation, registration failure, foreign labels, active leases, in-use resources, clock boundaries, removal errors, and idempotent replay.</li>
+          <li>Require ownership labels for managed, run ID, node ID, created-at, lifecycle, and cleanup policy. Running <code>stop-remove</code> containers may stop only at their proven boundary after dependencies complete.</li>
+          <li>Inject labels before creation and record unsupported paths as unmanaged. Implement filtered container/network cleanup planning using positive labels and age; implement volume TTL by label-filtered list plus inspect of creation time and explicit ID removal because volume prune lacks <code>until</code>.</li>
+          <li>Make per-chunk repository cleanup remove chunk-scoped resources only after validation, review, evidence, and merge disposition. Preserve run-scoped resources until their final dependent completes.</li>
+          <li>Make every terminal path call reconciliation and record <code>removed</code>, <code>retained_for_dependency</code>, <code>blocked</code>, <code>foreign</code>, or <code>missing</code>. Never invoke <code>docker system prune</code>.</li>
+          <li>Port the existing Git safe-to-delete decision table through the adapter without weakening merge proof or feature-branch protection.</li>
+          <li>Run the kernel suite and the repository cleanup contract validator. Expected: no fake command targets an unowned resource and every scenario has a receipt.</li>
+          <li>Commit <code>feat(workflow-kernel): own Git and Docker lifecycles</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="task-04">
+      <h2 id="task-04">Chunk 04: Persona and Browser Verification</h2>
+      <div class="card chunk">
+        <h3>Files</h3>
+        <ul>
+          <li>Create kernel <code>verification.py</code> and <code>adapters/{browser,personas}.py</code>.</li>
+          <li>Create <code>verification-profile-schema.json</code> and <code>browser-recovery-schema.json</code>.</li>
+          <li>Modify <code>plugins/pipeline/skills/assess/SKILL.md</code> and <code>plugins/pipeline/skills/promptcraft/SKILL.md</code> for project-local persona discovery and manifest propagation.</li>
+          <li>Modify <code>plugins/dm-review/agents/review/visual-browser-tester.md</code>, <code>ux-quality-reviewer.md</code>, and <code>plugins/dm-review/skills/visual-test/SKILL.md</code> to reference one recovery and coverage contract.</li>
+          <li>Add <code>test_persona_gates.py</code>, <code>test_browser_recovery.py</code>, and redaction fixtures.</li>
+        </ul>
+        <h3>Interfaces</h3>
+        <pre><code>class PersonaAdapter: discover(project_root: Path) -&gt; VerificationProfile; execute(case: PersonaCase) -&gt; EvidenceRef
+class VerificationGate: evaluate(profile: VerificationProfile, evidence: Iterable[EvidenceRef]) -&gt; CoverageDecision
+class BrowserRecovery: run(request: BrowserRequest, adapter: BrowserAdapter) -&gt; BrowserRecoveryReceipt
+# attempt order: primary -&gt; quit_primary_process -&gt; fresh_primary_session -&gt; secondary_engine -&gt; human_help</code></pre>
+        <ol class="steps">
+          <li>Write sanitized fixtures matching Assembly and assembly-baseplate <code>_index.md</code>, persona/task frontmatter, implementation statuses, coverage matrices, and suites. Treat task files as authoritative and source undeclared browsers from explicit workflow-policy defaults.</li>
+          <li>Implement completeness as a Cartesian set of declared required cases, not a fixed “two personas” heuristic. UI/integration nodes block when any required case lacks passing evidence.</li>
+          <li>Record <code>not_declared</code> when no project suite exists; do not invent personas and do not block non-UI work.</li>
+          <li>Write browser failure scenarios for a locked primary, failed relaunch, passing secondary, failed secondary, unavailable close tool, console errors, and preserved screenshots/traces.</li>
+          <li>Implement the exact recovery ladder: capture initial evidence, quit the primary process/engine session, prove a fresh relaunch identity and retry, launch a genuinely different engine, then stop with a human-help receipt. Context-only recreation and curl cannot satisfy required browser evidence.</li>
+          <li>Update assessment and review prose to point to the shared contract, eliminating conflicting skip semantics.</li>
+          <li>Run the full kernel suite plus description/contract checks. Expected: incomplete declared matrices and exhausted browser recovery fail closed with explicit coverage gaps.</li>
+          <li>Commit <code>feat(workflow-kernel): enforce persona and browser evidence</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="task-05">
+      <h2 id="task-05">Chunk 05: Shadow Workflow Adapters</h2>
+      <div class="card chunk">
+        <h3>Files</h3>
+        <ul>
+          <li>Create kernel <code>pipeline_adapter.py</code>, <code>dm_review_adapter.py</code>, <code>shadow.py</code>, and <code>metrics.py</code>; extend <code>cli.py</code> with executable observe, compare, cleanup-plan/result, reconciliation, and metrics commands.</li>
+          <li>Modify canonical commands <code>plugins/pipeline/commands/{pipeline,pipeline-run}.md</code> and <code>plugins/dm-review/commands/{dm-review,dm-review-loop,dm-review-visual}.md</code>.</li>
+          <li>Modify <code>plugins/pipeline/agents/workflow/execution-orchestrator.md</code> and <code>plugins/dm-review/skills/review/SKILL.md</code> at their named transition, receipt, and cleanup sections.</li>
+          <li>Add representative sanitized pipeline/dm-review receipt fixtures and host fixtures.</li>
+        </ul>
+        <h3>Interfaces</h3>
+        <pre><code>def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities) -&gt; RunSpec
+def translate_review(request: ReviewRequest, profile: HostCapabilities) -&gt; RunSpec
+class ShadowComparator: compare(predicted: RunState, authoritative: ReceiptSet) -&gt; ParityReport
+class MetricsAggregator: aggregate(events: Iterable[WorkflowEvent]) -&gt; ReliabilityReport</code></pre>
+        <ol class="steps">
+          <li>Write failing adapter tests from current manifest schema, progress ledger stages, dm-review lanes, fallback signatures, evaluation receipts, browser receipts, requirements cross-checks, and cleanup inventories.</li>
+          <li>Translate current data without changing authoritative execution. Every shadow event stores a reference to the existing receipt, <code>executionMode</code>, and end-to-end <code>workflowClass</code>. Resolve runtime only from the canonical Depot plugin root or validated caches, never target-project cwd.</li>
+          <li>Add host adapter mappings for Claude, Codex-native, and generic hosts. The mechanism may differ; required transitions, gates, security routing, evidence, and cleanup may not.</li>
+          <li>Instrument Docker creation before execution. At Step 3j and Step 5b the Markdown orchestrator remains authoritative: it rechecks and executes exact kernel-produced cleanup plans, then shadow observation records results. Comparator and metrics code remain side-effect free.</li>
+          <li>Integrate persona and browser profiles into UI/integration nodes and dm-review lanes. Missing required browser capability must enter recovery, never silently become skipped.</li>
+          <li>Aggregate duration, attempts, fallback reasons, first-pass validation, reviewer yield, persona/browser coverage, cleanup residue, and cost evidence. Emit recommendations only; never mutate routing policy.</li>
+          <li>Run replay fixtures in shadow mode and require zero unexplained differences. Known host-mechanism differences must map to named parity reasons.</li>
+          <li>Commit <code>feat(workflow-kernel): observe pipeline and dm-review</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="task-06">
+      <h2 id="task-06">Chunk 06: Hardening, Promotion, and Release</h2>
+      <div class="card chunk">
+        <h3>Files</h3>
+        <ul>
+          <li>Create <code>tools/validate-workflow-kernel.py</code> and <code>docs/workflow-kernel.md</code>.</li>
+          <li>Modify <code>tools/validate-composition.sh</code>, <code>tools/validate-workflow-contracts.sh</code>, and <code>tools/check-dependencies.sh</code>.</li>
+          <li>Add failure scenarios under the workflow-kernel test fixtures for every approved terminal and fallback path.</li>
+          <li>Modify canonical plugin manifests for workflow-kernel, pipeline, and dm-review plus <code>.claude-plugin/marketplace.json</code>; regenerate all Codex manifests and command-skill aliases.</li>
+        </ul>
+        <h3>Promotion contract</h3>
+        <pre><code>shadow -&gt; enforce: zero unexplained receipt gaps + all cleanup/browser/persona/host scenarios pass
+enforce -&gt; native_available: successful real shadow runs + interruption reconstruction + builder resume/non-resume evidence
+native_available -&gt; native_default: forbidden without a separate explicit human approval</code></pre>
+        <ol class="steps">
+          <li>Add failure injection for dead agent output, provider cap, repeated signatures, partial Git/Docker creation, process exit before registration, cleanup failure, corrupt/truncated events, browser exhaustion, persona auth failure, and core review failure after fallback.</li>
+          <li>Implement a behavioral validator that checks schema compatibility, replay determinism, terminal cleanup coverage, forbidden Docker commands, secret redaction, host parity, and promotion evidence.</li>
+          <li>Wire the validator and kernel unit suite into <code>./tools/validate-composition.sh --all</code> while preserving existing Markdown anchor checks.</li>
+          <li>Add the new leaf plugin as a dependency of pipeline and dm-review, bump versions, update the marketplace, and regenerate rather than hand-edit Codex manifests and command-skill aliases.</li>
+          <li>Document run directories, CLI examples, schema evolution, cleanup labels, persona declaration discovery, browser recovery, shadow reports, resumption, and rollback to Markdown-only authority.</li>
+          <li>Run:
+            <pre><code>PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m unittest discover -s plugins/workflow-kernel/skills/workflow-kernel/references/tests -p 'test_*.py' -v
+./tools/validate-workflow-kernel.py
+./tools/generate-codex-command-skills.py
+./tools/generate-codex-command-skills.py --check
+./tools/generate-codex-manifests.py
+./tools/generate-codex-manifests.py --check
+./tools/validate-composition.sh --all</code></pre>
+            Expected: all commands exit 0; no stale generated surface, unexplained parity gap, unowned cleanup, or secret-bearing fixture remains.
+          </li>
+          <li>Run final full dm-review, resolve all findings, produce the requirements cross-check and cleanup receipt, and commit <code>feat: ship AI developer workflow kernel</code>.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="decisions" class="widget--edit" data-island-key="decisions">
+      <h2 id="decisions">Decisions and Tradeoffs</h2>
+      <table id="decision-table">
+        <thead><tr><th data-field="id">ID</th><th data-field="decision">Decision</th><th data-field="rationale">Rationale</th><th data-field="alternatives">Alternatives</th></tr></thead>
+        <tbody>
+          <tr><td contenteditable="true">D1</td><td contenteditable="true">Create a neutral workflow-kernel leaf plugin</td><td contenteditable="true">Both pipeline and dm-review need the runtime; a leaf dependency prevents a cycle and ships with installed plugins</td><td contenteditable="true">Repo-root tool only; duplicated generated runtime; place kernel inside pipeline</td></tr>
+          <tr><td contenteditable="true">D2</td><td contenteditable="true">Use JSONL events plus atomically materialized JSON state</td><td contenteditable="true">Events are replayable evidence; state is fast to inspect; revisions prevent lost updates</td><td contenteditable="true">State only; SQLite; external event service</td></tr>
+          <tr><td contenteditable="true">D3</td><td contenteditable="true">Markdown orchestrator executes checked Docker plans at Step 3j and Step 5b</td><td contenteditable="true">Releases resources early while keeping shadow prediction side-effect free and preserving terminal honesty</td><td contenteditable="true">Kernel prediction authority; terminal-only cleanup; background daemon; broad prune</td></tr>
+          <tr><td contenteditable="true">D4</td><td contenteditable="true">Make declared persona matrices and browser recovery evidence blocking</td><td contenteditable="true">Prevents UI findings from disappearing when tooling snags or only a subset of roles runs</td><td contenteditable="true">Advisory personas; curl fallback; fixed two-persona sample</td></tr>
+          <tr><td contenteditable="true">D5</td><td contenteditable="true">Adopt through shadow, enforce, then opt-in native</td><td contenteditable="true">The workflow modifies its own control plane; receipt replay must bootstrap trust before authority moves</td><td contenteditable="true">Immediate cutover; permanent observation only</td></tr>
+          <tr><td contenteditable="true">D6</td><td contenteditable="true">Keep routing recommendations proposal-only</td><td contenteditable="true">Reliability data should inform humans without silently weakening security or quality policy</td><td contenteditable="true">Automatic policy tuning; omit metrics</td></tr>
+        </tbody>
+      </table>
+      <button class="copy-button" type="button" data-copy-table="decision-table">Copy table as JSON</button>
+    </section>
+
+    <section aria-labelledby="coverage">
+      <h2 id="coverage">Requirements Coverage</h2>
+      <table>
+        <thead><tr><th>Requirement</th><th>Chunk</th></tr></thead>
+        <tbody>
+          <tr><td>Deliver the complete improvement set through safe, executable slices.</td><td>01–06</td></tr>
+          <tr><td>Use the literal Depot pipeline and preserve gates and evidence.</td><td>05, 06</td></tr>
+          <tr><td>Decompose work into safe testable slices compatible with pipeline and dm-review.</td><td>01–06</td></tr>
+          <tr><td>Build executable control flow rather than more orchestration prose.</td><td>01, 02, 05</td></tr>
+          <tr><td>Preserve Claude/Codex parity, provider security, and honest degradation.</td><td>02, 05, 06</td></tr>
+          <tr><td>Validate transitions and failures behaviorally.</td><td>01–06</td></tr>
+          <tr><td>Deliver a clean feature branch with requirement-level evidence.</td><td>06</td></tr>
+          <tr><td>Additive standard-library kernel with shadow, enforce, and opt-in native modes.</td><td>01, 05, 06</td></tr>
+          <tr><td>Stay repo-local with no daemon or external ticket ingestion.</td><td>01, 06</td></tr>
+          <tr><td>Track Git and Docker ownership and sweep only labeled resources older than 24 hours.</td><td>03, 05, 06</td></tr>
+          <tr><td>Make project-declared UX personas blocking.</td><td>04, 05</td></tr>
+          <tr><td>Restart the primary browser, try another engine, then stop for human help.</td><td>04, 05</td></tr>
+          <tr><td>Clean chunk-owned Docker resources during per-chunk repository cleanup.</td><td>03, 05</td></tr>
+          <tr><td>Preserve builder sessions where supported.</td><td>02, 05, 06</td></tr>
+          <tr><td>Route chore, bug, feature, hotfix, security, investigation, and migration end to end.</td><td>02, 05, 06</td></tr>
+          <tr><td>Select remote sandbox, container, worktree, or sequential isolation explicitly.</td><td>02, 05</td></tr>
+          <tr><td>Make human gates workflow/risk aware without weakening sensitive paths.</td><td>02, 05, 06</td></tr>
+          <tr><td>Aggregate reliability economics without automatic policy mutation.</td><td>05, 06</td></tr>
+          <tr><td>Preserve Markdown contracts, generated shims, zero-deferral review, and cleanup.</td><td>01, 03, 05, 06</td></tr>
+          <tr><td>Keep policy/expertise in Markdown and repeatable mechanics in executable code.</td><td>01, 02, 05</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="rollback">
+      <h2 id="rollback">Rollback and Safety Boundaries</h2>
+      <ul>
+        <li>Shadow integration is removable without changing authoritative outcomes; disable the adapter call and retain its artifacts for diagnosis.</li>
+        <li>Enforcement promotion is configuration-driven and requires recorded parity evidence. Roll back to shadow by changing mode, not deleting run history.</li>
+        <li>Schema readers reject unknown major versions and retain original event files.</li>
+        <li>Cleanup never infers ownership solely from names. Missing or corrupt ownership evidence leaves the resource untouched and reports residue.</li>
+        <li>Native mode cannot become the default in this implementation.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="artifact-footer"><p>Pipeline plan artifact · 2026-07-14 · Six chunks map to the execution prompts generated in Phase 4.</p></footer>
+
+  <script>
+    document.querySelectorAll('[data-copy-table]').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const table = document.getElementById(button.dataset.copyTable);
+        const headers = [...table.querySelectorAll('thead th')].map((th) => ({ field: th.dataset.field, list: th.dataset.list === 'true' }));
+        const rows = [...table.querySelectorAll('tbody tr')].map((tr) => {
+          const values = [...tr.children].map((td) => td.textContent.trim());
+          return Object.fromEntries(headers.map((header, index) => [header.field, header.list ? values[index].split(',').map((value) => value.trim()).filter(Boolean) : values[index]]));
+        });
+        await navigator.clipboard.writeText(JSON.stringify(rows, null, 2));
+        button.textContent = 'Copied';
+      });
+    });
+  </script>
+
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "plan",
+    "slug": "ai-developer-workflow-kernel",
+    "chunks": [
+      {"n":"01","slug":"kernel-state-engine","scope":"Neutral plugin, schemas, event ledger, atomic state, transitions, receipts, redaction, and CLI","acceptance":"State reconstructs from events; illegal transitions and revision conflicts fail; CLI validates and replays runs","deps":[]},
+      {"n":"02","slug":"workflow-policy-hosts","scope":"Workflow classes, retry and convergence policy, risk gates, host capabilities, isolation, and builder session continuity","acceptance":"All seven workflow classes expand deterministically; degradation and resume decisions are explicit and tested","deps":["01"]},
+      {"n":"03","slug":"owned-resource-lifecycle","scope":"Git and Docker registry, label-aware creation, per-chunk cleanup plans, terminal reconciliation, and labeled TTL sweep","acceptance":"Current cleanup requires registry plus labels; stale orphans require complete labels, strict TTL, and no active lease; every terminal path emits dispositions","deps":["01","02"]},
+      {"n":"04","slug":"persona-browser-verification","scope":"Verification profiles, project persona discovery, blocking coverage, browser restart, and alternate-engine recovery","acceptance":"Declared matrix completeness blocks; recovery order and evidence are deterministic; unresolved access stops for help","deps":["01","02"]},
+      {"n":"05","slug":"shadow-workflow-adapters","scope":"Executable CLI, workflow-class propagation, pipeline/dm-review translators, receipt replay, authoritative cleanup integration, shadow comparison, and metrics","acceptance":"Markdown remains action authority; shadow prediction is side-effect free; all hosts and workflow classes retain evidence parity","deps":["01","02","03","04"]},
+      {"n":"06","slug":"hardening-promotion-release","scope":"Failure injection, behavioral validation, composition integration, manifests, versions, generated shims, and documentation","acceptance":"Full validation is clean; promotion gates fail closed; marketplace and Codex outputs are synchronized","deps":["05"]}
+    ],
+    "decisions": [
+      {"id":"D1","decision":"Create a neutral workflow-kernel leaf plugin","rationale":"Both pipeline and dm-review need the runtime; a leaf dependency prevents a cycle and ships with installed plugins","alternatives":"Repo-root tool only; duplicated generated runtime; place kernel inside pipeline"},
+      {"id":"D2","decision":"Use JSONL events plus atomically materialized JSON state","rationale":"Events are replayable evidence; state is fast to inspect; revisions prevent lost updates","alternatives":"State only; SQLite; external event service"},
+      {"id":"D3","decision":"The Markdown orchestrator executes ownership-checked cleanup plans at Step 3j and Step 5b","rationale":"Releases resources early while keeping shadow prediction side-effect free and preserving terminal honesty","alternatives":"Kernel prediction authority; terminal-only cleanup; background daemon; broad prune"},
+      {"id":"D4","decision":"Make declared persona matrices and browser recovery evidence blocking","rationale":"Prevents UI findings from disappearing when tooling snags or only a subset of roles runs","alternatives":"Advisory personas; curl fallback; fixed two-persona sample"},
+      {"id":"D5","decision":"Adopt through shadow, enforce, then opt-in native","rationale":"Receipt replay must bootstrap trust before authority moves","alternatives":"Immediate cutover; permanent observation only"},
+      {"id":"D6","decision":"Keep routing recommendations proposal-only","rationale":"Reliability data should inform humans without silently weakening policy","alternatives":"Automatic policy tuning; omit metrics"}
+    ],
+    "requirementsCoverage": [
+      {"requirement":"Deliver the complete workflow-kernel improvement set through safe executable slices.","chunk":"01-06"},
+      {"requirement":"Use the literal Depot pipeline and preserve gates and evidence.","chunk":"05,06"},
+      {"requirement":"Decompose work into safe testable slices compatible with pipeline and dm-review.","chunk":"01-06"},
+      {"requirement":"Build an executable control plane rather than more orchestration prose.","chunk":"01,02,05"},
+      {"requirement":"Preserve Claude and Codex behavior, provider security, and honest degradation.","chunk":"02,05,06"},
+      {"requirement":"Validate transitions and failure paths behaviorally.","chunk":"01-06"},
+      {"requirement":"Deliver a clean feature branch with requirement-level evidence.","chunk":"06"},
+      {"requirement":"Use an additive standard-library kernel with shadow, enforce, and opt-in native modes.","chunk":"01,05,06"},
+      {"requirement":"Keep the epic repo-local with no daemon or external ticket ingestion.","chunk":"01,06"},
+      {"requirement":"Track and clean owned Git and Docker resources and sweep only labeled resources older than 24 hours.","chunk":"03,05,06"},
+      {"requirement":"Discover project UX suites and make declared personas blocking.","chunk":"04,05"},
+      {"requirement":"Capture browser failure, restart primary, try another engine, then require help.","chunk":"04,05"},
+      {"requirement":"Clean chunk-owned Docker resources during per-chunk repository cleanup.","chunk":"03,05"},
+      {"requirement":"Preserve builder sessions across deterministic validation failures where supported.","chunk":"02,05,06"},
+      {"requirement":"Route all seven workflow classes end to end.","chunk":"02,05,06"},
+      {"requirement":"Select worktree, sequential branch, container, or remote sandbox isolation explicitly.","chunk":"02,05"},
+      {"requirement":"Make human gates workflow and risk aware without weakening sensitive paths.","chunk":"02,05,06"},
+      {"requirement":"Aggregate node and provider reliability economics without automatic policy mutation.","chunk":"05,06"},
+      {"requirement":"Preserve Markdown contracts, generated shims, zero-deferral review, and cleanup guarantees.","chunk":"01,03,05,06"},
+      {"requirement":"Keep policy and expertise in Markdown while moving mechanics into executable code.","chunk":"01,02,05"}
+    ]
+  }
+  </script>
+</body>
+</html>

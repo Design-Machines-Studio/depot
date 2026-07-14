@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="brainstorm">
+  <title>Brainstorm: AI Developer Workflow Kernel</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 70rem; --pad: 1rem; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: Canvas; color: CanvasText; }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { font-size: 1.875rem; }
+    h2 { font-size: 1.375rem; margin-top: 2rem; }
+    h3 { font-size: 1.125rem; }
+    a { color: LinkText; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { overflow-x: auto; padding: 0.75rem; border: 1px solid GrayText; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid GrayText; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
+    section { margin-block: 1.5rem; }
+    .skip-link { position: absolute; left: -9999px; top: 0; }
+    .skip-link:focus { left: 0; padding: 0.5rem 1rem; z-index: 10; }
+    .artifact-main { max-width: 70rem; margin-inline: auto; padding: 1rem; }
+    .artifact-header { padding-inline: 1rem; }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: 0.75rem; list-style: none; padding: 0; }
+    .artifact-meta { color: GrayText; font-size: 0.875rem; }
+    .stack > * + * { margin-block-start: 1.5rem; }
+    @media print { nav { display: none; } .artifact-main { max-width: none; } }
+  </style>
+</head>
+<body class="scheme-subtle">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="artifact-header">
+    <nav aria-label="Pipeline artifacts">
+      <ul>
+        <li><a href="original-prompt.md">Original prompt</a></li>
+        <li><a href="../../docs/superpowers/specs/2026-07-14-ai-developer-workflow-kernel-design.md">Design specification</a></li>
+      </ul>
+    </nav>
+    <p class="artifact-meta"><span class="artifact-kind">brainstorm</span> &middot; generated 2026-07-14</p>
+  </header>
+  <main id="content" class="artifact-main center stack">
+    <h1>Brainstorm: AI Developer Workflow Kernel</h1>
+
+    <section aria-labelledby="problem">
+      <h2 id="problem">Problem &amp; Intent</h2>
+      <p>Pipeline and dm-review already model sophisticated AI developer workflows, but many deterministic transitions, retry rules, evidence requirements, and cleanup paths remain encoded as prose interpreted by an agent. The approved design adds a dependency-free Python control plane while preserving Markdown policy, current commands, host adapters, and human gates.</p>
+      <pre><code>Markdown policy and expertise
+            |
+            v
+Host and system adapters
+            |
+            v
+Python workflow kernel
+            |
+            v
+Git, Docker, browsers, agents, validators, receipts</code></pre>
+    </section>
+
+    <section aria-labelledby="visual-decisions">
+      <h2 id="visual-decisions">Approved Design Decisions</h2>
+      <table>
+        <thead><tr><th>Area</th><th>Decision</th><th>Treatment</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td>Architecture</td><td>Additive adapter-first kernel</td><td>Markdown policy over a Python state machine</td><td>Moves mechanics into code without discarding accumulated expertise.</td></tr>
+          <tr><td>Rollout</td><td>Shadow, enforce, then opt-in native</td><td>Compatibility-first migration</td><td>The pipeline must not depend on an unproven rewrite of itself.</td></tr>
+          <tr><td>Runtime</td><td>Python standard library</td><td>Repo-local CLI</td><td>Strong JSON and testing support without a new dependency system.</td></tr>
+          <tr><td>Resources</td><td>Git and Docker ownership</td><td>Run labels, inventories, cleanup receipts</td><td>Worktrees and testing containers both accumulate after interrupted runs.</td></tr>
+          <tr><td>Docker TTL</td><td>Automatic stale cleanup</td><td>Remove only Depot-labeled resources older than 24 hours</td><td>Prevents clutter without broad or unsafe Docker pruning.</td></tr>
+          <tr><td>UX verification</td><td>Declared personas are blocking</td><td>Per-persona scenarios, browser, viewport, screenshot or trace</td><td>A UI run is incomplete if only the default user was exercised.</td></tr>
+          <tr><td>Browser recovery</td><td>Restart, alternate engine, then human escalation</td><td>No silent skip after a required browser node fails</td><td>Tooling snags must not erase visual or UX findings.</td></tr>
+          <tr><td>Scope</td><td>Repo-local engine only</td><td>No daemon or external ticket intake</td><td>Keeps the first implementation bounded and testable.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="mockups">
+      <h2 id="mockups">System Flow</h2>
+      <pre><code>manifest + policy
+       |
+       v
+workflow class and capability resolution
+       |
+       v
+ready node -> host adapter -> evidence
+       |                         |
+       +------ state/event ------+
+                    |
+                    v
+        verify -> retry/fallback/gate
+                    |
+                    v
+          Git + Docker cleanup</code></pre>
+    </section>
+
+    <section aria-labelledby="open-questions">
+      <h2 id="open-questions">Open Questions / Out of Scope</h2>
+      <p>No architectural questions remain. Assessment and research may refine implementation details without reopening the approved choices.</p>
+      <ul>
+        <li>External GitHub, Notion, Slack, and queue ingestion is deferred.</li>
+        <li>Native mode will not become the default in this epic.</li>
+        <li>Routing recommendations remain human-approved.</li>
+      </ul>
+    </section>
+  </main>
+  <footer class="artifact-footer">
+    <p>Pipeline planning artifact. The committed Markdown specification is the approved design source.</p>
+  </footer>
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "brainstorm",
+    "slug": "ai-developer-workflow-kernel",
+    "visualDecisions": [
+      {"area":"architecture","decision":"Add an adapter-first Python workflow kernel while preserving Markdown policy","treatment":"markdown-policy-plus-state-machine","rationale":"Move deterministic mechanics into testable code without discarding accumulated expertise"},
+      {"area":"rollout","decision":"Use shadow, enforce, then opt-in native modes","treatment":"compatibility-first","rationale":"Avoid making the pipeline depend on an unproven rewrite of itself"},
+      {"area":"resources","decision":"Track and clean owned Git and Docker resources","treatment":"run-labels-inventories-and-receipts","rationale":"Testing resources must not accumulate after interrupted runs"},
+      {"area":"ux-verification","decision":"Treat declared personas as blocking for UI and integration work","treatment":"persona-browser-viewport-evidence","rationale":"Running only a default user is incomplete coverage"},
+      {"area":"browser-recovery","decision":"Restart the primary browser, try another engine, then require human help","treatment":"blocking-recovery-ladder","rationale":"Browser failures must not silently erase UX findings"}
+    ]
+  }
+  </script>
+</body>
+</html>
