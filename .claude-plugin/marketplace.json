@@ -444,28 +444,6 @@
           "model-cascade"
         ]
       }
-    },
-    {
-      "name": "workflow-kernel",
-      "source": "./plugins/workflow-kernel",
-      "version": "0.1.0",
-      "author": {
-        "name": "Design Machines",
-        "url": "https://designmachines.studio"
-      },
-      "description": "Dependency-free shared workflow state, event-ledger, transition, receipt, and recovery mechanics for Design Machines automation.",
-      "capabilities_summary": {
-        "skills": 1,
-        "agents": 0,
-        "commands": 0,
-        "tags": [
-          "workflow",
-          "state-machine",
-          "event-ledger",
-          "recovery",
-          "receipts"
-        ]
-      }
     }
   ]
 }
