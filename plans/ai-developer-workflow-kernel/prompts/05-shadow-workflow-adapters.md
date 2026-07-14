@@ -214,7 +214,10 @@ Policy structure processing shares one exact-type taxonomy, rejects cycles, and
 uses Chunk 01's depth `16` and aggregate item limit `10000`. Safety-anchor
 projection charges the graph once before wrapping projected stage sets, ordered
 fields reject sets and frozensets, and only canonical forbidden downgrades accept
-a frozenset whose exact tuples are projected without re-entering them. Economics
+a frozenset. Its exact tuples are projected without re-entry, malformed members
+collapse to one invalid-shape payload, and exact scalar pairs sort by stable keys.
+The normalizer completes pair-shape validation before mode validation, making
+shape and unknown-mode reasons independent of list order and hash seed. Economics
 mode accepts only the exact string `proposal_only`.
 
 Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes

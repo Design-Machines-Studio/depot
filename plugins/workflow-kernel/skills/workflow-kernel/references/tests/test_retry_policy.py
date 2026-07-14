@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from collections.abc import Mapping
@@ -634,6 +637,148 @@ class RetryPolicyTests(unittest.TestCase):
                 injected_error.exception.details["reason_code"],
                 file_error.exception.details["reason_code"],
             )
+
+    def test_downgrade_shape_errors_precede_unknown_modes_in_every_order(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        canonical_payload = json.loads(source.read_text(encoding="utf-8"))
+        malformed = ["remote_sandbox"]
+        unknown = {"from": "remote_sandbox", "to": "unknown"}
+        for items in ([malformed, unknown], [unknown, malformed]):
+            payload = json.loads(json.dumps(canonical_payload))
+            payload["isolation"]["forbidden_downgrades"] = items
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "policy.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    load_policy(path)
+            self.assertEqual(
+                raised.exception.details["reason_code"],
+                detail_digest("invalid_isolation_policy"),
+            )
+
+        code = """
+import json
+from dataclasses import replace
+from workflow_kernel.adapters.base import IsolationMode
+from workflow_kernel.policies import GatePolicy, _policy_document_payload, load_policy
+from workflow_kernel.schema import InvalidSchemaError
+candidate = replace(load_policy(), forbidden_downgrades=frozenset({
+    (IsolationMode.REMOTE_SANDBOX,),
+    (IsolationMode.REMOTE_SANDBOX, 'unknown'),
+}))
+captured = (
+    candidate.retry_budgets, candidate.identical_signature_limit,
+    candidate.risk_human_approval, candidate.isolation_order,
+    candidate.forbidden_downgrades, candidate.workflow_safety_anchor,
+    candidate.economics_mode,
+)
+forbidden = _policy_document_payload(captured)['isolation']['forbidden_downgrades']
+try:
+    GatePolicy(policy_document=candidate)
+except InvalidSchemaError as error:
+    print(json.dumps({
+        'forbidden': forbidden,
+        'reason': error.details['reason_code'],
+    }, sort_keys=True))
+else:
+    raise SystemExit('mixed downgrade policy accepted')
+"""
+        outputs = set()
+        for seed in ("1", "2", "3", "4"):
+            env = dict(os.environ)
+            env.update({
+                "PYTHONHASHSEED": seed,
+                "PYTHONPATH": str(Path(__file__).parents[1]),
+            })
+            result = subprocess.run(
+                [sys.executable, "-c", code], check=True, capture_output=True,
+                text=True, env=env,
+            )
+            outputs.add(result.stdout.strip())
+        self.assertEqual(len(outputs), 1)
+        self.assertEqual(
+            json.loads(next(iter(outputs))), {
+                "forbidden": [None],
+                "reason": detail_digest("invalid_isolation_policy"),
+            },
+        )
+
+    def test_downgrade_payload_and_document_order_are_canonical(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        canonical_payload = json.loads(source.read_text(encoding="utf-8"))
+        valid = [
+            {"from": "remote_sandbox", "to": "container"},
+            {"from": "container", "to": "worktree"},
+        ]
+        documents = []
+        for items in (valid, list(reversed(valid))):
+            payload = json.loads(json.dumps(canonical_payload))
+            payload["isolation"]["forbidden_downgrades"] = items
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "policy.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                documents.append(load_policy(path))
+        injected = GatePolicy(policy_document=replace(
+            load_policy(source),
+            forbidden_downgrades=frozenset({
+                (IsolationMode.REMOTE_SANDBOX, IsolationMode.CONTAINER),
+                (IsolationMode.CONTAINER, IsolationMode.WORKTREE),
+            }),
+        ))._policy
+        self.assertEqual(documents[0], documents[1])
+        self.assertEqual(documents[0], injected)
+
+        code = """
+import json
+from dataclasses import replace
+from workflow_kernel.adapters.base import IsolationMode
+from workflow_kernel.policies import GatePolicy, _policy_document_payload, load_policy
+from workflow_kernel.schema import InvalidSchemaError
+document = replace(load_policy(), forbidden_downgrades=frozenset({
+    ('z-unknown', 'container'),
+    ('a-unknown', 'worktree'),
+    (IsolationMode.CONTAINER, IsolationMode.WORKTREE),
+    (IsolationMode.REMOTE_SANDBOX, IsolationMode.CONTAINER),
+}))
+captured = (
+    document.retry_budgets, document.identical_signature_limit,
+    document.risk_human_approval, document.isolation_order,
+    document.forbidden_downgrades, document.workflow_safety_anchor,
+    document.economics_mode,
+)
+forbidden = _policy_document_payload(captured)['isolation']['forbidden_downgrades']
+try:
+    GatePolicy(policy_document=document)
+except InvalidSchemaError as error:
+    print(json.dumps({
+        'forbidden': forbidden,
+        'reason': error.details['reason_code'],
+    }, sort_keys=True))
+else:
+    raise SystemExit('unknown downgrade policy accepted')
+"""
+        outputs = set()
+        for seed in ("1", "2", "3", "4"):
+            env = dict(os.environ)
+            env.update({
+                "PYTHONHASHSEED": seed,
+                "PYTHONPATH": str(Path(__file__).parents[1]),
+            })
+            result = subprocess.run(
+                [sys.executable, "-c", code], check=True, capture_output=True,
+                text=True, env=env,
+            )
+            outputs.add(result.stdout.strip())
+        self.assertEqual(len(outputs), 1)
+        self.assertEqual(json.loads(next(iter(outputs))), {
+            "forbidden": [
+                {"from": "a-unknown", "to": "worktree"},
+                {"from": "container", "to": "worktree"},
+                {"from": "remote_sandbox", "to": "container"},
+                {"from": "z-unknown", "to": "container"},
+            ],
+            "reason": detail_digest("unknown_isolation_mode"),
+        })
 
     def test_policy_origin_seal_never_executes_malformed_nested_containers(self):
         source = Path(__file__).parents[1] / "workflow-policy.json"

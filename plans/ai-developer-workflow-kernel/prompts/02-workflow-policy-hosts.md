@@ -173,9 +173,12 @@ returns none.
   stage-set wrappers, so file and injected forms consume the same canonical item
   budget. Ordered policy fields accept exact lists or normalized tuples, never
   sets or frozensets; only canonical `forbidden_downgrades` accepts a frozenset.
-  Project each exact downgrade tuple from its already-entered members so short,
-  long, and malformed tuples reach the canonical normalizer without a false
-  cycle.
+  Project each exact downgrade tuple from its already-entered members without a
+  false cycle. Classify the complete frozenset first: any malformed item becomes
+  one deterministic invalid-shape payload; otherwise sort exact scalar pairs by
+  stable keys. The normalizer validates every pair shape before sorting and
+  validating modes, so shape errors outrank unknown values independent of file
+  order or hash seed.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both

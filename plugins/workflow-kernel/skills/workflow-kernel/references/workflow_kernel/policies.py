@@ -382,6 +382,23 @@ def _safety_anchor_payload(
     return result
 
 
+def _downgrade_scalar_sort_key(value: object) -> Optional[tuple[str, object]]:
+    value_type = type(value)
+    if value_type is IsolationMode:
+        return ("str", value.value)
+    if value is None:
+        return ("none", 0)
+    if value_type is bool:
+        return ("bool", int(value))
+    if value_type is int:
+        return ("int", value)
+    if value_type is float:
+        return ("float", value.hex())
+    if value_type is str:
+        return ("str", value)
+    return None
+
+
 def _policy_document_payload(captured: tuple) -> dict:
     (
         retry_budgets, identical_signature_limit, risk_human_approval,
@@ -391,7 +408,8 @@ def _policy_document_payload(captured: tuple) -> dict:
     state = _PolicyTraversal()
     if _classify_policy_value(forbidden_downgrades) == "frozenset":
         kind, identity = state.enter(forbidden_downgrades, 1)
-        forbidden = []
+        projected_pairs = []
+        malformed_pair = False
         try:
             if kind != "frozenset":
                 raise ValueError
@@ -406,20 +424,31 @@ def _policy_document_payload(captured: tuple) -> dict:
                             for member in tuple.__iter__(item)
                         ]
                         if len(projected) == 2:
-                            forbidden.append({
-                                "from": projected[0],
-                                "to": projected[1],
-                            })
+                            sort_keys = tuple(
+                                _downgrade_scalar_sort_key(member)
+                                for member in projected
+                            )
+                            if any(key is None for key in sort_keys):
+                                malformed_pair = True
+                            else:
+                                projected_pairs.append((sort_keys, projected))
                         else:
-                            forbidden.append(projected)
-                    elif item_kind == "enum":
-                        forbidden.append(item.value)
+                            malformed_pair = True
                     else:
-                        forbidden.append(item)
+                        malformed_pair = True
                 finally:
                     state.leave(item_identity)
         finally:
             state.leave(identity)
+        if malformed_pair:
+            forbidden = [None]
+        else:
+            forbidden = [
+                {"from": projected[0], "to": projected[1]}
+                for _, projected in sorted(
+                    projected_pairs, key=lambda pair: pair[0],
+                )
+            ]
     else:
         forbidden = _plain_policy_value(
             forbidden_downgrades, _state=state, _depth=1,
@@ -535,10 +564,31 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
     if len(order) != len(IsolationMode) or set(order) != set(IsolationMode):
         raise invalid_policy("invalid_isolation_order")
     forbidden = set()
-    if type(isolation["forbidden_downgrades"]) is not list:
+    downgrade_items = isolation["forbidden_downgrades"]
+    if type(downgrade_items) is not list:
         raise invalid_policy("invalid_isolation_policy")
-    for item in isolation["forbidden_downgrades"]:
-        item = _exact_keys(item, {"from", "to"}, "invalid_isolation_policy")
+    shaped_downgrades = [
+        _exact_keys(item, {"from", "to"}, "invalid_isolation_policy")
+        for item in downgrade_items
+    ]
+    sortable_downgrades = []
+    for item in shaped_downgrades:
+        sort_keys = (
+            _downgrade_scalar_sort_key(item["from"]),
+            _downgrade_scalar_sort_key(item["to"]),
+        )
+        if all(key is not None for key in sort_keys):
+            sortable_downgrades.append((sort_keys, item))
+        else:
+            sortable_downgrades = []
+            break
+    if sortable_downgrades:
+        shaped_downgrades = [
+            item for _, item in sorted(
+                sortable_downgrades, key=lambda pair: pair[0],
+            )
+        ]
+    for item in shaped_downgrades:
         try:
             forbidden.add((
                 _normalize_enum(

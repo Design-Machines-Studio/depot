@@ -130,8 +130,11 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       for injected and file-loaded graphs. Safety anchors are projected once
       before projected stage sets are wrapped, preserving actual-budget parity.
       Ordered fields reject sets and frozensets; only canonical forbidden
-      downgrades accept a frozenset, and their exact tuples are projected without
-      re-entry so malformed tuple parity reaches the normalizer. Economics mode
+      downgrades accept a frozenset. Exact tuples project without re-entry; any
+      malformed member collapses to one invalid-shape payload, while exact scalar
+      pairs sort by stable keys. The normalizer validates every pair shape before
+      sorted mode validation, so shape and unknown-mode errors do not depend on
+      file order or hash seed. Economics mode
       requires the exact string `proposal_only` before equality. Ordinary executor
       nodes remain open to any compatible declared agentic route; security and
       sensitive nodes stay pinned to Anthropic native Claude. Routes, nodes and
