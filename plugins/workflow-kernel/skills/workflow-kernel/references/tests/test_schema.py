@@ -165,20 +165,101 @@ class SchemaTests(unittest.TestCase):
         self.assertNotIn(b"metadata.example.invalid", encoded)
         self.assertNotIn(b"nested.example.invalid", encoded)
 
-    def test_url_value_policy_rejects_unsupported_schemes_and_preserves_prose(self):
+    def test_standalone_uri_and_content_id_whitespace_is_rejected_across_outputs(self):
+        digest = "sha256:" + "a" * 64
+        for value in (" https://example.invalid/proof ", "\t" + digest, digest + "\n"):
+            with self.subTest(event=value), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"source": value})
+            with self.subTest(receipt=value), self.assertRaises(UnsafePayloadError):
+                encode_receipt({"source": value})
+            with self.subTest(state=value), self.assertRaises(UnsafePayloadError):
+                RunState.new(value, "2026-07-14T00:00:00Z")
+
+    def test_non_hierarchical_uri_schemes_fail_closed_across_outputs(self):
+        for value in (
+            "data:text/plain,never-persist-this-fixture",
+            "javascript:alert(never-persist-this-fixture)",
+            "mailto:never-persist-this-fixture@example.invalid",
+            "urn:example:never-persist-this-fixture",
+            "s3:bucket/never-persist-this-fixture",
+        ):
+            with self.subTest(event=value), self.assertRaises(UnsafePayloadError):
+                WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"source": value})
+            with self.subTest(receipt=value), self.assertRaises(UnsafePayloadError):
+                encode_receipt({"source": value})
+            with self.subTest(state=value), self.assertRaises(UnsafePayloadError):
+                RunState.new(value, "2026-07-14T00:00:00Z")
+
+    def test_embedded_http_url_is_digested_across_event_receipt_and_state(self):
+        sentinel = "never-persist-this-embedded-token"
+        url = "https://example.invalid/proof/" + sentinel
+        digest = "url-sha256:" + hashlib.sha256(url.encode("utf-8")).hexdigest()
+        prose = "See " + url + " for context."
+        normalized = "See " + digest + " for context."
+
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"note": prose})
+        receipt = encode_receipt({"note": prose})
+        state = RunState.new(prose, "2026-07-14T00:00:00Z")
+
+        self.assertEqual(event.payload["note"], normalized)
+        self.assertEqual(json.loads(receipt)["note"], normalized)
+        self.assertEqual(state.run_id, normalized)
+        for encoded in (encode_event(event), receipt, encode_state(state)):
+            self.assertNotIn(sentinel.encode(), encoded)
+            self.assertNotIn(b"example.invalid", encoded)
+            self.assertNotIn(url.encode(), encoded)
+            self.assertIn(digest.encode(), encoded)
+
+    def test_multiple_embedded_urls_preserve_punctuation_and_are_idempotent(self):
+        first = "https://one.example.invalid/path"
+        second = "http://two.example.invalid/report"
+        first_digest = "url-sha256:" + hashlib.sha256(first.encode("utf-8")).hexdigest()
+        second_digest = "url-sha256:" + hashlib.sha256(second.encode("utf-8")).hexdigest()
+        prose = "Compare \"" + first + "\", then (" + second + ")."
+        normalized = "Compare \"" + first_digest + "\", then (" + second_digest + ")."
+
+        first_event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                    "2026-07-14T00:00:00Z", {"note": prose})
+        second_event = WorkflowEvent.from_dict(first_event.to_dict())
+        first_receipt = encode_receipt({"note": prose})
+        second_receipt = encode_receipt(json.loads(first_receipt))
+
+        self.assertEqual(first_event.payload["note"], normalized)
+        self.assertEqual(second_event.payload["note"], normalized)
+        self.assertEqual(first_receipt, second_receipt)
+        self.assertEqual(encode_event(first_event), encode_event(second_event))
+
+    def test_embedded_unsafe_and_unsupported_uris_fail_without_echoing_values(self):
+        sentinel = "never-persist-this-unsafe-token"
+        values = (
+            "See https://user:" + sentinel + "@example.invalid/proof now",
+            "See https://example.invalid/proof?access_token=" + sentinel + " now",
+            "See https://example.invalid/proof#" + sentinel + " now",
+            "See data:text/plain," + sentinel + " now",
+        )
+        for value in values:
+            with self.subTest(value=value):
+                with self.assertRaises(UnsafePayloadError) as event_error:
+                    WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                  "2026-07-14T00:00:00Z", {"note": value})
+                with self.assertRaises(UnsafePayloadError) as receipt_error:
+                    encode_receipt({"note": value})
+                with self.assertRaises(UnsafePayloadError) as state_error:
+                    RunState.new(value, "2026-07-14T00:00:00Z")
+                for raised in (event_error, receipt_error, state_error):
+                    self.assertNotIn(sentinel, json.dumps(raised.exception.to_dict()))
+
+    def test_non_uri_prose_and_local_paths_remain_unchanged(self):
         preserved = {
-            "note": "See https://example.invalid/proof for context",
-            "leading_url_prose": "https://example.invalid/proof is documented here",
+            "note": "See the proof for context",
             "local": "artifacts/review/report.json",
         }
         event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
                               "2026-07-14T00:00:00Z", preserved)
         self.assertEqual(event.to_dict()["payload"], preserved)
-
-        for value in ("s3://bucket/report.json", "ftp://example.invalid/report.json"):
-            with self.subTest(value=value), self.assertRaises(UnsafePayloadError):
-                WorkflowEvent(1, 0, "run-1", None, "run.initialized",
-                              "2026-07-14T00:00:00Z", {"source_url": value})
 
     def test_url_values_are_normalized_in_state_identity_and_evidence(self):
         sentinel = "never-persist-this-state-identity"

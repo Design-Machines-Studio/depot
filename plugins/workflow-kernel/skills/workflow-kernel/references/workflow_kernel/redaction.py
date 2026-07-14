@@ -22,7 +22,10 @@ _SECRET_PARTS = (
 )
 _CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
 _ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
-_URL_VALUE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://\S*\Z")
+_WHOLE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:\S*\Z")
+_EMBEDDED_URI = re.compile(r"(?<![A-Za-z0-9+.-])(?P<uri>[A-Za-z][A-Za-z0-9+.-]*:\S+)")
+_TRAILING_PUNCTUATION = frozenset(".,;!?\"'")
+_CLOSING_PUNCTUATION = {")": "(", "]": "[", "}": "{"}
 
 
 def is_secret_key(key: str) -> bool:
@@ -64,11 +67,41 @@ def normalize_evidence_reference(reference: str) -> str:
     return reference
 
 
-def normalize_url_value(value: str) -> str:
-    """Normalize a standalone URL value while preserving prose and local strings."""
-    if _URL_VALUE.fullmatch(value):
+def _separate_uri_punctuation(token: str) -> tuple[str, str]:
+    """Separate prose punctuation that cannot safely be part of a URI token."""
+    suffix = ""
+    while token:
+        trailing = token[-1]
+        if trailing in _TRAILING_PUNCTUATION:
+            token = token[:-1]
+            suffix = trailing + suffix
+            continue
+        opening = _CLOSING_PUNCTUATION.get(trailing)
+        if opening is not None and token.count(trailing) > token.count(opening):
+            token = token[:-1]
+            suffix = trailing + suffix
+            continue
+        break
+    return token, suffix
+
+
+def normalize_durable_string(value: str) -> str:
+    """Digest supported URIs and reject unsupported ones in durable strings."""
+    stripped = value.strip()
+    if stripped != value and (_CONTENT_ID.fullmatch(stripped) or _WHOLE_URI.fullmatch(stripped)):
+        raise ValueError("standalone URI contains surrounding whitespace")
+    if _CONTENT_ID.fullmatch(value):
+        return value
+    if _WHOLE_URI.fullmatch(value):
         return normalize_evidence_reference(value)
-    return value
+
+    def replace_uri(match: re.Match) -> str:
+        token, suffix = _separate_uri_punctuation(match.group("uri"))
+        if _CONTENT_ID.fullmatch(token):
+            return token + suffix
+        return normalize_evidence_reference(token) + suffix
+
+    return _EMBEDDED_URI.sub(replace_uri, value)
 
 
 def _mutable_mapping(value: dict) -> dict:
@@ -111,7 +144,7 @@ class _Traversal:
                 raise TypeError("string exceeds maximum length")
             if key.casefold() == "reference":
                 return normalize_evidence_reference(value)
-            return normalize_url_value(value)
+            return normalize_durable_string(value)
         if isinstance(value, int):
             return value
         if isinstance(value, float):

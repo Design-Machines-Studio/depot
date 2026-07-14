@@ -101,13 +101,19 @@ one or more `/`-separated ASCII segments matching
 `[A-Za-z0-9_][A-Za-z0-9._-]*`; absolute paths, empty or dot segments,
 backslashes, controls, and ambiguous query or fragment syntax are rejected.
 Content IDs use exactly `sha256:<64 lowercase hex>`. Replay also accepts the
-kernel-generated `url-sha256:<64 lowercase hex>` form. Every exact standalone
-`<scheme>://...` string is treated as URL-valued regardless of its field name;
-ordinary prose containing a URL and local strings remain unchanged. An `http`
-or `https` value must have an authority and valid port with no userinfo, query,
-or fragment; the kernel immediately replaces the entire original UTF-8 value
-with its deterministic `url-sha256:` digest. No URL component enters events,
-receipts, or state. Standalone values using all other schemes are rejected.
+kernel-generated `url-sha256:<64 lowercase hex>` form. Valid content IDs are
+exempt from URI normalization, but surrounding whitespace on a standalone URI
+or content ID is rejected as ambiguous. Every whole-string URI candidate
+matching `[A-Za-z][A-Za-z0-9+.-]*:` and every URI token embedded in prose is
+treated as URI-valued regardless of its field name. An exact or embedded `http`
+or `https` URI must have an authority and valid port with no userinfo, query, or
+fragment; the kernel immediately replaces each complete original UTF-8 URI
+token with its deterministic `url-sha256:` digest. For embedded URIs,
+surrounding prose and punctuation are preserved, multiple tokens normalize
+deterministically, and repeated normalization is idempotent. No original URL
+component enters events, receipts, or state. Exact and embedded values using
+all other URI schemes are rejected. Local paths and prose without URI tokens
+remain unchanged.
 
 Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and
