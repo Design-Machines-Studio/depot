@@ -1,11 +1,20 @@
-"""Workflow kernel host adapter contracts and deterministic fakes."""
+"""Workflow kernel host contracts, closed builder outcomes, and safe persistence.
+
+Builder observations project to ``evidence.recorded`` events; they are never
+node lifecycle transitions. ``SessionHandle`` and ``SessionResult`` expose safe
+public projections. ``ResumeStateBlob`` is the supported persistence boundary:
+its raw bytes contain an opaque handle and belong only in a package-owned
+trusted store. The checksum detects corruption and does not claim authenticity.
+"""
 
 from importlib import import_module
 
 from .base import (
-    AttemptLedger, BuilderObservation, BuilderSessionDecision, FailureReason, GateDecision,
+    AttemptLedger, BuilderObservation, BuilderOutcome, BuilderSessionDecision,
+    FailureReason, GateDecision,
     HostAdapter, HostCapabilities, HostCapability, IsolationDecision, IsolationMode,
-    IsolationRequirements, NodeSpec, RetryDecision, SessionHandle, SessionResult,
+    IsolationRequirements, NodeSpec, ResumeStateBlob, ResumeStateContext,
+    RetryDecision, SessionHandle, SessionResult, SessionStatus,
     ValidationFeedback, WorkflowClass, WorkflowContext,
 )
 
@@ -31,10 +40,12 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
 __all__ = [
-    "AttemptLedger", "BuilderObservation", "BuilderSessionDecision", "BuilderSessionManager",
+    "AttemptLedger", "BuilderObservation", "BuilderOutcome", "BuilderSessionDecision",
+    "BuilderSessionManager",
     "FailureReason", "FakeHostAdapter", "GateDecision", "HostAdapter",
     "HostCapabilities", "HostCapability", "IsolationDecision", "IsolationMode",
     "IsolationRequirements", "IsolationSelector", "NodeSpec", "RetryDecision",
-    "SessionHandle", "SessionResult", "ValidationFeedback", "WorkflowClass",
+    "ResumeStateBlob", "ResumeStateContext", "SessionHandle", "SessionResult",
+    "SessionStatus", "ValidationFeedback", "WorkflowClass",
     "WorkflowContext", "capabilities_from_harness_profile",
 ]

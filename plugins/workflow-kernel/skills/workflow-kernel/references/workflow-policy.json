@@ -24,7 +24,6 @@
     "native_dispatch",
     "companion_dispatch",
     "wrapper_dispatch",
-    "openrouter_exec",
     "session_resume",
     "remote_sandbox",
     "container",
@@ -32,7 +31,8 @@
     "sequential_branch",
     "claude_execution",
     "codex_execution",
-    "openrouter_execution"
+    "openrouter_execution",
+    "anthropic_native_execution"
   ],
   "economics": {"mode": "proposal_only"}
 }

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .adapters.base import (
+    DEFAULT_EXECUTOR_CAPABILITY, EXECUTOR_CAPABILITIES, EXECUTORS, GATE_KINDS,
     HostCapability, NodeSpec, WorkflowClass, WorkflowContext, invalid_policy,
 )
 from .policies import GatePolicy
@@ -16,84 +17,8 @@ from .policies import GatePolicy
 
 WORKFLOW_CLASSES_SCHEMA_VERSION = 1
 DEFAULT_CLASSES_PATH = Path(__file__).resolve().parent.parent / "workflow-classes.json"
-_GATE_KINDS = frozenset({
-    "cleanup", "deterministic_validation", "evidence", "human_approval",
-    "investigation_promotion", "next_action", "risk",
-})
-_EXECUTORS = frozenset({"claude", "codex", "openrouter"})
-_EXECUTOR_CAPABILITIES = {
-    "claude": HostCapability.CLAUDE_EXECUTION,
-    "codex": HostCapability.CODEX_EXECUTION,
-    "openrouter": HostCapability.OPENROUTER_EXECUTION,
-}
-_OVERRIDABLE_BUILDERS = frozenset({
-    (WorkflowClass.CHORE, "build"),
-    (WorkflowClass.BUG, "build_fix"),
-    (WorkflowClass.FEATURE, "build"),
-    (WorkflowClass.HOTFIX, "build"),
-    (WorkflowClass.MIGRATION, "schema_data_change"),
-})
-
-# These safety boundaries are code-owned invariants, not editable data defaults.
-_MANDATORY_CONTRACTS = {
-    WorkflowClass.CHORE: (
-        ("assess", (), None, (), None),
-        ("build", ("assess",), None, (), "codex"),
-        ("deterministic_validation", ("build",), "deterministic_validation", ("validation_evidence",), None),
-        ("review", ("deterministic_validation",), None, (), "claude"),
-        ("cleanup", ("review",), "cleanup", (), None),
-    ),
-    WorkflowClass.BUG: (
-        ("reproduce", (), None, (), None),
-        ("build_fix", ("reproduce",), None, (), "codex"),
-        ("regression_validation", ("build_fix",), "deterministic_validation", ("regression_evidence",), None),
-        ("review", ("regression_validation",), None, (), "claude"),
-        ("cleanup", ("review",), "cleanup", (), None),
-    ),
-    WorkflowClass.FEATURE: (
-        ("assess", (), None, (), None),
-        ("research_plan", ("assess",), "evidence", ("research_plan",), None),
-        ("build", ("research_plan",), None, (), "codex"),
-        ("validation", ("build",), "deterministic_validation", ("validation_evidence",), None),
-        ("review", ("validation",), None, (), "claude"),
-        ("requirements_evidence", ("review",), "evidence", ("requirements_evidence",), None),
-        ("cleanup", ("requirements_evidence",), "cleanup", (), None),
-    ),
-    WorkflowClass.HOTFIX: (
-        ("reproduce_impact", (), "evidence", ("impact_assessment",), None),
-        ("build", ("reproduce_impact",), None, (), "codex"),
-        ("focused_validation", ("build",), "deterministic_validation", ("focused_validation_evidence",), None),
-        ("risk_gate", ("focused_validation",), "risk", ("risk_assessment",), None),
-        ("review", ("risk_gate",), None, (), "claude"),
-        ("cleanup", ("review",), "cleanup", (), None),
-    ),
-    WorkflowClass.SECURITY: (
-        ("threat_risk_evidence", (), "evidence", ("threat_model", "risk_assessment"), None),
-        ("security_build", ("threat_risk_evidence",), None, (), "claude"),
-        ("validation", ("security_build",), "deterministic_validation", ("validation_evidence",), None),
-        ("security_review", ("validation",), "evidence", ("security_review",), "claude"),
-        ("human_gate", ("security_review",), "human_approval", ("risk_assessment", "security_review"), None),
-        ("cleanup", ("human_gate",), "cleanup", (), None),
-    ),
-    WorkflowClass.INVESTIGATION: (
-        ("hypothesis", (), "evidence", ("hypothesis",), None),
-        ("evidence_gathering", ("hypothesis",), "evidence", ("investigation_evidence",), None),
-        ("conclusion_next_action", ("evidence_gathering",), "next_action", ("conclusion", "next_action"), None),
-        ("cleanup", ("conclusion_next_action",), "cleanup", (), None),
-    ),
-    WorkflowClass.MIGRATION: (
-        ("preflight", (), "evidence", ("migration_preflight",), None),
-        ("schema_data_change", ("preflight",), None, (), "codex"),
-        ("compatibility_validation", ("schema_data_change",), "deterministic_validation", ("compatibility_evidence",), None),
-        ("rollback_evidence", ("compatibility_validation",), "evidence", ("rollback_evidence",), None),
-        ("review", ("rollback_evidence",), "evidence", ("review_evidence",), "claude"),
-        ("human_gate", ("review",), "human_approval", ("rollback_evidence", "review_evidence"), None),
-        ("cleanup", ("human_gate",), "cleanup", (), None),
-    ),
-}
-_PROMOTION_CONTRACT = (
-    ("promotion_gate", ("evidence_gathering",), "investigation_promotion", ("promotion_decision",), None, None, False),
-    ("promoted_build", ("promotion_gate",), None, (), "codex", HostCapability.CODEX_EXECUTION, True),
+DEFAULT_CLASSES_SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent / "workflow-classes-schema.json"
 )
 
 
@@ -143,9 +68,13 @@ def _node_record(value: object) -> dict:
         type(item) is not str or not item for item in required_evidence
     ) or len(required_evidence) != len(set(required_evidence)):
         raise invalid_policy("invalid_node_evidence")
-    if value["gate_kind"] is not None and value["gate_kind"] not in _GATE_KINDS:
+    if value["gate_kind"] is not None and (
+        type(value["gate_kind"]) is not str or value["gate_kind"] not in GATE_KINDS
+    ):
         raise invalid_policy("unknown_gate_kind")
-    if value["executor"] is not None and value["executor"] not in _EXECUTORS:
+    if value["executor"] is not None and (
+        type(value["executor"]) is not str or value["executor"] not in EXECUTORS
+    ):
         raise invalid_policy("unknown_executor")
     try:
         required_capability = (
@@ -156,7 +85,9 @@ def _node_record(value: object) -> dict:
         raise invalid_policy("unknown_capability_name") from None
     if type(value["executor_overridable"]) is not bool:
         raise invalid_policy("invalid_workflow_node")
-    if required_capability != _EXECUTOR_CAPABILITIES.get(value["executor"]):
+    if value["executor"] is None and required_capability is not None:
+        raise invalid_policy("inconsistent_executor_capability")
+    if value["executor"] is not None and required_capability not in EXECUTOR_CAPABILITIES[value["executor"]]:
         raise invalid_policy("inconsistent_executor_capability")
     if value["executor"] is None and value["executor_overridable"]:
         raise invalid_policy("inconsistent_executor_capability")
@@ -219,24 +150,73 @@ def _validate_graph(records: tuple[dict, ...]) -> None:
         raise invalid_policy("cleanup_terminal_invariant")
 
 
-def _validate_mandatory_contract(kind: WorkflowClass, records: tuple[dict, ...]) -> None:
-    by_id = {record["id"]: record for record in records}
-    for node_id, dependencies, gate_kind, evidence, executor in _MANDATORY_CONTRACTS[kind]:
-        record = by_id.get(node_id)
-        expected_capability = _EXECUTOR_CAPABILITIES.get(executor)
-        expected_overridable = (kind, node_id) in _OVERRIDABLE_BUILDERS
-        if record is None or (
-            record["depends_on"], record["gate_kind"], record["required_evidence"],
-            record["executor"], record["required_capability"],
+def _load_boundaries() -> dict:
+    try:
+        schema = json.loads(DEFAULT_CLASSES_SCHEMA_PATH.read_text(encoding="utf-8"))
+        boundaries = schema["x-kernel-boundaries"]
+    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
+        raise invalid_policy("invalid_workflow_boundary_schema") from None
+    if type(boundaries) is not dict or set(boundaries) != {"classes", "promotion"}:
+        raise invalid_policy("invalid_workflow_boundary_schema")
+    return boundaries
+
+
+def _validate_boundary(records: tuple[dict, ...], boundary: object, reason: str) -> None:
+    if type(boundary) is not dict or set(boundary) != {
+        "node_ids", "edges", "gates", "executors", "terminal_node",
+    }:
+        raise invalid_policy("invalid_workflow_boundary_schema")
+    try:
+        node_ids = tuple(boundary["node_ids"])
+        edges = tuple(tuple(item) for item in boundary["edges"])
+        gates = {
+            node_id: (value["gate_kind"], tuple(value["required_evidence"]))
+            for node_id, value in boundary["gates"].items()
+        }
+        executors = {
+            node_id: (
+                value["executor"], value["required_capability"],
+                value["executor_overridable"],
+            )
+            for node_id, value in boundary["executors"].items()
+        }
+        terminal = boundary["terminal_node"]
+    except (AttributeError, KeyError, TypeError):
+        raise invalid_policy("invalid_workflow_boundary_schema") from None
+    actual_edges = tuple(
+        (dependency, record["id"])
+        for record in records for dependency in record["depends_on"]
+    )
+    actual_gates = {
+        record["id"]: (record["gate_kind"], record["required_evidence"])
+        for record in records if record["gate_kind"] is not None
+    }
+    actual_executors = {
+        record["id"]: (
+            record["executor"],
+            record["required_capability"].value,
             record["executor_overridable"],
-        ) != (
-            dependencies, gate_kind, evidence, executor, expected_capability,
-            expected_overridable,
-        ):
-            raise invalid_policy("mandatory_workflow_boundary_changed")
+        )
+        for record in records if record["executor"] is not None
+    }
+    if (
+        tuple(record["id"] for record in records) != node_ids
+        or actual_edges != edges
+        or actual_gates != gates
+        or actual_executors != executors
+        or not records
+        or records[-1]["id"] != terminal
+    ):
+        raise invalid_policy(reason)
 
 
 def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...]]:
+    boundaries = _load_boundaries()
+    class_boundaries = boundaries["classes"]
+    if type(class_boundaries) is not dict or set(class_boundaries) != {
+        kind.value for kind in WorkflowClass
+    }:
+        raise invalid_policy("invalid_workflow_boundary_schema")
     source = Path(path) if path is not None else DEFAULT_CLASSES_PATH
     try:
         payload = json.loads(source.read_text(encoding="utf-8"))
@@ -258,7 +238,10 @@ def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...
             raise invalid_policy("invalid_workflow_class")
         records = tuple(_node_record(item) for item in definition["nodes"])
         _validate_graph(records)
-        _validate_mandatory_contract(kind, records)
+        _validate_boundary(
+            records, class_boundaries[kind.value],
+            "mandatory_workflow_boundary_changed",
+        )
         result[kind] = records
     promotion = payload["promotion"]
     if type(promotion) is not dict or set(promotion) != {"investigation"}:
@@ -267,13 +250,9 @@ def _load_templates(path: Optional[Path]) -> dict[WorkflowClass, tuple[dict, ...
     if type(promoted) is not dict or set(promoted) != {"nodes"}:
         raise invalid_policy("invalid_promotion_policy")
     promotion_nodes = tuple(_node_record(item) for item in promoted["nodes"])
-    promotion_contract = tuple((
-        record["id"], record["depends_on"], record["gate_kind"],
-        record["required_evidence"], record["executor"],
-        record["required_capability"], record["executor_overridable"],
-    ) for record in promotion_nodes)
-    if promotion_contract != _PROMOTION_CONTRACT:
-        raise invalid_policy("promotion_boundary_invalid")
+    _validate_boundary(
+        promotion_nodes, boundaries["promotion"], "promotion_boundary_invalid",
+    )
     result["promotion"] = promotion_nodes
     return result
 
@@ -325,17 +304,21 @@ class WorkflowTemplates:
         nodes = []
         for record in records:
             executor = record["executor"]
+            required_capability = record["required_capability"]
             executor_overridable = record["executor_overridable"]
             routing_reason = None
             if executor is not None:
                 if sensitive:
                     executor = "claude"
+                    required_capability = HostCapability.ANTHROPIC_NATIVE_EXECUTION
                     routing_reason = "sensitive_path_override"
                 elif normalized is WorkflowClass.SECURITY:
                     executor = "claude"
+                    required_capability = HostCapability.ANTHROPIC_NATIVE_EXECUTION
                     routing_reason = "security_workflow_override"
                 elif context.requested_executor is not None and executor_overridable:
                     executor = context.requested_executor
+                    required_capability = DEFAULT_EXECUTOR_CAPABILITY[executor]
                     routing_reason = "requested_executor"
                 else:
                     routing_reason = "workflow_default"
@@ -350,7 +333,7 @@ class WorkflowTemplates:
                 executor=executor,
                 routing_reason=routing_reason,
                 gate_decision=gate,
-                required_capability=_EXECUTOR_CAPABILITIES.get(executor),
+                required_capability=required_capability,
                 executor_overridable=executor_overridable,
             ))
         return tuple(nodes)

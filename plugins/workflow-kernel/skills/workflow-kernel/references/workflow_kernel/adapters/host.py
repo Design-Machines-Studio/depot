@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import json
 import hashlib
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Optional
 
 from .base import (
-    BuilderObservation, BuilderSessionDecision, HostAdapter, HostCapabilities,
-    HostCapability, NodeSpec, SessionHandle, SessionResult, ValidationFeedback,
-    _snapshot_session_handle, invalid_policy,
+    BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
+    HostCapability, MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob,
+    ResumeStateContext, SessionHandle, SessionResult, ValidationFeedback,
+    _snapshot_session_handle, _snapshot_session_result, invalid_policy,
 )
 
 
@@ -20,7 +20,7 @@ _ROLE_CAPABILITIES = {
     "native": HostCapability.NATIVE_DISPATCH,
     "codex_companion": HostCapability.COMPANION_DISPATCH,
     "wrapper": HostCapability.WRAPPER_DISPATCH,
-    "openrouter_exec": HostCapability.OPENROUTER_EXEC,
+    "openrouter_exec": HostCapability.WRAPPER_DISPATCH,
     "none": None,
 }
 
@@ -57,18 +57,43 @@ def capabilities_from_harness_profile(
         capability = _ROLE_CAPABILITIES[kind]
         if capability is not None:
             declared.add(capability)
-        if kind == "codex_companion":
-            declared.add(HostCapability.CODEX_EXECUTION)
-        if kind in ("wrapper", "openrouter_exec"):
-            declared.add(HostCapability.OPENROUTER_EXECUTION)
-        if kind == "native":
-            if host_name == "claude-code":
-                declared.add(HostCapability.CLAUDE_EXECUTION)
-            elif host_name == "codex":
-                declared.add(HostCapability.CODEX_EXECUTION)
-        models = role.get("models", [])
-        if not isinstance(models, list) or any(type(model) is not str for model in models):
+        if kind == "none":
+            if set(role) != {"kind"}:
+                raise invalid_policy("invalid_harness_profile")
+            continue
+        if set(role) != {"kind", "probe", "models"}:
             raise invalid_policy("invalid_harness_profile")
+        probe = role["probe"]
+        models = role["models"]
+        expected_probes = {
+            "native": {"claude", "codex"},
+            "codex_companion": {"codex"},
+            "wrapper": {"openrouter"},
+            "openrouter_exec": {"openrouter"},
+        }[kind]
+        if type(probe) is not str or probe not in expected_probes:
+            raise invalid_policy("invalid_harness_profile")
+        if not isinstance(models, list) or not models or any(
+            type(model) is not str or not model for model in models
+        ):
+            raise invalid_policy("invalid_harness_profile")
+        if kind in ("native", "codex_companion") and (
+            (probe == "claude" and any(
+                model.startswith("openai/") or model.startswith("gpt-")
+                for model in models
+            ))
+            or (probe == "codex" and any(
+                model.startswith("anthropic/") for model in models
+            ))
+        ):
+            raise invalid_policy("invalid_harness_profile")
+        if kind == "native" and probe == "claude":
+            declared.add(HostCapability.CLAUDE_EXECUTION)
+            declared.add(HostCapability.ANTHROPIC_NATIVE_EXECUTION)
+        elif kind in ("native", "codex_companion") and probe == "codex":
+            declared.add(HostCapability.CODEX_EXECUTION)
+        elif kind in ("wrapper", "openrouter_exec"):
+            declared.add(HostCapability.OPENROUTER_EXECUTION)
         if any(model.startswith("anthropic/") for model in models):
             declared.add(HostCapability.CLAUDE_EXECUTION)
         if any(model.startswith("openai/") or model.startswith("gpt-") for model in models):
@@ -125,6 +150,12 @@ def _timestamp(value: str) -> datetime:
 
 
 class BuilderSessionManager:
+    """Owns capability-safe dispatch/resume and trusted-store persistence.
+
+    Resume blobs contain real opaque handles and are intended only for a
+    package-owned trusted store. Their checksum detects corruption; it does not
+    claim authenticity. Public repr/projections remain redacted.
+    """
     def __init__(self, adapter: HostAdapter, max_age_seconds: int = 86_400):
         if type(max_age_seconds) is not int or max_age_seconds < 0:
             raise invalid_policy("invalid_session_age_limit")
@@ -141,38 +172,69 @@ class BuilderSessionManager:
     def dispatch(self, node: NodeSpec) -> BuilderSessionDecision:
         if type(node) is not NodeSpec:
             raise invalid_policy("invalid_node_spec")
+        blocked = self._gate_preflight(node)
+        if blocked is not None:
+            return blocked
         capabilities = self._safe_capabilities()
         if capabilities is None:
-            return _blocked_decision("adapter_capabilities_failed")
-        return self._dispatch_with_capabilities(node, capabilities)
+            return BuilderSessionDecision(BuilderOutcome.ADAPTER_CAPABILITIES_FAILED)
+        preflight = self._capability_preflight(node, capabilities)
+        if preflight is not None:
+            return preflight
+        return self._dispatch_with_capabilities(node, capabilities, replacement=False)
+
+    def _gate_preflight(
+        self, node: NodeSpec,
+    ) -> Optional[BuilderSessionDecision]:
+        if not node.gate_decision.allowed:
+            return BuilderSessionDecision(BuilderOutcome.NODE_GATE_BLOCKED)
+        return None
+
+    def _capability_preflight(
+        self, node: NodeSpec, capabilities: HostCapabilities,
+    ) -> Optional[BuilderSessionDecision]:
+        if (
+            node.required_capability is None
+            or not capabilities.supports(node.required_capability)
+        ):
+            return BuilderSessionDecision(BuilderOutcome.HOST_CAPABILITY_UNAVAILABLE)
+        return None
 
     def _dispatch_with_capabilities(
         self,
         node: NodeSpec,
         capabilities: HostCapabilities,
+        *,
+        replacement: bool,
     ) -> BuilderSessionDecision:
-        if not node.gate_decision.allowed:
-            return _blocked_decision("node_gate_blocked")
-        if (
-            node.required_capability is None
-            or not capabilities.supports(node.required_capability)
-        ):
-            return _blocked_decision("host_capability_unavailable")
         try:
             candidate = self._adapter.dispatch(node)
         except Exception:
-            return _blocked_decision("adapter_dispatch_failed")
+            return BuilderSessionDecision(
+                BuilderOutcome.REPLACEMENT_ADAPTER_DISPATCH_FAILED
+                if replacement else BuilderOutcome.ADAPTER_DISPATCH_FAILED
+            )
         if candidate is None:
-            return _blocked_decision("session_handle_unavailable")
+            return BuilderSessionDecision(
+                BuilderOutcome.REPLACEMENT_SESSION_HANDLE_UNAVAILABLE
+                if replacement else BuilderOutcome.SESSION_HANDLE_UNAVAILABLE
+            )
         try:
             handle = _snapshot_session_handle(candidate)
         except Exception:
-            return _blocked_decision("invalid_session_handle")
+            return BuilderSessionDecision(
+                BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
+                if replacement else BuilderOutcome.INVALID_SESSION_HANDLE
+            )
         if handle.host_name != capabilities.host_name:
-            return _blocked_decision("invalid_session_handle")
+            return BuilderSessionDecision(
+                BuilderOutcome.REPLACEMENT_INVALID_SESSION_HANDLE
+                if replacement else BuilderOutcome.INVALID_SESSION_HANDLE
+            )
         return BuilderSessionDecision(
-            "dispatched", "builder_dispatched", handle, None, False,
-            (BuilderObservation.BUILDER_DISPATCHED,),
+            BuilderOutcome.REPLACEMENT_DISPATCHED if replacement
+            else BuilderOutcome.BUILDER_DISPATCHED,
+            handle,
         )
 
     def _can_resume(
@@ -200,79 +262,95 @@ class BuilderSessionManager:
     ) -> BuilderSessionDecision:
         if type(node) is not NodeSpec or type(feedback) is not ValidationFeedback:
             raise invalid_policy("invalid_builder_resume_request")
+        blocked = self._gate_preflight(node)
+        if blocked is not None:
+            return blocked
         capabilities = self._safe_capabilities()
         if capabilities is None:
-            return _blocked_decision("adapter_capabilities_failed")
+            return BuilderSessionDecision(BuilderOutcome.ADAPTER_CAPABILITIES_FAILED)
+        preflight = self._capability_preflight(node, capabilities)
+        if preflight is not None:
+            return preflight
         if self._can_resume(handle, now, capabilities):
             try:
                 result = self._adapter.resume(_snapshot_session_handle(handle), feedback)
             except Exception:
                 result = None
             if type(result) is SessionResult:
-                return BuilderSessionDecision(
-                    "resumed", "session_resumed", handle, result, True,
-                    (BuilderObservation.SESSION_RESUMED,),
-                )
-        replacement = self._dispatch_with_capabilities(node, capabilities)
-        if replacement.status != "dispatched":
-            if replacement.reason_code in {
-                "adapter_dispatch_failed", "adapter_capabilities_failed",
-                "host_capability_unavailable", "node_gate_blocked", "invalid_session_handle",
-            }:
-                return replacement
-            return BuilderSessionDecision(
-                "resume_unavailable", "session_resume_unavailable", None, None, False,
-                (BuilderObservation.SESSION_RESUME_UNAVAILABLE,),
-            )
-        return BuilderSessionDecision(
-            "replacement_dispatched", "session_resume_unavailable", replacement.handle, None,
-            False, (BuilderObservation.SESSION_RESUME_UNAVAILABLE,
-                    BuilderObservation.BUILDER_REPLACEMENT_DISPATCHED),
-        )
+                try:
+                    safe_result = _snapshot_session_result(result)
+                except Exception:
+                    safe_result = None
+                if safe_result is not None:
+                    return BuilderSessionDecision(
+                        BuilderOutcome.SESSION_RESUMED, handle, safe_result,
+                    )
+        return self._dispatch_with_capabilities(node, capabilities, replacement=True)
 
-    def _serialize_resume_state(self, handle: SessionHandle) -> "_DurableResumeState":
+    def serialize_resume_state(
+        self, handle: SessionHandle, context: ResumeStateContext,
+    ) -> ResumeStateBlob:
+        """Create a context-bound opaque blob for a trusted package store."""
         snapshot = _snapshot_session_handle(handle)
+        context = _snapshot_resume_context(context)
         handle_payload = {
             "host_name": snapshot.host_name,
             "opaque_handle": snapshot.opaque_handle,
             "created_at": snapshot.created_at,
             "resume_capable": snapshot.resume_capable,
         }
-        canonical = _canonical_json(handle_payload)
         payload = {
             "schema_version": 1,
+            "context": context.to_dict(),
             "handle": handle_payload,
-            "checksum": hashlib.sha256(canonical).hexdigest(),
+            "checksum": hashlib.sha256(
+                _canonical_json({"context": context.to_dict(), "handle": handle_payload})
+            ).hexdigest(),
         }
-        return _DurableResumeState(_canonical_json(payload))
+        return ResumeStateBlob(_canonical_json(payload))
 
-    def _restore_resume_state(
+    def restore_resume_state(
         self,
         state: Optional[object],
+        expected_context: ResumeStateContext,
     ) -> Optional[SessionHandle]:
+        """Restore trusted-store bytes only when immutable context still matches."""
+        expected_context = _snapshot_resume_context(expected_context)
         if state is None:
             return None
-        if type(state) is _DurableResumeState:
-            raw = state._payload
+        if type(state) is ResumeStateBlob:
+            raw = state.to_trusted_bytes()
         elif type(state) is bytes:
             raw = state
         else:
             raise invalid_policy("invalid_session_resume_state")
+        if len(raw) > MAX_RESUME_STATE_BYTES:
+            raise invalid_policy("invalid_session_resume_state")
         try:
             payload = json.loads(raw.decode("utf-8"))
             if type(payload) is not dict or set(payload) != {
-                "schema_version", "handle", "checksum",
+                "schema_version", "context", "handle", "checksum",
             } or payload["schema_version"] != 1:
                 raise ValueError
+            if _json_shape(payload, depth=0) > 32:
+                raise ValueError
+            context_payload = payload["context"]
+            if type(context_payload) is not dict or set(context_payload) != {
+                "run_id", "node_id", "attempt_id", "provider", "rail",
+            }:
+                raise ValueError
+            stored_context = ResumeStateContext(**context_payload)
             handle_payload = payload["handle"]
             if type(handle_payload) is not dict or set(handle_payload) != {
                 "host_name", "opaque_handle", "created_at", "resume_capable",
             } or type(payload["checksum"]) is not str:
                 raise ValueError
-            if hashlib.sha256(_canonical_json(handle_payload)).hexdigest() != payload["checksum"]:
+            checked = {"context": stored_context.to_dict(), "handle": handle_payload}
+            if hashlib.sha256(_canonical_json(checked)).hexdigest() != payload["checksum"]:
                 raise ValueError
             handle = SessionHandle(**handle_payload)
-        except (AttributeError, TypeError, ValueError, UnicodeError, json.JSONDecodeError):
+        except (AttributeError, TypeError, ValueError, UnicodeError, json.JSONDecodeError,
+                RecursionError):
             raise invalid_policy("invalid_session_resume_state") from None
         except Exception as error:
             if getattr(error, "details", None) is not None:
@@ -281,29 +359,29 @@ class BuilderSessionManager:
         capabilities = self._safe_capabilities()
         if capabilities is None:
             raise invalid_policy("adapter_capabilities_failed")
-        if handle.host_name != capabilities.host_name:
+        if stored_context != expected_context or handle.host_name != capabilities.host_name:
             raise invalid_policy("foreign_session_resume_state")
         return _snapshot_session_handle(handle)
-
-
-def _blocked_decision(reason_code: str) -> BuilderSessionDecision:
-    return BuilderSessionDecision(
-        "blocked", reason_code, None, None, False,
-        (BuilderObservation.DISPATCH_BLOCKED,),
-    )
 
 
 def _canonical_json(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-@dataclass(frozen=True, repr=False)
-class _DurableResumeState:
-    _payload: bytes
+def _snapshot_resume_context(context: ResumeStateContext) -> ResumeStateContext:
+    if type(context) is not ResumeStateContext:
+        raise invalid_policy("invalid_session_resume_context")
+    try:
+        return ResumeStateContext(**context.to_dict())
+    except (AttributeError, TypeError):
+        raise invalid_policy("invalid_session_resume_context") from None
 
-    def __repr__(self) -> str:
-        digest = hashlib.sha256(self._payload).hexdigest()
-        return f"_DurableResumeState(sha256:{digest})"
 
-    def __getitem__(self, key: object) -> object:
-        return self._payload[key]
+def _json_shape(value: object, *, depth: int) -> int:
+    if depth > 4:
+        raise ValueError
+    if type(value) is dict:
+        return len(value) + sum(_json_shape(item, depth=depth + 1) for item in value.values())
+    if type(value) is list:
+        return len(value) + sum(_json_shape(item, depth=depth + 1) for item in value)
+    return 1

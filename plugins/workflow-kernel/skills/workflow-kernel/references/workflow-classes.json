@@ -43,9 +43,9 @@
     "security": {
       "nodes": [
         {"id": "threat_risk_evidence", "depends_on": [], "gate_kind": "evidence", "required_evidence": ["threat_model", "risk_assessment"], "executor": null, "required_capability": null, "executor_overridable": false},
-        {"id": "security_build", "depends_on": ["threat_risk_evidence"], "gate_kind": null, "required_evidence": [], "executor": "claude", "required_capability": "claude_execution", "executor_overridable": false},
+        {"id": "security_build", "depends_on": ["threat_risk_evidence"], "gate_kind": null, "required_evidence": [], "executor": "claude", "required_capability": "anthropic_native_execution", "executor_overridable": false},
         {"id": "validation", "depends_on": ["security_build"], "gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"], "executor": null, "required_capability": null, "executor_overridable": false},
-        {"id": "security_review", "depends_on": ["validation"], "gate_kind": "evidence", "required_evidence": ["security_review"], "executor": "claude", "required_capability": "claude_execution", "executor_overridable": false},
+        {"id": "security_review", "depends_on": ["validation"], "gate_kind": "evidence", "required_evidence": ["security_review"], "executor": "claude", "required_capability": "anthropic_native_execution", "executor_overridable": false},
         {"id": "human_gate", "depends_on": ["security_review"], "gate_kind": "human_approval", "required_evidence": ["risk_assessment", "security_review"], "executor": null, "required_capability": null, "executor_overridable": false},
         {"id": "cleanup", "depends_on": ["human_gate"], "gate_kind": "cleanup", "required_evidence": [], "executor": null, "required_capability": null, "executor_overridable": false}
       ]

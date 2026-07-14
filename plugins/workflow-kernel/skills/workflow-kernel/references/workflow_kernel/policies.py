@@ -9,8 +9,8 @@ from types import MappingProxyType
 from typing import Mapping, Optional, Tuple
 
 from .adapters.base import (
-    AttemptLedger, FailureReason, GateDecision, HostCapability, IsolationMode,
-    RetryDecision, WorkflowClass, WorkflowContext, invalid_policy,
+    AttemptLedger, FailureReason, GATE_KINDS, GateDecision, HostCapability,
+    IsolationMode, RetryDecision, WorkflowClass, WorkflowContext, invalid_policy,
 )
 
 
@@ -162,10 +162,9 @@ class GatePolicy:
     ) -> GateDecision:
         if type(workflow_class) is not WorkflowClass or type(context) is not WorkflowContext:
             raise invalid_policy("invalid_gate_context")
-        if gate_kind is not None and gate_kind not in {
-            "cleanup", "deterministic_validation", "evidence", "human_approval",
-            "investigation_promotion", "next_action", "risk",
-        }:
+        if gate_kind is not None and (
+            type(gate_kind) is not str or gate_kind not in GATE_KINDS
+        ):
             raise invalid_policy("unknown_gate_kind")
         if not isinstance(required_evidence, (list, tuple)) or any(
             type(value) is not str or not value for value in required_evidence

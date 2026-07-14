@@ -137,16 +137,27 @@ class WorkflowClassTests(unittest.TestCase):
         self.assertTrue(routed)
         self.assertTrue(all(node.executor == "claude" for node in routed))
         self.assertTrue(all(node.routing_reason == "sensitive_path_override" for node in routed))
+        self.assertTrue(all(
+            node.required_capability is HostCapability.ANTHROPIC_NATIVE_EXECUTION
+            for node in routed
+        ))
 
     def test_changed_paths_reject_absolute_parent_and_non_posix_forms(self):
         for path in ("/internal/auth/keys.py", "../internal/auth/keys.py",
-                     "internal/auth/../safe.py", "internal\\auth\\keys.py"):
+                     "internal/auth/../safe.py", "internal\\auth\\keys.py",
+                     "internal/auth/\x00keys.py", "internal/auth/\x1fkeys.py",
+                     "x" * 4_097):
             with self.subTest(path=path), self.assertRaises(InvalidSchemaError) as raised:
                 WorkflowContext(changed_paths=(path,))
             self.assertEqual(
                 raised.exception.details["reason_code"],
                 detail_digest("invalid_changed_path"),
             )
+        with self.assertRaises(InvalidSchemaError) as raised:
+            WorkflowContext(changed_paths=tuple(f"file-{index}" for index in range(1_025)))
+        self.assertEqual(
+            raised.exception.details["reason_code"], detail_digest("invalid_changed_path"),
+        )
 
     def test_requested_executor_changes_only_overridable_builder_nodes(self):
         nodes = WorkflowTemplates().expand(
@@ -171,8 +182,68 @@ class WorkflowClassTests(unittest.TestCase):
                 with self.subTest(kind=kind.value, node=node.node_id):
                     self.assertEqual(
                         node.required_capability,
-                        expected[node.executor] if node.executor is not None else None,
+                        (HostCapability.ANTHROPIC_NATIVE_EXECUTION
+                         if kind is WorkflowClass.SECURITY and node.executor == "claude"
+                         else expected[node.executor] if node.executor is not None else None),
                     )
+
+    def test_schema_metadata_owns_boundaries_and_executor_capability_conditions(self):
+        root = Path(__file__).parents[1]
+        schema = json.loads((root / "workflow-classes-schema.json").read_text())
+        boundaries = schema["x-kernel-boundaries"]
+        self.assertEqual(set(boundaries["classes"]), set(EXPECTED))
+        self.assertEqual(boundaries["classes"]["security"]["terminal_node"], "cleanup")
+        node_schema = schema["$defs"]["node"]
+        self.assertIn("allOf", node_schema)
+
+    def test_malformed_scalar_shapes_fail_with_stable_errors(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        for field, value, reason in (
+            ("gate_kind", [], "unknown_gate_kind"),
+            ("gate_kind", {}, "unknown_gate_kind"),
+            ("executor", [], "unknown_executor"),
+            ("executor", {}, "unknown_executor"),
+        ):
+            payload = json.loads(json.dumps(base))
+            payload["classes"]["chore"]["nodes"][0][field] = value
+            with self.subTest(field=field, value=value), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(raised.exception.details["reason_code"],
+                                 detail_digest(reason))
+
+    def test_executor_capability_relationship_mutations_match_schema_contract(self):
+        source = Path(__file__).parents[1] / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        mutations = []
+        null_with_capability = json.loads(json.dumps(base))
+        null_with_capability["classes"]["chore"]["nodes"][0][
+            "required_capability"
+        ] = "codex_execution"
+        mutations.append(null_with_capability)
+        mismatched = json.loads(json.dumps(base))
+        mismatched["classes"]["chore"]["nodes"][1][
+            "required_capability"
+        ] = "openrouter_execution"
+        mutations.append(mismatched)
+        null_overridable = json.loads(json.dumps(base))
+        null_overridable["classes"]["chore"]["nodes"][0][
+            "executor_overridable"
+        ] = True
+        mutations.append(null_overridable)
+        for payload in mutations:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    WorkflowTemplates(path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("inconsistent_executor_capability"),
+                )
 
     def test_human_approval_cannot_repair_missing_mandatory_evidence(self):
         nodes = WorkflowTemplates().expand(

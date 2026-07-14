@@ -4,7 +4,9 @@ import unittest
 from pathlib import Path
 
 from tests import detail_digest
-from workflow_kernel.adapters.base import AttemptLedger, FailureReason, WorkflowClass, WorkflowContext
+from workflow_kernel.adapters.base import (
+    AttemptLedger, FailureReason, HostCapability, WorkflowClass, WorkflowContext,
+)
 from workflow_kernel.policies import RetryPolicy
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.workflows import WorkflowTemplates
@@ -97,6 +99,30 @@ class RetryPolicyTests(unittest.TestCase):
         self.assertEqual(
             raised.exception.details["reason_code"],
             detail_digest("duplicate_capability_name"),
+        )
+
+    def test_policy_schema_and_runtime_require_exactly_twelve_capabilities(self):
+        root = Path(__file__).parents[1]
+        schema = json.loads((root / "workflow-policy-schema.json").read_text())
+        capability_schema = schema["properties"]["capability_names"]
+        self.assertEqual(capability_schema["minItems"], 12)
+        self.assertEqual(capability_schema["maxItems"], 12)
+        self.assertTrue(capability_schema["uniqueItems"])
+        self.assertEqual(
+            set(capability_schema["items"]["enum"]),
+            {value.value for value in HostCapability},
+        )
+        payload = json.loads((root / "workflow-policy.json").read_text())
+        self.assertEqual(len(payload["capability_names"]), 12)
+        payload["capability_names"].pop()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "policy.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                RetryPolicy(path)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("unknown_capability_name"),
         )
 
 

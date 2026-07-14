@@ -19,22 +19,20 @@ class HostCapabilityTests(unittest.TestCase):
                 HostCapability.NATIVE_DISPATCH,
                 HostCapability.COMPANION_DISPATCH,
                 HostCapability.WRAPPER_DISPATCH,
-                HostCapability.OPENROUTER_EXEC,
                 HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
+                HostCapability.ANTHROPIC_NATIVE_EXECUTION,
             },
             "codex": {
                 HostCapability.NATIVE_DISPATCH,
                 HostCapability.WRAPPER_DISPATCH,
-                HostCapability.OPENROUTER_EXEC,
                 HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
             },
             "generic": {
                 HostCapability.WRAPPER_DISPATCH,
-                HostCapability.OPENROUTER_EXEC,
                 HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
@@ -78,6 +76,50 @@ class HostCapabilityTests(unittest.TestCase):
             raised.exception.details["reason_code"],
             detail_digest("unknown_capability_name"),
         )
+
+    def test_native_provider_capability_comes_from_validated_role_not_host_name(self):
+        payload = {
+            "hosts": {
+                "renamed-claude": {"roles": {"native": {
+                    "kind": "native", "probe": "claude", "models": ["opus"],
+                }}},
+                "wrapper-only": {"roles": {"api": {
+                    "kind": "wrapper", "probe": "openrouter",
+                    "models": ["anthropic/claude-opus-4.8"],
+                }}},
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            native = capabilities_from_harness_profile("renamed-claude", path)
+            wrapper = capabilities_from_harness_profile("wrapper-only", path)
+        self.assertIn(HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+                      native.capabilities)
+        self.assertNotIn(HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+                         wrapper.capabilities)
+        self.assertIn(HostCapability.CLAUDE_EXECUTION, wrapper.capabilities)
+
+    def test_inconsistent_harness_role_fields_fail_closed(self):
+        roles = (
+            {"kind": "native", "probe": "openrouter", "models": ["opus"]},
+            {"kind": "codex_companion", "probe": "claude", "models": ["gpt-5"]},
+            {"kind": "wrapper", "probe": "codex", "models": ["openai/gpt-5"]},
+            {"kind": "none", "probe": "claude"},
+            {"kind": "native", "probe": "claude", "models": ["openai/gpt-5"]},
+            {"kind": "native", "probe": "codex", "models": ["anthropic/claude-opus"]},
+        )
+        for role in roles:
+            payload = {"hosts": {"test": {"roles": {"bad": role}}}}
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "harness.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    capabilities_from_harness_profile("test", path)
+                self.assertEqual(
+                    raised.exception.details["reason_code"],
+                    detail_digest("invalid_harness_profile"),
+                )
 
     def test_required_modules_import_in_clean_processes_without_cycles(self):
         root = str(Path(__file__).parents[1])
