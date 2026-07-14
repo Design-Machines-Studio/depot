@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 from typing import Iterable, Tuple
 from urllib.parse import urlsplit
 
-from .adapters.base import invalid_policy
+from .adapters.base import _register_origin, _validate_capture, invalid_policy
 from .redaction import is_secret_key, normalize_evidence_reference
 
 _ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
@@ -31,7 +31,7 @@ def _invalid(reason="invalid_verification_declaration"):
 
 def _validate_id(value, *, reject_secret_shape=False):
     secret_parts = {"token", "key", "secret", "password", "authorization", "cookie", "dsn"}
-    if (type(value) is not str or _ID.fullmatch(value) is None
+    if (type(value) is not str or len(value) > 128 or _ID.fullmatch(value) is None
             or reject_secret_shape
             and any(part in secret_parts for part in re.split(r"[._-]", value.casefold()))):
         _invalid()
@@ -48,8 +48,9 @@ def validate_viewport(value):
 
 
 def _validate_route(route):
-    if (type(route) is not str or not route.startswith("/") or "?" in route
-            or "#" in route or any(part == ".." for part in route.split("/"))
+    if (type(route) is not str or len(route) > 2_048
+            or not route.startswith("/") or "?" in route
+            or "#" in route or any(part in {".", ".."} for part in route.split("/"))
             or any(is_secret_key(part) for part in route.split("/") if part)):
         _invalid("invalid_verification_target")
     return route
@@ -165,7 +166,8 @@ class VerificationProfile:
         if len(ids) != len(set(ids)):
             _invalid()
         if (type(self.auth_field_names) is not tuple
-                or any(type(name) is not str or _ID.fullmatch(name) is None for name in self.auth_field_names)
+                or any(type(name) is not str or len(name) > 128
+                       or _ID.fullmatch(name) is None for name in self.auth_field_names)
                 or tuple(sorted(self.auth_field_names)) != self.auth_field_names
                 or len(self.auth_field_names) != len(set(self.auth_field_names))):
             _invalid()
@@ -271,11 +273,34 @@ class EvidenceRef:
     recovery_receipt: object | None = None
     target_origin_digest: str = ""
 
+    def _origin_primitives(self):
+        receipt = self.recovery_receipt
+        receipt_payload = None
+        if receipt is not None:
+            try:
+                receipt_payload = json.dumps(
+                    receipt.to_dict(), sort_keys=True, separators=(",", ":"),
+                )
+            except Exception:
+                _invalid("invalid_verification_evidence")
+        return (
+            self.case_id, self.persona_id, self.scenario_id, self.route,
+            self.browser_engine, self.viewport, self.attempt, self.evaluation,
+            self.authenticated, self.reference, self.proof_kind,
+            self.actual_browser_engine, self.substitution_provenance,
+            self.verification_profile_id, self.configured_engines,
+            receipt_payload, self.target_origin_digest,
+        )
+
     def __post_init__(self):
         if type(self.case_id) is not str or not self.case_id.startswith("case-sha256:"):
             _invalid("invalid_verification_evidence")
         _validate_id(self.persona_id); _validate_id(self.scenario_id)
-        if type(self.route) is not str or not self.route.startswith("/") or self.browser_engine not in _ENGINES:
+        try:
+            _validate_route(self.route)
+        except Exception:
+            _invalid("invalid_verification_evidence")
+        if self.browser_engine not in _ENGINES:
             _invalid("invalid_verification_evidence")
         actual = self.browser_engine if self.actual_browser_engine is None else self.actual_browser_engine
         if (actual not in _ENGINES
@@ -305,12 +330,22 @@ class EvidenceRef:
             object.__setattr__(self, "reference", normalize_evidence_reference(self.reference))
         except Exception:
             _invalid("invalid_verification_evidence")
-        if self.substitution_provenance == "alternate_engine_recovery":
-            from .adapters.browser import BrowserRecoveryReceipt
-            receipt = self.recovery_receipt
-            if (type(receipt) is not BrowserRecoveryReceipt
-                    or receipt.status != "recovered"
-                    or receipt.reason_code != "alternate_engine_recovered_degraded"
+        if self.proof_kind == "browser":
+            from .adapters.browser import snapshot_browser_recovery_receipt
+            try:
+                receipt = snapshot_browser_recovery_receipt(self.recovery_receipt)
+            except Exception:
+                _invalid("invalid_verification_evidence")
+            object.__setattr__(self, "recovery_receipt", receipt)
+            expected_reason = (
+                "alternate_engine_recovered_degraded"
+                if self.substitution_provenance == "alternate_engine_recovery"
+                else {"browser_verified_first_pass", "primary_recovered_degraded"}
+            )
+            if (receipt.status not in {"clean", "recovered"}
+                    or (receipt.reason_code != expected_reason
+                        if type(expected_reason) is str
+                        else receipt.reason_code not in expected_reason)
                     or receipt.verification_profile_id != self.verification_profile_id
                     or receipt.configured_engines != self.configured_engines
                     or receipt.case_id != self.case_id
@@ -327,6 +362,22 @@ class EvidenceRef:
                 _invalid("invalid_verification_evidence")
         elif self.recovery_receipt is not None:
             _invalid("invalid_verification_evidence")
+        _register_origin(self, "EvidenceRef", self._origin_primitives())
+
+
+def _snapshot_evidence_ref(value):
+    if type(value) is not EvidenceRef:
+        _invalid("invalid_verification_evidence")
+    try:
+        captured = tuple(
+            getattr(value, name) for name in value.__dataclass_fields__
+        )
+        _validate_capture(
+            value, "EvidenceRef", captured, value._origin_primitives(),
+        )
+        return EvidenceRef(*captured)
+    except Exception:
+        _invalid("invalid_verification_evidence")
 
 
 @dataclass(frozen=True)
@@ -339,14 +390,15 @@ class VerificationGate:
     def evaluate(self, profile, evidence: Iterable[EvidenceRef], *, work_kind="ui"):
         if type(profile) is not VerificationProfile or work_kind not in {"ui", "integration", "logic", "documentation"}:
             _invalid("invalid_verification_gate")
+        try:
+            supplied = tuple(_snapshot_evidence_ref(item) for item in evidence)
+        except Exception:
+            _invalid("invalid_verification_evidence")
         if profile.discovery_status == "not_declared":
             return CoverageDecision(work_kind not in {"ui", "integration"},
                                     "persona_declarations_not_declared" if work_kind in {"ui", "integration"} else "persona_declarations_not_applicable")
         if profile.selection_status == "no_runnable_tasks":
             return CoverageDecision(True, "no_runnable_persona_cases_declared")
-        supplied = tuple(evidence)
-        if any(type(item) is not EvidenceRef for item in supplied):
-            _invalid("invalid_verification_evidence")
         required = {case.case_id: case for case in profile.cases if case.required}
         if required and profile.target_origin_digest is None:
             return CoverageDecision(

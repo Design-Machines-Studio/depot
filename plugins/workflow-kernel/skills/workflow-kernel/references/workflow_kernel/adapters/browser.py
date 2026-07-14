@@ -7,6 +7,7 @@ from dataclasses import dataclass, replace
 from typing import Optional, Protocol, Tuple
 from urllib.parse import urlsplit
 
+from .base import _register_origin, _validate_capture
 from ..redaction import digest_error_detail_string, normalize_evidence_reference
 from ..verification import digest_target_origin, digest_target_route, validate_viewport
 
@@ -16,6 +17,10 @@ _REASON_CODES = frozenset({
     "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
     "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch",
     "fresh_profile_unavailable", "secondary_engine_unavailable",
+})
+_ATTEMPT_REASON_CODES = frozenset({
+    "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
+    "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch",
 })
 _SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
@@ -110,6 +115,14 @@ class BrowserRequest:
     verification_profile_id: str; configured_engines: Tuple[str, ...]
     target_origin_digest: str
 
+    def _origin_primitives(self):
+        metadata = _target_metadata(self.url)
+        return (
+            self.case_id, metadata[0], metadata[1], metadata[2], self.viewport,
+            self.primary_engine, self.secondary_engine, self.verification_profile_id,
+            self.configured_engines, self.target_origin_digest,
+        )
+
     def __post_init__(self):
         _safe_case_id(self.case_id)
         _target_metadata(self.url)
@@ -128,6 +141,7 @@ class BrowserRequest:
                 or self.primary_engine == self.secondary_engine
                 or self.secondary_engine not in self.configured_engines):
             raise ValueError("browser engines must be genuinely different")
+        _register_origin(self, "BrowserRequest", self._origin_primitives())
 
     @property
     def target_url_digest(self):
@@ -136,6 +150,21 @@ class BrowserRequest:
     @property
     def target_route_digest(self):
         return _target_metadata(self.url)[2]
+
+
+def snapshot_browser_request(value):
+    if type(value) is not BrowserRequest:
+        raise ValueError("invalid browser request")
+    try:
+        captured = tuple(
+            getattr(value, name) for name in value.__dataclass_fields__
+        )
+        _validate_capture(
+            value, "BrowserRequest", captured, value._origin_primitives(),
+        )
+        return BrowserRequest(*captured)
+    except Exception:
+        raise ValueError("invalid browser request") from None
 
 
 @dataclass(frozen=True)
@@ -172,9 +201,10 @@ class BrowserAttempt:
                 != (self.substitution_provenance is None)):
             raise ValueError("invalid browser substitution")
         if self.result == "passed":
-            if self.reason_code is not None or self.failure_detail is not None:
+            if (self.reason_code is not None or self.failure_detail is not None
+                    or self.proof_kind != "browser"):
                 raise ValueError("inconsistent browser attempt")
-        elif self.reason_code not in _REASON_CODES:
+        elif self.reason_code not in _ATTEMPT_REASON_CODES:
             raise ValueError("invalid browser reason code")
         object.__setattr__(self, "failure_detail", _safe_detail(self.failure_detail))
         for name in ("screenshot_reference", "trace_reference", "console_reference"):
@@ -264,8 +294,20 @@ class BrowserLifecycleEvidence:
         if self.result in {"confirmed", "launched"} and (
                 self.reason_code is not None or self.failure_detail is not None):
             raise ValueError("inconsistent browser lifecycle result")
-        if self.result == "unavailable" and self.reason_code not in _REASON_CODES:
+        if self.result == "unavailable" and self.reason_code not in _ATTEMPT_REASON_CODES:
             raise ValueError("inconsistent browser lifecycle result")
+        exact_reasons = {
+            "unconfirmed": "browser_unavailable",
+            "session_identity_mismatch": "session_identity_mismatch",
+            "fresh_profile_unavailable": "fresh_profile_unavailable",
+            "secondary_engine_unavailable": "secondary_engine_unavailable",
+        }
+        if (self.result in exact_reasons
+                and self.reason_code != exact_reasons[self.result]):
+            raise ValueError("inconsistent browser lifecycle reason")
+        if (self.result == "primary_restart_unavailable"
+                and self.reason_code is not None):
+            raise ValueError("inconsistent browser lifecycle reason")
         if self.action == "browser_process_launch":
             if (self.result == "launched" and self.fresh_profile is not True
                     or self.result == "fresh_profile_unavailable" and self.fresh_profile is not False
@@ -289,6 +331,27 @@ class BrowserRecoveryReceipt:
     target_origin_digest: str
 
     def __post_init__(self):
+        try:
+            if type(self.attempts) is not tuple or type(self.lifecycle) is not tuple:
+                raise ValueError
+            attempts = tuple(
+                BrowserAttempt(**{
+                    name: getattr(item, name) for name in item.__dataclass_fields__
+                })
+                for item in self.attempts if type(item) is BrowserAttempt
+            )
+            lifecycle = tuple(
+                BrowserLifecycleEvidence(**{
+                    name: getattr(item, name) for name in item.__dataclass_fields__
+                })
+                for item in self.lifecycle if type(item) is BrowserLifecycleEvidence
+            )
+            if len(attempts) != len(self.attempts) or len(lifecycle) != len(self.lifecycle):
+                raise ValueError
+            object.__setattr__(self, "attempts", attempts)
+            object.__setattr__(self, "lifecycle", lifecycle)
+        except Exception:
+            raise ValueError("invalid browser recovery receipt") from None
         _safe_case_id(self.case_id)
         _validate_profile_binding(self.verification_profile_id, self.configured_engines)
         _validate_target_binding(
@@ -363,6 +426,11 @@ class BrowserRecoveryReceipt:
                         or item.session_id in launched or item.session_id == first_session):
                     raise ValueError("browser launch session mismatch")
                 launched[item.session_id] = item.actual_engine
+        attempted_launches = {
+            item.session_id: item.actual_engine for item in attempts[1:]
+        }
+        if launched != attempted_launches:
+            raise ValueError("browser launch lacks exactly one bound attempt")
         for item in attempts[1:]:
             if (launched.get(item.session_id) != item.actual_engine
                     and item.reason_code != "session_identity_mismatch"):
@@ -437,6 +505,34 @@ class BrowserRecoveryReceipt:
             "target_route_digest": self.target_route_digest,
             "viewport": self.viewport,
         }
+
+
+def snapshot_browser_recovery_receipt(value):
+    if type(value) is not BrowserRecoveryReceipt:
+        raise ValueError("invalid browser recovery receipt")
+    try:
+        payload = {
+            name: getattr(value, name) for name in value.__dataclass_fields__
+        }
+        attempts = []
+        for item in payload["attempts"]:
+            if type(item) is not BrowserAttempt:
+                raise ValueError
+            attempts.append(BrowserAttempt(**{
+                name: getattr(item, name) for name in item.__dataclass_fields__
+            }))
+        lifecycle = []
+        for item in payload["lifecycle"]:
+            if type(item) is not BrowserLifecycleEvidence:
+                raise ValueError
+            lifecycle.append(BrowserLifecycleEvidence(**{
+                name: getattr(item, name) for name in item.__dataclass_fields__
+            }))
+        payload["attempts"] = tuple(attempts)
+        payload["lifecycle"] = tuple(lifecycle)
+        return BrowserRecoveryReceipt(**payload)
+    except Exception:
+        raise ValueError("invalid browser recovery receipt") from None
 
 
 class BrowserAdapter(Protocol):
@@ -593,7 +689,7 @@ class BrowserRecovery:
             return item
         return replace(
             item, result="failed", reason_code="session_identity_mismatch",
-            failure_detail=None,
+            failure_detail=None, session_id=session_id,
         )
 
     @staticmethod
@@ -610,8 +706,7 @@ class BrowserRecovery:
         )
 
     def run(self, request, adapter):
-        if type(request) is not BrowserRequest:
-            raise ValueError("invalid browser request")
+        request = snapshot_browser_request(request)
         attempts, lifecycle = [], []
         initial = self._attempt(request, adapter, request.primary_engine, 1)
         attempts.append(initial)

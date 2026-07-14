@@ -46,7 +46,7 @@
     {"if": {"properties": {"requested_engine": {"const": "chromium"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "chromium"}}}},
     {"if": {"properties": {"requested_engine": {"const": "firefox"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "firefox"}}}},
     {"if": {"properties": {"requested_engine": {"const": "webkit"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "webkit"}}}},
-    {"if": {"properties": {"configured_engines": {"maxItems": 1}}}, "then": {"properties": {"status": {"const": "blocked"}, "reason_code": {"const": "human_help_required"}, "lifecycle": {"contains": {"properties": {"action": {"const": "secondary_engine"}, "result": {"const": "secondary_engine_unavailable"}}, "required": ["action", "result"]}}}}}
+    {"if": {"required": ["status", "configured_engines"], "properties": {"status": {"const": "blocked"}, "configured_engines": {"maxItems": 1}}}, "then": {"properties": {"reason_code": {"const": "human_help_required"}, "lifecycle": {"contains": {"properties": {"action": {"const": "secondary_engine"}, "result": {"const": "secondary_engine_unavailable"}}, "required": ["action", "result"]}}}}}
   ],
   "$defs": {
     "case_id": {"type": "string", "minLength": 1, "pattern": "^[^\\s/?#@]{1,128}$"},
@@ -143,6 +143,8 @@
         {"if": {"properties": {"result": {"const": "session_identity_mismatch"}}}, "then": {"properties": {"reason_code": {"const": "session_identity_mismatch"}}}},
         {"if": {"properties": {"result": {"const": "fresh_profile_unavailable"}}}, "then": {"properties": {"reason_code": {"const": "fresh_profile_unavailable"}}}},
         {"if": {"properties": {"result": {"const": "secondary_engine_unavailable"}}}, "then": {"properties": {"reason_code": {"const": "secondary_engine_unavailable"}}}},
+        {"if": {"properties": {"result": {"const": "unconfirmed"}}}, "then": {"properties": {"reason_code": {"const": "browser_unavailable"}}}},
+        {"if": {"properties": {"result": {"const": "primary_restart_unavailable"}}}, "then": {"properties": {"reason_code": {"const": null}}}},
         {"if": {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}}, "then": {"properties": {"fresh_profile": {"const": true}}}},
         {"if": {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "fresh_profile_unavailable"}}}, "then": {"properties": {"fresh_profile": {"const": false}}}},
         {"if": {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "unavailable"}}}, "then": {"properties": {"fresh_profile": {"const": null}}}},

@@ -198,9 +198,10 @@ def _scan_json_document(document: str) -> bool:
     return over_depth
 
 
-def load_json_document(path: Path) -> object:
-    """Load one syntactically valid JSON document within owned limits."""
-    document = path.read_text(encoding="utf-8")
+def parse_json_document(document: str) -> object:
+    """Parse one already-owned JSON text document within kernel limits."""
+    if type(document) is not str:
+        raise JSONDocumentSyntaxError
     if _scan_json_document(document):
         raise JSONDocumentDepthError
     return json.loads(
@@ -208,3 +209,8 @@ def load_json_document(path: Path) -> object:
         parse_int=bounded_json_int,
         parse_constant=_reject_json_constant,
     )
+
+
+def load_json_document(path: Path) -> object:
+    """Load one syntactically valid JSON document within owned limits."""
+    return parse_json_document(path.read_text(encoding="utf-8"))

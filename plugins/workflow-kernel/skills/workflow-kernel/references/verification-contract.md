@@ -14,8 +14,14 @@ The matrix must represent the complete authoritative task and assignment set;
 a compact matrix that omits a task or row is drift. Discovery rejects symlinks
 in every ancestor from the project root through the UX declaration and all
 descendants, plus any resolved path outside the owned UX tree, before reading
-it. Duplicate scalar or list-section frontmatter keys and malformed scalar or
-container types fail with `invalid_verification_declaration`.
+it. Declaration reads are descriptor-relative and no-follow, reject hardlinks,
+and revalidate file and directory identity after reading so path swaps cannot
+replace validated config, index, persona, task, suite, or matrix content.
+Duplicate scalar or list-section frontmatter keys and malformed scalar or
+container types fail with `invalid_verification_declaration`. Task `personas:`
+assignments are parsed only from that exact nested section: duplicate or unknown
+keys, duplicate IDs, invalid `expected` values, invalid `required` booleans, or
+missing assignments fail closed rather than being inferred from nearby text.
 Selected `current`, `redirected-current`, and statusless legacy tasks expand every
 persona assignment across every configured browser and viewport. Statusless tasks
 record `legacy_status_defaulted=true`. `required` defaults to true; only explicit
@@ -47,6 +53,10 @@ viewport, attempt, authentication state, and evaluation. Curl or reachability
 diagnostics are never browser evidence. UI/integration work blocks on missing,
 failed, unauthenticated, or non-evaluative required evidence. No UX directory is
 `not_declared`; no personas are fabricated, and non-UI work remains unblocked.
+Persona, scenario, role, and auth field identifiers are at most 128 characters.
+Routes are at most 2048 characters, are absolute and origin-relative, contain no
+query or fragment, and reject `.` or `..` traversal segments in both runtime
+validation and the published schema.
 
 Profiles retain auth field names only. Cookie values, bearer tokens, passwords,
 credential usernames, fixture secrets, and URL credentials never enter profiles,
@@ -63,6 +73,10 @@ For a required browser failure, preserve safe attempt evidence first, then:
    single-engine profile instead records `secondary_engine_unavailable`;
 5. if it fails or is unavailable, return blocked `human_help_required` with all
    attempts and exact missing case IDs.
+
+The browser adapter canonically snapshots and reconstructs each sealed
+`BrowserRequest` before any browser call. Mutation of its URL, target origin, or
+other bound input therefore fails before an adapter can observe the request.
 
 Quit evidence must identify the initial session, launch evidence must identify a
 different fresh session, and the following attempt must identify that launched
@@ -92,6 +106,17 @@ must agree, attempts are ordered and retain all failures before the sole winning
 attempt, action/result pairs are coherent, relaunch sessions are fresh and bind
 the following attempt, recovered/clean receipts have no missing cases, and a
 blocked human-help receipt names the exact missing case.
+
+Every browser `EvidenceRef`, including clean first-pass primary evidence, carries
+a complete `BrowserRecoveryReceipt`. The verification gate canonically
+reconstructs the evidence and all nested receipt values at its boundary, checks
+their sealed origin captures, and accepts only a browser winning attempt bound to
+that evidence. A caller-mutated evidence object, receipt, attempt, URL digest, or
+curl proof cannot be promoted by preserving an earlier digest. Every successful
+launch has exactly one following attempt bound to its session; primary quit
+evidence names the initial primary session exactly. Single-engine clean and
+primary-recovered receipts remain valid, while only a blocked path lacking a
+configured alternate records `secondary_engine_unavailable`.
 
 A recovered run retains the failed attempts and is degraded, never first-pass
 clean. Application/container restart is a separate diagnostic action and cannot

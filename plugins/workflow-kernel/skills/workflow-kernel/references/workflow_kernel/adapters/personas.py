@@ -1,12 +1,14 @@
 """Project-local Assembly persona and task discovery."""
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Protocol
 
 from .base import invalid_policy
-from ..limits import load_json_document
+from .._files import PinnedDirectory
+from ..limits import parse_json_document
 from ..policies import PolicyDocument, _snapshot_policy_document, load_policy
 from ..verification import (
     EvidenceRef, PersonaCase, VerificationProfile, digest_target_origin,
@@ -14,7 +16,6 @@ from ..verification import (
 )
 
 _TOP = re.compile(r"^([a-z_]+):\s*(.*?)\s*$", re.M)
-_PERSONA = re.compile(r"^  - id:\s*([a-z0-9-]+)\s*$", re.M)
 _VIEWPORT = re.compile(r"([1-9][0-9]{1,4})x([1-9][0-9]{1,4})")
 _RUNNABLE = frozenset({"current", "redirected-current"})
 _KNOWN_STATUSES = frozenset({
@@ -28,6 +29,7 @@ _MATRIX_PERSONAS = {
     "NP": "new-probationary", "NT": "numbers-treasurer",
 }
 _MATRIX_OUTCOMES = {"S": "SUCCESS", "F": "FRICTION", "B": "BLOCKED", "P": "PARTIAL"}
+_MAX_DECLARATION_BYTES = 1_048_576
 
 
 def _fail():
@@ -69,12 +71,39 @@ def _reject_symlinks(root):
         _fail()
 
 
-def _frontmatter(path, root):
+def _read_owned_text(path, root):
     _owned_path(path, root)
+    descriptor = None
     try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
+        with PinnedDirectory.open(path.parent) as directory:
+            descriptor = directory.open_regular(path.name, os.O_RDONLY)
+            chunks = []
+            total = 0
+            while True:
+                chunk = os.read(descriptor, min(65_536, _MAX_DECLARATION_BYTES + 1 - total))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > _MAX_DECLARATION_BYTES:
+                    _fail()
+            directory.require_identity(descriptor, path.name)
+            directory.revalidate()
+            os.close(descriptor)
+            descriptor = None
+        return b"".join(chunks).decode("utf-8")
+    except (OSError, UnicodeError, ValueError):
         _fail()
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+def _frontmatter(path, root):
+    text = _read_owned_text(path, root)
     if not text.startswith("---\n"):
         _fail()
     pieces = text.split("---\n", 2)
@@ -119,16 +148,48 @@ def _list(frontmatter, key):
 
 
 def _assignments(frontmatter):
-    starts = list(_PERSONA.finditer(frontmatter)); result = []
-    for index, match in enumerate(starts):
-        end = starts[index + 1].start() if index + 1 < len(starts) else len(frontmatter)
-        block = frontmatter[match.start():end]
-        expected = re.search(r"^    expected:\s*([A-Z]+)\s*$", block, re.M)
-        required = re.search(r"^    required:\s*(true|false)\s*$", block, re.M)
-        if expected is None:
+    lines = frontmatter.splitlines()
+    starts = [index for index, line in enumerate(lines) if line == "personas:"]
+    if len(starts) != 1:
+        _fail()
+    section = []
+    for line in lines[starts[0] + 1:]:
+        if line and not line.startswith(" "):
+            break
+        if line.strip():
+            section.append(line)
+    result = []
+    current = None
+    seen_ids = set()
+    for line in section:
+        match = re.fullmatch(r"  - id:\s*([a-z0-9][a-z0-9._-]*)", line)
+        if match is not None:
+            if current is not None:
+                result.append(current)
+            persona_id = match.group(1)
+            if persona_id in seen_ids:
+                _fail()
+            seen_ids.add(persona_id)
+            current = {"id": persona_id}
+            continue
+        match = re.fullmatch(r"    (expected|required):\s*(\S+)", line)
+        if match is None or current is None or match.group(1) in current:
             _fail()
-        result.append((match.group(1), expected.group(1), required is None or required.group(1) == "true"))
-    return result
+        current[match.group(1)] = match.group(2)
+    if current is not None:
+        result.append(current)
+    normalized = []
+    for item in result:
+        if (set(item) - {"id", "expected", "required"}
+                or item.get("expected") not in {"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"}
+                or "required" in item and item["required"] not in {"true", "false"}):
+            _fail()
+        normalized.append((
+            item["id"], item["expected"], item.get("required", "true") == "true",
+        ))
+    if not normalized:
+        _fail()
+    return normalized
 
 
 def _task_at(path, root):
@@ -154,10 +215,7 @@ def _persona_index(root):
     _owned_path(directory, root, directory=True)
     index = directory / "_index.md"
     _owned_path(index, root)
-    try:
-        text = index.read_text(encoding="utf-8")
-    except (OSError, UnicodeError):
-        _fail()
+    text = _read_owned_text(index, root)
     declared = []
     for line in text.splitlines():
         if not line.lstrip().startswith("|"):
@@ -199,10 +257,7 @@ def _validate_coverage_matrix(root, tasks):
     if not path.exists():
         return
     _owned_path(path, root)
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeError):
-        _fail()
+    lines = _read_owned_text(path, root).splitlines()
     direct_rows, indexed_rows = set(), {}
     header = None
     for line in lines:
@@ -327,7 +382,7 @@ class ProjectPersonaAdapter:
         if config_path.exists():
             _owned_path(config_path, ux)
             try:
-                config = load_json_document(config_path)
+                config = parse_json_document(_read_owned_text(config_path, ux))
             except Exception:
                 _fail()
             allowed = {

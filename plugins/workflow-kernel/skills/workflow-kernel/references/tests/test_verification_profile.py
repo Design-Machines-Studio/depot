@@ -1,8 +1,10 @@
 import json
+import os
 import re
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 from tests import detail_digest, schema_matches
@@ -10,6 +12,7 @@ from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import load_policy
 from workflow_kernel.verification import PersonaCase, VerificationProfile
 from workflow_kernel.adapters.personas import ProjectPersonaAdapter
+from workflow_kernel._files import PinnedDirectory
 
 
 ROOT = Path(__file__).parents[1]
@@ -314,6 +317,111 @@ class VerificationProfileTests(unittest.TestCase):
                 task.write_text(text.replace("title:", duplicate + "title:", 1))
                 with self.assertRaises(InvalidSchemaError):
                     ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(project)
+
+    def test_nested_persona_assignment_structure_is_exact_and_fail_closed(self):
+        replacements = (
+            ("    expected: FRICTION", "    expected: FRICTION\n    expected: BLOCKED"),
+            ("    expected: FRICTION", "    expected: FRICTION\n    required: nope"),
+            ("    expected: FRICTION", "    expected: FRICTION\n    required: false\n    required: true"),
+            ("personas:", "not_personas:"),
+        )
+        for old, new in replacements:
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                task.write_text(task.read_text().replace(old, new, 1))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
+    def test_identifier_and_route_runtime_and_schema_boundaries_match(self):
+        PersonaCase("p" * 128, "s" * 128, "m" * 128, "/" + "a" * 2047,
+                    "chromium", "1440x900", True)
+        for field, value in (
+            ("persona", "p" * 129),
+            ("scenario", "s" * 129),
+            ("role", "m" * 129),
+            ("route", "/" + "a" * 2048),
+            ("route", "/../admin"),
+            ("route", "/safe/../admin"),
+        ):
+            with self.subTest(field=field, length=len(value)), self.assertRaises(InvalidSchemaError):
+                PersonaCase(
+                    value if field == "persona" else "p",
+                    value if field == "scenario" else "s",
+                    value if field == "role" else "member",
+                    value if field == "route" else "/safe",
+                    "chromium", "1440x900", True,
+                )
+        schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
+        case = PersonaCase("p", "s", "member", "/safe", "chromium", "1440x900", True)
+        profile = VerificationProfile(1, "project_declaration", (case,), ())
+        payload = profile.to_dict()
+        payload["cases"][0]["route"] = "/../admin"
+        self.assertFalse(schema_matches(payload, schema))
+        with self.assertRaises(InvalidSchemaError):
+            VerificationProfile(
+                1, "project_declaration", (case,), ("a" * 129,),
+            )
+
+    def test_declaration_reads_reject_hardlinks_for_every_owned_document(self):
+        relative_paths = (
+            "verification.json", "personas/_index.md", "personas/casual-member.md",
+            "tasks/governance/sample-task.md", "coverage-matrix.md",
+        )
+        for relative in relative_paths:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory) / "project"
+                ux = project / "tests" / "ux"
+                shutil.copytree(FIXTURES / "assembly", ux)
+                victim = ux / relative
+                content = (
+                    '{"schema_version": 1}' if relative == "verification.json"
+                    else victim.read_text()
+                )
+                if victim.exists():
+                    victim.unlink()
+                outside = Path(directory) / "outside-owned-document"
+                outside.write_text(content)
+                os.link(outside, victim)
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
+    def test_declaration_reads_revalidate_identity_after_descriptor_open(self):
+        relative_paths = (
+            "verification.json", "personas/_index.md", "personas/casual-member.md",
+            "tasks/governance/sample-task.md", "coverage-matrix.md",
+        )
+        original = PinnedDirectory.require_identity
+        for relative in relative_paths:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory) / "project"
+                ux = project / "tests" / "ux"
+                shutil.copytree(FIXTURES / "assembly", ux)
+                victim = ux / relative
+                if relative == "verification.json":
+                    victim.write_text('{"schema_version": 1}')
+                replacement = Path(directory) / "replacement-owned-document"
+                replacement.write_text(victim.read_text())
+                swapped = []
+
+                def swap_after_open(pinned, descriptor, name):
+                    original(pinned, descriptor, name)
+                    if not swapped and pinned.path / name == victim:
+                        os.replace(replacement, victim)
+                        swapped.append(True)
+
+                with mock.patch.object(
+                    PinnedDirectory, "require_identity", swap_after_open,
+                ), self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+                self.assertTrue(swapped)
 
     def test_profile_runtime_loader_rejects_schema_valid_cross_field_drift(self):
         case = PersonaCase(

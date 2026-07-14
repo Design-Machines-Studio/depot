@@ -24,6 +24,37 @@ def evidence(
 ):
     configured = profile.configured_engines if profile is not None else (case.browser_engine,)
     profile_id = profile.profile_id if profile is not None else "profile-sha256:" + "a" * 64
+    if (proof_kind == "browser" and recovery_receipt is None
+            and substitution is None
+            and actual_engine in {None, case.browser_engine}
+            and profile is not None):
+        from workflow_kernel.adapters.browser import (
+            BrowserAttempt, BrowserRecovery, BrowserRequest,
+        )
+        url = TARGET_ORIGIN + case.route
+        url_digest = "url-sha256:" + hashlib.sha256(url.encode()).hexdigest()
+        route_digest = "sha256:" + hashlib.sha256(case.route.encode()).hexdigest()
+
+        class CleanAdapter:
+            def attempt(self, request, engine):
+                return BrowserAttempt(
+                    case.case_id, 1, case.browser_engine, engine, "verify", "passed",
+                    None, None, "proof/screenshot.png", None, None, "primary-1",
+                    "browser", None, profile.profile_id, profile.configured_engines,
+                    url_digest, profile.target_origin_digest, route_digest, case.viewport,
+                )
+
+        secondary = next(
+            (engine for engine in configured if engine != case.browser_engine), None,
+        )
+        recovery_receipt = BrowserRecovery().run(
+            BrowserRequest(
+                case.case_id, url, case.viewport, case.browser_engine, secondary,
+                profile.profile_id, profile.configured_engines,
+                profile.target_origin_digest,
+            ),
+            CleanAdapter(),
+        )
     attempt_number = recovery_receipt.attempts[-1].attempt_number if recovery_receipt else 1
     return EvidenceRef(
         case.case_id, case.persona_id, case.scenario_id, case.route,
@@ -74,8 +105,8 @@ class PersonaGateTests(unittest.TestCase):
             1, "project_declaration", (case,), (),
             configured_engines=("chromium", "firefox"),
         ).bind_target_origin(TARGET_ORIGIN)
-        generic_mismatch = evidence(case, profile=profile, actual_engine="firefox")
-        self.assertFalse(VerificationGate().evaluate(profile, [generic_mismatch]).allowed)
+        with self.assertRaises(InvalidSchemaError):
+            evidence(case, profile=profile, actual_engine="firefox")
         with self.assertRaises(InvalidSchemaError):
             evidence(
                 case, profile=profile, actual_engine="firefox",
@@ -138,6 +169,38 @@ class PersonaGateTests(unittest.TestCase):
                 case, profile=other, actual_engine="firefox",
                 substitution="alternate_engine_recovery", recovery_receipt=receipt,
             )
+
+    def test_gate_reconstructs_evidence_and_nested_receipt_before_trusting_it(self):
+        case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (), configured_engines=("chromium",),
+        ).bind_target_origin(TARGET_ORIGIN)
+        for mutation in ("evidence_origin", "nested_attempt", "curl_promotion"):
+            with self.subTest(mutation=mutation):
+                item = evidence(case, profile=profile)
+                if mutation == "evidence_origin":
+                    object.__setattr__(item, "target_origin_digest", "origin-sha256:" + "b" * 64)
+                elif mutation == "nested_attempt":
+                    object.__setattr__(
+                        item.recovery_receipt.attempts[0], "proof_kind", "curl",
+                    )
+                else:
+                    object.__setattr__(item, "proof_kind", "curl")
+                    object.__setattr__(item, "recovery_receipt", None)
+                    object.__setattr__(item, "proof_kind", "browser")
+                with self.assertRaises(InvalidSchemaError):
+                    VerificationGate().evaluate(profile, (item,))
+        ignored_profile = VerificationProfile(
+            1, "project_declaration", (), (),
+            selection_status="no_runnable_tasks", configured_engines=("chromium",),
+        )
+        item = evidence(case, profile=profile)
+        object.__setattr__(item, "proof_kind", "curl")
+        with self.assertRaises(InvalidSchemaError):
+            VerificationGate().evaluate(ignored_profile, (item,))
 
     def test_declared_empty_profile_requires_non_runnable_provenance(self):
         with self.assertRaises(InvalidSchemaError):
