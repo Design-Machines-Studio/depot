@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import List, Tuple
 
-from ._files import open_verified_regular
+from ._files import LockHandle, canonical_path, open_verified_regular
 from .redaction import redact
 from .schema import CorruptEventError, KernelError, SequenceConflictError, UnsafePayloadError, WorkflowEvent
 
@@ -32,34 +32,50 @@ def encode_event(event: WorkflowEvent) -> bytes:
 class EventStore:
     def __init__(self, path):
         self.path = Path(path)
-        self._lock_path = self.path.with_name(self.path.name + ".lock")
+        canonical = canonical_path(self.path)
+        self._lock_path = canonical.with_name(canonical.name + ".lock")
 
-    def _acquire(self) -> int:
+    def _acquire(self) -> LockHandle:
         if fcntl is None:
             raise SequenceConflictError("crash-safe event locking is unavailable", {
                 "reason_code": "locking_unsupported",
             })
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            descriptor = open_verified_regular(self._lock_path, os.O_CREAT | os.O_RDWR)
+            handle = LockHandle.open(self._lock_path)
         except OSError as exc:
             raise SequenceConflictError("event lock path is unsafe", {"path": str(self.path)}) from exc
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, OSError) as exc:
-            os.close(descriptor)
+            handle.close()
             raise SequenceConflictError("event ledger has another writer", {"path": str(self.path)}) from exc
-        return descriptor
+        try:
+            self._require_current_lock(handle)
+        except SequenceConflictError:
+            fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
+            handle.close()
+            raise
+        return handle
 
-    def _release(self, descriptor: int) -> None:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
+    def _release(self, handle: LockHandle) -> None:
+        fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
+        handle.close()
+
+    def _require_current_lock(self, handle: LockHandle) -> None:
+        try:
+            handle.revalidate()
+        except OSError as exc:
+            raise SequenceConflictError("event lock identity changed", {
+                "path": str(self._lock_path), "reason_code": "lock_identity_changed",
+            }) from exc
 
     def append(self, event: WorkflowEvent, expected_sequence: int) -> None:
         if isinstance(expected_sequence, bool) or not isinstance(expected_sequence, int) or expected_sequence < 0:
             raise SequenceConflictError("invalid expected sequence", {"expected_sequence": expected_sequence})
         lock = self._acquire()
         try:
+            self._require_current_lock(lock)
             try:
                 descriptor = open_verified_regular(self.path, os.O_CREAT | os.O_APPEND | os.O_RDWR)
             except OSError as exc:
@@ -76,6 +92,7 @@ class EventStore:
                 if events and event.run_id != events[0].run_id:
                     raise CorruptEventError("event run id conflicts with ledger", {"sequence": event.sequence})
                 data = encode_event(event)
+                self._require_current_lock(lock)
                 written = 0
                 while written < len(data):
                     written += os.write(descriptor, data[written:])

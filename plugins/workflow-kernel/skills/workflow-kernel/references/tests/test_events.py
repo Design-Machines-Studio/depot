@@ -62,6 +62,54 @@ class EventStoreTests(unittest.TestCase):
             finally:
                 store._release(lock)
 
+    def test_unlinked_live_event_lock_cannot_mutate_alongside_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            store = EventStore(path)
+            first = store._acquire()
+            store._lock_path.unlink()
+            second = store._acquire()
+            try:
+                stale = first
+                first = None
+                with mock.patch.object(store, "_acquire", return_value=stale):
+                    with self.assertRaises(SequenceConflictError) as raised:
+                        store.append(event(0), 0)
+                self.assertEqual(raised.exception.details["reason_code"], "lock_identity_changed")
+                self.assertFalse(path.exists())
+                with self.assertRaises(SequenceConflictError):
+                    store.append(event(0), 0)
+            finally:
+                if first is not None:
+                    store._release(first)
+                store._release(second)
+            store.append(event(0), 0)
+
+    def test_replaced_live_event_lock_cannot_mutate_alongside_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "events.jsonl"
+            store = EventStore(path)
+            first = store._acquire()
+            replacement = store._lock_path.with_name("replacement.lock")
+            replacement.write_text("replacement")
+            os.replace(replacement, store._lock_path)
+            second = store._acquire()
+            try:
+                stale = first
+                first = None
+                with mock.patch.object(store, "_acquire", return_value=stale):
+                    with self.assertRaises(SequenceConflictError) as raised:
+                        store.append(event(0), 0)
+                self.assertEqual(raised.exception.details["reason_code"], "lock_identity_changed")
+                self.assertFalse(path.exists())
+                with self.assertRaises(SequenceConflictError):
+                    store.append(event(0), 0)
+            finally:
+                if first is not None:
+                    store._release(first)
+                store._release(second)
+            store.append(event(0), 0)
+
     def test_oversize_record_and_ledger_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"

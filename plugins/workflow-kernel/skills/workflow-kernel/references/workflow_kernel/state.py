@@ -8,7 +8,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from ._files import open_verified_regular, verified_regular_exists
+from ._files import LockHandle, canonical_path, open_verified_regular, verified_regular_exists
 from .schema import CorruptStateError, KernelError, LeaseConflictError, RevisionConflictError, RunState
 
 try:
@@ -28,10 +28,9 @@ class RunLease:
     """Exclusive filesystem lease for a single run-state path."""
 
     def __init__(self, state_path):
-        path = Path(state_path)
-        self.state_path = Path(os.path.abspath(str(path)))
-        self.path = path.with_name(path.name + ".lease")
-        self._descriptor = None
+        self.state_path = canonical_path(Path(state_path))
+        self.path = self.state_path.with_name(self.state_path.name + ".lease")
+        self._handle = None
         self._owner_pid = None
 
     def acquire(self):
@@ -41,43 +40,67 @@ class RunLease:
             })
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            descriptor = open_verified_regular(self.path, os.O_CREAT | os.O_RDWR)
+            handle = LockHandle.open(self.path)
         except OSError as exc:
             raise LeaseConflictError("run lease path is unsafe", {"path": str(self.path)}) from exc
         try:
-            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except (BlockingIOError, OSError) as exc:
-            os.close(descriptor)
+            handle.close()
             raise LeaseConflictError("run already has a live writer lease", {"path": str(self.path)}) from exc
         try:
-            os.ftruncate(descriptor, 0)
-            os.write(descriptor, (str(os.getpid()) + "\n").encode("ascii"))
-            os.fsync(descriptor)
+            handle.revalidate()
+        except OSError as exc:
+            fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
+            handle.close()
+            raise LeaseConflictError("run lease identity changed", {
+                "path": str(self.path), "reason_code": "lease_identity_changed",
+            }) from exc
+        try:
+            os.ftruncate(handle.descriptor, 0)
+            os.write(handle.descriptor, (str(os.getpid()) + "\n").encode("ascii"))
+            os.fsync(handle.descriptor)
         except Exception:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)
+            fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
+            handle.close()
             raise
-        self._descriptor = descriptor
+        self._handle = handle
         self._owner_pid = os.getpid()
         return self
 
     def release(self):
-        if self._descriptor is None:
+        if self._handle is None:
             return
-        fcntl.flock(self._descriptor, fcntl.LOCK_UN)
-        os.close(self._descriptor)
-        self._descriptor = None
+        handle = self._handle
+        self._handle = None
+        fcntl.flock(handle.descriptor, fcntl.LOCK_UN)
+        handle.close()
         self._owner_pid = None
+
+    def require_authorized(self, state_path) -> None:
+        """Require this live capability to own the target state path."""
+        if self._handle is None or self._owner_pid != os.getpid():
+            raise LeaseConflictError("state write requires its acquired run lease", {
+                "path": str(state_path), "reason_code": "lease_not_owned",
+            })
+        if self.state_path != canonical_path(Path(state_path)):
+            raise LeaseConflictError("state write requires its acquired run lease", {
+                "path": str(state_path), "reason_code": "lease_path_mismatch",
+            })
+        try:
+            self._handle.revalidate()
+        except OSError as exc:
+            raise LeaseConflictError("run lease identity changed", {
+                "path": str(self.path), "reason_code": "lease_identity_changed",
+            }) from exc
 
     def authorizes(self, state_path) -> bool:
         """Return whether this live capability owns the target state path."""
-        if self._descriptor is None or self._owner_pid != os.getpid():
-            return False
         try:
-            os.fstat(self._descriptor)
-        except OSError:
+            self.require_authorized(state_path)
+        except LeaseConflictError:
             return False
-        return self.state_path == Path(os.path.abspath(str(state_path)))
+        return True
 
     def __enter__(self):
         return self.acquire()
@@ -123,8 +146,9 @@ class StateStore:
             os.close(descriptor)
 
     def write(self, state: RunState, expected_revision: int, *, lease: RunLease = None) -> dict:
-        if lease is None or not isinstance(lease, RunLease) or not lease.authorizes(self.path):
+        if lease is None or not isinstance(lease, RunLease):
             raise LeaseConflictError("state write requires its acquired run lease", {"path": str(self.path)})
+        lease.require_authorized(self.path)
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < -1:
             raise RevisionConflictError("invalid expected revision", {"expected_revision": expected_revision})
         try:
@@ -149,6 +173,7 @@ class StateStore:
                 handle.write(encode_state(state))
                 handle.flush()
                 os.fsync(handle.fileno())
+            lease.require_authorized(self.path)
             os.replace(temporary, self.path)
             directory_fsync = self._fsync_directory()
         except Exception:

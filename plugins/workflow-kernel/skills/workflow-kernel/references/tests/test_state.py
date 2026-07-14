@@ -35,6 +35,46 @@ class StateStoreTests(unittest.TestCase):
                     with RunLease(path):
                         pass
 
+    def test_unlinked_live_lease_cannot_authorize_alongside_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            first = RunLease(path).acquire()
+            first.path.unlink()
+            second = RunLease(path).acquire()
+            try:
+                self.assertFalse(first.authorizes(path))
+                with self.assertRaises(LeaseConflictError) as raised:
+                    StateStore(path).write(state, -1, lease=first)
+                self.assertEqual(raised.exception.details["reason_code"], "lease_identity_changed")
+                self.assertFalse(path.exists())
+                StateStore(path).write(state, -1, lease=second)
+            finally:
+                first.release()
+                self.assertTrue(second.authorizes(path))
+                second.release()
+
+    def test_replaced_live_lease_cannot_authorize_alongside_replacement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            first = RunLease(path).acquire()
+            replacement = first.path.with_name("replacement.lease")
+            replacement.write_text("replacement")
+            os.replace(replacement, first.path)
+            second = RunLease(path).acquire()
+            try:
+                self.assertFalse(first.authorizes(path))
+                with self.assertRaises(LeaseConflictError) as raised:
+                    StateStore(path).write(state, -1, lease=first)
+                self.assertEqual(raised.exception.details["reason_code"], "lease_identity_changed")
+                self.assertFalse(path.exists())
+                StateStore(path).write(state, -1, lease=second)
+            finally:
+                first.release()
+                self.assertTrue(second.authorizes(path))
+                second.release()
+
     def test_write_returns_durability_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
