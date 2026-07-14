@@ -635,6 +635,64 @@ class HostCapabilityTests(unittest.TestCase):
                         detail_digest("invalid_harness_profile"),
                     )
 
+    def test_harness_profile_rejects_hostile_names_before_key_dispatch(self):
+        secret = "sk-secret-host-name-callback"
+        calls = []
+
+        class Hostile:
+            def __hash__(self):
+                calls.append("hash")
+                raise RuntimeError(secret)
+
+            def __eq__(self, other):
+                calls.append("eq")
+                raise RuntimeError(secret)
+
+        class HostileString(str):
+            def __hash__(self):
+                calls.append("str-hash")
+                raise RuntimeError(secret)
+
+            def __eq__(self, other):
+                calls.append("str-eq")
+                raise RuntimeError(secret)
+
+        payload = {
+            "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            for name, host_name in (
+                ("object", Hostile()),
+                ("str_subclass", HostileString("test")),
+                ("empty", ""),
+            ):
+                calls.clear()
+                with self.subTest(name=name):
+                    with self.assertRaises(InvalidSchemaError) as raised:
+                        capabilities_from_harness_profile(host_name, path)
+                    self.assertEqual(
+                        raised.exception.details["reason_code"],
+                        detail_digest("invalid_harness_profile"),
+                    )
+                    self.assertNotIn(secret, repr(raised.exception))
+                    self.assertEqual(calls, [])
+
+    def test_harness_profile_preserves_exact_whitespace_host_contract(self):
+        payload = {
+            "hosts": {" ": {"roles": {"only": {"kind": "none"}}}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                capabilities_from_harness_profile(" ", path)
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_host_name"),
+        )
+
     def test_native_provider_capability_comes_from_validated_role_not_host_name(self):
         payload = {
             "hosts": {

@@ -33,6 +33,8 @@ def capabilities_from_harness_profile(
     host_name: str,
     path: Optional[Path] = None,
 ) -> HostCapabilities:
+    if type(host_name) is not str or not host_name:
+        raise invalid_policy("invalid_harness_profile")
     source = Path(path) if path is not None else _repository_file(
         "plugins/pipeline/references/harness-profile.json"
     )
