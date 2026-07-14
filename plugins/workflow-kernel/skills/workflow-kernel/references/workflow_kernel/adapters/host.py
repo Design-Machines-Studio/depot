@@ -15,7 +15,7 @@ from .base import (
     SessionHandle, SessionResult, ValidationFeedback, _snapshot_resume_context,
     _snapshot_host_capabilities, _snapshot_node_spec, _snapshot_session_handle,
     _snapshot_session_result, route_satisfies_node,
-    _snapshot_validation_feedback, invalid_policy,
+    _snapshot_validation_feedback, _validate_host_name, invalid_policy,
 )
 from ..limits import load_json_document
 from ..schema import InvalidSchemaError
@@ -33,8 +33,7 @@ def capabilities_from_harness_profile(
     host_name: str,
     path: Optional[Path] = None,
 ) -> HostCapabilities:
-    if type(host_name) is not str or not host_name:
-        raise invalid_policy("invalid_harness_profile")
+    host_name = _validate_host_name(host_name)
     source = Path(path) if path is not None else _repository_file(
         "plugins/pipeline/references/harness-profile.json"
     )

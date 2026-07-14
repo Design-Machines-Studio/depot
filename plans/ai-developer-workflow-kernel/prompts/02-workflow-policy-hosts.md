@@ -191,6 +191,10 @@ returns none.
   strict boundary, including for ignored fields, while translating every
   syntax, depth, and integer failure to their existing `invalid_routing_policy`
   and `invalid_harness_profile` reason contracts.
+  Validate harness host names through one shared callback-free exact-string and
+  `[a-z0-9][a-z0-9._-]*` format contract before profile I/O: malformed caller
+  names always produce `invalid_host_name`, while valid missing names and
+  malformed profiles retain `invalid_harness_profile`.
   Project the safety anchor exactly once, then add only its already-projected
   stage-set wrappers, so file and injected forms consume the same canonical item
   budget. Ordered policy fields accept exact lists or normalized tuples, never

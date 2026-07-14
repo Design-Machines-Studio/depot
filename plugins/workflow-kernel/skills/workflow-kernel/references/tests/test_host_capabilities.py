@@ -635,6 +635,44 @@ class HostCapabilityTests(unittest.TestCase):
                         detail_digest("invalid_harness_profile"),
                     )
 
+    def test_harness_profile_validates_exact_names_before_profile_state(self):
+        invalid_names = ("", " ", "\t", "\n", "UPPER", "-leading", "slash/name")
+        valid_role = {"roles": {"only": {"kind": "none"}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            profiles = {
+                "present": json.dumps({
+                    "hosts": {name: valid_role for name in invalid_names},
+                }),
+                "malformed_roles": json.dumps({
+                    "hosts": {name: {"roles": []} for name in invalid_names},
+                }),
+                "malformed_json": "{",
+            }
+            paths = {"absent": root / "absent.json"}
+            for state, content in profiles.items():
+                paths[state] = root / f"{state}.json"
+                paths[state].write_text(content, encoding="utf-8")
+
+            for host_name in invalid_names:
+                with self.subTest(surface="capabilities", host_name=host_name):
+                    with self.assertRaises(InvalidSchemaError) as raised:
+                        HostCapabilities(host_name, frozenset())
+                    self.assertEqual(
+                        raised.exception.details["reason_code"],
+                        detail_digest("invalid_host_name"),
+                    )
+                for state, path in paths.items():
+                    with self.subTest(
+                        surface="profile", host_name=host_name, state=state,
+                    ):
+                        with self.assertRaises(InvalidSchemaError) as raised:
+                            capabilities_from_harness_profile(host_name, path)
+                        self.assertEqual(
+                            raised.exception.details["reason_code"],
+                            detail_digest("invalid_host_name"),
+                        )
+
     def test_harness_profile_rejects_hostile_names_before_key_dispatch(self):
         secret = "sk-secret-host-name-callback"
         calls = []
@@ -657,41 +695,56 @@ class HostCapabilityTests(unittest.TestCase):
                 calls.append("str-eq")
                 raise RuntimeError(secret)
 
-        payload = {
-            "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
-        }
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "harness.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
+            root = Path(directory)
+            present = root / "present.json"
+            present.write_text(json.dumps({
+                "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
+            }), encoding="utf-8")
+            malformed = root / "malformed.json"
+            malformed.write_text("{", encoding="utf-8")
+            paths = (present, malformed, root / "absent.json")
             for name, host_name in (
                 ("object", Hostile()),
                 ("str_subclass", HostileString("test")),
-                ("empty", ""),
             ):
-                calls.clear()
-                with self.subTest(name=name):
+                for path in paths:
+                    calls.clear()
+                    with self.subTest(name=name, profile=path.name):
+                        with self.assertRaises(InvalidSchemaError) as raised:
+                            capabilities_from_harness_profile(host_name, path)
+                        self.assertEqual(
+                            raised.exception.details["reason_code"],
+                            detail_digest("invalid_host_name"),
+                        )
+                        self.assertNotIn(secret, repr(raised.exception))
+                        self.assertEqual(calls, [])
+
+    def test_valid_harness_names_preserve_profile_failure_contract(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            missing = root / "missing.json"
+            missing.write_text(json.dumps({"hosts": {}}), encoding="utf-8")
+            malformed_roles = root / "malformed-roles.json"
+            malformed_roles.write_text(json.dumps({
+                "hosts": {"test": {"roles": []}},
+            }), encoding="utf-8")
+            malformed_json = root / "malformed-json.json"
+            malformed_json.write_text("{", encoding="utf-8")
+            cases = (
+                ("missing", "missing", missing),
+                ("malformed_roles", "test", malformed_roles),
+                ("malformed_json", "test", malformed_json),
+                ("absent", "test", root / "absent.json"),
+            )
+            for state, host_name, path in cases:
+                with self.subTest(state=state):
                     with self.assertRaises(InvalidSchemaError) as raised:
                         capabilities_from_harness_profile(host_name, path)
                     self.assertEqual(
                         raised.exception.details["reason_code"],
                         detail_digest("invalid_harness_profile"),
                     )
-                    self.assertNotIn(secret, repr(raised.exception))
-                    self.assertEqual(calls, [])
-
-    def test_harness_profile_preserves_exact_whitespace_host_contract(self):
-        payload = {
-            "hosts": {" ": {"roles": {"only": {"kind": "none"}}}},
-        }
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "harness.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaises(InvalidSchemaError) as raised:
-                capabilities_from_harness_profile(" ", path)
-        self.assertEqual(
-            raised.exception.details["reason_code"],
-            detail_digest("invalid_host_name"),
-        )
 
     def test_native_provider_capability_comes_from_validated_role_not_host_name(self):
         payload = {

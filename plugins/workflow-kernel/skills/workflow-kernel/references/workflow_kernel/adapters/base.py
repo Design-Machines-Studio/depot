@@ -46,6 +46,13 @@ def invalid_policy(reason_code: str) -> InvalidSchemaError:
     )
 
 
+def _validate_host_name(value: object) -> str:
+    """Return one exact, format-valid host name without caller callbacks."""
+    if type(value) is not str or _HOST_NAME.fullmatch(value) is None:
+        raise invalid_policy("invalid_host_name")
+    return value
+
+
 def _normalize_enum(enum_type: type[Enum], value: object, reason_code: str) -> Enum:
     """Normalize one public enum scalar without leaking ordinary exceptions."""
     if type(value) is enum_type:
@@ -838,8 +845,7 @@ class HostCapabilities:
     routes: frozenset[HostRoute] = frozenset()
 
     def __post_init__(self) -> None:
-        if type(self.host_name) is not str or _HOST_NAME.fullmatch(self.host_name) is None:
-            raise invalid_policy("invalid_host_name")
+        _validate_host_name(self.host_name)
         try:
             raw_values = list(self.capabilities)
             converted = [

@@ -144,7 +144,11 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       actual-budget parity. Sensitive-path routing and harness-authorization
       profiles share this strict loader even for ignored fields, mapping syntax,
       depth, and integer failures to their existing `invalid_routing_policy` and
-      `invalid_harness_profile` reason contracts.
+      `invalid_harness_profile` reason contracts. One callback-free validator
+      requires exact built-in harness host strings matching
+      `[a-z0-9][a-z0-9._-]*` before profile I/O, making malformed caller names
+      deterministically `invalid_host_name` while valid missing names and
+      malformed profiles remain `invalid_harness_profile`.
       Ordered fields reject sets and frozensets; only canonical forbidden
       downgrades accept a frozenset. Exact tuples project without re-entry; any
       malformed member collapses to one invalid-shape payload, while exact scalar

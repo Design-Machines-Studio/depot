@@ -228,6 +228,10 @@ Sensitive-path routing and harness-authorization profile loading share this
 boundary even for otherwise ignored fields, mapping all syntax, depth, and
 integer failures to their existing `invalid_routing_policy` and
 `invalid_harness_profile` reasons.
+Harness host selection uses one callback-free exact built-in string and
+`[a-z0-9][a-z0-9._-]*` format validator before profile I/O. Malformed caller
+names therefore take `invalid_host_name` independently of profile state; valid
+missing names and malformed profiles retain `invalid_harness_profile`.
 Safety-anchor projection charges the graph once before wrapping projected stage
 sets, ordered
 fields reject sets and frozensets, and only canonical forbidden downgrades accept
