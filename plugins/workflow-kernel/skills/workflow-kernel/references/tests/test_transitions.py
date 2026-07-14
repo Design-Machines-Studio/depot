@@ -1,7 +1,9 @@
 import unittest
 import json
 from types import MappingProxyType
+from unittest import mock
 
+from workflow_kernel import transitions
 from workflow_kernel.schema import (
     IllegalTransitionError, MissingEvidenceError, NodeState, NodeStatus,
     RunState, RunStatus, WorkflowEvent,
@@ -73,3 +75,21 @@ class TransitionTests(unittest.TestCase):
         }))
         with self.assertRaises(IllegalTransitionError):
             self.engine.apply(state, event(2, "node.ready", node_id="b"))
+
+    def test_aggregate_evidence_limit_accepts_boundary_and_rejects_overflow(self):
+        self.assertTrue(hasattr(transitions, "MAX_EVIDENCE_ITEMS"))
+        with mock.patch.object(transitions, "MAX_EVIDENCE_ITEMS", 2):
+            state = self.engine.reconstruct((
+                event(0, "run.initialized"), event(1, "run.started"),
+                event(2, "node.added", node_id="n"),
+            ))
+            state = self.engine.apply(state, event(3, "evidence.recorded", payload={"evidence": ["a"]}))
+            state = self.engine.apply(state, event(4, "evidence.recorded", node_id="n", payload={"evidence": ["b"]}))
+            self.assertEqual(state.evidence, ("a",))
+            self.assertEqual(state.nodes["n"].evidence, ("b",))
+            with self.assertRaises(IllegalTransitionError) as raised:
+                self.engine.apply(state, event(5, "evidence.recorded", payload={"evidence": ["c"]}))
+        self.assertEqual(raised.exception.details["reason_code"], "evidence_limit_exceeded")
+        self.assertEqual(raised.exception.details["limit_items"], 2)
+        self.assertEqual(state.evidence, ("a",))
+        self.assertEqual(state.nodes["n"].evidence, ("b",))

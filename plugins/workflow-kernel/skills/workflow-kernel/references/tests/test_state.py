@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from dataclasses import replace
+from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
 from workflow_kernel import CorruptStateError
@@ -15,6 +15,38 @@ from workflow_kernel.state import RunLease, StateStore, encode_state
 
 
 class StateStoreTests(unittest.TestCase):
+    def test_prepared_state_is_frozen_and_publishes_exact_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            self.assertTrue(hasattr(store, "prepare"))
+            prepared = store.prepare(state)
+            self.assertEqual(prepared.state, state)
+            self.assertEqual(prepared.encoded, encode_state(state))
+            with self.assertRaises(FrozenInstanceError):
+                prepared.encoded = b"corrupt\n"
+            with RunLease(path) as lease:
+                for invalid in (b"corrupt\n", replace(prepared, encoded=b"corrupt\n")):
+                    with self.subTest(invalid=type(invalid).__name__), self.assertRaises(UnsafePayloadError):
+                        store.publish(invalid, -1, lease=lease)
+                store.publish(prepared, -1, lease=lease)
+            self.assertEqual(store.load(), state)
+            self.assertFalse(hasattr(store, "_write_prepared"))
+
+    def test_prepared_state_cannot_publish_through_another_store(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first = StateStore(Path(directory) / "first.json")
+            second = StateStore(Path(directory) / "second.json")
+            state = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            self.assertTrue(hasattr(first, "prepare"))
+            prepared = first.prepare(state)
+            with RunLease(second.path) as lease:
+                with self.assertRaises(UnsafePayloadError) as raised:
+                    second.publish(prepared, -1, lease=lease)
+            self.assertEqual(raised.exception.details["reason_code"], "prepared_state_owner_mismatch")
+            self.assertFalse(second.path.exists())
+
     def test_relative_stores_keep_all_artifacts_bound_across_chdir(self):
         original = Path.cwd()
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:

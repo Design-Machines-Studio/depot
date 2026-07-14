@@ -87,9 +87,9 @@ def command_append(args):
         expected = states.load().revision if states.path.exists() else -1
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
-        prepared = states.preflight(next_state)
+        prepared = states.prepare(next_state)
         events.append(event, expected_sequence=len(existing))
-        evidence = states._write_prepared(next_state, expected, prepared, lease=lease)
+        evidence = states.publish(prepared, expected, lease=lease)
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})
     return 0

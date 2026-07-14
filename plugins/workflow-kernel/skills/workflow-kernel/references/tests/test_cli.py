@@ -138,7 +138,7 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = state
             self.assertEqual(command_replay(SimpleNamespace(directory="unused")), 0)
         self.assertFalse(active["lease"])
-        states.preflight.assert_not_called()
+        states.prepare.assert_not_called()
 
     def test_append_observes_state_before_publishing_event(self):
         order = []
@@ -153,10 +153,10 @@ class CliTests(unittest.TestCase):
         states = mock.Mock()
         states.path.exists.return_value = True
         states.load.side_effect = lambda: (order.append("state"), current)[1]
-        prepared = b"prepared-state\n"
-        states.preflight.side_effect = lambda *_: (order.append("preflight"), prepared)[1]
-        states._write_prepared.side_effect = lambda *_args, **_kwargs: (
-            order.append("state-write"), {"directory_fsync": "completed"}
+        prepared = object()
+        states.prepare.side_effect = lambda *_: (order.append("prepare"), prepared)[1]
+        states.publish.side_effect = lambda *_args, **_kwargs: (
+            order.append("publish"), {"directory_fsync": "completed"}
         )[1]
         next_state = mock.Mock(revision=2)
         next_state.status.value = "running"
@@ -169,11 +169,11 @@ class CliTests(unittest.TestCase):
             engine.return_value.reconstruct.return_value = mock.Mock()
             engine.return_value.apply.return_value = next_state
             self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
-        self.assertEqual(order, ["state", "preflight", "event", "state-write"])
-        states._write_prepared.assert_called_once_with(next_state, 1, prepared, lease=coordinator.__enter__.return_value)
+        self.assertEqual(order, ["state", "prepare", "event", "publish"])
+        states.publish.assert_called_once_with(prepared, 1, lease=coordinator.__enter__.return_value)
         states.write.assert_not_called()
 
-    def test_append_state_preflight_preserves_prior_ledger_and_state(self):
+    def test_append_state_prepare_preserves_prior_ledger_and_state(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch("workflow_kernel.cli._emit"):
             command_init(SimpleNamespace(directory=directory, run_id="run-1", mode="shadow",
                                          occurred_at="2026-07-14T00:00:00Z"))

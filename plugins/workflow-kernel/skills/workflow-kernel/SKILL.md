@@ -65,9 +65,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   corruption, conflicting run IDs, and bounded-input violations.
 - Use `StateStore.load()` to read the bounded materialization. Unsafe paths or
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
-  Use `StateStore.preflight(state)` before publishing an event that derives the
-  state; coordinated CLI append and replay do this automatically. Oversized
-  state is rejected before temporary-file creation or replacement.
+  Use `StateStore.prepare(state)` before publishing an event that derives the
+  state. It returns an immutable capability containing the exact encoded state,
+  bound to that store; pass only that capability to `StateStore.publish()`.
+  Coordinated CLI append does this before event publication, while direct writes
+  compose prepare and publish automatically. Oversized state is rejected before
+  temporary-file creation or replacement.
 - Acquire `RunLease(state_path)` and pass that live capability to
   `StateStore.write(state, expected_revision, lease=lease)`. A lease for a
   different path or a released lease never authorizes a write. POSIX advisory
@@ -81,7 +84,9 @@ errors as stable JSON. Treat `--help` output as plain text.
 - Use `TransitionEngine.apply(state, event)` for one pure transition and
   `TransitionEngine.reconstruct(events)` for deterministic replay. Event
   sequence equals the prior state revision; each accepted event increments the
-  revision by one.
+  revision by one. A run may attach at most 1,024 evidence items across run and
+  node state; transitions exceeding that aggregate limit fail before state
+  reconstruction.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
   errors. Do not expose raw parser exceptions or rejected values.
 

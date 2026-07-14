@@ -6,6 +6,8 @@ import errno
 import json
 import os
 import tempfile
+import weakref
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from ._files import (
@@ -23,6 +25,15 @@ MAX_STATE_BYTES = 4_194_304
 
 def encode_state(state: RunState) -> bytes:
     return (json.dumps(state.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+@dataclass(frozen=True, eq=False)
+class PreparedState:
+    """Immutable state bytes authenticated for publication by one StateStore."""
+
+    state: RunState
+    encoded: bytes
+    _owner_token: object = field(repr=False)
 
 
 class RunLease:
@@ -105,6 +116,8 @@ class RunLease:
 class StateStore:
     def __init__(self, path):
         self.path = canonical_path(Path(path))
+        self._owner_token = object()
+        self._prepared = weakref.WeakSet()
 
     def load(self) -> RunState:
         try:
@@ -138,11 +151,18 @@ class StateStore:
             os.close(descriptor)
 
     def write(self, state: RunState, expected_revision: int, *, lease: RunLease = None) -> dict:
-        prepared = self.preflight(state)
-        return self._write_prepared(state, expected_revision, prepared, lease=lease)
+        prepared = self.prepare(state)
+        return self.publish(prepared, expected_revision, lease=lease)
 
-    def _write_prepared(self, state: RunState, expected_revision: int, prepared: bytes,
-                        *, lease: RunLease = None) -> dict:
+    def publish(self, prepared: PreparedState, expected_revision: int,
+                *, lease: RunLease = None) -> dict:
+        if (not isinstance(prepared, PreparedState)
+                or prepared._owner_token is not self._owner_token
+                or prepared not in self._prepared):
+            raise UnsafePayloadError("prepared state belongs to another store", {
+                "reason_code": "prepared_state_owner_mismatch",
+            })
+        state = prepared.state
         if lease is None or not isinstance(lease, RunLease):
             raise LeaseConflictError("state write requires its acquired run lease", {"path": str(self.path)})
         lease.require_authorized(self.path)
@@ -167,7 +187,7 @@ class StateStore:
         descriptor, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent))
         try:
             with os.fdopen(descriptor, "wb") as handle:
-                handle.write(prepared)
+                handle.write(prepared.encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
             lease.require_authorized(self.path)
@@ -181,14 +201,18 @@ class StateStore:
             raise
         return {"state_path": str(self.path), "revision": state.revision, "directory_fsync": directory_fsync}
 
-    def preflight(self, state: RunState) -> bytes:
-        """Encode and require a state that can be read back within durable limits."""
+    def prepare(self, state: RunState) -> PreparedState:
+        """Return immutable state bytes authenticated for this store."""
+        if not isinstance(state, RunState):
+            raise UnsafePayloadError("prepared state requires a validated RunState")
         encoded = encode_state(state)
         if len(encoded) > MAX_STATE_BYTES:
             raise UnsafePayloadError("materialized state exceeds size limit", {
                 "limit_bytes": MAX_STATE_BYTES,
             })
-        return encoded
+        prepared = PreparedState(state, encoded, self._owner_token)
+        self._prepared.add(prepared)
+        return prepared
 
     def _fsync_directory(self) -> str:
         flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)

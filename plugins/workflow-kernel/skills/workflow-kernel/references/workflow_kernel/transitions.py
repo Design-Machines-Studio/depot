@@ -30,6 +30,7 @@ NODE_TARGETS = {
     "node.blocked": NodeStatus.BLOCKED,
     "node.skipped": NodeStatus.SKIPPED,
 }
+MAX_EVIDENCE_ITEMS = 1_024
 LEGAL_NODE_SOURCES = {
     NodeStatus.READY: {NodeStatus.PENDING},
     NodeStatus.RUNNING: {NodeStatus.READY, NodeStatus.WAITING},
@@ -56,6 +57,23 @@ def _require(condition: bool, state: RunState, event: WorkflowEvent) -> None:
         raise IllegalTransitionError("event is illegal for current state", {
             "kind": event.kind, "run_status": state.status.value, "node_id": event.node_id,
         })
+
+
+def _merge_evidence(state: RunState, current: Tuple[str, ...], refs: Tuple[str, ...]) -> Tuple[str, ...]:
+    """Merge references only after enforcing the run-wide attachment bound."""
+    known = set(current)
+    additions = []
+    for reference in refs:
+        if reference not in known:
+            known.add(reference)
+            additions.append(reference)
+    total = len(state.evidence) + sum(len(node.evidence) for node in state.nodes.values())
+    if total + len(additions) > MAX_EVIDENCE_ITEMS:
+        raise IllegalTransitionError("evidence item limit exceeded", {
+            "reason_code": "evidence_limit_exceeded",
+            "limit_items": MAX_EVIDENCE_ITEMS,
+        })
+    return current + tuple(additions)
 
 
 class TransitionEngine:
@@ -108,7 +126,7 @@ class TransitionEngine:
             refs = _strings(event.payload, "evidence", required=True)
             _require(all(node.status in {NodeStatus.SUCCEEDED, NodeStatus.SKIPPED}
                          for node in state.nodes.values()), state, event)
-            evidence = tuple(dict.fromkeys(evidence + refs))
+            evidence = _merge_evidence(state, evidence, refs)
         return self._advance(state, event, status=target, evidence=evidence)
 
     def _apply_node(self, state: RunState, event: WorkflowEvent) -> RunState:
@@ -138,25 +156,25 @@ class TransitionEngine:
             _require(dependencies_succeeded, state, event)
         refs = node.evidence
         if target == NodeStatus.SUCCEEDED:
-            refs = tuple(dict.fromkeys(refs + _strings(event.payload, "evidence", required=True)))
+            refs = _merge_evidence(state, refs, _strings(event.payload, "evidence", required=True))
         nodes[event.node_id] = replace(node, status=target, evidence=refs)
         return self._advance(state, event, nodes=MappingProxyType(nodes))
 
     def _apply_evidence(self, state: RunState, event: WorkflowEvent) -> RunState:
         refs = _strings(event.payload, "evidence", required=True)
         if event.node_id is None:
-            evidence = tuple(dict.fromkeys(state.evidence + refs))
+            evidence = _merge_evidence(state, state.evidence, refs)
             return self._advance(state, event, evidence=evidence)
         nodes = dict(state.nodes)
         _require(event.node_id in nodes, state, event)
         node = nodes[event.node_id]
-        nodes[event.node_id] = replace(node, evidence=tuple(dict.fromkeys(node.evidence + refs)))
+        nodes[event.node_id] = replace(node, evidence=_merge_evidence(state, node.evidence, refs))
         return self._advance(state, event, nodes=MappingProxyType(nodes))
 
     def _apply_cleanup(self, state: RunState, event: WorkflowEvent) -> RunState:
         _require(event.node_id is None and not state.cleanup_reconciled, state, event)
         refs = _strings(event.payload, "evidence", required=True)
-        evidence = tuple(dict.fromkeys(state.evidence + refs))
+        evidence = _merge_evidence(state, state.evidence, refs)
         return self._advance(state, event, evidence=evidence, cleanup_reconciled=True)
 
     def reconstruct(self, events: Iterable[WorkflowEvent]) -> RunState:
