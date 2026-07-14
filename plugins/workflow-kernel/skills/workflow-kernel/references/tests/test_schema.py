@@ -1,4 +1,6 @@
+import ast
 import hashlib
+import inspect
 import json
 import unittest
 from dataclasses import replace
@@ -167,7 +169,8 @@ class SchemaTests(unittest.TestCase):
 
     def test_standalone_uri_and_content_id_whitespace_is_rejected_across_outputs(self):
         digest = "sha256:" + "a" * 64
-        for value in (" https://example.invalid/proof ", "\t" + digest, digest + "\n"):
+        for value in (" https://example.invalid/proof ", " //example.invalid/proof ",
+                      "\t" + digest, digest + "\n"):
             with self.subTest(event=value), self.assertRaises(UnsafePayloadError):
                 WorkflowEvent(1, 0, "run-1", None, "run.initialized",
                               "2026-07-14T00:00:00Z", {"source": value})
@@ -212,6 +215,56 @@ class SchemaTests(unittest.TestCase):
             self.assertNotIn(b"example.invalid", encoded)
             self.assertNotIn(url.encode(), encoded)
             self.assertIn(digest.encode(), encoded)
+
+    def test_network_path_urls_are_digested_across_event_receipt_and_state(self):
+        first = "//one.example.invalid/proof/never-persist-network-one"
+        second = "//two.example.invalid/report/never-persist-network-two"
+        first_digest = "url-sha256:" + hashlib.sha256(first.encode("utf-8")).hexdigest()
+        second_digest = "url-sha256:" + hashlib.sha256(second.encode("utf-8")).hexdigest()
+        source = "Compare <" + first + ">, then (" + second + ")."
+        normalized = "Compare <" + first_digest + ">, then (" + second_digest + ")."
+
+        event = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                              "2026-07-14T00:00:00Z", {"note": source})
+        receipt = encode_receipt({"note": source})
+        state = RunState.new(source, "2026-07-14T00:00:00Z")
+
+        self.assertEqual(event.payload["note"], normalized)
+        self.assertEqual(json.loads(receipt)["note"], normalized)
+        self.assertEqual(state.run_id, normalized)
+        self.assertEqual(encode_receipt(json.loads(receipt)), receipt)
+        for encoded in (encode_event(event), receipt, encode_state(state)):
+            self.assertNotIn(b"example.invalid", encoded)
+            self.assertNotIn(b"never-persist-network", encoded)
+            self.assertIn(first_digest.encode(), encoded)
+            self.assertIn(second_digest.encode(), encoded)
+
+    def test_standalone_network_path_url_is_digested_and_idempotent(self):
+        source = "//example.invalid/proof/never-persist-standalone"
+        digest = "url-sha256:" + hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+        self.assertEqual(redaction.normalize_durable_string(source), digest)
+        self.assertEqual(redaction.normalize_durable_string(digest), digest)
+
+    def test_unsafe_network_path_urls_fail_without_echoing_values(self):
+        sentinel = "never-persist-network-credential"
+        values = (
+            "//user:" + sentinel + "@example.invalid/proof",
+            "//example.invalid:invalid/proof/" + sentinel,
+            "//example.invalid/proof?access_token=" + sentinel,
+            "//example.invalid/proof#" + sentinel,
+        )
+        for value in values:
+            with self.subTest(value=value):
+                with self.assertRaises(UnsafePayloadError) as event_error:
+                    WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                  "2026-07-14T00:00:00Z", {"note": value})
+                with self.assertRaises(UnsafePayloadError) as receipt_error:
+                    encode_receipt({"note": "See <" + value + "> now"})
+                with self.assertRaises(UnsafePayloadError) as state_error:
+                    RunState.new(value, "2026-07-14T00:00:00Z")
+                for raised in (event_error, receipt_error, state_error):
+                    self.assertNotIn(sentinel, json.dumps(raised.exception.to_dict()))
 
     def test_uri_prefix_punctuation_and_digits_cannot_bypass_durable_outputs(self):
         urls = (
@@ -299,21 +352,106 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaises(UnsafePayloadError):
             RunState.new(rejected, "2026-07-14T00:00:00Z")
 
-    def test_maximum_length_uri_scan_has_linear_operation_bound(self):
+    def test_maximum_length_uri_scan_has_static_linear_structure(self):
         prefix = "See https://example.invalid/path"
         source = prefix + ")" * (redaction.MAX_STRING_LENGTH - len(prefix))
         self.assertEqual(len(source), redaction.MAX_STRING_LENGTH)
         self.assertTrue(hasattr(redaction, "_normalize_uri_tokens"))
 
-        normalized, operations = redaction._normalize_uri_tokens(source)
+        normalized = redaction._normalize_uri_tokens(source)
 
         digest = "url-sha256:" + hashlib.sha256(
             "https://example.invalid/path".encode("utf-8")
         ).hexdigest()
-        self.assertLessEqual(operations, len(source) * 8)
         self.assertNotIn("example.invalid", normalized)
         self.assertIn(digest, normalized)
         self.assertEqual(len(normalized.rsplit(digest, 1)[1]), source.count(")"))
+
+        for helper in (redaction._uri_token_end, redaction._nonspace_end,
+                       redaction._next_uri_shape, redaction._normalize_uri_tokens,
+                       redaction._reject_remaining_uri_shapes):
+            tree = ast.parse(inspect.getsource(helper))
+            loops = [node for node in ast.walk(tree) if isinstance(node, (ast.For, ast.While))]
+            for loop in loops:
+                nested = [node for child in ast.iter_child_nodes(loop)
+                          for node in ast.walk(child)
+                          if isinstance(node, (ast.For, ast.While))]
+                self.assertEqual(nested, [], helper.__name__ + " contains nested scanning loops")
+
+        next_shape_tree = ast.parse(inspect.getsource(redaction._next_uri_shape))
+        searches = [node for node in ast.walk(next_shape_tree)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "search"]
+        self.assertEqual(len(searches), 1, "shape selection must scan each suffix only once")
+
+    def test_production_uri_helpers_return_only_domain_results(self):
+        source = "See https://example.invalid/path now"
+        self.assertIsInstance(redaction._normalize_uri_tokens(source), str)
+        self.assertIsInstance(redaction._reject_remaining_uri_shapes("plain text"), type(None))
+        self.assertIsInstance(redaction._uri_token_end(source, 4, 32), int)
+
+    def test_timestamp_has_a_raw_validator_without_string_mode_flag(self):
+        self.assertTrue(hasattr(schema, "_validated_string"))
+        self.assertNotIn("normalize_uris", inspect.signature(schema._string).parameters)
+        timestamp = "2026-07-14T00:00:00Z"
+        self.assertEqual(schema._timestamp(timestamp), timestamp)
+
+    def test_uri_bearing_mapping_keys_are_rejected_without_rewriting(self):
+        sentinel = "never-persist-mapping-key"
+        keys = (
+            "https://example.invalid/" + sentinel,
+            "data:text/plain," + sentinel,
+            "//example.invalid/" + sentinel,
+            "https://user:password@example.invalid/path?token=" + sentinel,
+        )
+        for key in keys:
+            with self.subTest(key=key):
+                with self.assertRaises(UnsafePayloadError) as event_error:
+                    WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                  "2026-07-14T00:00:00Z", {"nested": {key: "value"}})
+                with self.assertRaises(UnsafePayloadError) as receipt_error:
+                    encode_receipt({"nested": {key: "value"}})
+                error = UnsafePayloadError("unsafe", {"nested": {key: "value"}})
+                encoded_error = json.dumps(error.to_dict(), sort_keys=True)
+                for raised in (event_error, receipt_error):
+                    self.assertNotIn(sentinel, json.dumps(raised.exception.to_dict()))
+                self.assertNotIn(sentinel, encoded_error)
+                self.assertNotIn(key, encoded_error)
+
+    def test_uri_mapping_key_collisions_reject_instead_of_rewriting(self):
+        source = "https://example.invalid/never-persist-collision"
+        digest = "url-sha256:" + hashlib.sha256(source.encode("utf-8")).hexdigest()
+        payload = {source: "unsafe", digest: "safe"}
+
+        with self.assertRaises(UnsafePayloadError) as event_error:
+            WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                          "2026-07-14T00:00:00Z", payload)
+        with self.assertRaises(UnsafePayloadError) as receipt_error:
+            encode_receipt(payload)
+        for raised in (event_error, receipt_error):
+            encoded = json.dumps(raised.exception.to_dict(), sort_keys=True)
+            self.assertNotIn(source, encoded)
+            self.assertNotIn("never-persist-collision", encoded)
+
+    def test_uri_bearing_node_mapping_keys_are_rejected_from_state(self):
+        keys = (
+            "https://example.invalid/never-persist-state-key",
+            "data:text/plain,never-persist-state-key",
+            "//example.invalid/never-persist-state-key",
+            "https://user:password@example.invalid/path?token=never-persist-state-key",
+        )
+        for key in keys:
+            data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+            data["nodes"] = {
+                key: {"node_id": "safe-node", "status": "pending", "dependencies": [], "evidence": []},
+            }
+
+            with self.subTest(key=key), self.assertRaises(
+                    (InvalidSchemaError, UnsafePayloadError)) as raised:
+                RunState.from_dict(data)
+            encoded = json.dumps(raised.exception.to_dict(), sort_keys=True)
+            self.assertNotIn(key, encoded)
+            self.assertNotIn("never-persist-state-key", encoded)
 
     def test_multiple_embedded_urls_preserve_punctuation_and_are_idempotent(self):
         first = "https://one.example.invalid/path"

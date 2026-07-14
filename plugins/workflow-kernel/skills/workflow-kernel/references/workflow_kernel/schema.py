@@ -12,6 +12,7 @@ from typing import Any, Mapping, Optional, Tuple
 from .redaction import (
     MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
     freeze_json, normalize_durable_string, normalize_evidence_reference, redact, thaw,
+    validate_durable_key,
 )
 
 
@@ -104,22 +105,26 @@ def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
     return value
 
 
-def _string(value: object, name: str, *, optional: bool = False,
-            normalize_uris: bool = True) -> Optional[str]:
+def _validated_string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
     if optional and value is None:
         return None
     if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
         raise InvalidSchemaError("invalid string field", {"field": name})
-    if normalize_uris:
-        try:
-            return normalize_durable_string(value)
-        except ValueError as exc:
-            raise UnsafePayloadError("string field contains an unsafe URI", {"field": name}) from exc
     return value
 
 
+def _string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
+    text = _validated_string(value, name, optional=optional)
+    if text is None:
+        return None
+    try:
+        return normalize_durable_string(text)
+    except ValueError as exc:
+        raise UnsafePayloadError("string field contains an unsafe URI", {"field": name}) from exc
+
+
 def _timestamp(value: object, name: str = "occurred_at") -> str:
-    text = _string(value, name, normalize_uris=False)
+    text = _validated_string(value, name)
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -133,6 +138,11 @@ def _only(data: Mapping[str, object], fields: set, required: set) -> None:
     keys = tuple(data)
     if any(not isinstance(key, str) for key in keys):
         raise InvalidSchemaError("schema keys must be strings")
+    try:
+        for key in keys:
+            validate_durable_key(key)
+    except ValueError as exc:
+        raise InvalidSchemaError("schema keys contain an unsafe URI") from exc
     unknown = sorted(set(keys) - fields)
     missing = sorted(required - set(keys))
     if unknown or missing:
@@ -291,7 +301,14 @@ class RunState:
         if not isinstance(self.nodes, Mapping):
             raise InvalidSchemaError("nodes must be an object")
         nodes = dict(self.nodes)
-        if any(not isinstance(key, str) or not isinstance(node, NodeState) or key != node.node_id
+        if any(not isinstance(key, str) for key in nodes):
+            raise InvalidSchemaError("node keys must be strings")
+        try:
+            for key in nodes:
+                validate_durable_key(key)
+        except ValueError as exc:
+            raise InvalidSchemaError("node keys contain an unsafe URI") from exc
+        if any(not isinstance(node, NodeState) or key != node.node_id
                for key, node in nodes.items()):
             raise InvalidSchemaError("node keys must match immutable node states")
         _validate_dependency_graph(nodes)
@@ -320,6 +337,13 @@ class RunState:
         raw_nodes = data["nodes"]
         if not isinstance(raw_nodes, Mapping):
             raise InvalidSchemaError("nodes must be an object")
+        if any(not isinstance(key, str) for key in raw_nodes):
+            raise InvalidSchemaError("node keys must be strings")
+        try:
+            for key in raw_nodes:
+                validate_durable_key(key)
+        except ValueError as exc:
+            raise InvalidSchemaError("node keys contain an unsafe URI") from exc
         nodes = {key: NodeState.from_dict(value) for key, value in raw_nodes.items()}
         return cls(data["schema_version"], data["revision"], data["run_id"], data["mode"], data["status"],
                    data["created_at"], data["updated_at"], MappingProxyType(nodes), data["evidence"],

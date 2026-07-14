@@ -102,24 +102,28 @@ one or more `/`-separated ASCII segments matching
 backslashes, controls, and ambiguous query or fragment syntax are rejected.
 Content IDs use exactly `sha256:<64 lowercase hex>`. Replay also accepts the
 kernel-generated `url-sha256:<64 lowercase hex>` form. Valid content IDs are
-exempt from URI normalization, but surrounding whitespace on a standalone URI
-or content ID is rejected as ambiguous. Every whole-string URI candidate
-matching `[A-Za-z][A-Za-z0-9+.-]*:` and every URI token embedded in prose is
-treated as URI-valued regardless of its field name or any adjacent punctuation,
-digit, or delimiter. An exact or embedded `http` or `https` URI must have an
+exempt from URI normalization, but surrounding whitespace on a standalone URI,
+network-path URL, or content ID is rejected as ambiguous. Every whole-string URI
+candidate matching `[A-Za-z][A-Za-z0-9+.-]*:`, every network-path URL beginning
+with `//authority`, and every such token embedded in prose is treated as
+URI-valued regardless of its field name or any adjacent punctuation, digit, or
+delimiter. Exact or embedded `http`, `https`, and network-path URLs must have an
 authority and valid port with no userinfo, query, or fragment; the kernel
-immediately replaces each complete original UTF-8 URI token with its
-deterministic `url-sha256:` digest. For embedded URIs, symmetric angle brackets,
-quotes, parentheses, brackets, braces, and terminal punctuation are preserved;
-multiple tokens normalize deterministically, and repeated normalization is
-idempotent. Token scanning is linear in the bounded input length. After
-normalization, any remaining `[A-Za-z][A-Za-z0-9+.-]*:` token whose colon is
-followed immediately by a non-whitespace character fails closed unless it is a
-valid content ID. This intentionally rejects namespace-like prose such as
+immediately replaces each complete original UTF-8 token with its deterministic
+`url-sha256:` digest. For embedded URLs, symmetric angle brackets, quotes,
+parentheses, brackets, braces, and terminal punctuation are preserved; multiple
+tokens normalize deterministically, and repeated normalization is idempotent.
+Token scanning is linear in the bounded input length. After normalization, any
+remaining `[A-Za-z][A-Za-z0-9+.-]*:` token whose colon is followed immediately by
+a non-whitespace character, or any remaining `//` token, fails closed unless it
+is a valid content ID. This intentionally rejects namespace-like prose such as
 `Note:see`; labels such as `Note: see` and URI-free local paths remain unchanged.
-Schema timestamp fields are validated separately as timezone-aware ISO-8601
-values. No original URL component enters events, receipts, or state. Exact and
-embedded values using all other URI schemes are rejected.
+Every recursive mapping key is also untrusted: if URI classification would
+reject or rewrite a key, the complete payload is rejected without rewriting the
+key or reporting its original bytes. Schema timestamp fields use a separate raw
+string validator before timezone-aware ISO-8601 parsing. No original URL
+component enters events, receipts, errors, or state. Exact and embedded values
+using all other URI schemes are rejected.
 
 Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and
