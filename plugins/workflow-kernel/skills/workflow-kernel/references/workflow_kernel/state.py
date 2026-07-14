@@ -7,7 +7,7 @@ import json
 import os
 import tempfile
 import weakref
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from ._files import (
@@ -33,7 +33,6 @@ class PreparedState:
 
     state: RunState
     encoded: bytes
-    _owner_token: object = field(repr=False)
 
 
 class RunLease:
@@ -116,7 +115,6 @@ class RunLease:
 class StateStore:
     def __init__(self, path):
         self.path = canonical_path(Path(path))
-        self._owner_token = object()
         self._prepared = weakref.WeakSet()
 
     def load(self) -> RunState:
@@ -157,7 +155,6 @@ class StateStore:
     def publish(self, prepared: PreparedState, expected_revision: int,
                 *, lease: RunLease = None) -> dict:
         if (not isinstance(prepared, PreparedState)
-                or prepared._owner_token is not self._owner_token
                 or prepared not in self._prepared):
             raise UnsafePayloadError("prepared state belongs to another store", {
                 "reason_code": "prepared_state_owner_mismatch",
@@ -210,7 +207,7 @@ class StateStore:
             raise UnsafePayloadError("materialized state exceeds size limit", {
                 "limit_bytes": MAX_STATE_BYTES,
             })
-        prepared = PreparedState(state, encoded, self._owner_token)
+        prepared = PreparedState(state, encoded)
         self._prepared.add(prepared)
         return prepared
 

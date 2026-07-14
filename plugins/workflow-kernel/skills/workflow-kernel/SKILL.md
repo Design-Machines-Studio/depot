@@ -67,10 +67,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
   Use `StateStore.prepare(state)` before publishing an event that derives the
   state. It returns an immutable capability containing the exact encoded state,
-  bound to that store; pass only that capability to `StateStore.publish()`.
-  Coordinated CLI append does this before event publication, while direct writes
-  compose prepare and publish automatically. Oversized state is rejected before
-  temporary-file creation or replacement.
+  bound to that store; pass only that capability to
+  `StateStore.publish(prepared, expected_revision, lease=lease)`. Preparation
+  validates state bytes but does not acquire or replace the live run lease.
+  Coordinated CLI append prepares before event publication while holding that
+  lease; direct writes compose prepare and publish automatically. Oversized
+  state is rejected before temporary-file creation or replacement.
 - Acquire `RunLease(state_path)` and pass that live capability to
   `StateStore.write(state, expected_revision, lease=lease)`. A lease for a
   different path or a released lease never authorizes a write. POSIX advisory

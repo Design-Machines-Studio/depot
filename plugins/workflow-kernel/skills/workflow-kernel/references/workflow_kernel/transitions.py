@@ -8,7 +8,8 @@ from typing import Iterable, Mapping, Tuple
 
 from .schema import (
     IllegalTransitionError, MissingEvidenceError, NodeState, NodeStatus,
-    RunMode, RunState, RunStatus, SequenceConflictError, WorkflowEvent,
+    MAX_EVIDENCE_ITEMS, RunMode, RunState, RunStatus, SequenceConflictError,
+    WorkflowEvent,
 )
 
 
@@ -30,7 +31,6 @@ NODE_TARGETS = {
     "node.blocked": NodeStatus.BLOCKED,
     "node.skipped": NodeStatus.SKIPPED,
 }
-MAX_EVIDENCE_ITEMS = 1_024
 LEGAL_NODE_SOURCES = {
     NodeStatus.READY: {NodeStatus.PENDING},
     NodeStatus.RUNNING: {NodeStatus.READY, NodeStatus.WAITING},

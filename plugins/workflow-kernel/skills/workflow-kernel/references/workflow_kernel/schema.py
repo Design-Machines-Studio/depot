@@ -16,6 +16,7 @@ from .redaction import (
 
 
 SCHEMA_VERSION = 1
+MAX_EVIDENCE_ITEMS = 1_024
 
 
 class RunMode(str, Enum):
@@ -288,8 +289,14 @@ class RunState:
                for key, node in nodes.items()):
             raise InvalidSchemaError("node keys must match immutable node states")
         _validate_dependency_graph(nodes)
+        evidence = _string_tuple(self.evidence, "evidence", references=True)
+        if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
+            raise InvalidSchemaError("evidence item limit exceeded", {
+                "reason_code": "evidence_limit_exceeded",
+                "limit_items": MAX_EVIDENCE_ITEMS,
+            })
         object.__setattr__(self, "nodes", MappingProxyType(nodes))
-        object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
+        object.__setattr__(self, "evidence", evidence)
         if not isinstance(self.cleanup_reconciled, bool):
             raise InvalidSchemaError("cleanup_reconciled must be boolean")
 

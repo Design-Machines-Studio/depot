@@ -1,7 +1,9 @@
 import json
 import unittest
 from dataclasses import replace
+from unittest import mock
 
+from workflow_kernel import schema
 from workflow_kernel.schema import (
     CorruptStateError,
     InvalidSchemaError,
@@ -153,3 +155,31 @@ class SchemaTests(unittest.TestCase):
 
     def test_new_delegates_mode_validation_to_constructor(self):
         self.assertEqual(RunState.new("run-1", "2026-07-14T00:00:00Z", mode="enforce").mode, RunMode.ENFORCE)
+
+    def test_direct_state_enforces_aggregate_evidence_boundary(self):
+        self.assertTrue(hasattr(schema, "MAX_EVIDENCE_ITEMS"))
+        base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+        with mock.patch.object(schema, "MAX_EVIDENCE_ITEMS", 2):
+            boundary = replace(base, evidence=("run",), nodes={
+                "n": NodeState("n", evidence=("node",)),
+            })
+            self.assertEqual(boundary.evidence, ("run",))
+            with self.assertRaises(InvalidSchemaError) as raised:
+                replace(boundary, evidence=("run", "overflow"))
+        self.assertEqual(raised.exception.details["reason_code"], "evidence_limit_exceeded")
+        self.assertEqual(raised.exception.details["limit_items"], 2)
+
+    def test_state_from_dict_enforces_aggregate_evidence_boundary(self):
+        self.assertTrue(hasattr(schema, "MAX_EVIDENCE_ITEMS"))
+        data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+        data["evidence"] = ["run"]
+        data["nodes"] = {
+            "n": {"node_id": "n", "status": "pending", "dependencies": [], "evidence": ["node"]},
+        }
+        with mock.patch.object(schema, "MAX_EVIDENCE_ITEMS", 2):
+            self.assertEqual(RunState.from_dict(data).nodes["n"].evidence, ("node",))
+            data["evidence"].append("overflow")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                RunState.from_dict(data)
+        self.assertEqual(raised.exception.details["reason_code"], "evidence_limit_exceeded")
+        self.assertEqual(raised.exception.details["limit_items"], 2)
