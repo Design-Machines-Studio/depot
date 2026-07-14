@@ -1,8 +1,10 @@
+import ast
 import hashlib
 import inspect
 import json
 import unittest
 from dataclasses import replace
+from pathlib import Path
 from unittest import mock
 
 from workflow_kernel import redaction, schema
@@ -84,23 +86,28 @@ class SchemaTests(unittest.TestCase):
         self.assertNotIn("fixture-secret", encoded)
         self.assertIn("[REDACTED]", encoded)
 
-    def test_error_messages_normalize_supported_url_tokens(self):
+    def test_uncatalogued_error_messages_fall_back(self):
         exact = "https://example.invalid/never-persist-exact-message"
         embedded = "See https://example.invalid/never-persist-embedded-message now"
         network = "See <//example.invalid/never-persist-network-message>."
-        cases = (
-            (exact, "url-sha256:" + hashlib.sha256(exact.encode("utf-8")).hexdigest()),
-            (embedded, "See url-sha256:" + hashlib.sha256(
-                "https://example.invalid/never-persist-embedded-message".encode("utf-8")
-            ).hexdigest() + " now"),
-            (network, "See <url-sha256:" + hashlib.sha256(
-                "//example.invalid/never-persist-network-message".encode("utf-8")
-            ).hexdigest() + ">."),
+        values = (
+            exact,
+            embedded,
+            network,
+            "authorization=Bearer never-persist-authorization",
+            "Bearer never-persist-bearer",
+            "password=never-persist-password",
+            "token=never-persist-token",
+            "cookie=never-persist-cookie",
+            "dsn=never-persist-dsn",
+            "environment_value=never-persist-env",
+            "parser rejected never-persist-parser-text at offset 4",
+            "never-persist-arbitrary-plain-secret",
         )
-        for source, expected in cases:
+        for source in values:
             error = UnsafePayloadError(source)
-            self.assertEqual(error.to_dict()["error"]["message"], expected)
-            self.assertEqual(str(error), expected)
+            self.assertEqual(error.to_dict()["error"]["message"], "workflow kernel error")
+            self.assertEqual(str(error), "workflow kernel error")
             self.assertNotIn("never-persist", json.dumps(error.to_dict()))
             self.assertNotIn("never-persist", str(error))
 
@@ -119,6 +126,58 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(str(error), fallback)
             self.assertNotIn("never-persist", json.dumps(error.to_dict()))
             self.assertNotIn("never-persist", str(error))
+
+    def test_error_message_catalog_covers_internal_kernel_errors(self):
+        catalog = getattr(schema, "SAFE_ERROR_MESSAGES", frozenset())
+        error_names = {
+            "KernelError", "InvalidSchemaError", "CorruptEventError", "CorruptStateError",
+            "SequenceConflictError", "RevisionConflictError", "LeaseConflictError",
+            "IllegalTransitionError", "MissingEvidenceError", "UnsafePayloadError",
+        }
+        package = Path(schema.__file__).parent
+        observed = set()
+        for path in package.glob("*.py"):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if (not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name)
+                        or node.func.id not in error_names or not node.args):
+                    continue
+                message = node.args[0]
+                self.assertIsInstance(message, ast.Constant, path.name + ":" + str(node.lineno))
+                self.assertIsInstance(message.value, str, path.name + ":" + str(node.lineno))
+                observed.add(message.value)
+        self.assertTrue(observed)
+        self.assertEqual(observed - catalog, set())
+        for message in catalog:
+            error = UnsafePayloadError(message)
+            self.assertEqual(error.message, message)
+            self.assertEqual(error.args, (message,))
+            self.assertEqual(str(error), message)
+
+    def test_error_message_and_details_cannot_be_mutated_after_construction(self):
+        message = "invalid string field"
+        error = UnsafePayloadError(message, {"field": "safe"})
+        sentinel = "never-persist-mutated-error"
+
+        with self.assertRaises(AttributeError):
+            error.message = sentinel
+        with self.assertRaises(AttributeError):
+            error.args = (sentinel,)
+        with self.assertRaises(AttributeError):
+            error._safe_message = sentinel
+        with self.assertRaises(AttributeError):
+            error.details = {"password": sentinel}
+        with self.assertRaises(TypeError):
+            error.details["password"] = sentinel
+        with self.assertRaises(AttributeError):
+            del error._safe_message
+        with self.assertRaises(AttributeError):
+            del error._details
+
+        self.assertEqual(error.message, message)
+        self.assertEqual(error.args, (message,))
+        self.assertEqual(str(error), message)
+        self.assertNotIn(sentinel, json.dumps(error.to_dict()))
 
     def test_recursive_redaction_covers_events_and_receipts(self):
         fixture = "never-print-this-fixture"
@@ -428,6 +487,13 @@ class SchemaTests(unittest.TestCase):
         self.assertIsInstance(redaction._normalize_uri_tokens(source), str)
         self.assertIsInstance(redaction._reject_remaining_uri_shapes("plain text"), type(None))
         self.assertIsInstance(redaction._uri_token_end(source, 4, 32), int)
+
+    def test_uri_span_iterator_is_shared_domain_output(self):
+        source = "See <https://one.example/path>, then (//two.example/report)."
+        self.assertTrue(hasattr(redaction, "_iter_uri_token_spans"))
+        spans = tuple(redaction._iter_uri_token_spans(source))
+        tokens = tuple(source[start:end] for start, end, _ in spans)
+        self.assertEqual(tokens, ("https://one.example/path", "//two.example/report"))
 
     def test_timestamp_has_a_raw_validator_without_string_mode_flag(self):
         self.assertTrue(hasattr(schema, "_validated_string"))

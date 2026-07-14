@@ -19,6 +19,85 @@ from .redaction import (
 SCHEMA_VERSION = 1
 MAX_EVIDENCE_ITEMS = 1_024
 SAFE_ERROR_MESSAGE = "workflow kernel error"
+SAFE_ERROR_MESSAGES = frozenset({
+    SAFE_ERROR_MESSAGE,
+    "authoritative event ledger is missing or empty",
+    "cannot reconstruct an empty event ledger",
+    "cleanup_reconciled must be boolean",
+    "crash-safe event locking is unavailable",
+    "crash-safe run locking is unavailable",
+    "event contains unsafe durable data",
+    "event is illegal for current state",
+    "event is not valid JSON",
+    "event ledger contains conflicting run ids",
+    "event ledger exceeds size limit",
+    "event ledger has another writer",
+    "event ledger path is unsafe",
+    "event ledger sequence is not contiguous",
+    "event ledger would exceed size limit",
+    "event lock identity changed",
+    "event lock path is unsafe",
+    "event must be an object",
+    "event payload field must be a string list",
+    "event record exceeds size limit",
+    "event run id conflicts with ledger",
+    "event run id does not match state",
+    "event sequence does not match ledger",
+    "event sequence does not match state revision",
+    "event specifies unknown run mode",
+    "evidence item limit exceeded",
+    "evidence receipt contains unsafe data",
+    "evidence reference is unsafe",
+    "field contains duplicates",
+    "field must be a list",
+    "first event must initialize the run",
+    "invalid command arguments",
+    "invalid event record",
+    "invalid expected revision",
+    "invalid expected sequence",
+    "invalid integer field",
+    "invalid string field",
+    "invalid timestamp",
+    "materialized state does not match event ledger",
+    "materialized state exceeds size limit",
+    "materialized state is corrupt",
+    "materialized state path is unsafe",
+    "node dependency graph is invalid",
+    "node dependency is invalid",
+    "node dependency is missing",
+    "node keys contain an unsafe URI",
+    "node keys must be strings",
+    "node keys must match immutable node states",
+    "node must be an object",
+    "nodes must be an object",
+    "payload contains a non-JSON-safe value",
+    "payload must be a mapping",
+    "prepared state belongs to another store",
+    "prepared state requires a validated RunState",
+    "receipt contains a non-JSON-safe value",
+    "run already has a live writer lease",
+    "run directory is already initialized",
+    "run directory is not initialized",
+    "run lease identity changed",
+    "run lease path is unsafe",
+    "schema fields do not match",
+    "schema keys contain an unsafe URI",
+    "schema keys must be strings",
+    "state does not exist at expected revision",
+    "state must be an object",
+    "state revision cannot move backward",
+    "state revision changed",
+    "state write requires its acquired run lease",
+    "string field contains an unsafe URI",
+    "terminal run rejects mutation",
+    "timestamp must include timezone",
+    "transition requires evidence",
+    "unknown event kind",
+    "unknown node status",
+    "unknown run enum",
+    "unsupported schema version",
+    "workflow kernel operation failed",
+})
 
 
 class RunMode(str, Enum):
@@ -53,23 +132,47 @@ class KernelError(Exception):
     code = "kernel_error"
 
     def __init__(self, message: object, details: Optional[Mapping[str, object]] = None):
-        safe_message = SAFE_ERROR_MESSAGE
-        if isinstance(message, str) and message and len(message) <= MAX_STRING_LENGTH:
-            try:
-                normalized = normalize_durable_string(message)
-                if len(normalized) <= MAX_STRING_LENGTH:
-                    safe_message = normalized
-            except (TypeError, ValueError):
-                pass
-        self.message = safe_message
-        try:
-            self.details = redact(dict(details or {}))
-        except (TypeError, ValueError):
-            self.details = {"detail": "[UNSAFE]"}
+        safe_message = message if isinstance(message, str) and message in SAFE_ERROR_MESSAGES else SAFE_ERROR_MESSAGE
         super().__init__(safe_message)
+        self._safe_message = safe_message
+        try:
+            safe_details = freeze_json(dict(details or {}))
+        except (TypeError, ValueError):
+            safe_details = freeze_json({"detail": "[UNSAFE]"})
+        object.__setattr__(self, "_details", safe_details)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        protected = {"message", "args", "_safe_message", "details", "_details"}
+        if name in protected and hasattr(self, "_safe_message"):
+            raise AttributeError("kernel error public state is immutable")
+        super().__setattr__(name, value)
+
+    def __delattr__(self, name: str) -> None:
+        if name in {"message", "args", "_safe_message", "details", "_details"}:
+            raise AttributeError("kernel error public state is immutable")
+        super().__delattr__(name)
+
+    def _catalogued_message(self) -> str:
+        try:
+            candidate = object.__getattribute__(self, "_safe_message")
+        except AttributeError:
+            return SAFE_ERROR_MESSAGE
+        return candidate if candidate in SAFE_ERROR_MESSAGES else SAFE_ERROR_MESSAGE
+
+    @property
+    def message(self) -> str:
+        return self._catalogued_message()
+
+    @property
+    def details(self) -> Mapping[str, object]:
+        return self._details
+
+    def __str__(self) -> str:
+        return self._catalogued_message()
 
     def to_dict(self) -> dict:
-        return {"error": {"code": self.code, "message": self.message, "details": self.details}}
+        return {"error": {"code": self.code, "message": self._catalogued_message(),
+                          "details": thaw(self._details)}}
 
 
 class InvalidSchemaError(KernelError):

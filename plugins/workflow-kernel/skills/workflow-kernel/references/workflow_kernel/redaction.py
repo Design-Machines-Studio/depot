@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Iterator, Optional, Tuple
 from urllib.parse import urlsplit
 
 
@@ -130,8 +130,8 @@ def _next_uri_shape(value: str, start: int) -> Optional[Tuple[int, int]]:
     return None
 
 
-def _reject_remaining_uri_shapes(value: str) -> None:
-    """Fail closed if normalization leaves any non-content-ID URI shape."""
+def _iter_uri_token_spans(value: str) -> Iterator[Tuple[int, int, int]]:
+    """Yield normalized token and raw span ends with one forward-only traversal."""
     index = 0
     while index < len(value):
         shape = _next_uri_shape(value, index)
@@ -140,29 +140,27 @@ def _reject_remaining_uri_shapes(value: str) -> None:
         token_start, shape_end = shape
         raw_end = _nonspace_end(value, shape_end)
         token_end = _uri_token_end(value, token_start, raw_end)
+        yield token_start, token_end, raw_end
+        index = raw_end
+
+
+def _reject_remaining_uri_shapes(value: str) -> None:
+    """Fail closed if normalization leaves any non-content-ID URI shape."""
+    for token_start, token_end, _ in _iter_uri_token_spans(value):
         if not _CONTENT_ID.fullmatch(value[token_start:token_end]):
             raise ValueError("durable string contains an unhandled URI")
-        index = raw_end
 
 
 def _normalize_uri_tokens(value: str) -> str:
     """Normalize embedded URI tokens with forward-only bounded scans."""
     pieces = []
     cursor = 0
-    index = 0
 
-    while index < len(value):
-        shape = _next_uri_shape(value, index)
-        if shape is None:
-            break
-        token_start, shape_end = shape
-        raw_end = _nonspace_end(value, shape_end)
-        token_end = _uri_token_end(value, token_start, raw_end)
+    for token_start, token_end, raw_end in _iter_uri_token_spans(value):
         token = value[token_start:token_end]
         normalized = token if _CONTENT_ID.fullmatch(token) else normalize_evidence_reference(token)
         pieces.extend((value[cursor:token_start], normalized, value[token_end:raw_end]))
         cursor = raw_end
-        index = raw_end
 
     pieces.append(value[cursor:])
     normalized_value = "".join(pieces)

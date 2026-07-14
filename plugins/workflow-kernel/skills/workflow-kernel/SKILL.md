@@ -90,9 +90,11 @@ errors as stable JSON. Treat `--help` output as plain text.
   node state; transitions exceeding that aggregate limit fail before state
   reconstruction.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
-  errors. Public error messages are bounded and URI-normalized locally; invalid,
-  unsupported, empty, or oversized messages become one generic safe message.
-  Both `to_dict()` and `str(error)` follow that boundary. Do not expose raw
+  errors. Public messages come only from the kernel's closed catalog of stable
+  developer-defined text; every uncatalogued candidate becomes one generic safe
+  message. Put dynamic, parser, and rejected-input context only in recursively
+  redacted immutable details. The message, exception arguments, details,
+  `to_dict()`, and `str(error)` share that immutable boundary. Do not expose raw
   parser exceptions or rejected values.
 
 ## Security and Portability
