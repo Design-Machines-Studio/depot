@@ -16,7 +16,7 @@
 ## Progress
 
 - 0e. Ref registry initialized: complete
-- 01-kernel-state-engine: complete (logic; 234/234 tests; five-lens review CLEAN at iteration 37; merged 07e7126; executionMode codex_native)
+- 01-kernel-state-engine: complete (logic; 234/234 tests; five-lens review CLEAN at iteration 37; merged 07e7126; chunk worktree and branch deleted; executionMode codex_native)
 - 02-workflow-policy-hosts: pending
 - 03-owned-resource-lifecycle: pending
 - 04-persona-browser-verification: pending

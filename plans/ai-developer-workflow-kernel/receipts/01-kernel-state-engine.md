@@ -33,4 +33,5 @@ EVAL_GATE_PASSED: 01-kernel-state-engine | classification: logic | iterations: 3
 
 - Docker resources created by this chunk: none.
 - Existing Assembly, Assembly Baseplate, and DDEV containers were inventoried and left untouched.
-- Chunk worktree/branch cleanup follows merge ancestry proof.
+- Chunk worktree removed after a clean-status check and merge ancestry proof.
+- Chunk branch `pipeline/ai-developer-workflow-kernel/01-kernel-state-engine` deleted with `git branch -d`.
