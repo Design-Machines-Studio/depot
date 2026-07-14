@@ -93,14 +93,22 @@ errors as stable JSON. Treat `--help` output as plain text.
   errors. `ErrorMessage` and `ErrorCode` are the closed developer-owned enums
   for public text and machine codes; raw or unknown candidates become the
   generic `workflow kernel error` / `kernel_error` pair. Dynamic, parser, and
-  rejected-input context belongs only in recursively immutable details.
+  rejected-input context belongs only in recursively immutable details. Each
+  error captures one frozen `ErrorEnvelope`; message, code, exception arguments,
+  details, `to_dict()`, and `str(error)` delegate to that envelope. The error
+  boundary is sealed against subclass overrides of construction, attribute
+  access, mutation, serialization, and those public properties. Subclasses may
+  select only a closed private `_error_code`; CLI exception handling invokes the
+  base-owned `KernelError.to_dict(error)` serializer.
   Sensitive-key paths become `[REDACTED]`; every other string value becomes a
   deterministic `value-sha256:<64 lowercase hex>` digest, while numbers,
-  booleans, and null remain typed. Use those digests only for stable correlation
+  booleans, and null remain typed. `ErrorDetailKey` is the developer-owned
+  vocabulary whose keys remain readable. Every unknown error-detail key at any
+  depth becomes a deterministic `key-sha256:<64 lowercase hex>` digest; even an
+  input already shaped like a key digest is hashed again, preventing collision
+  with the digest of another input. Use these digests only for stable correlation
   across receipts and logs—the original plaintext is never recoverable from the
-  public error. Message, code, exception arguments, details, `to_dict()`, and
-  `str(error)` all use the captured immutable boundary. Do not expose raw parser
-  exceptions or rejected values.
+  public error. Do not expose raw parser exceptions or rejected values.
 
 ## Security and Portability
 
@@ -130,7 +138,10 @@ is a valid content ID. This intentionally rejects namespace-like prose such as
 `Note:see`; labels such as `Note: see` and URI-free local paths remain unchanged.
 Every recursive mapping key is also untrusted: if URI classification would
 reject or rewrite a key, the complete payload is rejected without rewriting the
-key or reporting its original bytes. Schema timestamp fields use a separate raw
+key or reporting its original bytes. Error-detail mappings are the stricter
+exception: only `ErrorDetailKey` members retain their names, and every other key
+is replaced by its opaque key digest without reporting the original bytes.
+Schema timestamp fields use a separate raw
 string validator before timezone-aware ISO-8601 parsing. No original URL
 component enters events, receipts, errors, or state. Exact and embedded values
 using all other URI schemes are rejected.

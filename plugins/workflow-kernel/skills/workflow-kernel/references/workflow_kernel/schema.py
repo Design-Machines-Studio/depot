@@ -113,6 +113,44 @@ class ErrorCode(str, Enum):
     UNSAFE_PAYLOAD = "unsafe_payload"
 
 
+class ErrorDetailKey(str, Enum):
+    ACTUAL_REVISION = "actual_revision"
+    ACTUAL_SEQUENCE = "actual_sequence"
+    BYTE_OFFSET = "byte_offset"
+    CANDIDATE_REVISION = "candidate_revision"
+    DETAIL = "detail"
+    DIRECTORY = "directory"
+    EVENT_SEQUENCE = "event_sequence"
+    EXCEPTION_TYPE = "exception_type"
+    EXPECTED_REVISION = "expected_revision"
+    EXPECTED_SEQUENCE = "expected_sequence"
+    FIELD = "field"
+    KIND = "kind"
+    LEDGER_REVISION = "ledger_revision"
+    LIMIT_BYTES = "limit_bytes"
+    LIMIT_ITEMS = "limit_items"
+    MATERIALIZED_REVISION = "materialized_revision"
+    MINIMUM = "minimum"
+    MISSING = "missing"
+    MODE = "mode"
+    NODE_ID = "node_id"
+    OFFSET = "offset"
+    OPTION = "option"
+    PATH = "path"
+    REASON_CODE = "reason_code"
+    RECORD = "record"
+    REVISION = "revision"
+    RUN_STATUS = "run_status"
+    SCHEMA_VERSION = "schema_version"
+    SEQUENCE = "sequence"
+    STATE_PATH = "state_path"
+    STATUS = "status"
+    UNKNOWN = "unknown"
+
+
+_ERROR_DETAIL_KEYS = frozenset(key.value for key in ErrorDetailKey)
+
+
 class RunMode(str, Enum):
     SHADOW = "shadow"
     ENFORCE = "enforce"
@@ -141,76 +179,80 @@ class NodeStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+@dataclass(frozen=True)
+class ErrorEnvelope:
+    code: ErrorCode
+    message: ErrorMessage
+    details: Mapping[str, object]
+
+
 class KernelError(Exception):
     _error_code = ErrorCode.KERNEL_ERROR
+    _PROTECTED_NAMES = frozenset({
+        "_envelope", "_error_code", "message", "code", "details", "args",
+    })
+    _SEALED_SUBCLASS_NAMES = (
+        "__init__", "__new__", "message", "code", "details", "to_dict", "__str__",
+        "args", "_envelope", "__getattribute__", "__setattr__", "__delattr__",
+        "_PROTECTED_NAMES", "_SEALED_SUBCLASS_NAMES",
+    )
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
-        if "code" in cls.__dict__:
-            delattr(cls, "code")
+        overridden = sorted(set(cls.__dict__).intersection(KernelError._SEALED_SUBCLASS_NAMES))
+        if overridden:
+            raise TypeError("kernel error boundary is sealed: " + ", ".join(overridden))
 
     def __init__(self, message: object, details: Optional[Mapping[str, object]] = None):
         safe_message = message if isinstance(message, ErrorMessage) else ErrorMessage.GENERIC
         candidate_code = getattr(type(self), "_error_code", ErrorCode.KERNEL_ERROR)
         safe_code = candidate_code if isinstance(candidate_code, ErrorCode) else ErrorCode.KERNEL_ERROR
-        super().__init__(safe_message.value)
-        object.__setattr__(self, "_safe_message", safe_message)
-        object.__setattr__(self, "_safe_code", safe_code)
         try:
-            safe_details = freeze_error_details(dict(details or {}))
+            safe_details = freeze_error_details(dict(details or {}), known_keys=_ERROR_DETAIL_KEYS)
         except (TypeError, ValueError):
-            safe_details = freeze_error_details({"detail": "[UNSAFE]"})
-        object.__setattr__(self, "_details", safe_details)
+            safe_details = freeze_error_details(
+                {ErrorDetailKey.DETAIL.value: "[UNSAFE]"}, known_keys=_ERROR_DETAIL_KEYS,
+            )
+        object.__setattr__(self, "_envelope", ErrorEnvelope(safe_code, safe_message, safe_details))
 
     def __setattr__(self, name: str, value: object) -> None:
-        protected = {
-            "message", "args", "_safe_message", "code", "_safe_code", "_error_code",
-            "details", "_details",
-        }
-        if name in protected and hasattr(self, "_safe_message"):
-            raise AttributeError("kernel error public state is immutable")
-        super().__setattr__(name, value)
+        if name in KernelError._PROTECTED_NAMES:
+            try:
+                object.__getattribute__(self, "_envelope")
+            except AttributeError:
+                pass
+            else:
+                raise AttributeError("kernel error public state is immutable")
+        object.__setattr__(self, name, value)
 
     def __delattr__(self, name: str) -> None:
-        if name in {
-            "message", "args", "_safe_message", "code", "_safe_code", "_error_code",
-            "details", "_details",
-        }:
+        if name in KernelError._PROTECTED_NAMES:
             raise AttributeError("kernel error public state is immutable")
-        super().__delattr__(name)
-
-    def _message_value(self) -> str:
-        try:
-            candidate = object.__getattribute__(self, "_safe_message")
-        except AttributeError:
-            return ErrorMessage.GENERIC.value
-        return candidate.value if isinstance(candidate, ErrorMessage) else ErrorMessage.GENERIC.value
-
-    def _code_value(self) -> str:
-        try:
-            candidate = object.__getattribute__(self, "_safe_code")
-        except AttributeError:
-            return ErrorCode.KERNEL_ERROR.value
-        return candidate.value if isinstance(candidate, ErrorCode) else ErrorCode.KERNEL_ERROR.value
+        object.__delattr__(self, name)
 
     @property
     def message(self) -> str:
-        return self._message_value()
+        return object.__getattribute__(self, "_envelope").message.value
 
     @property
     def code(self) -> str:
-        return self._code_value()
+        return object.__getattribute__(self, "_envelope").code.value
 
     @property
     def details(self) -> Mapping[str, object]:
-        return self._details
+        return object.__getattribute__(self, "_envelope").details
+
+    @property
+    def args(self) -> tuple:
+        return (object.__getattribute__(self, "_envelope").message.value,)
 
     def __str__(self) -> str:
-        return self._message_value()
+        return object.__getattribute__(self, "_envelope").message.value
 
     def to_dict(self) -> dict:
-        return {"error": {"code": self._code_value(), "message": self._message_value(),
-                          "details": thaw(self._details)}}
+        envelope = object.__getattribute__(self, "_envelope")
+        return {"error": {"code": envelope.code.value, "message": envelope.message.value,
+                          "details": thaw(envelope.details)}}
 
 
 class InvalidSchemaError(KernelError):
@@ -251,7 +293,9 @@ class UnsafePayloadError(KernelError):
 
 def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise InvalidSchemaError(ErrorMessage.INVALID_INTEGER_FIELD, {"field": name, "minimum": minimum})
+        raise InvalidSchemaError(ErrorMessage.INVALID_INTEGER_FIELD, {
+            ErrorDetailKey.FIELD: name, ErrorDetailKey.MINIMUM: minimum,
+        })
     return value
 
 
@@ -259,7 +303,7 @@ def _validated_string(value: object, name: str, *, optional: bool = False) -> Op
     if optional and value is None:
         return None
     if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
-        raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD, {"field": name})
+        raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD, {ErrorDetailKey.FIELD: name})
     return value
 
 
@@ -270,7 +314,7 @@ def _string(value: object, name: str, *, optional: bool = False) -> Optional[str
     try:
         return normalize_durable_string(text)
     except ValueError as exc:
-        raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {"field": name}) from exc
+        raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD: name}) from exc
 
 
 def _timestamp(value: object, name: str = "occurred_at") -> str:
@@ -278,9 +322,9 @@ def _timestamp(value: object, name: str = "occurred_at") -> str:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {"field": name}) from exc
+        raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {ErrorDetailKey.FIELD: name}) from exc
     if parsed.tzinfo is None:
-        raise InvalidSchemaError(ErrorMessage.TIMESTAMP_TIMEZONE_REQUIRED, {"field": name})
+        raise InvalidSchemaError(ErrorMessage.TIMESTAMP_TIMEZONE_REQUIRED, {ErrorDetailKey.FIELD: name})
     return text
 
 
@@ -296,12 +340,14 @@ def _only(data: Mapping[str, object], fields: set, required: set) -> None:
     unknown = sorted(set(keys) - fields)
     missing = sorted(required - set(keys))
     if unknown or missing:
-        raise InvalidSchemaError(ErrorMessage.SCHEMA_FIELDS_MISMATCH, {"unknown": unknown, "missing": missing})
+        raise InvalidSchemaError(ErrorMessage.SCHEMA_FIELDS_MISMATCH, {
+            ErrorDetailKey.UNKNOWN: unknown, ErrorDetailKey.MISSING: missing,
+        })
 
 
 def _payload(value: object) -> Mapping[str, object]:
     if not isinstance(value, Mapping):
-        raise InvalidSchemaError(ErrorMessage.PAYLOAD_MAPPING_REQUIRED, {"field": "payload"})
+        raise InvalidSchemaError(ErrorMessage.PAYLOAD_MAPPING_REQUIRED, {ErrorDetailKey.FIELD: "payload"})
     try:
         safe = freeze_json(value, max_depth=MAX_PAYLOAD_DEPTH,
                            max_items=MAX_PAYLOAD_ITEMS,
@@ -323,9 +369,13 @@ def _validate_dependency_graph(nodes: Mapping[str, "NodeState"]) -> None:
     for node_id, node in nodes.items():
         for dependency in node.dependencies:
             if dependency == node_id:
-                raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {"reason_code": "self_dependency"})
+                raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {
+                    ErrorDetailKey.REASON_CODE: "self_dependency",
+                })
             if dependency not in nodes:
-                raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {"reason_code": "missing_dependency"})
+                raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {
+                    ErrorDetailKey.REASON_CODE: "missing_dependency",
+                })
             dependents[dependency].append(node_id)
     ready = deque(node_id for node_id, count in indegree.items() if count == 0)
     visited = 0
@@ -337,7 +387,9 @@ def _validate_dependency_graph(nodes: Mapping[str, "NodeState"]) -> None:
             if indegree[dependent] == 0:
                 ready.append(dependent)
     if visited != len(nodes):
-        raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {"reason_code": "dependency_cycle"})
+        raise InvalidSchemaError(ErrorMessage.NODE_DEPENDENCY_GRAPH_INVALID, {
+            ErrorDetailKey.REASON_CODE: "dependency_cycle",
+        })
 
 
 @dataclass(frozen=True)
@@ -353,7 +405,9 @@ class WorkflowEvent:
     def __post_init__(self) -> None:
         object.__setattr__(self, "schema_version", _strict_int(self.schema_version, "schema_version", minimum=1))
         if self.schema_version != SCHEMA_VERSION:
-            raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {"schema_version": self.schema_version})
+            raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
+                ErrorDetailKey.SCHEMA_VERSION: self.schema_version,
+            })
         object.__setattr__(self, "sequence", _strict_int(self.sequence, "sequence"))
         object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
         object.__setattr__(self, "node_id", _string(self.node_id, "node_id", optional=True))
@@ -387,7 +441,7 @@ class NodeState:
         try:
             status = self.status if isinstance(self.status, NodeStatus) else NodeStatus(self.status)
         except (ValueError, TypeError) as exc:
-            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {"status": self.status}) from exc
+            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS: self.status}) from exc
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "dependencies", _string_tuple(self.dependencies, "dependencies"))
         object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
@@ -407,7 +461,7 @@ class NodeState:
 
 def _string_tuple(value: object, name: str, *, references: bool = False) -> Tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
-        raise InvalidSchemaError(ErrorMessage.FIELD_LIST_REQUIRED, {"field": name})
+        raise InvalidSchemaError(ErrorMessage.FIELD_LIST_REQUIRED, {ErrorDetailKey.FIELD: name})
     result = tuple(_string(item, name) for item in value)
     if references:
         try:
@@ -415,7 +469,7 @@ def _string_tuple(value: object, name: str, *, references: bool = False) -> Tupl
         except ValueError as exc:
             raise UnsafePayloadError(ErrorMessage.EVIDENCE_REFERENCE_UNSAFE) from exc
     if len(result) != len(set(result)):
-        raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {"field": name})
+        raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {ErrorDetailKey.FIELD: name})
     return result
 
 
@@ -435,7 +489,9 @@ class RunState:
     def __post_init__(self) -> None:
         version = _strict_int(self.schema_version, "schema_version", minimum=1)
         if version != SCHEMA_VERSION:
-            raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {"schema_version": version})
+            raise InvalidSchemaError(ErrorMessage.UNSUPPORTED_SCHEMA_VERSION, {
+                ErrorDetailKey.SCHEMA_VERSION: version,
+            })
         object.__setattr__(self, "schema_version", version)
         object.__setattr__(self, "revision", _strict_int(self.revision, "revision"))
         object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
@@ -443,7 +499,9 @@ class RunState:
             mode = self.mode if isinstance(self.mode, RunMode) else RunMode(self.mode)
             status = self.status if isinstance(self.status, RunStatus) else RunStatus(self.status)
         except (ValueError, TypeError) as exc:
-            raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {"mode": self.mode, "status": self.status}) from exc
+            raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
+                ErrorDetailKey.MODE: self.mode, ErrorDetailKey.STATUS: self.status,
+            }) from exc
         object.__setattr__(self, "mode", mode)
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "created_at", _timestamp(self.created_at, "created_at"))
@@ -465,8 +523,8 @@ class RunState:
         evidence = _string_tuple(self.evidence, "evidence", references=True)
         if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
             raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
-                "reason_code": "evidence_limit_exceeded",
-                "limit_items": MAX_EVIDENCE_ITEMS,
+                ErrorDetailKey.REASON_CODE: "evidence_limit_exceeded",
+                ErrorDetailKey.LIMIT_ITEMS: MAX_EVIDENCE_ITEMS,
             })
         object.__setattr__(self, "nodes", MappingProxyType(nodes))
         object.__setattr__(self, "evidence", evidence)

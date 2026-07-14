@@ -1,17 +1,12 @@
-import hashlib
 import tempfile
 import unittest
 import os
 from pathlib import Path
 from unittest import mock
 
+from tests import detail_digest
 from workflow_kernel.events import EventStore, encode_event
 from workflow_kernel.schema import CorruptEventError, SequenceConflictError, UnsafePayloadError, WorkflowEvent
-
-
-def detail_digest(value):
-    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
-
 
 def event(sequence):
     return WorkflowEvent(1, sequence, "run-1", None, "evidence.recorded", "2026-07-14T00:00:00Z", {"evidence": [str(sequence)]})

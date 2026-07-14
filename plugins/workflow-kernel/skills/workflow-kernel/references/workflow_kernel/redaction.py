@@ -15,6 +15,7 @@ from urllib.parse import urlsplit
 REDACTED = "[REDACTED]"
 UNSAFE = "[UNSAFE]"
 VALUE_DIGEST_PREFIX = "value-sha256:"
+KEY_DIGEST_PREFIX = "key-sha256:"
 MAX_PAYLOAD_DEPTH = 16
 MAX_PAYLOAD_ITEMS = 10_000
 MAX_STRING_LENGTH = 65_536
@@ -203,6 +204,11 @@ def digest_error_detail_string(value: str) -> str:
     return VALUE_DIGEST_PREFIX + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def digest_error_detail_key(value: str) -> str:
+    """Return an opaque key that cannot retain attacker-controlled text."""
+    return KEY_DIGEST_PREFIX + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _mutable_mapping(value: dict) -> dict:
     return value
 
@@ -227,6 +233,7 @@ class _Traversal:
     wrap_mapping: Callable[[dict], Any]
     wrap_sequence: Callable[[tuple], Any]
     string_normalizer: Optional[Callable[[str], str]] = None
+    key_normalizer: Optional[Callable[[str], str]] = None
     count: int = 0
 
     def normalize(self, value: Any, *, key: str = "", depth: int = 0) -> Any:
@@ -260,8 +267,11 @@ class _Traversal:
                     raise TypeError("mapping keys must be strings")
                 if len(child_key) > self.max_string_length:
                     raise TypeError("mapping key exceeds maximum length")
-                validate_durable_key(child_key)
-                result[child_key] = self.normalize(item, key=child_key, depth=depth + 1)
+                normalized_key = (self.key_normalizer(child_key) if self.key_normalizer is not None
+                                  else validate_durable_key(child_key))
+                if normalized_key in result:
+                    raise TypeError("mapping keys collide after normalization")
+                result[normalized_key] = self.normalize(item, key=child_key, depth=depth + 1)
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
             if self.string_normalizer is None and key.casefold() == "evidence":
@@ -287,11 +297,17 @@ def freeze_json(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
 
 def freeze_error_details(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
                          max_items: int = MAX_PAYLOAD_ITEMS,
-                         max_string_length: int = MAX_STRING_LENGTH) -> Any:
+                         max_string_length: int = MAX_STRING_LENGTH,
+                         known_keys=()) -> Any:
     """Return immutable public details with every nonsensitive string digested."""
+    safe_keys = frozenset(known_keys)
+
+    def normalize_key(key: str) -> str:
+        return str.__str__(key) if key in safe_keys else digest_error_detail_key(key)
+
     return _Traversal(max_depth, max_items, max_string_length,
                       _frozen_mapping, _frozen_sequence,
-                      digest_error_detail_string).normalize(value)
+                      digest_error_detail_string, normalize_key).normalize(value)
 
 
 def thaw(value: Any) -> Any:

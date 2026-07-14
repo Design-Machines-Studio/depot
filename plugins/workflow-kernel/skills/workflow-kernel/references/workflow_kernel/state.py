@@ -15,8 +15,8 @@ from ._files import (
     canonical_path, open_verified_regular, verified_regular_exists,
 )
 from .schema import (
-    CorruptStateError, ErrorMessage, KernelError, LeaseConflictError, RevisionConflictError,
-    RunState, UnsafePayloadError,
+    CorruptStateError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
+    RevisionConflictError, RunState, UnsafePayloadError,
 )
 
 
@@ -50,16 +50,21 @@ class RunLease:
             handle = LockHandle.acquire(self.path)
         except LockingUnsupportedError as exc:
             raise LeaseConflictError(ErrorMessage.RUN_LOCKING_UNAVAILABLE, {
-                "reason_code": "locking_unsupported",
+                ErrorDetailKey.REASON_CODE: "locking_unsupported",
             }) from exc
         except LockIdentityError as exc:
             raise LeaseConflictError(ErrorMessage.RUN_LEASE_IDENTITY_CHANGED, {
-                "path": str(self.path), "reason_code": "lease_identity_changed",
+                ErrorDetailKey.PATH: str(self.path),
+                ErrorDetailKey.REASON_CODE: "lease_identity_changed",
             }) from exc
         except LockContentionError as exc:
-            raise LeaseConflictError(ErrorMessage.RUN_WRITER_LEASE_HELD, {"path": str(self.path)}) from exc
+            raise LeaseConflictError(ErrorMessage.RUN_WRITER_LEASE_HELD, {
+                ErrorDetailKey.PATH: str(self.path),
+            }) from exc
         except OSError as exc:
-            raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {"path": str(self.path)}) from exc
+            raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {
+                ErrorDetailKey.PATH: str(self.path),
+            }) from exc
         try:
             os.ftruncate(handle.descriptor, 0)
             os.write(handle.descriptor, (str(os.getpid()) + "\n").encode("ascii"))
@@ -83,17 +88,20 @@ class RunLease:
         """Require this live capability to own the target state path."""
         if self._handle is None or self._owner_pid != os.getpid():
             raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {
-                "path": str(state_path), "reason_code": "lease_not_owned",
+                ErrorDetailKey.PATH: str(state_path),
+                ErrorDetailKey.REASON_CODE: "lease_not_owned",
             })
         if self.state_path != canonical_path(Path(state_path)):
             raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {
-                "path": str(state_path), "reason_code": "lease_path_mismatch",
+                ErrorDetailKey.PATH: str(state_path),
+                ErrorDetailKey.REASON_CODE: "lease_path_mismatch",
             })
         try:
             self._handle.revalidate()
         except OSError as exc:
             raise LeaseConflictError(ErrorMessage.RUN_LEASE_IDENTITY_CHANGED, {
-                "path": str(self.path), "reason_code": "lease_identity_changed",
+                ErrorDetailKey.PATH: str(self.path),
+                ErrorDetailKey.REASON_CODE: "lease_identity_changed",
             }) from exc
 
     def authorizes(self, state_path) -> bool:
@@ -123,10 +131,14 @@ class StateStore:
         except FileNotFoundError:
             raise
         except OSError as exc:
-            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {"path": str(self.path)}) from exc
+            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                ErrorDetailKey.PATH: str(self.path),
+            }) from exc
         try:
             if os.fstat(descriptor).st_size > MAX_STATE_BYTES:
-                raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {"limit_bytes": MAX_STATE_BYTES})
+                raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
+                    ErrorDetailKey.LIMIT_BYTES: MAX_STATE_BYTES,
+                })
             chunks = []
             remaining = MAX_STATE_BYTES + 1
             while remaining:
@@ -137,14 +149,18 @@ class StateStore:
                 remaining -= len(chunk)
             raw_bytes = b"".join(chunks)
             if len(raw_bytes) > MAX_STATE_BYTES:
-                raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {"limit_bytes": MAX_STATE_BYTES})
+                raise CorruptStateError(ErrorMessage.STATE_SIZE_LIMIT, {
+                    ErrorDetailKey.LIMIT_BYTES: MAX_STATE_BYTES,
+                })
             raw = raw_bytes.decode("utf-8")
             data = json.loads(raw)
             return RunState.from_dict(data)
         except CorruptStateError:
             raise
         except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError) as exc:
-            raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {"path": str(self.path)}) from exc
+            raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {
+                ErrorDetailKey.PATH: str(self.path),
+            }) from exc
         finally:
             os.close(descriptor)
 
@@ -157,28 +173,40 @@ class StateStore:
         if (not isinstance(prepared, PreparedState)
                 or prepared not in self._prepared):
             raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
-                "reason_code": "prepared_state_owner_mismatch",
+                ErrorDetailKey.REASON_CODE: "prepared_state_owner_mismatch",
             })
         state = prepared.state
         if lease is None or not isinstance(lease, RunLease):
-            raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {"path": str(self.path)})
+            raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {
+                ErrorDetailKey.PATH: str(self.path),
+            })
         lease.require_authorized(self.path)
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < -1:
-            raise RevisionConflictError(ErrorMessage.INVALID_EXPECTED_REVISION, {"expected_revision": expected_revision})
+            raise RevisionConflictError(ErrorMessage.INVALID_EXPECTED_REVISION, {
+                ErrorDetailKey.EXPECTED_REVISION: expected_revision,
+            })
         try:
             exists = verified_regular_exists(self.path)
         except OSError as exc:
-            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {"path": str(self.path)}) from exc
+            raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                ErrorDetailKey.PATH: str(self.path),
+            }) from exc
         if exists:
             actual = self.load().revision
             if actual != expected_revision:
-                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {"expected_revision": expected_revision, "actual_revision": actual})
+                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                    ErrorDetailKey.EXPECTED_REVISION: expected_revision,
+                    ErrorDetailKey.ACTUAL_REVISION: actual,
+                })
             if state.revision < actual:
                 raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
-                    "candidate_revision": state.revision, "actual_revision": actual,
+                    ErrorDetailKey.CANDIDATE_REVISION: state.revision,
+                    ErrorDetailKey.ACTUAL_REVISION: actual,
                 })
         elif expected_revision != -1:
-            raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {"expected_revision": expected_revision})
+            raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {
+                ErrorDetailKey.EXPECTED_REVISION: expected_revision,
+            })
 
         self.path.parent.mkdir(parents=True, exist_ok=True)
         descriptor, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent))
@@ -205,7 +233,7 @@ class StateStore:
         encoded = encode_state(state)
         if len(encoded) > MAX_STATE_BYTES:
             raise UnsafePayloadError(ErrorMessage.STATE_SIZE_LIMIT, {
-                "limit_bytes": MAX_STATE_BYTES,
+                ErrorDetailKey.LIMIT_BYTES: MAX_STATE_BYTES,
             })
         prepared = PreparedState(state, encoded)
         self._prepared.add(prepared)

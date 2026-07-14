@@ -1,4 +1,3 @@
-import hashlib
 import tempfile
 import unittest
 import json
@@ -9,15 +8,11 @@ from pathlib import Path
 from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
+from tests import detail_digest
 from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import RunLease, StateStore, encode_state
-
-
-def detail_digest(value):
-    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
-
 
 class StateStoreTests(unittest.TestCase):
     def test_prepared_state_is_frozen_and_publishes_exact_state(self):

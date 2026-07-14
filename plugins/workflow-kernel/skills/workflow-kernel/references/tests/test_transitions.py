@@ -1,20 +1,15 @@
-import hashlib
 import unittest
 import json
 from types import MappingProxyType
 from unittest import mock
 
+from tests import detail_digest
 from workflow_kernel import transitions
 from workflow_kernel.schema import (
     IllegalTransitionError, MissingEvidenceError, NodeState, NodeStatus,
     RunState, RunStatus, WorkflowEvent,
 )
 from workflow_kernel.transitions import TransitionEngine
-
-
-def detail_digest(value):
-    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
-
 
 NOW = "2026-07-14T00:00:00Z"
 

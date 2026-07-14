@@ -1,4 +1,3 @@
-import hashlib
 import json
 import os
 import subprocess
@@ -9,8 +8,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tests import detail_digest, detail_key_digest
+from workflow_kernel import cli
 from workflow_kernel.cli import command_append, command_init, command_replay, command_validate
-from workflow_kernel.schema import InvalidSchemaError, UnsafePayloadError
+from workflow_kernel.schema import ErrorMessage, InvalidSchemaError, KernelError, UnsafePayloadError
 
 
 class CliTests(unittest.TestCase):
@@ -61,12 +62,12 @@ class CliTests(unittest.TestCase):
                               "--occurred-at", "2026-07-14T00:00:00Z", "--mode", sentinel)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn(sentinel, result.stderr)
-        expected = "value-sha256:" + hashlib.sha256(b"invalid_argument").hexdigest()
+        expected = detail_digest("invalid_argument")
         self.assertEqual(json.loads(result.stderr)["error"]["details"]["reason_code"], expected)
 
     def test_rejected_event_kind_is_hashed_in_public_error_details(self):
         sentinel = "never-persist-rejected-event-kind"
-        digest = "value-sha256:" + hashlib.sha256(sentinel.encode("utf-8")).hexdigest()
+        digest = detail_digest(sentinel)
         with tempfile.TemporaryDirectory() as directory:
             initialized = self.run_cli(
                 "init", directory, "--run-id", "run-1",
@@ -86,6 +87,33 @@ class CliTests(unittest.TestCase):
         self.assertEqual(rejected.returncode, 2)
         self.assertNotIn(sentinel, rejected.stderr)
         self.assertEqual(json.loads(rejected.stderr)["error"]["details"]["kind"], digest)
+
+    def test_main_uses_base_owned_error_serialization(self):
+        class ExternalError(KernelError):
+            pass
+
+        error = ExternalError(ErrorMessage.INVALID_STRING_FIELD, {"field": "safe"})
+        parsed = SimpleNamespace(handler=mock.Mock(side_effect=error))
+        with mock.patch.object(ExternalError, "to_dict", return_value={"secret": "never-persist"}), \
+                mock.patch("workflow_kernel.cli.parser") as parser, \
+                mock.patch("workflow_kernel.cli._emit") as emit:
+            parser.return_value.parse_args.return_value = parsed
+            self.assertEqual(cli.main([]), 2)
+        emitted = emit.call_args.args[0]
+        self.assertEqual(emitted["error"]["code"], "kernel_error")
+        self.assertNotIn("never-persist", json.dumps(emitted))
+
+    def test_main_hashes_unknown_error_detail_keys(self):
+        sentinel = "never-persist-cli-detail-key"
+        error = UnsafePayloadError(ErrorMessage.INVALID_STRING_FIELD, {sentinel: "value"})
+        parsed = SimpleNamespace(handler=mock.Mock(side_effect=error))
+        with mock.patch("workflow_kernel.cli.parser") as parser, \
+                mock.patch("workflow_kernel.cli._emit") as emit:
+            parser.return_value.parse_args.return_value = parsed
+            self.assertEqual(cli.main([]), 2)
+        emitted = emit.call_args.args[0]
+        self.assertIn(detail_key_digest(sentinel), emitted["error"]["details"])
+        self.assertNotIn(sentinel, json.dumps(emitted))
 
     def test_append_normalizes_deeply_nested_json_without_traceback(self):
         nested = "[" * 1_200 + "0" + "]" * 1_200

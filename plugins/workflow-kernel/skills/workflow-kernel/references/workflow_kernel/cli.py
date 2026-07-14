@@ -10,7 +10,10 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .events import EventStore
-from .schema import CorruptEventError, ErrorMessage, InvalidSchemaError, KernelError, RunMode, UnsafePayloadError, WorkflowEvent
+from .schema import (
+    CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
+    RunMode, UnsafePayloadError, WorkflowEvent,
+)
 from .state import RunLease, StateStore
 from .transitions import TransitionEngine
 
@@ -20,7 +23,7 @@ class KernelArgumentParser(argparse.ArgumentParser):
         match = re.search(r"argument ([^:]+)", message)
         option = match.group(1) if match else "command"
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            "reason_code": "invalid_argument", "option": option,
+            ErrorDetailKey.REASON_CODE: "invalid_argument", ErrorDetailKey.OPTION: option,
         })
 
 
@@ -45,7 +48,9 @@ def command_init(args):
     root.mkdir(parents=True, exist_ok=True)
     with _coordinated_run(states) as lease:
         if events.path.exists() or states.path.exists():
-            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {"directory": str(root)})
+            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {
+                ErrorDetailKey.DIRECTORY: str(root),
+            })
         event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
         state = TransitionEngine().reconstruct((event,))
         events.append(event, 0)
@@ -65,7 +70,8 @@ def command_validate(args):
         materialized = states.load()
         if materialized != state:
             raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
-                "materialized_revision": materialized.revision, "ledger_revision": state.revision,
+                ErrorDetailKey.MATERIALIZED_REVISION: materialized.revision,
+                ErrorDetailKey.LEDGER_REVISION: state.revision,
             })
     _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
     return 0
@@ -76,9 +82,11 @@ def command_append(args):
     try:
         data = json.loads(args.event)
     except json.JSONDecodeError as exc:
-        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {"offset": exc.pos}) from exc
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {ErrorDetailKey.OFFSET: exc.pos}) from exc
     except RecursionError as exc:
-        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {"reason_code": "recursion_limit"}) from exc
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {
+            ErrorDetailKey.REASON_CODE: "recursion_limit",
+        }) from exc
     event = WorkflowEvent.from_dict(data)
     with _coordinated_run(states) as lease:
         existing = events.replay()
@@ -148,9 +156,11 @@ def main(argv=None):
         args = parser().parse_args(argv)
         return args.handler(args)
     except KernelError as exc:
-        _emit(exc.to_dict(), sys.stderr)
+        _emit(KernelError.to_dict(exc), sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
-        error = UnsafePayloadError(ErrorMessage.OPERATION_FAILED, {"exception_type": type(exc).__name__})
-        _emit(error.to_dict(), sys.stderr)
+        error = UnsafePayloadError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.EXCEPTION_TYPE: type(exc).__name__,
+        })
+        _emit(KernelError.to_dict(error), sys.stderr)
         return 1
