@@ -1,10 +1,8 @@
-import ast
 import hashlib
 import inspect
 import json
 import unittest
 from dataclasses import replace
-from pathlib import Path
 from unittest import mock
 
 from workflow_kernel import redaction, schema
@@ -46,6 +44,10 @@ class CountingStr(str):
         for character in super().__iter__():
             self.counter[0] += 1
             yield character
+
+
+def detail_digest(value):
+    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 class SchemaTests(unittest.TestCase):
@@ -111,6 +113,43 @@ class SchemaTests(unittest.TestCase):
             self.assertNotIn("never-persist", json.dumps(error.to_dict()))
             self.assertNotIn("never-persist", str(error))
 
+    def test_error_messages_and_codes_are_owned_by_closed_enums(self):
+        self.assertTrue(hasattr(schema, "ErrorMessage"))
+        self.assertTrue(hasattr(schema, "ErrorCode"))
+        message = schema.ErrorMessage.INVALID_STRING_FIELD
+        error = UnsafePayloadError(message)
+        self.assertEqual(error.message, "invalid string field")
+        self.assertEqual(error.args, ("invalid string field",))
+        self.assertEqual(error.code, "unsafe_payload")
+        for enum_message in schema.ErrorMessage:
+            candidate = schema.KernelError(enum_message)
+            self.assertEqual(candidate.message, enum_message.value)
+            self.assertEqual(candidate.args, (enum_message.value,))
+        for error_type, enum_code in (
+            (schema.KernelError, schema.ErrorCode.KERNEL_ERROR),
+            (schema.InvalidSchemaError, schema.ErrorCode.INVALID_SCHEMA),
+            (schema.CorruptEventError, schema.ErrorCode.CORRUPT_EVENT),
+            (schema.CorruptStateError, schema.ErrorCode.CORRUPT_STATE),
+            (schema.SequenceConflictError, schema.ErrorCode.SEQUENCE_CONFLICT),
+            (schema.RevisionConflictError, schema.ErrorCode.REVISION_CONFLICT),
+            (schema.LeaseConflictError, schema.ErrorCode.LEASE_CONFLICT),
+            (schema.IllegalTransitionError, schema.ErrorCode.ILLEGAL_TRANSITION),
+            (schema.MissingEvidenceError, schema.ErrorCode.MISSING_EVIDENCE),
+            (schema.UnsafePayloadError, schema.ErrorCode.UNSAFE_PAYLOAD),
+        ):
+            self.assertEqual(error_type(schema.ErrorMessage.GENERIC).code, enum_code.value)
+
+        raw = UnsafePayloadError("invalid string field")
+        self.assertEqual(raw.message, "workflow kernel error")
+
+        class ExternalError(schema.KernelError):
+            code = "https://example.invalid/never-persist-code"
+            _error_code = "never-persist-arbitrary-code"
+
+        external = ExternalError(message)
+        self.assertEqual(external.code, "kernel_error")
+        self.assertNotIn("never-persist", json.dumps(external.to_dict()))
+
     def test_error_messages_fail_closed_on_invalid_inputs(self):
         fallback = "workflow kernel error"
         values = (
@@ -127,35 +166,8 @@ class SchemaTests(unittest.TestCase):
             self.assertNotIn("never-persist", json.dumps(error.to_dict()))
             self.assertNotIn("never-persist", str(error))
 
-    def test_error_message_catalog_covers_internal_kernel_errors(self):
-        catalog = getattr(schema, "SAFE_ERROR_MESSAGES", frozenset())
-        error_names = {
-            "KernelError", "InvalidSchemaError", "CorruptEventError", "CorruptStateError",
-            "SequenceConflictError", "RevisionConflictError", "LeaseConflictError",
-            "IllegalTransitionError", "MissingEvidenceError", "UnsafePayloadError",
-        }
-        package = Path(schema.__file__).parent
-        observed = set()
-        for path in package.glob("*.py"):
-            tree = ast.parse(path.read_text())
-            for node in ast.walk(tree):
-                if (not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name)
-                        or node.func.id not in error_names or not node.args):
-                    continue
-                message = node.args[0]
-                self.assertIsInstance(message, ast.Constant, path.name + ":" + str(node.lineno))
-                self.assertIsInstance(message.value, str, path.name + ":" + str(node.lineno))
-                observed.add(message.value)
-        self.assertTrue(observed)
-        self.assertEqual(observed - catalog, set())
-        for message in catalog:
-            error = UnsafePayloadError(message)
-            self.assertEqual(error.message, message)
-            self.assertEqual(error.args, (message,))
-            self.assertEqual(str(error), message)
-
     def test_error_message_and_details_cannot_be_mutated_after_construction(self):
-        message = "invalid string field"
+        message = schema.ErrorMessage.INVALID_STRING_FIELD
         error = UnsafePayloadError(message, {"field": "safe"})
         sentinel = "never-persist-mutated-error"
 
@@ -166,6 +178,12 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             error._safe_message = sentinel
         with self.assertRaises(AttributeError):
+            error.code = sentinel
+        with self.assertRaises(AttributeError):
+            error._safe_code = sentinel
+        with self.assertRaises(AttributeError):
+            error._error_code = sentinel
+        with self.assertRaises(AttributeError):
             error.details = {"password": sentinel}
         with self.assertRaises(TypeError):
             error.details["password"] = sentinel
@@ -173,11 +191,52 @@ class SchemaTests(unittest.TestCase):
             del error._safe_message
         with self.assertRaises(AttributeError):
             del error._details
+        with self.assertRaises(AttributeError):
+            del error._safe_code
+        with self.assertRaises(AttributeError):
+            del error._error_code
 
-        self.assertEqual(error.message, message)
-        self.assertEqual(error.args, (message,))
-        self.assertEqual(str(error), message)
+        self.assertEqual(error.message, message.value)
+        self.assertEqual(error.args, (message.value,))
+        self.assertEqual(str(error), message.value)
         self.assertNotIn(sentinel, json.dumps(error.to_dict()))
+
+    def test_error_details_hash_every_nonsensitive_string_and_stay_frozen(self):
+        sentinel = "never-persist-arbitrary-plain-secret"
+        digest = detail_digest(sentinel)
+        error = UnsafePayloadError("invalid string field", {
+            "context": sentinel,
+            "mode": sentinel,
+            "field": sentinel,
+            "path": sentinel,
+            "nested": [sentinel, {"password": sentinel}],
+            "count": 3,
+            "enabled": True,
+            "missing": None,
+        })
+        self.assertEqual(error.details["context"], digest)
+        self.assertEqual(error.details["mode"], digest)
+        self.assertEqual(error.details["field"], digest)
+        self.assertEqual(error.details["path"], digest)
+        self.assertEqual(error.details["nested"][0], digest)
+        self.assertEqual(error.details["nested"][1]["password"], "[REDACTED]")
+        self.assertEqual(error.details["count"], 3)
+        self.assertIs(error.details["enabled"], True)
+        self.assertIsNone(error.details["missing"])
+        with self.assertRaises(TypeError):
+            error.details["nested"][1]["other"] = sentinel
+        encoded = json.dumps(error.to_dict(), sort_keys=True)
+        self.assertNotIn(sentinel, encoded)
+        self.assertIn(digest, encoded)
+
+    def test_error_detail_mapping_keys_with_uri_material_fail_closed(self):
+        sentinel = "never-persist-detail-key"
+        error = UnsafePayloadError("invalid string field", {
+            "https://example.invalid/" + sentinel: "value",
+        })
+        encoded = json.dumps(error.to_dict(), sort_keys=True)
+        self.assertNotIn(sentinel, encoded)
+        self.assertEqual(error.details, {"detail": "[UNSAFE]"})
 
     def test_recursive_redaction_covers_events_and_receipts(self):
         fixture = "never-print-this-fixture"
@@ -671,7 +730,7 @@ class SchemaTests(unittest.TestCase):
     def test_corrupt_state_error_has_stable_public_code(self):
         self.assertEqual(CorruptStateError("bad state").code, "corrupt_state")
 
-    def test_error_details_value_error_is_safely_contained(self):
+    def test_error_details_sensitive_and_uri_values_are_safely_contained(self):
         fixture = "never-print-this-credential"
         error = UnsafePayloadError("unsafe", {
             "authorization": "Bearer " + fixture,
@@ -679,7 +738,11 @@ class SchemaTests(unittest.TestCase):
         })
         encoded = json.dumps(error.to_dict(), sort_keys=True)
         self.assertNotIn(fixture, encoded)
-        self.assertEqual(error.details, {"detail": "[UNSAFE]"})
+        self.assertEqual(error.details["authorization"], "[REDACTED]")
+        self.assertEqual(
+            error.details["reference"],
+            detail_digest("https://user:" + fixture + "@example.invalid/proof"),
+        )
 
     def test_python_signature_errors_are_native_but_from_dict_is_stable(self):
         with self.assertRaises(TypeError):
@@ -732,7 +795,7 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(boundary.evidence, ("run",))
             with self.assertRaises(InvalidSchemaError) as raised:
                 replace(boundary, evidence=("run", "overflow"))
-        self.assertEqual(raised.exception.details["reason_code"], "evidence_limit_exceeded")
+        self.assertEqual(raised.exception.details["reason_code"], detail_digest("evidence_limit_exceeded"))
         self.assertEqual(raised.exception.details["limit_items"], 2)
 
     def test_state_from_dict_enforces_aggregate_evidence_boundary(self):
@@ -747,5 +810,5 @@ class SchemaTests(unittest.TestCase):
             data["evidence"].append("overflow")
             with self.assertRaises(InvalidSchemaError) as raised:
                 RunState.from_dict(data)
-        self.assertEqual(raised.exception.details["reason_code"], "evidence_limit_exceeded")
+        self.assertEqual(raised.exception.details["reason_code"], detail_digest("evidence_limit_exceeded"))
         self.assertEqual(raised.exception.details["limit_items"], 2)

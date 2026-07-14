@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 import json
@@ -12,6 +13,10 @@ from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
 from workflow_kernel.state import RunLease, StateStore, encode_state
+
+
+def detail_digest(value):
+    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 class StateStoreTests(unittest.TestCase):
@@ -44,7 +49,7 @@ class StateStoreTests(unittest.TestCase):
             with RunLease(second.path) as lease:
                 with self.assertRaises(UnsafePayloadError) as raised:
                     second.publish(prepared, -1, lease=lease)
-            self.assertEqual(raised.exception.details["reason_code"], "prepared_state_owner_mismatch")
+            self.assertEqual(raised.exception.details["reason_code"], detail_digest("prepared_state_owner_mismatch"))
             self.assertFalse(second.path.exists())
 
     def test_relative_stores_keep_all_artifacts_bound_across_chdir(self):
@@ -106,7 +111,7 @@ class StateStoreTests(unittest.TestCase):
                 self.assertFalse(first.authorizes(path))
                 with self.assertRaises(LeaseConflictError) as raised:
                     StateStore(path).write(state, -1, lease=first)
-                self.assertEqual(raised.exception.details["reason_code"], "lease_identity_changed")
+                self.assertEqual(raised.exception.details["reason_code"], detail_digest("lease_identity_changed"))
                 self.assertFalse(path.exists())
                 StateStore(path).write(state, -1, lease=second)
             finally:
@@ -127,7 +132,7 @@ class StateStoreTests(unittest.TestCase):
                 self.assertFalse(first.authorizes(path))
                 with self.assertRaises(LeaseConflictError) as raised:
                     StateStore(path).write(state, -1, lease=first)
-                self.assertEqual(raised.exception.details["reason_code"], "lease_identity_changed")
+                self.assertEqual(raised.exception.details["reason_code"], detail_digest("lease_identity_changed"))
                 self.assertFalse(path.exists())
                 StateStore(path).write(state, -1, lease=second)
             finally:
@@ -241,7 +246,7 @@ class StateStoreTests(unittest.TestCase):
             with mock.patch("workflow_kernel._files.fcntl", None, create=True):
                 with self.assertRaises(LeaseConflictError) as raised:
                     RunLease(path).acquire()
-            self.assertEqual(raised.exception.details["reason_code"], "locking_unsupported")
+            self.assertEqual(raised.exception.details["reason_code"], detail_digest("locking_unsupported"))
             self.assertFalse(path.with_name(path.name + ".lease").exists())
 
     def test_candidate_revision_cannot_downgrade_materialized_state(self):

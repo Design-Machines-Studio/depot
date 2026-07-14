@@ -7,14 +7,14 @@ import json
 from typing import Mapping, Optional
 
 from .redaction import redact
-from .schema import UnsafePayloadError, WorkflowEvent
+from .schema import ErrorMessage, UnsafePayloadError, WorkflowEvent
 
 
 def encode_receipt(receipt: Mapping[str, object]) -> bytes:
     try:
         safe = redact(receipt)
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError("receipt contains a non-JSON-safe value") from exc
+        raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from exc
     return (json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
@@ -24,7 +24,7 @@ def evidence_receipt(run_id: str, evidence_type: str, reference: str, *, metadat
     try:
         safe = redact(receipt)
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError("evidence receipt contains unsafe data") from exc
+        raise UnsafePayloadError(ErrorMessage.EVIDENCE_RECEIPT_UNSAFE) from exc
     safe["digest"] = "sha256:" + hashlib.sha256(encode_receipt(safe)).hexdigest()
     return safe
 

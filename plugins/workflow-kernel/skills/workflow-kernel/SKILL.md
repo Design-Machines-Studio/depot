@@ -90,12 +90,17 @@ errors as stable JSON. Treat `--help` output as plain text.
   node state; transitions exceeding that aggregate limit fail before state
   reconstruction.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
-  errors. Public messages come only from the kernel's closed catalog of stable
-  developer-defined text; every uncatalogued candidate becomes one generic safe
-  message. Put dynamic, parser, and rejected-input context only in recursively
-  redacted immutable details. The message, exception arguments, details,
-  `to_dict()`, and `str(error)` share that immutable boundary. Do not expose raw
-  parser exceptions or rejected values.
+  errors. `ErrorMessage` and `ErrorCode` are the closed developer-owned enums
+  for public text and machine codes; raw or unknown candidates become the
+  generic `workflow kernel error` / `kernel_error` pair. Dynamic, parser, and
+  rejected-input context belongs only in recursively immutable details.
+  Sensitive-key paths become `[REDACTED]`; every other string value becomes a
+  deterministic `value-sha256:<64 lowercase hex>` digest, while numbers,
+  booleans, and null remain typed. Use those digests only for stable correlation
+  across receipts and logs—the original plaintext is never recoverable from the
+  public error. Message, code, exception arguments, details, `to_dict()`, and
+  `str(error)` all use the captured immutable boundary. Do not expose raw parser
+  exceptions or rejected values.
 
 ## Security and Portability
 

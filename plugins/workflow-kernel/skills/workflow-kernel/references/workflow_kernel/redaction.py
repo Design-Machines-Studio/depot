@@ -13,6 +13,8 @@ from urllib.parse import urlsplit
 
 
 REDACTED = "[REDACTED]"
+UNSAFE = "[UNSAFE]"
+VALUE_DIGEST_PREFIX = "value-sha256:"
 MAX_PAYLOAD_DEPTH = 16
 MAX_PAYLOAD_ITEMS = 10_000
 MAX_STRING_LENGTH = 65_536
@@ -33,6 +35,7 @@ _SCHEME_CHARACTERS = _ASCII_LETTERS | frozenset("0123456789+.-")
 _TRAILING_PUNCTUATION = frozenset(".,;!?\"'")
 _OPENING_TO_CLOSING = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
+_SAFE_DETAIL_MARKERS = frozenset({REDACTED, UNSAFE})
 
 
 def is_secret_key(key: str) -> bool:
@@ -193,6 +196,13 @@ def validate_durable_key(key: str) -> str:
     return key
 
 
+def digest_error_detail_string(value: str) -> str:
+    """Return a stable correlation digest without retaining original text."""
+    if value in _SAFE_DETAIL_MARKERS:
+        return value
+    return VALUE_DIGEST_PREFIX + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
 def _mutable_mapping(value: dict) -> dict:
     return value
 
@@ -216,6 +226,7 @@ class _Traversal:
     max_string_length: int
     wrap_mapping: Callable[[dict], Any]
     wrap_sequence: Callable[[tuple], Any]
+    string_normalizer: Optional[Callable[[str], str]] = None
     count: int = 0
 
     def normalize(self, value: Any, *, key: str = "", depth: int = 0) -> Any:
@@ -231,6 +242,8 @@ class _Traversal:
         if isinstance(value, str):
             if len(value) > self.max_string_length:
                 raise TypeError("string exceeds maximum length")
+            if self.string_normalizer is not None:
+                return self.string_normalizer(value)
             if key.casefold() == "reference":
                 return normalize_evidence_reference(value)
             return normalize_durable_string(value)
@@ -251,7 +264,7 @@ class _Traversal:
                 result[child_key] = self.normalize(item, key=child_key, depth=depth + 1)
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
-            if key.casefold() == "evidence":
+            if self.string_normalizer is None and key.casefold() == "evidence":
                 value = tuple(normalize_evidence_reference(reference) for reference in value)
             result = tuple(self.normalize(item, depth=depth + 1) for item in value)
             return self.wrap_sequence(result)
@@ -270,6 +283,15 @@ def freeze_json(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
     """Return a recursively immutable, redacted, JSON-safe value."""
     return _Traversal(max_depth, max_items, max_string_length,
                       _frozen_mapping, _frozen_sequence).normalize(value)
+
+
+def freeze_error_details(value: Any, *, max_depth: int = MAX_PAYLOAD_DEPTH,
+                         max_items: int = MAX_PAYLOAD_ITEMS,
+                         max_string_length: int = MAX_STRING_LENGTH) -> Any:
+    """Return immutable public details with every nonsensitive string digested."""
+    return _Traversal(max_depth, max_items, max_string_length,
+                      _frozen_mapping, _frozen_sequence,
+                      digest_error_detail_string).normalize(value)
 
 
 def thaw(value: Any) -> Any:

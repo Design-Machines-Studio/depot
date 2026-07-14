@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .events import EventStore
-from .schema import CorruptEventError, InvalidSchemaError, KernelError, RunMode, UnsafePayloadError, WorkflowEvent
+from .schema import CorruptEventError, ErrorMessage, InvalidSchemaError, KernelError, RunMode, UnsafePayloadError, WorkflowEvent
 from .state import RunLease, StateStore
 from .transitions import TransitionEngine
 
@@ -19,7 +19,7 @@ class KernelArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         match = re.search(r"argument ([^:]+)", message)
         option = match.group(1) if match else "command"
-        raise InvalidSchemaError("invalid command arguments", {
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             "reason_code": "invalid_argument", "option": option,
         })
 
@@ -45,7 +45,7 @@ def command_init(args):
     root.mkdir(parents=True, exist_ok=True)
     with _coordinated_run(states) as lease:
         if events.path.exists() or states.path.exists():
-            raise InvalidSchemaError("run directory is already initialized", {"directory": str(root)})
+            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_INITIALIZED, {"directory": str(root)})
         event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
         state = TransitionEngine().reconstruct((event,))
         events.append(event, 0)
@@ -59,12 +59,12 @@ def command_validate(args):
     _, events, states = _paths(args.directory)
     replayed, notes = events.validate(recovery=args.recovery)
     if not replayed:
-        raise CorruptEventError("authoritative event ledger is missing or empty")
+        raise CorruptEventError(ErrorMessage.AUTHORITATIVE_LEDGER_MISSING)
     state = TransitionEngine().reconstruct(replayed)
     if states.path.exists():
         materialized = states.load()
         if materialized != state:
-            raise InvalidSchemaError("materialized state does not match event ledger", {
+            raise InvalidSchemaError(ErrorMessage.STATE_LEDGER_MISMATCH, {
                 "materialized_revision": materialized.revision, "ledger_revision": state.revision,
             })
     _emit({"valid": True, "event_count": len(replayed), "notes": list(notes)})
@@ -76,14 +76,14 @@ def command_append(args):
     try:
         data = json.loads(args.event)
     except json.JSONDecodeError as exc:
-        raise InvalidSchemaError("event is not valid JSON", {"offset": exc.pos}) from exc
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {"offset": exc.pos}) from exc
     except RecursionError as exc:
-        raise InvalidSchemaError("event is not valid JSON", {"reason_code": "recursion_limit"}) from exc
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {"reason_code": "recursion_limit"}) from exc
     event = WorkflowEvent.from_dict(data)
     with _coordinated_run(states) as lease:
         existing = events.replay()
         if not existing:
-            raise InvalidSchemaError("run directory is not initialized")
+            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
         expected = states.load().revision if states.path.exists() else -1
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
@@ -151,6 +151,6 @@ def main(argv=None):
         _emit(exc.to_dict(), sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
-        error = UnsafePayloadError("workflow kernel operation failed", {"exception_type": type(exc).__name__})
+        error = UnsafePayloadError(ErrorMessage.OPERATION_FAILED, {"exception_type": type(exc).__name__})
         _emit(error.to_dict(), sys.stderr)
         return 1

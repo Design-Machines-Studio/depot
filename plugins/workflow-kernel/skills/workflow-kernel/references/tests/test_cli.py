@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import subprocess
@@ -60,7 +61,31 @@ class CliTests(unittest.TestCase):
                               "--occurred-at", "2026-07-14T00:00:00Z", "--mode", sentinel)
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn(sentinel, result.stderr)
-        self.assertEqual(json.loads(result.stderr)["error"]["details"]["reason_code"], "invalid_argument")
+        expected = "value-sha256:" + hashlib.sha256(b"invalid_argument").hexdigest()
+        self.assertEqual(json.loads(result.stderr)["error"]["details"]["reason_code"], expected)
+
+    def test_rejected_event_kind_is_hashed_in_public_error_details(self):
+        sentinel = "never-persist-rejected-event-kind"
+        digest = "value-sha256:" + hashlib.sha256(sentinel.encode("utf-8")).hexdigest()
+        with tempfile.TemporaryDirectory() as directory:
+            initialized = self.run_cli(
+                "init", directory, "--run-id", "run-1",
+                "--occurred-at", "2026-07-14T00:00:00Z",
+            )
+            self.assertEqual(initialized.returncode, 0)
+            event = {
+                "schema_version": 1,
+                "sequence": 1,
+                "run_id": "run-1",
+                "node_id": None,
+                "kind": sentinel,
+                "occurred_at": "2026-07-14T00:00:01Z",
+                "payload": {},
+            }
+            rejected = self.run_cli("append", directory, "--event", json.dumps(event))
+        self.assertEqual(rejected.returncode, 2)
+        self.assertNotIn(sentinel, rejected.stderr)
+        self.assertEqual(json.loads(rejected.stderr)["error"]["details"]["kind"], digest)
 
     def test_append_normalizes_deeply_nested_json_without_traceback(self):
         nested = "[" * 1_200 + "0" + "]" * 1_200

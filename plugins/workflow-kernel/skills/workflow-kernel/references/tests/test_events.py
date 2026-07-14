@@ -1,3 +1,4 @@
+import hashlib
 import tempfile
 import unittest
 import os
@@ -6,6 +7,10 @@ from unittest import mock
 
 from workflow_kernel.events import EventStore, encode_event
 from workflow_kernel.schema import CorruptEventError, SequenceConflictError, UnsafePayloadError, WorkflowEvent
+
+
+def detail_digest(value):
+    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 def event(sequence):
@@ -91,7 +96,7 @@ class EventStoreTests(unittest.TestCase):
                 with mock.patch.object(store, "_acquire", return_value=stale):
                     with self.assertRaises(SequenceConflictError) as raised:
                         store.append(event(0), 0)
-                self.assertEqual(raised.exception.details["reason_code"], "lock_identity_changed")
+                self.assertEqual(raised.exception.details["reason_code"], detail_digest("lock_identity_changed"))
                 self.assertFalse(path.exists())
                 with self.assertRaises(SequenceConflictError):
                     store.append(event(0), 0)
@@ -116,7 +121,7 @@ class EventStoreTests(unittest.TestCase):
                 with mock.patch.object(store, "_acquire", return_value=stale):
                     with self.assertRaises(SequenceConflictError) as raised:
                         store.append(event(0), 0)
-                self.assertEqual(raised.exception.details["reason_code"], "lock_identity_changed")
+                self.assertEqual(raised.exception.details["reason_code"], detail_digest("lock_identity_changed"))
                 self.assertFalse(path.exists())
                 with self.assertRaises(SequenceConflictError):
                     store.append(event(0), 0)
@@ -204,7 +209,7 @@ class EventStoreTests(unittest.TestCase):
             with mock.patch("workflow_kernel._files.fcntl", None, create=True):
                 with self.assertRaises(SequenceConflictError) as raised:
                     EventStore(path).append(event(0), 0)
-            self.assertEqual(raised.exception.details["reason_code"], "locking_unsupported")
+            self.assertEqual(raised.exception.details["reason_code"], detail_digest("locking_unsupported"))
             self.assertFalse(path.exists())
             self.assertFalse(path.with_name(path.name + ".lock").exists())
 

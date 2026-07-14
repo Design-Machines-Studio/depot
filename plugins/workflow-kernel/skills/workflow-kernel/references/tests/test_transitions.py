@@ -1,3 +1,4 @@
+import hashlib
 import unittest
 import json
 from types import MappingProxyType
@@ -9,6 +10,10 @@ from workflow_kernel.schema import (
     RunState, RunStatus, WorkflowEvent,
 )
 from workflow_kernel.transitions import TransitionEngine
+
+
+def detail_digest(value):
+    return "value-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 NOW = "2026-07-14T00:00:00Z"
@@ -89,7 +94,7 @@ class TransitionTests(unittest.TestCase):
             self.assertEqual(state.nodes["n"].evidence, ("b",))
             with self.assertRaises(IllegalTransitionError) as raised:
                 self.engine.apply(state, event(5, "evidence.recorded", payload={"evidence": ["c"]}))
-        self.assertEqual(raised.exception.details["reason_code"], "evidence_limit_exceeded")
+        self.assertEqual(raised.exception.details["reason_code"], detail_digest("evidence_limit_exceeded"))
         self.assertEqual(raised.exception.details["limit_items"], 2)
         self.assertEqual(state.evidence, ("a",))
         self.assertEqual(state.nodes["n"].evidence, ("b",))
