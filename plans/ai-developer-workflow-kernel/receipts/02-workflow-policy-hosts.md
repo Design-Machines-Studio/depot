@@ -35,5 +35,5 @@ EVAL_GATE_PASSED: 02-workflow-policy-hosts | classification: logic | iterations:
 
 - Docker resources created by this chunk: none.
 - Existing Assembly, Assembly Baseplate, and DDEV containers were inventoried and left untouched.
-- Chunk worktree removal: pending post-receipt clean-status and merge-ancestry proof.
-- Chunk branch deletion: pending post-receipt clean-status and merge-ancestry proof.
+- Chunk worktree removed after clean-status and merge-ancestry proof.
+- Chunk branch `pipeline/ai-developer-workflow-kernel/02-workflow-policy-hosts` deleted with `git branch -d`.

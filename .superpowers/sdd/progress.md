@@ -17,7 +17,7 @@
 
 - 0e. Ref registry initialized: complete
 - 01-kernel-state-engine: complete (logic; 234/234 tests; five-lens review CLEAN at iteration 37; merged 07e7126; chunk worktree and branch deleted; executionMode codex_native)
-- 02-workflow-policy-hosts: complete (logic; 380/380 tests across four runtime/settings modes; five-lens review CLEAN at iteration 25; merged a8c970a; cleanup pending; executionMode codex_native)
+- 02-workflow-policy-hosts: complete (logic; 380/380 tests across four runtime/settings modes; five-lens review CLEAN at iteration 25; merged a8c970a; chunk worktree and branch deleted; executionMode codex_native)
 - 03-owned-resource-lifecycle: pending
 - 04-persona-browser-verification: pending
 - 05-shadow-workflow-adapters: pending
