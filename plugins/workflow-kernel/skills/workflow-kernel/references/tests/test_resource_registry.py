@@ -92,8 +92,17 @@ class ResourceRegistryTests(unittest.TestCase):
             writer.register(expected)
 
             self.assertEqual(
-                expected,
-                reader.resource_for_exact(ResourceKind.CONTAINER, "shared"),
+                (expected, True),
+                reader.resource_state_for_exact(ResourceKind.CONTAINER, "shared"),
+            )
+
+            append_terminal_transaction(
+                path,
+                disposition(expected, CleanupDisposition.REMOVED, "removed"),
+            )
+            self.assertEqual(
+                (expected, False),
+                reader.resource_state_for_exact(ResourceKind.CONTAINER, "shared"),
             )
 
     def test_preopened_registries_cannot_interleave_conflicting_registration(self):

@@ -145,11 +145,13 @@ Cleanup execution uses a stable, one-action-at-a-time authority boundary.
 zero and returns only the next dependency-eligible action and its immutable plan
 index.
 `revalidate-cleanup-action` is the single non-splittable authorization step for
-that index: it reloads the exact kind-and-ID registry record regardless
-of owner (or proves its global absence for explicit stale-orphan mode), consumes
-a fresh exact-ID inventory, requires
-a complete fresh authoritative node-status proof for every dependency, and
-binds the exact successful predecessor result when the action declares one.
+that index: it atomically reloads the exact kind-and-ID registry record and its
+active/retired state regardless of owner. Registered mode requires the active
+action owner; explicit stale-orphan mode requires total global absence, with a
+retired historical record failing closed. It consumes a fresh exact-ID
+inventory, requires a complete fresh authoritative node-status proof for every
+dependency, and binds the exact successful predecessor result when the action
+declares one.
 The host executes only the exact argv returned by that revalidation immediately
 afterward, records its result, and asks for the next action. Cached plans,
 translated events, comparator output, metrics, and all other shadow state are

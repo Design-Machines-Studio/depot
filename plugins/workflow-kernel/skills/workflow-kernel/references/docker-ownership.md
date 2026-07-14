@@ -84,13 +84,15 @@ changed dependency/status snapshot invalidates the action. Changed ref count,
 object identity, label, lease/use state, inspect result, or resource identity
 likewise invalidates it. The lifecycle coordinator accepts and forwards this
 typed proof; lower adapters expose no raw active-ID shortcut.
-Execution-time Docker revalidation reloads the exact durable registry record
+Execution-time Docker revalidation atomically reloads the exact durable registry
+record and its active/retired state. Registered mode requires an active record
 for the action owner and derives dependency-proof requirements only from that
 record. Action precondition strings, Docker labels, cached plans, and shadow
 state cannot declare a registered resource dependency-free. Stale-orphan
-revalidation is an explicit separate mode: it proves the registry has no
-exact kind-and-ID record under any owner and requires complete positive labels
-plus a fresh inactive lease. Command results remain a gap-free plan prefix
+revalidation is an explicit separate mode: it proves the registry has no exact
+kind-and-ID record under any owner; a retired historical record still blocks
+orphan authorization. Complete positive labels and a fresh inactive lease are
+also required. Command results remain a gap-free plan prefix
 beginning at action zero; a dependent action is accepted only after its declared
 predecessor result appears earlier and succeeded.
 

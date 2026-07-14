@@ -889,7 +889,9 @@ class DockerAdapter:
 
         if type(registry) is not ResourceRegistry:
             raise invalid_policy("docker_cleanup_precondition_changed")
-        record = registry.resource_for_exact(action.kind, action.resource_id)
+        record, record_active = registry.resource_state_for_exact(
+            action.kind, action.resource_id,
+        )
         if orphan_mode:
             if (
                 record is not None or incomplete_node_proof is not None
@@ -900,7 +902,7 @@ class DockerAdapter:
         else:
             if lease_proof is not None:
                 raise invalid_policy("docker_cleanup_precondition_changed")
-            if record is None or (record.run_id, record.node_id) != (
+            if not record_active or record is None or (record.run_id, record.node_id) != (
                 action.run_id, action.node_id,
             ):
                 raise invalid_policy("docker_cleanup_precondition_changed")

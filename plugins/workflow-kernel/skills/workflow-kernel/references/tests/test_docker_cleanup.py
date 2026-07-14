@@ -795,6 +795,23 @@ class DockerLifecycleTests(unittest.TestCase):
                 DockerInventory((value,)), after,
             )
 
+    def test_retired_record_cannot_reauthorize_stale_cleanup_action(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        action = plan.actions[0]
+        self.registry.record_results(
+            self.adapter, plan, (CommandResult(action.argv, 0, "", ""),),
+            DockerInventory((value,)), exact_absent(),
+        )
+        self.assertEqual((), self.registry.resources_for("run-1", "node-1"))
+
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                action, value, registry=self.registry,
+            )
+
     def test_terminal_orphan_result_atomically_registers_and_retires(self):
         orphan_registry = ResourceRegistry(Path(self.directory.name) / "orphan.jsonl")
         orphan = resource("orphan-1")
