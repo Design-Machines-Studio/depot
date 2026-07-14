@@ -17,6 +17,7 @@ from .base import (
     _snapshot_session_result, route_satisfies_node,
     _snapshot_validation_feedback, invalid_policy,
 )
+from ..limits import load_json_document
 from ..schema import InvalidSchemaError
 
 
@@ -36,9 +37,9 @@ def capabilities_from_harness_profile(
         "plugins/pipeline/references/harness-profile.json"
     )
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload = load_json_document(source)
         roles = payload["hosts"][host_name]["roles"]
-    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
+    except (OSError, UnicodeError, ValueError, RecursionError, KeyError, TypeError):
         raise invalid_policy("invalid_harness_profile") from None
     if type(roles) is not dict:
         raise invalid_policy("invalid_harness_profile")

@@ -224,6 +224,10 @@ tokenization before depth is assigned: depth 17 plus 4,096 digits keeps the
 document reason, while 4,097 or 5,000 digits takes the JSON reason. Results are
 independent of Python 3.12's integer-string limit at its default, `640`, or
 disabled setting, with Python 3.9 parity.
+Sensitive-path routing and harness-authorization profile loading share this
+boundary even for otherwise ignored fields, mapping all syntax, depth, and
+integer failures to their existing `invalid_routing_policy` and
+`invalid_harness_profile` reasons.
 Safety-anchor projection charges the graph once before wrapping projected stage
 sets, ordered
 fields reject sets and frozensets, and only canonical forbidden downgrades accept

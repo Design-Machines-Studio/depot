@@ -10,7 +10,10 @@ import weakref
 from unittest.mock import patch
 from pathlib import Path
 
-from tests import detail_digest, snapshot_during_validated_mutation
+from tests import (
+    detail_digest, ignored_json_boundary_corpus,
+    snapshot_during_validated_mutation,
+)
 import workflow_kernel.adapters.base as adapter_base
 from workflow_kernel.adapters.base import (
     GateDecision, HostCapabilities, HostCapability, HostRoute, NodeSpec,
@@ -607,6 +610,30 @@ class HostCapabilityTests(unittest.TestCase):
             raised.exception.details["reason_code"],
             detail_digest("unknown_capability_name"),
         )
+
+    def test_harness_profile_uses_shared_json_boundaries(self):
+        canonical = json.dumps({
+            "hosts": {"test": {"roles": {"only": {"kind": "none"}}}},
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, (content, accepted) in ignored_json_boundary_corpus(
+                canonical,
+            ).items():
+                path = root / f"{name}.json"
+                path.write_text(content, encoding="utf-8")
+                if accepted:
+                    with self.subTest(name=name):
+                        profile = capabilities_from_harness_profile("test", path)
+                        self.assertEqual(profile.capabilities, frozenset())
+                    continue
+                with self.subTest(name=name):
+                    with self.assertRaises(InvalidSchemaError) as raised:
+                        capabilities_from_harness_profile("test", path)
+                    self.assertEqual(
+                        raised.exception.details["reason_code"],
+                        detail_digest("invalid_harness_profile"),
+                    )
 
     def test_native_provider_capability_comes_from_validated_role_not_host_name(self):
         payload = {

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fnmatch
-import json
 from collections import deque
 from pathlib import Path
 from typing import Mapping, Optional
@@ -34,9 +33,9 @@ def _load_sensitive_globs(path: Optional[Path]) -> tuple[str, ...]:
         "plugins/pipeline/references/routing-policy.json"
     )
     try:
-        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload = load_json_document(source)
         globs = payload["security"]["neverRouteOffAnthropic"]["pathGlobs"]
-    except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
+    except (OSError, UnicodeError, ValueError, RecursionError, KeyError, TypeError):
         raise invalid_policy("invalid_routing_policy") from None
     if not isinstance(globs, list) or any(type(value) is not str or not value for value in globs):
         raise invalid_policy("invalid_routing_policy")

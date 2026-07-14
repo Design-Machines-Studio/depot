@@ -4,7 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tests import detail_digest, schema_matches
+from tests import (
+    detail_digest, ignored_json_boundary_corpus, json_document_boundary_corpus,
+    schema_matches,
+)
 from workflow_kernel.adapters.base import HostCapability, WorkflowClass, WorkflowContext
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import GatePolicy, load_policy
@@ -16,84 +19,12 @@ class WorkflowClassTests(unittest.TestCase):
         canonical = source.read_text(encoding="utf-8")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            documents = {
-                "syntax": ("{", "invalid_workflow_classes_json"),
-                "oversized_integer": (
-                    canonical.replace(
-                        '"schema_version": 1',
-                        '"schema_version": ' + "9" * 5_000,
-                        1,
-                    ),
-                    "invalid_workflow_classes_json",
-                ),
-                "over_depth": (
-                    '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
-                    "invalid_workflow_classes_document",
-                ),
-                "mismatched_over_depth": (
-                    "[" * 17 + "}" * 17,
-                    "invalid_workflow_classes_json",
-                ),
-                "underflow": ("]", "invalid_workflow_classes_json"),
-                "unterminated_string": (
-                    '{"value":"open', "invalid_workflow_classes_json",
-                ),
-                "unterminated_escape": (
-                    '{"value":"open\\', "invalid_workflow_classes_json",
-                ),
-                "remaining_opener": ("[0", "invalid_workflow_classes_json"),
-                "malformed_number": (
-                    canonical.replace('"schema_version": 1',
-                                      '"schema_version": 01', 1),
-                    "invalid_workflow_classes_json",
-                ),
-                "balanced_grammar_error": (
-                    "[" * 17 + "0 1" + "]" * 17,
-                    "invalid_workflow_classes_json",
-                ),
-                "nan": ("NaN", "invalid_workflow_classes_json"),
-                "infinity": ("Infinity", "invalid_workflow_classes_json"),
-                "negative_infinity": (
-                    "-Infinity", "invalid_workflow_classes_json",
-                ),
-                "nested_nan": (
-                    '{"value":NaN}', "invalid_workflow_classes_json",
-                ),
-                "nested_infinity": (
-                    '{"value":Infinity}', "invalid_workflow_classes_json",
-                ),
-                "nested_negative_infinity": (
-                    '[0,-Infinity]', "invalid_workflow_classes_json",
-                ),
-                "depth_integer_boundary": (
-                    "[" * 17 + "9" * 4_096 + "]" * 17,
-                    "invalid_workflow_classes_document",
-                ),
-                "depth_negative_integer_boundary": (
-                    "[" * 17 + "-" + "9" * 4_096 + "]" * 17,
-                    "invalid_workflow_classes_document",
-                ),
-                "depth_integer_over_limit": (
-                    "[" * 17 + "9" * 4_097 + "]" * 17,
-                    "invalid_workflow_classes_json",
-                ),
-                "depth_negative_integer_over_limit": (
-                    "[" * 17 + "-" + "9" * 4_097 + "]" * 17,
-                    "invalid_workflow_classes_json",
-                ),
-                "depth_integer_far_over_limit": (
-                    "[" * 17 + "9" * 5_000 + "]" * 17,
-                    "invalid_workflow_classes_json",
-                ),
-                "thousand_digit_version": (
-                    canonical.replace(
-                        '"schema_version": 1',
-                        '"schema_version": ' + "9" * 1_000,
-                        1,
-                    ),
-                    "unsupported_policy_version",
-                ),
-            }
+            documents = json_document_boundary_corpus(
+                canonical,
+                json_reason="invalid_workflow_classes_json",
+                document_reason="invalid_workflow_classes_document",
+                version_reason="unsupported_policy_version",
+            )
             for name, (content, reason) in documents.items():
                 path = root / f"{name}.json"
                 path.write_text(content, encoding="utf-8")
@@ -110,6 +41,32 @@ class WorkflowClassTests(unittest.TestCase):
             WorkflowTemplates(source)._templates,
             WorkflowTemplates()._templates,
         )
+
+    def test_sensitive_routing_policy_uses_shared_json_boundaries(self):
+        canonical = json.dumps({
+            "security": {
+                "neverRouteOffAnthropic": {"pathGlobs": ["secret/**"]},
+            },
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, (content, accepted) in ignored_json_boundary_corpus(
+                canonical,
+            ).items():
+                path = root / f"{name}.json"
+                path.write_text(content, encoding="utf-8")
+                if accepted:
+                    with self.subTest(name=name):
+                        templates = WorkflowTemplates(routing_policy_path=path)
+                        self.assertEqual(templates._sensitive_globs, ("secret/**",))
+                    continue
+                with self.subTest(name=name):
+                    with self.assertRaises(InvalidSchemaError) as raised:
+                        WorkflowTemplates(routing_policy_path=path)
+                    self.assertEqual(
+                        raised.exception.details["reason_code"],
+                        detail_digest("invalid_routing_policy"),
+                    )
 
     def test_workflow_enum_impostors_are_rejected_without_equality_dispatch(self):
         secret = "sk-secret-workflow-detail"

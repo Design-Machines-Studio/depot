@@ -187,6 +187,10 @@ returns none.
   version reaches the same
   semantic `unsupported_policy_version` reason with Python's integer-string
   limit defaulted, set to `640`, or disabled on Python 3.9 and 3.12.
+  Sensitive-path routing and harness-authorization profile loading use this same
+  strict boundary, including for ignored fields, while translating every
+  syntax, depth, and integer failure to their existing `invalid_routing_policy`
+  and `invalid_harness_profile` reason contracts.
   Project the safety anchor exactly once, then add only its already-projected
   stage-set wrappers, so file and injected forms consume the same canonical item
   budget. Ordered policy fields accept exact lists or normalized tuples, never

@@ -140,8 +140,11 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       5,000 digits takes the JSON reason. The signed decimal parser manually
       accumulates within that ceiling, so Python 3.9 and 3.12 agree with the
       integer-string limit defaulted, set to `640`, or disabled. Safety anchors
-      are projected once
-      before projected stage sets are wrapped, preserving actual-budget parity.
+      are projected once before projected stage sets are wrapped, preserving
+      actual-budget parity. Sensitive-path routing and harness-authorization
+      profiles share this strict loader even for ignored fields, mapping syntax,
+      depth, and integer failures to their existing `invalid_routing_policy` and
+      `invalid_harness_profile` reason contracts.
       Ordered fields reject sets and frozensets; only canonical forbidden
       downgrades accept a frozenset. Exact tuples project without re-entry; any
       malformed member collapses to one invalid-shape payload, while exact scalar

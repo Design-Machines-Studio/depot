@@ -11,7 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import patch
 
-from tests import detail_digest, schema_matches
+from tests import detail_digest, json_document_boundary_corpus, schema_matches
 import workflow_kernel.adapters.base as adapter_base
 from workflow_kernel.adapters.base import (
     AttemptLedger, FailureReason, HostCapability, IsolationMode, WorkflowClass,
@@ -341,74 +341,12 @@ class RetryPolicyTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            documents = {
-                "syntax": ("{", "invalid_policy_json"),
-                "oversized_integer": (
-                    canonical.replace(
-                        '"schema_version": 1',
-                        '"schema_version": ' + "9" * 5_000,
-                        1,
-                    ),
-                    "invalid_policy_json",
-                ),
-                "over_depth": (
-                    '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
-                    "invalid_policy_document",
-                ),
-                "mismatched_over_depth": (
-                    "[" * 17 + "}" * 17,
-                    "invalid_policy_json",
-                ),
-                "underflow": ("]", "invalid_policy_json"),
-                "unterminated_string": ('{"value":"open', "invalid_policy_json"),
-                "unterminated_escape": ('{"value":"open\\', "invalid_policy_json"),
-                "remaining_opener": ("[0", "invalid_policy_json"),
-                "malformed_number": (
-                    canonical.replace('"schema_version": 1',
-                                      '"schema_version": 01', 1),
-                    "invalid_policy_json",
-                ),
-                "balanced_grammar_error": (
-                    "[" * 17 + "0 1" + "]" * 17,
-                    "invalid_policy_json",
-                ),
-                "nan": ("NaN", "invalid_policy_json"),
-                "infinity": ("Infinity", "invalid_policy_json"),
-                "negative_infinity": ("-Infinity", "invalid_policy_json"),
-                "nested_nan": ('{"value":NaN}', "invalid_policy_json"),
-                "nested_infinity": ('{"value":Infinity}', "invalid_policy_json"),
-                "nested_negative_infinity": (
-                    '[0,-Infinity]', "invalid_policy_json",
-                ),
-                "depth_integer_boundary": (
-                    "[" * 17 + "9" * 4_096 + "]" * 17,
-                    "invalid_policy_document",
-                ),
-                "depth_negative_integer_boundary": (
-                    "[" * 17 + "-" + "9" * 4_096 + "]" * 17,
-                    "invalid_policy_document",
-                ),
-                "depth_integer_over_limit": (
-                    "[" * 17 + "9" * 4_097 + "]" * 17,
-                    "invalid_policy_json",
-                ),
-                "depth_negative_integer_over_limit": (
-                    "[" * 17 + "-" + "9" * 4_097 + "]" * 17,
-                    "invalid_policy_json",
-                ),
-                "depth_integer_far_over_limit": (
-                    "[" * 17 + "9" * 5_000 + "]" * 17,
-                    "invalid_policy_json",
-                ),
-                "thousand_digit_version": (
-                    canonical.replace(
-                        '"schema_version": 1',
-                        '"schema_version": ' + "9" * 1_000,
-                        1,
-                    ),
-                    "unsupported_policy_version",
-                ),
-            }
+            documents = json_document_boundary_corpus(
+                canonical,
+                json_reason="invalid_policy_json",
+                document_reason="invalid_policy_document",
+                version_reason="unsupported_policy_version",
+            )
             for name, (content, reason) in documents.items():
                 path = root / f"{name}.json"
                 path.write_text(content, encoding="utf-8")

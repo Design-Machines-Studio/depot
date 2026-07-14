@@ -6,6 +6,101 @@ import threading
 from unittest.mock import patch
 
 
+def json_document_boundary_corpus(
+    canonical, *, json_reason, document_reason, version_reason,
+):
+    """Return the shared strict-JSON corpus with loader-specific reasons."""
+    return {
+        "syntax": ("{", json_reason),
+        "oversized_integer": (
+            canonical.replace(
+                '"schema_version": 1',
+                '"schema_version": ' + "9" * 5_000,
+                1,
+            ),
+            json_reason,
+        ),
+        "over_depth": (
+            '{"nested":' + "[" * 1_500 + "0" + "]" * 1_500 + "}",
+            document_reason,
+        ),
+        "mismatched_over_depth": ("[" * 17 + "}" * 17, json_reason),
+        "underflow": ("]", json_reason),
+        "unterminated_string": ('{"value":"open', json_reason),
+        "unterminated_escape": ('{"value":"open\\', json_reason),
+        "remaining_opener": ("[0", json_reason),
+        "malformed_number": (
+            canonical.replace('"schema_version": 1', '"schema_version": 01', 1),
+            json_reason,
+        ),
+        "balanced_grammar_error": ("[" * 17 + "0 1" + "]" * 17, json_reason),
+        "nan": ("NaN", json_reason),
+        "infinity": ("Infinity", json_reason),
+        "negative_infinity": ("-Infinity", json_reason),
+        "nested_nan": ('{"value":NaN}', json_reason),
+        "nested_infinity": ('{"value":Infinity}', json_reason),
+        "nested_negative_infinity": ('[0,-Infinity]', json_reason),
+        "depth_integer_boundary": (
+            "[" * 17 + "9" * 4_096 + "]" * 17,
+            document_reason,
+        ),
+        "depth_negative_integer_boundary": (
+            "[" * 17 + "-" + "9" * 4_096 + "]" * 17,
+            document_reason,
+        ),
+        "depth_integer_over_limit": (
+            "[" * 17 + "9" * 4_097 + "]" * 17,
+            json_reason,
+        ),
+        "depth_negative_integer_over_limit": (
+            "[" * 17 + "-" + "9" * 4_097 + "]" * 17,
+            json_reason,
+        ),
+        "depth_integer_far_over_limit": (
+            "[" * 17 + "9" * 5_000 + "]" * 17,
+            json_reason,
+        ),
+        "thousand_digit_version": (
+            canonical.replace(
+                '"schema_version": 1',
+                '"schema_version": ' + "9" * 1_000,
+                1,
+            ),
+            version_reason,
+        ),
+    }
+
+
+def ignored_json_boundary_corpus(canonical):
+    """Return strict-JSON boundary documents using an otherwise ignored member."""
+    def with_value(raw):
+        document = canonical.rstrip()
+        if not document.endswith("}"):
+            raise AssertionError("boundary corpus requires a JSON object")
+        return document[:-1] + ',"_ignored_boundary":' + raw + "}"
+
+    return {
+        "syntax": ("{", False),
+        "ignored_nan": (with_value("NaN"), False),
+        "ignored_infinity": (with_value("Infinity"), False),
+        "ignored_negative_infinity": (with_value("-Infinity"), False),
+        "ignored_over_depth": (
+            with_value("[" * 17 + "0" + "]" * 17),
+            False,
+        ),
+        "ignored_integer_boundary": (with_value("9" * 4_096), True),
+        "ignored_negative_integer_boundary": (
+            with_value("-" + "9" * 4_096),
+            True,
+        ),
+        "ignored_integer_over_limit": (with_value("9" * 4_097), False),
+        "ignored_negative_integer_over_limit": (
+            with_value("-" + "9" * 4_097),
+            False,
+        ),
+    }
+
+
 def snapshot_during_validated_mutation(value, snapshot, mutate):
     """Pause one snapshot after its target seal validates, then mutate it."""
     from workflow_kernel.adapters import base as adapter_base
