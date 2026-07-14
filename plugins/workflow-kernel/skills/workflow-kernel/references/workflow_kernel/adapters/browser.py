@@ -542,7 +542,7 @@ class BrowserRecoveryReceipt:
             }
             prior_sessions.update(
                 item.session_id for item in self.lifecycle[:lifecycle_index - 1]
-                if item.result == "launched"
+                if item.action in {"browser_process_launch", "session_validation"}
             )
             if (alternate.actual_engine == self.requested_engine
                     or alternate.action not in {"browser_process_launch", "session_validation"}
@@ -827,9 +827,11 @@ class BrowserRecovery:
                 previous=initial.session_id,
             ))
 
-        previous_sessions = {initial.session_id}
-        if primary_launch is not None:
-            previous_sessions.add(primary_launch.session_id)
+        previous_sessions = {item.session_id for item in attempts}
+        previous_sessions.update(
+            item.session_id for item in lifecycle
+            if item.action in {"browser_process_launch", "session_validation"}
+        )
         if request.secondary_engine is None:
             lifecycle.append(self._lifecycle(
                 request, request.primary_engine, "secondary_engine",

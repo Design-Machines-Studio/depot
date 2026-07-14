@@ -25,6 +25,10 @@ _KNOWN_STATUSES = frozenset({
     "future-fixture-ui",
 })
 _INDEX_LINK = re.compile(r"\[[^\]]+\]\(([^)]+\.md)\)\Z")
+_PLAIN_LIST_SCALAR = re.compile(r"[A-Za-z][A-Za-z0-9._/-]*\Z")
+_YAML_IMPLICIT_SCALARS = frozenset({
+    "false", "n", "no", "null", "off", "on", "true", "y", "yes",
+})
 _MATRIX_PERSONAS = {
     "EC": "engaged-chair", "PS": "power-secretary",
     "RB": "reluctant-board-member", "CM": "casual-member",
@@ -388,16 +392,20 @@ def _list(frontmatter, key):
     for line in lines[start:]:
         if line.startswith("  - "):
             raw = line[4:].strip()
-            quoted = (
-                len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in {'"', "'"}
-            )
-            if (not quoted and (
-                    raw.startswith(("[", "{", "- ", "? ", "!!map", "!!seq"))
-                    or re.search(r":(?:\s|$)", raw) is not None)):
+            if raw[:1] in {'"', "'"}:
+                quote = raw[0]
+                if len(raw) < 3 or raw[-1] != quote:
+                    _fail()
+                value = raw[1:-1]
+                if (quote in value or "\\" in value
+                        or any(ord(character) < 32 or ord(character) == 127
+                               for character in value)):
+                    _fail()
+            elif (_PLAIN_LIST_SCALAR.fullmatch(raw) is None
+                    or raw.casefold() in _YAML_IMPLICIT_SCALARS):
                 _fail()
-            value = raw[1:-1].strip() if quoted else raw
-            if not value:
-                _fail()
+            else:
+                value = raw
             result.append(value)
         elif not line.strip():
             continue
@@ -660,7 +668,8 @@ class ProjectPersonaAdapter:
                 raise ValueError
             return result
         except Exception:
-            raise invalid_policy("invalid_verification_evidence") from None
+            failure = invalid_policy("invalid_verification_evidence")
+        raise failure from None
 
     def _discover(self, project_root, *, target_origin=None, declaration_root=None):
         project = Path(project_root)

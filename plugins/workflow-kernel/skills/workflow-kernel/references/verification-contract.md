@@ -28,8 +28,10 @@ path swaps cannot replace validated config, index, persona, task, suite, or
 matrix content. Duplicate scalar or list-section frontmatter
 keys and malformed scalar or container types fail with
 `invalid_verification_declaration`. Only the supported indented scalar-list form
-is accepted; inline arrays, mappings beneath scalar lists, nested containers,
-and empty list items fail closed. Task `personas:`
+is accepted: plain values use the exact identifier-like scalar grammar, while
+explicitly quoted values may contain structure-shaped text. Inline arrays,
+mappings, tags, anchors, aliases, block scalars, implicit typed scalars, nested
+containers, and empty list items fail closed. Task `personas:`
 assignments are parsed only from that exact nested section: the live descriptive
 `reason` field is accepted but never retained; duplicate or unknown keys,
 duplicate IDs, invalid `expected` values, invalid `required` booleans, or missing
@@ -85,9 +87,10 @@ match the case, profile identity, configured engines, target-origin digest,
 expected evaluation, authentication requirement, and browser proof kind.
 Execution without bound discovery context, evidence for a different case or
 target, or any executor exception fails with
-`invalid_verification_evidence`. Executor exceptions suppress chained context,
-never render hostile exception strings or representations into evidence, and
-produce only the stable digested invalid-evidence detail.
+`invalid_verification_evidence`. Executor exceptions produce the safe failure
+outside the handler, retain no cause or context object, never render hostile
+exception strings or representations into evidence, and expose only the stable
+digested invalid-evidence detail.
 
 Profiles retain auth field names only. Cookie values, bearer tokens, passwords,
 credential usernames, fixture secrets, and URL credentials never enter profiles,
@@ -116,7 +119,8 @@ Quit evidence must identify the initial session, launch evidence must identify a
 different fresh session, and the following attempt must identify that launched
 session. The same launch-to-attempt identity proof applies to the alternate
 engine, whose successful session must also differ from every earlier attempt and
-successful launch in the receipt. Every attempt and receipt binds `case_id`,
+every launch or session-validation identity in the receipt, regardless of that
+earlier lifecycle result. Every attempt and receipt binds `case_id`,
 requested engine, actual
 engine, configured-engine set, verification-profile identity, validated
 viewport, opaque URL digest, authoritative origin digest, opaque route digest,

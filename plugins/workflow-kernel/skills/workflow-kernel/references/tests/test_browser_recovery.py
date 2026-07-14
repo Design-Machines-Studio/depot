@@ -632,6 +632,77 @@ class BrowserRecoveryTests(unittest.TestCase):
                 recovered, lifecycle=reused_lifecycle, attempts=reused_attempts,
             )
 
+    def test_alternate_launch_rejects_every_prior_launch_outcome_session(self):
+        launch_cases = (
+            (
+                BrowserLaunchEvidence("chromium", False, True, "prior-launch"),
+                "prior-launch",
+            ),
+            (
+                BrowserLaunchEvidence("chromium", True, False, "prior-nonfresh"),
+                "prior-nonfresh",
+            ),
+            (RuntimeError("launch unavailable"), "unavailable-launch-chromium"),
+        )
+        for primary_launch, reused_session in launch_cases:
+            with self.subTest(reused_session=reused_session):
+                receipt = BrowserRecovery().run(
+                    self.request,
+                    FakeBrowserAdapter(
+                        [
+                            attempt(1, "chromium", "failed", session="primary-1"),
+                            attempt(2, "firefox", "passed", session=reused_session),
+                        ],
+                        launches=[
+                            primary_launch,
+                            BrowserLaunchEvidence(
+                                "firefox", True, True, reused_session,
+                            ),
+                        ],
+                    ),
+                )
+                self.assertEqual(receipt.status, "blocked")
+                self.assertEqual(receipt.reason_code, "human_help_required")
+                self.assertEqual(
+                    receipt.lifecycle[-1].result, "session_identity_mismatch",
+                )
+                self.assertEqual(len(receipt.attempts), 1)
+
+    def test_receipt_rejects_alternate_reusing_prior_validation_session(self):
+        recovered = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [
+                    attempt(1, "chromium", "failed", session="primary-1"),
+                    attempt(2, "firefox", "passed", session="secondary-1"),
+                ],
+                launches=[
+                    BrowserLaunchEvidence(
+                        "chromium", True, False, "primary-nonfresh",
+                    ),
+                    BrowserLaunchEvidence(
+                        "firefox", True, True, "secondary-1",
+                    ),
+                ],
+            ),
+        )
+        prior_validation = BrowserLifecycleEvidence(
+            "case-1", "chromium", "chromium", "session_validation",
+            "session_identity_mismatch", "prior-validation", "primary-1",
+            "session_identity_mismatch",
+        )
+        reused_lifecycle = (
+            recovered.lifecycle[0], prior_validation, recovered.lifecycle[2],
+            replace(recovered.lifecycle[3], session_id="prior-validation"),
+        )
+        reused_attempts = recovered.attempts[:-1] + (
+            replace(recovered.attempts[-1], session_id="prior-validation"),
+        )
+        with self.assertRaises(ValueError):
+            replace(
+                recovered, lifecycle=reused_lifecycle, attempts=reused_attempts,
+            )
+
     def test_runtime_receipt_matches_strict_schema_and_empty_evidence_does_not(self):
         adapter = FakeBrowserAdapter(
             [attempt(1, "chromium", "passed", session="primary-1")],

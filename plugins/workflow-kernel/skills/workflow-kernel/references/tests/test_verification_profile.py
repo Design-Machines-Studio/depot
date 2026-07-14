@@ -10,7 +10,9 @@ from pathlib import Path
 from tests import detail_digest, schema_matches
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import load_policy
-from workflow_kernel.verification import PersonaCase, VerificationProfile
+from workflow_kernel.verification import (
+    PersonaCase, VerificationProfile, _validate_route,
+)
 from workflow_kernel.adapters.personas import _DeclarationTree, ProjectPersonaAdapter
 from workflow_kernel._files import PinnedDirectory
 
@@ -440,13 +442,37 @@ class VerificationProfileTests(unittest.TestCase):
                         policy_path=ROOT / "workflow-policy.json",
                     ).discover(project)
 
+        yaml_structures = (
+            "!!omap []", "!!pairs []", "!!set {}", "!!str value",
+            "|", ">", "&anchor value", "*anchor", "- nested",
+            "? key", "key: value", "[mobile, responsive]", "{kind: mobile}",
+            "true", "42", "2026-01-01", "plain value",
+        )
+        for value in yaml_structures:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                task.write_text(task.read_text().replace(
+                    '  - "A signed-in member has a proposal to review"',
+                    "  - " + value,
+                    1,
+                ))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)
             shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
             task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
             task.write_text(task.read_text().replace(
                 '  - "A signed-in member has a proposal to review"',
-                '  - "key: value"\n  - "[mobile, responsive]"\n  - "{kind: mobile}"',
+                '\n'.join(
+                    "  - " + json.dumps(value)
+                    for value in yaml_structures
+                ),
             ))
             profile = ProjectPersonaAdapter(
                 policy_path=ROOT / "workflow-policy.json",
@@ -535,7 +561,11 @@ class VerificationProfileTests(unittest.TestCase):
             payload["cases"][0]["route"] = route
             self.assertFalse(schema_matches(payload, schema), route)
 
-        for encoded in ("%C2%A2", "%C3%A9", "%E2%82%AC", "%F0%9F%92%A9"):
+        for encoded in (
+            "%C2%A2", "%C3%A9", "%E2%82%AC", "%F0%90%80%80",
+            "%F0%9F%92%A9", "%F0%A0%80%80", "%F0%BF%BF%BF",
+            "%F4%8F%BF%BF",
+        ):
             route = "/safe/" + encoded
             case = PersonaCase(
                 "p", "s", "member", route, "chromium", "1440x900", True,
@@ -561,6 +591,45 @@ class VerificationProfileTests(unittest.TestCase):
             self.assertEqual(
                 runtime_valid, schema_matches(payload, schema), route,
             )
+
+        route_pattern = re.compile(
+            schema["$defs"]["case"]["properties"]["route"]["pattern"],
+        )
+        boundary_bytes = (0x00, 0x7F, 0x80, 0x8F, 0x90, 0x9F,
+                          0xA0, 0xBF, 0xC0, 0xFF)
+        mismatches = []
+
+        def compare(route):
+            try:
+                _validate_route(route)
+                runtime_valid = True
+            except InvalidSchemaError:
+                runtime_valid = False
+            schema_valid = route_pattern.fullmatch(route) is not None
+            if runtime_valid != schema_valid:
+                mismatches.append((route, runtime_valid, schema_valid))
+
+        for first in range(256):
+            for second in range(256):
+                compare("/safe/%{:02X}%{:02X}".format(first, second))
+        for first in range(0xE0, 0xF0):
+            for second in range(256):
+                for third in boundary_bytes:
+                    compare(
+                        "/safe/%{:02X}%{:02X}%{:02X}".format(
+                            first, second, third,
+                        ),
+                    )
+        for first in range(0xF0, 0xF5):
+            for second in range(256):
+                for third in boundary_bytes:
+                    for fourth in boundary_bytes:
+                        compare(
+                            "/safe/%{:02X}%{:02X}%{:02X}%{:02X}".format(
+                                first, second, third, fourth,
+                            ),
+                        )
+        self.assertEqual(mismatches, [])
 
     def test_declaration_root_pin_rejects_ancestor_swap_before_open(self):
         with tempfile.TemporaryDirectory() as directory:
