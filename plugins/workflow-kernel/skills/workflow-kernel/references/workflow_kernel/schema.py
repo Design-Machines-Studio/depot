@@ -300,7 +300,7 @@ class UnsafePayloadError(KernelError):
 
 
 def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+    if type(value) is not int or value < minimum:
         raise InvalidSchemaError(ErrorMessage.INVALID_INTEGER_FIELD, {
             ErrorDetailKey.FIELD.value: name, ErrorDetailKey.MINIMUM.value: minimum,
         })
@@ -310,7 +310,7 @@ def _strict_int(value: object, name: str, *, minimum: int = 0) -> int:
 def _validated_string(value: object, name: str, *, optional: bool = False) -> Optional[str]:
     if optional and value is None:
         return None
-    if not isinstance(value, str) or not value or len(value) > MAX_STRING_LENGTH:
+    if type(value) is not str or not value or len(value) > MAX_STRING_LENGTH:
         raise InvalidSchemaError(ErrorMessage.INVALID_STRING_FIELD, {ErrorDetailKey.FIELD.value: name})
     return value
 
@@ -452,6 +452,36 @@ class WorkflowEvent:
         return {field.value: _plain(getattr(self, field.value)) for field in WorkflowEventField}
 
 
+def _snapshot_workflow_event(event: WorkflowEvent) -> WorkflowEvent:
+    """Rebuild one exact event field-wise before any public projection."""
+    if type(event) is not WorkflowEvent:
+        raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA)
+    try:
+        return WorkflowEvent(
+            event.schema_version, event.sequence, event.run_id, event.node_id,
+            event.kind, event.occurred_at, event.payload,
+        )
+    except KernelError:
+        raise
+    except (AttributeError, TypeError, ValueError, RecursionError):
+        raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA) from None
+
+
+class _StateItemBudget:
+    """One aggregate budget shared by nodes and their state-tree collections."""
+
+    def __init__(self, limit: int = MAX_PAYLOAD_ITEMS):
+        self.limit = limit
+        self.count = 0
+
+    def consume(self) -> None:
+        self.count += 1
+        if self.count > self.limit:
+            raise InvalidSchemaError(ErrorMessage.PAYLOAD_NON_JSON_SAFE, {
+                ErrorDetailKey.LIMIT_ITEMS.value: self.limit,
+            })
+
+
 @dataclass(frozen=True)
 class NodeState:
     node_id: str
@@ -465,7 +495,12 @@ class NodeState:
     def __post_init__(self) -> None:
         object.__setattr__(self, "node_id", _string(self.node_id, "node_id"))
         try:
-            status = self.status if isinstance(self.status, NodeStatus) else NodeStatus(self.status)
+            if type(self.status) is NodeStatus:
+                status = self.status
+            elif type(self.status) is str:
+                status = NodeStatus(self.status)
+            else:
+                raise TypeError("node status must be an exact enum or string")
         except (ValueError, TypeError):
             raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS.value: self.status}) from None
         object.__setattr__(self, "status", status)
@@ -474,23 +509,25 @@ class NodeState:
 
     @classmethod
     def from_dict(cls, data: object) -> "NodeState":
-        snapshot = _bounded_mapping(data, ErrorMessage.NODE_OBJECT_REQUIRED)
-        fields = {"node_id", "status", "dependencies", "evidence"}
-        _only(snapshot, fields, fields)
-        return cls(snapshot["node_id"], snapshot["status"],
-                   snapshot["dependencies"], snapshot["evidence"])
+        return _node_state_from_mapping(data)
 
     def to_dict(self) -> dict:
         return {"node_id": self.node_id, "status": self.status.value,
                 "dependencies": list(self.dependencies), "evidence": list(self.evidence)}
 
 
-def _string_tuple(value: object, name: str, *, references: bool = False) -> Tuple[str, ...]:
+def _string_tuple(value: object, name: str, *, references: bool = False,
+                  budget: Optional[_StateItemBudget] = None) -> Tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         raise InvalidSchemaError(ErrorMessage.FIELD_LIST_REQUIRED, {ErrorDetailKey.FIELD.value: name})
     limit = MAX_EVIDENCE_ITEMS if references else MAX_PAYLOAD_ITEMS
     try:
-        result = tuple(_string(item, name) for item in bounded_iterable(value, max_items=limit))
+        result = []
+        for item in bounded_iterable(value, max_items=limit):
+            if budget is not None:
+                budget.consume()
+            result.append(_string(item, name))
+        result = tuple(result)
     except TypeError:
         message = ErrorMessage.EVIDENCE_ITEM_LIMIT if references else ErrorMessage.PAYLOAD_NON_JSON_SAFE
         raise InvalidSchemaError(message, {ErrorDetailKey.LIMIT_ITEMS.value: limit}) from None
@@ -502,6 +539,29 @@ def _string_tuple(value: object, name: str, *, references: bool = False) -> Tupl
     if len(result) != len(set(result)):
         raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {ErrorDetailKey.FIELD.value: name})
     return result
+
+
+def _snapshot_node_state(node: NodeState, budget: _StateItemBudget) -> NodeState:
+    if type(node) is not NodeState:
+        raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
+    try:
+        dependencies = _string_tuple(node.dependencies, "dependencies", budget=budget)
+        evidence = _string_tuple(node.evidence, "evidence", references=True, budget=budget)
+        return NodeState(node.node_id, node.status, dependencies, evidence)
+    except KernelError:
+        raise
+    except (AttributeError, TypeError, ValueError, RecursionError):
+        raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
+
+
+def _node_state_from_mapping(data: object,
+                             budget: Optional[_StateItemBudget] = None) -> NodeState:
+    snapshot = _bounded_mapping(data, ErrorMessage.NODE_OBJECT_REQUIRED)
+    fields = {"node_id", "status", "dependencies", "evidence"}
+    _only(snapshot, fields, fields)
+    dependencies = _string_tuple(snapshot["dependencies"], "dependencies", budget=budget)
+    evidence = _string_tuple(snapshot["evidence"], "evidence", references=True, budget=budget)
+    return NodeState(snapshot["node_id"], snapshot["status"], dependencies, evidence)
 
 
 @dataclass(frozen=True)
@@ -530,8 +590,18 @@ class RunState:
         object.__setattr__(self, "revision", _strict_int(self.revision, "revision"))
         object.__setattr__(self, "run_id", _string(self.run_id, "run_id"))
         try:
-            mode = self.mode if isinstance(self.mode, RunMode) else RunMode(self.mode)
-            status = self.status if isinstance(self.status, RunStatus) else RunStatus(self.status)
+            if type(self.mode) is RunMode:
+                mode = self.mode
+            elif type(self.mode) is str:
+                mode = RunMode(self.mode)
+            else:
+                raise TypeError("run mode must be an exact enum or string")
+            if type(self.status) is RunStatus:
+                status = self.status
+            elif type(self.status) is str:
+                status = RunStatus(self.status)
+            else:
+                raise TypeError("run status must be an exact enum or string")
         except (ValueError, TypeError):
             raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
                 ErrorDetailKey.MODE.value: self.mode, ErrorDetailKey.STATUS.value: self.status,
@@ -543,11 +613,13 @@ class RunState:
         if not isinstance(self.nodes, Mapping):
             raise InvalidSchemaError(ErrorMessage.NODES_OBJECT_REQUIRED)
         nodes = {}
+        budget = _StateItemBudget(MAX_PAYLOAD_ITEMS)
         try:
             for key in bounded_iterable(self.nodes, max_items=MAX_PAYLOAD_ITEMS):
+                budget.consume()
                 if type(key) is not str:
                     raise InvalidSchemaError(ErrorMessage.NODE_KEYS_STRINGS)
-                nodes[key] = self.nodes[key]
+                nodes[key] = _snapshot_node_state(self.nodes[key], budget)
         except InvalidSchemaError:
             raise
         except (KeyError, TypeError, ValueError, RecursionError):
@@ -557,11 +629,10 @@ class RunState:
                 validate_durable_key(key)
         except ValueError:
             raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
-        if any(type(node) is not NodeState or key != node.node_id
-               for key, node in nodes.items()):
+        if any(key != node.node_id for key, node in nodes.items()):
             raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)
+        evidence = _string_tuple(self.evidence, "evidence", references=True, budget=budget)
         _validate_dependency_graph(nodes)
-        evidence = _string_tuple(self.evidence, "evidence", references=True)
         if len(evidence) + sum(len(node.evidence) for node in nodes.values()) > MAX_EVIDENCE_ITEMS:
             raise InvalidSchemaError(ErrorMessage.EVIDENCE_ITEM_LIMIT, {
                 ErrorDetailKey.REASON_CODE.value: "evidence_limit_exceeded",
@@ -583,10 +654,16 @@ class RunState:
         fields = {"schema_version", "revision", "run_id", "mode", "status", "created_at", "updated_at", "nodes", "evidence", "cleanup_reconciled"}
         _only(snapshot, fields, fields)
         raw_nodes = _bounded_mapping(snapshot["nodes"], ErrorMessage.NODES_OBJECT_REQUIRED)
-        nodes = {key: NodeState.from_dict(value) for key, value in raw_nodes.items()}
+        budget = _StateItemBudget(MAX_PAYLOAD_ITEMS)
+        nodes = {}
+        for key, value in raw_nodes.items():
+            budget.consume()
+            nodes[key] = _node_state_from_mapping(value, budget)
+        evidence = _string_tuple(snapshot["evidence"], "evidence", references=True,
+                                 budget=budget)
         return cls(snapshot["schema_version"], snapshot["revision"], snapshot["run_id"],
                    snapshot["mode"], snapshot["status"], snapshot["created_at"],
-                   snapshot["updated_at"], MappingProxyType(nodes), snapshot["evidence"],
+                   snapshot["updated_at"], MappingProxyType(nodes), evidence,
                    snapshot["cleanup_reconciled"])
 
     def to_dict(self) -> dict:
@@ -597,3 +674,19 @@ class RunState:
             "nodes": {key: NodeState.to_dict(self.nodes[key]) for key in sorted(self.nodes)},
             "evidence": list(self.evidence), "cleanup_reconciled": self.cleanup_reconciled,
         }
+
+
+def _snapshot_run_state(state: RunState) -> RunState:
+    """Rebuild exact state and nodes field-wise under one aggregate budget."""
+    if type(state) is not RunState:
+        raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_RUN_STATE_REQUIRED)
+    try:
+        return RunState(
+            state.schema_version, state.revision, state.run_id, state.mode, state.status,
+            state.created_at, state.updated_at, state.nodes, state.evidence,
+            state.cleanup_reconciled,
+        )
+    except KernelError:
+        raise
+    except (AttributeError, TypeError, ValueError, RecursionError):
+        raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None

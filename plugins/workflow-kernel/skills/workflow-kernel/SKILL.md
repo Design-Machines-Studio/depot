@@ -57,15 +57,21 @@ errors as stable JSON. Treat `--help` output as plain text.
 
 - Construct exact, final, immutable `WorkflowEvent`, `NodeState`, and `RunState`
   schema objects. Durable writers, receipt factories, and reducers reject
-  substitutes instead of dispatching virtual serializers. Direct Python
+  substitutes instead of dispatching virtual serializers. Durable scalar
+  fields require exact built-in `str` and `int` values; subclasses cannot
+  override validation or comparison. Event and state writers rebuild exact
+  fields through shared bounded internal snapshots before any public
+  `to_dict()` projection. Direct Python
   construction follows normal signature semantics, so
   missing or extra positional arguments raise Python `TypeError`. Use
   `from_dict()` as the boundary for untrusted mappings; unknown fields, enums,
   versions, unsafe references, and invalid JSON shapes then fail with a stable
   `KernelError.code`.
-- Construct `EventStore(run_root)`; it derives only `<run_root>/events.jsonl`
-  and `<run_root>/run-state.json`, so callers cannot pair paths from different
-  runs. Use
+- Construct `EventStore(run_root)`; its exact, final, weak-referenceable,
+  slot-only identity records the canonical root, event, state, and lock paths
+  in a closure-owned registry. It derives only `<run_root>/events.jsonl` and
+  `<run_root>/run-state.json`, so neither public nor private instance mutation
+  can pair paths or locks from different runs. Use
   `EventStore.append(event, expected_sequence, lease=same_run_lease)` to append
   exactly the next event. The exact live `RunLease` must authorize the bound
   state path before mutation and is revalidated immediately before the write.
@@ -79,8 +85,9 @@ errors as stable JSON. Treat `--help` output as plain text.
   state or encoded-byte fields. A closure-owned weak registry keyed by the
   exact store and capability owns only the captured revision and exact bytes;
   it never retains or later consults the caller's `RunState`. Pass only that
-  capability to `StateStore.publish(prepared, expected_revision, lease=lease)`. Preparation
-  validates state bytes but does not acquire or replace the live run lease.
+  capability to `StateStore.publish(prepared, expected_revision, lease=lease)`.
+  Preparation uses the same field-wise bounded snapshot-and-encode helper as
+  `encode_state()` but does not acquire or replace the live run lease.
   Coordinated CLI append prepares before event publication while holding that
   lease; direct writes compose prepare and publish automatically. Oversized
   state is rejected before temporary-file creation or replacement.
@@ -94,6 +101,11 @@ errors as stable JSON. Treat `--help` output as plain text.
   locks release on process exit, so crash residue does not become a lock. Hosts
   without POSIX `fcntl` locking fail closed with a stable conflict error; the
   kernel never falls back to crash-stale sentinel locking.
+  Prefer `with RunLease(state_path) as lease:` so release is deterministic. If
+  manual `acquire()` is necessary, call `release()` in `finally`; a weakref
+  finalizer releases the underlying lock if an acquired lease is garbage
+  collected, and explicit release or context exit invokes that finalizer only
+  once.
 - Hold the same run lease across authoritative ledger replay, current-state
   observation, validation comparison, event append or reduction, and
   materialized-state publication.
@@ -106,6 +118,12 @@ errors as stable JSON. Treat `--help` output as plain text.
   node state; transitions exceeding that aggregate limit fail before state
   reconstruction. Reconstruction streams at most 100,000 events and never
   eagerly exhausts a caller iterable.
+- One run-wide state-tree budget counts nodes, dependency edges, node evidence,
+  and run evidence against `MAX_PAYLOAD_ITEMS` before dependency-graph helper
+  structures are allocated. The same aggregate bound applies to direct
+  `RunState` construction, parsed state, and writer snapshots.
+- The package root exports `PreparedState` for type-aware API consumers and
+  `ErrorDetailKey` for the closed public error-detail vocabulary.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
   errors. `ErrorMessage` and `ErrorCode` are the closed developer-owned enums
   for public text and machine codes; raw or unknown candidates become the
@@ -170,7 +188,8 @@ All public collection boundaries count before allocation: raw schema mappings,
 node mappings, error details, receipt metadata, evidence/dependency sequences,
 and reconstruction iterables stop at their declared limits without eager
 copies. Public file, state, lease, and event `KernelError` wrappers suppress raw
-OS exception causes, so rejected paths cannot reappear in formatted tracebacks.
+OS exception causes, including parent-directory and temporary-file setup, so
+rejected paths cannot reappear in formatted tracebacks.
 `transition_receipt()` sanitizes the full event through the shared
 event schema, including its arbitrary payload, and accepts `state_digest` only
 in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,

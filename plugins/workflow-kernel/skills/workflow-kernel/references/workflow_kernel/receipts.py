@@ -15,8 +15,8 @@ from .redaction import (
     validate_durable_key,
 )
 from .schema import (
-    ErrorMessage, UnsafePayloadError, WORKFLOW_EVENT_FIELDS, WorkflowEvent,
-    WorkflowEventField,
+    ErrorMessage, KernelError, UnsafePayloadError, WORKFLOW_EVENT_FIELDS,
+    WorkflowEvent, WorkflowEventField, _snapshot_workflow_event,
 )
 
 
@@ -172,11 +172,11 @@ def transition_receipt(event: WorkflowEvent, state_digest: str) -> bytes:
             ReceiptField.SCHEMA_VERSION.value: 1,
             ReceiptField.RECEIPT_TYPE.value: "transition",
             ReceiptField.EVENT.value: WorkflowEvent.to_dict(
-                WorkflowEvent.from_dict(WorkflowEvent.to_dict(event))
+                _snapshot_workflow_event(event)
             ),
             ReceiptField.STATE_DIGEST.value: state_digest,
         }, schema=_TRANSITION_RECEIPT_SCHEMA))
-    except (TypeError, ValueError):
+    except (KernelError, TypeError, ValueError):
         raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from None
 
 

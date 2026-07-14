@@ -10,10 +10,12 @@ from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
 from tests import detail_digest, detail_key_digest
+import workflow_kernel
 from workflow_kernel import receipts, redaction, schema
 from workflow_kernel.schema import (
     CorruptStateError,
     InvalidSchemaError,
+    KernelError,
     RunMode,
     RunState,
     RunStatus,
@@ -23,7 +25,7 @@ from workflow_kernel.schema import (
 from workflow_kernel.receipts import encode_receipt, evidence_receipt, transition_receipt
 from workflow_kernel.events import encode_event
 from workflow_kernel.schema import NodeState
-from workflow_kernel.state import encode_state
+from workflow_kernel.state import StateStore, encode_state
 
 
 class CountingStr(str):
@@ -51,6 +53,12 @@ class CountingStr(str):
             yield character
 
 class SchemaTests(unittest.TestCase):
+    def test_package_root_exports_capability_and_error_detail_vocabulary(self):
+        self.assertIs(workflow_kernel.PreparedState, workflow_kernel.state.PreparedState)
+        self.assertIs(workflow_kernel.ErrorDetailKey, schema.ErrorDetailKey)
+        self.assertIn("PreparedState", workflow_kernel.__all__)
+        self.assertIn("ErrorDetailKey", workflow_kernel.__all__)
+
     def test_durable_schema_types_are_final_against_serializer_overrides(self):
         for base in (WorkflowEvent, NodeState, RunState):
             with self.subTest(base=base.__name__), self.assertRaises(TypeError):
@@ -71,6 +79,110 @@ class SchemaTests(unittest.TestCase):
         ):
             with self.subTest(operation=operation), self.assertRaises(UnsafePayloadError):
                 operation()
+
+    def test_durable_scalar_subclasses_cannot_bypass_schema_or_writer_validation(self):
+        class NegativeInt(int):
+            def __lt__(self, _other):
+                return False
+
+            def __ne__(self, _other):
+                return False
+
+        class FakeTimestamp(str):
+            def replace(self, *_args, **_kwargs):
+                return "2026-07-14T00:00:00+00:00"
+
+        with self.assertRaises(InvalidSchemaError):
+            WorkflowEvent(1, NegativeInt(-1), "run-1", None, "run.initialized",
+                          "2026-07-14T00:00:00Z", {})
+        with self.assertRaises(InvalidSchemaError):
+            WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                          FakeTimestamp("not-a-timestamp"), {})
+        with self.assertRaises(InvalidSchemaError):
+            RunState(1, NegativeInt(-1), "run-1", "shadow", "planned",
+                     "2026-07-14T00:00:00Z", "2026-07-14T00:00:00Z")
+
+        for field, invalid in (("sequence", NegativeInt(-1)),
+                               ("occurred_at", FakeTimestamp("not-a-timestamp"))):
+            candidate = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                      "2026-07-14T00:00:00Z", {})
+            object.__setattr__(candidate, field, invalid)
+            for writer in (encode_event,
+                           lambda value: transition_receipt(value, "sha256:" + "a" * 64)):
+                with self.subTest(field=field, writer=writer), self.assertRaises(KernelError):
+                    writer(candidate)
+
+    def test_event_and_state_writers_bound_mutated_collections_before_projection(self):
+        class GuardedMapping(Mapping):
+            def __init__(self, value_factory):
+                self.reads = 0
+                self.value_factory = value_factory
+
+            def __iter__(self):
+                while True:
+                    self.reads += 1
+                    if self.reads > 4:
+                        raise AssertionError("mapping was eagerly projected")
+                    yield "item-" + str(self.reads)
+
+            def __len__(self):
+                return 100
+
+            def __getitem__(self, key):
+                return self.value_factory(key)
+
+        for writer in (encode_event,
+                       lambda value: transition_receipt(value, "sha256:" + "a" * 64)):
+            payload = GuardedMapping(lambda _key: 1)
+            candidate = WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                      "2026-07-14T00:00:00Z", {})
+            object.__setattr__(candidate, "payload", payload)
+            with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 2):
+                with self.subTest(writer=writer), self.assertRaises(KernelError):
+                    writer(candidate)
+            self.assertLessEqual(payload.reads, 3)
+
+        for writer in (encode_state, lambda value: StateStore("unused.json").prepare(value)):
+            nodes = GuardedMapping(lambda key: NodeState(key))
+            candidate = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            object.__setattr__(candidate, "nodes", nodes)
+            with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 2):
+                with self.subTest(writer=writer), self.assertRaises(KernelError):
+                    writer(candidate)
+            self.assertLessEqual(nodes.reads, 3)
+
+    def test_run_state_enforces_one_aggregate_graph_item_budget(self):
+        nodes = {
+            "a": NodeState("a"),
+            "b": NodeState("b", dependencies=("a",)),
+            "c": NodeState("c", dependencies=("a", "b")),
+        }
+        with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 5):
+            with self.assertRaises(InvalidSchemaError):
+                RunState(1, 0, "run-1", "shadow", "planned",
+                         "2026-07-14T00:00:00Z", "2026-07-14T00:00:00Z", nodes)
+
+        class GuardedDependencies(list):
+            def __init__(self):
+                super().__init__()
+                self.reads = 0
+
+            def __iter__(self):
+                while True:
+                    self.reads += 1
+                    if self.reads > 3:
+                        raise AssertionError("dependencies were eagerly exhausted")
+                    yield "a"
+
+        guarded = GuardedDependencies()
+        state = RunState(1, 0, "run-1", "shadow", "planned",
+                         "2026-07-14T00:00:00Z", "2026-07-14T00:00:00Z",
+                         {"a": NodeState("a"), "b": NodeState("b")})
+        object.__setattr__(state.nodes["b"], "dependencies", guarded)
+        with mock.patch.object(schema, "MAX_PAYLOAD_ITEMS", 2):
+            with self.assertRaises(KernelError):
+                StateStore("unused.json").prepare(state)
+        self.assertLessEqual(guarded.reads, 1)
 
     def test_new_state_defaults_to_shadow(self):
         state = RunState.new("run-1", "2026-07-14T00:00:00Z")

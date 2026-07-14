@@ -6,20 +6,20 @@ from .receipts import (
     encode_receipt, evidence_receipt, transition_receipt,
 )
 from .schema import (
-    SCHEMA_VERSION, CorruptEventError, CorruptStateError, ErrorCode, ErrorMessage,
+    SCHEMA_VERSION, CorruptEventError, CorruptStateError, ErrorCode, ErrorDetailKey, ErrorMessage,
     IllegalTransitionError, InvalidSchemaError,
     KernelError, LeaseConflictError, MissingEvidenceError, NodeState, NodeStatus,
     RevisionConflictError, RunMode, RunState, RunStatus, SequenceConflictError,
     UnsafePayloadError, WORKFLOW_EVENT_FIELDS, WorkflowEvent, WorkflowEventField,
     serialize_kernel_error,
 )
-from .state import RunLease, StateStore
+from .state import PreparedState, RunLease, StateStore
 from .transitions import TransitionEngine
 
 __all__ = [
     "SCHEMA_VERSION", "RunMode", "RunStatus", "NodeStatus", "WorkflowEvent",
-    "NodeState", "RunState", "EventStore", "StateStore", "RunLease",
-    "TransitionEngine", "ErrorCode", "ErrorMessage", "KernelError", "InvalidSchemaError",
+    "NodeState", "RunState", "EventStore", "StateStore", "PreparedState", "RunLease",
+    "TransitionEngine", "ErrorCode", "ErrorDetailKey", "ErrorMessage", "KernelError", "InvalidSchemaError",
     "CorruptEventError", "CorruptStateError",
     "SequenceConflictError", "RevisionConflictError", "LeaseConflictError",
     "IllegalTransitionError", "MissingEvidenceError", "UnsafePayloadError",

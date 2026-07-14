@@ -2,9 +2,11 @@ import tempfile
 import unittest
 import json
 import os
+import gc
 import subprocess
 import sys
 import traceback
+import weakref
 from pathlib import Path
 from dataclasses import replace
 from unittest import mock
@@ -158,6 +160,17 @@ class StateStoreTests(unittest.TestCase):
                     with RunLease(path):
                         pass
 
+    def test_garbage_collected_lease_releases_lock_for_reacquisition(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            lease = RunLease(path).acquire()
+            reference = weakref.ref(lease)
+            del lease
+            gc.collect()
+            self.assertIsNone(reference())
+            with RunLease(path):
+                pass
+
     def test_unlinked_live_lease_cannot_authorize_alongside_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
@@ -212,9 +225,16 @@ class StateStoreTests(unittest.TestCase):
             with RunLease(path) as lease:
                 store.write(original, -1, lease=lease)
             before = path.read_bytes()
-            with RunLease(path) as lease, mock.patch("workflow_kernel.state.os.replace", side_effect=OSError("injected")):
-                with self.assertRaises(OSError):
+            sentinel = "never-render-state-replace"
+            with RunLease(path) as lease, mock.patch(
+                    "workflow_kernel.state.os.replace", side_effect=OSError(sentinel)):
+                with self.assertRaises(CorruptStateError) as raised:
                     store.write(original, original.revision, lease=lease)
+            rendered = "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            ))
+            self.assertIsNone(raised.exception.__cause__)
+            self.assertNotIn(sentinel, rendered)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(list(Path(directory).glob(".run-state.json.*.tmp")), [])
 
@@ -275,6 +295,30 @@ class StateStoreTests(unittest.TestCase):
                     type(raised.exception), raised.exception, raised.exception.__traceback__,
                 ))
                 self.assertIsNone(raised.exception.__cause__)
+                self.assertNotIn(sentinel, rendered)
+
+    def test_lease_and_state_setup_errors_are_stable_and_secret_safe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sentinel = "never-render-filesystem-setup"
+            blocker = root / sentinel
+            blocker.write_text("not a directory")
+            with self.assertRaises(LeaseConflictError) as lease_error:
+                RunLease(blocker / "child" / "run-state.json").acquire()
+
+            path = root / "run-state.json"
+            store = StateStore(path)
+            prepared = store.prepare(RunState.new("run-1", "2026-07-14T00:00:00Z"))
+            with RunLease(path) as lease, mock.patch(
+                    "workflow_kernel.state.tempfile.mkstemp", side_effect=OSError(sentinel)):
+                with self.assertRaises(CorruptStateError) as state_error:
+                    store.publish(prepared, -1, lease=lease)
+
+            for raised in (lease_error.exception, state_error.exception):
+                rendered = "".join(traceback.format_exception(
+                    type(raised), raised, raised.__traceback__,
+                ))
+                self.assertIsNone(raised.__cause__)
                 self.assertNotIn(sentinel, rendered)
 
     def test_oversize_state_is_rejected_before_parsing(self):

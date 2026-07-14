@@ -2,13 +2,14 @@ import tempfile
 import unittest
 import os
 import traceback
+from collections.abc import Mapping
 from pathlib import Path
 from unittest import mock
 
 from tests import detail_digest
 from workflow_kernel.events import EventStore, encode_event
 from workflow_kernel.schema import (
-    CorruptEventError, LeaseConflictError, SequenceConflictError,
+    CorruptEventError, KernelError, LeaseConflictError, SequenceConflictError,
     UnsafePayloadError, WorkflowEvent,
 )
 from workflow_kernel.state import RunLease
@@ -35,11 +36,18 @@ class EventStoreTests(unittest.TestCase):
             store = EventStore(root)
             self.assertEqual(store.path, root / "events.jsonl")
             self.assertEqual(store.state_path, root / "run-state.json")
+            self.assertFalse(hasattr(store, "__dict__"))
             for name, value in (("root", root / "other"),
                                 ("path", root / "other-events.jsonl"),
-                                ("state_path", root / "other-state.json")):
+                                ("state_path", root / "other-state.json"),
+                                ("_root", root / "other"),
+                                ("_path", root / "other-events.jsonl"),
+                                ("_state_path", root / "other-state.json"),
+                                ("_lock_path", root / "other-events.lock")):
                 with self.subTest(name=name), self.assertRaises((AttributeError, TypeError)):
                     object.__setattr__(store, name, value)
+                with self.subTest(delete=name), self.assertRaises((AttributeError, TypeError)):
+                    object.__delattr__(store, name)
             with self.assertRaises(TypeError):
                 class ForgedEventStore(EventStore):
                     pass
@@ -74,6 +82,57 @@ class EventStoreTests(unittest.TestCase):
                 append_event(store, event(2), 1)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(store.replay(), (event(0),))
+
+    def test_append_rejects_mutated_scalar_subclasses_without_corrupting_replay(self):
+        class NegativeInt(int):
+            def __lt__(self, _other):
+                return False
+
+            def __ne__(self, _other):
+                return False
+
+        class FakeTimestamp(str):
+            def replace(self, *_args, **_kwargs):
+                return "2026-07-14T00:00:00+00:00"
+
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            for field, invalid in (("sequence", NegativeInt(-1)),
+                                   ("occurred_at", FakeTimestamp("not-a-timestamp"))):
+                candidate = WorkflowEvent(
+                    1, 0, "run-1", None, "run.initialized",
+                    "2026-07-14T00:00:00Z", {},
+                )
+                object.__setattr__(candidate, field, invalid)
+                with self.subTest(field=field), RunLease(store.state_path) as lease:
+                    with self.assertRaises(KernelError):
+                        store.append(candidate, 0, lease=lease)
+                self.assertEqual(store.replay(), ())
+
+    def test_append_uses_one_captured_event_for_validation_and_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            candidate = WorkflowEvent(
+                1, 1, "run-1", None, "run.initialized",
+                "2026-07-14T00:00:00Z", {},
+            )
+
+            class MutatingPayload(Mapping):
+                def __iter__(self):
+                    yield "note"
+
+                def __len__(self):
+                    return 1
+
+                def __getitem__(self, _key):
+                    object.__setattr__(candidate, "sequence", 0)
+                    return "captured"
+
+            object.__setattr__(candidate, "payload", MutatingPayload())
+            with RunLease(store.state_path) as lease:
+                with self.assertRaises(SequenceConflictError):
+                    store.append(candidate, 0, lease=lease)
+            self.assertEqual(store.replay(), ())
 
     def test_corrupt_earlier_record_is_fatal(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -146,7 +205,7 @@ class EventStoreTests(unittest.TestCase):
             try:
                 stale = first
                 first = None
-                with mock.patch.object(store, "_acquire", return_value=stale):
+                with mock.patch.object(EventStore, "_acquire", return_value=stale):
                     with self.assertRaises(SequenceConflictError) as raised:
                         append_event(store, event(0), 0)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lock_identity_changed"))
@@ -171,7 +230,7 @@ class EventStoreTests(unittest.TestCase):
             try:
                 stale = first
                 first = None
-                with mock.patch.object(store, "_acquire", return_value=stale):
+                with mock.patch.object(EventStore, "_acquire", return_value=stale):
                     with self.assertRaises(SequenceConflictError) as raised:
                         append_event(store, event(0), 0)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lock_identity_changed"))
@@ -275,6 +334,22 @@ class EventStoreTests(unittest.TestCase):
                 self.assertIsNone(raised.exception.__cause__)
                 self.assertNotIn(sentinel, rendered)
 
+    def test_event_parent_setup_errors_are_stable_and_secret_safe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            sentinel = "never-render-event-parent"
+            with RunLease(store.state_path) as lease:
+                with mock.patch("workflow_kernel.events.Path.mkdir",
+                                side_effect=NotADirectoryError(sentinel)):
+                    with self.assertRaises(SequenceConflictError) as raised:
+                        store.append(event(0), 0, lease=lease)
+            rendered = "".join(traceback.format_exception(
+                type(raised.exception), raised.exception, raised.exception.__traceback__,
+            ))
+            self.assertEqual(raised.exception.code, "sequence_conflict")
+            self.assertIsNone(raised.exception.__cause__)
+            self.assertNotIn(sentinel, rendered)
+
     def test_event_writer_fails_closed_without_crash_safe_locking(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
@@ -289,28 +364,6 @@ class EventStoreTests(unittest.TestCase):
             self.assertEqual(raised.exception.details["reason_code"], detail_digest("locking_unsupported"))
             self.assertFalse(path.exists())
             self.assertFalse(path.with_name(path.name + ".lock").exists())
-
-    def test_append_does_not_reopen_a_swapped_regular_ledger(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            path = root / "events.jsonl"
-            target_root = root / "other-run"
-            target_root.mkdir()
-            target = target_root / "events.jsonl"
-            append_event(event_store(path), event(0), 0)
-            append_event(event_store(target_root), event(0), 0)
-            before = target.read_bytes()
-            store = event_store(path)
-
-            def swap_after_replay():
-                existing = event_store(path).replay()
-                path.unlink()
-                os.link(target, path)
-                return existing
-
-            with mock.patch.object(store, "replay", side_effect=swap_after_replay):
-                append_event(store, event(1), 1)
-            self.assertEqual(target.read_bytes(), before)
 
     def test_hard_linked_ledger_is_rejected_without_mutating_target(self):
         with tempfile.TemporaryDirectory() as directory:

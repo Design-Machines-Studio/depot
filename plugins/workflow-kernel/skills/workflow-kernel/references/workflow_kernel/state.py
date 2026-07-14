@@ -15,28 +15,35 @@ from ._files import (
 )
 from .schema import (
     CorruptStateError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
-    RevisionConflictError, RunState, UnsafePayloadError,
+    RevisionConflictError, RunState, UnsafePayloadError, _snapshot_run_state,
 )
 
 
 MAX_STATE_BYTES = 4_194_304
 
 
-def _validated_state_snapshot(state: RunState) -> RunState:
-    if type(state) is not RunState:
-        raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_RUN_STATE_REQUIRED)
-    return RunState.from_dict(RunState.to_dict(state))
+def _snapshot_and_encode_state(state: RunState):
+    snapshot = _snapshot_run_state(state)
+    encoded = (json.dumps(RunState.to_dict(snapshot), ensure_ascii=False,
+                          sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+    return snapshot, encoded
 
 
 def encode_state(state: RunState) -> bytes:
-    snapshot = _validated_state_snapshot(state)
-    return (json.dumps(RunState.to_dict(snapshot), ensure_ascii=False, sort_keys=True,
-                       separators=(",", ":")) + "\n").encode("utf-8")
+    _, encoded = _snapshot_and_encode_state(state)
+    return encoded
 
 
 def _capability_types():
     lease_records = weakref.WeakKeyDictionary()
     store_records = weakref.WeakKeyDictionary()
+
+    def finalize_lease(record, handle) -> None:
+        if record.get("handle") is handle:
+            record["handle"] = None
+            record["owner_pid"] = None
+            record["finalizer"] = None
+        handle.release()
 
     class PreparedState:
         """Opaque identity capability issued and owned by one StateStore."""
@@ -63,6 +70,7 @@ def _capability_types():
                 "path": state_path.with_name(state_path.name + ".lease"),
                 "handle": None,
                 "owner_pid": None,
+                "finalizer": None,
             }
 
         def __init_subclass__(cls, **_kwargs):
@@ -84,8 +92,8 @@ def _capability_types():
                 raise LeaseConflictError(ErrorMessage.RUN_WRITER_LEASE_HELD, {
                     ErrorDetailKey.PATH.value: str(record["path"]),
                 })
-            record["path"].parent.mkdir(parents=True, exist_ok=True)
             try:
+                record["path"].parent.mkdir(parents=True, exist_ok=True)
                 handle = LockHandle.acquire(record["path"])
             except LockingUnsupportedError:
                 raise LeaseConflictError(ErrorMessage.RUN_LOCKING_UNAVAILABLE, {
@@ -108,11 +116,17 @@ def _capability_types():
                 os.ftruncate(handle.descriptor, 0)
                 os.write(handle.descriptor, (str(os.getpid()) + "\n").encode("ascii"))
                 os.fsync(handle.descriptor)
+            except OSError:
+                handle.release()
+                raise LeaseConflictError(ErrorMessage.RUN_LEASE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(record["path"]),
+                }) from None
             except Exception:
                 handle.release()
                 raise
             record["handle"] = handle
             record["owner_pid"] = os.getpid()
+            record["finalizer"] = weakref.finalize(self, finalize_lease, record, handle)
             return self
 
         def release(self):
@@ -122,7 +136,12 @@ def _capability_types():
             handle = record["handle"]
             record["handle"] = None
             record["owner_pid"] = None
-            handle.release()
+            finalizer = record["finalizer"]
+            record["finalizer"] = None
+            if finalizer is not None and finalizer.alive:
+                finalizer()
+            else:
+                handle.release()
 
         def __enter__(self):
             return self.acquire()
@@ -233,8 +252,7 @@ def _capability_types():
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
                 }) from None
             require_run_lease(lease, record["path"])
-            if (isinstance(expected_revision, bool) or not isinstance(expected_revision, int)
-                    or expected_revision < -1):
+            if type(expected_revision) is not int or expected_revision < -1:
                 raise RevisionConflictError(ErrorMessage.INVALID_EXPECTED_REVISION, {
                     ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                 })
@@ -262,10 +280,15 @@ def _capability_types():
                 })
 
             path = record["path"]
-            path.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary = tempfile.mkstemp(
-                prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent),
-            )
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+                descriptor, temporary = tempfile.mkstemp(
+                    prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent),
+                )
+            except OSError:
+                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
             try:
                 with os.fdopen(descriptor, "wb") as handle:
                     handle.write(encoded)
@@ -274,19 +297,25 @@ def _capability_types():
                 require_run_lease(lease, path)
                 os.replace(temporary, path)
                 directory_fsync = self._fsync_directory()
+            except OSError:
+                try:
+                    os.unlink(temporary)
+                except OSError:
+                    pass
+                raise CorruptStateError(ErrorMessage.STATE_PATH_UNSAFE, {
+                    ErrorDetailKey.PATH.value: str(path),
+                }) from None
             except Exception:
                 try:
                     os.unlink(temporary)
-                except FileNotFoundError:
+                except OSError:
                     pass
                 raise
             return {"state_path": str(path), "revision": revision,
                     "directory_fsync": directory_fsync}
 
         def prepare(self, state: RunState) -> PreparedState:
-            snapshot = _validated_state_snapshot(state)
-            encoded = (json.dumps(RunState.to_dict(snapshot), ensure_ascii=False,
-                                  sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+            snapshot, encoded = _snapshot_and_encode_state(state)
             if len(encoded) > MAX_STATE_BYTES:
                 raise UnsafePayloadError(ErrorMessage.STATE_SIZE_LIMIT, {
                     ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
