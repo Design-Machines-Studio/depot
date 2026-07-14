@@ -24,11 +24,12 @@ _CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
 _ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 _WHOLE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:\S*\Z")
 _WHOLE_NETWORK_PATH = re.compile(r"//\S+\Z")
-_URI_SHAPE = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:(?=\S)|//(?=\S)")
 _ISO_TIMESTAMP = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
     r"(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})\Z"
 )
+_ASCII_LETTERS = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+_SCHEME_CHARACTERS = _ASCII_LETTERS | frozenset("0123456789+.-")
 _TRAILING_PUNCTUATION = frozenset(".,;!?\"'")
 _OPENING_TO_CLOSING = {"(": ")", "[": "]", "{": "}", "<": ">"}
 _CLOSING_PUNCTUATION = frozenset(_OPENING_TO_CLOSING.values())
@@ -108,10 +109,25 @@ def _nonspace_end(value: str, start: int) -> int:
 
 
 def _next_uri_shape(value: str, start: int) -> Optional[Tuple[int, int]]:
-    match = _URI_SHAPE.search(value, start)
-    if match is None:
-        return None
-    return match.start(), match.end()
+    """Return the next URI marker while advancing through each character once."""
+    index = start
+    length = len(value)
+    while index < length:
+        character = value[index]
+        if (character == "/" and index + 2 < length and value[index + 1] == "/"
+                and not value[index + 2].isspace()):
+            return index, index + 2
+        if character in _ASCII_LETTERS:
+            token_start = index
+            index += 1
+            while index < length and value[index] in _SCHEME_CHARACTERS:
+                index += 1
+            if (index < length and value[index] == ":" and index + 1 < length
+                    and not value[index + 1].isspace()):
+                return token_start, index + 1
+            continue
+        index += 1
+    return None
 
 
 def _reject_remaining_uri_shapes(value: str) -> None:

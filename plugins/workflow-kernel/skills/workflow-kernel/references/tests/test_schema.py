@@ -1,4 +1,3 @@
-import ast
 import hashlib
 import inspect
 import json
@@ -20,6 +19,31 @@ from workflow_kernel.receipts import encode_receipt, evidence_receipt
 from workflow_kernel.events import encode_event
 from workflow_kernel.schema import NodeState
 from workflow_kernel.state import encode_state
+
+
+class CountingStr(str):
+    """String wrapper sharing a test-only character-operation counter across slices."""
+
+    def __new__(cls, value, counter=None):
+        result = super().__new__(cls, value)
+        result.counter = counter if counter is not None else [0]
+        return result
+
+    @property
+    def operations(self):
+        return self.counter[0]
+
+    def __getitem__(self, key):
+        self.counter[0] += 1
+        result = super().__getitem__(key)
+        if isinstance(result, str):
+            return type(self)(result, self.counter)
+        return result
+
+    def __iter__(self):
+        for character in super().__iter__():
+            self.counter[0] += 1
+            yield character
 
 
 class SchemaTests(unittest.TestCase):
@@ -59,6 +83,42 @@ class SchemaTests(unittest.TestCase):
         self.assertEqual(error.code, "unsafe_payload")
         self.assertNotIn("fixture-secret", encoded)
         self.assertIn("[REDACTED]", encoded)
+
+    def test_error_messages_normalize_supported_url_tokens(self):
+        exact = "https://example.invalid/never-persist-exact-message"
+        embedded = "See https://example.invalid/never-persist-embedded-message now"
+        network = "See <//example.invalid/never-persist-network-message>."
+        cases = (
+            (exact, "url-sha256:" + hashlib.sha256(exact.encode("utf-8")).hexdigest()),
+            (embedded, "See url-sha256:" + hashlib.sha256(
+                "https://example.invalid/never-persist-embedded-message".encode("utf-8")
+            ).hexdigest() + " now"),
+            (network, "See <url-sha256:" + hashlib.sha256(
+                "//example.invalid/never-persist-network-message".encode("utf-8")
+            ).hexdigest() + ">."),
+        )
+        for source, expected in cases:
+            error = UnsafePayloadError(source)
+            self.assertEqual(error.to_dict()["error"]["message"], expected)
+            self.assertEqual(str(error), expected)
+            self.assertNotIn("never-persist", json.dumps(error.to_dict()))
+            self.assertNotIn("never-persist", str(error))
+
+    def test_error_messages_fail_closed_on_invalid_inputs(self):
+        fallback = "workflow kernel error"
+        values = (
+            "data:text/plain,never-persist-unsupported-message",
+            "https://example.invalid/proof?token=never-persist-query-message",
+            "x" * (redaction.MAX_STRING_LENGTH + 1),
+            "",
+            None,
+        )
+        for value in values:
+            error = UnsafePayloadError(value)
+            self.assertEqual(error.to_dict()["error"]["message"], fallback)
+            self.assertEqual(str(error), fallback)
+            self.assertNotIn("never-persist", json.dumps(error.to_dict()))
+            self.assertNotIn("never-persist", str(error))
 
     def test_recursive_redaction_covers_events_and_receipts(self):
         fixture = "never-print-this-fixture"
@@ -352,37 +412,16 @@ class SchemaTests(unittest.TestCase):
         with self.assertRaises(UnsafePayloadError):
             RunState.new(rejected, "2026-07-14T00:00:00Z")
 
-    def test_maximum_length_uri_scan_has_static_linear_structure(self):
-        prefix = "See https://example.invalid/path"
-        source = prefix + ")" * (redaction.MAX_STRING_LENGTH - len(prefix))
-        self.assertEqual(len(source), redaction.MAX_STRING_LENGTH)
-        self.assertTrue(hasattr(redaction, "_normalize_uri_tokens"))
-
-        normalized = redaction._normalize_uri_tokens(source)
-
-        digest = "url-sha256:" + hashlib.sha256(
-            "https://example.invalid/path".encode("utf-8")
-        ).hexdigest()
-        self.assertNotIn("example.invalid", normalized)
-        self.assertIn(digest, normalized)
-        self.assertEqual(len(normalized.rsplit(digest, 1)[1]), source.count(")"))
-
-        for helper in (redaction._uri_token_end, redaction._nonspace_end,
-                       redaction._next_uri_shape, redaction._normalize_uri_tokens,
-                       redaction._reject_remaining_uri_shapes):
-            tree = ast.parse(inspect.getsource(helper))
-            loops = [node for node in ast.walk(tree) if isinstance(node, (ast.For, ast.While))]
-            for loop in loops:
-                nested = [node for child in ast.iter_child_nodes(loop)
-                          for node in ast.walk(child)
-                          if isinstance(node, (ast.For, ast.While))]
-                self.assertEqual(nested, [], helper.__name__ + " contains nested scanning loops")
-
-        next_shape_tree = ast.parse(inspect.getsource(redaction._next_uri_shape))
-        searches = [node for node in ast.walk(next_shape_tree)
-                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                    and node.func.attr == "search"]
-        self.assertEqual(len(searches), 1, "shape selection must scan each suffix only once")
+    def test_maximum_length_uri_scans_have_bounded_character_operations(self):
+        values = (
+            CountingStr("a" * redaction.MAX_STRING_LENGTH),
+            CountingStr(("//host.example/path " * 4_000)[:redaction.MAX_STRING_LENGTH]),
+        )
+        for source in values:
+            normalized = redaction.normalize_durable_string(source)
+            self.assertGreaterEqual(source.operations, len(source))
+            self.assertLessEqual(source.operations, len(source) * 16)
+            self.assertNotIn("host.example", normalized)
 
     def test_production_uri_helpers_return_only_domain_results(self):
         source = "See https://example.invalid/path now"
@@ -452,6 +491,17 @@ class SchemaTests(unittest.TestCase):
             encoded = json.dumps(raised.exception.to_dict(), sort_keys=True)
             self.assertNotIn(key, encoded)
             self.assertNotIn("never-persist-state-key", encoded)
+
+    def test_state_node_keys_use_one_post_init_invariant_boundary(self):
+        data = RunState.new("run-1", "2026-07-14T00:00:00Z").to_dict()
+        data["nodes"] = {
+            "node-1": {"node_id": "node-1", "status": "pending", "dependencies": [], "evidence": []},
+        }
+        with mock.patch("workflow_kernel.schema.validate_durable_key",
+                        wraps=schema.validate_durable_key) as validate:
+            RunState.from_dict(data)
+        node_key_calls = [call for call in validate.call_args_list if call.args == ("node-1",)]
+        self.assertEqual(len(node_key_calls), 1)
 
     def test_multiple_embedded_urls_preserve_punctuation_and_are_idempotent(self):
         first = "https://one.example.invalid/path"

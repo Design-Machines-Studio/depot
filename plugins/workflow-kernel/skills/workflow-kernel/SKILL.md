@@ -90,7 +90,10 @@ errors as stable JSON. Treat `--help` output as plain text.
   node state; transitions exceeding that aggregate limit fail before state
   reconstruction.
 - Catch `KernelError` subclasses and serialize `to_dict()` for stable safe
-  errors. Do not expose raw parser exceptions or rejected values.
+  errors. Public error messages are bounded and URI-normalized locally; invalid,
+  unsupported, empty, or oversized messages become one generic safe message.
+  Both `to_dict()` and `str(error)` follow that boundary. Do not expose raw
+  parser exceptions or rejected values.
 
 ## Security and Portability
 

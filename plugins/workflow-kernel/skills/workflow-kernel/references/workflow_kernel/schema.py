@@ -18,6 +18,7 @@ from .redaction import (
 
 SCHEMA_VERSION = 1
 MAX_EVIDENCE_ITEMS = 1_024
+SAFE_ERROR_MESSAGE = "workflow kernel error"
 
 
 class RunMode(str, Enum):
@@ -51,13 +52,21 @@ class NodeStatus(str, Enum):
 class KernelError(Exception):
     code = "kernel_error"
 
-    def __init__(self, message: str, details: Optional[Mapping[str, object]] = None):
-        self.message = message
+    def __init__(self, message: object, details: Optional[Mapping[str, object]] = None):
+        safe_message = SAFE_ERROR_MESSAGE
+        if isinstance(message, str) and message and len(message) <= MAX_STRING_LENGTH:
+            try:
+                normalized = normalize_durable_string(message)
+                if len(normalized) <= MAX_STRING_LENGTH:
+                    safe_message = normalized
+            except (TypeError, ValueError):
+                pass
+        self.message = safe_message
         try:
             self.details = redact(dict(details or {}))
         except (TypeError, ValueError):
             self.details = {"detail": "[UNSAFE]"}
-        super().__init__(message)
+        super().__init__(safe_message)
 
     def to_dict(self) -> dict:
         return {"error": {"code": self.code, "message": self.message, "details": self.details}}
@@ -337,13 +346,6 @@ class RunState:
         raw_nodes = data["nodes"]
         if not isinstance(raw_nodes, Mapping):
             raise InvalidSchemaError("nodes must be an object")
-        if any(not isinstance(key, str) for key in raw_nodes):
-            raise InvalidSchemaError("node keys must be strings")
-        try:
-            for key in raw_nodes:
-                validate_durable_key(key)
-        except ValueError as exc:
-            raise InvalidSchemaError("node keys contain an unsafe URI") from exc
         nodes = {key: NodeState.from_dict(value) for key, value in raw_nodes.items()}
         return cls(data["schema_version"], data["revision"], data["run_id"], data["mode"], data["status"],
                    data["created_at"], data["updated_at"], MappingProxyType(nodes), data["evidence"],
