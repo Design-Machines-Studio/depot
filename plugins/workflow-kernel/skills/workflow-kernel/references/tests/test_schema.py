@@ -1,10 +1,11 @@
 import hashlib
 import io
-import inspect
 import json
 import logging
 import pickle
+import traceback
 import unittest
+from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, replace
 from unittest import mock
 
@@ -227,6 +228,26 @@ class SchemaTests(unittest.TestCase):
             self.assertNotIn("never-persist", json.dumps(error.to_dict()))
             self.assertNotIn("never-persist", str(error))
 
+    def test_untrusted_rejections_do_not_retain_raw_traceback_causes(self):
+        sentinel = "never-persist-traceback-secret"
+        invalid_url = "https://example.invalid:" + sentinel + "/proof"
+        cases = (
+            lambda: WorkflowEvent(1, 0, "run-1", None, "run.initialized", sentinel, {}),
+            lambda: RunState.new(invalid_url, "2026-07-14T00:00:00Z"),
+            lambda: WorkflowEvent(1, 0, "run-1", None, "run.initialized",
+                                  "2026-07-14T00:00:00Z", {"note": invalid_url}),
+            lambda: evidence_receipt("run-1", "test", invalid_url),
+        )
+        for reject in cases:
+            with self.subTest(reject=reject):
+                with self.assertRaises((InvalidSchemaError, UnsafePayloadError)) as raised:
+                    reject()
+                rendered = "".join(traceback.format_exception(
+                    type(raised.exception), raised.exception, raised.exception.__traceback__,
+                ))
+                self.assertIsNone(raised.exception.__cause__)
+                self.assertNotIn(sentinel, rendered)
+
     def test_error_details_hash_every_nonsensitive_string_and_stay_frozen(self):
         sentinel = "never-persist-arbitrary-plain-secret"
         digest = detail_digest(sentinel)
@@ -402,6 +423,34 @@ class SchemaTests(unittest.TestCase):
         digest = receipt.pop("digest")
         digest_free = (json.dumps(receipt, ensure_ascii=False, sort_keys=True,
                                   separators=(",", ":")) + "\n").encode("utf-8")
+        self.assertEqual(digest, "sha256:" + hashlib.sha256(digest_free).hexdigest())
+
+    def test_evidence_receipt_sanitizes_one_stateful_projection(self):
+        class StatefulMapping(Mapping):
+            def __init__(self):
+                self.reads = 0
+
+            def __getitem__(self, key):
+                if key != "note":
+                    raise KeyError(key)
+                self.reads += 1
+                return "value-" + str(self.reads)
+
+            def __iter__(self):
+                return iter(("note",))
+
+            def __len__(self):
+                return 1
+
+        nested = StatefulMapping()
+        receipt = json.loads(evidence_receipt(
+            "run-1", "test", "receipt.json", metadata={"nested": nested},
+        ))
+        digest = receipt.pop("digest")
+        digest_free = (json.dumps(receipt, ensure_ascii=False, sort_keys=True,
+                                  separators=(",", ":")) + "\n").encode("utf-8")
+
+        self.assertEqual(nested.reads, 1)
         self.assertEqual(digest, "sha256:" + hashlib.sha256(digest_free).hexdigest())
 
     def test_factory_bytes_are_not_a_trusted_encode_receipt_input(self):
@@ -801,24 +850,20 @@ class SchemaTests(unittest.TestCase):
             self.assertLessEqual(source.operations, len(source) * 16)
             self.assertNotIn("host.example", normalized)
 
-    def test_production_uri_helpers_return_only_domain_results(self):
-        source = "See https://example.invalid/path now"
-        self.assertIsInstance(redaction._normalize_uri_tokens(source), str)
-        self.assertIsInstance(redaction._reject_remaining_uri_shapes("plain text"), type(None))
-        self.assertIsInstance(redaction._uri_token_end(source, 4, 32), int)
+    def test_evidence_normalization_stops_at_the_shared_item_bound(self):
+        calls = 0
+        original = redaction.normalize_evidence_reference
 
-    def test_uri_span_iterator_is_shared_domain_output(self):
-        source = "See <https://one.example/path>, then (//two.example/report)."
-        self.assertTrue(hasattr(redaction, "_iter_uri_token_spans"))
-        spans = tuple(redaction._iter_uri_token_spans(source))
-        tokens = tuple(source[start:end] for start, end, _ in spans)
-        self.assertEqual(tokens, ("https://one.example/path", "//two.example/report"))
+        def counted(value):
+            nonlocal calls
+            calls += 1
+            return original(value)
 
-    def test_timestamp_has_a_raw_validator_without_string_mode_flag(self):
-        self.assertTrue(hasattr(schema, "_validated_string"))
-        self.assertNotIn("normalize_uris", inspect.signature(schema._string).parameters)
-        timestamp = "2026-07-14T00:00:00Z"
-        self.assertEqual(schema._timestamp(timestamp), timestamp)
+        with mock.patch("workflow_kernel.redaction.normalize_evidence_reference",
+                        side_effect=counted):
+            with self.assertRaises(TypeError):
+                redaction.freeze_json({"evidence": ["a"] * 200}, max_items=3)
+        self.assertLessEqual(calls, 3)
 
     def test_uri_bearing_mapping_keys_are_rejected_without_rewriting(self):
         sentinel = "never-persist-mapping-key"

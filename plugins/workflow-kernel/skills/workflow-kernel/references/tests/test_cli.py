@@ -231,6 +231,7 @@ class CliTests(unittest.TestCase):
             engine.return_value.apply.return_value = next_state
             self.assertEqual(command_append(SimpleNamespace(directory="unused", event=json.dumps(event_data))), 0)
         self.assertEqual(order, ["state", "prepare", "event", "publish"])
+        self.assertIs(events.append.call_args.kwargs["lease"], coordinator.__enter__.return_value)
         states.publish.assert_called_once_with(prepared, 1, lease=coordinator.__enter__.return_value)
         states.write.assert_not_called()
 

@@ -5,34 +5,45 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import replace
 from unittest import mock
 
 from tests import detail_digest
 from workflow_kernel import CorruptStateError
 from workflow_kernel.events import EventStore
 from workflow_kernel.schema import LeaseConflictError, RevisionConflictError, RunState, UnsafePayloadError, WorkflowEvent
-from workflow_kernel.state import RunLease, StateStore, encode_state
+from workflow_kernel.state import PreparedState, RunLease, StateStore, encode_state
 
 class StateStoreTests(unittest.TestCase):
-    def test_prepared_state_is_frozen_and_publishes_exact_state(self):
+    def test_prepared_state_is_opaque_and_publishes_registry_owned_state(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
             store = StateStore(path)
             state = RunState.new("run-1", "2026-07-14T00:00:00Z")
-            self.assertTrue(hasattr(store, "prepare"))
             prepared = store.prepare(state)
-            self.assertEqual(prepared.state, state)
-            self.assertEqual(prepared.encoded, encode_state(state))
-            with self.assertRaises(FrozenInstanceError):
-                prepared.encoded = b"corrupt\n"
+            self.assertIs(type(prepared), PreparedState)
+            self.assertFalse(hasattr(prepared, "__dict__"))
+            self.assertFalse(hasattr(prepared, "state"))
+            self.assertFalse(hasattr(prepared, "encoded"))
+            for name, value in (("state", replace(state, revision=99)),
+                                ("encoded", b"corrupt\n"),
+                                ("_state", replace(state, revision=99)),
+                                ("_encoded", b"corrupt\n")):
+                with self.subTest(name=name), self.assertRaises((AttributeError, TypeError)):
+                    object.__setattr__(prepared, name, value)
             with RunLease(path) as lease:
-                for invalid in (b"corrupt\n", replace(prepared, encoded=b"corrupt\n")):
-                    with self.subTest(invalid=type(invalid).__name__), self.assertRaises(UnsafePayloadError):
-                        store.publish(invalid, -1, lease=lease)
                 store.publish(prepared, -1, lease=lease)
             self.assertEqual(store.load(), state)
-            self.assertFalse(hasattr(store, "_write_prepared"))
+
+    def test_unissued_prepared_state_cannot_publish(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            unissued = object.__new__(PreparedState)
+            with RunLease(path) as lease:
+                with self.assertRaises(UnsafePayloadError):
+                    store.publish(unissued, -1, lease=lease)
+            self.assertFalse(path.exists())
 
     def test_prepared_state_cannot_publish_through_another_store(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -52,8 +63,8 @@ class StateStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             try:
                 os.chdir(first)
-                events = EventStore("events.jsonl")
                 states = StateStore("run-state.json")
+                events = EventStore("events.jsonl", states.path)
                 canonical_first = Path(first).resolve()
                 self.assertEqual(events.path, canonical_first / "events.jsonl")
                 self.assertEqual(states.path, canonical_first / "run-state.json")
@@ -63,9 +74,9 @@ class StateStoreTests(unittest.TestCase):
                     1, 0, "run-1", None, "run.initialized",
                     "2026-07-14T00:00:00Z", {"mode": "shadow"},
                 )
-                events.append(event, 0)
                 state = RunState.new("run-1", "2026-07-14T00:00:00Z")
                 with RunLease(states.path) as lease:
+                    events.append(event, 0, lease=lease)
                     states.write(state, -1, lease=lease)
             finally:
                 os.chdir(original)
@@ -103,15 +114,14 @@ class StateStoreTests(unittest.TestCase):
             first.path.unlink()
             second = RunLease(path).acquire()
             try:
-                self.assertFalse(first.authorizes(path))
                 with self.assertRaises(LeaseConflictError) as raised:
-                    StateStore(path).write(state, -1, lease=first)
+                    first.require_authorized(path)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lease_identity_changed"))
                 self.assertFalse(path.exists())
                 StateStore(path).write(state, -1, lease=second)
             finally:
                 first.release()
-                self.assertTrue(second.authorizes(path))
+                second.require_authorized(path)
                 second.release()
 
     def test_replaced_live_lease_cannot_authorize_alongside_replacement(self):
@@ -124,15 +134,14 @@ class StateStoreTests(unittest.TestCase):
             os.replace(replacement, first.path)
             second = RunLease(path).acquire()
             try:
-                self.assertFalse(first.authorizes(path))
                 with self.assertRaises(LeaseConflictError) as raised:
-                    StateStore(path).write(state, -1, lease=first)
+                    first.require_authorized(path)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lease_identity_changed"))
                 self.assertFalse(path.exists())
                 StateStore(path).write(state, -1, lease=second)
             finally:
                 first.release()
-                self.assertTrue(second.authorizes(path))
+                second.require_authorized(path)
                 second.release()
 
     def test_write_returns_durability_evidence(self):

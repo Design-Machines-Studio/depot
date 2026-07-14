@@ -133,7 +133,7 @@ def encode_receipt(receipt: Mapping[str, object]) -> bytes:
     try:
         return _canonical_bytes(_sanitize_receipt(receipt))
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from exc
+        raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from None
 
 
 def evidence_receipt(run_id: str, evidence_type: str, reference: str, *,
@@ -152,16 +152,14 @@ def evidence_receipt(run_id: str, evidence_type: str, reference: str, *,
             ReceiptField.REFERENCE.value: normalized_reference,
             ReceiptField.METADATA.value: dict(metadata or {}),
         }
-        digest_free_bytes = _canonical_bytes(
-            _sanitize_receipt(digest_free, schema=_EVIDENCE_RECEIPT_SCHEMA)
-        )
-        final = dict(digest_free)
+        final = _sanitize_receipt(digest_free, schema=_EVIDENCE_RECEIPT_SCHEMA)
+        digest_free_bytes = _canonical_bytes(final)
         final[ReceiptField.DIGEST.value] = (
             "sha256:" + hashlib.sha256(digest_free_bytes).hexdigest()
         )
-        return _canonical_bytes(_sanitize_receipt(final, schema=_EVIDENCE_RECEIPT_SCHEMA))
+        return _canonical_bytes(final)
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError(ErrorMessage.EVIDENCE_RECEIPT_UNSAFE) from exc
+        raise UnsafePayloadError(ErrorMessage.EVIDENCE_RECEIPT_UNSAFE) from None
 
 
 def transition_receipt(event: WorkflowEvent, state_digest: str) -> bytes:
@@ -177,7 +175,7 @@ def transition_receipt(event: WorkflowEvent, state_digest: str) -> bytes:
             ReceiptField.STATE_DIGEST.value: state_digest,
         }, schema=_TRANSITION_RECEIPT_SCHEMA))
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from exc
+        raise UnsafePayloadError(ErrorMessage.RECEIPT_NON_JSON_SAFE) from None
 
 
 __all__ = [

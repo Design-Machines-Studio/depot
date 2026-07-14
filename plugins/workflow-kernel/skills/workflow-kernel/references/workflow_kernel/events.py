@@ -13,9 +13,10 @@ from ._files import (
 )
 from .redaction import redact
 from .schema import (
-    CorruptEventError, ErrorDetailKey, ErrorMessage, KernelError, SequenceConflictError,
-    UnsafePayloadError, WorkflowEvent,
+    CorruptEventError, ErrorDetailKey, ErrorMessage, KernelError, LeaseConflictError,
+    SequenceConflictError, UnsafePayloadError, WorkflowEvent,
 )
+from .state import RunLease
 
 MAX_RECORD_BYTES = 1_048_576
 MAX_LEDGER_BYTES = 16_777_216
@@ -25,13 +26,14 @@ def encode_event(event: WorkflowEvent) -> bytes:
     try:
         safe = redact(event.to_dict())
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA) from exc
+        raise UnsafePayloadError(ErrorMessage.EVENT_UNSAFE_DURABLE_DATA) from None
     return (json.dumps(safe, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
 class EventStore:
-    def __init__(self, path):
+    def __init__(self, path, state_path):
         self.path = canonical_path(Path(path))
+        self.state_path = canonical_path(Path(state_path))
         self._lock_path = self.path.with_name(self.path.name + ".lock")
 
     def _acquire(self) -> LockHandle:
@@ -68,7 +70,12 @@ class EventStore:
                 ErrorDetailKey.REASON_CODE.value: "lock_identity_changed",
             }) from exc
 
-    def append(self, event: WorkflowEvent, expected_sequence: int) -> None:
+    def append(self, event: WorkflowEvent, expected_sequence: int, *, lease: RunLease) -> None:
+        if type(lease) is not RunLease:
+            raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {
+                ErrorDetailKey.PATH.value: str(self.state_path),
+            })
+        lease.require_authorized(self.state_path)
         if isinstance(expected_sequence, bool) or not isinstance(expected_sequence, int) or expected_sequence < 0:
             raise SequenceConflictError(ErrorMessage.INVALID_EXPECTED_SEQUENCE, {
                 ErrorDetailKey.EXPECTED_SEQUENCE.value: expected_sequence,
@@ -106,6 +113,7 @@ class EventStore:
                         ErrorDetailKey.LIMIT_BYTES.value: MAX_LEDGER_BYTES,
                     })
                 self._require_current_lock(lock)
+                lease.require_authorized(self.state_path)
                 written = 0
                 while written < len(data):
                     written += os.write(descriptor, data[written:])
@@ -171,7 +179,7 @@ class EventStore:
                     break
                 raise CorruptEventError(ErrorMessage.INVALID_EVENT_RECORD, {
                     ErrorDetailKey.BYTE_OFFSET.value: offset, ErrorDetailKey.RECORD.value: index + 1,
-                }) from exc
+                }) from None
             if current.sequence != len(events):
                 raise SequenceConflictError(ErrorMessage.LEDGER_SEQUENCE_NONCONTIGUOUS, {
                     ErrorDetailKey.BYTE_OFFSET.value: offset,

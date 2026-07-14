@@ -7,7 +7,6 @@ import json
 import os
 import tempfile
 import weakref
-from dataclasses import dataclass
 from pathlib import Path
 
 from ._files import (
@@ -27,12 +26,16 @@ def encode_state(state: RunState) -> bytes:
     return (json.dumps(state.to_dict(), ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
-@dataclass(frozen=True, eq=False)
 class PreparedState:
-    """Immutable state bytes authenticated for publication by one StateStore."""
+    """Opaque identity capability issued and owned by one StateStore."""
 
-    state: RunState
-    encoded: bytes
+    __slots__ = ("__weakref__",)
+
+    def __new__(cls, *_args, **_kwargs):
+        raise TypeError("prepared states are store-issued")
+
+    def __init_subclass__(cls, **_kwargs):
+        raise TypeError("PreparedState is final")
 
 
 class RunLease:
@@ -104,14 +107,6 @@ class RunLease:
                 ErrorDetailKey.REASON_CODE.value: "lease_identity_changed",
             }) from exc
 
-    def authorizes(self, state_path) -> bool:
-        """Return whether this live capability owns the target state path."""
-        try:
-            self.require_authorized(state_path)
-        except LeaseConflictError:
-            return False
-        return True
-
     def __enter__(self):
         return self.acquire()
 
@@ -123,7 +118,7 @@ class RunLease:
 class StateStore:
     def __init__(self, path):
         self.path = canonical_path(Path(path))
-        self._prepared = weakref.WeakSet()
+        self._prepared = weakref.WeakKeyDictionary()
 
     def load(self) -> RunState:
         try:
@@ -160,7 +155,7 @@ class StateStore:
         except (UnicodeDecodeError, json.JSONDecodeError, KernelError, RecursionError) as exc:
             raise CorruptStateError(ErrorMessage.STATE_CORRUPT, {
                 ErrorDetailKey.PATH.value: str(self.path),
-            }) from exc
+            }) from None
         finally:
             os.close(descriptor)
 
@@ -170,12 +165,16 @@ class StateStore:
 
     def publish(self, prepared: PreparedState, expected_revision: int,
                 *, lease: RunLease = None) -> dict:
-        if (not isinstance(prepared, PreparedState)
-                or prepared not in self._prepared):
+        if type(prepared) is not PreparedState:
             raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
                 ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
             })
-        state = prepared.state
+        try:
+            state, encoded = self._prepared[prepared]
+        except (KeyError, TypeError):
+            raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
+                ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
+            }) from None
         if lease is None or not isinstance(lease, RunLease):
             raise LeaseConflictError(ErrorMessage.STATE_LEASE_REQUIRED, {
                 ErrorDetailKey.PATH.value: str(self.path),
@@ -212,7 +211,7 @@ class StateStore:
         descriptor, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", suffix=".tmp", dir=str(self.path.parent))
         try:
             with os.fdopen(descriptor, "wb") as handle:
-                handle.write(prepared.encoded)
+                handle.write(encoded)
                 handle.flush()
                 os.fsync(handle.fileno())
             lease.require_authorized(self.path)
@@ -235,8 +234,8 @@ class StateStore:
             raise UnsafePayloadError(ErrorMessage.STATE_SIZE_LIMIT, {
                 ErrorDetailKey.LIMIT_BYTES.value: MAX_STATE_BYTES,
             })
-        prepared = PreparedState(state, encoded)
-        self._prepared.add(prepared)
+        prepared = object.__new__(PreparedState)
+        self._prepared[prepared] = (state, encoded)
         return prepared
 
     def _fsync_directory(self) -> str:

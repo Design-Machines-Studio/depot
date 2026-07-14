@@ -109,7 +109,7 @@ class TransitionEngine:
             try:
                 mode = RunMode(mode_value)
             except (ValueError, TypeError) as exc:
-                raise IllegalTransitionError(ErrorMessage.EVENT_UNKNOWN_RUN_MODE, {ErrorDetailKey.MODE.value: mode_value}) from exc
+                raise IllegalTransitionError(ErrorMessage.EVENT_UNKNOWN_RUN_MODE, {ErrorDetailKey.MODE.value: mode_value}) from None
             return self._advance(state, event, mode=mode)
         if event.kind == "run.started":
             _require(state.status in {RunStatus.PLANNED, RunStatus.WAITING} and event.node_id is None, state, event)
@@ -155,7 +155,7 @@ class TransitionEngine:
             except KeyError as exc:
                 raise IllegalTransitionError(ErrorMessage.NODE_DEPENDENCY_MISSING, {
                     ErrorDetailKey.REASON_CODE.value: "missing_dependency",
-                }) from exc
+                }) from None
             _require(dependencies_succeeded, state, event)
         refs = node.evidence
         if target == NodeStatus.SUCCEEDED:

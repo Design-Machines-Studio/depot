@@ -320,7 +320,7 @@ def _string(value: object, name: str, *, optional: bool = False) -> Optional[str
     try:
         return normalize_durable_string(text)
     except ValueError as exc:
-        raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD.value: name}) from exc
+        raise UnsafePayloadError(ErrorMessage.STRING_UNSAFE_URI, {ErrorDetailKey.FIELD.value: name}) from None
 
 
 def _timestamp(value: object, name: str = "occurred_at") -> str:
@@ -328,7 +328,7 @@ def _timestamp(value: object, name: str = "occurred_at") -> str:
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {ErrorDetailKey.FIELD.value: name}) from exc
+        raise InvalidSchemaError(ErrorMessage.INVALID_TIMESTAMP, {ErrorDetailKey.FIELD.value: name}) from None
     if parsed.tzinfo is None:
         raise InvalidSchemaError(ErrorMessage.TIMESTAMP_TIMEZONE_REQUIRED, {ErrorDetailKey.FIELD.value: name})
     return text
@@ -342,7 +342,7 @@ def _only(data: Mapping[str, object], fields: set, required: set) -> None:
         for key in keys:
             validate_durable_key(key)
     except ValueError as exc:
-        raise InvalidSchemaError(ErrorMessage.SCHEMA_KEYS_UNSAFE_URI) from exc
+        raise InvalidSchemaError(ErrorMessage.SCHEMA_KEYS_UNSAFE_URI) from None
     unknown = sorted(set(keys) - fields)
     missing = sorted(required - set(keys))
     if unknown or missing:
@@ -359,7 +359,7 @@ def _payload(value: object) -> Mapping[str, object]:
                            max_items=MAX_PAYLOAD_ITEMS,
                            max_string_length=MAX_STRING_LENGTH)
     except (TypeError, ValueError) as exc:
-        raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from exc
+        raise UnsafePayloadError(ErrorMessage.PAYLOAD_NON_JSON_SAFE) from None
     return safe
 
 
@@ -444,7 +444,7 @@ class NodeState:
         try:
             status = self.status if isinstance(self.status, NodeStatus) else NodeStatus(self.status)
         except (ValueError, TypeError) as exc:
-            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS.value: self.status}) from exc
+            raise InvalidSchemaError(ErrorMessage.UNKNOWN_NODE_STATUS, {ErrorDetailKey.STATUS.value: self.status}) from None
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "dependencies", _string_tuple(self.dependencies, "dependencies"))
         object.__setattr__(self, "evidence", _string_tuple(self.evidence, "evidence", references=True))
@@ -470,7 +470,7 @@ def _string_tuple(value: object, name: str, *, references: bool = False) -> Tupl
         try:
             result = tuple(normalize_evidence_reference(item) for item in result)
         except ValueError as exc:
-            raise UnsafePayloadError(ErrorMessage.EVIDENCE_REFERENCE_UNSAFE) from exc
+            raise UnsafePayloadError(ErrorMessage.EVIDENCE_REFERENCE_UNSAFE) from None
     if len(result) != len(set(result)):
         raise InvalidSchemaError(ErrorMessage.FIELD_DUPLICATES, {ErrorDetailKey.FIELD.value: name})
     return result
@@ -504,7 +504,7 @@ class RunState:
         except (ValueError, TypeError) as exc:
             raise InvalidSchemaError(ErrorMessage.UNKNOWN_RUN_ENUM, {
                 ErrorDetailKey.MODE.value: self.mode, ErrorDetailKey.STATUS.value: self.status,
-            }) from exc
+            }) from None
         object.__setattr__(self, "mode", mode)
         object.__setattr__(self, "status", status)
         object.__setattr__(self, "created_at", _timestamp(self.created_at, "created_at"))
@@ -518,7 +518,7 @@ class RunState:
             for key in nodes:
                 validate_durable_key(key)
         except ValueError as exc:
-            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from exc
+            raise InvalidSchemaError(ErrorMessage.NODE_KEYS_UNSAFE_URI) from None
         if any(not isinstance(node, NodeState) or key != node.node_id
                for key, node in nodes.items()):
             raise InvalidSchemaError(ErrorMessage.NODE_KEYS_MISMATCH)

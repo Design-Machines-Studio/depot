@@ -63,7 +63,7 @@ def normalize_evidence_reference(reference: str) -> str:
     try:
         parsed = urlsplit(parse_target)
     except ValueError as exc:
-        raise ValueError("evidence reference is invalid") from exc
+        raise ValueError("evidence reference is invalid") from None
     if parsed.scheme:
         if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.hostname is None:
             raise ValueError("evidence reference uses an unsupported URL")
@@ -72,7 +72,7 @@ def normalize_evidence_reference(reference: str) -> str:
         try:
             parsed.port
         except ValueError as exc:
-            raise ValueError("evidence reference contains an invalid URL port") from exc
+            raise ValueError("evidence reference contains an invalid URL port") from None
         return "url-sha256:" + hashlib.sha256(reference.encode("utf-8")).hexdigest()
     if reference.startswith("/"):
         raise ValueError("evidence reference is not a run-relative artifact path")
@@ -267,7 +267,7 @@ class _Traversal:
                 return self.string_policy(value, key, policy)
             if self.string_normalizer is not None:
                 return self.string_normalizer(value)
-            if key.casefold() == "reference":
+            if key.casefold() in {"reference", "evidence"}:
                 return normalize_evidence_reference(value)
             return normalize_durable_string(value)
         if isinstance(value, int):
@@ -298,12 +298,16 @@ class _Traversal:
                 )
             return self.wrap_mapping(result)
         if isinstance(value, (list, tuple)):
-            if (self.string_normalizer is None and self.string_policy is None
-                    and key.casefold() == "evidence"):
-                value = tuple(normalize_evidence_reference(reference) for reference in value)
-            result = tuple(self.normalize(
-                item, depth=depth + 1,
-            ) for item in value)
+            evidence_items = (self.string_normalizer is None and self.string_policy is None
+                              and key.casefold() == "evidence")
+            result = []
+            for item in value:
+                if evidence_items and not isinstance(item, str):
+                    raise TypeError("evidence items must be strings")
+                result.append(self.normalize(
+                    item, key=key if evidence_items else "", depth=depth + 1,
+                ))
+            result = tuple(result)
             return self.wrap_sequence(result)
         raise TypeError("value is not JSON-safe")
 

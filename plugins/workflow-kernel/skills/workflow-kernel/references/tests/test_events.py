@@ -6,10 +6,24 @@ from unittest import mock
 
 from tests import detail_digest
 from workflow_kernel.events import EventStore, encode_event
-from workflow_kernel.schema import CorruptEventError, SequenceConflictError, UnsafePayloadError, WorkflowEvent
+from workflow_kernel.schema import (
+    CorruptEventError, LeaseConflictError, SequenceConflictError,
+    UnsafePayloadError, WorkflowEvent,
+)
+from workflow_kernel.state import RunLease
 
 def event(sequence):
     return WorkflowEvent(1, sequence, "run-1", None, "evidence.recorded", "2026-07-14T00:00:00Z", {"evidence": [str(sequence)]})
+
+
+def event_store(path):
+    path = Path(path)
+    return EventStore(path, path.with_name("run-state.json"))
+
+
+def append_event(store, value, expected_sequence):
+    with RunLease(store.state_path) as lease:
+        store.append(value, expected_sequence, lease=lease)
 
 
 class EventStoreTests(unittest.TestCase):
@@ -18,12 +32,12 @@ class EventStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
             try:
                 os.chdir(first)
-                store = EventStore("events.jsonl")
+                store = event_store("events.jsonl")
                 canonical_first = Path(first).resolve()
                 self.assertEqual(store.path, canonical_first / "events.jsonl")
                 self.assertEqual(store._lock_path, canonical_first / "events.jsonl.lock")
                 os.chdir(second)
-                store.append(event(0), 0)
+                append_event(store, event(0), 0)
             finally:
                 os.chdir(original)
             self.assertTrue((Path(first) / "events.jsonl").exists())
@@ -32,11 +46,11 @@ class EventStoreTests(unittest.TestCase):
     def test_append_replay_and_sequence_conflict_preserves_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            store = EventStore(path)
-            store.append(event(0), expected_sequence=0)
+            store = event_store(path)
+            append_event(store, event(0), 0)
             before = path.read_bytes()
             with self.assertRaises(SequenceConflictError):
-                store.append(event(2), expected_sequence=1)
+                append_event(store, event(2), 1)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(store.replay(), (event(0),))
 
@@ -45,13 +59,13 @@ class EventStoreTests(unittest.TestCase):
             path = Path(directory) / "events.jsonl"
             path.write_bytes(b"{bad}\n{}\n")
             with self.assertRaises(CorruptEventError):
-                EventStore(path).replay()
+                event_store(path).replay()
 
     def test_recovery_reports_truncated_final_record_offset(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            store = EventStore(path)
-            store.append(event(0), 0)
+            store = event_store(path)
+            append_event(store, event(0), 0)
             offset = path.stat().st_size
             with path.open("ab") as handle:
                 handle.write(b'{"schema_version":')
@@ -65,23 +79,46 @@ class EventStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
             path.with_name(path.name + ".lock").write_text("crashed writer")
-            EventStore(path).append(event(0), 0)
-            self.assertEqual(EventStore(path).replay(), (event(0),))
+            append_event(event_store(path), event(0), 0)
+            self.assertEqual(event_store(path).replay(), (event(0),))
 
     def test_live_event_writer_contention_fails(self):
         with tempfile.TemporaryDirectory() as directory:
-            store = EventStore(Path(directory) / "events.jsonl")
+            store = event_store(Path(directory) / "events.jsonl")
             lock = store._acquire()
             try:
                 with self.assertRaises(SequenceConflictError):
-                    store.append(event(0), 0)
+                    append_event(store, event(0), 0)
             finally:
                 store._release(lock)
+
+    def test_append_requires_the_live_lease_for_its_bound_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = event_store(root / "events.jsonl")
+            with self.assertRaises(TypeError):
+                store.append(event(0), 0)
+            with RunLease(root / "other-state.json") as foreign:
+                with self.assertRaises(LeaseConflictError):
+                    store.append(event(0), 0, lease=foreign)
+            released = RunLease(store.state_path).acquire()
+            released.release()
+            with self.assertRaises(LeaseConflictError):
+                store.append(event(0), 0, lease=released)
+            self.assertFalse(store.path.exists())
+
+    def test_held_run_lease_cannot_be_bypassed_for_ledger_append(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = event_store(Path(directory) / "events.jsonl")
+            with RunLease(store.state_path):
+                with self.assertRaises(TypeError):
+                    store.append(event(0), 0)
+            self.assertFalse(store.path.exists())
 
     def test_unlinked_live_event_lock_cannot_mutate_alongside_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            store = EventStore(path)
+            store = event_store(path)
             first = store._acquire()
             store._lock_path.unlink()
             second = store._acquire()
@@ -90,21 +127,21 @@ class EventStoreTests(unittest.TestCase):
                 first = None
                 with mock.patch.object(store, "_acquire", return_value=stale):
                     with self.assertRaises(SequenceConflictError) as raised:
-                        store.append(event(0), 0)
+                        append_event(store, event(0), 0)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lock_identity_changed"))
                 self.assertFalse(path.exists())
                 with self.assertRaises(SequenceConflictError):
-                    store.append(event(0), 0)
+                    append_event(store, event(0), 0)
             finally:
                 if first is not None:
                     store._release(first)
                 store._release(second)
-            store.append(event(0), 0)
+            append_event(store, event(0), 0)
 
     def test_replaced_live_event_lock_cannot_mutate_alongside_replacement(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            store = EventStore(path)
+            store = event_store(path)
             first = store._acquire()
             replacement = store._lock_path.with_name("replacement.lock")
             replacement.write_text("replacement")
@@ -115,16 +152,16 @@ class EventStoreTests(unittest.TestCase):
                 first = None
                 with mock.patch.object(store, "_acquire", return_value=stale):
                     with self.assertRaises(SequenceConflictError) as raised:
-                        store.append(event(0), 0)
+                        append_event(store, event(0), 0)
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest("lock_identity_changed"))
                 self.assertFalse(path.exists())
                 with self.assertRaises(SequenceConflictError):
-                    store.append(event(0), 0)
+                    append_event(store, event(0), 0)
             finally:
                 if first is not None:
                     store._release(first)
                 store._release(second)
-            store.append(event(0), 0)
+            append_event(store, event(0), 0)
 
     def test_oversize_record_and_ledger_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -132,36 +169,36 @@ class EventStoreTests(unittest.TestCase):
             path.write_bytes(b"x" * 65 + b"\n")
             with mock.patch("workflow_kernel.events.MAX_RECORD_BYTES", 64):
                 with self.assertRaises(CorruptEventError):
-                    EventStore(path).replay()
+                    event_store(path).replay()
             with mock.patch("workflow_kernel.events.MAX_LEDGER_BYTES", 32):
                 with self.assertRaises(CorruptEventError):
-                    EventStore(path).replay()
+                    event_store(path).replay()
 
     def test_append_rejects_oversize_record_without_changing_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            store = EventStore(path)
-            store.append(event(0), 0)
+            store = event_store(path)
+            append_event(store, event(0), 0)
             before = path.read_bytes()
             candidate = WorkflowEvent(1, 1, "run-1", None, "evidence.recorded",
                                       "2026-07-14T00:00:00Z", {"note": "x" * 256})
             with mock.patch("workflow_kernel.events.MAX_RECORD_BYTES", len(encode_event(candidate)) - 1):
                 with self.assertRaises(UnsafePayloadError):
-                    store.append(candidate, 1)
+                    append_event(store, candidate, 1)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(store.replay(), (event(0),))
 
     def test_append_rejects_projected_ledger_overflow_without_changing_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            store = EventStore(path)
-            store.append(event(0), 0)
+            store = event_store(path)
+            append_event(store, event(0), 0)
             before = path.read_bytes()
             candidate = event(1)
             projected_limit = len(before) + len(encode_event(candidate)) - 1
             with mock.patch("workflow_kernel.events.MAX_LEDGER_BYTES", projected_limit):
                 with self.assertRaises(UnsafePayloadError):
-                    store.append(candidate, 1)
+                    append_event(store, candidate, 1)
             self.assertEqual(path.read_bytes(), before)
             self.assertEqual(store.replay(), (event(0),))
 
@@ -171,20 +208,20 @@ class EventStoreTests(unittest.TestCase):
             path.write_text('{"kind":"run.initialized","node_id":null,"occurred_at":"2026-07-14T00:00:00Z","payload":{"a":{"b":{"c":1}}},"run_id":"run-1","schema_version":1,"sequence":0}\n')
             with mock.patch("workflow_kernel.schema.MAX_PAYLOAD_DEPTH", 2):
                 with self.assertRaises(CorruptEventError):
-                    EventStore(path).replay()
+                    event_store(path).replay()
 
     def test_symlinked_ledger_is_rejected_without_mutating_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / "other-run.jsonl"
-            EventStore(target).append(event(0), 0)
+            append_event(event_store(target), event(0), 0)
             before = target.read_bytes()
             alias = root / "events.jsonl"
             alias.symlink_to(target)
             with self.assertRaises(CorruptEventError):
-                EventStore(alias).validate()
+                event_store(alias).validate()
             with self.assertRaises(CorruptEventError):
-                EventStore(alias).append(event(1), 1)
+                append_event(event_store(alias), event(1), 1)
             self.assertEqual(target.read_bytes(), before)
 
     def test_symlinked_event_lock_is_rejected_without_touching_victim(self):
@@ -195,15 +232,20 @@ class EventStoreTests(unittest.TestCase):
             path.with_name(path.name + ".lock").symlink_to(victim)
             before = victim.read_bytes()
             with self.assertRaises(SequenceConflictError):
-                EventStore(path).append(event(0), 0)
+                append_event(event_store(path), event(0), 0)
             self.assertEqual(victim.read_bytes(), before)
 
     def test_event_writer_fails_closed_without_crash_safe_locking(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "events.jsonl"
-            with mock.patch("workflow_kernel._files.fcntl", None, create=True):
-                with self.assertRaises(SequenceConflictError) as raised:
-                    EventStore(path).append(event(0), 0)
+            store = event_store(path)
+            lease = RunLease(store.state_path).acquire()
+            try:
+                with mock.patch("workflow_kernel._files.fcntl", None, create=True):
+                    with self.assertRaises(SequenceConflictError) as raised:
+                        store.append(event(0), 0, lease=lease)
+            finally:
+                lease.release()
             self.assertEqual(raised.exception.details["reason_code"], detail_digest("locking_unsupported"))
             self.assertFalse(path.exists())
             self.assertFalse(path.with_name(path.name + ".lock").exists())
@@ -213,31 +255,31 @@ class EventStoreTests(unittest.TestCase):
             root = Path(directory)
             path = root / "events.jsonl"
             target = root / "other-run.jsonl"
-            EventStore(path).append(event(0), 0)
-            EventStore(target).append(event(0), 0)
+            append_event(event_store(path), event(0), 0)
+            append_event(event_store(target), event(0), 0)
             before = target.read_bytes()
-            store = EventStore(path)
+            store = event_store(path)
 
             def swap_after_replay():
-                existing = EventStore(path).replay()
+                existing = event_store(path).replay()
                 path.unlink()
                 os.link(target, path)
                 return existing
 
             with mock.patch.object(store, "replay", side_effect=swap_after_replay):
-                store.append(event(1), 1)
+                append_event(store, event(1), 1)
             self.assertEqual(target.read_bytes(), before)
 
     def test_hard_linked_ledger_is_rejected_without_mutating_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / "other-run.jsonl"
-            EventStore(target).append(event(0), 0)
+            append_event(event_store(target), event(0), 0)
             before = target.read_bytes()
             alias = root / "events.jsonl"
             os.link(target, alias)
             with self.assertRaises(CorruptEventError):
-                EventStore(alias).validate()
+                event_store(alias).validate()
             with self.assertRaises(CorruptEventError):
-                EventStore(alias).append(event(1), 1)
+                append_event(event_store(alias), event(1), 1)
             self.assertEqual(target.read_bytes(), before)

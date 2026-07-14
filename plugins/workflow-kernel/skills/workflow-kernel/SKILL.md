@@ -61,16 +61,21 @@ errors as stable JSON. Treat `--help` output as plain text.
   `from_dict()` as the boundary for untrusted mappings; unknown fields, enums,
   versions, unsafe references, and invalid JSON shapes then fail with a stable
   `KernelError.code`.
-- Use `EventStore.append(event, expected_sequence)` to append exactly the next
-  event. Records and projected ledgers that exceed durable read limits are
-  rejected before mutation. Use `EventStore.replay()` to reject gaps,
-  corruption, conflicting run IDs, and bounded-input violations.
+- Construct `EventStore(event_path, state_path)` so ledger mutation is bound to
+  the run's materialized-state lease. Use
+  `EventStore.append(event, expected_sequence, lease=same_run_lease)` to append
+  exactly the next event. The exact live `RunLease` must authorize the bound
+  state path before mutation and is revalidated immediately before the write.
+  Records and projected ledgers that exceed durable read limits are rejected.
+  Use `EventStore.replay()` to reject gaps, corruption, conflicting run IDs,
+  and bounded-input violations.
 - Use `StateStore.load()` to read the bounded materialization. Unsafe paths or
   invalid state bytes fail with `CorruptStateError.code == "corrupt_state"`.
   Use `StateStore.prepare(state)` before publishing an event that derives the
-  state. It returns an immutable capability containing the exact encoded state,
-  bound to that store; pass only that capability to
-  `StateStore.publish(prepared, expected_revision, lease=lease)`. Preparation
+  state. It returns an opaque exact-type identity capability with no exposed
+  state or encoded-byte fields. The issuing store owns the authoritative
+  validated state and exact bytes in a private weak registry; pass only that
+  capability to `StateStore.publish(prepared, expected_revision, lease=lease)`. Preparation
   validates state bytes but does not acquire or replace the live run lease.
   Coordinated CLI append prepares before event publication while holding that
   lease; direct writes compose prepare and publish automatically. Oversized
@@ -147,9 +152,10 @@ re-digested and cannot infer provenance from their shape. Only the sensitive-key
 branch emits `[REDACTED]`.
 `evidence_receipt()` value-digests caller `run_id` and `evidence_type`, sanitizes
 arbitrary metadata, and preserves only a separately validated evidence
-reference. It intentionally performs one content-addressing pass to sanitize
-and canonically encode the digest-free payload, computes that payload's digest,
-then performs one final sanitize-and-encode pass for the complete receipt.
+reference. It sanitizes one digest-free projection, canonically encodes that
+same projection for content addressing, adds the digest to the sanitized
+projection, then canonically encodes the complete receipt without another
+traversal.
 `transition_receipt()` sanitizes the full event through the shared
 event schema, including its arbitrary payload, and accepts `state_digest` only
 in the exact canonical form `sha256:<64 lowercase hex>`; raw, uppercase,

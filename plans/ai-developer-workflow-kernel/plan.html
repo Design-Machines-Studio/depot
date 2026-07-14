@@ -140,6 +140,18 @@
 class EventStore: append(event: WorkflowEvent, expected_sequence: int) -&gt; None; replay() -&gt; list[WorkflowEvent]
 class StateStore: load() -&gt; RunState; write(state: RunState, expected_revision: int) -&gt; None
 class TransitionEngine: apply(state: RunState, event: WorkflowEvent) -&gt; RunState</code></pre>
+        <h3>As-built deviation and interface — Chunk 01</h3>
+        <p>This block records the implemented hardening without rewriting the design-time decisions above. Immutable schema payloads use <code>Mapping</code> containers, replay returns a tuple, and every ledger mutation shares the run lease used for state publication.</p>
+        <pre><code>@dataclass(frozen=True) class WorkflowEvent: payload: Mapping[str, object]
+class EventStore:
+    __init__(event_path, state_path)
+    append(event: WorkflowEvent, expected_sequence: int, *, lease: RunLease) -&gt; None
+    replay() -&gt; tuple[WorkflowEvent, ...]
+class StateStore:
+    prepare(state: RunState) -&gt; PreparedState
+    publish(prepared: PreparedState, expected_revision: int, *, lease: RunLease) -&gt; dict
+    write(state: RunState, expected_revision: int, *, lease: RunLease) -&gt; dict
+class PreparedState: opaque store-issued identity capability</code></pre>
         <ol class="steps">
           <li>Write failing <code>unittest</code> cases for schema versions, strict enum parsing, secret redaction, legal transitions, illegal transitions, duplicate/gapped sequences, truncated JSONL tails, and deterministic receipt serialization.</li>
           <li>Run the focused suite and require failures caused by missing modules, not syntax or fixture mistakes.</li>

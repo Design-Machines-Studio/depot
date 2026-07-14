@@ -29,7 +29,8 @@ class KernelArgumentParser(argparse.ArgumentParser):
 
 def _paths(directory):
     root = Path(directory)
-    return root, EventStore(root / "events.jsonl"), StateStore(root / "run-state.json")
+    states = StateStore(root / "run-state.json")
+    return root, EventStore(root / "events.jsonl", states.path), states
 
 
 def _emit(value, stream=sys.stdout):
@@ -53,7 +54,7 @@ def command_init(args):
             })
         event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
         state = TransitionEngine().reconstruct((event,))
-        events.append(event, 0)
+        events.append(event, 0, lease=lease)
         evidence = states.write(state, -1, lease=lease)
     _emit({"run_id": state.run_id, "mode": state.mode.value, "status": state.status.value, "revision": state.revision,
            "durability": evidence})
@@ -82,11 +83,11 @@ def command_append(args):
     try:
         data = json.loads(args.event)
     except json.JSONDecodeError as exc:
-        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {ErrorDetailKey.OFFSET.value: exc.pos}) from exc
+        raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {ErrorDetailKey.OFFSET.value: exc.pos}) from None
     except RecursionError as exc:
         raise InvalidSchemaError(ErrorMessage.EVENT_INVALID_JSON, {
             ErrorDetailKey.REASON_CODE.value: "recursion_limit",
-        }) from exc
+        }) from None
     event = WorkflowEvent.from_dict(data)
     with _coordinated_run(states) as lease:
         existing = events.replay()
@@ -96,7 +97,7 @@ def command_append(args):
         state = TransitionEngine().reconstruct(existing)
         next_state = TransitionEngine().apply(state, event)
         prepared = states.prepare(next_state)
-        events.append(event, expected_sequence=len(existing))
+        events.append(event, expected_sequence=len(existing), lease=lease)
         evidence = states.publish(prepared, expected, lease=lease)
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})
