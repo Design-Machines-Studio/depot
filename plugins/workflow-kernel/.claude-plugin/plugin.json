@@ -1,0 +1,42 @@
+{
+  "name": "workflow-kernel",
+  "description": "Dependency-free shared workflow state, event-ledger, transition, receipt, and recovery mechanics for Design Machines automation.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
+  },
+  "keywords": [
+    "workflow",
+    "state-machine",
+    "event-ledger",
+    "recovery",
+    "receipts"
+  ],
+  "pluginDependencies": {},
+  "optionalPluginDependencies": {},
+  "capabilities": {
+    "skills": [
+      {
+        "id": "workflow-kernel",
+        "name": "Workflow Kernel",
+        "description": "Use the shared dependency-free runtime to validate, replay, and materialize workflow event ledgers.",
+        "triggers": [
+          "workflow kernel",
+          "replay workflow events",
+          "validate run state",
+          "materialize workflow state"
+        ],
+        "tags": [
+          "workflow",
+          "state-machine",
+          "event-ledger",
+          "recovery"
+        ],
+        "mcpDependencies": []
+      }
+    ],
+    "agents": [],
+    "commands": []
+  }
+}
