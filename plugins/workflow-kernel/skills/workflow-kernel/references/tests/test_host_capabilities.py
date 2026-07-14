@@ -5,13 +5,12 @@ import os
 import subprocess
 import sys
 import tempfile
-import threading
 import unittest
 import weakref
 from unittest.mock import patch
 from pathlib import Path
 
-from tests import detail_digest
+from tests import detail_digest, snapshot_during_validated_mutation
 import workflow_kernel.adapters.base as adapter_base
 from workflow_kernel.adapters.base import (
     GateDecision, HostCapabilities, HostCapability, HostRoute, NodeSpec,
@@ -19,43 +18,6 @@ from workflow_kernel.adapters.base import (
 )
 from workflow_kernel.adapters.host import capabilities_from_harness_profile
 from workflow_kernel.schema import InvalidSchemaError
-
-
-def snapshot_during_validated_mutation(value, snapshot, mutate):
-    validated = threading.Event()
-    release = threading.Event()
-    result = []
-    failure = []
-    original = adapter_base._ORIGIN_SEALS.validate
-
-    def validate(candidate, kind, primitives):
-        original(candidate, kind, primitives)
-        if candidate is value:
-            validated.set()
-            release.wait(timeout=2)
-
-    def run():
-        try:
-            result.append(snapshot(value))
-        except BaseException as error:
-            failure.append(error)
-
-    with patch.object(adapter_base._ORIGIN_SEALS, "validate", side_effect=validate):
-        worker = threading.Thread(target=run)
-        worker.start()
-        if not validated.wait(timeout=2):
-            release.set()
-            worker.join(timeout=2)
-            raise AssertionError("snapshot never reached origin validation")
-        mutate()
-        release.set()
-        worker.join(timeout=2)
-    if worker.is_alive():
-        raise AssertionError("snapshot worker did not finish")
-    if failure:
-        raise failure[0]
-    return result[0]
-
 
 class HostCapabilityTests(unittest.TestCase):
     def test_live_identities_cannot_be_resealed_through_post_init(self):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,11 +39,44 @@ class PolicyDocument:
             self.forbidden_downgrades, self.workflow_safety_anchor,
             self.economics_mode,
         )
-        try:
-            digest = _policy_payload_digest(_policy_document_payload(captured))
-        except Exception:
-            raise invalid_policy("invalid_policy_document") from None
-        _register_origin(self, "PolicyDocument", digest)
+        _register_origin(
+            self, "PolicyDocument", _policy_origin_primitives(captured),
+        )
+
+
+def _policy_origin_primitives(value: object) -> tuple:
+    """Capture policy structure without executing caller-defined behavior."""
+    value_type = type(value)
+    if value is None:
+        return ("none",)
+    if value_type in {bool, int, str}:
+        return (value_type.__name__, value)
+    if value_type in {
+        FailureReason, HostCapability, IsolationMode, WorkflowClass,
+    }:
+        return ("enum", id(value_type), value.value)
+    if value_type is dict:
+        return (
+            "dict",
+            tuple(
+                (
+                    _policy_origin_primitives(key),
+                    _policy_origin_primitives(item),
+                )
+                for key, item in value.items()
+            ),
+        )
+    if value_type in {list, tuple}:
+        return (
+            value_type.__name__,
+            tuple(_policy_origin_primitives(item) for item in value),
+        )
+    if value_type in {set, frozenset}:
+        return (
+            value_type.__name__,
+            frozenset(_policy_origin_primitives(item) for item in value),
+        )
+    return ("opaque", id(value_type), id(value))
 
 
 def _exact_keys(value: object, expected: set[str], reason: str) -> dict:
@@ -243,13 +275,6 @@ def _policy_document_payload(captured: tuple) -> dict:
     }
 
 
-def _policy_payload_digest(payload: object) -> str:
-    encoded = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
 def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
     if type(document) is not PolicyDocument:
         raise invalid_policy("invalid_policy_document")
@@ -260,6 +285,7 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
             document.forbidden_downgrades, document.workflow_safety_anchor,
             document.economics_mode,
         )
+        origin = _policy_origin_primitives(captured)
         payload = _policy_document_payload(captured)
         normalization_error = None
         try:
@@ -268,7 +294,7 @@ def _snapshot_policy_document(document: PolicyDocument) -> PolicyDocument:
             normalization_error = error
             normalized = None
         _validate_capture(
-            document, "PolicyDocument", captured, _policy_payload_digest(payload),
+            document, "PolicyDocument", captured, origin,
         )
         if normalization_error is not None:
             raise normalization_error

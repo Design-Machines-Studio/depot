@@ -18,6 +18,76 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 
 class RetryPolicyTests(unittest.TestCase):
+    def test_attempt_ledger_accessors_normalize_before_mapping_lookup(self):
+        ledger = AttemptLedger(
+            {FailureReason.CLEANUP: 1},
+            {FailureReason.CLEANUP: ("first",)},
+        )
+        for reason in (FailureReason.CLEANUP, "cleanup"):
+            with self.subTest(reason=reason):
+                self.assertEqual(ledger.count(reason), 1)
+                self.assertEqual(ledger.history(reason), ("first",))
+
+        calls = []
+
+        class EnumImpostor:
+            def __hash__(self):
+                calls.append("hash")
+                raise RuntimeError("sk-secret-ledger-hash")
+
+            def __eq__(self, other):
+                calls.append("equal")
+                raise RuntimeError("sk-secret-ledger-equal")
+
+        class FatalImpostor:
+            def __hash__(self):
+                calls.append("fatal_hash")
+                raise FatalLookup()
+
+            def __eq__(self, other):
+                calls.append("fatal_equal")
+                raise FatalLookup()
+
+        class FatalLookup(BaseException):
+            pass
+
+        for method in (ledger.count, ledger.history):
+            for value in (EnumImpostor(), FatalImpostor()):
+                with self.subTest(method=method.__name__, value=type(value).__name__):
+                    with self.assertRaises(InvalidSchemaError) as raised:
+                        method(value)
+                    self.assertEqual(
+                        raised.exception.details["reason_code"],
+                        detail_digest("unknown_failure_reason"),
+                    )
+        self.assertEqual(calls, [])
+
+    def test_attempt_ledger_accessor_snapshot_exceptions_are_normalized(self):
+        class HostileMapping(dict):
+            def items(self):
+                raise RuntimeError("sk-secret-ledger-items")
+
+        class FatalLookup(BaseException):
+            pass
+
+        class FatalMapping(dict):
+            def items(self):
+                raise FatalLookup()
+
+        for method_name in ("count", "history"):
+            hostile = AttemptLedger()
+            object.__setattr__(hostile, "counts", HostileMapping())
+            with self.subTest(method=method_name, failure="ordinary"):
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    getattr(hostile, method_name)(FailureReason.CLEANUP)
+                self.assertNotIn("sk-secret-ledger-items", repr(raised.exception))
+
+            fatal = AttemptLedger()
+            object.__setattr__(fatal, "counts", FatalMapping())
+            with self.subTest(method=method_name, failure="base"):
+                with self.assertRaises(FatalLookup):
+                    getattr(fatal, method_name)(FailureReason.CLEANUP)
+
     def test_retry_reason_enum_impostors_are_rejected_without_equality_dispatch(self):
         secret = "sk-secret-retry-detail"
         calls = []
@@ -181,6 +251,115 @@ class RetryPolicyTests(unittest.TestCase):
             self.assertNotIn(
                 "sk-secret-downgrade-detail", repr(injected_error.exception),
             )
+
+    def test_policy_origin_seal_never_executes_malformed_nested_containers(self):
+        source = Path(__file__).parents[1] / "workflow-policy.json"
+        canonical_payload = json.loads(source.read_text(encoding="utf-8"))
+        document = load_policy(source)
+        calls = []
+
+        class FatalTraversal(BaseException):
+            pass
+
+        class HostileList(list):
+            def __iter__(self):
+                calls.append("list_iter")
+                raise RuntimeError("sk-secret-list-iter")
+
+            def __repr__(self):
+                calls.append("list_repr")
+                raise RuntimeError("sk-secret-list-repr")
+
+        class FatalList(list):
+            def __iter__(self):
+                calls.append("fatal_list_iter")
+                raise FatalTraversal()
+
+            def __repr__(self):
+                calls.append("fatal_list_repr")
+                raise FatalTraversal()
+
+        class HostileDict(dict):
+            def items(self):
+                calls.append("dict_items")
+                raise RuntimeError("sk-secret-dict-items")
+
+            def __iter__(self):
+                calls.append("dict_iter")
+                raise RuntimeError("sk-secret-dict-iter")
+
+        class HostileTuple(tuple):
+            def __iter__(self):
+                calls.append("tuple_iter")
+                raise RuntimeError("sk-secret-tuple-iter")
+
+            def __repr__(self):
+                calls.append("tuple_repr")
+                raise RuntimeError("sk-secret-tuple-repr")
+
+        cases = []
+        bad_forbidden = json.loads(json.dumps(canonical_payload))
+        bad_forbidden["isolation"]["forbidden_downgrades"] = [{"bad": 1}]
+        cases.append((
+            bad_forbidden,
+            {"forbidden_downgrades": HostileList([{"bad": 1}])},
+        ))
+
+        fatal_forbidden = json.loads(json.dumps(canonical_payload))
+        fatal_forbidden["isolation"]["forbidden_downgrades"] = [{"bad": 1}]
+        cases.append((
+            fatal_forbidden,
+            {"forbidden_downgrades": FatalList([{"bad": 1}])},
+        ))
+
+        bad_budgets = json.loads(json.dumps(canonical_payload))
+        bad_budgets["retry"]["budgets"] = {}
+        cases.append((bad_budgets, {"retry_budgets": HostileDict()}))
+
+        bad_order = json.loads(json.dumps(canonical_payload))
+        bad_order["isolation"]["order"] = ["remote_sandbox"]
+        cases.append((
+            bad_order,
+            {"isolation_order": HostileTuple(("remote_sandbox",))},
+        ))
+
+        non_iterable = json.loads(json.dumps(canonical_payload))
+        non_iterable["isolation"]["forbidden_downgrades"] = None
+        cases.append((non_iterable, {"forbidden_downgrades": None}))
+
+        for payload, changes in cases:
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "policy.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError) as file_error:
+                    load_policy(path)
+            injected = replace(document, **changes)
+            with self.assertRaises(InvalidSchemaError) as injected_error:
+                GatePolicy(policy_document=injected)
+            self.assertEqual(
+                injected_error.exception.details["reason_code"],
+                file_error.exception.details["reason_code"],
+            )
+        self.assertEqual(calls, [])
+
+    def test_policy_structural_origin_detects_normal_and_malformed_mutation(self):
+        document = load_policy()
+        object.__setattr__(document, "economics_mode", "automatic")
+        with self.assertRaises(InvalidSchemaError) as normal_error:
+            GatePolicy(policy_document=document)
+        self.assertEqual(
+            normal_error.exception.details["reason_code"],
+            detail_digest("invalid_policy_document"),
+        )
+
+        mutable = replace(load_policy(), forbidden_downgrades=[])
+        mutable.forbidden_downgrades.append({"bad": 1})
+        with self.assertRaises(InvalidSchemaError) as malformed_error:
+            GatePolicy(policy_document=mutable)
+        self.assertEqual(
+            malformed_error.exception.details["reason_code"],
+            detail_digest("invalid_policy_document"),
+        )
 
     def test_attempt_ledger_seal_cannot_be_spoofed(self):
         ledger = AttemptLedger({FailureReason.CLEANUP: 1})

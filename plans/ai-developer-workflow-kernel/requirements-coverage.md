@@ -117,7 +117,10 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       payload-to-document normalizer; structural injected projection preserves
       missing anchor sections, malformed stages, and raw non-iterable or hostile
       downgrade fields so parity includes nested shape errors as well as budgets
-      and convergence. Ordinary executor nodes remain open to any compatible
+      and convergence. Policy origin registration and validation traverse exact
+      trusted built-ins only; malformed and non-exact objects use inert
+      type/identity markers without caller iteration, hashing, equality, or
+      representation. Ordinary executor nodes remain open to any compatible
       declared agentic route; security and sensitive nodes stay pinned to
       Anthropic native Claude. Routes, nodes and nested gates, capabilities,
       workflow/attempt/isolation inputs, resume contexts, handles, results,
@@ -128,13 +131,14 @@ accepted Iteration 2 cleanup-boundary feedback in `original-prompt.md`.
       fields and direct initialization re-entry have no authority. Coherent and nested mutation tests prove rewrites fail
       before route authorization or manager dispatch. Every sealed snapshot
       captures fields and nested primitives once, validates the seal derived from
-      that payload, and reconstructs without rereading caller state, while hostile ordinary
-      scalar, enum, membership, equality, hashing, iterator, and mapping failures
-      map to stable secret-safe reasons and `BaseException` propagates. Enum
+      that payload, and reconstructs without rereading caller state. Builder
+      decisions capture all parent fields before nested snapshots. Hostile
+      ordinary scalar, enum, membership, equality, hashing, iterator, and mapping
+      failures map to stable secret-safe reasons and `BaseException` propagates. Enum
       inputs are exact enum instances or exact strings only, and equality truth
       coercion is covered by the same safe boundary as comparison. Retry
-      policy snapshots its ledger once and reads the reconstructed mappings
-      directly. Chunk 05
+      policy normalizes ledger accessor keys, snapshots its ledger once, and reads
+      the reconstructed mappings directly. Chunk 05
       adds the explicit `workflowClass` manifest field and promptcraft → pipeline
       → RunSpec → event → receipt propagation; Chunk 06 validates all classes
       and legacy defaulting.

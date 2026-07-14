@@ -154,7 +154,10 @@ returns none.
   malformed nested anchor shape without dereferencing required keys first, so
   missing sections, malformed stages, non-iterable or hostile downgrade fields,
   budgets, and convergence limits reach the same normalizer and stable reason at
-  both boundaries.
+  both boundaries. Register and validate injected policy origins through inert
+  structural primitives that traverse exact trusted built-ins only. Non-exact or
+  malformed objects become type/identity markers without invoking caller
+  iteration, hashing, equality, or representation.
 - Test canonical policy/schema coherence with deterministic standard-library
   checks; the runtime uses its exact validator rather than a partial JSON Schema
   implementation. The capability array is exactly the 13 enum values at both
@@ -199,7 +202,8 @@ returns none.
   `HostCapabilities` seals primitive route tuples rather than route-object
   aliases. Each sealed-value snapshot captures every field and nested primitive
   once, derives and validates its seal from that payload, and reconstructs only
-  from that payload after validation. Snapshot/property/repr,
+  from that payload after validation. Builder decisions capture outcome, context,
+  handle, and result together before any nested snapshot. Snapshot/property/repr,
   authorization, and manager tests must reject coherent route rewrites,
   coordinated security-node rewrites, and nested gate/route mutations before
   dispatch. Public reconstruction and projection boundaries map ordinary
@@ -207,8 +211,8 @@ returns none.
   to stable secret-safe failures while allowing `BaseException` control flow to
   propagate. Enum inputs accept only the exact enum type or exact `str`, and
   equality truth coercion remains inside the same safe boundary as `==`. Retry
-  decisions snapshot the attempt ledger once, then read the
-  sealed reconstructed mappings directly.
+  decisions normalize accessor keys before snapshotting the attempt ledger once,
+  then read the sealed reconstructed mappings directly.
   `capabilities` is a derived compatibility view, never an authorization proof.
   Native, Codex companion, and `openrouter_exec` are agentic; wrapper is
   analysis/text-only. Ordinary nodes may use any compatible declared agentic

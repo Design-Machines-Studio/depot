@@ -5,7 +5,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from tests import detail_digest
+from tests import detail_digest, snapshot_during_validated_mutation
 from workflow_kernel.adapters.base import (
     BuilderObservation, BuilderOutcome, BuilderSessionDecision, GateDecision,
     AttemptLedger, HostCapabilities,
@@ -168,41 +168,8 @@ class BuilderResumeTests(unittest.TestCase):
             )
 
     def test_resume_and_handle_snapshots_use_one_validated_capture(self):
-        def interleave(value, snapshot, mutate):
-            validated = threading.Event()
-            release = threading.Event()
-            result = []
-            failure = []
-            original = adapter_base._ORIGIN_SEALS.validate
-
-            def validate(candidate, kind, primitives):
-                original(candidate, kind, primitives)
-                if candidate is value:
-                    validated.set()
-                    release.wait(timeout=2)
-
-            def run():
-                try:
-                    result.append(snapshot(value))
-                except BaseException as error:
-                    failure.append(error)
-
-            with patch.object(
-                adapter_base._ORIGIN_SEALS, "validate", side_effect=validate,
-            ):
-                worker = threading.Thread(target=run)
-                worker.start()
-                self.assertTrue(validated.wait(timeout=2))
-                mutate()
-                release.set()
-                worker.join(timeout=2)
-            self.assertFalse(worker.is_alive())
-            if failure:
-                raise failure[0]
-            return result[0]
-
         context = receipt_context()
-        captured_context = interleave(
+        captured_context = snapshot_during_validated_mutation(
             context, adapter_base._snapshot_resume_context,
             lambda: object.__setattr__(context, "run_id", "run-2"),
         )
@@ -215,11 +182,84 @@ class BuilderResumeTests(unittest.TestCase):
             object.__setattr__(candidate, "opaque_handle", "opaque-replacement")
             object.__setattr__(candidate, "context", receipt_context(run="run-2"))
 
-        captured_handle = interleave(
+        captured_handle = snapshot_during_validated_mutation(
             candidate, adapter_base._snapshot_session_handle, mutate_handle,
         )
         self.assertEqual(captured_handle.opaque_handle, "opaque-original")
         self.assertEqual(captured_handle.context.run_id, "run-1")
+
+    def test_builder_decision_captures_parent_fields_before_nested_snapshots(self):
+        original_context_snapshot = adapter_base._snapshot_resume_context
+
+        def interleave(decision, mutate):
+            entered = threading.Event()
+            release = threading.Event()
+            result = []
+            failure = []
+
+            def pause_context(value):
+                entered.set()
+                release.wait(timeout=2)
+                return original_context_snapshot(value)
+
+            def run():
+                try:
+                    result.append(adapter_base._snapshot_builder_decision(decision))
+                except BaseException as error:
+                    failure.append(error)
+
+            with patch.object(
+                adapter_base, "_snapshot_resume_context",
+                side_effect=pause_context,
+            ):
+                worker = threading.Thread(target=run)
+                worker.start()
+                self.assertTrue(entered.wait(timeout=2))
+                mutate()
+                release.set()
+                worker.join(timeout=2)
+            self.assertFalse(worker.is_alive())
+            if failure:
+                raise failure[0]
+            return result[0][1]
+
+        outcome = BuilderSessionDecision(
+            BuilderOutcome.NODE_GATE_BLOCKED, receipt_context(),
+        )
+        captured = interleave(
+            outcome,
+            lambda: object.__setattr__(
+                outcome, "outcome", BuilderOutcome.HOST_CAPABILITY_UNAVAILABLE,
+            ),
+        )
+        self.assertIs(captured.outcome, BuilderOutcome.NODE_GATE_BLOCKED)
+
+        original_handle = handle(value="opaque-original")
+        handled = BuilderSessionDecision(
+            BuilderOutcome.BUILDER_DISPATCHED, receipt_context(), original_handle,
+        )
+        captured = interleave(
+            handled,
+            lambda: object.__setattr__(
+                handled, "handle", handle(value="opaque-replacement"),
+            ),
+        )
+        self.assertEqual(captured.handle.opaque_handle, "opaque-original")
+
+        original_result = session_result()
+        resulted = BuilderSessionDecision(
+            BuilderOutcome.SESSION_RESUMED, receipt_context(), handle(),
+            original_result,
+        )
+        captured = interleave(
+            resulted,
+            lambda: object.__setattr__(
+                resulted, "result", session_result(
+                    evidence=("sha256:" + "0" * 64,),
+                ),
+            ),
+        )
+        self.assertEqual(captured.result.evidence, ())
 
     def test_module_seals_reject_nested_resume_and_decision_spoofing(self):
         manager = BuilderSessionManager(FakeHostAdapter(host_capabilities()))

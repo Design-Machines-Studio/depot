@@ -204,7 +204,9 @@ boundaries must map to stable secret-safe failures; do not intercept
 and nested primitives once, validated the seal derived from that capture, and
 reconstructed without rereading the caller object. Enum inputs accept only the
 exact enum type or exact `str`; equality truth coercion belongs inside the same
-safe boundary as the equality operation.
+safe boundary as the equality operation. Builder decisions capture outcome,
+context, handle, and result before any nested snapshot, and retry-ledger
+accessors normalize their public key before taking one sealed snapshot.
 
 Protected restore is a control-plane operation. Store `ResumeStateBlob` bytes
 only in permission-restricted package-owned storage with explicit retention and

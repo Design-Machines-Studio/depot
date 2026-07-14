@@ -764,10 +764,16 @@ class AttemptLedger:
         )
 
     def count(self, reason: FailureReason) -> int:
-        return _snapshot_attempt_ledger(self).counts.get(reason, 0)
+        normalized = _normalize_enum(
+            FailureReason, reason, "unknown_failure_reason",
+        )
+        return _snapshot_attempt_ledger(self).counts.get(normalized, 0)
 
     def history(self, reason: FailureReason) -> Tuple[str, ...]:
-        return _snapshot_attempt_ledger(self).signatures.get(reason, ())
+        normalized = _normalize_enum(
+            FailureReason, reason, "unknown_failure_reason",
+        )
+        return _snapshot_attempt_ledger(self).signatures.get(normalized, ())
 
 
 def _attempt_ledger_primitives(captured: tuple) -> tuple[object, ...]:
@@ -1650,16 +1656,21 @@ def _snapshot_builder_decision(
     if type(decision) is not BuilderSessionDecision:
         raise invalid_policy("invalid_builder_session_decision")
     try:
-        context = _snapshot_resume_context(decision.context)
+        parent = (
+            decision.outcome, decision.context, decision.handle,
+            decision.result,
+        )
+        outcome_value, context_value, handle_value, result_value = parent
+        context = _snapshot_resume_context(context_value)
         handle = (
-            None if decision.handle is None
-            else _snapshot_session_handle(decision.handle)
+            None if handle_value is None
+            else _snapshot_session_handle(handle_value)
         )
         result = (
-            None if decision.result is None
-            else _snapshot_session_result(decision.result)
+            None if result_value is None
+            else _snapshot_session_result(result_value)
         )
-        captured = (decision.outcome, context, handle, result)
+        captured = (outcome_value, context, handle, result)
         captured = _validate_capture(
             decision, "BuilderSessionDecision", captured,
             _builder_decision_primitives(captured),

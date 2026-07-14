@@ -2,6 +2,47 @@
 import hashlib
 import json
 import os
+import threading
+from unittest.mock import patch
+
+
+def snapshot_during_validated_mutation(value, snapshot, mutate):
+    """Pause one snapshot after its target seal validates, then mutate it."""
+    from workflow_kernel.adapters import base as adapter_base
+
+    validated = threading.Event()
+    release = threading.Event()
+    result = []
+    failure = []
+    original = adapter_base._ORIGIN_SEALS.validate
+
+    def validate(candidate, kind, primitives):
+        original(candidate, kind, primitives)
+        if candidate is value:
+            validated.set()
+            release.wait(timeout=2)
+
+    def run():
+        try:
+            result.append(snapshot(value))
+        except BaseException as error:
+            failure.append(error)
+
+    with patch.object(adapter_base._ORIGIN_SEALS, "validate", side_effect=validate):
+        worker = threading.Thread(target=run)
+        worker.start()
+        if not validated.wait(timeout=2):
+            release.set()
+            worker.join(timeout=2)
+            raise AssertionError("snapshot never reached origin validation")
+        mutate()
+        release.set()
+        worker.join(timeout=2)
+    if worker.is_alive():
+        raise AssertionError("snapshot worker did not finish")
+    if failure:
+        raise failure[0]
+    return result[0]
 
 
 def _json_equal(left, right):
