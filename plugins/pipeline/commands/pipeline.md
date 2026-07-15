@@ -287,6 +287,8 @@ Create the implementation plan. Two options:
 
 **Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.html` to confirm.
 
+**Authoritative workflow class:** The approved plan MUST carry one explicit `workflowClass` value in its data island: `chore|bug|feature|hotfix|security|investigation|migration`. Capture it from an explicit user decision or an already-approved upstream design/spec decision. If the class is absent or more than one class is defensible, STOP and use AskUserQuestion to have the user choose before the Phase 3 gate can pass. Planning MUST NOT infer it from changed paths, chunk kinds, risk, or keywords. The `feature` default exists only for legacy manifest consumers; it is forbidden while creating a new plan or manifest.
+
 **Plan self-review (before presenting):** Re-read your own plan and check:
 
 1. **Internal contradictions:** Do any two design decisions conflict? (e.g., "follow existing convention" in one section and "use a different approach" in another)
@@ -314,7 +316,7 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
-The manifest MUST include explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration`. Never infer it from chunk kind or file paths. A legacy missing field defaults only at consumption to `feature` with `workflow_class_defaulted=true`; pass the resulting value unchanged through RunSpec, receipts, and metrics. Security keeps all existing provider and approval overrides.
+The manifest MUST copy the approved plan island's explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration` unchanged. Never infer or independently reselect it from chunk kind, file paths, prompt prose, or risk. If the approved plan lacks the field, return to the Phase 3 user gate. A legacy missing field defaults only at consumption to `feature` with `workflow_class_defaulted=true`; pass the resulting value unchanged through RunSpec, receipts, and metrics. Security keeps all existing provider and approval overrides.
 
 **Verification:** Run `ls plans/<feature-slug>/manifest.json plans/<feature-slug>/prompts/` to confirm all files exist on disk.
 
@@ -390,7 +392,7 @@ The execution-orchestrator verifies per-chunk, but `curl` + `grep` + HTML regex 
 - **Layout regressions** -- whether a neighboring card got pushed off-screen by your margin change.
 - **Duplicate elements** -- an AC saying "Post comment button is present" passes when there are two Post comment buttons as long as at least one is there.
 
-If the orchestrator ran in `executionMode: curl_fallback`, assume ALL of the above were unverified. The caller (you) must verify them in Phase 7.
+Any UI or Integration receipt without complete browser evidence is blocked, regardless of host execution mode. Required browser cases run the recovery ladder below and cannot be delivered until complete or `human_help_required` is resolved.
 
 ### Ambiguity Protocol Check (pipeline v1.10.0+)
 
@@ -401,7 +403,7 @@ The three-layer ambiguity defence added in v1.10.0 leaves an audit trail. Inspec
 - **If trailers or the flag are present,** review the chosen path. If the chosen interpretation conflicts with what the user actually wanted, this is a Phase 7 gap -- fix inline on the feature branch, then re-run `/dm-review-quick` on the affected chunk.
 - **If neither signal is present,** either the chunks were unambiguous OR the subagents silently picked. The plan-adversary's Sprint Contract Negotiation should have caught the latter at Phase 5; if you suspect it didn't, sample one or two chunks' rendered output against the original prompt before approving merge.
 
-### Caller Verification Checklist (mandatory when ANY UI/Integration chunk was executed, OR executionMode was `curl_fallback`)
+### Caller Verification Checklist (mandatory when ANY UI/Integration chunk was executed)
 
 Complete ALL THREE checks. Record evidence in the delivery report.
 
@@ -409,7 +411,7 @@ Complete ALL THREE checks. Record evidence in the delivery report.
 - [ ] **(2) One runtime state eval per new JS module.** For each chunk that added a JS module, run `browser_evaluate` with a snippet like `typeof window.<globalName>` or `typeof document.querySelector('<selector>').dataset.<attr>` to confirm the module attached at runtime. curl confirms the file responds; `browser_evaluate` confirms it actually ran. Record the snippet and its result.
 - [ ] **(3) Cardinality check per AC containing quantity language.** For every acceptance criterion containing "exactly N", "no duplicate", "only one", "should replace", or "instead of", run a `browser_evaluate` that counts matching elements: e.g. `document.querySelectorAll('button[type=submit]').length`. An AC that says "Post comment should REPLACE the old button" passes only when count is 1, not 2.
 
-Any check that cannot be completed (no browser tools, dev server down) MUST be recorded as `FAILED -- no browser tools` in the delivery report, and the merge recommendation MUST escalate to `BLOCKED PENDING CALLER VERIFICATION`. Do NOT deliver as "ready" without these evidence items.
+Any required check that cannot initially run because the browser, dev server, authentication fixture, route binding, or verification profile is unavailable MUST preserve the failed attempt, quit the primary browser process/session, launch a fresh primary session and retry, try a different configured browser, then stop with blocked `human_help_required` and ask the user to restore the missing prerequisite. Do NOT deliver as "ready" and do not convert the case to skipped, deferred, degraded, or proceed-without-browser.
 
 Use the complete verification profile selected from project configuration and `tests/ux/` declarations: persona, scenario, concrete route, browser engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent; a present but incomplete declaration is blocking. Required browser failure follows the evidence-preserving ladder: quit the browser process/session, launch a demonstrably fresh primary session and retry, try a genuinely different configured engine, then stop with `human_help_required` and the exact missing case IDs. Curl is diagnostic only and never produces `BROWSER_VERIFIED`.
 
@@ -454,7 +456,7 @@ If gaps are found, present them as part of the delivery. Do not present the bran
 
 Assertions without evidence are findings, not verifications. "Verified: sidebar looks good" is NOT acceptable. "Verified: sidebar headings use 0.875rem / 400 weight / var(--color-muted) per getComputedStyle" IS acceptable.
 
-If you cannot provide evidence (no browser tools), you MUST state: "Visual verification incomplete -- no browser tools available. The following requirements could not be visually verified: [list]." This is NOT a passing verification.
+If evidence is still unavailable after the required recovery ladder, emit blocked `human_help_required` with every attempt and exact missing case IDs, ask the user for help, and stop delivery. This is never a passing, skipped, or deferred verification.
 
 **Requirements cross-check (ledger item 13):** Use the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. (At this phase, re-read original-prompt.md is justified ONLY if the user has layered feedback on during execution -- otherwise the cache is authoritative.) Verify every Key Requirement was addressed in the final branch. Each entry requires an evidence type:
 
@@ -537,9 +539,9 @@ Before delivering to the user, verify your own compliance by answering these que
 9. Did the orchestrator run dm-review-loop after each chunk?
 10. Did the orchestrator run a final full dm-review?
 11. Did the orchestrator record the session to ai-memory?
-12. **Curl-fallback audit:** If the orchestrator ran in `executionMode: curl_fallback`, did I complete the 3-item Caller Verification Checklist (screenshot, runtime eval, cardinality) with attached evidence? If the answer is "no" for any item, this self-audit FAILS LOUDLY -- I must not deliver until every check has evidence or the merge recommendation is set to `BLOCKED PENDING CALLER VERIFICATION`. "I ran curl and grep" is NOT visual verification.
+12. **Browser authority audit:** Did every required UI/Integration case produce browser evidence, or a blocked `human_help_required` receipt after primary quit, fresh-primary retry, and different-browser attempt? Curl and grep are not visual verification.
 13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
-14. If the feature involved UI work beyond curl_fallback mode, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
+14. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
 15. **Codify audit:** If the run had friction (findings, >1 review iteration, a resolved ambiguity, or a repeated guardrail trip), did the orchestrator run the codify loop (Step 5.2)? For any failure pattern not already in CLAUDE.md "Known Pipeline Failure Modes," did it surface a postmortem stub + candidate Known Failure Mode entry as a Codify Proposal, rather than silently swallowing a novel failure? A new failure that produces no codify proposal is a missed compounding opportunity.
 16. **Run economics audit:** Did the orchestrator write `plans/<feature-slug>/run-postmortem.md`, report measured `providerSplit`, append `docs/pipeline-metrics/ledger.md`, and label recommendations `AWAITING APPROVAL`? A run that skips the post-mortem FAILS the self-audit.
 

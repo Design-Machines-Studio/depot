@@ -169,7 +169,7 @@ The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list 
 
 ## Progress Ledger
 
-Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), `manual_walkthrough` (user is driving some steps), or `curl_fallback` (degraded -- no browser tools). Include the label in every chunk receipt and in the final Summary Report.
+Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), or `manual_walkthrough` (user is driving some steps). Browser availability is a separate required-evidence status and never an execution mode. Include the label in every chunk receipt and in the final Summary Report.
 
 Before any chunk runs:
 
@@ -190,7 +190,7 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 8. Run Playwright browser check (UI and Integration chunks only)
 [chunk-id] 9. Merge back to feature branch
 [chunk-id] 10. Clean up worktree
-[chunk-id] executionMode: full_cli | codex_native | manual_walkthrough | curl_fallback
+[chunk-id] executionMode: full_cli | codex_native | manual_walkthrough
 ```
 
 After all chunks:
@@ -258,9 +258,9 @@ Also check for Chrome DevTools MCP:
 
 ### 3. Decision gate
 
-**If UI/Integration chunks > 0 AND no browser MCP tools found:**
+**If UI/Integration chunks > 0 AND no browser MCP tools are initially found:**
 
-STOP. Output:
+Treat discovery failure as the first failed required-browser attempt. Preserve the safe discovery evidence, attempt to quit the primary browser process/engine session, attempt a demonstrably fresh primary launch and retry discovery, then attempt a genuinely different configured browser engine. Record an unavailable attempt when the host cannot perform a recovery action. If the ladder is exhausted, output:
 
 ```text
 BLOCKED: This manifest contains [N] UI/Integration chunks that require browser verification, but no Playwright or Chrome DevTools MCP tools are available. Visual verification cannot be performed.
@@ -268,7 +268,7 @@ BLOCKED: This manifest contains [N] UI/Integration chunks that require browser v
 Fix: Ensure a Playwright or Chrome DevTools MCP server is running before pipeline execution.
 ```
 
-Record the required cases as blocked `human_help_required` with `browser_tool_unavailable` evidence and ask the user to restore a browser engine. Do not offer curl or a silent skip as completion for required browser work. The authoritative merge recommendation remains `BLOCKED PENDING CALLER VERIFICATION` until complete browser evidence exists.
+Record the required cases as blocked `human_help_required` with the initial discovery plus primary-quit, fresh-primary, and different-engine attempt evidence, then ask the user to restore a browser engine. Do not offer curl or a silent skip as completion for required browser work. The authoritative merge recommendation remains `BLOCKED PENDING CALLER VERIFICATION` until complete browser evidence exists.
 
 **If browser tools are available:**
 
@@ -518,9 +518,22 @@ Mark `[chunk-id] 2. Create worktree` complete, or `branch selected` for `sequent
 
 #### Docker/Compose creation ownership
 
-Before any later step creates a Docker container, network, named volume, or Compose project for this run, call kernel `plan-create` or `plan-compose` with the exact argv JSON. These planning commands only return validated label-instrumented argv and ownership proof; they do not execute. The authoritative orchestrator executes only that returned argv/labels-only Compose override. Caller-supplied project names, ambiguous forms, anonymous/external resources, symlink escapes, or unsupported instrumentation are recorded `unmanaged/retained`, never guessed owned by name.
+Before any later step creates a Docker container, network, named volume, or Compose project for this run, invoke exactly one of:
 
-Immediately after the creation attempt, call `record-create` with the command result and fresh before/after inventories. Register partial Compose creation as individual resources. Every managed object must carry the complete `com.designmachines.depot.*` ownership labels before creation. If planning or registration cannot prove ownership, do not later auto-remove the object.
+```text
+python3 -m workflow_kernel plan-create --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
+python3 -m workflow_kernel plan-compose --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
+```
+
+These planning commands only return validated label-instrumented creation argv and ownership proof; they do not execute. The authoritative orchestrator executes that returned creation argv/labels-only Compose override exactly once. Caller-supplied project names, ambiguous forms, anonymous/external resources, symlink escapes, or unsupported instrumentation are recorded `unmanaged/retained`, never guessed owned by name. This creation execution is separate from cleanup: returned cleanup argv is never executed outside `execute-cleanup-step`.
+
+Immediately after the creation attempt, invoke:
+
+```text
+python3 -m workflow_kernel record-create --state-dir PATH --plan PATH --result PATH --before-inventory PATH --after-inventory PATH
+```
+
+Register partial Compose creation as individual resources. Every managed object must carry the complete `com.designmachines.depot.*` ownership labels before creation. If planning or registration cannot prove ownership, do not later auto-remove the object.
 
 ### 3c: Apply Input Guardrails
 
@@ -901,9 +914,7 @@ For UI and Integration chunks, verify the rendered output in a browser against t
 
 Discover the complete verification profile from project configuration and `tests/ux/` task frontmatter. Required coverage is the exact declared set of persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation cases. `not_declared` is valid only when declarations are absent. A present but incomplete declaration, unresolved route binding, missing auth fixture, or missing case evidence is blocking; never replace the project case set with a fixed two-persona sample.
 
-**If Playwright MCP tools are unavailable,** STOP and ask the user: "Playwright browser tools are unavailable. Visual verification cannot be performed for this UI chunk. Proceed without visual check, or fix the tool issue first?" Do NOT silently continue.
-
-**If dev server is not running,** STOP and ask the user: "No dev server detected. Visual verification requires a running application. Start the dev server, or proceed without visual check?" Do NOT silently continue.
+**If browser tools, the dev server, authentication fixture, route binding, or verification profile is unavailable,** treat that as the initial failed required attempt. Preserve safe evidence, run the mandatory recovery ladder (primary process/session quit -> demonstrably fresh primary retry -> different configured browser), then emit blocked `human_help_required` with the exact missing case IDs and ask the user to restore the prerequisite. There is no proceed-without-browser, skipped, deferred, degraded, or curl-proof path for UI/Integration work.
 
 #### Step 1: Design Spec Discovery
 
@@ -990,7 +1001,7 @@ When the chunk's acceptance criteria include a parity requirement ("visually ide
    PARITY MISMATCH: background-color -- reference: rgb(240,248,240), target: rgb(220,240,220)
    ```
 4. **Severity:** Parity mismatches are **P1 findings** when the user explicitly requested visual identity. These are not optional polish.
-5. **Fallback:** If `browser_evaluate` cannot run (no browser tools), log: "Parity diff skipped -- no browser tools available" and flag as DEFERRED with explicit justification. Do NOT silently skip.
+5. **Unavailable evaluation:** If `browser_evaluate` cannot run, preserve the failed attempt and run the same primary-quit, fresh-primary, different-browser recovery ladder. If still unavailable, emit blocked `human_help_required`, ask the user for help, and stop. Never skip or defer a required parity diff.
 
 **Baseline comparison:** If `plans/<feature-slug>/baselines/` exists (created by the assess phase), also compare post-implementation screenshots against the baseline:
 
@@ -1012,7 +1023,7 @@ For required browser-tooling failure, first persist safe attempt evidence, then 
 
 After the authoritative `BROWSER_VERIFIED` or blocked human-help receipt exists, run `observe-pipeline`. A recovered alternate-engine pass remains degraded recovery evidence, not first-pass clean.
 
-Mark `[chunk-id] 8. Run visual verification` complete (or "skipped: [reason]").
+Mark `[chunk-id] 8. Run visual verification` complete only with complete required evidence. Otherwise mark it `blocked: human_help_required` and stop for user help; never mark it skipped or deferred.
 
 ### 3i: Merge Back
 
@@ -1054,7 +1065,16 @@ Write the authoritative merge disposition, then run `observe-pipeline` against t
 
 This boundary runs only after deterministic validation, review/evaluation, required evidence capture (or an explicit blocked receipt), and merge disposition are authoritative. It cleans both registered Docker resources and Git refs for this chunk.
 
-Read the chunk's registered resources and call `plan-cleanup`; the returned plan is a proposal, not execution authority. Iterate with `next-cleanup-step`, then call `execute-cleanup-step` for exactly that immutable plan and step index with a fresh exact-ID inventory, complete fresh authoritative status proof for every declared dependent node, the gap-free prior outcomes, and any required successful predecessor result. `execute-cleanup-step` is the only non-splittable authorization/execution boundary: never execute returned cleanup argv separately and never pass a free-standing capability. For `stop-remove`, the guarded step uses a bounded stop before exact-ID removal. Actionless `MISSING` steps perform a fresh exact-ID inspect inside the same registry guard.
+Read the chunk's registered resources and use these exact interfaces:
+
+```text
+python3 -m workflow_kernel plan-cleanup --state-dir PATH --run-id ID --node-id ID --output PATH
+python3 -m workflow_kernel next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH
+python3 -m workflow_kernel execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH
+python3 -m workflow_kernel record-cleanup --state-dir PATH --plan PATH --outcomes PATH
+```
+
+`plan-cleanup` and `next-cleanup-step` return proposals/eligibility only. `execute-cleanup-step` is the only non-splittable authorization/execution boundary for exactly that immutable plan and step index with a fresh exact-ID inventory, complete fresh authoritative status proof for every declared dependent node, the gap-free prior outcomes, and any required successful predecessor result. Never execute any cleanup argv returned by planning separately and never pass a free-standing capability. For `stop-remove`, the guarded step uses a bounded stop before exact-ID removal. Actionless `MISSING` steps perform a fresh exact-ID inspect inside the same registry guard.
 
 Append each registry-issued command or terminal-observation outcome durably and in order, stop on blocked/unsafe/conflicting evidence, then call `record-cleanup` with the complete gap-free outcome sequence. Retain run-lifecycle resources while any declared dependent is incomplete. Cleanup failure or missing proof is `blocked/retained`, never reported clean. Broad prune, wildcards, negative filters, and name-based ownership are forbidden.
 
@@ -1169,7 +1189,7 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 - `CLEAN` -- zero findings at any severity, dev server verified, all chunks passed visual verification.
 - `APPROVE WITH FIXES` -- zero P1, any P2/P3 findings resolved before this line is emitted (zero-deferral). Emit only when every finding from the final review is resolved.
 - `BLOCKS MERGE` -- any P1 remains, or any finding could not be resolved.
-- `BLOCKED PENDING CALLER VERIFICATION` -- the Progress Ledger has `degradedMode=curl_fallback` for ANY chunk. Emit this regardless of review findings. The caller must complete Phase 7 visual verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
+- `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Emit this regardless of review findings. The caller must resolve the blocked case and complete browser verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
 
 **Docker verification (Assembly projects):** Before emitting any merge recommendation, run `docker compose exec app go build ./cmd/api && docker compose exec app go test ./...` to confirm the feature branch compiles and passes tests inside the container. A merge recommendation emitted without a passing Docker build is invalid.
 
@@ -1197,7 +1217,7 @@ Template:
 Feature: <feature-slug>
 Date: <YYYY-MM-DD>
 Branch: <featureBranch>
-executionMode: <full_cli | codex_native | manual_walkthrough | curl_fallback>
+executionMode: <full_cli | codex_native | manual_walkthrough>
 
 | # | Requirement | Addressed In | Evidence |
 |---|-------------|--------------|----------|
@@ -1298,15 +1318,30 @@ Mark `FINAL 5. Run Post-Mortem` complete.
 
 ## Step 5b: Artifact and Repository Cleanup
 
-Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`), then clean up git refs per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
+Reconcile authoritative Docker ownership first, then clean artifacts and Git refs, then write the final authoritative cleanup/terminal receipt, and only then run shadow observation/comparison/metrics. This order is mandatory.
+
+`STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> shadow_tier2_delete_on_match`
 
 **This step is mandatory and runs on every exit path** -- success, review failure, chunk-blocking failure, pipeline-blocking failure, and every answer to the caller's Phase 7 gate. If the run is aborting because of an exception, this step still runs: it is deterministic git and cannot make the failure worse.
 
-Before writing the terminal receipt or deleting run-scoped artifacts, observe the final authoritative receipts, run `compare`, then run `metrics` when the trusted runtime is available. Record the semantic result or honest unavailability in the receipt. These commands are side-effect free and cannot alter the cleanup plan or run result.
+### 1. Docker terminal reconciliation
 
-### 1. Write receipt
+On every terminal path, invoke:
 
-Create `plans/<feature-slug>/receipt.md`:
+```text
+python3 -m workflow_kernel plan-reconcile --state-dir PATH --run-id ID --ttl-hours 24 --output PATH
+python3 -m workflow_kernel next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH
+python3 -m workflow_kernel execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH
+python3 -m workflow_kernel record-cleanup --state-dir PATH --plan PATH --outcomes PATH
+```
+
+`plan-reconcile` and `next-cleanup-step` are proposal/eligibility interfaces only. For every proposed action or actionless missing observation, `execute-cleanup-step` is the sole guarded authorization-and-execution boundary. Supply fresh exact-ID inventory, complete authoritative dependent-node statuses, ordered prior outcomes, and any required predecessor result. Never execute returned cleanup argv separately. Persist only registry-issued outcomes with `record-cleanup`.
+
+Reconciliation covers registered resources missed by an interrupted chunk and eligible stale orphans with complete labels plus fresh inactive-lease proof. Retain run-shared resources while any dependent is incomplete. Never broad-prune Docker, infer ownership by name, remove in-use networks/volumes, or report blocked/uninspectable resources clean. Capture Docker before/after inventories and every `removed|missing|retained|blocked|unmanaged` disposition before constructing the receipt.
+
+### Final receipt schema (write only after Steps 1-4)
+
+Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and readiness checks are complete. Do not write or finalize any field before its authoritative outcome exists.
 
 ```markdown
 # Pipeline Receipt: <feature-slug>
@@ -1319,7 +1354,6 @@ Create `plans/<feature-slug>/receipt.md`:
 - Mode: <executionMode>
 - Workflow class: <workflowClass>
 - Workflow class defaulted: <true|false>
-- Shadow: <match|parity-gap|unavailable>
 - providerSplit: {claude: N, codex: N, openrouter: N, deepseek: N}
 
 ## Evidence
@@ -1354,7 +1388,7 @@ Create `plans/<feature-slug>/receipt.md`:
 
 Every registered ref appears exactly once under "Created this run". A blocked ref is never reported as deleted and never omitted -- reporting a ref as gone when it still exists converts a visible mess into an invisible one.
 
-### 2. Delete artifacts by tier
+### 2. Artifact cleanup
 
 **Always (success or failure) -- delete Tier 1 (ephemeral):**
 
@@ -1369,17 +1403,9 @@ rm -rf plans/<feature-slug>/prompts/
 rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.html
 ```
 
-After a successful terminal comparison with semantic `match`, also remove `run-state.json`, `events.jsonl`, and `shadow-report.json`. Preserve them when comparison reports a parity gap, missing evidence, unsafe-to-promote state, runtime unavailability, or write conflict.
-
 On failure, preserve Tier 2 for debugging. Log: `Artifact cleanup (partial -- run failed): preserved prompts and manifest for debugging.`
 
-Complete shadow comparison and metrics before deleting shadow Tier 2 files. Preserve shadow state on failure, unavailable runtime, or parity investigation; it never authorizes a disposition.
-
-### 2b. Docker terminal reconciliation
-
-After artifact disposition and on every terminal path, call `plan-reconcile --state-dir ... --run-id ... --ttl-hours 24 --output ...`. The plan is a proposal only. For each proposed action or actionless missing observation, repeat the exact Step 3j `next-cleanup-step` plus guarded `execute-cleanup-step` sequence with fresh exact-ID inventory, complete authoritative dependent-node statuses, ordered prior outcomes, and required predecessor result; never execute returned argv separately. Persist only registry-issued outcomes with `record-cleanup`.
-
-Reconciliation covers registered resources missed by an interrupted chunk and eligible stale orphans with complete labels plus fresh inactive-lease proof. Retain run-shared resources while any dependent is incomplete. Never broad-prune Docker, infer ownership by name, remove in-use networks/volumes, or report blocked/uninspectable resources clean. Record Docker before/after inventories and every `removed|missing|retained|blocked|unmanaged` disposition alongside the Git inventory.
+Do not delete `run-state.json`, `events.jsonl`, or `shadow-report.json` here. Shadow Tier 2 remains until Step 6 has compared the complete final authoritative receipt.
 
 ### 3. Repository cleanup
 
@@ -1459,7 +1485,9 @@ git worktree list --porcelain   # expect: no prunable entries, no .worktrees/pip
 git status --porcelain          # expect: empty
 ```
 
-### 5. Report
+### 5. Final authoritative cleanup/terminal receipt and report
+
+Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state.
 
 Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, retained K feature-scoped files.`
 
@@ -1475,6 +1503,12 @@ for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/dep
 done
 if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deliver"; fi
 ```
+
+### 6. Shadow observation, comparison, metrics, and shadow Tier 2 disposition
+
+Only after the complete final authoritative cleanup/terminal receipt exists, run `observe-pipeline`, then `compare`, then `metrics` when the trusted runtime is available. These commands are observation-only and cannot alter Docker, Git, artifact, merge, review, or receipt outcomes.
+
+Delete `run-state.json`, `events.jsonl`, and `shadow-report.json` only when comparison returns semantic `match`. Preserve them for `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, `unsafe_to_promote`, runtime unavailability, invalid input, unsafe/blocked, or write conflict. Record the comparison/metrics disposition in the final summary without rewriting the authoritative cleanup receipt.
 
 Mark `FINAL 5b. Artifact and repository cleanup` complete.
 
@@ -1533,7 +1567,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - **Mode:** Full (all agents)
 - **Result:** Clean / N findings remaining
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
-- **executionMode:** full_cli / codex_native / manual_walkthrough / curl_fallback
+- **executionMode:** full_cli / codex_native / manual_walkthrough
 - **providerSplit:** `{claude: N, codex: N, openrouter: N, deepseek: N}` measured from run receipts/postmortem
 - **workflowClass:** `<class>` (`workflow_class_defaulted=true|false`)
 - **shadow:** match / parity-gap / unavailable (reason)
@@ -1589,7 +1623,7 @@ docs/post-mortems/. If the run was clean, state "None -- clean run, nothing to c
 - Recommendation status: AWAITING APPROVAL
 
 ## Warnings
-[List any browser verification skips, degraded reviews, or anti-pattern findings that were fixed]
+[List any recovered browser attempts, unresolved `human_help_required` browser blockers, degraded non-browser reviews, or anti-pattern findings that were fixed. Required browser verification is never skipped.]
 
 ## Flagged Items
 [Any chunks or findings needing manual attention]

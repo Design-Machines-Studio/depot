@@ -49,7 +49,20 @@ Resolve the runtime relative to the real path of the currently executing canonic
 
 Translate an explicit `workflowClass` unchanged; when absent, use `feature` and record `workflow_class_defaulted=true`. Never infer it from diff kind, path, finding, or severity. Observe only after an authoritative lane/consolidation/cleanup receipt exists. At the end, compare and aggregate metrics without changing review state. Shadow events and builder observations never replace authoritative dispatch/resume receipts.
 
-If review setup creates any Docker/Compose resource, first use kernel `plan-create` or `plan-compose` and execute only the returned label-instrumented argv/override, then immediately call `record-create` with result and fresh before/after inventories. Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned.
+If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
+
+```text
+python3 -m workflow_kernel plan-create --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
+python3 -m workflow_kernel plan-compose --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
+```
+
+Execute only its returned label-instrumented creation argv/override exactly once, then immediately invoke:
+
+```text
+python3 -m workflow_kernel record-create --state-dir PATH --plan PATH --result PATH --before-inventory PATH --after-inventory PATH
+```
+
+Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned. No returned cleanup argv is ever executed separately.
 
 ## Fix Philosophy
 
@@ -301,7 +314,7 @@ Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/
 
 1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (openrouter-bulk-analyst or deepseek-bulk-analyst), it receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
-3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
+3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped. If required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input; do not proceed without the lane.
 
 If any agents were dropped or input was modified, report before proceeding:
 
@@ -309,7 +322,7 @@ If any agents were dropped or input was modified, report before proceeding:
 Input guardrails applied:
 - Diff truncated from 8,200 to 5,000 lines (200 lines/file cap)
 - Stripped 2 sensitive files from non-security agents: .env, config/secrets.yml
-- Dropped 1 agent: visual-browser-tester (token budget)
+- Blocked required browser lane: human_help_required (token budget; user input needed)
 ```
 
 ---
@@ -450,7 +463,7 @@ The `visual-browser-tester`, `ux-quality-reviewer`, and `ui-standards-reviewer` 
 
 For declared UI coverage, discover the complete project verification profile from configuration and `tests/ux/` task frontmatter: persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent. Present but incomplete declarations, unresolved route bindings, or missing required evidence block a clean review and appear in Coverage Gaps.
 
-On browser-tooling failure, each required case preserves safe attempt evidence, quits the primary browser process/engine session, launches a demonstrably fresh primary profile and retries once, then tries a genuinely different configured engine. If recovery cannot complete, report `human_help_required` with every attempt and exact missing case IDs. Do not silently return Skipped. Curl/reachability is diagnostic only and never browser evidence. Product/application assertion failures are findings and do not trigger the recovery ladder.
+On missing browser tools, dev server, authentication fixture, route binding, or verification profile, each required case preserves safe attempt evidence, quits the primary browser process/engine session, launches a demonstrably fresh primary profile and retries once, then tries a genuinely different configured engine. If recovery cannot complete, report blocked `human_help_required` with every attempt and exact missing case IDs, ask the user for help, and stop the review. Do not return Skipped, deferred, degraded, or proceed-without-browser. Curl/reachability is diagnostic only and never browser evidence. Product/application assertion failures are findings and do not trigger the recovery ladder.
 
 **Design spec injection:** When `design_spec_context` was discovered in Phase 3.25, append it to the prompt for ALL THREE browser-based agents (visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer). Add this section after `## Caller-Provided Context`:
 
@@ -478,10 +491,10 @@ When no design spec exists, omit this section entirely. The browser agents will 
 
 Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-- If an agent fails or times out (>120s), record the failure in the Agent Summary table and proceed
+- If a non-browser agent fails or times out (>120s), record the failure in the Agent Summary table and apply the documented lane policy. A required browser agent instead runs browser recovery and, on exhaustion, blocks with `human_help_required` and asks the user for help.
 - For agents routed to external LLMs, defer failure classification to Phase 4.5 before applying these policies
 - If a **core agent** (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation
-- If all conditional agents fail but core agents succeed, the review is "Degraded" but still valid
+- If all non-browser conditional agents fail but core agents succeed, the review is "Degraded" but still valid. Missing required browser evidence is never degraded-valid.
 - See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full failure classification table
 
 ---
@@ -771,7 +784,7 @@ After the project-level memory capture, record depot-level metrics. This tracks 
 1. Search for `DepotMetrics` entity -- create if missing (type: System)
 2. Add ONE batched observation summarizing the agent dispatch:
    `[YYYY-MM-DD] Review session: X/Y agents completed, Z skipped (<agent>: <reason>, ...)`
-   - Example: `[2026-03-25] Review session: 9/11 agents completed, 2 skipped (visual-browser-tester: no dev server, craft-reviewer: no .twig files)`
+   - Example: `[2026-03-25] Review session: 9/11 agents completed, 1 unavailable (craft-reviewer: no .twig files), browser: human_help_required (dev server unavailable after recovery)`
 3. Search for `DepotPlugin:dm-review` entity -- create if missing (type: PluginMetrics)
 4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
 5. Call `save` to persist
@@ -815,7 +828,7 @@ dm-review creates no worktrees. Its obligations are narrower than pipeline's:
 4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
 5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
 
-dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Call `plan-cleanup` (and terminal `plan-reconcile`) as proposal generation, then iterate `next-cleanup-step` plus the guarded `execute-cleanup-step` with fresh exact-ID inventory, complete authoritative dependent-node statuses, ordered prior outcomes, and predecessor result. Never execute proposed cleanup argv separately. Persist only registry-issued ordered outcomes through `record-cleanup`; actionless missing requires fresh exact-ID inspect inside the guard. Retain unmanaged, incomplete-label, in-use, uninspectable, run-shared, or incomplete-dependent resources and report exact follow-up. Broad Docker prune and name-based ownership are forbidden.
+dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Invoke `plan-cleanup --state-dir PATH --run-id ID [--node-id ID] --output PATH` (and terminal `plan-reconcile --state-dir PATH --run-id ID --ttl-hours 24 --output PATH`) as proposal generation, then iterate `next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH` plus guarded `execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH`. Never execute proposed cleanup argv separately. Persist only registry-issued ordered outcomes through `record-cleanup --state-dir PATH --plan PATH --outcomes PATH`; actionless missing requires fresh exact-ID inspect inside the guard. Retain unmanaged, incomplete-label, in-use, uninspectable, run-shared, or incomplete-dependent resources and report exact follow-up. Broad Docker prune and name-based ownership are forbidden.
 
 The cleanup report includes Docker before/after inventories and `removed|missing|retained|blocked|unmanaged` dispositions alongside Git. Cleanup runs on every terminal path. A cleanup failure never becomes a clean disposition or changes the authoritative code-review finding result.
 

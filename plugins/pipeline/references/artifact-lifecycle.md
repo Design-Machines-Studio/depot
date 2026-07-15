@@ -66,23 +66,26 @@ Protected builder restore blobs are not ordinary artifacts. Store them only in p
 
 ## Cleanup Rules
 
-Artifact cleanup (below) and repository cleanup (`repo-cleanup-contract.md`) both run in Step 5b, on every exit path -- success, failure, and every answer to the Phase 7 gate. Artifact disposition varies by outcome; the repository cleanup phase does not.
+Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: Docker reconciliation; artifact and Git cleanup; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; shadow Tier 2 deletion only on semantic `match`. Receipt fields never precede their Docker/Git/artifact outcomes.
 
 ### On successful pipeline completion (Step 5b)
 
-1. Write `plans/<feature-slug>/receipt.md`
-2. Delete all Tier 1 files: `rm -rf plans/<slug>/baselines/ baselines-pre-fix/ baselines-post-fix/ screenshots/`
-3. Delete all Tier 2 files: `rm -rf plans/<slug>/prompts/` and `rm -f plans/<slug>/manifest.json plans/<slug>/brainstorm.html`
-4. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`
+1. Complete authoritative Docker terminal reconciliation and capture before/after inventories plus every disposition.
+2. Delete all non-shadow Tier 1 and Tier 2 artifacts and complete Git cleanup/readiness checks.
+3. Write `plans/<feature-slug>/receipt.md` from those completed authoritative outcomes.
+4. Run shadow observation, comparison, and metrics against the final receipt.
+5. Delete `run-state.json`, `events.jsonl`, and `shadow-report.json` only on semantic `match`; otherwise preserve them for investigation.
+6. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`.
 
-Delete `run-state.json`, `events.jsonl`, and `shadow-report.json` only after the terminal comparison, metrics aggregation, receipt write, and reconciliation receipt are complete. Preserve them on failure or parity/unavailability investigation. Shadow artifacts never authorize cleanup or substitute for an authoritative receipt.
+Shadow artifacts never authorize cleanup, supply receipt fields, or substitute for an authoritative receipt.
 
 ### On failed pipeline run (Step 5b)
 
-1. Write `plans/<feature-slug>/receipt.md` with failure details
-2. Delete Tier 1 only (screenshots valueless after failure)
-3. Preserve Tier 2 (prompts/manifest useful for retry/debugging)
-4. Report: `Artifact cleanup (partial -- run failed): removed N ephemeral files, preserved prompts for debugging`
+1. Complete authoritative Docker reconciliation and Git cleanup/readiness checks.
+2. Delete Tier 1 only; preserve non-shadow Tier 2 for retry/debugging.
+3. Write `plans/<feature-slug>/receipt.md` with completed failure and cleanup outcomes.
+4. Run shadow observation/comparison/metrics and preserve shadow Tier 2.
+5. Report: `Artifact cleanup (partial -- run failed): removed N ephemeral files, preserved prompts for debugging`.
 
 ### On user "Done" at Phase 7 GATE
 
@@ -110,10 +113,9 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 - Branch: <featureBranch>
 - Merge: CLEAN | APPROVE WITH FIXES | BLOCKS MERGE
 - Chunks: N executed, M parallel
-- Mode: full_cli | curl_fallback
+- Mode: full_cli | codex_native | manual_walkthrough
 - Workflow class: chore | bug | feature | hotfix | security | investigation | migration
 - Workflow class defaulted: true | false
-- Shadow: match | parity-gap | unavailable
 
 ## Evidence
 | # | Requirement | Evidence |

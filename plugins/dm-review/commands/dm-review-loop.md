@@ -49,7 +49,7 @@ workflowClass = explicit request value, else "feature" with workflow_class_defau
 shadow_state = trusted runtime state directory, or "shadow unavailable"
 ```
 
-The canonical loop state and todo files remain authoritative. After each complete review/fix iteration receipt, call `observe-review` when the trusted runtime is available. Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
+The canonical loop state and todo files remain authoritative. Pass the exact `workflowClass` and `workflow_class_defaulted` values into every nested `/dm-review-quick` or `/dm-review`, every `/dm-review-fix`, every final re-review, every iteration receipt, and the terminal receipt. Nested commands MUST NOT re-default, infer, or change the class. After each complete review/fix iteration receipt, call `observe-review` when the trusted runtime is available. Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
 
 ### 2. Review-Fix Loop
 
@@ -59,9 +59,9 @@ while iteration < max_iterations:
 
   # Run review
   if mode == "quick":
-    Run /dm-review-quick {target}
+    Run /dm-review-quick {target} with workflowClass and workflow_class_defaulted forwarded unchanged
   else:
-    Run /dm-review {target}
+    Run /dm-review {target} with workflowClass and workflow_class_defaulted forwarded unchanged
 
   # Check for findings
   Count findings in todos/*-pending-*.md
@@ -85,14 +85,14 @@ while iteration < max_iterations:
   # Under zero-deferral (default), dm-review-fix addresses every pending finding.
   # Under --allow-defer-p3, P3s may be triaged; P1/P2 still mandatory.
   if allow_defer_p3:
-    Run /dm-review-fix --allow-defer-p3
+    Run /dm-review-fix --allow-defer-p3 with workflowClass and workflow_class_defaulted forwarded unchanged
   else:
-    Run /dm-review-fix
+    Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged
   # dm-review-fix resolves and cleans up todo files
 
   # If this was the last iteration, run one final review to verify
   if iteration == max_iterations:
-    Run review one more time (same mode)
+    Run review one more time (same mode) with workflowClass and workflow_class_defaulted forwarded unchanged
     Count remaining findings
     if findings == 0:
       Report: "Clean after {iteration} iteration(s) with fixes."
