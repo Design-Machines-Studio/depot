@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -225,6 +226,39 @@ def _write_json(path, value):
         directory.fsync()
 
 
+def _write_json_once(path, value):
+    """Atomically claim an immutable artifact pathname without replacement."""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ) + "\n").encode("utf-8")
+    binding = bind_durable_path(destination)
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        directory.revalidate()
+        descriptor = owned.own(directory.open_regular(
+            binding.path.name, os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+        ))
+        pending = encoded
+        try:
+            while pending:
+                count = os.write(descriptor, pending)
+                if count <= 0:
+                    raise OSError("json write made no progress")
+                pending = pending[count:]
+            os.fsync(descriptor)
+            directory.require_identity(descriptor, binding.path.name)
+            directory.fsync()
+        except BaseException:
+            try:
+                directory.unlink(binding.path.name)
+                directory.fsync()
+            except OSError:
+                pass
+            raise
+
+
 def _profile_from_receipts(receipts):
     from .adapters.base import HostCapabilities
 
@@ -265,6 +299,37 @@ def _require_spec_receipt_context(spec, events):
             raise ValueError("run spec receipt context mismatch")
 
 
+def _document_digest(value):
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _bind_prediction(path, observation_type, spec, events):
+    document = {
+        "schema_version": 1, "artifact_role": "independent_prediction",
+        "observation_type": observation_type,
+        "run_spec": spec.to_dict(),
+        "run_spec_digest": _document_digest(spec.to_dict()),
+        "event_count": len(events),
+        "events": [event.to_dict() for event in events],
+        "observation_only": True,
+    }
+    try:
+        _write_json_once(path, document)
+        return True
+    except FileExistsError:
+        existing = _load_json(path)
+        if (
+            type(existing) is not dict
+            or existing.get("artifact_role") != "independent_prediction"
+            or existing.get("observation_type") != observation_type
+        ):
+            raise ValueError("invalid bound prediction artifact") from None
+        return False
+
+
 def command_observe_pipeline(args):
     from .pipeline_adapter import translate_manifest, translate_pipeline_receipts
 
@@ -276,6 +341,8 @@ def command_observe_pipeline(args):
     events = translate_pipeline_receipts(receipts)
     _require_spec_receipt_context(spec, events)
     artifact = {
+        "schema_version": 1,
+        "artifact_role": "authoritative_observation",
         "observation_type": "pipeline",
         "run_spec": spec.to_dict(), "event_count": len(events),
         "events": [event.to_dict() for event in events],
@@ -283,8 +350,20 @@ def command_observe_pipeline(args):
         "observation_only": True,
     }
     output = Path(args.state_dir) / "pipeline-shadow-observation.json"
+    prediction_bound = False
+    prediction_path = Path(args.state_dir) / "pipeline-shadow-prediction.json"
+    prediction_source = getattr(args, "prediction_receipts", None)
+    if prediction_source is not None:
+        predicted = translate_pipeline_receipts(_load_json(prediction_source))
+        _require_spec_receipt_context(spec, predicted)
+        prediction_bound = _bind_prediction(
+            prediction_path, "pipeline", spec, predicted,
+        )
     _write_json(output, artifact)
-    _emit({"observed": True, "event_count": len(events), "output": str(output)})
+    _emit({
+        "observed": True, "event_count": len(events), "output": str(output),
+        "prediction_bound": prediction_bound,
+    })
     return 0
 
 
@@ -299,6 +378,8 @@ def command_observe_review(args):
     events = translate_review_receipts(receipts)
     _require_spec_receipt_context(spec, events)
     artifact = {
+        "schema_version": 1,
+        "artifact_role": "authoritative_observation",
         "observation_type": "review",
         "run_spec": spec.to_dict(), "event_count": len(events),
         "events": [event.to_dict() for event in events],
@@ -306,8 +387,20 @@ def command_observe_review(args):
         "observation_only": True,
     }
     output = Path(args.state_dir) / "review-shadow-observation.json"
+    prediction_bound = False
+    prediction_path = Path(args.state_dir) / "review-shadow-prediction.json"
+    prediction_source = getattr(args, "prediction_receipts", None)
+    if prediction_source is not None:
+        predicted = translate_review_receipts(_load_json(prediction_source))
+        _require_spec_receipt_context(spec, predicted)
+        prediction_bound = _bind_prediction(
+            prediction_path, "review", spec, predicted,
+        )
     _write_json(output, artifact)
-    _emit({"observed": True, "event_count": len(events), "output": str(output)})
+    _emit({
+        "observed": True, "event_count": len(events), "output": str(output),
+        "prediction_bound": prediction_bound,
+    })
     return 0
 
 
@@ -322,16 +415,34 @@ def command_compare(args):
     receipts = _load_json(args.authoritative_receipts)
     if not isinstance(document, dict) or not isinstance(receipts, list):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    if document.get("artifact_role") != "authoritative_observation":
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     observation_type = document.get("observation_type")
     if observation_type == "pipeline":
         from .pipeline_adapter import translate_pipeline_receipts
         events = translate_pipeline_receipts(receipts)
+        prediction_path = state_dir / "pipeline-shadow-prediction.json"
     elif observation_type == "review":
         from .dm_review_adapter import translate_review_receipts
         events = translate_review_receipts(receipts)
+        prediction_path = state_dir / "review-shadow-prediction.json"
     else:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
-    raw_events = document.get("events")
+    if not prediction_path.is_file():
+        report = ParityReport(
+            "missing_authoritative_evidence", False, False,
+            ("missing_independent_prediction",),
+        )
+        _write_json(args.output, report.to_dict())
+        return EXIT_PARITY_GAP
+    prediction = _load_json(prediction_path)
+    if (
+        type(prediction) is not dict
+        or prediction.get("artifact_role") != "independent_prediction"
+        or prediction.get("observation_type") != observation_type
+    ):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    raw_events = prediction.get("events")
     if type(raw_events) is not list:
         report = ParityReport(
             "semantic_receipts_required", False, False,
@@ -340,6 +451,18 @@ def command_compare(args):
         _write_json(args.output, report.to_dict())
         return EXIT_PARITY_GAP
     run_spec = document.get("run_spec")
+    prediction_spec = prediction.get("run_spec")
+    if (
+        type(prediction_spec) is not dict
+        or prediction.get("run_spec_digest") != _document_digest(prediction_spec)
+        or prediction_spec != run_spec
+    ):
+        report = ParityReport(
+            "run_spec_receipt_context_mismatch", False, False,
+            ("prediction_context_or_digest_drift",),
+        )
+        _write_json(args.output, report.to_dict())
+        return EXIT_PARITY_GAP
     if type(run_spec) is not dict or not events:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     first = events[0]
@@ -727,16 +850,17 @@ class StateDirectoryLeaseReader:
             raise ValueError("invalid state directory")
         self.now = now or (lambda: datetime.now(timezone.utc))
 
-    def read(self, run_id):
-        from .adapters.docker import LeaseProof
-        from .schema import RunStatus
+    def _state_path(self, run_id):
         if type(run_id) is not str or self._RUN_ID.fullmatch(run_id) is None:
             raise ValueError("invalid lease run id")
         run_dir = self.root / "runs" / run_id
-        if not run_dir.is_dir():
-            return None
+        return None if not run_dir.is_dir() else run_dir / "run-state.json"
+
+    def _proof(self, run_id, state_path):
+        from .adapters.docker import LeaseProof
+        from .schema import RunStatus
         try:
-            state = StateStore(run_dir / "run-state.json").load()
+            state = StateStore(state_path).load()
         except FileNotFoundError:
             return None
         if state.run_id != run_id:
@@ -752,6 +876,35 @@ class StateDirectoryLeaseReader:
         ):
             raise ValueError("invalid lease reader clock")
         return LeaseProof(run_id, state.status not in terminal, True, observed_at)
+
+    def read(self, run_id):
+        from .adapters.docker import LeaseProof
+        from .schema import LeaseConflictError
+        state_path = self._state_path(run_id)
+        if state_path is None:
+            return None
+        try:
+            with RunLease(state_path):
+                return self._proof(run_id, state_path)
+        except LeaseConflictError:
+            observed_at = self.now()
+            if (
+                type(observed_at) is not datetime or observed_at.tzinfo is None
+                or observed_at.utcoffset() is None
+            ):
+                raise ValueError("invalid lease reader clock") from None
+            return LeaseProof(run_id, True, True, observed_at)
+
+    @contextmanager
+    def inactive_guard(self, run_id):
+        state_path = self._state_path(run_id)
+        if state_path is None:
+            raise ValueError("stale cleanup lease proof unavailable")
+        with RunLease(state_path):
+            proof = self._proof(run_id, state_path)
+            if proof is None or proof.active:
+                raise ValueError("stale cleanup run is not inactive")
+            yield proof
 
 
 def _reconcile_output_paths(output):
@@ -1001,37 +1154,44 @@ def command_execute_cleanup_step(args):
         ), None)
         if sealed_resource is None:
             raise ValueError("cleanup resource absent from sealed inventory")
-        lease_proof = None
         orphan_mode = plan.scope.stale_sweep
-        if orphan_mode:
-            current = adapter.inventory()
-            lease_proof = StateDirectoryLeaseReader(args.state_dir).read(action.run_id)
-            if lease_proof is None:
-                raise ValueError("stale cleanup lease proof unavailable")
-            records = ()
-        else:
-            record, active = registry.resource_state_for_exact(
-                action.kind, action.resource_id,
+        lease_context = (
+            StateDirectoryLeaseReader(args.state_dir).inactive_guard(action.run_id)
+            if orphan_mode else nullcontext(None)
+        )
+        with lease_context as lease_proof:
+            if orphan_mode:
+                current = adapter.inventory()
+                records = ()
+                proof = None
+            else:
+                record, active = registry.resource_state_for_exact(
+                    action.kind, action.resource_id,
+                )
+                if not active or record is None:
+                    raise ValueError("cleanup resource is not active")
+                records = (record,)
+                current = adapter.inventory_registered(records)
+                proof = _incomplete_node_proof(
+                    args.state_dir, action.run_id, records,
+                    args.node_statuses,
+                )
+            witness = _inventory(_load_json(args.inventory))
+            if _inventory_dict(witness) != _inventory_dict(current):
+                raise ValueError("cleanup inventory witness mismatch")
+            resource = next((
+                item for item in current.resources
+                if item.kind is action.kind
+                and item.resource_id == action.resource_id
+            ), None)
+            if resource is None:
+                raise ValueError("cleanup resource unavailable")
+            guarded = registry.execute_guarded_action(
+                adapter, plan, args.step_index, resource,
+                adapter.runner.run, lease_proof=lease_proof,
+                incomplete_node_proof=proof, orphan_mode=orphan_mode,
+                authority_prefix=authorities,
             )
-            if not active or record is None:
-                raise ValueError("cleanup resource is not active")
-            records = (record,)
-            current = adapter.inventory_registered(records)
-        witness = _inventory(_load_json(args.inventory))
-        if _inventory_dict(witness) != _inventory_dict(current):
-            raise ValueError("cleanup inventory witness mismatch")
-        resource = next((item for item in current.resources
-                         if item.kind is action.kind and item.resource_id == action.resource_id), None)
-        if resource is None:
-            raise ValueError("cleanup resource unavailable")
-        proof = _incomplete_node_proof(
-            args.state_dir, action.run_id, records, args.node_statuses,
-        )
-        guarded = registry.execute_guarded_action(
-            adapter, plan, args.step_index, resource, adapter.runner.run,
-            lease_proof=lease_proof, incomplete_node_proof=proof,
-            orphan_mode=orphan_mode, authority_prefix=authorities,
-        )
     _write_json(args.output, _authority_dict(guarded))
     return 0
 
@@ -1096,12 +1256,14 @@ def parser():
     observe_pipeline = commands.add_parser("observe-pipeline", help="observe authoritative pipeline receipts")
     observe_pipeline.add_argument("--manifest", required=True)
     observe_pipeline.add_argument("--receipts", required=True)
+    observe_pipeline.add_argument("--prediction-receipts")
     observe_pipeline.add_argument("--state-dir", required=True)
     observe_pipeline.set_defaults(handler=command_observe_pipeline)
 
     observe_review = commands.add_parser("observe-review", help="observe authoritative review receipts")
     observe_review.add_argument("--request", required=True)
     observe_review.add_argument("--receipts", required=True)
+    observe_review.add_argument("--prediction-receipts")
     observe_review.add_argument("--state-dir", required=True)
     observe_review.set_defaults(handler=command_observe_review)
 

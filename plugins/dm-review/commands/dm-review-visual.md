@@ -31,9 +31,9 @@ On any missing required browser tool, dev server, authentication fixture, route 
 After the authoritative visual report exists, append it to `.claude/ux-review/workflow-kernel/authoritative-receipts.json` and invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
 python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 ```
 
-Keep the request, receipt array, and generated `review-shadow-observation.json` snapshot until all three commands complete. Shadow unavailability or parity gaps remain evidence only and never convert the visual result.
+Bind independently produced prediction receipts once as `review-shadow-prediction.json`; later authoritative observation cannot overwrite them. Keep request, authoritative receipts, observation, and prediction artifacts until all commands complete. Missing independent prediction evidence fails closed and never converts the visual result.

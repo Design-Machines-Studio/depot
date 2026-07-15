@@ -45,3 +45,25 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
 3. Output the unified review report with merge recommendation (per the zero-deferral policy above)
+
+## Shadow Workflow Kernel Lifecycle
+
+The review skill, selected lanes, findings, coverage receipt, merge recommendation, and repository-cleanup report remain authoritative. Resolve the workflow kernel from the real path of the currently executing canonical Depot dm-review plugin; accept an in-repository runtime only beneath that same canonical Depot repository realpath, otherwise search versioned cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin metadata.
+
+Materialize the validated review request at `.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered redacted authoritative receipt array at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. After the authoritative consolidated review and coverage receipt exist, run exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+After terminal cleanup receipts are appended, run exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
+python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+```
+
+Inline Python source is forbidden. Produce `independent-prediction-receipts.json` before corresponding authoritative actions; terminal observation binds it once and cannot overwrite it on re-observation. Keep the request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` until all terminal commands complete. Missing independent prediction evidence fails closed and preserves the review result. A parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE`; it is proposal-only evidence.
+
+When a review request has no explicit `workflowClass`, translate it as `feature` with `workflow_class_defaulted=true`; never infer it from findings, diff kinds, or severity. Preserve requested/attempted/implemented-by/fallback/reason evidence for every provider lane.

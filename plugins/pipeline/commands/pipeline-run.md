@@ -41,7 +41,7 @@ Invoke only stable `python3 -m workflow_kernel` subcommands documented by the ke
 The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulative ordered redacted array `plans/<feature>/authoritative-receipts.json`. Every boundary observation uses:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
 ```
 
 ## Codex Native Execution Adapter
@@ -100,12 +100,12 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
 After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
 python3 -m workflow_kernel compare --state-dir plans/<feature> --authoritative-receipts plans/<feature>/authoritative-receipts.json --output plans/<feature>/shadow-report.json
 python3 -m workflow_kernel metrics --events plans/<feature>/authoritative-receipts.json --output plans/<feature>/metrics.json
 ```
 
-Keep the manifest, receipt array, and generated `pipeline-shadow-observation.json` RunSpec snapshot until all three commands complete. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Report matches, explained host differences, missing authoritative evidence, unexpected transitions, prediction gaps, and unsafe-to-promote findings distinctly. Missing runtime or evidence remains visible in the summary.
+Produce `independent-prediction-receipts.json` before the corresponding authoritative actions. `observe-pipeline` runs only after authoritative receipts exist, binds that independent input once as `pipeline-shadow-prediction.json`, and writes a separate `authoritative_observation`; later observations never overwrite the prediction. Without an independent context/digest-bound prediction, comparison fails closed. Keep these artifacts until all three commands complete. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result.
 
 Present the summary report from the orchestrator, then ask:
 

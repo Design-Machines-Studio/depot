@@ -217,10 +217,10 @@ Resolve the runtime relative to the real path of the currently executing canonic
 Before each observation, atomically materialize the complete ordered redacted receipt array through the latest authoritative boundary at `plans/<feature-slug>/authoritative-receipts.json`, then invoke:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
-The validated `manifest.json`, cumulative receipt array, and generated `pipeline-shadow-observation.json` are the canonical terminal RunSpec/receipt snapshots. Keep them until terminal `observe-pipeline`, `compare`, and `metrics` have all completed.
+The validated `manifest.json` and cumulative receipt array remain authoritative observations. The independently produced `independent-prediction-receipts.json` must exist before its corresponding authoritative actions and is bound once as `pipeline-shadow-prediction.json`; later authoritative observation cannot overwrite it. `pipeline-shadow-observation.json` is explicitly an `authoritative_observation`, while comparison promotion is available only from the context/digest-bound `independent_prediction`. Without that independent artifact, comparison fails closed with missing prediction evidence. Keep all artifacts until terminal `observe-pipeline`, `compare`, and `metrics` have completed.
 
 If resolution, observation, comparison, or metrics is unavailable, preserve the authoritative result and record `shadow unavailable` with a safe reason. Stable exits are `0` success, `2` invalid input/schema, `3` unsafe/blocked, `4` unavailable/incompatible, `5` parity gap, and `6` write/state conflict. None authorizes changing the canonical result; cleanup exit `3` or `6` remains blocked. Every observation consumes an authoritative receipt reference; builder observations and shadow state cannot stand in for dispatch, resume, validation, evaluation, browser, merge, or cleanup evidence.
 
@@ -1536,7 +1536,7 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deli
 Only after the complete final authoritative cleanup/terminal receipt exists, append it to the cumulative ordered redacted receipt array and run exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 python3 -m workflow_kernel compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
 python3 -m workflow_kernel metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```

@@ -115,18 +115,18 @@ Resolve the kernel from the real path of the currently executing canonical Depot
 At each phase boundary, rewrite `plans/<feature-slug>/authoritative-receipts.json` as the complete ordered, redacted receipt array through that boundary, then invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
 After the authoritative terminal receipt is appended, invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 python3 -m workflow_kernel compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
 python3 -m workflow_kernel metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
-Keep `manifest.json`, `authoritative-receipts.json`, and the generated `pipeline-shadow-observation.json` RunSpec snapshot through all three terminal commands. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result. Shadow state and builder observations never replace an authoritative dispatch, resume, evaluation, browser, merge, or cleanup receipt.
+Produce `independent-prediction-receipts.json` before corresponding authoritative actions. Terminal observation binds it once as `pipeline-shadow-prediction.json` and writes a separate `authoritative_observation`; re-observation cannot overwrite the prediction. Keep those artifacts through all terminal commands. Missing independent prediction evidence fails closed. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result.
 
 ## Airlift Checkpoint (every phase boundary)
 

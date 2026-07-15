@@ -52,7 +52,7 @@ Translate an explicit `workflowClass` unchanged; when absent, use `feature` and 
 Use these exact observation interfaces:
 
 ```text
-python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
 python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 ```
@@ -603,7 +603,7 @@ Output the full report to the user.
 
 Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case. Each row names requested/attempted/implemented-by provider, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
 
-Only after this receipt exists, run `observe-review` when the trusted runtime is available. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; recommendations remain proposal-only.
+Only after this receipt exists, run `observe-review` when the trusted runtime is available. An independently produced prediction receipt array must predate the corresponding authoritative actions and is bound once as `review-shadow-prediction.json`; later authoritative observations cannot overwrite it. The generated observation and prediction artifacts are explicitly distinct, and missing independent prediction evidence fails closed. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; recommendations remain proposal-only.
 
 #### Verify-before-close gate
 

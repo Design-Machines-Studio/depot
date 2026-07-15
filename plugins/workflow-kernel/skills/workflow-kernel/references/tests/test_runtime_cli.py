@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import subprocess
 import sys
@@ -11,6 +12,23 @@ from pathlib import Path
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
+
+
+def shadow_artifact(role, run_spec, events=None):
+    value = {
+        "schema_version":1, "artifact_role":role,
+        "observation_type":"pipeline", "run_spec":run_spec,
+        "event_count":0 if events is None else len(events),
+        "observation_only":True,
+    }
+    if events is not None:
+        value["events"] = events
+    if role == "independent_prediction":
+        encoded = json.dumps(
+            run_spec, sort_keys=True, separators=(",", ":"),
+        ).encode()
+        value["run_spec_digest"] = "sha256:" + hashlib.sha256(encoded).hexdigest()
+    return value
 
 
 class RuntimeCliTests(unittest.TestCase):
@@ -32,8 +50,73 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             artifact = json.loads((root / "pipeline-shadow-observation.json").read_text())
             self.assertEqual(artifact["observation_type"], "pipeline")
+            self.assertEqual(artifact["artifact_role"], "authoritative_observation")
             self.assertEqual(artifact["run_spec"]["workflow_class"], "feature")
             self.assertEqual(artifact["event_count"], 11)
+
+    def test_independent_prediction_is_bound_once_and_terminal_observation_cannot_overwrite_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature":"pipeline-1","workflowClass":"feature",
+                "executionMode":"codex_native","chunks":[],
+            }))
+            predicted = root / "prediction.json"
+            values = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+            values[2]["status"] = "failed"
+            predicted.write_text(json.dumps(values))
+            first = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", FIXTURES / "pipeline-codex.json",
+                "--prediction-receipts", predicted, "--state-dir", root,
+            )
+            self.assertEqual(first.returncode, 0, first.stderr)
+            prediction_path = root / "pipeline-shadow-prediction.json"
+            bound = prediction_path.read_bytes()
+            document = json.loads(bound)
+            self.assertEqual(document["artifact_role"], "independent_prediction")
+            predicted.write_text((FIXTURES / "pipeline-codex.json").read_text())
+            second = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", FIXTURES / "pipeline-codex.json",
+                "--prediction-receipts", predicted, "--state-dir", root,
+            )
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(prediction_path.read_bytes(), bound)
+            output = root / "parity.json"
+            compared = self.run_cli(
+                "compare", "--state-dir", root,
+                "--authoritative-receipts", FIXTURES / "pipeline-codex.json",
+                "--output", output,
+            )
+            self.assertEqual(compared.returncode, 5, compared.stderr)
+            self.assertEqual(json.loads(output.read_text())["reason"], "kernel_prediction_gap")
+
+    def test_compare_without_independent_prediction_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature":"pipeline-1","workflowClass":"feature",
+                "executionMode":"codex_native","chunks":[],
+            }))
+            observed = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", FIXTURES / "pipeline-codex.json",
+                "--state-dir", root,
+            )
+            self.assertEqual(observed.returncode, 0, observed.stderr)
+            output = root / "parity.json"
+            compared = self.run_cli(
+                "compare", "--state-dir", root,
+                "--authoritative-receipts", FIXTURES / "pipeline-codex.json",
+                "--output", output,
+            )
+            self.assertEqual(compared.returncode, 5, compared.stderr)
+            report = json.loads(output.read_text())
+            self.assertEqual(report["reason"], "missing_authoritative_evidence")
+            self.assertIn("missing_independent_prediction", report["differences"])
 
     def test_metrics_and_invalid_input_exit_codes_are_stable(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -49,13 +132,16 @@ class RuntimeCliTests(unittest.TestCase):
     def test_compare_returns_five_for_parity_gap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "pipeline-shadow-observation.json").write_text(json.dumps({
-                "observation_type": "pipeline",
-                "run_spec": {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"},
-                "run_state": {
+            run_spec = {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"}
+            observation = shadow_artifact("authoritative_observation", run_spec)
+            observation["run_state"] = {
                 "schema_version": 1, "revision": 0, "run_id": "pipeline-1", "mode": "shadow", "status": "planned",
                 "created_at": "2026-07-14T00:00:00Z", "updated_at": "2026-07-14T00:00:00Z", "nodes": {}, "evidence": [], "cleanup_reconciled": False,
-            }}))
+            }
+            (root / "pipeline-shadow-observation.json").write_text(json.dumps(observation))
+            (root / "pipeline-shadow-prediction.json").write_text(json.dumps(
+                shadow_artifact("independent_prediction", run_spec),
+            ))
             output = root / "parity.json"
             result = self.run_cli("compare", "--state-dir", root, "--authoritative-receipts", FIXTURES / "pipeline-claude.json", "--output", output)
             self.assertEqual(result.returncode, 5)
@@ -68,12 +154,16 @@ class RuntimeCliTests(unittest.TestCase):
             predicted = json.loads(json.dumps(receipts)); predicted[2]["status"] = "failed"
             from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
             events = translate_pipeline_receipts(predicted)
-            (root / "pipeline-shadow-observation.json").write_text(json.dumps({
-                "observation_type": "pipeline",
-                "run_spec": {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"},
-                "events": [event.to_dict() for event in events],
-                "run_state": {"schema_version":1,"revision":len(events),"run_id":"pipeline-1","mode":"shadow","status":"running","created_at":events[0].occurred_at,"updated_at":events[-1].occurred_at,"nodes":{},"evidence":[event.payload["authoritative_receipt"] for event in events],"cleanup_reconciled":False},
-            }))
+            run_spec = {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"}
+            (root / "pipeline-shadow-observation.json").write_text(json.dumps(
+                shadow_artifact("authoritative_observation", run_spec, []),
+            ))
+            (root / "pipeline-shadow-prediction.json").write_text(json.dumps(
+                shadow_artifact(
+                    "independent_prediction", run_spec,
+                    [event.to_dict() for event in events],
+                ),
+            ))
             output = root / "parity.json"
             result = self.run_cli("compare", "--state-dir", root, "--authoritative-receipts", FIXTURES / "pipeline-claude.json", "--output", output)
             self.assertEqual(result.returncode, 5)
@@ -87,17 +177,25 @@ class RuntimeCliTests(unittest.TestCase):
             events = translate_pipeline_receipts(receipts)
             refs = [event.payload["authoritative_receipt"] for event in events]
             base = {
-                "observation_type": "pipeline",
+                "schema_version":1,"artifact_role":"authoritative_observation",
+                "observation_type": "pipeline", "observation_only":True,
                 "run_spec": {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"},
                 "run_state": {"schema_version":1,"revision":len(events),"run_id":"pipeline-1","mode":"shadow","status":"running","created_at":events[0].occurred_at,"updated_at":events[-1].occurred_at,"nodes":{},"evidence":refs,"cleanup_reconciled":False},
             }
             output = root / "parity.json"
             for mutation in ("missing_events", "runspec_mode"):
                 artifact = json.loads(json.dumps(base))
+                prediction = shadow_artifact(
+                    "independent_prediction", artifact["run_spec"],
+                )
                 if mutation == "runspec_mode":
-                    artifact["events"] = [event.to_dict() for event in events]
                     artifact["run_spec"]["execution_mode"] = "codex_native"
+                    prediction = shadow_artifact(
+                        "independent_prediction", artifact["run_spec"],
+                        [event.to_dict() for event in events],
+                    )
                 (root / "pipeline-shadow-observation.json").write_text(json.dumps(artifact))
+                (root / "pipeline-shadow-prediction.json").write_text(json.dumps(prediction))
                 result = self.run_cli("compare", "--state-dir", root, "--authoritative-receipts", FIXTURES / "pipeline-claude.json", "--output", output)
                 with self.subTest(mutation=mutation):
                     self.assertEqual(result.returncode, 5, result.stderr)
@@ -107,6 +205,7 @@ class RuntimeCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "pipeline-shadow-observation.json").write_text(json.dumps({
+                "artifact_role":"authoritative_observation",
                 "observation_type":"pipeline", "run_spec":{}, "events":[],
             }))
             result = self.run_cli("compare", "--state-dir", root, "--authoritative-receipts", FIXTURES / "dm-review.json", "--output", root / "out.json")
@@ -278,6 +377,114 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertFalse(proof.active)
             self.assertTrue(proof.readable)
             self.assertIsNone(StateDirectoryLeaseReader(root, now=lambda: now).read("missing"))
+
+    def test_stale_state_reader_treats_live_os_lease_as_active_and_guard_is_nonblocking(self):
+        from workflow_kernel.cli import StateDirectoryLeaseReader
+        from workflow_kernel.schema import LeaseConflictError
+        from workflow_kernel.state import RunLease
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run_dir = root / "runs" / "old-run"
+            run_dir.mkdir(parents=True)
+            state_path = run_dir / "run-state.json"
+            state_path.write_text(json.dumps({
+                "schema_version":1,"revision":1,"run_id":"old-run",
+                "mode":"shadow","status":"succeeded",
+                "created_at":now.isoformat(),"updated_at":now.isoformat(),
+                "nodes":{},"evidence":[],"cleanup_reconciled":True,
+            }))
+            reader = StateDirectoryLeaseReader(root, now=lambda: now)
+            with RunLease(state_path):
+                self.assertTrue(reader.read("old-run").active)
+                with self.assertRaises(LeaseConflictError):
+                    with reader.inactive_guard("old-run"):
+                        self.fail("live run lease must not yield an inactive guard")
+            with reader.inactive_guard("old-run") as proof:
+                self.assertFalse(proof.active)
+
+    def test_stale_cli_action_executes_under_old_run_guard_without_current_run_node_witness(self):
+        from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory, DockerResource
+        from workflow_kernel.cli import (
+            StateDirectoryLeaseReader, _cleanup_artifact_document,
+            _inventory_dict, command_execute_cleanup_step,
+        )
+        from workflow_kernel.resources import CommandResult, ResourceKind, ResourceRegistry
+        from workflow_kernel.schema import LeaseConflictError
+        from workflow_kernel.state import RunLease
+
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        created = now - timedelta(hours=48)
+        labels = {
+            "com.designmachines.depot.managed":"true",
+            "com.designmachines.depot.run-id":"old-run",
+            "com.designmachines.depot.node-id":"old-node",
+            "com.designmachines.depot.created-at":created.isoformat().replace("+00:00","Z"),
+            "com.designmachines.depot.lifecycle":"run",
+            "com.designmachines.depot.cleanup-policy":"remove-when-stopped",
+        }
+        container_list = ("docker","ps","-a","--filter","label=com.designmachines.depot.managed=true","--format","{{.ID}}")
+        network_list = ("docker","network","ls","--filter","label=com.designmachines.depot.managed=true","--format","{{.ID}}")
+        volume_list = ("docker","volume","ls","--filter","label=com.designmachines.depot.managed=true","--format","{{.Name}}")
+        inspect = ("docker","container","inspect","ctr-old")
+        remove = ("docker","rm","ctr-old")
+        inspected = json.dumps([{
+            "Name":"/ctr-old","Config":{"Labels":labels},
+            "Created":created.isoformat(),"State":{"Running":False},
+        }])
+
+        class Runner:
+            calls = []
+            results = {
+                container_list:CommandResult(container_list,0,"ctr-old\n",""),
+                network_list:CommandResult(network_list,0,"",""),
+                volume_list:CommandResult(volume_list,0,"",""),
+                inspect:CommandResult(inspect,0,inspected,""),
+                remove:CommandResult(remove,0,"",""),
+            }
+            def run(self, argv):
+                argv = tuple(argv); self.calls.append(argv)
+                return self.results[argv]
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); run_dir = root / "runs" / "old-run"
+            run_dir.mkdir(parents=True)
+            (run_dir / "run-state.json").write_text(json.dumps({
+                "schema_version":1,"revision":1,"run_id":"old-run",
+                "mode":"shadow","status":"succeeded",
+                "created_at":created.isoformat(),"updated_at":now.isoformat(),
+                "nodes":{},"evidence":[],"cleanup_reconciled":True,
+            }))
+            runner = Runner()
+            adapter = DockerAdapter(
+                runner, now=lambda: now,
+                lease_reader=StateDirectoryLeaseReader(root, now=lambda: now),
+            )
+            inventory = adapter.inventory()
+            plan = adapter.plan_stale_sweep(inventory, timedelta(hours=24))
+            self.assertEqual(len(plan.actions), 1)
+            plan_path = root / "stale.json"
+            inventory_path = root / "inventory.json"
+            outcomes = root / "outcomes.json"
+            output = root / "authority.json"
+            plan_path.write_text(json.dumps(_cleanup_artifact_document(plan, inventory)))
+            inventory_path.write_text(json.dumps(_inventory_dict(inventory)))
+            outcomes.write_text("[]")
+            args = SimpleNamespace(
+                plan=plan_path, step_index=0, state_dir=root,
+                outcomes=outcomes, inventory=inventory_path,
+                node_statuses=root / "must-not-be-read.json", output=output,
+            )
+            Runner.calls.clear()
+            with RunLease(run_dir / "run-state.json"):
+                with mock.patch("workflow_kernel.cli._SubprocessRunner", Runner):
+                    with self.assertRaises(LeaseConflictError):
+                        command_execute_cleanup_step(args)
+                self.assertNotIn(remove, Runner.calls)
+            Runner.calls.clear()
+            with mock.patch("workflow_kernel.cli._SubprocessRunner", Runner):
+                self.assertEqual(command_execute_cleanup_step(args), 0)
+            self.assertIn(remove, Runner.calls)
+            self.assertTrue(output.is_file())
 
     def test_forged_cli_authority_prefix_is_rejected_before_runner_use(self):
         from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory, DockerResource

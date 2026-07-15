@@ -1404,7 +1404,7 @@ def _docker_cleanup_evidence(
     if lease_proof is not None:
         payload["lease"] = {
             "run_id": lease_proof.run_id, "active": lease_proof.active,
-            "readable": lease_proof.readable, "observed_at": _timestamp(lease_proof.observed_at),
+            "readable": lease_proof.readable,
         }
     return payload
 
