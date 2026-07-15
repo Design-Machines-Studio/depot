@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,13 +19,26 @@ from .adapters.base import (
 from .schema import InvalidSchemaError
 from .redaction import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
 from .limits import JSONDocumentDepthError, load_json_document
-from .verification import validate_viewport
 
 
 POLICY_SCHEMA_VERSION = 1
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parent.parent / "workflow-policy.json"
 _MAPPING_PROXY_TYPE = type(MappingProxyType({}))
 _MALFORMED_POLICY_VALUE = object()
+_POLICY_VIEWPORT_DIMENSION = (
+    r"(?:[1-9][0-9]{1,3}|1[0-5][0-9]{3}|16[0-2][0-9]{2}|"
+    r"163[0-7][0-9]|1638[0-4])"
+)
+_POLICY_VIEWPORT = re.compile(
+    _POLICY_VIEWPORT_DIMENSION + "x" + _POLICY_VIEWPORT_DIMENSION + r"\Z",
+)
+
+
+def _validate_policy_viewport(value: object) -> str:
+    """Validate policy-owned viewport syntax without importing UI verification."""
+    if type(value) is not str or _POLICY_VIEWPORT.fullmatch(value) is None:
+        raise ValueError
+    return value
 
 
 class _TrustedPolicyMap(tuple, MappingABC):
@@ -642,7 +656,7 @@ def _normalize_policy_payload(payload: object) -> PolicyDocument:
     engines = verification["browser_engines"]
     try:
         viewports = tuple(
-            validate_viewport(verification[name])
+            _validate_policy_viewport(verification[name])
             for name in ("desktop_viewport", "mobile_viewport")
         )
     except Exception:

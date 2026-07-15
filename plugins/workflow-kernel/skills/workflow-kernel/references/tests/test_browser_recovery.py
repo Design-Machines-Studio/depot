@@ -116,21 +116,62 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.missing_case_ids, ("case-1",))
         self.assertEqual(adapter.calls, [("attempt", "chromium")])
 
-    def test_readiness_recheck_blocks_before_alternate_engine(self):
+    def test_unavailable_readiness_is_diagnostic_and_alternate_still_runs(self):
         unavailable = BrowserReadinessEvidence(
             "case-1", "primary-1", TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST,
             True, False, True, "target_url_unavailable",
         )
         adapter = FakeBrowserAdapter(
-            [attempt(1, "chromium", "failed", session="primary-1")],
+            [
+                attempt(1, "chromium", "failed", session="primary-1"),
+                attempt(2, "firefox", "failed", session="secondary-1"),
+            ],
             quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+            launches=[BrowserLaunchEvidence("firefox", True, True, "secondary-1")],
             readiness=unavailable,
         )
         receipt = BrowserRecovery().run(self.request, adapter)
         self.assertEqual(receipt.status, "blocked")
         self.assertEqual(receipt.reason_code, "human_help_required")
-        self.assertEqual(receipt.lifecycle[-1].action, "readiness_recheck")
-        self.assertNotIn(("launch_engine", "firefox", True), adapter.calls)
+        readiness = next(
+            item for item in receipt.lifecycle
+            if item.action == "readiness_recheck"
+        )
+        self.assertEqual(readiness.result, "unavailable")
+        self.assertEqual(
+            readiness.readiness_checks,
+            ("confirmed", "unavailable", "confirmed"),
+        )
+        self.assertEqual(receipt.attempts[-1].actual_engine, "firefox")
+        self.assertEqual(adapter.calls[-2:], [
+            ("launch_engine", "firefox", True), ("attempt", "firefox"),
+        ])
+
+    def test_unavailable_readiness_still_records_alternate_launch_unavailable(self):
+        unavailable = BrowserReadinessEvidence(
+            "case-1", "primary-1", TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST,
+            False, True, True, "dev_server_unavailable",
+        )
+        receipt = BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [attempt(1, "chromium", "failed", session="primary-1")],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+                launches=[RuntimeError("alternate unavailable")],
+                readiness=unavailable,
+            ),
+        )
+        self.assertEqual(receipt.reason_code, "human_help_required")
+        self.assertEqual(receipt.lifecycle[-2].action, "readiness_recheck")
+        self.assertEqual(receipt.lifecycle[-1].action, "browser_process_launch")
+        self.assertEqual(receipt.lifecycle[-1].result, "unavailable")
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        self.assertTrue(schema_matches(receipt.to_dict(), schema))
+        truncated = receipt.to_dict()
+        truncated["lifecycle"] = truncated["lifecycle"][:-1]
+        self.assertFalse(schema_matches(truncated, schema))
 
     def test_recovered_receipt_recomputes_readiness_digest(self):
         adapter = FakeBrowserAdapter(

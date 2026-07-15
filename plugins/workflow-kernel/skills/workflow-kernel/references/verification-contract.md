@@ -28,8 +28,11 @@ path swaps cannot replace validated config, index, persona, task, suite, or
 matrix content. Duplicate scalar or list-section frontmatter
 keys, unknown keys, malformed key spacing, and malformed scalar or container types fail with
 `invalid_verification_declaration`. Only the supported indented scalar-list form
-is accepted: plain values use the exact identifier-like scalar grammar, while
-explicitly quoted values may contain structure-shaped text. The only inline
+is accepted. Scalar fields use a bounded plain-scalar grammar; scalar-list items
+use the narrower identifier-like grammar. The only unquoted typed exceptions
+are lowercase `true`/`false` in declared boolean fields and decimal `0` through
+`5` in the two bounded persona knowledge fields. Explicitly quoted implicit-type
+and structure-shaped lookalikes remain strings. The only inline
 containers are the exact persona `groups: [group-id, ...]` list and
 `viewport: { width: N, height: N }` mapping already used by the project
 declarations. Other inline arrays or mappings, tags, anchors, aliases, block
@@ -118,8 +121,11 @@ For a required browser failure, preserve safe attempt evidence first, then:
 3. if restart cannot be proved, record `primary_restart_unavailable` and continue;
 4. independently recheck the current dev server, target URL, and authentication
    fixture and persist their sealed statuses and canonical readiness digest;
-5. only after all three checks pass, launch one genuinely different configured engine and retry once; a valid
-   single-engine profile instead records `secondary_engine_unavailable`;
+5. treat readiness as typed diagnostic evidence, never as permission to omit the
+   configured alternate: launch one genuinely different configured engine and
+   retry once even when a readiness check is unavailable, or persist explicit
+   alternate-launch-unavailable evidence; a valid single-engine profile instead
+   records `secondary_engine_unavailable`;
 6. if it fails or is unavailable, return blocked `human_help_required` with all
    attempts and exact missing case IDs.
 
@@ -167,8 +173,9 @@ the following attempt, recovered/clean receipts have no missing cases, and a
 blocked human-help receipt names the exact missing case.
 Receipt history follows one exact grammar: initial attempt; on failure, primary
 quit; primary launch or `primary_restart_unavailable`; primary retry only after
-a proved fresh launch; then a sealed three-part readiness recheck; then alternate
-launch and attempt, or the exact
+a proved fresh launch; then a sealed three-part readiness recheck whose status is
+diagnostic; then alternate launch and attempt, or explicit alternate-launch
+unavailability, or the exact
 single-engine/unavailable marker; then the matching clean, recovered, or blocked
 terminal. Missing, duplicated, reordered, or branch-incompatible actions are
 invalid even if their individual fields look plausible.

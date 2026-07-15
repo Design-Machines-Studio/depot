@@ -446,10 +446,13 @@ class BrowserLifecycleEvidence:
         return _field_values(self, BrowserLifecycleEvidence)
 
     def to_dict(self):
-        return {
+        payload = {
             field.name: getattr(self, field.name)
             for field in fields(BrowserLifecycleEvidence)
         }
+        if self.readiness_checks is not None:
+            payload["readiness_checks"] = list(self.readiness_checks)
+        return payload
 
 
 def snapshot_browser_lifecycle(value):
@@ -692,16 +695,6 @@ class BrowserRecoveryReceipt:
                     or readiness.session_id != readiness_session
                     or readiness.previous_session_id != readiness_session):
                 raise ValueError("browser readiness recheck mismatch")
-            if readiness.result != "confirmed":
-                if not (lifecycle_index == len(self.lifecycle)
-                        and attempt_index == len(attempts) and not passed
-                        and self.status == "blocked"
-                        and self.reason_code == "human_help_required"
-                        and self.actual_engine == attempts[-1].actual_engine
-                        and self.substitution_provenance is None
-                        and self.missing_case_ids == (self.case_id,)):
-                    raise ValueError("inconsistent readiness block")
-                return
             if lifecycle_index >= len(self.lifecycle):
                 raise ValueError("browser receipt omits alternate engine evidence")
             alternate = self.lifecycle[lifecycle_index]
@@ -1084,11 +1077,6 @@ class BrowserRecovery:
         current_primary_session = attempts[-1].session_id
         readiness = self._readiness(request, adapter, current_primary_session)
         lifecycle.append(readiness)
-        if readiness.result != "confirmed":
-            return self._receipt(
-                request, "blocked", "human_help_required", attempts, lifecycle,
-                (request.case_id,),
-            )
         secondary_launch, launch_lifecycle = self._launch(
             request, adapter, request.secondary_engine, current_primary_session,
             previous_sessions,
