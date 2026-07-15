@@ -111,6 +111,54 @@ class VerificationProfileTests(unittest.TestCase):
                     ProjectPersonaAdapter(
                         policy_path=ROOT / "workflow-policy.json",
                     ).discover(project)
+
+    def test_all_yaml_sexagesimal_and_timestamp_shapes_require_quotes(self):
+        implicit = (
+            "+12:34", "1:2", "123:45", "1:2:3", "+1:2",
+            "2001-12-15  2:59:43.1",
+            "2001-12-15 2:59:43.1",
+            "2001-12-15 2:59:43.1 Z",
+            "2001-12-15 2:59:43.1 +02:00",
+            "2001-12-15T02:59:43.1Z",
+        )
+        for value in implicit:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests/ux")
+                task = project / "tests/ux/tasks/governance/sample-task.md"
+                task.write_text(task.read_text().replace(
+                    "title: Review a proposal", "title: " + value,
+                ))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
+    def test_quoted_implicit_lookalikes_and_narrow_typed_scalars_remain_valid(self):
+        lookalikes = (
+            "+12:34", "1:2", "123:45", "1:2:3", "+1:2",
+            "2001-12-15  2:59:43.1",
+            "2001-12-15 2:59:43.1 Z",
+            "2001-12-15 2:59:43.1 -07:30",
+        )
+        for value in lookalikes:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests/ux")
+                task = project / "tests/ux/tasks/governance/sample-task.md"
+                task.write_text(task.read_text().replace(
+                    "title: Review a proposal", "title: " + json.dumps(value),
+                ))
+                persona = project / "tests/ux/personas/casual-member.md"
+                persona.write_text(persona.read_text().replace(
+                    "role: Member",
+                    "role: Member\ntech_comfort: 0\ngovernance_knowledge: 5",
+                ))
+                profile = ProjectPersonaAdapter(
+                    policy_path=ROOT / "workflow-policy.json",
+                ).discover(project)
+                self.assertEqual("runnable_cases", profile.selection_status)
+
     def test_schemas_accept_runtime_receipts_and_policy_defaults(self):
         profile_schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
         recovery_schema = json.loads((ROOT / "browser-recovery-schema.json").read_text())
