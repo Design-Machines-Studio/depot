@@ -157,8 +157,8 @@ ownership guesses. Receipts record kind, ID, owner, lifecycle, action, reason,
 bounded evidence, and follow-up without copying command output that may contain
 secrets. Runtime cleanup receipts serialize with schema version, scope, nested
 owner, kind and ID, lifecycle, disposition, exact command evidence, reason, and
-follow-up. The complete serialized receipt—including scope, owner, identifiers,
-reason, command evidence, and nested evidence—is traversed through the shared
+follow-up. The complete serialized receipt -- including scope, owner, identifiers,
+reason, command evidence, and nested evidence -- is traversed through the shared
 bounded redaction policy. Cookie, bearer, DSN, environment-secret, overlong,
 cyclic, and otherwise unsafe values are redacted or hashed before durable
 persistence while safe resource identities remain available as evidence.

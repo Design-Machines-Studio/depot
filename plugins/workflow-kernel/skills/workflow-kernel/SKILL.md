@@ -245,7 +245,7 @@ errors as stable JSON. Treat `--help` output as plain text.
   key token fails closed. Literal caller strings `[REDACTED]` and `[UNSAFE]` are
   ordinary values and therefore hash. Only the sensitive-key sanitizer branch
   emits the trusted `[REDACTED]` marker. Use these digests only for stable correlation
-  across receipts and logs—the original plaintext is never recoverable from the
+  across receipts and logs -- the original plaintext is never recoverable from the
   public error. Do not expose raw parser exceptions or rejected values.
 
 ## Security and Portability

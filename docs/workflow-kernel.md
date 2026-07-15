@@ -108,7 +108,7 @@ python3 -m workflow_kernel execute-cleanup-step --state-dir plans/feature --plan
 python3 -m workflow_kernel record-cleanup --state-dir plans/feature --plan cleanup-plan.json --outcomes outcomes.json
 ```
 
-At every terminal path—success, failure, blocked, cancelled, or interrupted—run
+At every terminal path -- success, failure, blocked, cancelled, or interrupted -- run
 reconciliation before artifact and Git cleanup:
 
 ```sh

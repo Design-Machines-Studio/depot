@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material.
+Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. The repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material, with one sanctioned executable exception: the workflow-kernel plugin ships a stdlib-only Python 3.12 reference runtime (no build step, no third-party dependencies) plus its test suite, validated by `tools/validate-workflow-kernel.py` as part of `./tools/validate-composition.sh --all`. Everything else has no build system, test suite, or application code.
 
 ## Repository Structure
 
@@ -327,7 +327,7 @@ These failure patterns have been observed in production pipeline runs. Each has 
 5. **Missing visual diff protocol:** When the user says "these should be visually identical," no protocol exists for getComputedStyle comparison. Hardening: Visual Parity Diff step in `execution-orchestrator.md`.
 6. **dm-review-loop not invoked:** The caller never runs dm-review-loop on the final result, trusting the orchestrator's self-report. Hardening: Caller Visual Verification section in `pipeline.md` Phase 7.
 7. **Prompt quality degradation:** Across large chunk sets, later prompts have less detail, fewer acceptance criteria, and weaker visual specifications. Hardening: Prompt Quality Parity Check in `promptcraft SKILL.md`.
-8. **Silent curl-fallback merge claims:** The orchestrator emits "ready to merge" when visual verification was skipped. Hardening: `execution_mode: curl_fallback` flag, forbidden-phrases list, and `BLOCKED PENDING CALLER VERIFICATION` merge recommendation in `execution-orchestrator.md`; Caller Verification Checklist (screenshot + runtime eval + cardinality) in `pipeline.md` Phase 7.
+8. **Silent browser-verification-skipped merge claims:** The orchestrator emits "ready to merge" when visual verification was skipped. Browser availability is a verification-evidence status, never an execution mode. Hardening: required browser-evidence status on every UI chunk receipt, browser-recovery escalation ladder (evidence capture -> primary restart -> alternate engine -> human help) in `execution-orchestrator.md`, forbidden-phrases list, and `BLOCKED PENDING CALLER VERIFICATION` merge recommendation; Caller Verification Checklist (screenshot + runtime eval + cardinality) in `pipeline.md` Phase 7.
 9. **Multi-chunk rename atomicity:** Identifiers renamed across non-adjacent chunks produce a broken window under orchestrator parallelization. Hardening: Rename Atomicity Check in `plan-adversary.md`.
 10. **Append-only revision residue:** Round N amendments coexist with superseded content. Hardening: Append-Only Purge Check + Final Audit + imperative verb discipline (`REPLACE`/`DELETE`/`INSERT`/`RENAME`) in `plan-adversary.md`.
 11. **Dev-mode module loader desync:** New JS module ships without updating the dev-mode module map, loads 404 in browser. Hardening: Step 0c Module-Loader Pre-Flight in `execution-orchestrator.md`.
@@ -352,7 +352,7 @@ After any pipeline run or manual feature implementation, verify:
 - [ ] Zero pending P3 findings OR explicit `--allow-defer-p3` with justification + tracking ID for each (zero-deferral default)
 - [ ] Requirements cross-check with EVIDENCE type for each requirement (screenshot, build pass, computed style)
 - [ ] No "visually identical" requirements left unverified (visual diff protocol applied)
-- [ ] If the orchestrator ran in `execution_mode: curl_fallback`, the 3-item Caller Verification Checklist is complete with attached evidence
+- [ ] If any UI chunk receipt carries a browser-evidence status other than verified (browser unavailable, alternate engine, or human-help escalation), the 3-item Caller Verification Checklist is complete with attached evidence
 - [ ] Repository cleanup phase ran; receipt carries a `## Branch & Worktree Inventory` with every created ref dispositioned, every kept/blocked ref carrying a follow-up command, and a clean `git status --porcelain`
 - [ ] Feature branch preserved unless `git merge-base --is-ancestor <branch> origin/main` proves it landed
 - [ ] UI work uses Datastar/Datastar Pro attributes rather than hand-rolled JS; every Pro attribute has a recorded bundle-presence check
