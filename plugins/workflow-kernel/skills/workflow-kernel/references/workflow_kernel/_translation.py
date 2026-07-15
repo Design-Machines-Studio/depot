@@ -27,7 +27,8 @@ EXECUTION_MODES = frozenset({
 COMMON_RECEIPT_FIELDS = frozenset({
     "stage", "status", "host", "mechanism", "workflow_class", "provider",
     "model", "attempt", "duration_seconds", "first_pass", "fallback_reason",
-    "retry_reason", "isolation_mode", "persona_expected", "persona_passed",
+    "retry_reason", "isolation_mode", "isolation_strategy",
+    "persona_expected", "persona_passed",
     "persona_recovered", "persona_missing", "cleanup_removed",
     "cleanup_retained", "cleanup_blocked", "cleanup_foreign", "tokens",
     "cost_usd", "time_to_clean_seconds", "requested_executor",
@@ -51,6 +52,14 @@ RECEIPT_FIELD_ALIASES = {
     "attemptedProvider": "attempted_provider",
     "implementedBy": "implemented_by",
     "fallbackReason": "fallback_reason",
+    # Documented model-descent evidence field: Claude/Codex receipts spell the
+    # resolved model as `modelUsed`; it normalizes to the canonical `model`
+    # metrics dimension instead of being silently dropped.
+    "modelUsed": "model",
+    # Worktree isolation is a strategy separate from the closed executionMode
+    # set (execution-orchestrator.md Step 1c): per-chunk-worktree or
+    # sequential-on-branch.
+    "isolationStrategy": "isolation_strategy",
 }
 
 _MISSING = object()
@@ -378,6 +387,11 @@ def translate_receipts(
         if "workflow_class_defaulted" in receipt:
             current_defaulted = receipt["workflow_class_defaulted"]
             if type(current_defaulted) is not bool:
+                raise ValueError("invalid workflow class provenance")
+            if position == 0 and not class_was_present and not current_defaulted:
+                # The run's class was just derived from the default; a receipt
+                # that omits workflow_class cannot claim explicit non-defaulted
+                # provenance (receipt-side residue of the 064 request fix).
                 raise ValueError("invalid workflow class provenance")
         else:
             current_defaulted = (

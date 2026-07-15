@@ -116,6 +116,58 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_pipeline_receipts(explicit)
 
+    def test_receipts_reject_false_default_provenance_without_a_class(self):
+        # Finding 085: a receipt set that omits workflow_class derived the
+        # default; it cannot explicitly claim workflow_class_defaulted=false.
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        derived = copy.deepcopy(receipts)
+        for receipt in derived:
+            receipt.pop("workflow_class", None)
+            receipt["workflow_class_defaulted"] = False
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(derived)
+        truthful = copy.deepcopy(receipts)
+        for receipt in truthful:
+            receipt["workflow_class_defaulted"] = False
+        events = translate_pipeline_receipts(truthful)
+        self.assertFalse(any(event.payload["workflow_class_defaulted"] for event in events))
+        inherited = copy.deepcopy(receipts)
+        for receipt in inherited[1:]:
+            receipt.pop("workflow_class", None)
+            receipt["workflow_class_defaulted"] = False
+        events = translate_pipeline_receipts(inherited)
+        self.assertFalse(any(event.payload["workflow_class_defaulted"] for event in events))
+
+    def test_isolation_strategy_is_a_separate_receipt_field_from_execution_mode(self):
+        # Finding 083: sequential-on-branch is an isolation strategy carried
+        # in its own receipt field; executionMode stays in the closed host set.
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2]["isolationStrategy"] = "sequential-on-branch"
+        receipts[3]["isolation_strategy"] = "per-chunk-worktree"
+        events = translate_pipeline_receipts(receipts)
+        self.assertEqual(events[2].payload["isolation_strategy"], "sequential-on-branch")
+        self.assertEqual(events[2].payload["execution_mode"], "full_cli")
+        self.assertEqual(events[3].payload["isolation_strategy"], "per-chunk-worktree")
+        self.assertNotIn("isolationStrategy", events[2].payload)
+        widened = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        for receipt in widened:
+            receipt["execution_mode"] = "sequential-on-branch"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(widened)
+
+    def test_model_used_alias_normalizes_to_canonical_model_field(self):
+        # Finding 087: documented modelUsed descent evidence feeds the
+        # canonical model field instead of being silently dropped.
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2]["modelUsed"] = "claude-opus-4-8"
+        event = translate_pipeline_receipts(receipts)[2]
+        self.assertEqual(event.payload["model"], "claude-opus-4-8")
+        self.assertNotIn("modelUsed", event.payload)
+        conflicting = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        conflicting[2].update({"modelUsed": "claude-opus-4-8", "model": "gpt-5.6-sol"})
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(conflicting)
+
     def test_receipt_redaction_preserves_safe_routing_facts_and_drops_secret_shapes(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         receipts[2].update({

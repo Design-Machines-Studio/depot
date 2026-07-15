@@ -25,7 +25,7 @@ You MUST execute every step for every chunk. Specifically:
 - You MUST record the session to ai-memory
 - You MUST report what you actually did in the summary, honestly
 
-Exception: use `sequential-on-branch` mode instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification.
+Exception: use the `sequential-on-branch` isolation strategy instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification. It is an isolation strategy recorded as `isolationStrategy`, never an `executionMode` value.
 
 ## CRITICAL: Subagent Budget & Dead-Lane Handling
 
@@ -169,7 +169,7 @@ The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list 
 
 ## Progress Ledger
 
-Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), or `manual_walkthrough` (user is driving some steps). Browser availability is a separate required-evidence status and never an execution mode. Include the label in every chunk receipt and in the final Summary Report.
+Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), or `manual_walkthrough` (user is driving some steps). Browser availability is a separate required-evidence status and never an execution mode. Each chunk also carries a separate `isolationStrategy` label from Step 1c (`per-chunk-worktree` or `sequential-on-branch`) -- isolation is never folded into `executionMode`. Include both labels in every chunk receipt and in the final Summary Report.
 
 Before any chunk runs:
 
@@ -191,6 +191,7 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 9. Merge back to feature branch
 [chunk-id] 10. Clean up worktree
 [chunk-id] executionMode: full_cli | codex_native | manual_walkthrough
+[chunk-id] isolationStrategy: per-chunk-worktree | sequential-on-branch
 ```
 
 After all chunks:
@@ -467,7 +468,7 @@ In `sequential-on-branch` mode:
 1. Do not create per-chunk worktrees.
 2. Execute chunks sequentially on `<featureBranch>` in manifest order, even if the manifest has parallel groups.
 3. Preserve every other gate: input guardrails, implementation dispatch, build/test validation, anti-pattern scan, evaluation gate, final full review, requirements cross-check, receipt, and cleanup.
-4. Record `executionMode: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report.
+4. Record `isolationStrategy: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report. `executionMode` keeps its closed host-shaped value (`full_cli`, `codex_native`, `manual_walkthrough`, `generic`, `generic_host`) -- sequential-on-branch is an isolation strategy, not a host execution mode, and the workflow-kernel adapters reject any `executionMode` outside the closed set. Runs that use per-chunk worktrees record `isolationStrategy: per-chunk-worktree`.
 
 Tradeoff: no parallel isolation. This is acceptable for sequential manifests and required when Docker-mounted verification would otherwise test the wrong checkout.
 
@@ -522,7 +523,7 @@ git worktree add .worktrees/pipeline/<feature>/<chunk-id> -b pipeline/<feature>/
 
 Registration happens at creation, never reconstructed afterward from a glob. If the run dies between `worktree add` and registration, Step 5b's sweep is the only thing that finds the orphan -- and it can only find refs it knows the naming convention for.
 
-In `sequential-on-branch` mode, replace the worktree command with:
+Under the `sequential-on-branch` isolation strategy, replace the worktree command with:
 
 ```bash
 git checkout <featureBranch>
@@ -1234,6 +1235,7 @@ Feature: <feature-slug>
 Date: <YYYY-MM-DD>
 Branch: <featureBranch>
 executionMode: <full_cli | codex_native | manual_walkthrough>
+isolationStrategy: <per-chunk-worktree | sequential-on-branch>
 
 | # | Requirement | Addressed In | Evidence |
 |---|-------------|--------------|----------|
@@ -1387,6 +1389,7 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 - Merge: <merge recommendation from Step 4>
 - Chunks: <N> executed, <M> parallel
 - Mode: <executionMode>
+- Isolation: <isolationStrategy: per-chunk-worktree | sequential-on-branch>
 - Workflow class: <workflowClass>
 - Workflow class defaulted: <true|false>
 - providerSplit: {claude: N, codex: N, openrouter: N, deepseek: N}
@@ -1611,6 +1614,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - **Result:** Clean / N findings remaining
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
 - **executionMode:** full_cli / codex_native / manual_walkthrough
+- **isolationStrategy:** per-chunk-worktree / sequential-on-branch
 - **providerSplit:** `{claude: N, codex: N, openrouter: N, deepseek: N}` measured from run receipts/postmortem
 - **workflowClass:** `<class>` (`workflow_class_defaulted=true|false`)
 - **shadow:** match / parity-gap / unavailable (reason)

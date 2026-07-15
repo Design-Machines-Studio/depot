@@ -71,6 +71,13 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(report.proposals[0]["rationale"], "observed_fallback")
         self.assertEqual(report.proposals[0]["evidence_count"], 1)
 
+    def test_model_used_alias_feeds_the_model_metrics_dimension(self):
+        # Finding 087: modelUsed evidence populates model metrics.
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2]["modelUsed"] = "claude-opus-4-8"
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(report.models, {"claude-opus-4-8": 1})
+
     def test_replay_duplicate_gap_and_order_are_rejected(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         variants = []
