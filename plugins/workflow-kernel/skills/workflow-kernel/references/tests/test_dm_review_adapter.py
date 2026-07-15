@@ -23,11 +23,11 @@ class DmReviewAdapterTests(unittest.TestCase):
         self.assertFalse(hasattr(spec, "execute"))
 
     def test_mapping_tracks_legacy_workflow_class_default_provenance(self):
-        request = ReviewRequest.from_mapping({"run_id": "review-legacy", "requested_lanes": ["architecture"], "executionMode": "claude_full"})
+        request = ReviewRequest.from_mapping({"run_id": "review-legacy", "requested_lanes": ["architecture"], "executionMode": "full_cli"})
         spec = translate_review(request, HostCapabilities("claude", frozenset()))
         self.assertTrue(spec.workflow_class_defaulted)
         self.assertEqual(spec.workflow_class, WorkflowClass.FEATURE)
-        self.assertEqual(spec.execution_mode, "claude_full")
+        self.assertEqual(spec.execution_mode, "full_cli")
 
     def test_mapping_requires_an_exact_lane_collection(self):
         for lanes in ("security", {"security": True}, (value for value in ("security",))):

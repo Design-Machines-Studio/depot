@@ -17,7 +17,7 @@ from .workflows import WorkflowTemplates
 
 
 EXECUTION_MODES = frozenset({
-    "claude_full", "claude_full_cli", "codex_native", "generic",
+    "full_cli", "codex_native", "manual_walkthrough", "generic",
     "generic_host",
 })
 PIPELINE_STAGES = frozenset({

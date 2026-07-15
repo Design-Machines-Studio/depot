@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping, Tuple
 
 from .adapters.base import HostCapabilities, NodeSpec, WorkflowClass
-from .pipeline_adapter import RunSpec, _required_text, _translate_receipts
+from .pipeline_adapter import EXECUTION_MODES, RunSpec, _required_text, _translate_receipts
 from .schema import WorkflowEvent
 from .workflows import WorkflowTemplates
 
@@ -36,10 +36,7 @@ class ReviewRequest:
             raise ValueError("invalid review lanes")
         if self.mode not in REVIEW_MODES:
             raise ValueError("invalid review mode")
-        if self.execution_mode not in {
-            "claude_full", "claude_full_cli", "codex_native", "generic",
-            "generic_host",
-        }:
+        if self.execution_mode not in EXECUTION_MODES:
             raise ValueError("invalid execution mode")
         if type(self.workflow_class_defaulted) is not bool:
             raise ValueError("invalid workflow class provenance")

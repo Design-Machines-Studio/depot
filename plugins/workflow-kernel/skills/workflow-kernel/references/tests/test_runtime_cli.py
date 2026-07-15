@@ -313,7 +313,7 @@ class RuntimeCliTests(unittest.TestCase):
     def test_compare_returns_five_for_parity_gap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            run_spec = {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"}
+            run_spec = {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"full_cli"}
             observation = shadow_artifact("authoritative_observation", run_spec)
             observation["run_state"] = {
                 "schema_version": 1, "revision": 0, "run_id": "pipeline-1", "mode": "shadow", "status": "planned",
@@ -335,7 +335,7 @@ class RuntimeCliTests(unittest.TestCase):
             predicted = json.loads(json.dumps(receipts)); predicted[2]["status"] = "failed"
             from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
             events = translate_pipeline_receipts(predicted)
-            run_spec = {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"}
+            run_spec = {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"full_cli"}
             (root / "pipeline-shadow-observation.json").write_text(json.dumps(
                 shadow_artifact("authoritative_observation", run_spec, []),
             ))
@@ -360,7 +360,7 @@ class RuntimeCliTests(unittest.TestCase):
             base = {
                 "schema_version":1,"artifact_role":"authoritative_observation",
                 "observation_type": "pipeline", "observation_only":True,
-                "run_spec": {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"claude_full"},
+                "run_spec": {"run_id":"pipeline-1","workflow_class":"feature","workflow_class_defaulted":False,"execution_mode":"full_cli"},
                 "run_state": {"schema_version":1,"revision":len(events),"run_id":"pipeline-1","mode":"shadow","status":"running","created_at":events[0].occurred_at,"updated_at":events[-1].occurred_at,"nodes":{},"evidence":refs,"cleanup_reconciled":False},
             }
             output = root / "parity.json"
