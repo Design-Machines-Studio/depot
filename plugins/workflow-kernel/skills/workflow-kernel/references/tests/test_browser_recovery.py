@@ -110,6 +110,40 @@ class BrowserRecoveryTests(unittest.TestCase):
             ),
         )
 
+    def recovered_on_alternate(self, primary, alternate):
+        engines = (primary, alternate)
+        request = BrowserRequest(
+            "case-1", TARGET_URL, VIEWPORT, primary, alternate,
+            PROFILE_ID, engines, TARGET_ORIGIN_DIGEST,
+        )
+        initial = BrowserAttempt(
+            "case-1", 1, primary, primary, "verify", "failed",
+            "browser_tool_failure", "tool failed", "proof/screenshot.png",
+            "proof/trace.zip", "proof/console.txt", "primary-1", "browser",
+            None, PROFILE_ID, engines, TARGET_URL_DIGEST,
+            TARGET_ORIGIN_DIGEST, TARGET_ROUTE_DIGEST, VIEWPORT,
+        )
+        recovered = BrowserAttempt(
+            "case-1", 2, primary, alternate, "verify", "passed",
+            None, None, "proof/screenshot.png", "proof/trace.zip",
+            "proof/console.txt", "secondary-1", "browser",
+            "alternate_engine_recovery", PROFILE_ID, engines,
+            TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST, TARGET_ROUTE_DIGEST,
+            VIEWPORT,
+        )
+        return BrowserRecovery().run(
+            request,
+            FakeBrowserAdapter(
+                [initial, recovered],
+                quit_result=BrowserQuitEvidence(primary, False, "primary-1"),
+                launches=[
+                    BrowserLaunchEvidence(
+                        alternate, True, True, "secondary-1",
+                    ),
+                ],
+            ),
+        )
+
     def test_primary_first_pass_is_clean_without_recovery(self):
         adapter = FakeBrowserAdapter([attempt(1, "chromium", "passed", session="primary-1")])
         receipt = BrowserRecovery().run(self.request, adapter)
@@ -194,6 +228,53 @@ class BrowserRecoveryTests(unittest.TestCase):
         payload = self.blocked_with_unavailable_readiness().to_dict()
         payload["lifecycle"][-1]["actual_engine"] = payload["requested_engine"]
         self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_accepts_runtime_alternate_recovery_for_each_primary(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in (
+            ("chromium", "firefox"),
+            ("firefox", "webkit"),
+            ("webkit", "chromium"),
+        ):
+            with self.subTest(primary=primary, alternate=alternate):
+                receipt = self.recovered_on_alternate(primary, alternate)
+                self.assertEqual(
+                    receipt.reason_code, "alternate_engine_recovered_degraded",
+                )
+                self.assertTrue(schema_matches(receipt.to_dict(), schema))
+
+    def test_schema_rejects_recovered_receipt_without_readiness(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in (
+            ("chromium", "firefox"),
+            ("firefox", "webkit"),
+            ("webkit", "chromium"),
+        ):
+            with self.subTest(primary=primary, alternate=alternate):
+                payload = self.recovered_on_alternate(primary, alternate).to_dict()
+                payload["lifecycle"] = [
+                    item for item in payload["lifecycle"]
+                    if item["action"] != "readiness_recheck"
+                ]
+                self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_rejects_recovered_same_engine_alternate_evidence(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in (
+            ("chromium", "firefox"),
+            ("firefox", "webkit"),
+            ("webkit", "chromium"),
+        ):
+            with self.subTest(primary=primary, alternate=alternate):
+                payload = self.recovered_on_alternate(primary, alternate).to_dict()
+                payload["lifecycle"][-1]["actual_engine"] = primary
+                self.assertFalse(schema_matches(payload, schema))
 
     def test_recovered_receipt_recomputes_readiness_digest(self):
         adapter = FakeBrowserAdapter(
