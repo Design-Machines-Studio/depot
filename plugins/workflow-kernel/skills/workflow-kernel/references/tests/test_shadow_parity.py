@@ -23,6 +23,27 @@ class ShadowParityTests(unittest.TestCase):
     def load(self, name):
         return translate_pipeline_receipts(json.loads((FIXTURES / name).read_text()))
 
+    def test_known_host_profiles_use_the_canonical_harness_profile_host_ids(self):
+        from tests import canonical_harness_profile
+        from workflow_kernel.shadow import CANONICAL_HOSTS, KNOWN_HOST_PROFILES
+
+        declared = set(json.loads(
+            canonical_harness_profile().read_text(encoding="utf-8"),
+        )["hosts"])
+        self.assertEqual(declared, CANONICAL_HOSTS)
+        self.assertEqual(
+            {profile[0] for profile in KNOWN_HOST_PROFILES}, CANONICAL_HOSTS,
+        )
+
+    def test_real_claude_code_host_receipts_classify_as_known_host_difference(self):
+        codex = ReceiptSet.from_events(self.load("pipeline-codex.json"))
+        claude = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        self.assertTrue(all(item["host"] == "claude-code" for item in claude))
+        report = ShadowComparator().compare_receipt_sets(
+            codex, ReceiptSet.from_events(translate_pipeline_receipts(claude)),
+        )
+        self.assertEqual(report.reason, "explained_host_difference")
+
     def test_known_claude_codex_mechanisms_are_explained_when_semantics_match(self):
         claude = ReceiptSet.from_events(self.load("pipeline-claude.json"))
         codex = ReceiptSet.from_events(self.load("pipeline-codex.json"))

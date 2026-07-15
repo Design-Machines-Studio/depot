@@ -16,7 +16,7 @@ class MetricsTests(unittest.TestCase):
         before = tuple(event.to_dict() for event in events)
         report = MetricsAggregator().aggregate(events)
         self.assertEqual(report.workflow_classes, {"feature": 11})
-        self.assertEqual(report.hosts, {"claude": 11})
+        self.assertEqual(report.hosts, {"claude-code": 11})
         self.assertEqual(report.validation_first_pass_rate, 1.0)
         self.assertEqual(report.persona_expected, 2)
         self.assertEqual(report.persona_passed, 2)

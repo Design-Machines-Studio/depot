@@ -16,8 +16,12 @@ KNOWN_MECHANISMS = {
     "generic_agentic": "agentic_dispatch",
 }
 KNOWN_AGENTIC_PROVIDERS = frozenset({"anthropic", "openai", "generic"})
+# Canonical host identifiers, matching the harness profile's host keys
+# (plugins/pipeline/references/harness-profile.json) and its auto-detection.
+# Receipts must carry these exact names; there are no accepted aliases.
+CANONICAL_HOSTS = frozenset({"claude-code", "codex", "generic"})
 KNOWN_HOST_PROFILES = {
-    ("claude", "claude_native", "anthropic"),
+    ("claude-code", "claude_native", "anthropic"),
     ("codex", "codex_companion", "openai"),
     ("generic", "generic_agentic", "generic"),
 }
@@ -65,9 +69,7 @@ def _normalized_reference(value: object) -> object:
     if type(value) is not str:
         return value
     pieces = value.split("/")
-    if len(pieces) >= 3 and pieces[0] == "receipts" and pieces[1] in {
-        "claude", "codex", "generic",
-    }:
+    if len(pieces) >= 3 and pieces[0] == "receipts" and pieces[1] in CANONICAL_HOSTS:
         return (pieces[0], "host", *pieces[2:])
     return value
 
@@ -79,7 +81,7 @@ def _routing_fact(event: WorkflowEvent, *, normalize_host: bool = False) -> tupl
     host = payload.get("host")
     if normalize_host and mechanism == "agentic_dispatch" and provider in KNOWN_AGENTIC_PROVIDERS:
         provider = "agentic_provider"
-    if normalize_host and mechanism == "agentic_dispatch" and host in {"claude", "codex", "generic"}:
+    if normalize_host and mechanism == "agentic_dispatch" and host in CANONICAL_HOSTS:
         host = "agentic_host"
     return host, mechanism, provider
 
