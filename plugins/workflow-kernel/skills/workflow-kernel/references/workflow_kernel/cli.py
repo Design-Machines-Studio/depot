@@ -99,6 +99,11 @@ def _coordinated_run(states):
 
 def command_init(args):
     root = Path(args.directory)
+    lease_root = getattr(args, "lease_root", None)
+    if lease_root is not None:
+        expected = Path(lease_root) / "runs" / args.run_id
+        if root.resolve(strict=False) != expected.resolve(strict=False):
+            raise ValueError("run directory does not match canonical lease root")
     root.mkdir(parents=True, exist_ok=True)
     root, events, states = _paths(root)
     with _coordinated_run(states) as lease:
@@ -306,14 +311,17 @@ def _document_digest(value):
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
-def _bind_prediction(path, observation_type, spec, events):
+def _bind_prediction(path, observation_type, spec, events, source):
+    event_documents = [event.to_dict() for event in events]
     document = {
         "schema_version": 1, "artifact_role": "independent_prediction",
         "observation_type": observation_type,
         "run_spec": spec.to_dict(),
         "run_spec_digest": _document_digest(spec.to_dict()),
         "event_count": len(events),
-        "events": [event.to_dict() for event in events],
+        "events": event_documents,
+        "event_digest": _document_digest(event_documents),
+        "source_digest": _document_digest(source),
         "observation_only": True,
     }
     try:
@@ -325,9 +333,62 @@ def _bind_prediction(path, observation_type, spec, events):
             type(existing) is not dict
             or existing.get("artifact_role") != "independent_prediction"
             or existing.get("observation_type") != observation_type
+            or existing.get("run_spec") != spec.to_dict()
+            or existing.get("run_spec_digest") != _document_digest(spec.to_dict())
+            or existing.get("events") != event_documents
+            or existing.get("event_digest") != _document_digest(event_documents)
+            or existing.get("source_digest") != _document_digest(source)
         ):
             raise ValueError("invalid bound prediction artifact") from None
         return False
+
+
+def _require_bound_prediction(state_dir, observation_type, spec, authoritative_source):
+    path = Path(state_dir) / f"{observation_type}-shadow-prediction.json"
+    prediction = _load_json(path)
+    run_spec = spec.to_dict()
+    events = prediction.get("events") if type(prediction) is dict else None
+    if (
+        type(prediction) is not dict
+        or prediction.get("artifact_role") != "independent_prediction"
+        or prediction.get("observation_type") != observation_type
+        or prediction.get("run_spec") != run_spec
+        or prediction.get("run_spec_digest") != _document_digest(run_spec)
+        or type(events) is not list
+        or prediction.get("event_digest") != _document_digest(events)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", prediction.get("source_digest", ""))
+        or prediction.get("source_digest") == _document_digest(authoritative_source)
+    ):
+        raise ValueError("bound prediction artifact mismatch")
+    return prediction
+
+
+def command_bind_prediction(args):
+    source = _load_json(args.prediction_receipts)
+    if type(source) is not list:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    if args.type == "pipeline":
+        from .pipeline_adapter import translate_manifest, translate_pipeline_receipts
+        if args.manifest is None or args.request is not None:
+            raise ValueError("pipeline prediction requires manifest only")
+        spec = translate_manifest(
+            _load_json(args.manifest), _profile_from_receipts(source),
+        )
+        events = translate_pipeline_receipts(source)
+        name = "pipeline-shadow-prediction.json"
+    else:
+        from .dm_review_adapter import ReviewRequest, translate_review, translate_review_receipts
+        if args.request is None or args.manifest is not None:
+            raise ValueError("review prediction requires request only")
+        request = ReviewRequest.from_mapping(_load_json(args.request))
+        spec = translate_review(request, _profile_from_receipts(source))
+        events = translate_review_receipts(source)
+        name = "review-shadow-prediction.json"
+    _require_spec_receipt_context(spec, events)
+    output = Path(args.state_dir) / name
+    bound = _bind_prediction(output, args.type, spec, events, source)
+    _emit({"prediction_bound": bound, "event_count": len(events), "output": str(output)})
+    return 0
 
 
 def command_observe_pipeline(args):
@@ -340,6 +401,7 @@ def command_observe_pipeline(args):
     spec = translate_manifest(manifest, _profile_from_receipts(receipts))
     events = translate_pipeline_receipts(receipts)
     _require_spec_receipt_context(spec, events)
+    _require_bound_prediction(args.state_dir, "pipeline", spec, receipts)
     artifact = {
         "schema_version": 1,
         "artifact_role": "authoritative_observation",
@@ -350,19 +412,10 @@ def command_observe_pipeline(args):
         "observation_only": True,
     }
     output = Path(args.state_dir) / "pipeline-shadow-observation.json"
-    prediction_bound = False
-    prediction_path = Path(args.state_dir) / "pipeline-shadow-prediction.json"
-    prediction_source = getattr(args, "prediction_receipts", None)
-    if prediction_source is not None:
-        predicted = translate_pipeline_receipts(_load_json(prediction_source))
-        _require_spec_receipt_context(spec, predicted)
-        prediction_bound = _bind_prediction(
-            prediction_path, "pipeline", spec, predicted,
-        )
     _write_json(output, artifact)
     _emit({
         "observed": True, "event_count": len(events), "output": str(output),
-        "prediction_bound": prediction_bound,
+        "prediction_bound": False,
     })
     return 0
 
@@ -377,6 +430,7 @@ def command_observe_review(args):
     spec = translate_review(request, _profile_from_receipts(receipts))
     events = translate_review_receipts(receipts)
     _require_spec_receipt_context(spec, events)
+    _require_bound_prediction(args.state_dir, "review", spec, receipts)
     artifact = {
         "schema_version": 1,
         "artifact_role": "authoritative_observation",
@@ -387,19 +441,10 @@ def command_observe_review(args):
         "observation_only": True,
     }
     output = Path(args.state_dir) / "review-shadow-observation.json"
-    prediction_bound = False
-    prediction_path = Path(args.state_dir) / "review-shadow-prediction.json"
-    prediction_source = getattr(args, "prediction_receipts", None)
-    if prediction_source is not None:
-        predicted = translate_review_receipts(_load_json(prediction_source))
-        _require_spec_receipt_context(spec, predicted)
-        prediction_bound = _bind_prediction(
-            prediction_path, "review", spec, predicted,
-        )
     _write_json(output, artifact)
     _emit({
         "observed": True, "event_count": len(events), "output": str(output),
-        "prediction_bound": prediction_bound,
+        "prediction_bound": False,
     })
     return 0
 
@@ -442,11 +487,22 @@ def command_compare(args):
         or prediction.get("observation_type") != observation_type
     ):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
-    raw_events = prediction.get("events")
-    if type(raw_events) is not list:
+    if prediction.get("source_digest") == _document_digest(receipts):
         report = ParityReport(
-            "semantic_receipts_required", False, False,
-            ("observation_events_missing",),
+            "unsafe_to_promote", False, False,
+            ("prediction_source_reused_as_authoritative",),
+        )
+        _write_json(args.output, report.to_dict())
+        return EXIT_PARITY_GAP
+    raw_events = prediction.get("events")
+    if (
+        type(raw_events) is not list
+        or prediction.get("event_digest") != _document_digest(raw_events)
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", prediction.get("source_digest", ""))
+    ):
+        report = ParityReport(
+            "missing_authoritative_evidence", False, False,
+            ("semantic_receipts_required", "observation_events_missing"),
         )
         _write_json(args.output, report.to_dict())
         return EXIT_PARITY_GAP
@@ -458,8 +514,8 @@ def command_compare(args):
         or prediction_spec != run_spec
     ):
         report = ParityReport(
-            "run_spec_receipt_context_mismatch", False, False,
-            ("prediction_context_or_digest_drift",),
+            "kernel_prediction_gap", False, False,
+            ("run_spec_receipt_context_mismatch", "prediction_context_or_digest_drift"),
         )
         _write_json(args.output, report.to_dict())
         return EXIT_PARITY_GAP
@@ -478,8 +534,8 @@ def command_compare(args):
     )
     if observed_context != expected_context:
         report = ParityReport(
-            "run_spec_receipt_context_mismatch", False, False,
-            ("run_class_or_mode_drift",),
+            "kernel_prediction_gap", False, False,
+            ("run_spec_receipt_context_mismatch", "run_class_or_mode_drift"),
         )
         _write_json(args.output, report.to_dict())
         return EXIT_PARITY_GAP
@@ -489,6 +545,16 @@ def command_compare(args):
     report = ShadowComparator().compare_receipt_sets(
         predicted, ReceiptSet.from_events(events),
     )
+    if report.reason == "semantic_receipts_required":
+        report = ParityReport(
+            "missing_authoritative_evidence", False, False,
+            ("semantic_receipts_required", *report.differences),
+        )
+    elif report.reason == "run_spec_receipt_context_mismatch":
+        report = ParityReport(
+            "kernel_prediction_gap", False, False,
+            ("run_spec_receipt_context_mismatch", *report.differences),
+        )
     _write_json(args.output, report.to_dict())
     return 0 if report.semantic_match else EXIT_PARITY_GAP
 
@@ -991,7 +1057,8 @@ def command_plan_cleanup(args):
     records = registry.resources_for(args.run_id, args.node_id)
     inventory = adapter.inventory_registered(records)
     proof = _incomplete_node_proof(
-        args.state_dir, args.run_id, records, args.node_statuses,
+        Path(args.lease_root) / "runs" / args.run_id,
+        args.run_id, records, args.node_statuses,
     )
     if args.node_id is None:
         plan = adapter.plan_reconcile_run(
@@ -1009,7 +1076,7 @@ def command_plan_cleanup(args):
 
 def command_plan_reconcile(args):
     from .adapters.docker import DockerAdapter
-    lease_reader = StateDirectoryLeaseReader(args.state_dir)
+    lease_reader = StateDirectoryLeaseReader(args.lease_root)
     adapter = DockerAdapter(_SubprocessRunner(), lease_reader=lease_reader)
     registry = _registry(args.state_dir)
     records = registry.resources_for(args.run_id)
@@ -1017,7 +1084,8 @@ def command_plan_reconcile(args):
     plan = adapter.plan_reconcile_run(
         registry, inventory, args.run_id,
         incomplete_node_proof=_incomplete_node_proof(
-            args.state_dir, args.run_id, records, args.node_statuses,
+            Path(args.lease_root) / "runs" / args.run_id,
+            args.run_id, records, args.node_statuses,
         ), terminal=True,
     )
     stale_inventory = adapter.inventory()
@@ -1156,7 +1224,7 @@ def command_execute_cleanup_step(args):
             raise ValueError("cleanup resource absent from sealed inventory")
         orphan_mode = plan.scope.stale_sweep
         lease_context = (
-            StateDirectoryLeaseReader(args.state_dir).inactive_guard(action.run_id)
+            StateDirectoryLeaseReader(args.lease_root).inactive_guard(action.run_id)
             if orphan_mode else nullcontext(None)
         )
         with lease_context as lease_proof:
@@ -1173,7 +1241,8 @@ def command_execute_cleanup_step(args):
                 records = (record,)
                 current = adapter.inventory_registered(records)
                 proof = _incomplete_node_proof(
-                    args.state_dir, action.run_id, records,
+                    Path(args.lease_root) / "runs" / action.run_id,
+                    action.run_id, records,
                     args.node_statuses,
                 )
             witness = _inventory(_load_json(args.inventory))
@@ -1231,6 +1300,7 @@ def parser():
     init = commands.add_parser("init", help="initialize a shadow-mode run")
     init.add_argument("directory")
     init.add_argument("--run-id", required=True)
+    init.add_argument("--lease-root")
     init.add_argument("--mode", choices=[item.value for item in RunMode], default=RunMode.SHADOW.value)
     init.add_argument("--occurred-at", required=True, help="timezone-aware ISO-8601 timestamp")
     init.set_defaults(handler=command_init)
@@ -1253,17 +1323,25 @@ def parser():
     status.add_argument("directory")
     status.set_defaults(handler=command_status)
 
+    bind_prediction = commands.add_parser(
+        "bind-prediction", help="seal one independent pre-action prediction",
+    )
+    bind_prediction.add_argument("--type", choices=("pipeline", "review"), required=True)
+    bind_prediction.add_argument("--manifest")
+    bind_prediction.add_argument("--request")
+    bind_prediction.add_argument("--prediction-receipts", required=True)
+    bind_prediction.add_argument("--state-dir", required=True)
+    bind_prediction.set_defaults(handler=command_bind_prediction)
+
     observe_pipeline = commands.add_parser("observe-pipeline", help="observe authoritative pipeline receipts")
     observe_pipeline.add_argument("--manifest", required=True)
     observe_pipeline.add_argument("--receipts", required=True)
-    observe_pipeline.add_argument("--prediction-receipts")
     observe_pipeline.add_argument("--state-dir", required=True)
     observe_pipeline.set_defaults(handler=command_observe_pipeline)
 
     observe_review = commands.add_parser("observe-review", help="observe authoritative review receipts")
     observe_review.add_argument("--request", required=True)
     observe_review.add_argument("--receipts", required=True)
-    observe_review.add_argument("--prediction-receipts")
     observe_review.add_argument("--state-dir", required=True)
     observe_review.set_defaults(handler=command_observe_review)
 
@@ -1303,6 +1381,7 @@ def parser():
 
     plan_cleanup = commands.add_parser("plan-cleanup", help="plan registered resource cleanup")
     plan_cleanup.add_argument("--state-dir", required=True)
+    plan_cleanup.add_argument("--lease-root", required=True)
     plan_cleanup.add_argument("--run-id", required=True)
     plan_cleanup.add_argument("--node-id")
     plan_cleanup.add_argument("--node-statuses")
@@ -1318,6 +1397,7 @@ def parser():
 
     execute_step = commands.add_parser("execute-cleanup-step", help="execute one sealed cleanup step under registry guard")
     execute_step.add_argument("--state-dir", required=True)
+    execute_step.add_argument("--lease-root", required=True)
     execute_step.add_argument("--plan", required=True)
     execute_step.add_argument("--step-index", type=int, required=True)
     execute_step.add_argument("--inventory", required=True)
@@ -1334,6 +1414,7 @@ def parser():
 
     reconcile = commands.add_parser("plan-reconcile", help="plan terminal registered-resource reconciliation")
     reconcile.add_argument("--state-dir", required=True)
+    reconcile.add_argument("--lease-root", required=True)
     reconcile.add_argument("--run-id", required=True)
     reconcile.add_argument("--ttl-hours", type=float, default=24.0)
     reconcile.add_argument("--node-statuses")

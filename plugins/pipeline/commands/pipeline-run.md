@@ -34,14 +34,21 @@ If any check fails, report the issue and stop.
 
 The Markdown manifest, this command, routing policy, orchestrator, and receipts remain authoritative. The workflow kernel is observation-only and may not select ready nodes, block a merge, change fallback routing, invoke cleanup, or convert a review result.
 
-Resolve the runtime from the real path of the currently executing canonical Depot plugin root. Accept an in-repository runtime only beneath that same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` directories under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible manifest name/version metadata. Store `run-state.json`, `events.jsonl`, and `shadow-report.json` beneath the feature's `plans/<feature>/` directory. If resolution or compatibility fails, preserve the authoritative run and record `shadow unavailable` with the safe reason.
+Resolve the runtime from the real path of the currently executing canonical Depot plugin root. Accept an in-repository runtime only beneath that same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` directories under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible manifest name/version metadata. Store observation and parity artifacts beneath `plans/<feature>/`. Use the explicit repository-scoped canonical lease root `.workflow-kernel`, initialize every run at `.workflow-kernel/runs/<run-id>` with `--lease-root .workflow-kernel`, and append lifecycle state there; this root is never home-global or shared across repositories. If resolution or compatibility fails, preserve the authoritative run and record `shadow unavailable` with the safe reason.
 
 Invoke only stable `python3 -m workflow_kernel` subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
 
-The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulative ordered redacted array `plans/<feature>/authoritative-receipts.json`. Every boundary observation uses:
+The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulative ordered redacted array `plans/<feature>/authoritative-receipts.json`. Produce the independent prediction before corresponding authoritative actions and seal it first:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
+python3 -m workflow_kernel init .workflow-kernel/runs/<run-id> --run-id <run-id> --lease-root .workflow-kernel --mode shadow --occurred-at <timezone-aware-ISO-8601>
+python3 -m workflow_kernel bind-prediction --type pipeline --manifest plans/<feature>/manifest.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
+```
+
+Every later boundary observation uses:
+
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
 ```
 
 ## Codex Native Execution Adapter
@@ -100,12 +107,12 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
 After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
 python3 -m workflow_kernel compare --state-dir plans/<feature> --authoritative-receipts plans/<feature>/authoritative-receipts.json --output plans/<feature>/shadow-report.json
 python3 -m workflow_kernel metrics --events plans/<feature>/authoritative-receipts.json --output plans/<feature>/metrics.json
 ```
 
-Produce `independent-prediction-receipts.json` before the corresponding authoritative actions. `observe-pipeline` runs only after authoritative receipts exist, binds that independent input once as `pipeline-shadow-prediction.json`, and writes a separate `authoritative_observation`; later observations never overwrite the prediction. Without an independent context/digest-bound prediction, comparison fails closed. Keep these artifacts until all three commands complete. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result.
+`bind-prediction` runs before corresponding authoritative actions and atomically seals the source, translated events, event digest, and RunSpec context. `observe-pipeline` runs only after authoritative receipts exist, requires that bound `pipeline-shadow-prediction.json`, and writes a separate `authoritative_observation`; it never creates or changes the prediction. Without matching independent prediction evidence, observation and comparison fail closed. Keep the source and bound artifact until comparison completes. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result.
 
 Present the summary report from the orchestrator, then ask:
 

@@ -24,11 +24,11 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `prompts/*.md` | 2 | Chunk execution prompts consumed by orchestrator |
 | `manifest.json` | 2 | Chunk ordering and dependency metadata; retained through terminal observe/compare/metrics |
 | `authoritative-receipts.json` | 2 | Cumulative ordered redacted receipt array; canonical input to observe/compare/metrics |
-| `run-state.json` | 2 | Workflow-kernel shadow state; observation-only and preserved on failure |
-| `events.jsonl` | 2 | Redacted workflow-kernel event stream used for parity and metrics |
+| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Repository-scoped canonical lifecycle and lease state; every run writes and locks the same path stale reconciliation reads |
+| `.workflow-kernel/runs/<run-id>/events.jsonl` | 2 | Canonical redacted lifecycle ledger paired with the lease state |
 | `pipeline-shadow-observation.json` | 2 | Explicit `authoritative_observation` RunSpec/event snapshot generated after authoritative receipts |
 | `pipeline-shadow-prediction.json` | 2 | Immutable, context/digest-bound `independent_prediction`; bound once and never overwritten by re-observation |
-| `independent-prediction-receipts.json` | 1 | Independently produced prediction input that predates corresponding authoritative actions |
+| `independent-prediction-receipts.json` | 2 | Independently produced pre-action prediction source; retained with the bound prediction through comparison and deleted only after semantic match |
 | `shadow-report.json` | 2 | Predicted-versus-authoritative comparison; never changes run outcome |
 | `metrics.json` | 2 | Proposal-only reliability aggregation generated after the terminal receipt |
 | `docker/*.json` | 2 | Creation plans/receipts, bound node-status and inventory snapshots, sealed cleanup plans, outcomes, and cleanup receipts |
@@ -60,6 +60,7 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 | `.claude/ux-review/workflow-kernel/authoritative-receipts.json` | 2 | Cumulative ordered redacted review receipt array |
 | `.claude/ux-review/workflow-kernel/review-shadow-observation.json` | 2 | Explicit authoritative review observation snapshot |
 | `.claude/ux-review/workflow-kernel/review-shadow-prediction.json` | 2 | Immutable, context/digest-bound independent review prediction |
+| `.claude/ux-review/workflow-kernel/independent-prediction-receipts.json` | 2 | Pre-action review prediction source retained through comparison and deleted only after semantic match |
 | `.claude/ux-review/workflow-kernel/{shadow-report,metrics}.json` | 2 | Terminal parity and proposal-only reliability outputs |
 | `.claude/ux-review/workflow-kernel/docker/*.json` | 2 | Owned-resource plans, proof snapshots, outcomes, and receipts |
 | `todos/*-pending-*.md` | 3 | Active findings -- persist until resolved |
@@ -86,7 +87,7 @@ Step 5b runs on every exit path -- success, failure, and every answer to the Pha
 2. Delete Tier 1 plus consumed prompts/brainstorm artifacts and complete Git cleanup/readiness checks. Preserve `manifest.json`, `authoritative-receipts.json`, and shadow/RunSpec artifacts.
 3. Write `plans/<feature-slug>/receipt.md` from those completed authoritative outcomes.
 4. Append the terminal receipt, run terminal observation, comparison, and metrics using the retained manifest and cumulative receipt array.
-5. On semantic `match`, delete shadow Tier 2 first, then delete the consumed manifest, receipt array, and Docker plan/proof inputs. On any other result, preserve all terminal inputs and shadow artifacts for investigation.
+5. On semantic `match`, delete shadow Tier 2, including the bound prediction and canonical run directory, then delete the consumed manifest, authoritative receipt array, independent prediction source, and Docker plan/proof inputs. The source and bound prediction are never deleted before bind and comparison. On any other result, preserve all terminal inputs and shadow artifacts for investigation.
 6. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`.
 
 Shadow artifacts never authorize cleanup, supply receipt fields, or substitute for an authoritative receipt.

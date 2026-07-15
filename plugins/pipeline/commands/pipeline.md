@@ -110,23 +110,30 @@ Mark each item as you complete it. Do not mark a GATE as complete until AskUserQ
 
 The Progress Ledger, canonical Markdown phases, manifest, routing policy, execution-orchestrator, and authoritative receipts remain the source of truth. Kernel hooks run only after the matching authoritative artifact, receipt, or action exists. They may observe and compare; they may not select ready nodes, advance gates, block or approve a merge, alter provider fallback, invoke cleanup, or convert review outcomes.
 
-Resolve the kernel from the real path of the currently executing canonical Depot plugin root. Permit an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` subcommands; inline Python source is forbidden. Store shadow state beneath `plans/<feature-slug>/`. If unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
+Resolve the kernel from the real path of the currently executing canonical Depot plugin root. Permit an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` subcommands; inline Python source is forbidden. Store observation artifacts beneath `plans/<feature-slug>/`. Use the explicit repository-scoped canonical lease root `.workflow-kernel` for this repository only; initialize each run at `.workflow-kernel/runs/<run-id>` with `init ... --lease-root .workflow-kernel`, and append lifecycle events there so stale reconciliation reads and locks the same path. Never use a home-global or cross-repository lease root. If unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
+
+After producing `independent-prediction-receipts.json` and before any corresponding authoritative action, seal it exactly once:
+
+```text
+python3 -m workflow_kernel init .workflow-kernel/runs/<run-id> --run-id <run-id> --lease-root .workflow-kernel --mode shadow --occurred-at <timezone-aware-ISO-8601>
+python3 -m workflow_kernel bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
+```
 
 At each phase boundary, rewrite `plans/<feature-slug>/authoritative-receipts.json` as the complete ordered, redacted receipt array through that boundary, then invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
 ```
 
 After the authoritative terminal receipt is appended, invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
 python3 -m workflow_kernel compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
 python3 -m workflow_kernel metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
-Produce `independent-prediction-receipts.json` before corresponding authoritative actions. Terminal observation binds it once as `pipeline-shadow-prediction.json` and writes a separate `authoritative_observation`; re-observation cannot overwrite the prediction. Keep those artifacts through all terminal commands. Missing independent prediction evidence fails closed. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result.
+`bind-prediction` atomically seals the prediction source, translated events, event digest, and RunSpec context as `pipeline-shadow-prediction.json`. `observe-pipeline` only consumes that existing bound artifact and writes a separate `authoritative_observation`; it never creates or changes the prediction. Keep both the source and bound artifact through comparison. Missing or mismatched independent prediction evidence fails closed. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result.
 
 ## Airlift Checkpoint (every phase boundary)
 

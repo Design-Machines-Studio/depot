@@ -22,7 +22,11 @@ Visual findings at any severity (P1/P2/P3) are mandatory fixes before merge. See
    - `--a11y`: focus on runtime accessibility checks
 3. Output the visual testing report
 
-Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `.claude/ux-review/workflow-kernel/request.json`; maintain its cumulative ordered redacted receipts at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`.
+Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `.claude/ux-review/workflow-kernel/request.json`; maintain its cumulative ordered redacted receipts at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. Use repository-scoped `.workflow-kernel` as the canonical lease root for this repository only, with the run under `.workflow-kernel/runs/<run-id>`. Before authoritative browser actions, seal the independent prediction:
+
+```text
+python3 -m workflow_kernel bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
 
 Use the complete project verification profile selected from configuration and `tests/ux/` task frontmatter: persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation. `not_declared` applies only when declarations are absent; a present but incomplete declaration or unresolved route binding is blocking. Execute the selected case set rather than a fixed persona sample.
 
@@ -31,9 +35,9 @@ On any missing required browser tool, dev server, authentication fixture, route 
 After the authoritative visual report exists, append it to `.claude/ux-review/workflow-kernel/authoritative-receipts.json` and invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
 python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 ```
 
-Bind independently produced prediction receipts once as `review-shadow-prediction.json`; later authoritative observation cannot overwrite them. Keep request, authoritative receipts, observation, and prediction artifacts until all commands complete. Missing independent prediction evidence fails closed and never converts the visual result.
+`bind-prediction` atomically seals the independent source and translated context as `review-shadow-prediction.json`; later authoritative observation requires it and never creates or overwrites it. Keep the prediction source and bound artifact through comparison, deleting them only after semantic `match`. Missing or source-reused prediction evidence fails closed and never converts the visual result.

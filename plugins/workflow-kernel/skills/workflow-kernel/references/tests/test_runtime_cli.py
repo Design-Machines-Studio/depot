@@ -28,6 +28,12 @@ def shadow_artifact(role, run_spec, events=None):
             run_spec, sort_keys=True, separators=(",", ":"),
         ).encode()
         value["run_spec_digest"] = "sha256:" + hashlib.sha256(encoded).hexdigest()
+        event_documents = [] if events is None else events
+        encoded_events = json.dumps(
+            event_documents, sort_keys=True, separators=(",", ":"),
+        ).encode()
+        value["event_digest"] = "sha256:" + hashlib.sha256(encoded_events).hexdigest()
+        value["source_digest"] = "sha256:" + "0" * 64
     return value
 
 
@@ -46,6 +52,17 @@ class RuntimeCliTests(unittest.TestCase):
                 "feature": "pipeline-1", "workflowClass": "feature", "executionMode": "codex_native",
                 "chunks": [{"id": "chunk-a", "dependsOn": []}], "executionPlan": {"levels": [{"level": 0, "strategy": "sequential", "chunks": ["chunk-a"]}]},
             }))
+            prediction = root / "prediction.json"
+            predicted = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+            predicted[0]["prediction_basis"] = "pre-action"
+            prediction.write_text(json.dumps(predicted))
+            bound = self.run_cli(
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest,
+                "--prediction-receipts", prediction,
+                "--state-dir", root,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
             result = self.run_cli("observe-pipeline", "--manifest", manifest, "--receipts", FIXTURES / "pipeline-codex.json", "--state-dir", root)
             self.assertEqual(result.returncode, 0, result.stderr)
             artifact = json.loads((root / "pipeline-shadow-observation.json").read_text())
@@ -53,6 +70,32 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(artifact["artifact_role"], "authoritative_observation")
             self.assertEqual(artifact["run_spec"]["workflow_class"], "feature")
             self.assertEqual(artifact["event_count"], 11)
+
+    def test_observe_rejects_prediction_source_reused_as_authoritative_by_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature":"pipeline-1", "workflowClass":"feature",
+                "executionMode":"codex_native", "chunks":[],
+            }))
+            prediction = root / "prediction.json"
+            authoritative = root / "authoritative-at-different-path.json"
+            document = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+            prediction.write_text(json.dumps(document))
+            authoritative.write_text(json.dumps(document))
+            bound = self.run_cli(
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest, "--prediction-receipts", prediction,
+                "--state-dir", root,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            observed = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", authoritative, "--state-dir", root,
+            )
+            self.assertEqual(observed.returncode, 2, observed.stderr)
+            self.assertFalse((root / "pipeline-shadow-observation.json").exists())
 
     def test_independent_prediction_is_bound_once_and_terminal_observation_cannot_overwrite_it(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -67,22 +110,29 @@ class RuntimeCliTests(unittest.TestCase):
             values[2]["status"] = "failed"
             predicted.write_text(json.dumps(values))
             first = self.run_cli(
-                "observe-pipeline", "--manifest", manifest,
-                "--receipts", FIXTURES / "pipeline-codex.json",
-                "--prediction-receipts", predicted, "--state-dir", root,
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest, "--prediction-receipts", predicted,
+                "--state-dir", root,
             )
             self.assertEqual(first.returncode, 0, first.stderr)
             prediction_path = root / "pipeline-shadow-prediction.json"
             bound = prediction_path.read_bytes()
             document = json.loads(bound)
             self.assertEqual(document["artifact_role"], "independent_prediction")
-            predicted.write_text((FIXTURES / "pipeline-codex.json").read_text())
-            second = self.run_cli(
+            self.assertTrue(document["event_digest"].startswith("sha256:"))
+            observed = self.run_cli(
                 "observe-pipeline", "--manifest", manifest,
                 "--receipts", FIXTURES / "pipeline-codex.json",
-                "--prediction-receipts", predicted, "--state-dir", root,
+                "--state-dir", root,
             )
-            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(observed.returncode, 0, observed.stderr)
+            predicted.write_text((FIXTURES / "pipeline-codex.json").read_text())
+            second = self.run_cli(
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest, "--prediction-receipts", predicted,
+                "--state-dir", root,
+            )
+            self.assertEqual(second.returncode, 2, second.stderr)
             self.assertEqual(prediction_path.read_bytes(), bound)
             output = root / "parity.json"
             compared = self.run_cli(
@@ -106,7 +156,27 @@ class RuntimeCliTests(unittest.TestCase):
                 "--receipts", FIXTURES / "pipeline-codex.json",
                 "--state-dir", root,
             )
-            self.assertEqual(observed.returncode, 0, observed.stderr)
+            self.assertEqual(observed.returncode, 2, observed.stderr)
+            from workflow_kernel.adapters.base import HostCapabilities
+            from workflow_kernel.pipeline_adapter import translate_manifest, translate_pipeline_receipts
+            receipts = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+            spec = translate_manifest(
+                json.loads(manifest.read_text()),
+                HostCapabilities("codex", frozenset()),
+            )
+            events = translate_pipeline_receipts(receipts)
+            observation = shadow_artifact(
+                "authoritative_observation", spec.to_dict(),
+                [event.to_dict() for event in events],
+            )
+            observation["run_state"] = {
+                "schema_version": 1, "revision": len(events), "run_id": spec.run_id,
+                "mode": "shadow", "status": "running", "created_at": events[0].occurred_at,
+                "updated_at": events[-1].occurred_at, "nodes": {},
+                "evidence": [event.payload["authoritative_receipt"] for event in events],
+                "cleanup_reconciled": False,
+            }
+            (root / "pipeline-shadow-observation.json").write_text(json.dumps(observation))
             output = root / "parity.json"
             compared = self.run_cli(
                 "compare", "--state-dir", root,
@@ -183,11 +253,15 @@ class RuntimeCliTests(unittest.TestCase):
                 "run_state": {"schema_version":1,"revision":len(events),"run_id":"pipeline-1","mode":"shadow","status":"running","created_at":events[0].occurred_at,"updated_at":events[-1].occurred_at,"nodes":{},"evidence":refs,"cleanup_reconciled":False},
             }
             output = root / "parity.json"
-            for mutation in ("missing_events", "runspec_mode"):
+            for mutation in ("missing_events", "empty_events", "runspec_mode"):
                 artifact = json.loads(json.dumps(base))
                 prediction = shadow_artifact(
                     "independent_prediction", artifact["run_spec"],
                 )
+                if mutation == "empty_events":
+                    prediction = shadow_artifact(
+                        "independent_prediction", artifact["run_spec"], [],
+                    )
                 if mutation == "runspec_mode":
                     artifact["run_spec"]["execution_mode"] = "codex_native"
                     prediction = shadow_artifact(
@@ -199,7 +273,15 @@ class RuntimeCliTests(unittest.TestCase):
                 result = self.run_cli("compare", "--state-dir", root, "--authoritative-receipts", FIXTURES / "pipeline-claude.json", "--output", output)
                 with self.subTest(mutation=mutation):
                     self.assertEqual(result.returncode, 5, result.stderr)
-                    self.assertFalse(json.loads(output.read_text())["safe_to_promote"])
+                    report = json.loads(output.read_text())
+                    self.assertFalse(report["safe_to_promote"])
+                    if mutation in {"missing_events", "empty_events"}:
+                        self.assertEqual(report["reason"], "missing_authoritative_evidence")
+                        if mutation == "missing_events":
+                            self.assertIn("semantic_receipts_required", report["differences"])
+                    else:
+                        self.assertEqual(report["reason"], "kernel_prediction_gap")
+                        self.assertIn("run_spec_receipt_context_mismatch", report["differences"])
 
     def test_compare_selects_translator_from_observation_type(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -221,7 +303,7 @@ class RuntimeCliTests(unittest.TestCase):
 
     def test_cleanup_command_surface_and_plan_create(self):
         help_result = self.run_cli("--help")
-        for command in ("plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
+        for command in ("bind-prediction", "plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
             self.assertIn(command, help_result.stdout)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); argv = root / "argv.json"; output = root / "plan.json"
@@ -402,6 +484,47 @@ class RuntimeCliTests(unittest.TestCase):
             with reader.inactive_guard("old-run") as proof:
                 self.assertFalse(proof.active)
 
+    def test_canonical_run_init_is_reachable_from_shared_lease_root(self):
+        from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory
+        from workflow_kernel.cli import command_plan_reconcile
+        from workflow_kernel.cli import StateDirectoryLeaseReader
+        now = "2026-07-15T00:00:00Z"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / ".workflow-kernel"
+            run_dir = root / "runs" / "old-run"
+            initialized = self.run_cli(
+                "init", run_dir, "--run-id", "old-run",
+                "--lease-root", root, "--occurred-at", now,
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            for sequence, kind, occurred_at, payload in (
+                (1,"run.started","2026-07-15T00:00:01Z",{}),
+                (2,"run.succeeded","2026-07-15T00:00:02Z",{"evidence":["receipt.json"]}),
+            ):
+                event = json.dumps({
+                    "schema_version":1,"sequence":sequence,"run_id":"old-run",
+                    "node_id":None,"kind":kind,"occurred_at":occurred_at,
+                    "payload":payload,
+                })
+                appended = self.run_cli("append", run_dir, "--event", event)
+                self.assertEqual(appended.returncode, 0, appended.stderr)
+            proof = StateDirectoryLeaseReader(root).read("old-run")
+            self.assertFalse(proof.active)
+            state_dir = Path(directory) / "plans" / "feature"
+            state_dir.mkdir(parents=True)
+            output = state_dir / "reconcile.json"
+            args = SimpleNamespace(
+                state_dir=state_dir, lease_root=root, run_id="current-run",
+                ttl_hours=24, node_statuses=None, output=output,
+            )
+            with (
+                mock.patch.object(DockerAdapter, "inventory_registered", return_value=DockerInventory(())),
+                mock.patch.object(DockerAdapter, "inventory", return_value=DockerInventory(())),
+            ):
+                self.assertEqual(command_plan_reconcile(args), 0)
+            stale = output.with_name("reconcile.stale-sweep.json")
+            self.assertTrue(stale.is_file())
+
     def test_stale_cli_action_executes_under_old_run_guard_without_current_run_node_witness(self):
         from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory, DockerResource
         from workflow_kernel.cli import (
@@ -471,6 +594,7 @@ class RuntimeCliTests(unittest.TestCase):
             outcomes.write_text("[]")
             args = SimpleNamespace(
                 plan=plan_path, step_index=0, state_dir=root,
+                lease_root=root,
                 outcomes=outcomes, inventory=inventory_path,
                 node_statuses=root / "must-not-be-read.json", output=output,
             )

@@ -50,20 +50,26 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
 
 The review skill, selected lanes, findings, coverage receipt, merge recommendation, and repository-cleanup report remain authoritative. Resolve the workflow kernel from the real path of the currently executing canonical Depot dm-review plugin; accept an in-repository runtime only beneath that same canonical Depot repository realpath, otherwise search versioned cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin metadata.
 
-Materialize the validated review request at `.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered redacted authoritative receipt array at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. After the authoritative consolidated review and coverage receipt exist, run exactly:
+Materialize the validated review request at `.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered redacted authoritative receipt array at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. Use repository-scoped `.workflow-kernel` as the explicit canonical lease root, initialize this run under `.workflow-kernel/runs/<run-id>`, and append lifecycle state there; never use a home-global or cross-repository root. Produce independent prediction receipts before corresponding authoritative actions and seal them first:
 
 ```text
-python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+After the authoritative consolidated review and coverage receipt exist, run exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
 ```
 
 After terminal cleanup receipts are appended, run exactly:
 
 ```text
-python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
 python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 ```
 
-Inline Python source is forbidden. Produce `independent-prediction-receipts.json` before corresponding authoritative actions; terminal observation binds it once and cannot overwrite it on re-observation. Keep the request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` until all terminal commands complete. Missing independent prediction evidence fails closed and preserves the review result. A parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE`; it is proposal-only evidence.
+Inline Python source is forbidden. `bind-prediction` atomically seals the pre-action source, translated events, event digest, and request context. Observation requires that matching artifact and never creates or mutates it; prediction-source content cannot later serve as authoritative input even at a different path. Keep the source input, request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` through comparison. Delete the prediction source and bound artifact only after semantic `match`. Missing independent prediction evidence fails closed and preserves the review result. A parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE`; it is proposal-only evidence.
 
 When a review request has no explicit `workflowClass`, translate it as `feature` with `workflow_class_defaulted=true`; never infer it from findings, diff kinds, or severity. Preserve requested/attempted/implemented-by/fallback/reason evidence for every provider lane.
