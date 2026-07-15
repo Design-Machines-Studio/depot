@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
   "version": "0.1.0",
-  "description": "Neutral deterministic workflow run-state, event-ledger, replay, receipt, recovery, and shadow-observation mechanics for Design Machines automation.",
+  "description": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -43,8 +43,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Workflow Kernel",
-    "shortDescription": "Neutral deterministic workflow run-state, event-ledger, replay, receipt, recovery, and shadow-observation mechanics for ",
-    "longDescription": "Neutral deterministic workflow run-state, event-ledger, replay, receipt, recovery, and shadow-observation mechanics for Design Machines automation.",
+    "shortDescription": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
+    "longDescription": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
     "developerName": "Design Machines",
     "category": "Productivity",
     "capabilities": [

@@ -20,7 +20,7 @@ Each run uses `.workflow-kernel/runs/<run-id>/` and includes:
 
 - `events.jsonl`: append-only, sequence-checked event ledger;
 - `run-state.json`: replay-derived materialized state;
-- `run-state.json.lock`: advisory run lease;
+- `run-state.json.lease`: advisory run lease;
 - authoritative and shadow receipt references;
 - the sealed prediction and authoritative observation;
 - `shadow-report.json` and `metrics.json`;
@@ -43,8 +43,9 @@ export PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references
 python3 -m workflow_kernel --help
 ```
 
-Use JSON files for untrusted structured inputs. The examples below are safe
-templates; replace placeholders only with run-owned paths and exact IDs.
+Use JSON files for file-taking structured inputs. The `append --event` argument
+is the one exception: it accepts one inline JSON object. The examples below are
+safe templates; replace placeholders only with run-owned paths and exact IDs.
 
 ### Base state
 
@@ -52,7 +53,7 @@ templates; replace placeholders only with run-owned paths and exact IDs.
 python3 -m workflow_kernel init .workflow-kernel/runs/RUN --run-id RUN --mode shadow --occurred-at 2026-01-01T00:00:00Z
 python3 -m workflow_kernel validate .workflow-kernel/runs/RUN
 python3 -m workflow_kernel validate .workflow-kernel/runs/RUN --recovery
-python3 -m workflow_kernel append .workflow-kernel/runs/RUN --event event.json
+python3 -m workflow_kernel append .workflow-kernel/runs/RUN --event '{"schema_version":1,"sequence":1,"run_id":"RUN","node_id":null,"kind":"run.started","occurred_at":"2026-01-01T00:00:01Z","payload":{}}'
 python3 -m workflow_kernel replay .workflow-kernel/runs/RUN
 python3 -m workflow_kernel status .workflow-kernel/runs/RUN
 ```
@@ -71,7 +72,7 @@ python3 -m workflow_kernel bind-prediction --type review --request request.json 
 python3 -m workflow_kernel observe-pipeline --manifest manifest.json --receipts authoritative.json --state-dir plans/feature
 python3 -m workflow_kernel observe-review --request request.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel
 python3 -m workflow_kernel compare --state-dir plans/feature --authoritative-receipts authoritative.json --output shadow-report.json
-python3 -m workflow_kernel metrics --events .workflow-kernel/runs/RUN/events.jsonl --output metrics.json
+python3 -m workflow_kernel metrics --events authoritative.json --output metrics.json
 ```
 
 Shadow observation never selects a node, changes an executor, waives a finding,
@@ -126,6 +127,29 @@ state, and TTL evidence. Foreign, contradictory, running, in-use, uninspectable,
 or partially registered resources are retained and reported. Never use
 `docker system prune`, unfiltered prune, negative-label filters, wildcard/name
 ownership, or shell-built cleanup commands.
+
+### Git worktree and branch cleanup
+
+Git cleanup uses the pipeline ref registry, not Docker labels. Capture
+`git worktree list --porcelain` and `git branch --list` before the run, then
+register every created worktree, chunk branch, and feature branch at creation
+with its exact path/ref, kind, base, run namespace, and lifecycle. Never infer
+ownership afterward from a broad glob or delete a ref outside the registered
+`.worktrees/pipeline/<feature>/` and `pipeline/<feature>/*` namespace.
+
+After a chunk is integrated, remove its worktree only when `git status` is
+readable and clean. Remove the worktree before its branch. Delete a chunk branch
+with `git branch -d` when ancestry proves it is merged into its declared target;
+use `-D` only when the registry proves the branch's unique commits were merged
+to a different target. Dirty, unreadable, checked-out, unmerged, or ambiguously
+owned refs are retained and reported as blocked with the recovery command.
+
+At terminal reconciliation, parse `git worktree list --porcelain` field-wise,
+reconcile every registered ref and namespace-bounded interrupted orphan, then
+run `git worktree prune`. Record before/after inventories and every
+`deleted|kept|blocked` disposition. The feature branch is always retained by
+the pipeline; even external merge proof changes its receipt to merged/kept and
+never authorizes automatic feature-branch deletion.
 
 ## Workflow and verification contracts
 
@@ -191,5 +215,10 @@ keeps `shadow` as the default and exposes no native authority.
   or unresolved cleanup evidence.
 
 Run `./tools/validate-workflow-kernel.py` for the deterministic offline
-behavioral suite and `./tools/validate-composition.sh --all` for the full Depot
-release gate.
+behavioral suite. By default it writes concise PASS/FAIL output and the
+deterministic fixture-only receipt at
+`plans/ai-developer-workflow-kernel/receipts/06-workflow-kernel-release-evidence.json`.
+Use `--evidence-output plans/<feature>/workflow-kernel-evidence.json` to
+override that path. The receipt explicitly sets `real_run_evidence` false and
+cannot satisfy native promotion. Run `./tools/validate-composition.sh --all`
+for the full Depot release gate.

@@ -103,8 +103,16 @@ browser, network access, API keys, or a running project.
 ```bash
 ./tools/validate-workflow-kernel.py
 ./tools/validate-workflow-kernel.py --verbose
+./tools/validate-workflow-kernel.py --evidence-output plans/feature/workflow-kernel-evidence.json
 ./tools/validate-workflow-kernel.py --help
 ```
+
+The default invocation emits concise PASS/FAIL sections and writes the
+deterministic fixture-only compatibility and promotion receipt to
+`plans/ai-developer-workflow-kernel/receipts/06-workflow-kernel-release-evidence.json`.
+`--evidence-output PATH` overrides that destination. The receipt declares
+`real_run_evidence: false`; it is never a substitute for supported-host real
+shadow runs.
 
 This validator is a named stage in `./tools/validate-composition.sh --all`.
 The default composition-only invocation remains unchanged.

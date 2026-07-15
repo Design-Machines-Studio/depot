@@ -13,7 +13,7 @@ from .base import (
     BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
     DISPATCH_RAIL_CAPABILITIES, HostRoute, HostCapability,
     MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob, ResumeStateContext,
-    SessionHandle, SessionResult, ValidationFeedback, _snapshot_resume_context,
+    SessionHandle, SessionResult, SessionStatus, ValidationFeedback, _snapshot_resume_context,
     _snapshot_host_capabilities, _snapshot_node_spec, _snapshot_session_handle,
     _snapshot_session_result, route_satisfies_node,
     _snapshot_validation_feedback, _validate_host_name, invalid_policy,
@@ -376,7 +376,14 @@ class BuilderSessionManager:
                     safe_result = _snapshot_session_result(result)
                 except Exception:
                     safe_result = None
-                if safe_result is not None and safe_result.context == context:
+                if (
+                    safe_result is not None
+                    and safe_result.context == context
+                    and not (
+                        safe_result.status is SessionStatus.SUCCEEDED
+                        and not safe_result.evidence
+                    )
+                ):
                     return BuilderSessionDecision(
                         BuilderOutcome.SESSION_RESUMED, context, handle, safe_result,
                     )
