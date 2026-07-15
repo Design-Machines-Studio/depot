@@ -113,6 +113,62 @@ class CompatibilityTests(unittest.TestCase):
             with self.assertRaises(FileNotFoundError):
                 resolve_workflow_kernel_runtime(pipeline, home=root / "home")
 
+    def test_runtime_discovery_uses_the_shared_semver_compatibility_rule(self):
+        from workflow_kernel.cli import (
+            compatible_kernel_version, resolve_workflow_kernel_runtime,
+        )
+        self.assertEqual(compatible_kernel_version("0.1.0"), (0, 1, 0))
+        self.assertEqual(compatible_kernel_version("0.2.0"), (0, 2, 0))
+        self.assertEqual(compatible_kernel_version("0.1.10"), (0, 1, 10))
+        for incompatible in ("1.0.0", "0.0.9", "0.1", "0.1.0-rc1", 1, None):
+            with self.subTest(version=incompatible):
+                self.assertIsNone(compatible_kernel_version(incompatible))
+
+        def install(root, cache_name, version, declared=None):
+            plugin = (
+                root / "home" / cache_name / "plugins" / "cache" / "depot"
+                / "workflow-kernel" / version
+            )
+            package = plugin / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
+            package.mkdir(parents=True)
+            (package / "__main__.py").write_text("")
+            (plugin / ".claude-plugin").mkdir()
+            (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({
+                "name": "workflow-kernel", "version": declared or version,
+            }))
+            return package.parent
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pipeline = root / "depot" / "plugins" / "pipeline"
+            pipeline.mkdir(parents=True)
+            # Compatible same-major minor bump is discoverable.
+            newer = install(root, ".claude", "0.2.0")
+            install(root, ".claude", "0.1.9")
+            self.assertEqual(
+                resolve_workflow_kernel_runtime(pipeline, home=root / "home"),
+                newer.resolve(),
+            )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pipeline = root / "depot" / "plugins" / "pipeline"
+            pipeline.mkdir(parents=True)
+            # Semver order, not lexical or mtime order: 0.1.10 > 0.1.9.
+            newest = install(root, ".claude", "0.1.10")
+            install(root, ".claude", "0.1.9")
+            self.assertEqual(
+                resolve_workflow_kernel_runtime(pipeline, home=root / "home"),
+                newest.resolve(),
+            )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pipeline = root / "depot" / "plugins" / "pipeline"
+            pipeline.mkdir(parents=True)
+            # A declared version that mismatches its path segment is rejected.
+            install(root, ".claude", "0.1.5", declared="0.1.4")
+            with self.assertRaises(FileNotFoundError):
+                resolve_workflow_kernel_runtime(pipeline, home=root / "home")
+
     def test_runtime_trust_accepts_both_supported_cache_roots_deterministically(self):
         from workflow_kernel.cli import resolve_workflow_kernel_runtime
         for cache_name in (".claude", ".codex"):

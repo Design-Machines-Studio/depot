@@ -374,7 +374,8 @@ def _exercise_provider_fault(fault):
         session_result,
     )
     from workflow_kernel.model import HostCapabilities, ValidationFeedback
-    from workflow_kernel.adapters.host import BuilderSessionManager, FakeHostAdapter
+    from workflow_kernel.adapters.host import BuilderSessionManager
+    from tests import FakeHostAdapter
 
     feedback = ValidationFeedback("build", "deterministic_validation_failure")
     if fault == "empty_agent_output":

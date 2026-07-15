@@ -7,7 +7,7 @@ import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional, Protocol, Union
+from typing import Optional, Protocol, Union
 
 from ..model import (
     BuilderOutcome, BuilderSessionDecision, HostCapabilities,
@@ -23,6 +23,48 @@ from ..schema import InvalidSchemaError
 
 
 _HarnessProfilePath = Union[str, os.PathLike[str]]
+
+# One model-prefix vocabulary for both role validation and route derivation.
+_MODEL_PREFIXES = {
+    "anthropic": ("anthropic/",),
+    "openai": ("openai/", "gpt-"),
+}
+
+
+def _lists_models_for(provider: str, models: list) -> bool:
+    return any(model.startswith(_MODEL_PREFIXES[provider]) for model in models)
+
+
+# (kind, probe) -> (forbidden model provider, unconditional route capability
+# tuples, model-conditional route capability tuples). Absent keys are invalid
+# kind/probe pairings. Every derived route's rail is the role's own kind.
+_NATIVE_CODEX_ROUTES = (
+    "anthropic",
+    (("openai", HostCapability.CODEX_EXECUTION),),
+    (),
+)
+_OPENROUTER_ROUTES = (
+    None,
+    (("openrouter", HostCapability.OPENROUTER_EXECUTION),),
+    (
+        ("anthropic", ("openrouter", HostCapability.CLAUDE_EXECUTION)),
+        ("openai", ("openrouter", HostCapability.CODEX_EXECUTION)),
+    ),
+)
+_ROLE_ROUTE_TABLE = {
+    ("native", "claude"): (
+        "openai",
+        (
+            ("anthropic", HostCapability.CLAUDE_EXECUTION),
+            ("anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION),
+        ),
+        (),
+    ),
+    ("native", "codex"): _NATIVE_CODEX_ROUTES,
+    ("codex_companion", "codex"): _NATIVE_CODEX_ROUTES,
+    ("wrapper", "openrouter"): _OPENROUTER_ROUTES,
+    ("openrouter_exec", "openrouter"): _OPENROUTER_ROUTES,
+}
 
 
 class HostAdapter(Protocol):
@@ -84,99 +126,24 @@ def capabilities_from_harness_profile(
             raise invalid_policy("invalid_harness_profile")
         probe = role["probe"]
         models = role["models"]
-        expected_probes = {
-            "native": {"claude", "codex"},
-            "codex_companion": {"codex"},
-            "wrapper": {"openrouter"},
-            "openrouter_exec": {"openrouter"},
-        }[kind]
-        if type(probe) is not str or probe not in expected_probes:
+        entry = (
+            _ROLE_ROUTE_TABLE.get((kind, probe)) if type(probe) is str else None
+        )
+        if entry is None:
             raise invalid_policy("invalid_harness_profile")
         if not isinstance(models, list) or not models or any(
             type(model) is not str or not model for model in models
         ):
             raise invalid_policy("invalid_harness_profile")
-        if kind in ("native", "codex_companion") and (
-            (probe == "claude" and any(
-                model.startswith("openai/") or model.startswith("gpt-")
-                for model in models
-            ))
-            or (probe == "codex" and any(
-                model.startswith("anthropic/") for model in models
-            ))
-        ):
+        forbidden_provider, base_routes, model_routes = entry
+        if forbidden_provider is not None and _lists_models_for(forbidden_provider, models):
             raise invalid_policy("invalid_harness_profile")
-        if kind == "native" and probe == "claude":
-            routes.add(HostRoute(
-                "anthropic", HostCapability.CLAUDE_EXECUTION, "native",
-            ))
-            routes.add(HostRoute(
-                "anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION, "native",
-            ))
-        elif kind in ("native", "codex_companion") and probe == "codex":
-            routes.add(HostRoute(
-                "openai", HostCapability.CODEX_EXECUTION, kind,
-            ))
-        elif kind in ("wrapper", "openrouter_exec"):
-            routes.add(HostRoute(
-                "openrouter", HostCapability.OPENROUTER_EXECUTION, kind,
-            ))
-        if kind in ("wrapper", "openrouter_exec") and any(
-            model.startswith("anthropic/") for model in models
-        ):
-            routes.add(HostRoute(
-                "openrouter", HostCapability.CLAUDE_EXECUTION, kind,
-            ))
-        if kind in ("wrapper", "openrouter_exec") and any(
-            model.startswith("openai/") or model.startswith("gpt-")
-            for model in models
-        ):
-            routes.add(HostRoute(
-                "openrouter", HostCapability.CODEX_EXECUTION, kind,
-            ))
+        for provider, capability in base_routes:
+            routes.add(HostRoute(provider, capability, kind))
+        for model_provider, (provider, capability) in model_routes:
+            if _lists_models_for(model_provider, models):
+                routes.add(HostRoute(provider, capability, kind))
     return HostCapabilities(host_name, frozenset(), routes=frozenset(routes))
-
-
-class FakeHostAdapter:
-    """Deterministic adapter fixture; it never performs external dispatch."""
-
-    def __init__(
-        self,
-        capabilities: HostCapabilities,
-        *,
-        dispatch_handles: Iterable[Optional[SessionHandle]] = (),
-        resume_results: Iterable[SessionResult] = (),
-    ):
-        if type(capabilities) is not HostCapabilities:
-            raise invalid_policy("invalid_host_capabilities")
-        self._capabilities = capabilities
-        self._dispatch_handles = list(dispatch_handles)
-        self._resume_results = list(resume_results)
-        self.dispatch_calls = []
-        self.resume_calls = []
-
-    def capabilities(self) -> HostCapabilities:
-        return self._capabilities
-
-    def dispatch(
-        self, node: NodeSpec, context: ResumeStateContext,
-    ) -> Optional[SessionHandle]:
-        if type(node) is not NodeSpec or type(context) is not ResumeStateContext:
-            raise invalid_policy("invalid_node_spec")
-        self.dispatch_calls.append((node, context))
-        return self._dispatch_handles.pop(0) if self._dispatch_handles else None
-
-    def resume(
-        self,
-        handle: SessionHandle,
-        feedback: ValidationFeedback,
-    ) -> SessionResult:
-        self.resume_calls.append((handle, feedback))
-        if not self._resume_results:
-            return SessionResult(
-                "blocked", handle.context, (), "fake_resume_result_unavailable",
-            )
-        return self._resume_results.pop(0)
 
 
 def _timestamp(value: str) -> datetime:

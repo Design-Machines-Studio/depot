@@ -303,3 +303,46 @@ def canonical_harness_profile():
         if candidate.is_file():
             return candidate
     raise FileNotFoundError("canonical harness-profile.json not found")
+
+
+class FakeHostAdapter:
+    """Deterministic HostAdapter test double; never performs external dispatch.
+
+    Lives in the test suite, not the shipped package: the HostAdapter
+    Protocol in workflow_kernel.adapters.host is the documented external-host
+    contract, and production code must not depend on a recording fixture.
+    """
+
+    def __init__(self, capabilities, *, dispatch_handles=(), resume_results=()):
+        from workflow_kernel.model import HostCapabilities, invalid_policy
+
+        if type(capabilities) is not HostCapabilities:
+            raise invalid_policy("invalid_host_capabilities")
+        self._capabilities = capabilities
+        self._dispatch_handles = list(dispatch_handles)
+        self._resume_results = list(resume_results)
+        self.dispatch_calls = []
+        self.resume_calls = []
+
+    def capabilities(self):
+        return self._capabilities
+
+    def dispatch(self, node, context):
+        from workflow_kernel.model import (
+            NodeSpec, ResumeStateContext, invalid_policy,
+        )
+
+        if type(node) is not NodeSpec or type(context) is not ResumeStateContext:
+            raise invalid_policy("invalid_node_spec")
+        self.dispatch_calls.append((node, context))
+        return self._dispatch_handles.pop(0) if self._dispatch_handles else None
+
+    def resume(self, handle, feedback):
+        from workflow_kernel.model import SessionResult
+
+        self.resume_calls.append((handle, feedback))
+        if not self._resume_results:
+            return SessionResult(
+                "blocked", handle.context, (), "fake_resume_result_unavailable",
+            )
+        return self._resume_results.pop(0)

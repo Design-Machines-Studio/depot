@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from contextlib import contextmanager, nullcontext
@@ -735,6 +736,27 @@ def command_metrics(args):
     return 0
 
 
+# Declared dependency floor (pipeline/dm-review pluginDependencies:
+# "workflow-kernel": ">=0.1.0"). Compatibility is same-major at or above the
+# floor; this one rule serves both dependency validation and runtime
+# discovery, and orders cache candidates by parsed semver, never mtime.
+KERNEL_VERSION_FLOOR = (0, 1, 0)
+_KERNEL_SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
+
+
+def compatible_kernel_version(text):
+    """Return the parsed semver tuple when compatible, otherwise None."""
+    if type(text) is not str:
+        return None
+    match = _KERNEL_SEMVER.fullmatch(text)
+    if match is None:
+        return None
+    version = tuple(int(part) for part in match.groups())
+    if version[0] != KERNEL_VERSION_FLOOR[0] or version < KERNEL_VERSION_FLOOR:
+        return None
+    return version
+
+
 def resolve_workflow_kernel_runtime(canonical_plugin_root, *, home=None):
     """Resolve only the canonical Depot sibling, then named versioned caches."""
     source = Path(canonical_plugin_root).resolve(strict=True)
@@ -743,20 +765,20 @@ def resolve_workflow_kernel_runtime(canonical_plugin_root, *, home=None):
     depot = source.parent.parent.resolve(strict=True)
     lexical_depot = Path(os.path.abspath(str(canonical_plugin_root))).parent.parent
     home = Path.home() if home is None else Path(home)
-    roots = [(lexical_depot / "plugins" / "workflow-kernel", depot)]
+    roots = [(lexical_depot / "plugins" / "workflow-kernel", depot, None)]
     for cache_name in (".claude", ".codex"):
         cache = home / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel"
         if cache.is_dir():
             candidates = []
             for candidate in cache.iterdir():
-                match = re.fullmatch(r"0\.1\.([0-9]+)", candidate.name)
-                if match:
-                    candidates.append((int(match.group(1)), candidate))
+                version = compatible_kernel_version(candidate.name)
+                if version is not None:
+                    candidates.append((version, candidate))
             roots.extend(
-                (candidate, cache.resolve(strict=True))
-                for _patch, candidate in sorted(candidates, reverse=True)
+                (candidate, cache.resolve(strict=True), version)
+                for version, candidate in sorted(candidates, reverse=True)
             )
-    for candidate, boundary in roots:
+    for candidate, boundary, path_version in roots:
         try:
             resolved = candidate.resolve(strict=True)
             if not resolved.is_relative_to(boundary):
@@ -766,10 +788,14 @@ def resolve_workflow_kernel_runtime(canonical_plugin_root, *, home=None):
                 manifest = resolved / ".codex-plugin" / "plugin.json"
             document = _load_json(manifest)
             version = document.get("version") if type(document) is dict else None
-            if document.get("name") != "workflow-kernel" or type(version) is not str or not re.fullmatch(r"0\.1\.[0-9]+", version):
+            declared = compatible_kernel_version(version)
+            if document.get("name") != "workflow-kernel" or declared is None:
+                continue
+            # A cache candidate's semver path segment must match the
+            # runtime's declared version; a mismatch is a corrupt install.
+            if path_version is not None and declared != path_version:
                 continue
             references = resolved / "skills" / "workflow-kernel" / "references"
-            lexical_references = candidate / "skills" / "workflow-kernel" / "references"
             package = references / "workflow_kernel"
             if package.is_dir() and (package / "__main__.py").is_file() and package.resolve(strict=True).is_relative_to(resolved):
                 return references.resolve(strict=True)
@@ -778,16 +804,40 @@ def resolve_workflow_kernel_runtime(canonical_plugin_root, *, home=None):
     raise FileNotFoundError("compatible workflow-kernel runtime unavailable")
 
 
+# Fixed PATH for the one runtime path that shells out; the caller's PATH
+# never selects the docker binary that executes destructive stop/rm actions.
+_FIXED_SUBPROCESS_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+_SUBPROCESS_ENV_PASSTHROUGH = (
+    "HOME", "TMPDIR", "DOCKER_HOST", "DOCKER_CONFIG", "DOCKER_CONTEXT",
+    "DOCKER_CERT_PATH", "DOCKER_TLS_VERIFY", "DOCKER_API_VERSION",
+)
+
+
 class _SubprocessRunner:
+    """Executes Docker commands with a fixed PATH and a minimal environment."""
+
     def run(self, argv):
         from .resources import CommandResult
+        argv = tuple(argv)
+        if not argv:
+            raise RuntimeUnavailableError("docker runtime unavailable")
+        executable = argv[0] if os.path.isabs(argv[0]) else shutil.which(
+            argv[0], path=_FIXED_SUBPROCESS_PATH,
+        )
+        if executable is None:
+            raise RuntimeUnavailableError("docker runtime unavailable")
+        env = {"PATH": _FIXED_SUBPROCESS_PATH}
+        for name in _SUBPROCESS_ENV_PASSTHROUGH:
+            if name in os.environ:
+                env[name] = os.environ[name]
         try:
             result = subprocess.run(
-                tuple(argv), text=True, capture_output=True, check=False,
+                (executable,) + argv[1:], text=True, capture_output=True,
+                check=False, env=env,
             )
         except FileNotFoundError:
             raise RuntimeUnavailableError("docker runtime unavailable") from None
-        return CommandResult(tuple(argv), result.returncode, result.stdout, result.stderr)
+        return CommandResult(argv, result.returncode, result.stdout, result.stderr)
 
 
 def _registry(state_dir):

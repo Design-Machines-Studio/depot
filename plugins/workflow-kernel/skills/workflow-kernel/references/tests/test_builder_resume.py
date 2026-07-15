@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from tests import (
-    canonical_harness_profile, detail_digest,
+    FakeHostAdapter, canonical_harness_profile, detail_digest,
     snapshot_during_validated_mutation,
 )
 from workflow_kernel.model import (
@@ -15,7 +15,7 @@ from workflow_kernel.model import (
     HostCapability, HostRoute, NodeSpec, ResumeStateContext, SessionHandle, SessionResult,
     ValidationFeedback, ResumeStateBlob,
 )
-from workflow_kernel.adapters.host import BuilderSessionManager, FakeHostAdapter
+from workflow_kernel.adapters.host import BuilderSessionManager
 from workflow_kernel.adapters.host import capabilities_from_harness_profile
 from workflow_kernel.schema import InvalidSchemaError, RunState, WorkflowEvent
 from workflow_kernel.transitions import TransitionEngine
