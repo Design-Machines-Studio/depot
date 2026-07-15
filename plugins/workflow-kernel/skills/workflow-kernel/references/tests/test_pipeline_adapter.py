@@ -130,6 +130,46 @@ class PipelineAdapterTests(unittest.TestCase):
         self.assertNotIn("authorization", event.payload)
         self.assertNotIn("never-show", repr(event.payload))
 
+    def test_documented_camelcase_receipt_fields_are_preserved_not_dropped(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2].update({
+            "requestedProvider": "claude", "attemptedProvider": "openrouter",
+            "implementedBy": "claude", "fallbackReason": "provider_unavailable",
+        })
+        event = translate_pipeline_receipts(receipts)[2]
+        self.assertEqual(event.payload["requested_provider"], "claude")
+        self.assertEqual(event.payload["attempted_provider"], "openrouter")
+        self.assertEqual(event.payload["implemented_by"], "claude")
+        self.assertEqual(event.payload["fallback_reason"], "provider_unavailable")
+        self.assertNotIn("requestedProvider", event.payload)
+        agreeing = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        agreeing[2].update({
+            "requestedProvider": "claude", "requested_provider": "claude",
+        })
+        self.assertEqual(
+            translate_pipeline_receipts(agreeing)[2].payload["requested_provider"],
+            "claude",
+        )
+        conflicting = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        conflicting[2].update({
+            "requestedProvider": "claude", "requested_provider": "openrouter",
+        })
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(conflicting)
+
+    def test_manifest_dual_keys_are_camel_primary_and_reject_conflicts(self):
+        snake = self.manifest()
+        snake["workflow_class"] = snake.pop("workflowClass")
+        snake["execution_mode"] = snake.pop("executionMode")
+        snake["changed_paths"] = snake.pop("changedPaths")
+        spec = translate_manifest(snake, self.profile())
+        self.assertEqual(spec.execution_mode, "codex_native")
+        self.assertEqual(spec.workflow_class.value, "feature")
+        conflicting = self.manifest()
+        conflicting["execution_mode"] = "generic"
+        with self.assertRaises(ValueError):
+            translate_manifest(conflicting, self.profile())
+
     def test_hostile_mapping_callbacks_are_rejected_without_invocation(self):
         class Hostile(dict):
             def get(self, *_args, **_kwargs):

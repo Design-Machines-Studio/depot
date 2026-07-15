@@ -29,6 +29,39 @@ class DmReviewAdapterTests(unittest.TestCase):
         self.assertEqual(spec.workflow_class, WorkflowClass.FEATURE)
         self.assertEqual(spec.execution_mode, "full_cli")
 
+    def test_mapping_preserves_explicit_provenance_on_round_trip(self):
+        legacy = ReviewRequest.from_mapping({
+            "run_id": "review-legacy", "requested_lanes": ["architecture"],
+            "workflow_class": "feature", "workflow_class_defaulted": True,
+        })
+        self.assertTrue(legacy.workflow_class_defaulted)
+        round_tripped = ReviewRequest.from_mapping(legacy.to_dict())
+        self.assertEqual(round_tripped, legacy)
+        self.assertTrue(round_tripped.workflow_class_defaulted)
+        explicit = ReviewRequest.from_mapping({
+            "run_id": "review-1", "requested_lanes": ["architecture"],
+            "workflowClass": "bug", "workflowClassDefaulted": False,
+        })
+        self.assertFalse(explicit.workflow_class_defaulted)
+        for invalid in (
+            {"run_id": "r", "requested_lanes": [], "workflow_class_defaulted": "true"},
+            {"run_id": "r", "requested_lanes": [], "workflow_class_defaulted": False},
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                ReviewRequest.from_mapping(invalid)
+
+    def test_mapping_dual_keys_reject_conflicting_spellings(self):
+        with self.assertRaises(ValueError):
+            ReviewRequest.from_mapping({
+                "run_id": "review-1", "requested_lanes": [],
+                "execution_mode": "generic", "executionMode": "codex_native",
+            })
+        agreeing = ReviewRequest.from_mapping({
+            "run_id": "review-1", "requested_lanes": [],
+            "execution_mode": "codex_native", "executionMode": "codex_native",
+        })
+        self.assertEqual(agreeing.execution_mode, "codex_native")
+
     def test_mapping_requires_an_exact_lane_collection(self):
         for lanes in ("security", {"security": True}, (value for value in ("security",))):
             with self.subTest(lanes=type(lanes).__name__), self.assertRaises(ValueError):

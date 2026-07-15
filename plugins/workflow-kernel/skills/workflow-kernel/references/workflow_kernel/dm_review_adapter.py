@@ -5,10 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Tuple
 
+from ._translation import (
+    EXECUTION_MODES, RunSpec, dual_key, required_text, translate_receipts,
+)
 from .model import HostCapabilities, NodeSpec, WorkflowClass
-from .pipeline_adapter import EXECUTION_MODES, RunSpec, _required_text, _translate_receipts
 from .schema import WorkflowEvent
-from .workflows import WorkflowTemplates
 
 
 REVIEW_STAGES = frozenset({
@@ -29,7 +30,7 @@ class ReviewRequest:
     workflow_class_defaulted: bool = False
 
     def __post_init__(self) -> None:
-        _required_text(self.run_id, "run id")
+        required_text(self.run_id, "run id")
         if not isinstance(self.required_lanes, (list, tuple)) or any(
             type(value) is not str or not value for value in self.required_lanes
         ) or len(self.required_lanes) != len(set(self.required_lanes)):
@@ -51,17 +52,35 @@ class ReviewRequest:
     def from_mapping(cls, value: Mapping[str, object]) -> "ReviewRequest":
         if type(value) is not dict:
             raise ValueError("review request must be an object")
-        raw_class = value.get("workflow_class", value.get("workflowClass"))
+        raw_class = dual_key(value, "workflow_class", "workflowClass", default=None)
+        # `requested_lanes` is the documented request key (caller intent);
+        # `required_lanes` is the internal derived-execution field. The
+        # requested (input) -> required (derived) translation happens here.
         raw_lanes = value.get("required_lanes", value.get("requested_lanes", ()))
         if type(raw_lanes) not in {list, tuple}:
             raise ValueError("invalid review lanes")
+        raw_defaulted = dual_key(
+            value, "workflow_class_defaulted", "workflowClassDefaulted",
+            default=None,
+        )
+        if raw_defaulted is None:
+            defaulted = raw_class is None
+        else:
+            # Preserve explicit provenance on round-trip: a serialized legacy
+            # request carrying workflow_class + workflow_class_defaulted=true
+            # must forward unchanged. Derive only when neither form exists.
+            if type(raw_defaulted) is not bool:
+                raise ValueError("invalid workflow class provenance")
+            if raw_class is None and raw_defaulted is False:
+                raise ValueError("invalid workflow class provenance")
+            defaulted = raw_defaulted
         return cls(
-            value.get("run_id", value.get("runId")),
+            dual_key(value, "run_id", "runId", default=None),
             tuple(raw_lanes),
             value.get("mode", "full"),
             "feature" if raw_class is None else raw_class,
-            value.get("execution_mode", value.get("executionMode", "generic")),
-            raw_class is None,
+            dual_key(value, "execution_mode", "executionMode", default="generic"),
+            defaulted,
         )
 
     def to_dict(self) -> dict:
@@ -104,4 +123,4 @@ def translate_review(request: ReviewRequest, profile: HostCapabilities) -> RunSp
 def translate_review_receipts(
     receipts: Iterable[Mapping[str, object]],
 ) -> Tuple[WorkflowEvent, ...]:
-    return _translate_receipts(receipts, REVIEW_STAGES)
+    return translate_receipts(receipts, REVIEW_STAGES)
