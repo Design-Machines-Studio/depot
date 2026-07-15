@@ -347,14 +347,17 @@ def _prediction_binding_matches(event, expected_payload):
     )
 
 
-def _load_prediction_lifecycle(scope, spec):
+def _load_prediction_lifecycle(scope, spec, *, allow_reconciliation=False):
     directory = _prediction_lifecycle(scope, spec)
     _, events, states = _paths(directory)
     with _coordinated_run(states):
-        replayed, _notes, reconstructed, _materialized = _observe_consistent_run(
-            events, states, TransitionEngine(), recovery=False,
-            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
-        )
+        replayed, _notes = events.validate(recovery=False)
+        if not replayed:
+            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
+        reconstructed = TransitionEngine().reconstruct(replayed)
+        materialized = _load_optional_state(states)
+        if not allow_reconciliation:
+            _require_materialized_matches_ledger(materialized, reconstructed)
     return replayed, reconstructed
 
 
@@ -367,19 +370,31 @@ def _append_prediction_binding(scope, observation_type, spec, document):
         document["event_digest"], document["source_digest"],
     )
     with _coordinated_run(states) as lease:
-        replayed, _notes, reconstructed, materialized = _observe_consistent_run(
-            events, states, engine, recovery=False,
-            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
-        )
+        replayed, _notes = events.validate(recovery=False)
+        if not replayed:
+            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
+        reconstructed = engine.reconstruct(replayed)
+        materialized = _load_optional_state(states)
         if len(replayed) == 2 and replayed[1].kind == "evidence.recorded":
             if not _prediction_binding_matches(replayed[1], expected_payload):
                 raise ValueError("prediction lifecycle binding mismatch")
+            if materialized != reconstructed:
+                expected_revision = (
+                    materialized.revision if materialized is not None else -1
+                )
+                states.publish(
+                    _prepare_replay_state(
+                        states, reconstructed, expected_revision,
+                    ),
+                    expected_revision, lease=lease,
+                )
             return False
         if (
             len(replayed) != 1 or replayed[0].kind != "run.initialized"
             or reconstructed.status.value != "planned"
         ):
             raise ValueError("prediction must be bound before run start")
+        _require_materialized_matches_ledger(materialized, reconstructed)
         current = datetime.now(timezone.utc)
         prior = datetime.fromisoformat(
             reconstructed.updated_at.replace("Z", "+00:00"),
@@ -396,6 +411,7 @@ def _append_prediction_binding(scope, observation_type, spec, document):
         _append_and_publish(
             events, states, event, next_state, expected_sequence=1,
             expected_revision=expected_revision, lease=lease,
+            authoritative_initialization=materialized is None,
         )
     return True
 
@@ -499,7 +515,9 @@ def command_bind_prediction(args):
         name = "review-shadow-prediction.json"
     _require_spec_receipt_context(spec, events)
     scope = repository_scope(args.state_dir)
-    replayed, state = _load_prediction_lifecycle(scope, spec)
+    replayed, state = _load_prediction_lifecycle(
+        scope, spec, allow_reconciliation=True,
+    )
     if (
         len(replayed) not in {1, 2} or state.status.value != "planned"
         or replayed[0].kind != "run.initialized"

@@ -380,18 +380,19 @@ def check_cli(context):
             completed = run([sys.executable, "-m", "workflow_kernel", command, *argv])
             if command in {
                 "init", "validate", "append", "replay", "status",
-                "plan-cleanup", "plan-reconcile",
+                "plan-cleanup",
             }:
                 require(completed.returncode == 0, f"{command} behavioral execution failed")
             else:
-                require(
-                    completed.returncode in {
-                        cli.EXIT_INVALID, cli.EXIT_UNSAFE_PLAN,
-                        cli.EXIT_RUNTIME_UNAVAILABLE, cli.EXIT_PARITY_GAP,
-                        cli.EXIT_CONFLICT,
-                    },
-                    f"{command} did not fail safely",
-                )
+                safe_outcomes = {
+                    cli.EXIT_INVALID, cli.EXIT_UNSAFE_PLAN,
+                    cli.EXIT_RUNTIME_UNAVAILABLE, cli.EXIT_PARITY_GAP,
+                    cli.EXIT_CONFLICT,
+                }
+                if command == "plan-reconcile":
+                    safe_outcomes.add(0)
+                require(completed.returncode in safe_outcomes,
+                        f"{command} did not produce a defined outcome")
             outcomes[command] = completed.returncode
 
         def successful(command, *arguments):

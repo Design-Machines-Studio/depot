@@ -143,6 +143,69 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(observed.returncode, 0, observed.stderr)
             self.assertTrue((root / "pipeline-shadow-observation.json").exists())
 
+    def test_prediction_binding_rebuilds_missing_materialized_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature": "pipeline-1", "workflowClass": "feature",
+                "executionMode": "codex_native", "chunks": [],
+            }))
+            prediction = root / "prediction.json"
+            prediction.write_text((FIXTURES / "pipeline-codex.json").read_text())
+            state_path = (
+                root / ".workflow-kernel" / "runs" / "pipeline-1" /
+                "run-state.json"
+            )
+            state_path.unlink()
+
+            bound = self.run_cli(
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest, "--prediction-receipts", prediction,
+                "--state-dir", root,
+            )
+
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.assertEqual(json.loads(state_path.read_text())["revision"], 2)
+
+    def test_prediction_binding_retry_reconciles_publish_interruption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root)
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature": "pipeline-1", "workflowClass": "feature",
+                "executionMode": "codex_native", "chunks": [],
+            }))
+            prediction = root / "prediction.json"
+            prediction.write_text((FIXTURES / "pipeline-codex.json").read_text())
+            args = SimpleNamespace(
+                type="pipeline", manifest=manifest, request=None,
+                prediction_receipts=prediction, state_dir=root,
+            )
+            from workflow_kernel.cli import command_bind_prediction
+            from workflow_kernel.state import StateStore
+
+            with mock.patch.object(
+                    StateStore, "publish", side_effect=RuntimeError("interrupted")), \
+                    mock.patch("workflow_kernel.cli._emit"), \
+                    self.assertRaises(RuntimeError):
+                command_bind_prediction(args)
+
+            state_path = (
+                root / ".workflow-kernel" / "runs" / "pipeline-1" /
+                "run-state.json"
+            )
+            self.assertEqual(json.loads(state_path.read_text())["revision"], 1)
+            retried = self.run_cli(
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest, "--prediction-receipts", prediction,
+                "--state-dir", root,
+            )
+            self.assertEqual(retried.returncode, 0, retried.stderr)
+            self.assertEqual(json.loads(state_path.read_text())["revision"], 2)
+
     def test_independent_prediction_is_bound_once_and_terminal_observation_cannot_overwrite_it(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
