@@ -45,7 +45,23 @@ mode = "quick" (or "full" if --full flag present)
 allow_defer_p3 = true if --allow-defer-p3 flag present, else false
 target = remaining arguments after flag parsing
 prior_findings_signature = null  # for stalled-convergence detection
+workflowClass = explicit request value, else "feature" with workflow_class_defaulted=true
+shadow_state = trusted runtime state directory, or "shadow unavailable"
 ```
+
+The canonical loop state and todo files remain authoritative. Pass the exact `workflowClass` and `workflow_class_defaulted` values into every nested `/dm-review-quick` or `/dm-review`, every `/dm-review-fix`, every final re-review, every iteration receipt, and the terminal receipt. Nested commands MUST NOT re-default, infer, or change the class. Initialize this run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Append lifecycle transitions there. Materialize the validated request at `.claude/ux-review/workflow-kernel/request.json`. Before corresponding authoritative actions, produce and seal the independent prediction exactly once:
+
+```text
+python3 -m workflow_kernel bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+Rewrite `.claude/ux-review/workflow-kernel/authoritative-receipts.json` as the complete ordered redacted receipt array after each iteration. After each complete review/fix iteration receipt, invoke exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
 
 ### 2. Review-Fix Loop
 
@@ -55,9 +71,9 @@ while iteration < max_iterations:
 
   # Run review
   if mode == "quick":
-    Run /dm-review-quick {target}
+    Run /dm-review-quick {target} with workflowClass and workflow_class_defaulted forwarded unchanged
   else:
-    Run /dm-review {target}
+    Run /dm-review {target} with workflowClass and workflow_class_defaulted forwarded unchanged
 
   # Check for findings
   Count findings in todos/*-pending-*.md
@@ -81,14 +97,14 @@ while iteration < max_iterations:
   # Under zero-deferral (default), dm-review-fix addresses every pending finding.
   # Under --allow-defer-p3, P3s may be triaged; P1/P2 still mandatory.
   if allow_defer_p3:
-    Run /dm-review-fix --allow-defer-p3
+    Run /dm-review-fix --allow-defer-p3 with workflowClass and workflow_class_defaulted forwarded unchanged
   else:
-    Run /dm-review-fix
+    Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged
   # dm-review-fix resolves and cleans up todo files
 
   # If this was the last iteration, run one final review to verify
   if iteration == max_iterations:
-    Run review one more time (same mode)
+    Run review one more time (same mode) with workflowClass and workflow_class_defaulted forwarded unchanged
     Count remaining findings
     if findings == 0:
       Report: "Clean after {iteration} iteration(s) with fixes."
@@ -105,7 +121,19 @@ Runs on **all three terminal paths** -- clean, findings remaining, and stalled c
 
 Follow `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: `git worktree prune`, delete only branches this loop created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, emit the inventory. Never delete the branch under review.
 
+Also reconcile only Docker resources explicitly registered as created by this loop/review. Follow the exact executable Docker interfaces in `plugins/dm-review/skills/review/SKILL.md`: creation includes `--dependent-node-ids-json`; cleanup/reconcile planning and every guarded execute include the bound freshly rewritten `--node-statuses`; terminal `plan-reconcile` produces independently sealed current-run and stale-sweep artifacts that are iterated and recorded separately. Never execute proposed argv separately or cross-use plan authorities. Existing project containers, unsupported instrumentation, incomplete ownership labels, in-use resources, and incomplete-dependent resources are retained and reported. Broad Docker prune and name-based ownership are forbidden.
+
 ### 4. Report
+
+After authoritative cleanup receipts are appended, invoke exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
+python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+```
+
+The pre-action bind seals `review-shadow-prediction.json`; later authoritative observation only consumes it and cannot create or overwrite it. Keep the prediction source and bound artifact through comparison, and delete them only after semantic `match`. Missing or reused prediction evidence fails closed without changing convergence. The repository-lifetime scope file is never auto-deleted, and parity match alone never deletes terminal run state; retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches.
 
 Output one of:
 

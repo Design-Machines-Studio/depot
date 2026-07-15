@@ -13,6 +13,7 @@ plans/*/screenshots/
 plans/*/prompts/
 plans/*/manifest.json
 plans/*/brainstorm.html
+.workflow-kernel/
 .worktrees/
 
 # dm-review artifacts
@@ -46,6 +47,7 @@ ENTRIES=(
   'plans/*/prompts/'
   'plans/*/manifest.json'
   'plans/*/brainstorm.html'
+  '.workflow-kernel/'
   '.worktrees/'
   '.claude/ux-review/'
   'todos/'

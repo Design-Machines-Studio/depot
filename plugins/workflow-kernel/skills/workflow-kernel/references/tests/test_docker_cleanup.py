@@ -27,6 +27,7 @@ from workflow_kernel.schema import InvalidSchemaError, NodeStatus
 
 
 NOW = datetime(2026, 7, 15, 1, 2, 3, tzinfo=timezone.utc)
+SCOPE_ID = "a" * 64
 
 
 def legacy_recomputed_authority_id(
@@ -78,6 +79,7 @@ def owned_labels(*, run_id="run-1", lifecycle="chunk", created_at=NOW, cleanup_p
         "com.designmachines.depot.created-at": created_at.isoformat().replace("+00:00", "Z"),
         "com.designmachines.depot.lifecycle": lifecycle,
         "com.designmachines.depot.cleanup-policy": cleanup_policy,
+        "com.designmachines.depot.repository-scope-id": SCOPE_ID,
     }
 
 
@@ -86,7 +88,10 @@ def resource(resource_id="ctr-1", *, kind=ResourceKind.CONTAINER, labels=None, c
 
 
 def inactive_lease(run_id="run-1"):
-    return LeaseProof(run_id, active=False, readable=True, observed_at=NOW)
+    return LeaseProof(
+        run_id, active=False, readable=True, observed_at=NOW,
+        repository_scope_id=SCOPE_ID,
+    )
 
 
 def exact_absent(kind=ResourceKind.CONTAINER, resource_id="ctr-1"):
@@ -108,7 +113,10 @@ class DockerLifecycleTests(unittest.TestCase):
         self.registry = ResourceRegistry(Path(self.directory.name) / "resources.jsonl")
         self.runner = FakeRunner()
         self.leases = FakeLeaseReader({"run-1": inactive_lease()})
-        self.adapter = DockerAdapter(self.runner, now=lambda: NOW, lease_reader=self.leases)
+        self.adapter = DockerAdapter(
+            self.runner, now=lambda: NOW, lease_reader=self.leases,
+            repository_scope_id=SCOPE_ID,
+        )
 
     def tearDown(self):
         self.directory.cleanup()
@@ -129,7 +137,7 @@ class DockerLifecycleTests(unittest.TestCase):
         ):
             plan = self.adapter.plan_create(argv, "run-1", "node-1", "chunk", "stop-remove")
             self.assertTrue(plan.managed)
-            self.assertEqual(6, plan.argv.count("--label"))
+            self.assertEqual(7, plan.argv.count("--label"))
             self.assertEqual(kind, plan.registration_intents[0].kind)
 
         value, receipt = self.register()
@@ -178,7 +186,10 @@ class DockerLifecycleTests(unittest.TestCase):
             "networks": {}, "volumes": {},
         }
         runner = FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),))
-        adapter = DockerAdapter(runner, now=lambda: NOW, lease_reader=self.leases)
+        adapter = DockerAdapter(
+            runner, now=lambda: NOW, lease_reader=self.leases,
+            repository_scope_id=SCOPE_ID,
+        )
         plan = adapter.plan_compose(("docker", "compose", "-f", "compose.yml", "up"), "run-1", "node-1", "chunk", "stop-remove")
         materialized = json.loads(plan.compose_override_content)
         self.assertEqual({"labels"}, set(materialized["services"]["app"]))
@@ -255,15 +266,31 @@ class DockerLifecycleTests(unittest.TestCase):
         stale = resource("stale", labels=owned_labels(created_at=created), created_at=created)
         for proof in (
             None,
-            LeaseProof("run-1", active=False, readable=False, observed_at=NOW),
-            LeaseProof("run-1", active=True, readable=True, observed_at=NOW),
-            LeaseProof("run-1", active=False, readable=True, observed_at=NOW - timedelta(minutes=2)),
+            LeaseProof("run-1", active=False, readable=False, observed_at=NOW, repository_scope_id=SCOPE_ID),
+            LeaseProof("run-1", active=True, readable=True, observed_at=NOW, repository_scope_id=SCOPE_ID),
+            LeaseProof("run-1", active=False, readable=True, observed_at=NOW - timedelta(minutes=2), repository_scope_id=SCOPE_ID),
         ):
-            adapter = DockerAdapter(FakeRunner(), now=lambda: NOW, lease_reader=FakeLeaseReader({"run-1": proof}))
+            adapter = DockerAdapter(
+                FakeRunner(), now=lambda: NOW,
+                lease_reader=FakeLeaseReader({"run-1": proof}),
+                repository_scope_id=SCOPE_ID,
+            )
             plan = adapter.plan_stale_sweep(DockerInventory((stale,)), timedelta(hours=24))
             self.assertEqual((), plan.actions)
         allowed = self.adapter.plan_stale_sweep(DockerInventory((stale,)), timedelta(hours=24))
         self.assertEqual(("docker", "rm", "stale"), allowed.actions[0].argv)
+
+    def test_stale_sweep_rejects_cross_repo_run_id_collision_before_lease_lookup(self):
+        created = NOW - timedelta(hours=25)
+        labels = owned_labels(created_at=created)
+        labels["com.designmachines.depot.repository-scope-id"] = "b" * 64
+        foreign = resource("foreign", labels=labels, created_at=created)
+        plan = self.adapter.plan_stale_sweep(
+            DockerInventory((foreign,)), timedelta(hours=24),
+        )
+        self.assertEqual((), plan.actions)
+        self.assertEqual("foreign_repository_scope", plan.dispositions[0].reason)
+        self.assertEqual([], self.leases.calls)
 
     def test_stale_boundary_label_domains_and_inspected_creation_time_fail_closed(self):
         boundary_time = NOW - timedelta(hours=24)
@@ -322,10 +349,10 @@ class DockerLifecycleTests(unittest.TestCase):
 
     def test_lease_proof_rejects_truthy_bools_and_noncanonical_identity_timestamp(self):
         invalid = (
-            dict(run_id="run-1", active=0, readable=True, observed_at=NOW),
-            dict(run_id="run-1", active=False, readable=1, observed_at=NOW),
-            dict(run_id=" run-1", active=False, readable=True, observed_at=NOW),
-            dict(run_id="run-1", active=False, readable=True, observed_at=NOW.replace(tzinfo=None)),
+            dict(run_id="run-1", active=0, readable=True, observed_at=NOW, repository_scope_id=SCOPE_ID),
+            dict(run_id="run-1", active=False, readable=1, observed_at=NOW, repository_scope_id=SCOPE_ID),
+            dict(run_id=" run-1", active=False, readable=True, observed_at=NOW, repository_scope_id=SCOPE_ID),
+            dict(run_id="run-1", active=False, readable=True, observed_at=NOW.replace(tzinfo=None), repository_scope_id=SCOPE_ID),
         )
         for values in invalid:
             with self.subTest(values=values), self.assertRaises(InvalidSchemaError):
@@ -357,23 +384,25 @@ class DockerLifecycleTests(unittest.TestCase):
         adapter = DockerAdapter(
             FakeRunner(), now=lambda: NOW,
             lease_reader=FakeLeaseReader({"run-1": derived}),
+            repository_scope_id=SCOPE_ID,
         )
         plan = adapter.plan_stale_sweep(DockerInventory((stale,)), timedelta(hours=24))
         self.assertEqual((), plan.actions)
         self.assertEqual("lease_proof_unreadable", plan.dispositions[0].reason)
 
-        mutated = LeaseProof("run-1", False, True, NOW)
+        mutated = LeaseProof("run-1", False, True, NOW, SCOPE_ID)
         object.__setattr__(mutated, "active", 0)
         adapter = DockerAdapter(
             FakeRunner(), now=lambda: NOW,
             lease_reader=FakeLeaseReader({"run-1": mutated}),
+            repository_scope_id=SCOPE_ID,
         )
         plan = adapter.plan_stale_sweep(DockerInventory((stale,)), timedelta(hours=24))
         self.assertEqual((), plan.actions)
         self.assertEqual("lease_proof_unreadable", plan.dispositions[0].reason)
 
     def test_volume_inventory_queries_container_mounts_and_unknown_use_blocks(self):
-        volume_list = ("docker", "volume", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.Name}}")
+        volume_list = ("docker", "volume", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--filter", "label=com.designmachines.depot.repository-scope-id=" + SCOPE_ID, "--format", "{{.Name}}")
         inspect = ("docker", "volume", "inspect", "vol-1")
         use = ("docker", "ps", "-a", "--filter", "volume=vol-1", "--format", "{{.ID}}")
         inspected = [{"Name": "vol-1", "Labels": owned_labels(), "CreatedAt": NOW.isoformat()}]
@@ -382,7 +411,10 @@ class DockerLifecycleTests(unittest.TestCase):
             CommandResult(inspect, 0, json.dumps(inspected), ""),
             CommandResult(use, 0, "container-1\n", ""),
         ))
-        inventory = DockerAdapter(runner, now=lambda: NOW, lease_reader=self.leases).inventory()
+        inventory = DockerAdapter(
+            runner, now=lambda: NOW, lease_reader=self.leases,
+            repository_scope_id=SCOPE_ID,
+        ).inventory()
         volume = next(item for item in inventory.resources if item.kind is ResourceKind.VOLUME)
         self.assertTrue(volume.use_known)
         self.assertTrue(volume.in_use)
@@ -430,7 +462,10 @@ class DockerLifecycleTests(unittest.TestCase):
         value, _ = self.register()
         inspect = ("docker", "container", "inspect", value.resource_id)
         runner = FakeRunner((CommandResult(inspect, 1, "", "Error: No such object: ctr-1"),))
-        adapter = DockerAdapter(runner, now=lambda: NOW, lease_reader=self.leases)
+        adapter = DockerAdapter(
+            runner, now=lambda: NOW, lease_reader=self.leases,
+            repository_scope_id=SCOPE_ID,
+        )
         inventory = adapter.inventory_registered(tuple(self.registry.resources_for("run-1")))
         self.assertEqual((inspect,), tuple(runner.calls))
         self.assertEqual(((ResourceKind.CONTAINER, "ctr-1"),), inventory.absent)
@@ -438,19 +473,21 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(CleanupDisposition.MISSING, plan.dispositions[0].disposition)
 
     def test_malformed_network_inspect_containers_type_blocks_cleanup(self):
-        list_argv = ("docker", "network", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.ID}}")
+        list_argv = ("docker", "network", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--filter", "label=com.designmachines.depot.repository-scope-id=" + SCOPE_ID, "--format", "{{.ID}}")
         inspect = ("docker", "network", "inspect", "net-1")
         payload = [{
             "Name": "net-1", "Labels": owned_labels(), "Created": NOW.isoformat(),
             "State": {}, "Containers": ["attached"],
         }]
         runner = FakeRunner((
-            CommandResult(("docker", "ps", "-a", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.ID}}"), 0, "", ""),
+            CommandResult(("docker", "ps", "-a", "--filter", "label=com.designmachines.depot.managed=true", "--filter", "label=com.designmachines.depot.repository-scope-id=" + SCOPE_ID, "--format", "{{.ID}}"), 0, "", ""),
             CommandResult(list_argv, 0, "net-1\n", ""),
             CommandResult(inspect, 0, json.dumps(payload), ""),
-            CommandResult(("docker", "volume", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--format", "{{.Name}}"), 0, "", ""),
+            CommandResult(("docker", "volume", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--filter", "label=com.designmachines.depot.repository-scope-id=" + SCOPE_ID, "--format", "{{.Name}}"), 0, "", ""),
         ))
-        inventory = DockerAdapter(runner, now=lambda: NOW).inventory()
+        inventory = DockerAdapter(
+            runner, now=lambda: NOW, repository_scope_id=SCOPE_ID,
+        ).inventory()
         self.assertFalse(inventory.resources[0].inspect_ok)
 
     def test_action_revalidation_and_result_models_fail_closed(self):
@@ -645,7 +682,9 @@ class DockerLifecycleTests(unittest.TestCase):
             "networks": {}, "volumes": {},
         }
         runner = FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),))
-        adapter = DockerAdapter(runner, now=lambda: NOW)
+        adapter = DockerAdapter(
+            runner, now=lambda: NOW, repository_scope_id=SCOPE_ID,
+        )
         plan = adapter.plan_compose(
             ("docker", "compose", "-f", "compose.yml", "up"),
             "run-1", "node-1", "chunk", "stop-remove",
@@ -672,6 +711,7 @@ class DockerLifecycleTests(unittest.TestCase):
         adapter = DockerAdapter(
             FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),)),
             now=lambda: NOW,
+            repository_scope_id=SCOPE_ID,
         )
 
         plan = adapter.plan_compose(
@@ -703,6 +743,7 @@ class DockerLifecycleTests(unittest.TestCase):
         adapter = DockerAdapter(
             FakeRunner((CommandResult(config_argv, 0, json.dumps(config), ""),)),
             now=lambda: NOW,
+            repository_scope_id=SCOPE_ID,
         )
         plan = adapter.plan_compose(
             ("docker", "compose", "-fcompose.yml", "up"),
@@ -780,7 +821,9 @@ class DockerLifecycleTests(unittest.TestCase):
         runner = FakeRunner((CommandResult(
             inspect, 1, "", "Cannot connect: dial unix /var/run/docker.sock: no such file or directory",
         ),))
-        adapter = DockerAdapter(runner, now=lambda: NOW)
+        adapter = DockerAdapter(
+            runner, now=lambda: NOW, repository_scope_id=SCOPE_ID,
+        )
         inventory = adapter.inventory_registered(tuple(self.registry.resources_for("run-1")))
         self.assertEqual((), inventory.absent)
         self.assertFalse(inventory.resources[0].inspect_ok)
@@ -876,6 +919,45 @@ class DockerLifecycleTests(unittest.TestCase):
             reopened.record_guarded_results(
                 self.adapter, plan, (observation,), absent, absent,
             )
+
+    def test_public_authority_prefix_rejects_forged_expired_consumed_and_out_of_order(self):
+        clock = [NOW]
+        registry = ResourceRegistry(
+            Path(self.directory.name) / "prefix-resources.jsonl",
+            now=lambda: clock[0], authority_ttl=timedelta(minutes=1),
+        )
+        adapter = DockerAdapter(
+            FakeRunner(), now=lambda: clock[0],
+            repository_scope_id=SCOPE_ID,
+        )
+        value = resource()
+        registry.register(ResourceRecord(
+            value.resource_id, value.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=value.labels,
+        ))
+        before = DockerInventory((value,))
+        plan = adapter.plan_chunk_cleanup(registry, before, "run-1", "node-1")
+        guarded = registry.execute_guarded_action(
+            adapter, plan, 0, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        self.assertEqual((guarded,), registry.validate_authority_prefix(plan, (guarded,)))
+        forged = replace(guarded, authority_id="sha256:" + "f" * 64)
+        out_of_order = replace(guarded, step_identity=CleanupStepIdentity(
+            guarded.step_identity.plan_digest, 1, "command_action",
+        ))
+        for invalid in (forged, out_of_order):
+            with self.assertRaises(InvalidSchemaError):
+                registry.validate_authority_prefix(plan, (invalid,))
+        clock[0] = NOW + timedelta(minutes=2)
+        with self.assertRaises(InvalidSchemaError):
+            registry.validate_authority_prefix(plan, (guarded,))
+        clock[0] = NOW
+        registry.record_guarded_results(
+            adapter, plan, (guarded,), before, exact_absent(),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            registry.validate_authority_prefix(plan, (guarded,))
 
     def test_guarded_recording_rejects_unmatched_terminal_state(self):
         first, _ = self.register(resource("ctr-a"))

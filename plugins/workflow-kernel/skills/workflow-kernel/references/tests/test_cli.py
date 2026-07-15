@@ -20,6 +20,11 @@ class CliTests(unittest.TestCase):
         env["PYTHONPATH"] = str(Path(__file__).parents[1])
         return subprocess.run([sys.executable, "-m", "workflow_kernel", *args], text=True, capture_output=True, env=env, check=False)
 
+    def canonical_run(self, directory, run_id="run-1"):
+        repo = Path(directory)
+        subprocess.run(["git", "init", "-q", repo], check=True)
+        return repo / ".workflow-kernel" / "runs" / run_id
+
     def install_cached_runtime(self, home, cache, version, main_source=None, *, mtime=None):
         refs = (Path(home) / cache / "plugins/cache/depot/workflow-kernel" /
                 version / "skills/workflow-kernel/references")
@@ -54,6 +59,7 @@ class CliTests(unittest.TestCase):
 
     def test_init_append_replay_status_and_safe_error(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
             self.assertEqual(self.run_cli("init", directory, "--run-id", "run-1", "--occurred-at", "2026-07-14T00:00:00Z").returncode, 0)
             state_path = Path(directory) / "run-state.json"
             self.assertEqual(json.loads(state_path.read_text())["mode"], "shadow")
@@ -77,6 +83,7 @@ class CliTests(unittest.TestCase):
             empty = self.run_cli("validate", directory)
             self.assertNotEqual(empty.returncode, 0)
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
             self.assertEqual(self.run_cli("init", directory, "--run-id", "run-1", "--occurred-at", "2026-07-14T00:00:00Z").returncode, 0)
             Path(directory, "events.jsonl").write_text("")
             result = self.run_cli("validate", directory)
@@ -84,6 +91,7 @@ class CliTests(unittest.TestCase):
 
     def test_validate_rejects_dangling_state_symlink(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
             initialized = self.run_cli(
                 "init", directory, "--run-id", "run-1",
                 "--occurred-at", "2026-07-14T00:00:00Z",
@@ -98,6 +106,7 @@ class CliTests(unittest.TestCase):
 
     def test_append_rejects_dangling_state_symlink_before_ledger_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
             initialized = self.run_cli(
                 "init", directory, "--run-id", "run-1",
                 "--occurred-at", "2026-07-14T00:00:00Z",
@@ -123,6 +132,8 @@ class CliTests(unittest.TestCase):
 
     def test_init_rejects_dangling_state_before_creating_ledger(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
+            Path(directory).mkdir(parents=True)
             root = Path(directory)
             state_path = root / "run-state.json"
             state_path.symlink_to("missing-state-target")
@@ -137,6 +148,8 @@ class CliTests(unittest.TestCase):
 
     def test_init_rejects_dangling_ledger_without_creating_state(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
+            Path(directory).mkdir(parents=True)
             root = Path(directory)
             ledger_path = root / "events.jsonl"
             ledger_path.symlink_to("missing-ledger-target")
@@ -152,6 +165,7 @@ class CliTests(unittest.TestCase):
     def test_init_prepares_state_before_creating_ledger(self):
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch("workflow_kernel.state.MAX_STATE_BYTES", 1):
+            directory = self.canonical_run(directory)
             with self.assertRaises(UnsafePayloadError):
                 command_init(SimpleNamespace(
                     directory=directory, run_id="run-1", mode="shadow",
@@ -167,6 +181,7 @@ class CliTests(unittest.TestCase):
         )
         for name, mutate in mutations:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                directory = self.canonical_run(directory)
                 initialized = self.run_cli(
                     "init", directory, "--run-id", "run-1",
                     "--occurred-at", "2026-07-14T00:00:00Z",
@@ -195,6 +210,7 @@ class CliTests(unittest.TestCase):
 
     def test_append_rebuilds_missing_materialization_from_candidate_state(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
             initialized = self.run_cli(
                 "init", directory, "--run-id", "run-1",
                 "--occurred-at", "2026-07-14T00:00:00Z",
@@ -224,6 +240,7 @@ class CliTests(unittest.TestCase):
         )
         for name, mutate in mutations:
             with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                directory = self.canonical_run(directory)
                 initialized = self.run_cli(
                     "init", directory, "--run-id", "run-1",
                     "--occurred-at", "2026-07-14T00:00:00Z",
@@ -261,6 +278,7 @@ class CliTests(unittest.TestCase):
         sentinel = "never-persist-rejected-event-kind"
         digest = detail_digest(sentinel)
         with tempfile.TemporaryDirectory() as directory:
+            directory = self.canonical_run(directory)
             initialized = self.run_cli(
                 "init", directory, "--run-id", "run-1",
                 "--occurred-at", "2026-07-14T00:00:00Z",
@@ -364,8 +382,8 @@ class CliTests(unittest.TestCase):
     def test_validate_binds_run_directory_before_parent_alias_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            first = root / "first"
-            second = root / "second"
+            first = self.canonical_run(root / "first", "run-first")
+            second = self.canonical_run(root / "second", "run-second")
             alias = root / "alias"
             for path, run_id in ((first, "run-first"), (second, "run-second")):
                 self.assertEqual(self.run_cli(
@@ -603,6 +621,7 @@ class CliTests(unittest.TestCase):
 
     def test_append_state_prepare_preserves_prior_ledger_and_state(self):
         with tempfile.TemporaryDirectory() as directory, mock.patch("workflow_kernel.cli._emit"):
+            directory = self.canonical_run(directory)
             command_init(SimpleNamespace(directory=directory, run_id="run-1", mode="shadow",
                                          occurred_at="2026-07-14T00:00:00Z"))
             events_path = Path(directory) / "events.jsonl"

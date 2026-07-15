@@ -11,6 +11,11 @@ Every full pipeline run writes `plans/<slug>/run-postmortem.md` after memory cap
 - `qualityLedger` - which provider found each review issue, retries, cap descents, and regressions shipped by cheaper models.
 - `rankedRecommendations` - proposal-only changes for plugins exercised by this run.
 - `standingRecommendations` - recommendations repeated in at least `N` runs, default `3`, with run citations.
+- `kernelReliability` - shadow availability, semantic parity status, comparison reason counts, observation/adapter failures, missing authoritative evidence, browser recovery outcomes, owned-resource cleanup outcomes, and reconciliation results.
+- `workflowClass` - validated class plus `workflow_class_defaulted`; metrics retain the authoritative manifest value unchanged.
+- `providerReceipts` - requested, attempted, implemented-by, fallback, and reason for every routed lane, including unavailable and misrouted lanes.
+
+Kernel reliability data is measurement only. A parity report or reliability recommendation cannot mutate routing policy, workflow stages, cleanup state, merge results, or review outcomes. Promotion requires a separate human-approved source change after evidence review.
 
 ## Recommendation Shape
 

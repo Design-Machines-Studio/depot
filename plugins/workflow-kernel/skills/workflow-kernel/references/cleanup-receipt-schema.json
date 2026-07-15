@@ -10,12 +10,13 @@
     "scope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["run_id", "terminal", "stale_sweep"],
+      "required": ["run_id", "terminal", "stale_sweep", "repository_scope_id"],
       "properties": {
         "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
         "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
         "terminal": {"type": "boolean"},
-        "stale_sweep": {"type": "boolean"}
+        "stale_sweep": {"type": "boolean"},
+        "repository_scope_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
       }
     },
     "before": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "uniqueItems": true},
