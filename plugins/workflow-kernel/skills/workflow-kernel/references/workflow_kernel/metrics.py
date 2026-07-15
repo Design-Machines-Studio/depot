@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Mapping, Tuple
+from typing import Iterable, Mapping, Optional, Tuple
 
 from .schema import WorkflowEvent
 
@@ -37,11 +37,11 @@ class ReliabilityReport:
     cleanup_retained: int
     cleanup_blocked: int
     cleanup_foreign: int
-    tokens: int
-    cost_usd: float
+    tokens: Optional[int]
+    cost_usd: Optional[float]
     completion_rate: float
-    time_to_clean_seconds: float
-    cost_to_clean: float
+    time_to_clean_seconds: Optional[float]
+    cost_to_clean: Optional[float]
     fallback_rate: float
     cleanup_reliability: float
     proposals: Tuple[Mapping[str, object], ...]
@@ -89,6 +89,11 @@ class MetricsAggregator:
         values = tuple(events)
         if any(type(event) is not WorkflowEvent for event in values):
             raise ValueError("invalid metric events")
+        if values and (
+            any(event.sequence != position for position, event in enumerate(values))
+            or any(event.run_id != values[0].run_id for event in values)
+        ):
+            raise ValueError("non-contiguous metric events")
         dimensions = {name: Counter() for name in (
             "provider", "model", "host", "workflow_class", "isolation_mode",
         )}
@@ -100,6 +105,7 @@ class MetricsAggregator:
         totals = Counter()
         tokens = 0
         cost = 0.0
+        saw_tokens = saw_cost = False
         validation_count = validation_first = fallbacks = completed = terminals = 0
         for event in values:
             payload = event.payload
@@ -135,8 +141,12 @@ class MetricsAggregator:
                 "cleanup_removed", "cleanup_retained", "cleanup_blocked", "cleanup_foreign",
             ):
                 totals[name] += _number(payload, name, int)
-            tokens += _number(payload, "usage_count", int)
-            cost += _number(payload, "cost_usd", float)
+            if "usage_count" in payload:
+                saw_tokens = True
+                tokens += _number(payload, "usage_count", int)
+            if "cost_usd" in payload:
+                saw_cost = True
+                cost += _number(payload, "cost_usd", float)
             if payload.get("stage") in ("run_summary", "review_terminal"):
                 terminals += 1
                 completed += int(payload.get("status") in ("succeeded", "clean", "findings"))
@@ -148,13 +158,23 @@ class MetricsAggregator:
             "cleanup_removed", "cleanup_retained", "cleanup_blocked",
         ))
         clean_total = totals["cleanup_removed"] + totals["cleanup_retained"]
-        time_to_clean = max((max(times) for times in node_times.values() if times), default=None)
-        start = min((min(times) for times in node_times.values() if times), default=None)
-        clean_seconds = (time_to_clean - start).total_seconds() if time_to_clean and start else 0.0
+        cleanup_times = []
+        for event in values:
+            if event.payload.get("stage") in {
+                "chunk_cleanup", "repository_cleanup", "terminal_reconciliation",
+            }:
+                try:
+                    cleanup_times.append(datetime.fromisoformat(event.occurred_at.replace("Z", "+00:00")))
+                except ValueError:
+                    pass
+        clean_seconds = (
+            (max(cleanup_times) - min(cleanup_times)).total_seconds()
+            if len(cleanup_times) > 1 else None
+        )
         proposals = ({
             "kind": "routing_or_workflow_change", "mode": "proposal_only",
             "human_approval_required": True,
-        },)
+        },) if values else ()
         return ReliabilityReport(
             len(values), durations, dict(attempts), dict(dimensions["provider"]),
             dict(dimensions["model"]), dict(dimensions["host"]),
@@ -167,9 +187,11 @@ class MetricsAggregator:
             totals["browser_passed"], totals["browser_recovered"],
             totals["browser_missing"], totals["cleanup_removed"],
             totals["cleanup_retained"], totals["cleanup_blocked"],
-            totals["cleanup_foreign"], tokens, cost,
+            totals["cleanup_foreign"], tokens if saw_tokens else None,
+            cost if saw_cost else None,
             completed / terminals if terminals else 0.0,
-            clean_seconds, cost / clean_total if clean_total else 0.0,
+            clean_seconds,
+            cost / clean_total if saw_cost and clean_total else None,
             fallbacks / len(values) if values else 0.0,
             clean_total / cleanup_total if cleanup_total else 0.0,
             proposals,

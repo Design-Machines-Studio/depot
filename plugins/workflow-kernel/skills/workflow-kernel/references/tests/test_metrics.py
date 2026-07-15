@@ -1,4 +1,5 @@
 import json
+import copy
 import unittest
 from pathlib import Path
 
@@ -30,6 +31,25 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(report.completion_rate, 0.0)
         self.assertEqual(report.fallback_rate, 0.0)
         self.assertEqual(report.cleanup_reliability, 0.0)
+        self.assertIsNone(report.tokens)
+        self.assertIsNone(report.cost_usd)
+        self.assertIsNone(report.time_to_clean_seconds)
+        self.assertEqual(report.proposals, ())
+
+    def test_time_to_clean_uses_cleanup_window_only(self):
+        events = translate_pipeline_receipts(json.loads((FIXTURES / "pipeline-claude.json").read_text()))
+        report = MetricsAggregator().aggregate(events)
+        self.assertEqual(report.time_to_clean_seconds, 120.0)
+
+    def test_replay_duplicate_gap_and_order_are_rejected(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        variants = []
+        duplicate = copy.deepcopy(receipts); duplicate[1]["sequence"] = 0; variants.append(duplicate)
+        gap = copy.deepcopy(receipts); gap[1]["sequence"] = 2; variants.append(gap)
+        order = copy.deepcopy(receipts); order[0], order[1] = order[1], order[0]; variants.append(order)
+        for value in variants:
+            with self.assertRaises(ValueError):
+                MetricsAggregator().aggregate(translate_pipeline_receipts(value))
 
 
 if __name__ == "__main__":

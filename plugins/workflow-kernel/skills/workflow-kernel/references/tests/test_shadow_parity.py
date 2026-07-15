@@ -1,4 +1,5 @@
 import json
+import copy
 import unittest
 from pathlib import Path
 
@@ -41,6 +42,41 @@ class ShadowParityTests(unittest.TestCase):
         refs = tuple(event.payload["authoritative_receipt"] for event in authoritative.events)
         report = ShadowComparator().compare(state(refs), authoritative)
         self.assertEqual(report.reason, "match")
+        self.assertTrue(report.semantic_match)
+
+    def test_semantic_mutations_never_report_safe_match(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        authoritative = ReceiptSet.from_events(translate_pipeline_receipts(original))
+        changes = (
+            (2, "status", "failed"), (2, "provider", "openrouter"),
+            (2, "fallback_reason", "provider_unavailable"),
+            (5, "persona_passed", 1), (7, "cleanup_blocked", 1),
+            (10, "workflow_class", "bug"),
+        )
+        for index, key, value in changes:
+            mutated = copy.deepcopy(original); mutated[index][key] = value
+            if key == "workflow_class":
+                for receipt in mutated: receipt[key] = value
+            report = ShadowComparator().compare_receipt_sets(
+                ReceiptSet.from_events(translate_pipeline_receipts(mutated)), authoritative,
+            )
+            with self.subTest(key=key):
+                self.assertFalse(report.semantic_match)
+                self.assertFalse(report.safe_to_promote)
+                self.assertIn(report.reason, ("kernel_prediction_gap", "unsafe_to_promote"))
+
+    def test_missing_and_extra_receipts_have_distinct_reasons(self):
+        events = self.load("pipeline-claude.json")
+        missing = ShadowComparator().compare_receipt_sets(ReceiptSet.from_events(events[:-1]), ReceiptSet.from_events(events))
+        extra = ShadowComparator().compare_receipt_sets(ReceiptSet.from_events(events), ReceiptSet.from_events(events[:-1]))
+        self.assertEqual(missing.reason, "missing_authoritative_evidence")
+        self.assertEqual(extra.reason, "unexpected_authoritative_transition")
+
+    def test_generic_host_fixture_is_semantically_equivalent(self):
+        generic = ReceiptSet.from_events(self.load("pipeline-generic.json"))
+        claude = ReceiptSet.from_events(self.load("pipeline-claude.json"))
+        report = ShadowComparator().compare_receipt_sets(generic, claude)
+        self.assertIn(report.reason, ("match", "explained_host_difference"))
         self.assertTrue(report.semantic_match)
 
 

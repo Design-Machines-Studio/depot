@@ -11,12 +11,23 @@ FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 
 class DmReviewAdapterTests(unittest.TestCase):
     def test_request_translates_required_lanes_without_selecting_actions(self):
-        request = ReviewRequest("review-1", ("security", "architecture", "visual"), "full", WorkflowClass.BUG)
+        request = ReviewRequest("review-1", ("security", "architecture", "visual"), "full", WorkflowClass.BUG, "codex_native", False)
         spec = translate_review(request, HostCapabilities("codex", frozenset()))
         self.assertEqual(spec.run_id, "review-1")
         self.assertEqual(spec.workflow_class, WorkflowClass.BUG)
         self.assertEqual(spec.required_lanes, ("security", "architecture", "visual"))
+        self.assertEqual(spec.execution_mode, "codex_native")
+        self.assertFalse(spec.workflow_class_defaulted)
+        node_ids = {node.node_id for node in spec.nodes}
+        self.assertTrue({"review-request", "review-lane-security", "review-convergence", "review-browser-verification", "review-cleanup", "review-terminal"} <= node_ids)
         self.assertFalse(hasattr(spec, "execute"))
+
+    def test_mapping_tracks_legacy_workflow_class_default_provenance(self):
+        request = ReviewRequest.from_mapping({"run_id": "review-legacy", "requested_lanes": ["architecture"], "executionMode": "claude_full"})
+        spec = translate_review(request, HostCapabilities("claude", frozenset()))
+        self.assertTrue(spec.workflow_class_defaulted)
+        self.assertEqual(spec.workflow_class, WorkflowClass.FEATURE)
+        self.assertEqual(spec.execution_mode, "claude_full")
 
     def test_receipts_preserve_fallback_findings_coverage_convergence_and_terminal(self):
         receipts = json.loads((FIXTURES / "dm-review.json").read_text())

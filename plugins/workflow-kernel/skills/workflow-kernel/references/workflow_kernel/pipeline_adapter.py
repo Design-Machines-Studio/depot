@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+import re
 from typing import Iterable, Mapping, Optional, Tuple
 
 from .adapters.base import (
@@ -38,7 +39,11 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "prior_findings_signature", "finding_count", "convergence_signature",
     "browser_expected", "browser_passed", "browser_recovered",
     "browser_missing",
+    "execution_mode", "requested_provider", "attempted_provider", "lane",
+    "fallback", "cleanup_policy", "cleanup_disposition", "resource_kind",
+    "resource_name", "topology", "topology_node", "topology_edge",
 })
+_RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,21 @@ class RunSpec:
                     "required_evidence": list(node.required_evidence),
                     "executor": node.executor,
                     "routing_reason": node.routing_reason,
+                    "gate_decision": {
+                        "allowed": node.gate_decision.allowed,
+                        "reason_code": node.gate_decision.reason_code,
+                        "missing_evidence": list(node.gate_decision.missing_evidence),
+                        "human_required": node.gate_decision.human_required,
+                    },
+                    "required_capability": (
+                        node.required_capability.value
+                        if node.required_capability is not None else None
+                    ),
+                    "required_dispatch_capability": (
+                        node.required_dispatch_capability.value
+                        if node.required_dispatch_capability is not None else None
+                    ),
+                    "executor_overridable": node.executor_overridable,
                 }
                 for node in self.nodes
             ],
@@ -99,6 +119,14 @@ def _required_text(value: object, field: str) -> str:
     return value
 
 
+def _run_identity(value: object) -> str:
+    value = _required_text(value, "feature")
+    normalized = _RUN_ID_SEPARATORS.sub("-", value.lower()).strip("-")
+    if not normalized or len(normalized) > 255:
+        raise ValueError("invalid feature")
+    return normalized
+
+
 def _safe_reference(value: object) -> str:
     reference = _required_text(value, "authoritative receipt")
     if "\\" in reference or reference.startswith("/") or any(
@@ -115,7 +143,7 @@ def _chunks(value: object) -> Tuple[ChunkSpec, ...]:
     chunks = []
     identifiers = set()
     for raw in value:
-        if not isinstance(raw, Mapping):
+        if type(raw) is not dict:
             raise ValueError("chunk must be an object")
         node_id = _required_text(raw.get("id"), "chunk id")
         dependencies = raw.get("dependsOn", raw.get("depends_on", []))
@@ -163,7 +191,34 @@ def _levels(chunks: Tuple[ChunkSpec, ...]) -> Tuple[Tuple[str, ...], ...]:
 def _cached_plan(value: object) -> Optional[Tuple[Tuple[str, ...], ...]]:
     if value is None:
         return None
-    if not isinstance(value, list) or any(not isinstance(level, list) for level in value):
+    if type(value) is dict:
+        value = value.get("levels")
+        if type(value) is not list:
+            raise ValueError("invalid executionPlan")
+        result = []
+        for expected_level, raw in enumerate(value):
+            if type(raw) is not dict or raw.get("level") != expected_level:
+                raise ValueError("invalid executionPlan")
+            strategy = raw.get("strategy")
+            if strategy == "sequential":
+                items = raw.get("chunks")
+                if type(items) is not list:
+                    raise ValueError("invalid executionPlan")
+            elif strategy == "parallel":
+                groups = raw.get("groups")
+                if type(groups) is not dict or any(
+                    type(key) is not str or type(group) is not list
+                    for key, group in groups.items()
+                ):
+                    raise ValueError("invalid executionPlan")
+                items = [item for key in sorted(groups) for item in groups[key]]
+            else:
+                raise ValueError("invalid executionPlan")
+            if any(type(item) is not str or not item for item in items):
+                raise ValueError("invalid executionPlan")
+            result.append(tuple(items))
+        return tuple(result)
+    if type(value) is not list or any(type(level) is not list for level in value):
         raise ValueError("invalid executionPlan")
     result = []
     for level in value:
@@ -174,9 +229,12 @@ def _cached_plan(value: object) -> Optional[Tuple[Tuple[str, ...], ...]]:
 
 
 def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities) -> RunSpec:
-    if not isinstance(manifest, Mapping) or type(profile) is not HostCapabilities:
+    if type(manifest) is not dict or type(profile) is not HostCapabilities:
         raise ValueError("invalid manifest or host profile")
-    run_id = _required_text(manifest.get("runId", manifest.get("run_id")), "run id")
+    identity = manifest.get("feature")
+    if identity is None:  # bounded legacy compatibility; canonical feature wins.
+        identity = manifest.get("runId", manifest.get("run_id"))
+    run_id = _run_identity(identity)
     raw_class = manifest.get("workflowClass")
     defaulted = raw_class is None
     try:
@@ -230,14 +288,35 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
 def _translate_receipts(
     receipts: Iterable[Mapping[str, object]], allowed_stages: frozenset,
 ) -> Tuple[WorkflowEvent, ...]:
+    try:
+        values = tuple(receipts)
+    except Exception:
+        raise ValueError("invalid receipts") from None
     events = []
-    for position, receipt in enumerate(receipts):
-        if not isinstance(receipt, Mapping):
+    run_identity = None
+    workflow_class = None
+    execution_mode = None
+    for position, receipt in enumerate(values):
+        if type(receipt) is not dict:
             raise ValueError("receipt must be an object")
         run_id = _required_text(receipt.get("run_id"), "run id")
-        sequence = receipt.get("sequence", position)
-        if type(sequence) is not int or sequence < 0:
+        sequence = receipt.get("sequence")
+        if type(sequence) is not int or sequence != position:
             raise ValueError("invalid receipt sequence")
+        current_class = _required_text(
+            receipt.get("workflow_class", workflow_class or "feature"),
+            "workflow class",
+        )
+        current_mode = _required_text(
+            receipt.get("execution_mode", execution_mode or "generic"),
+            "execution mode",
+        )
+        if current_mode not in EXECUTION_MODES:
+            raise ValueError("invalid execution mode")
+        if position == 0:
+            run_identity, workflow_class, execution_mode = run_id, current_class, current_mode
+        elif (run_id, current_class, current_mode) != (run_identity, workflow_class, execution_mode):
+            raise ValueError("receipt context discontinuity")
         stage = _required_text(receipt.get("stage"), "stage")
         if stage not in allowed_stages:
             raise ValueError("unknown receipt stage")
@@ -246,9 +325,12 @@ def _translate_receipts(
         if node_id is not None:
             node_id = _required_text(node_id, "node id")
         reference = _safe_reference(receipt.get("authoritative_receipt"))
+        normalized_receipt = dict(receipt)
+        normalized_receipt["workflow_class"] = current_class
+        normalized_receipt["execution_mode"] = current_mode
         events.append(WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,
-            _safe_receipt_payload(receipt, reference),
+            _safe_receipt_payload(normalized_receipt, reference),
         ))
     return tuple(events)
 
