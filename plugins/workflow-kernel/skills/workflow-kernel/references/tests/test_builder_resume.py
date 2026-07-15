@@ -5,7 +5,10 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from tests import detail_digest, snapshot_during_validated_mutation
+from tests import (
+    canonical_harness_profile, detail_digest,
+    snapshot_during_validated_mutation,
+)
 from workflow_kernel.adapters.base import (
     BuilderObservation, BuilderOutcome, BuilderSessionDecision, GateDecision,
     AttemptLedger, HostCapabilities,
@@ -996,7 +999,7 @@ class BuilderResumeTests(unittest.TestCase):
             for node in (security_build, sensitive_build):
                 with self.subTest(host=host, node=node.node_id):
                     adapter = FakeHostAdapter(
-                        capabilities_from_harness_profile(host),
+                        capabilities_from_harness_profile(host, canonical_harness_profile()),
                         dispatch_handles=(handle(host=host),),
                     )
                     context = receipt_context(

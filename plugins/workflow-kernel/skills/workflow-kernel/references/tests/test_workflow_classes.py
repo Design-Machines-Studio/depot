@@ -42,6 +42,35 @@ class WorkflowClassTests(unittest.TestCase):
             WorkflowTemplates()._templates,
         )
 
+    def test_default_sensitive_globs_are_kernel_owned_and_synced_with_routing_policy(self):
+        from workflow_kernel.workflows import DEFAULT_SENSITIVE_POLICY_PATH
+
+        references = Path(__file__).parents[1]
+        self.assertEqual(
+            DEFAULT_SENSITIVE_POLICY_PATH,
+            references / "sensitive-path-policy.json",
+        )
+        owned = json.loads(DEFAULT_SENSITIVE_POLICY_PATH.read_text(encoding="utf-8"))
+        owned_globs = owned["security"]["neverRouteOffAnthropic"]["pathGlobs"]
+        self.assertEqual(
+            tuple(owned_globs), WorkflowTemplates()._sensitive_globs,
+        )
+        routing_policy = next(
+            (
+                parent / "plugins" / "pipeline" / "references" / "routing-policy.json"
+                for parent in Path(__file__).resolve().parents
+                if (parent / "plugins" / "pipeline" / "references" / "routing-policy.json").is_file()
+            ),
+            None,
+        )
+        self.assertIsNotNone(routing_policy, "canonical routing-policy.json not found")
+        upstream = json.loads(routing_policy.read_text(encoding="utf-8"))
+        self.assertEqual(
+            owned_globs,
+            upstream["security"]["neverRouteOffAnthropic"]["pathGlobs"],
+            "kernel-owned sensitive-path-policy.json drifted from routing-policy.json",
+        )
+
     def test_sensitive_routing_policy_uses_shared_json_boundaries(self):
         canonical = json.dumps({
             "security": {

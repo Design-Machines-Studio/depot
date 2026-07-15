@@ -18,20 +18,16 @@ from .policies import GatePolicy, load_policy
 
 WORKFLOW_CLASSES_SCHEMA_VERSION = 1
 DEFAULT_CLASSES_PATH = Path(__file__).resolve().parent.parent / "workflow-classes.json"
-
-
-def _repository_file(relative: str) -> Path:
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / relative
-        if candidate.is_file():
-            return candidate
-    raise invalid_policy("routing_policy_unavailable")
+# Kernel-owned copy of the never-route-off-Anthropic path globs. The default
+# must resolve inside the installed plugin itself; installed caches
+# (~/.claude, ~/.codex) have no depot repository ancestor to walk.
+DEFAULT_SENSITIVE_POLICY_PATH = (
+    Path(__file__).resolve().parent.parent / "sensitive-path-policy.json"
+)
 
 
 def _load_sensitive_globs(path: Optional[Path]) -> tuple[str, ...]:
-    source = Path(path) if path is not None else _repository_file(
-        "plugins/pipeline/references/routing-policy.json"
-    )
+    source = Path(path) if path is not None else DEFAULT_SENSITIVE_POLICY_PATH
     try:
         payload = load_json_document(source)
         globs = payload["security"]["neverRouteOffAnthropic"]["pathGlobs"]

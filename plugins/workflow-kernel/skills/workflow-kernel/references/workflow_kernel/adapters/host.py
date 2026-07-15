@@ -25,33 +25,27 @@ from ..schema import InvalidSchemaError
 _HarnessProfilePath = Union[str, os.PathLike[str]]
 
 
-def _repository_file(relative: str) -> Path:
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / relative
-        if candidate.is_file():
-            return candidate
-    raise invalid_policy("harness_profile_unavailable")
-
-
 def capabilities_from_harness_profile(
     host_name: str,
-    path: Optional[_HarnessProfilePath] = None,
+    path: _HarnessProfilePath,
 ) -> HostCapabilities:
+    """Aggregate declared host capabilities from one explicit harness profile.
+
+    The caller owns the profile location (canonically
+    ``plugins/pipeline/references/harness-profile.json`` in the consuming
+    orchestrator). The kernel never discovers the profile by walking
+    filesystem ancestors: installed plugin caches have no depot repository
+    ancestor, so implicit discovery would fail closed on every installed
+    host.
+    """
     host_name = _validate_host_name(host_name)
-    if path is None:
-        source = _repository_file(
-            "plugins/pipeline/references/harness-profile.json"
-        )
-    else:
-        try:
-            raw_path = os.fspath(path)
-            # Copy caller text to an exact built-in string before Path creation.
-            path_text = str.__str__(raw_path)
-            if type(path_text) is not str:
-                raise TypeError
-            source = Path(path_text)
-        except Exception:
-            raise invalid_policy("invalid_harness_profile") from None
+    try:
+        raw_path = os.fspath(path)
+        # Copy caller text to an exact built-in string before Path creation.
+        path_text = str.__str__(raw_path)
+        source = Path(path_text)
+    except Exception:
+        raise invalid_policy("invalid_harness_profile") from None
     try:
         payload = load_json_document(source)
         roles = payload["hosts"][host_name]["roles"]

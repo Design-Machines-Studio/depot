@@ -1,7 +1,13 @@
 import json
+import os
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+import workflow_kernel
 
 from workflow_kernel.adapters.base import HostCapabilities, WorkflowClass
 from workflow_kernel.pipeline_adapter import translate_manifest, translate_pipeline_receipts
@@ -40,6 +46,46 @@ class CompatibilityTests(unittest.TestCase):
         from workflow_kernel.schema import RunMode
         self.assertEqual(RunMode.SHADOW.value, "shadow")
         self.assertNotIn("native_default", {mode.value for mode in RunMode})
+
+    def test_translation_works_from_installed_cache_layout_without_repo_ancestor(self):
+        """An installed cache has no plugins/pipeline ancestor; the kernel must
+        still translate manifests and expand workflow classes from its own
+        kernel-owned safety data (finding 061)."""
+        real_references = Path(workflow_kernel.__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as directory:
+            references = (
+                Path(directory) / ".claude" / "plugins" / "cache" / "depot"
+                / "workflow-kernel" / "0.1.0" / "skills" / "workflow-kernel"
+                / "references"
+            )
+            shutil.copytree(
+                real_references, references,
+                ignore=shutil.ignore_patterns("tests", "__pycache__"),
+            )
+            script = (
+                "from workflow_kernel.adapters.base import HostCapabilities\n"
+                "from workflow_kernel.pipeline_adapter import translate_manifest\n"
+                "spec = translate_manifest({\n"
+                "    'feature': 'cache-layout', 'workflowClass': 'feature',\n"
+                "    'executionMode': 'generic', 'chunks': [],\n"
+                "    'changedPaths': ['internal/auth/keys.py'],\n"
+                "}, HostCapabilities('generic', frozenset()))\n"
+                "assert spec.nodes[-1].node_id == 'cleanup'\n"
+                "assert any(\n"
+                "    node.routing_reason == 'sensitive_path_override'\n"
+                "    for node in spec.nodes if node.executor is not None\n"
+                ")\n"
+            )
+            completed = subprocess.run(
+                (sys.executable, "-c", script), cwd=directory, text=True,
+                capture_output=True, check=False,
+                env={
+                    "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                    "PYTHONPATH": str(references),
+                    "HOME": directory,
+                },
+            )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_runtime_trust_rejects_project_shadow_symlink_wrong_name_and_incompatible_version(self):
         from workflow_kernel.cli import resolve_workflow_kernel_runtime

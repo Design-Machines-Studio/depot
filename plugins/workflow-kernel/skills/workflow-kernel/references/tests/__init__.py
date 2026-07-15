@@ -287,3 +287,19 @@ def detail_digest(value):
 
 def detail_key_digest(value):
     return "key-sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def canonical_harness_profile():
+    """Return the repo's canonical harness profile for explicit-path tests.
+
+    The runtime never discovers this file implicitly (installed caches have
+    no depot ancestor); tests are repository development artifacts, so
+    locating the checked-in canonical profile here is legitimate.
+    """
+    from pathlib import Path
+
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "plugins" / "pipeline" / "references" / "harness-profile.json"
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError("canonical harness-profile.json not found")

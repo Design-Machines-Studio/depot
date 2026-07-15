@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import get_type_hints, Optional, Union
 
 from tests import (
-    detail_digest, ignored_json_boundary_corpus,
+    canonical_harness_profile, detail_digest, ignored_json_boundary_corpus,
     snapshot_during_validated_mutation,
 )
 import workflow_kernel.adapters.base as adapter_base
@@ -322,7 +322,7 @@ class HostCapabilityTests(unittest.TestCase):
             type("HostileRoute", (HostRoute,), {})
 
     def test_harness_routes_preserve_provider_capability_and_dispatch_coherence(self):
-        claude = capabilities_from_harness_profile("claude-code")
+        claude = capabilities_from_harness_profile("claude-code", canonical_harness_profile())
         expected = {
             HostRoute("anthropic", HostCapability.CLAUDE_EXECUTION, "native"),
             HostRoute("anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION, "native"),
@@ -575,7 +575,7 @@ class HostCapabilityTests(unittest.TestCase):
         }
         for host, capabilities in expected.items():
             with self.subTest(host=host):
-                fixture = capabilities_from_harness_profile(host)
+                fixture = capabilities_from_harness_profile(host, canonical_harness_profile())
                 self.assertEqual(fixture.capabilities, frozenset(capabilities))
                 self.assertEqual(fixture.transition_model_version, 1)
                 self.assertEqual(fixture.evidence_model_version, 1)
@@ -872,7 +872,7 @@ class HostCapabilityTests(unittest.TestCase):
         )["path"]
         self.assertEqual(
             annotation,
-            Optional[Union[str, os.PathLike[str]]],
+            Union[str, os.PathLike[str]],
         )
 
     def test_invalid_host_name_precedes_hostile_path_dispatch(self):
