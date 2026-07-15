@@ -7,12 +7,12 @@
     "schema_version", "status", "reason_code", "case_id", "requested_engine",
     "actual_engine", "substitution_provenance", "attempts", "lifecycle",
     "missing_case_ids", "verification_profile_id", "configured_engines",
-    "target_url_digest", "target_origin_digest", "target_route_digest", "viewport"
+    "target_url_digest", "target_origin_digest", "target_route_digest", "viewport", "declared_route_digest"
   ],
   "properties": {
     "schema_version": {"const": 1},
     "status": {"enum": ["clean", "recovered", "blocked"]},
-    "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded", "alternate_engine_recovered_degraded", "human_help_required"]},
+    "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded", "alternate_engine_recovered_degraded", "human_help_required", "application_failure"]},
     "case_id": {"$ref": "#/$defs/case_id"},
     "requested_engine": {"$ref": "#/$defs/engine"},
     "actual_engine": {"$ref": "#/$defs/engine"},
@@ -34,15 +34,17 @@
     "target_origin_digest": {"type": "string", "pattern": "^origin-sha256:[0-9a-f]{64}$"},
     "target_route_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "viewport": {"$ref": "#/$defs/viewport"}
+    ,"declared_route_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
   },
   "allOf": [
     {"if": {"properties": {"status": {"const": "clean"}}}, "then": {"properties": {"reason_code": {"const": "browser_verified_first_pass"}, "substitution_provenance": {"const": null}, "attempts": {"minItems": 1, "maxItems": 1, "items": {"properties": {"attempt_number": {"const": 1}, "result": {"const": "passed"}, "substitution_provenance": {"const": null}}}}, "lifecycle": {"maxItems": 0}, "missing_case_ids": {"maxItems": 0}}}},
-    {"if": {"properties": {"status": {"const": "blocked"}}}, "then": {"properties": {"reason_code": {"const": "human_help_required"}, "substitution_provenance": {"const": null}, "attempts": {"prefixItems": [{"properties": {"result": {"enum": ["failed", "unavailable"]}}}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}, "missing_case_ids": {"minItems": 1, "maxItems": 1}}}},
+    {"if": {"properties": {"status": {"const": "blocked"}}}, "then": {"properties": {"reason_code": {"enum": ["human_help_required", "application_failure"]}, "substitution_provenance": {"const": null}, "attempts": {"prefixItems": [{"properties": {"result": {"enum": ["failed", "unavailable"]}}}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}, "missing_case_ids": {"minItems": 1, "maxItems": 1}}}},
     {"if": {"properties": {"status": {"const": "recovered"}}}, "then": {"properties": {"reason_code": {"enum": ["primary_recovered_degraded", "alternate_engine_recovered_degraded"]}, "attempts": {"minItems": 2, "prefixItems": [{"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}, "missing_case_ids": {"maxItems": 0}}}},
     {"if": {"properties": {"reason_code": {"const": "primary_recovered_degraded"}}}, "then": {"properties": {"status": {"const": "recovered"}, "substitution_provenance": {"const": null}, "attempts": {"minItems": 2, "maxItems": 2, "prefixItems": [{"properties": {"result": {"enum": ["failed", "unavailable"]}, "substitution_provenance": {"const": null}}}, {"properties": {"result": {"const": "passed"}, "substitution_provenance": {"const": null}}}]}}}},
     {"if": {"properties": {"reason_code": {"const": "alternate_engine_recovered_degraded"}}}, "then": {"properties": {"status": {"const": "recovered"}, "substitution_provenance": {"const": "alternate_engine_recovery"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"properties": {"result": {"enum": ["failed", "unavailable"]}, "substitution_provenance": {"const": null}}}, {"properties": {"result": {"const": "passed"}, "substitution_provenance": {"const": "alternate_engine_recovery"}}}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"properties": {"result": {"enum": ["failed", "unavailable"]}, "substitution_provenance": {"const": null}}}, {"properties": {"result": {"enum": ["failed", "unavailable"]}, "substitution_provenance": {"const": null}}}, {"properties": {"result": {"const": "passed"}, "substitution_provenance": {"const": "alternate_engine_recovery"}}}]}]}}}},
     {"if": {"properties": {"reason_code": {"const": "browser_verified_first_pass"}}}, "then": {"properties": {"status": {"const": "clean"}}}},
     {"if": {"properties": {"reason_code": {"const": "human_help_required"}}}, "then": {"properties": {"status": {"const": "blocked"}}}},
+    {"if": {"properties": {"reason_code": {"const": "application_failure"}}}, "then": {"properties": {"status": {"const": "blocked"}}}},
     {"if": {"properties": {"requested_engine": {"const": "chromium"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "chromium"}}}},
     {"if": {"properties": {"requested_engine": {"const": "firefox"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "firefox"}}}},
     {"if": {"properties": {"requested_engine": {"const": "webkit"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "webkit"}}}},
@@ -63,7 +65,9 @@
       "enum": [
         null, "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
         "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch",
-        "fresh_profile_unavailable", "secondary_engine_unavailable"
+        "fresh_profile_unavailable", "secondary_engine_unavailable", "application_failure",
+        "dev_server_unavailable", "target_url_unavailable", "auth_fixture_unavailable",
+        "readiness_recheck_unavailable"
       ]
     },
     "failure_detail": {
@@ -78,7 +82,7 @@
         "result", "reason_code", "failure_detail", "screenshot_reference",
         "trace_reference", "console_reference", "session_id", "proof_kind",
         "substitution_provenance", "verification_profile_id", "configured_engines",
-        "target_url_digest", "target_origin_digest", "target_route_digest", "viewport"
+        "target_url_digest", "target_origin_digest", "target_route_digest", "viewport", "declared_route_digest"
       ],
       "properties": {
         "case_id": {"$ref": "#/$defs/case_id"},
@@ -100,11 +104,12 @@
         "target_url_digest": {"type": "string", "pattern": "^url-sha256:[0-9a-f]{64}$"},
         "target_origin_digest": {"type": "string", "pattern": "^origin-sha256:[0-9a-f]{64}$"},
         "target_route_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "viewport": {"$ref": "#/$defs/viewport"}
+        "viewport": {"$ref": "#/$defs/viewport"},
+        "declared_route_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       },
       "allOf": [
         {"if": {"properties": {"result": {"const": "passed"}}}, "then": {"properties": {"reason_code": {"const": null}, "failure_detail": {"const": null}, "proof_kind": {"const": "browser"}}}},
-        {"if": {"properties": {"result": {"enum": ["failed", "unavailable"]}}}, "then": {"properties": {"reason_code": {"enum": ["adapter_exception", "invalid_adapter_evidence", "browser_tool_failure", "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch"]}}}},
+        {"if": {"properties": {"result": {"enum": ["failed", "unavailable"]}}}, "then": {"properties": {"reason_code": {"enum": ["adapter_exception", "invalid_adapter_evidence", "browser_tool_failure", "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch", "application_failure"]}}}},
         {"if": {"properties": {"substitution_provenance": {"const": null}}}, "then": {"allOf": [
           {"if": {"properties": {"requested_engine": {"const": "chromium"}}}, "then": {"properties": {"actual_engine": {"const": "chromium"}}}},
           {"if": {"properties": {"requested_engine": {"const": "firefox"}}}, "then": {"properties": {"actual_engine": {"const": "firefox"}}}},
@@ -118,20 +123,22 @@
       "required": [
         "case_id", "requested_engine", "actual_engine", "action", "result",
         "session_id", "previous_session_id", "reason_code", "failure_detail",
-        "substitution_provenance", "fresh_profile"
+        "substitution_provenance", "fresh_profile", "readiness_checks", "readiness_evidence_digest"
       ],
       "properties": {
         "case_id": {"$ref": "#/$defs/case_id"},
         "requested_engine": {"$ref": "#/$defs/engine"},
         "actual_engine": {"$ref": "#/$defs/engine"},
-        "action": {"enum": ["browser_process_quit", "browser_process_launch", "application_restart", "primary_restart", "session_validation", "secondary_engine"]},
+        "action": {"enum": ["browser_process_quit", "browser_process_launch", "application_restart", "primary_restart", "session_validation", "secondary_engine", "readiness_recheck"]},
         "result": {"enum": ["confirmed", "unconfirmed", "launched", "unavailable", "primary_restart_unavailable", "session_identity_mismatch", "fresh_profile_unavailable", "secondary_engine_unavailable"]},
         "session_id": {"$ref": "#/$defs/session_id"},
         "previous_session_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
         "reason_code": {"$ref": "#/$defs/reason_code"},
         "failure_detail": {"$ref": "#/$defs/failure_detail"},
         "substitution_provenance": {"type": ["string", "null"], "enum": [null, "alternate_engine_recovery"]},
-        "fresh_profile": {"type": ["boolean", "null"]}
+        "fresh_profile": {"type": ["boolean", "null"]},
+        "readiness_checks": {"type": ["array", "null"], "minItems": 3, "maxItems": 3, "items": {"enum": ["confirmed", "unavailable"]}},
+        "readiness_evidence_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
       },
       "allOf": [
         {"if": {"properties": {"action": {"const": "browser_process_quit"}}}, "then": {"properties": {"result": {"enum": ["confirmed", "unconfirmed", "unavailable"]}}}},
@@ -140,6 +147,7 @@
         {"if": {"properties": {"action": {"const": "primary_restart"}}}, "then": {"properties": {"result": {"const": "primary_restart_unavailable"}}}},
         {"if": {"properties": {"action": {"const": "session_validation"}}}, "then": {"properties": {"result": {"const": "session_identity_mismatch"}}}},
         {"if": {"properties": {"action": {"const": "secondary_engine"}}}, "then": {"properties": {"result": {"const": "secondary_engine_unavailable"}}}},
+        {"if": {"properties": {"action": {"const": "readiness_recheck"}}}, "then": {"properties": {"result": {"enum": ["confirmed", "unavailable"]}, "fresh_profile": {"const": null}, "readiness_checks": {"type": "array", "minItems": 3, "maxItems": 3}, "readiness_evidence_digest": {"type": "string"}}}},
         {"if": {"properties": {"result": {"const": "session_identity_mismatch"}}}, "then": {"properties": {"reason_code": {"const": "session_identity_mismatch"}}}},
         {"if": {"properties": {"result": {"const": "fresh_profile_unavailable"}}}, "then": {"properties": {"reason_code": {"const": "fresh_profile_unavailable"}}}},
         {"if": {"properties": {"result": {"const": "secondary_engine_unavailable"}}}, "then": {"properties": {"reason_code": {"const": "secondary_engine_unavailable"}}}},
@@ -148,9 +156,11 @@
         {"if": {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}}, "then": {"properties": {"fresh_profile": {"const": true}}}},
         {"if": {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "fresh_profile_unavailable"}}}, "then": {"properties": {"fresh_profile": {"const": false}}}},
         {"if": {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "unavailable"}}}, "then": {"properties": {"fresh_profile": {"const": null}}}},
-        {"if": {"properties": {"action": {"enum": ["browser_process_quit", "application_restart", "primary_restart", "session_validation", "secondary_engine"]}}}, "then": {"properties": {"fresh_profile": {"const": null}}}},
+        {"if": {"properties": {"action": {"enum": ["browser_process_quit", "application_restart", "primary_restart", "session_validation", "secondary_engine", "readiness_recheck"]}}}, "then": {"properties": {"fresh_profile": {"const": null}}}},
+        {"if": {"properties": {"action": {"enum": ["browser_process_quit", "browser_process_launch", "application_restart", "primary_restart", "session_validation", "secondary_engine"]}}}, "then": {"properties": {"readiness_checks": {"const": null}, "readiness_evidence_digest": {"const": null}}}},
         {"if": {"properties": {"result": {"enum": ["confirmed", "launched"]}}}, "then": {"properties": {"reason_code": {"const": null}, "failure_detail": {"const": null}}}},
-        {"if": {"properties": {"result": {"const": "unavailable"}}}, "then": {"properties": {"reason_code": {"enum": ["adapter_exception", "invalid_adapter_evidence", "browser_tool_failure", "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch"]}}}}
+        {"if": {"properties": {"action": {"const": "readiness_recheck"}, "result": {"const": "unavailable"}}}, "then": {"properties": {"reason_code": {"enum": ["adapter_exception", "invalid_adapter_evidence", "dev_server_unavailable", "target_url_unavailable", "auth_fixture_unavailable", "readiness_recheck_unavailable"]}}}},
+        {"if": {"properties": {"action": {"enum": ["browser_process_quit", "browser_process_launch"]}, "result": {"const": "unavailable"}}}, "then": {"properties": {"reason_code": {"enum": ["adapter_exception", "invalid_adapter_evidence", "browser_tool_failure", "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch"]}}}}
       ]
     }
   }

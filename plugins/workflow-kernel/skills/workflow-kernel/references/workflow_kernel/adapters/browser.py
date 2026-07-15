@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass, fields, replace
 from typing import Optional, Protocol, Tuple
@@ -17,10 +18,13 @@ _REASON_CODES = frozenset({
     "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
     "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch",
     "fresh_profile_unavailable", "secondary_engine_unavailable",
+    "dev_server_unavailable", "target_url_unavailable", "auth_fixture_unavailable",
+    "readiness_recheck_unavailable",
 })
 _ATTEMPT_REASON_CODES = frozenset({
     "adapter_exception", "invalid_adapter_evidence", "browser_tool_failure",
     "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch",
+    "application_failure",
 })
 _SESSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
@@ -29,7 +33,7 @@ _ORIGIN_DIGEST = re.compile(r"origin-sha256:[0-9a-f]{64}\Z")
 _SUBSTITUTION = "alternate_engine_recovery"
 _RECEIPT_REASONS = frozenset({
     "browser_verified_first_pass", "primary_recovered_degraded",
-    "alternate_engine_recovered_degraded", "human_help_required",
+    "alternate_engine_recovered_degraded", "human_help_required", "application_failure",
 })
 
 
@@ -72,6 +76,8 @@ def _sealed_exception_detail(error):
 def _target_metadata(url):
     if type(url) is not str or not url or len(url) > 65_536:
         raise ValueError("invalid browser target")
+    if any(0xD800 <= ord(character) <= 0xDFFF for character in url):
+        raise ValueError("invalid browser target")
     try:
         parsed = urlsplit(url)
         if (parsed.scheme not in {"http", "https"} or not parsed.netloc
@@ -87,11 +93,14 @@ def _target_metadata(url):
     origin = parsed.scheme + "://" + host
     if port is not None:
         origin += ":" + str(port)
-    return (
-        "url-sha256:" + hashlib.sha256(url.encode("utf-8")).hexdigest(),
-        digest_target_origin(origin),
-        digest_target_route(parsed.path or "/"),
-    )
+    try:
+        return (
+            "url-sha256:" + hashlib.sha256(url.encode("utf-8")).hexdigest(),
+            digest_target_origin(origin),
+            digest_target_route(parsed.path or "/"),
+        )
+    except UnicodeError:
+        raise ValueError("invalid browser target") from None
 
 
 def _validate_profile_binding(profile_id, engines):
@@ -118,6 +127,7 @@ class BrowserRequest:
     case_id: str; url: str; viewport: str; primary_engine: str; secondary_engine: Optional[str]
     verification_profile_id: str; configured_engines: Tuple[str, ...]
     target_origin_digest: str
+    declared_route_digest: str = ""
 
     def _origin_primitives(self):
         metadata = _target_metadata(self.url)
@@ -125,6 +135,7 @@ class BrowserRequest:
             self.case_id, metadata[0], metadata[1], metadata[2], self.viewport,
             self.primary_engine, self.secondary_engine, self.verification_profile_id,
             self.configured_engines, self.target_origin_digest,
+            self.declared_route_digest,
         )
 
     def __post_init__(self):
@@ -135,6 +146,11 @@ class BrowserRequest:
         metadata = _target_metadata(self.url)
         if metadata[1] != self.target_origin_digest:
             raise ValueError("browser target origin mismatch")
+        if not self.declared_route_digest:
+            object.__setattr__(self, "declared_route_digest", metadata[2])
+        elif (_TARGET_DIGEST.fullmatch(self.declared_route_digest) is None
+              or not self.declared_route_digest.startswith("sha256:")):
+            raise ValueError("invalid declared route binding")
         if (self.primary_engine not in _ENGINES
                 or self.primary_engine not in self.configured_engines):
             raise ValueError("browser engines must be genuinely different")
@@ -182,6 +198,7 @@ class BrowserAttempt:
     target_origin_digest: str = ""
     target_route_digest: str = ""
     viewport: str = ""
+    declared_route_digest: str = ""
 
     def __post_init__(self):
         _safe_case_id(self.case_id); _safe_session_id(self.session_id)
@@ -190,6 +207,11 @@ class BrowserAttempt:
             self.target_url_digest, self.target_origin_digest,
             self.target_route_digest, self.viewport,
         )
+        if not self.declared_route_digest:
+            object.__setattr__(self, "declared_route_digest", self.target_route_digest)
+        elif (_TARGET_DIGEST.fullmatch(self.declared_route_digest) is None
+              or not self.declared_route_digest.startswith("sha256:")):
+            raise ValueError("invalid declared route binding")
         if (type(self.attempt_number) is not int or self.attempt_number < 1
                 or self.requested_engine not in _ENGINES or self.actual_engine not in _ENGINES
                 or self.requested_engine not in self.configured_engines
@@ -271,12 +293,68 @@ class BrowserLaunchEvidence:
 
 
 @dataclass(frozen=True)
+class BrowserReadinessEvidence:
+    """Independent current-runtime readiness observations before engine fallback."""
+    case_id: str; session_id: str
+    target_url_digest: str; target_origin_digest: str
+    dev_server_ready: bool; target_url_ready: bool; auth_fixture_ready: bool
+    reason_code: Optional[str] = None
+
+    def __post_init__(self):
+        _safe_case_id(self.case_id); _safe_session_id(self.session_id)
+        if (type(self.target_url_digest) is not str
+                or _TARGET_DIGEST.fullmatch(self.target_url_digest) is None
+                or type(self.target_origin_digest) is not str
+                or _ORIGIN_DIGEST.fullmatch(self.target_origin_digest) is None
+                or any(type(value) is not bool for value in (
+                    self.dev_server_ready, self.target_url_ready,
+                    self.auth_fixture_ready,
+                ))):
+            raise ValueError("invalid browser readiness evidence")
+        expected = (
+            None if all((self.dev_server_ready, self.target_url_ready,
+                         self.auth_fixture_ready))
+            else "dev_server_unavailable" if not self.dev_server_ready
+            else "target_url_unavailable" if not self.target_url_ready
+            else "auth_fixture_unavailable"
+        )
+        if self.reason_code != expected:
+            raise ValueError("inconsistent browser readiness evidence")
+        _register_origin(self, "BrowserReadinessEvidence", self._origin_primitives())
+
+    def _origin_primitives(self):
+        return _field_values(self, BrowserReadinessEvidence)
+
+    @property
+    def evidence_digest(self):
+        payload = json.dumps(
+            self._origin_primitives(), separators=(",", ":"),
+        ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def snapshot_browser_readiness(value):
+    if type(value) is not BrowserReadinessEvidence:
+        raise ValueError("invalid browser readiness evidence")
+    try:
+        captured = _field_values(value, BrowserReadinessEvidence)
+        _validate_capture(
+            value, "BrowserReadinessEvidence", captured, value._origin_primitives(),
+        )
+        return BrowserReadinessEvidence(*captured)
+    except Exception:
+        raise ValueError("invalid browser readiness evidence") from None
+
+
+@dataclass(frozen=True)
 class BrowserLifecycleEvidence:
     case_id: str; requested_engine: str; actual_engine: str; action: str; result: str
     session_id: str; previous_session_id: Optional[str] = None
     reason_code: Optional[str] = None; failure_detail: Optional[str] = None
     substitution_provenance: Optional[str] = None
     fresh_profile: Optional[bool] = None
+    readiness_checks: Optional[Tuple[str, str, str]] = None
+    readiness_evidence_digest: Optional[str] = None
 
     def __post_init__(self):
         _safe_case_id(self.case_id); _safe_session_id(self.session_id)
@@ -286,6 +364,7 @@ class BrowserLifecycleEvidence:
                 or self.action not in {
                     "browser_process_quit", "browser_process_launch", "application_restart",
                     "primary_restart", "session_validation", "secondary_engine",
+                    "readiness_recheck",
                 }
                 or self.result not in {
                     "confirmed", "unconfirmed", "launched", "unavailable",
@@ -301,6 +380,7 @@ class BrowserLifecycleEvidence:
             "primary_restart": {"primary_restart_unavailable"},
             "session_validation": {"session_identity_mismatch"},
             "secondary_engine": {"secondary_engine_unavailable"},
+            "readiness_recheck": {"confirmed", "unavailable"},
         }
         allowed_results["browser_process_launch"].add("fresh_profile_unavailable")
         if (self.result not in allowed_results[self.action]
@@ -313,7 +393,16 @@ class BrowserLifecycleEvidence:
         if self.result in {"confirmed", "launched"} and (
                 self.reason_code is not None or self.failure_detail is not None):
             raise ValueError("inconsistent browser lifecycle result")
-        if self.result == "unavailable" and self.reason_code not in _ATTEMPT_REASON_CODES:
+        readiness_reasons = {
+            "dev_server_unavailable", "target_url_unavailable",
+            "auth_fixture_unavailable", "readiness_recheck_unavailable",
+            "adapter_exception", "invalid_adapter_evidence",
+        }
+        if (self.result == "unavailable"
+                and self.reason_code not in (
+                    readiness_reasons if self.action == "readiness_recheck"
+                    else _ATTEMPT_REASON_CODES
+                )):
             raise ValueError("inconsistent browser lifecycle result")
         exact_reasons = {
             "unconfirmed": "browser_unavailable",
@@ -334,6 +423,21 @@ class BrowserLifecycleEvidence:
                 raise ValueError("inconsistent browser lifecycle freshness")
         elif self.fresh_profile is not None:
             raise ValueError("unexpected browser lifecycle freshness")
+        if self.action == "readiness_recheck":
+            if (type(self.readiness_checks) is not tuple
+                    or len(self.readiness_checks) != 3
+                    or any(status not in {"confirmed", "unavailable"}
+                           for status in self.readiness_checks)
+                    or type(self.readiness_evidence_digest) is not str
+                    or _TARGET_DIGEST.fullmatch(self.readiness_evidence_digest) is None
+                    or not self.readiness_evidence_digest.startswith("sha256:")
+                    or (self.result == "confirmed") != all(
+                        status == "confirmed" for status in self.readiness_checks
+                    )):
+                raise ValueError("invalid readiness lifecycle binding")
+        elif (self.readiness_checks is not None
+              or self.readiness_evidence_digest is not None):
+            raise ValueError("unexpected readiness lifecycle binding")
         _register_origin(
             self, "BrowserLifecycleEvidence", self._origin_primitives(),
         )
@@ -370,6 +474,7 @@ class BrowserRecoveryReceipt:
     verification_profile_id: str; configured_engines: Tuple[str, ...]
     target_url_digest: str; target_route_digest: str; viewport: str
     target_origin_digest: str
+    declared_route_digest: str = ""
 
     def __post_init__(self):
         try:
@@ -389,6 +494,11 @@ class BrowserRecoveryReceipt:
             self.target_url_digest, self.target_origin_digest,
             self.target_route_digest, self.viewport,
         )
+        if not self.declared_route_digest:
+            object.__setattr__(self, "declared_route_digest", self.target_route_digest)
+        elif (_TARGET_DIGEST.fullmatch(self.declared_route_digest) is None
+              or not self.declared_route_digest.startswith("sha256:")):
+            raise ValueError("invalid declared route binding")
         if (type(self.schema_version) is not int or self.schema_version != 1
                 or self.status not in {"clean", "recovered", "blocked"}
                 or self.reason_code not in _RECEIPT_REASONS
@@ -422,10 +532,31 @@ class BrowserRecoveryReceipt:
             self.missing_case_ids, self.verification_profile_id,
             self.configured_engines, self.target_url_digest,
             self.target_route_digest, self.viewport, self.target_origin_digest,
+            self.declared_route_digest,
         )
 
     def _validate_history(self):
         attempts = self.attempts
+        for lifecycle_item in self.lifecycle:
+            if lifecycle_item.action != "readiness_recheck":
+                continue
+            checks = lifecycle_item.readiness_checks
+            if lifecycle_item.reason_code in {
+                    "adapter_exception", "invalid_adapter_evidence"}:
+                expected_digest = "sha256:" + hashlib.sha256(
+                    (self.case_id + "\0" + lifecycle_item.session_id + "\0"
+                     + lifecycle_item.reason_code).encode()
+                ).hexdigest()
+            else:
+                readiness = BrowserReadinessEvidence(
+                    self.case_id, lifecycle_item.session_id,
+                    self.target_url_digest, self.target_origin_digest,
+                    checks[0] == "confirmed", checks[1] == "confirmed",
+                    checks[2] == "confirmed", lifecycle_item.reason_code,
+                )
+                expected_digest = readiness.evidence_digest
+            if lifecycle_item.readiness_evidence_digest != expected_digest:
+                raise ValueError("browser readiness evidence digest mismatch")
         for number, item in enumerate(attempts, 1):
             if (item.attempt_number != number
                     or item.requested_engine != self.requested_engine
@@ -434,10 +565,20 @@ class BrowserRecoveryReceipt:
                     or item.target_url_digest != self.target_url_digest
                     or item.target_origin_digest != self.target_origin_digest
                     or item.target_route_digest != self.target_route_digest
+                    or item.declared_route_digest != self.declared_route_digest
                     or item.viewport != self.viewport
                     or (number == 1 and item.actual_engine != self.requested_engine)):
                 raise ValueError("browser attempt history mismatch")
         passed = tuple(item for item in attempts if item.result == "passed")
+        if attempts[0].reason_code == "application_failure":
+            if not (len(attempts) == 1 and not self.lifecycle and not passed
+                    and self.status == "blocked"
+                    and self.reason_code == "application_failure"
+                    and self.actual_engine == self.requested_engine
+                    and self.substitution_provenance is None
+                    and self.missing_case_ids == (self.case_id,)):
+                raise ValueError("inconsistent terminal application failure")
+            return
         if self.status == "clean":
             if not (len(attempts) == 1 and passed == attempts
                     and self.reason_code == "browser_verified_first_pass"
@@ -517,6 +658,16 @@ class BrowserRecoveryReceipt:
             if not valid:
                 raise ValueError("inconsistent browser primary recovery receipt")
             return
+        if primary_retry is not None and primary_retry.reason_code == "application_failure":
+            if not (lifecycle_index == len(self.lifecycle)
+                    and attempt_index == len(attempts) and not passed
+                    and self.status == "blocked"
+                    and self.reason_code == "application_failure"
+                    and self.actual_engine == self.requested_engine
+                    and self.substitution_provenance is None
+                    and self.missing_case_ids == (self.case_id,)):
+                raise ValueError("inconsistent terminal application failure")
+            return
 
         alternate_attempt = None
         if len(self.configured_engines) == 1:
@@ -532,6 +683,26 @@ class BrowserRecoveryReceipt:
                 raise ValueError("browser unavailable secondary mismatch")
         else:
             if lifecycle_index >= len(self.lifecycle):
+                raise ValueError("browser receipt omits readiness evidence")
+            readiness = self.lifecycle[lifecycle_index]
+            lifecycle_index += 1
+            readiness_session = attempts[attempt_index - 1].session_id
+            if (readiness.actual_engine != self.requested_engine
+                    or readiness.action != "readiness_recheck"
+                    or readiness.session_id != readiness_session
+                    or readiness.previous_session_id != readiness_session):
+                raise ValueError("browser readiness recheck mismatch")
+            if readiness.result != "confirmed":
+                if not (lifecycle_index == len(self.lifecycle)
+                        and attempt_index == len(attempts) and not passed
+                        and self.status == "blocked"
+                        and self.reason_code == "human_help_required"
+                        and self.actual_engine == attempts[-1].actual_engine
+                        and self.substitution_provenance is None
+                        and self.missing_case_ids == (self.case_id,)):
+                    raise ValueError("inconsistent readiness block")
+                return
+            if lifecycle_index >= len(self.lifecycle):
                 raise ValueError("browser receipt omits alternate engine evidence")
             alternate = self.lifecycle[lifecycle_index]
             lifecycle_index += 1
@@ -544,7 +715,7 @@ class BrowserRecoveryReceipt:
             )
             if (alternate.actual_engine == self.requested_engine
                     or alternate.action not in {"browser_process_launch", "session_validation"}
-                    or alternate.previous_session_id != first_session
+                    or alternate.previous_session_id != readiness_session
                     or alternate.result == "launched"
                     and alternate.session_id in prior_sessions):
                 raise ValueError("browser alternate launch order mismatch")
@@ -574,6 +745,16 @@ class BrowserRecoveryReceipt:
                 raise ValueError("inconsistent browser alternate recovery receipt")
             return
 
+        if (alternate_attempt is not None
+                and alternate_attempt.reason_code == "application_failure"):
+            if not (not passed and self.status == "blocked"
+                    and self.reason_code == "application_failure"
+                    and self.actual_engine == alternate_attempt.actual_engine
+                    and self.substitution_provenance is None
+                    and self.missing_case_ids == (self.case_id,)):
+                raise ValueError("inconsistent terminal application failure")
+            return
+
         if not (not passed and self.status == "blocked"
                 and self.reason_code == "human_help_required"
                 and self.actual_engine == attempts[-1].actual_engine
@@ -596,6 +777,7 @@ class BrowserRecoveryReceipt:
             "target_origin_digest": self.target_origin_digest,
             "target_route_digest": self.target_route_digest,
             "viewport": self.viewport,
+            "declared_route_digest": self.declared_route_digest,
         }
 
 
@@ -619,6 +801,9 @@ class BrowserAdapter(Protocol):
     def attempt(self, request: BrowserRequest, engine: str) -> BrowserAttempt: ...
     def quit_engine(self, engine: str) -> BrowserQuitEvidence: ...
     def launch_engine(self, engine: str, fresh_profile: bool = True) -> BrowserLaunchEvidence: ...
+    def recheck_readiness(
+        self, request: BrowserRequest, previous_session_id: str,
+    ) -> BrowserReadinessEvidence: ...
 
 
 class BrowserRecovery:
@@ -631,6 +816,7 @@ class BrowserRecovery:
             request.verification_profile_id, request.configured_engines,
             request.target_url_digest, request.target_origin_digest,
             request.target_route_digest, request.viewport,
+            request.declared_route_digest,
         )
 
     def _attempt(self, request, adapter, engine, number):
@@ -657,6 +843,7 @@ class BrowserRecovery:
                 or item.target_url_digest != request.target_url_digest
                 or item.target_origin_digest != request.target_origin_digest
                 or item.target_route_digest != request.target_route_digest
+                or item.declared_route_digest != request.declared_route_digest
                 or item.viewport != request.viewport
                 or item.substitution_provenance not in {None, expected_substitution}):
             return self._unavailable_attempt(
@@ -678,13 +865,14 @@ class BrowserRecovery:
     @staticmethod
     def _lifecycle(
         request, engine, action, result, session_id, *, previous=None, reason=None,
-        detail=None, fresh_profile=None,
+        detail=None, fresh_profile=None, readiness_checks=None,
+        readiness_evidence_digest=None,
     ):
         return BrowserLifecycleEvidence(
             request.case_id, request.primary_engine, engine, action, result, session_id,
             previous, reason, detail,
             _SUBSTITUTION if engine != request.primary_engine else None,
-            fresh_profile,
+            fresh_profile, readiness_checks, readiness_evidence_digest,
         )
 
     def _quit(self, request, adapter, initial):
@@ -757,6 +945,52 @@ class BrowserRecovery:
             previous=previous, fresh_profile=True,
         )
 
+    def _readiness(self, request, adapter, previous):
+        try:
+            item = snapshot_browser_readiness(
+                adapter.recheck_readiness(request, previous),
+            )
+        except Exception as error:
+            failure_digest = "sha256:" + hashlib.sha256(
+                (request.case_id + "\0" + previous + "\0adapter_exception").encode()
+            ).hexdigest()
+            return self._lifecycle(
+                request, request.primary_engine, "readiness_recheck", "unavailable",
+                previous, previous=previous, reason="adapter_exception",
+                detail=_sealed_exception_detail(error),
+                readiness_checks=("unavailable", "unavailable", "unavailable"),
+                readiness_evidence_digest=failure_digest,
+            )
+        if (item.case_id != request.case_id
+                or item.session_id != previous
+                or item.target_url_digest != request.target_url_digest
+                or item.target_origin_digest != request.target_origin_digest):
+            failure_digest = "sha256:" + hashlib.sha256(
+                (request.case_id + "\0" + previous
+                 + "\0invalid_adapter_evidence").encode()
+            ).hexdigest()
+            return self._lifecycle(
+                request, request.primary_engine, "readiness_recheck", "unavailable",
+                previous, previous=previous, reason="invalid_adapter_evidence",
+                detail="adapter readiness identity mismatch",
+                readiness_checks=("unavailable", "unavailable", "unavailable"),
+                readiness_evidence_digest=failure_digest,
+            )
+        ready = all((item.dev_server_ready, item.target_url_ready,
+                     item.auth_fixture_ready))
+        return self._lifecycle(
+            request, request.primary_engine, "readiness_recheck",
+            "confirmed" if ready else "unavailable", previous,
+            previous=previous, reason=item.reason_code,
+            readiness_checks=tuple(
+                "confirmed" if value else "unavailable" for value in (
+                    item.dev_server_ready, item.target_url_ready,
+                    item.auth_fixture_ready,
+                )
+            ),
+            readiness_evidence_digest=item.evidence_digest,
+        )
+
     @staticmethod
     def _bind_attempt_session(item, session_id):
         if item.session_id == session_id:
@@ -777,6 +1011,7 @@ class BrowserRecovery:
             request.verification_profile_id, request.configured_engines,
             request.target_url_digest, request.target_route_digest, request.viewport,
             request.target_origin_digest,
+            request.declared_route_digest,
         )
 
     def run(self, request, adapter):
@@ -786,6 +1021,11 @@ class BrowserRecovery:
         attempts.append(initial)
         if initial.result == "passed":
             return self._receipt(request, "clean", "browser_verified_first_pass", attempts, lifecycle)
+        if initial.reason_code == "application_failure":
+            return self._receipt(
+                request, "blocked", "application_failure", attempts, lifecycle,
+                (request.case_id,),
+            )
 
         quit_item, quit_lifecycle = self._quit(request, adapter, initial)
         lifecycle.append(quit_lifecycle)
@@ -814,6 +1054,11 @@ class BrowserRecovery:
                 return self._receipt(
                     request, "recovered", "primary_recovered_degraded", attempts, lifecycle,
                 )
+            if retry.reason_code == "application_failure":
+                return self._receipt(
+                    request, "blocked", "application_failure", attempts, lifecycle,
+                    (request.case_id,),
+                )
         else:
             lifecycle.append(self._lifecycle(
                 request, request.primary_engine, "primary_restart",
@@ -836,8 +1081,16 @@ class BrowserRecovery:
                 request, "blocked", "human_help_required", attempts, lifecycle,
                 (request.case_id,),
             )
+        current_primary_session = attempts[-1].session_id
+        readiness = self._readiness(request, adapter, current_primary_session)
+        lifecycle.append(readiness)
+        if readiness.result != "confirmed":
+            return self._receipt(
+                request, "blocked", "human_help_required", attempts, lifecycle,
+                (request.case_id,),
+            )
         secondary_launch, launch_lifecycle = self._launch(
-            request, adapter, request.secondary_engine, initial.session_id,
+            request, adapter, request.secondary_engine, current_primary_session,
             previous_sessions,
         )
         lifecycle.append(launch_lifecycle)
@@ -854,6 +1107,11 @@ class BrowserRecovery:
                 return self._receipt(
                     request, "recovered", "alternate_engine_recovered_degraded",
                     attempts, lifecycle,
+                )
+            if secondary.reason_code == "application_failure":
+                return self._receipt(
+                    request, "blocked", "application_failure", attempts, lifecycle,
+                    (request.case_id,),
                 )
         return self._receipt(
             request, "blocked", "human_help_required", attempts, lifecycle,

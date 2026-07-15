@@ -12,6 +12,7 @@ from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import load_policy
 from workflow_kernel.verification import (
     PersonaCase, VerificationProfile, _validate_route, digest_target_route,
+    digest_target_origin,
 )
 from workflow_kernel.adapters.personas import _DeclarationTree, ProjectPersonaAdapter
 from workflow_kernel._files import PinnedDirectory
@@ -22,6 +23,94 @@ FIXTURES = Path(__file__).parent / "fixtures" / "ux"
 
 
 class VerificationProfileTests(unittest.TestCase):
+    def test_origin_rejects_lone_surrogate_with_stable_policy_error(self):
+        with self.assertRaises(InvalidSchemaError) as raised:
+            digest_target_origin("https://\ud800.invalid")
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_verification_target"),
+        )
+
+    def test_route_templates_require_explicit_task_scoped_bindings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+            task = project / "tests/ux/tasks/governance/sample-task.md"
+            task.write_text(task.read_text().replace(
+                "/governance/proposals/sample", "/governance/proposals/{id}",
+            ))
+            adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
+            blocked = adapter.discover(project)
+            self.assertEqual(blocked.selection_status, "blocked_route_bindings")
+            self.assertEqual(
+                blocked.coverage_diagnostics, ("unresolved_route_parameters",),
+            )
+            self.assertEqual(blocked.route_binding_gaps, ("gov-sample-001:id",))
+            (project / "tests/ux/verification.json").write_text(json.dumps({
+                "schema_version": 1,
+                "route_bindings": {"gov-sample-001": {"id": "proposal-123"}},
+            }))
+            profile = adapter.discover(project)
+        self.assertEqual({case.route for case in profile.cases}, {
+            "/governance/proposals/proposal-123",
+        })
+        self.assertEqual(
+            {case.declared_route_digest for case in profile.cases},
+            {digest_target_route("/governance/proposals/{id}")},
+        )
+        self.assertTrue(all("{" not in case.route for case in profile.cases))
+
+    def test_frontmatter_consumes_every_nonblank_line_exactly(self):
+        mutations = (
+            ("route: /governance/proposals/sample", "route : /attacker"),
+            ("title: Review a proposal", "unknown_key: value\ntitle: Review a proposal"),
+            ("title: Review a proposal", "meta-data: &loop\n  self: *loop\ntitle: Review a proposal"),
+        )
+        source = FIXTURES / "assembly/tasks/governance/sample-task.md"
+        for old, new in mutations:
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests/ux")
+                task = project / "tests/ux/tasks/governance/sample-task.md"
+                task.write_text(task.read_text().replace(old, new))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
+    def test_credential_detection_is_ascii_exact(self):
+        self.assertEqual(_validate_route("/\u017fk-secret"), "/\u017fk-secret")
+        self.assertEqual(_validate_route("/s\u212a-secret"), "/s\u212a-secret")
+        for route in ("/\u017fk-secret", "/s\u212a-secret"):
+            case = PersonaCase(
+                "member", "scenario", "member", route, "chromium",
+                "1440x900", True,
+            )
+            schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
+            profile = VerificationProfile(
+                1, "project_declaration", (case,), (),
+                configured_engines=("chromium",),
+            )
+            self.assertTrue(schema_matches(profile.to_dict(), schema))
+
+    def test_implicit_yaml_scalars_fail_in_every_scalar_authority(self):
+        mutations = (
+            ("id: GOV-SAMPLE-001", "id: 42"),
+            ("title: Review a proposal", "title: null"),
+            ("requires_auth: true", "requires_auth: 2026-01-01"),
+            ("reason: \"A live-shape descriptive explanation that is never retained\"",
+             "reason: .nan"),
+        )
+        for old, new in mutations:
+            with self.subTest(new=new), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests/ux")
+                task = project / "tests/ux/tasks/governance/sample-task.md"
+                task.write_text(task.read_text().replace(old, new))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
     def test_schemas_accept_runtime_receipts_and_policy_defaults(self):
         profile_schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
         recovery_schema = json.loads((ROOT / "browser-recovery-schema.json").read_text())
@@ -131,7 +220,16 @@ class VerificationProfileTests(unittest.TestCase):
             with self.subTest(repository=repository.name):
                 profile = adapter.discover(repository)
                 self.assertEqual(profile.discovery_status, "declared")
-                self.assertTrue(profile.cases)
+                self.assertIn(profile.selection_status, {
+                    "runnable_cases", "blocked_route_bindings",
+                })
+                if profile.selection_status == "blocked_route_bindings":
+                    self.assertIn(
+                        "unresolved_route_parameters",
+                        profile.coverage_diagnostics,
+                    )
+                else:
+                    self.assertTrue(profile.cases)
 
     def test_config_suite_and_viewport_precedence_expand_complete_matrix(self):
         with tempfile.TemporaryDirectory() as directory:

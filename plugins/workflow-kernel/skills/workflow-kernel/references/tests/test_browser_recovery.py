@@ -8,7 +8,8 @@ from tests import schema_matches
 
 from workflow_kernel.adapters.browser import (
     BrowserAttempt, BrowserLaunchEvidence, BrowserLifecycleEvidence,
-    BrowserQuitEvidence, BrowserRecovery, BrowserRecoveryReceipt, BrowserRequest,
+    BrowserQuitEvidence, BrowserReadinessEvidence, BrowserRecovery,
+    BrowserRecoveryReceipt, BrowserRequest,
     snapshot_browser_recovery_receipt, snapshot_browser_request,
 )
 
@@ -23,10 +24,11 @@ VIEWPORT = "375x812"
 
 
 class FakeBrowserAdapter:
-    def __init__(self, attempts, *, quit_result=None, launches=()):
+    def __init__(self, attempts, *, quit_result=None, launches=(), readiness=None):
         self.attempts = list(attempts)
         self.quit_result = quit_result or BrowserQuitEvidence("chromium", True, "primary-1")
         self.launches = list(launches)
+        self.readiness = readiness
         self.calls = []
 
     def attempt(self, request, engine):
@@ -48,6 +50,17 @@ class FakeBrowserAdapter:
         if isinstance(result, Exception):
             raise result
         return result
+
+    def recheck_readiness(self, request, previous_session_id):
+        self.calls.append(("recheck_readiness", previous_session_id))
+        if isinstance(self.readiness, Exception):
+            raise self.readiness
+        if self.readiness is not None:
+            return self.readiness
+        return BrowserReadinessEvidence(
+            request.case_id, previous_session_id, request.target_url_digest,
+            request.target_origin_digest, True, True, True,
+        )
 
 
 def attempt(
@@ -91,6 +104,63 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.actual_engine, "chromium")
         self.assertIsNone(receipt.substitution_provenance)
         self.assertEqual(adapter.calls, [("attempt", "chromium")])
+
+    def test_application_failure_is_terminal_and_never_recovered(self):
+        adapter = FakeBrowserAdapter([
+            attempt(1, "chromium", "failed", session="primary-1",
+                    reason="application_failure"),
+        ])
+        receipt = BrowserRecovery().run(self.request, adapter)
+        self.assertEqual(receipt.status, "blocked")
+        self.assertEqual(receipt.reason_code, "application_failure")
+        self.assertEqual(receipt.missing_case_ids, ("case-1",))
+        self.assertEqual(adapter.calls, [("attempt", "chromium")])
+
+    def test_readiness_recheck_blocks_before_alternate_engine(self):
+        unavailable = BrowserReadinessEvidence(
+            "case-1", "primary-1", TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST,
+            True, False, True, "target_url_unavailable",
+        )
+        adapter = FakeBrowserAdapter(
+            [attempt(1, "chromium", "failed", session="primary-1")],
+            quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+            readiness=unavailable,
+        )
+        receipt = BrowserRecovery().run(self.request, adapter)
+        self.assertEqual(receipt.status, "blocked")
+        self.assertEqual(receipt.reason_code, "human_help_required")
+        self.assertEqual(receipt.lifecycle[-1].action, "readiness_recheck")
+        self.assertNotIn(("launch_engine", "firefox", True), adapter.calls)
+
+    def test_recovered_receipt_recomputes_readiness_digest(self):
+        adapter = FakeBrowserAdapter(
+            [
+                attempt(1, "chromium", "failed", session="primary-1"),
+                attempt(2, "firefox", "passed", session="secondary-1"),
+            ],
+            quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+            launches=[BrowserLaunchEvidence("firefox", True, True, "secondary-1")],
+        )
+        receipt = BrowserRecovery().run(self.request, adapter)
+        readiness_index = next(
+            index for index, item in enumerate(receipt.lifecycle)
+            if item.action == "readiness_recheck"
+        )
+        forged = replace(
+            receipt.lifecycle[readiness_index],
+            readiness_evidence_digest="sha256:" + "0" * 64,
+        )
+        lifecycle = list(receipt.lifecycle); lifecycle[readiness_index] = forged
+        with self.assertRaisesRegex(ValueError, "readiness evidence digest"):
+            replace(receipt, lifecycle=tuple(lifecycle))
+
+    def test_browser_request_rejects_lone_surrogate_stably(self):
+        with self.assertRaisesRegex(ValueError, "invalid browser target"):
+            BrowserRequest(
+                "case-1", "https://example.invalid/\ud800", VIEWPORT,
+                "chromium", "firefox", PROFILE_ID, ENGINES,
+                TARGET_ORIGIN_DIGEST,
+            )
 
     def test_request_snapshot_ignores_instance_controlled_dataclass_fields(self):
         forged = {
@@ -364,6 +434,7 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertLess(len(serialized), 8_000)
         self.assertEqual(adapter.calls, [
             ("attempt", "chromium"), ("quit_engine", "chromium"),
+            ("recheck_readiness", "unavailable-1-chromium"),
             ("launch_engine", "firefox", True),
         ])
 

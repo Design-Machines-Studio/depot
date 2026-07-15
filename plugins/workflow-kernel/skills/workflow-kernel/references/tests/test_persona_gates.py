@@ -44,6 +44,7 @@ def evidence(
                     None, None, "proof/screenshot.png", None, None, "primary-1",
                     "browser", None, profile.profile_id, profile.configured_engines,
                     url_digest, profile.target_origin_digest, route_digest, case.viewport,
+                    case.declared_route_digest,
                 )
 
         secondary = next(
@@ -54,6 +55,7 @@ def evidence(
                 case.case_id, url, case.viewport, case.browser_engine, secondary,
                 profile.profile_id, profile.configured_engines,
                 profile.target_origin_digest,
+                case.declared_route_digest,
             ),
             CleanAdapter(),
         )
@@ -66,6 +68,7 @@ def evidence(
         actual_engine or case.browser_engine, substitution, profile_id,
         configured, recovery_receipt,
         profile.target_origin_digest if profile is not None else TARGET_ORIGIN_DIGEST,
+        case.declared_route_digest,
     )
 
 
@@ -172,7 +175,7 @@ class PersonaGateTests(unittest.TestCase):
     def test_substitution_requires_receipt_from_same_profile_and_configured_set(self):
         from workflow_kernel.adapters.browser import (
             BrowserAttempt, BrowserLaunchEvidence, BrowserQuitEvidence,
-            BrowserRecovery, BrowserRequest,
+            BrowserReadinessEvidence, BrowserRecovery, BrowserRequest,
         )
         case = PersonaCase(
             "member", "dashboard", "member", "/dashboard", "chromium",
@@ -200,15 +203,23 @@ class PersonaGateTests(unittest.TestCase):
                     None if engine == "chromium" else "alternate_engine_recovery",
                     profile.profile_id, profile.configured_engines,
                     url_digest, TARGET_ORIGIN_DIGEST, route_digest, case.viewport,
+                    case.declared_route_digest,
                 )
             def quit_engine(self, engine):
                 return BrowserQuitEvidence(engine, False, "primary-1")
             def launch_engine(self, engine, fresh_profile=True):
                 return BrowserLaunchEvidence(engine, True, True, "secondary-1")
+            def recheck_readiness(self, request, previous_session_id):
+                return BrowserReadinessEvidence(
+                    request.case_id, previous_session_id,
+                    request.target_url_digest, request.target_origin_digest,
+                    True, True, True,
+                )
 
         request = BrowserRequest(
             case.case_id, url, case.viewport, "chromium", "firefox",
             profile.profile_id, profile.configured_engines, TARGET_ORIGIN_DIGEST,
+            case.declared_route_digest,
         )
         receipt = BrowserRecovery().run(request, Adapter())
         valid = evidence(

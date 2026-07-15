@@ -24,14 +24,19 @@ _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
 _CASE_ID = re.compile(r"case-sha256:[0-9a-f]{64}\Z")
 _ORIGIN_ID = re.compile(r"origin-sha256:[0-9a-f]{64}\Z")
 _CREDENTIAL_VALUE = re.compile(
-    r"(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)", re.IGNORECASE,
+    r"(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)", re.IGNORECASE | re.ASCII,
 )
 _PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
 _PERCENT_BYTE = re.compile(r"%([0-9A-Fa-f]{2})")
 _UNRESERVED_BYTES = frozenset(
     b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
 )
-_COVERAGE_DIAGNOSTICS = frozenset({"coverage_matrix_mismatch"})
+_COVERAGE_DIAGNOSTICS = frozenset({
+    "coverage_matrix_mismatch", "unresolved_route_parameters",
+})
+_ROUTE_BINDING_GAP = re.compile(
+    r"[a-z0-9][a-z0-9._-]{0,127}:[a-z][a-z0-9_]*(?:,[a-z][a-z0-9_]*)*\Z",
+)
 
 
 def _invalid(reason="invalid_verification_declaration"):
@@ -98,6 +103,8 @@ def digest_target_route(route):
 def digest_target_origin(origin):
     if type(origin) is not str or not origin or len(origin) > 2_048:
         _invalid("invalid_verification_target")
+    if any(_unsafe_route_character(character) for character in origin):
+        _invalid("invalid_verification_target")
     try:
         parsed = urlsplit(origin)
         if (parsed.scheme not in {"http", "https"} or not parsed.netloc
@@ -115,7 +122,11 @@ def digest_target_origin(origin):
     canonical = parsed.scheme + "://" + host
     if port is not None and port != default_port:
         canonical += ":" + str(port)
-    return "origin-sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    try:
+        encoded = canonical.encode("utf-8")
+    except UnicodeError:
+        _invalid("invalid_verification_target")
+    return "origin-sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -132,6 +143,7 @@ class PersonaCase:
     browser_source: str = "workflow_policy_default"
     viewport_source: str = "workflow_policy_default"
     legacy_status_defaulted: bool = False
+    declared_route_digest: str = ""
 
     def __post_init__(self):
         _validate_id(self.persona_id); _validate_id(self.scenario_id)
@@ -150,6 +162,11 @@ class PersonaCase:
             _invalid()
         if self.viewport_source not in {"project_config", "task_declaration", "persona_default", "workflow_policy_default"}:
             _invalid()
+        if not self.declared_route_digest:
+            object.__setattr__(self, "declared_route_digest", digest_target_route(self.route))
+        elif (type(self.declared_route_digest) is not str
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", self.declared_route_digest) is None):
+            _invalid()
         _register_origin(self, "PersonaCase", self._origin_primitives())
 
     def _origin_primitives(self):
@@ -158,7 +175,7 @@ class PersonaCase:
     @property
     def case_id(self):
         raw = "\0".join((self.persona_id, self.scenario_id, self.role, self.route,
-                          self.browser_engine, self.viewport))
+                          self.browser_engine, self.viewport, self.declared_route_digest))
         return "case-sha256:" + hashlib.sha256(raw.encode()).hexdigest()
 
     def to_dict(self):
@@ -168,7 +185,8 @@ class PersonaCase:
                 "required": self.required, "expected_outcome": self.expected_outcome,
                 "requires_auth": self.requires_auth, "browser_source": self.browser_source,
                 "viewport_source": self.viewport_source,
-                "legacy_status_defaulted": self.legacy_status_defaulted}
+                "legacy_status_defaulted": self.legacy_status_defaulted,
+                "declared_route_digest": self.declared_route_digest}
 
 
 @dataclass(frozen=True)
@@ -182,6 +200,7 @@ class VerificationProfile:
     configured_engines: Tuple[str, ...] = ("chromium", "firefox")
     target_origin_digest: str | None = None
     coverage_diagnostics: Tuple[str, ...] = ()
+    route_binding_gaps: Tuple[str, ...] = ()
 
     def __post_init__(self):
         if type(self.schema_version) is not int or self.schema_version != 1:
@@ -189,7 +208,8 @@ class VerificationProfile:
         if (self.source not in {"project_declaration", "not_declared"}
                 or self.discovery_status not in {"declared", "not_declared"}
                 or self.selection_status not in {
-                    "runnable_cases", "optional_cases_only", "no_runnable_tasks", "not_declared",
+                    "runnable_cases", "optional_cases_only", "no_runnable_tasks",
+                    "blocked_route_bindings", "not_declared",
                 }):
             _invalid()
         if type(self.cases) is not tuple or any(type(case) is not PersonaCase for case in self.cases):
@@ -226,6 +246,15 @@ class VerificationProfile:
         object.__setattr__(
             self, "coverage_diagnostics", tuple(sorted(self.coverage_diagnostics)),
         )
+        if (type(self.route_binding_gaps) is not tuple
+                or any(type(item) is not str or len(item) > 512
+                       or _ROUTE_BINDING_GAP.fullmatch(item) is None
+                       for item in self.route_binding_gaps)
+                or len(self.route_binding_gaps) != len(set(self.route_binding_gaps))):
+            _invalid()
+        object.__setattr__(
+            self, "route_binding_gaps", tuple(sorted(self.route_binding_gaps)),
+        )
         if (self.target_origin_digest is not None and (
                 type(self.target_origin_digest) is not str
                 or _ORIGIN_ID.fullmatch(self.target_origin_digest) is None)):
@@ -238,7 +267,13 @@ class VerificationProfile:
             _invalid()
         if self.discovery_status == "declared" and self.selection_status == "not_declared":
             _invalid()
-        if self.selection_status == "no_runnable_tasks" and self.cases:
+        if self.selection_status in {"no_runnable_tasks", "blocked_route_bindings"} and self.cases:
+            _invalid()
+        if ((self.selection_status == "blocked_route_bindings")
+                != ("unresolved_route_parameters" in self.coverage_diagnostics)):
+            _invalid()
+        if ((self.selection_status == "blocked_route_bindings")
+                != bool(self.route_binding_gaps)):
             _invalid()
         if self.selection_status == "optional_cases_only" and (
                 not self.cases or any(case.required for case in self.cases)):
@@ -255,6 +290,7 @@ class VerificationProfile:
             self.auth_field_names, self.discovery_status, self.selection_status,
             self.configured_engines, self.target_origin_digest,
             self.coverage_diagnostics,
+            self.route_binding_gaps,
         )
 
     def to_dict(self):
@@ -266,7 +302,8 @@ class VerificationProfile:
                 "auth_field_names": list(self.auth_field_names),
                 "configured_engines": list(self.configured_engines),
                 "target_origin_digest": self.target_origin_digest,
-                "coverage_diagnostics": list(self.coverage_diagnostics)}
+                "coverage_diagnostics": list(self.coverage_diagnostics),
+                "route_binding_gaps": list(self.route_binding_gaps)}
 
     @property
     def profile_id(self):
@@ -278,6 +315,7 @@ class VerificationProfile:
             "target_origin_digest": self.target_origin_digest,
             "cases": [case.to_dict() for case in self.cases],
             "auth_field_names": list(self.auth_field_names),
+            "route_binding_gaps": list(self.route_binding_gaps),
         }
         canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return "profile-sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -291,6 +329,7 @@ class VerificationProfile:
             "schema_version", "profile_id", "source", "discovery_status",
             "selection_status", "configured_engines", "target_origin_digest",
             "cases", "auth_field_names", "coverage_diagnostics",
+            "route_binding_gaps",
         }
         try:
             if type(payload) is not dict or set(payload) != expected:
@@ -303,6 +342,7 @@ class VerificationProfile:
                 "browser_engine", "viewport", "required", "expected_outcome",
                 "requires_auth", "browser_source", "viewport_source",
                 "legacy_status_defaulted",
+                "declared_route_digest",
             }
             cases = []
             for raw in raw_cases:
@@ -314,13 +354,15 @@ class VerificationProfile:
                 cases.append(case)
             if (type(payload["configured_engines"]) is not list
                     or type(payload["auth_field_names"]) is not list
-                    or type(payload["coverage_diagnostics"]) is not list):
+                    or type(payload["coverage_diagnostics"]) is not list
+                    or type(payload["route_binding_gaps"]) is not list):
                 raise ValueError
             profile = cls(
                 payload["schema_version"], payload["source"], tuple(cases),
                 tuple(payload["auth_field_names"]), payload["discovery_status"],
                 payload["selection_status"], tuple(payload["configured_engines"]),
                 payload["target_origin_digest"], tuple(payload["coverage_diagnostics"]),
+                tuple(payload["route_binding_gaps"]),
             )
             if type(payload["profile_id"]) is not str or payload["profile_id"] != profile.profile_id:
                 raise ValueError
@@ -366,6 +408,7 @@ class EvidenceRef:
     configured_engines: Tuple[str, ...] = ()
     recovery_receipt: object | None = None
     target_origin_digest: str = ""
+    declared_route_digest: str = ""
 
     def _origin_primitives(self):
         receipt = self.recovery_receipt
@@ -384,6 +427,7 @@ class EvidenceRef:
             self.actual_browser_engine, self.substitution_provenance,
             self.verification_profile_id, self.configured_engines,
             receipt_payload, self.target_origin_digest,
+            self.declared_route_digest,
         )
 
     def __post_init__(self):
@@ -411,6 +455,11 @@ class EvidenceRef:
             _invalid("invalid_verification_evidence")
         if (type(self.target_origin_digest) is not str
                 or _ORIGIN_ID.fullmatch(self.target_origin_digest) is None):
+            _invalid("invalid_verification_evidence")
+        if not self.declared_route_digest:
+            object.__setattr__(self, "declared_route_digest", digest_target_route(self.route))
+        elif (type(self.declared_route_digest) is not str
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", self.declared_route_digest) is None):
             _invalid("invalid_verification_evidence")
         if self.substitution_provenance == "alternate_engine_recovery" and actual == self.browser_engine:
             _invalid("invalid_verification_evidence")
@@ -449,6 +498,7 @@ class EvidenceRef:
                     or receipt.viewport != self.viewport
                     or receipt.target_origin_digest != self.target_origin_digest
                     or receipt.target_route_digest != digest_target_route(self.route)
+                    or receipt.declared_route_digest != self.declared_route_digest
                     or not receipt.attempts
                     or receipt.attempts[-1].attempt_number != self.attempt
                     or receipt.attempts[-1].result != "passed"
@@ -476,6 +526,7 @@ def _snapshot_evidence_ref(value):
 class CoverageDecision:
     allowed: bool; reason_code: str
     missing_case_ids: Tuple[str, ...] = (); invalid_case_ids: Tuple[str, ...] = ()
+    route_binding_gaps: Tuple[str, ...] = ()
 
 
 class VerificationGate:
@@ -492,6 +543,11 @@ class VerificationGate:
                                     "persona_declarations_not_declared" if work_kind in {"ui", "integration"} else "persona_declarations_not_applicable")
         if profile.selection_status == "no_runnable_tasks":
             return CoverageDecision(True, "no_runnable_persona_cases_declared")
+        if profile.selection_status == "blocked_route_bindings":
+            return CoverageDecision(
+                False, "unresolved_route_parameters",
+                route_binding_gaps=profile.route_binding_gaps,
+            )
         required = {case.case_id: case for case in profile.cases if case.required}
         if required and profile.target_origin_digest is None:
             return CoverageDecision(
@@ -518,6 +574,7 @@ class VerificationGate:
             )
             matches = (item.persona_id == case.persona_id and item.scenario_id == case.scenario_id
                        and item.route == case.route and item.browser_engine == case.browser_engine
+                       and item.declared_route_digest == case.declared_route_digest
                        and item.viewport == case.viewport and item.proof_kind == "browser"
                        and item.evaluation == case.expected_outcome
                        and engine_matches and (not case.requires_auth or item.authenticated))

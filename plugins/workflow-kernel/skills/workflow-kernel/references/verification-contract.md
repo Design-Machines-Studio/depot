@@ -26,12 +26,15 @@ declaration read beneath them rejects hardlinks and revalidates file,
 ancestor-directory, child-directory, and pinned-root identity after reading so
 path swaps cannot replace validated config, index, persona, task, suite, or
 matrix content. Duplicate scalar or list-section frontmatter
-keys and malformed scalar or container types fail with
+keys, unknown keys, malformed key spacing, and malformed scalar or container types fail with
 `invalid_verification_declaration`. Only the supported indented scalar-list form
 is accepted: plain values use the exact identifier-like scalar grammar, while
-explicitly quoted values may contain structure-shaped text. Inline arrays,
-mappings, tags, anchors, aliases, block scalars, implicit typed scalars, nested
-containers, and empty list items fail closed. Task `personas:`
+explicitly quoted values may contain structure-shaped text. The only inline
+containers are the exact persona `groups: [group-id, ...]` list and
+`viewport: { width: N, height: N }` mapping already used by the project
+declarations. Other inline arrays or mappings, tags, anchors, aliases, block
+scalars, implicit typed scalars, nested containers, and empty list items fail
+closed. Task `personas:`
 assignments are parsed only from that exact nested section: the live descriptive
 `reason` field is accepted but never retained; duplicate or unknown keys,
 duplicate IDs, invalid `expected` values, invalid `required` booleans, or missing
@@ -52,6 +55,16 @@ absent tree and empty cases/engines; declared profiles use project-declaration
 provenance and exactly one of runnable, optional-only, or proven no-runnable
 selection. UI work with empty coverage blocks unless declared provenance proves
 that no runnable cases exist.
+
+Routes containing `{parameter}` are declarations, not runnable targets. Optional
+`verification.json` `route_bindings` are exact task-scoped, non-secret path
+segment maps. Discovery hashes the declared template before substitution, binds
+that digest into case identity, then emits only concrete routes. A missing
+binding produces declared `blocked_route_bindings` with
+`unresolved_route_parameters` plus a bounded safe list of exact task IDs and
+placeholder names requiring operator input; a partial, extra, unsafe, secret-shaped, or
+unknown-task binding is an invalid declaration. The adapter never infers an ID
+from unrelated persona or fixture fields.
 
 Precedence is project config, task declaration, selected suite IDs, persona
 device/viewport defaults, then workflow-policy defaults. Undeclared browser and
@@ -103,10 +116,16 @@ For a required browser failure, preserve safe attempt evidence first, then:
 1. quit the primary browser process or engine session (a tab/context close is not proof);
 2. launch a fresh primary profile with a changed process/session identity and retry once;
 3. if restart cannot be proved, record `primary_restart_unavailable` and continue;
-4. launch one genuinely different configured engine and retry once; a valid
+4. independently recheck the current dev server, target URL, and authentication
+   fixture and persist their sealed statuses and canonical readiness digest;
+5. only after all three checks pass, launch one genuinely different configured engine and retry once; a valid
    single-engine profile instead records `secondary_engine_unavailable`;
-5. if it fails or is unavailable, return blocked `human_help_required` with all
+6. if it fails or is unavailable, return blocked `human_help_required` with all
    attempts and exact missing case IDs.
+
+An `application_failure` is a product or assertion result, not recoverable browser
+tooling. It is terminal at any attempt, records blocked application failure, and
+never triggers a quit, relaunch, alternate engine, recovery, or passing coverage.
 
 The browser adapter canonically snapshots and reconstructs each origin-sealed
 `BrowserRequest` before any browser call. `BrowserAttempt`,
@@ -124,7 +143,7 @@ earlier lifecycle result. Every attempt and receipt binds `case_id`,
 requested engine, actual
 engine, configured-engine set, verification-profile identity, validated
 viewport, opaque URL digest, authoritative origin digest, opaque route digest,
-and session ID. Raw targets
+declared-route-template digest, and session ID. Raw targets
 never enter durable attempt or receipt data. A passing alternate is explicit
 `alternate_engine_recovery`: degraded browser-tooling proof for the requested
 case. The coverage gate accepts only that named substitution when its complete
@@ -148,7 +167,8 @@ the following attempt, recovered/clean receipts have no missing cases, and a
 blocked human-help receipt names the exact missing case.
 Receipt history follows one exact grammar: initial attempt; on failure, primary
 quit; primary launch or `primary_restart_unavailable`; primary retry only after
-a proved fresh launch; then alternate launch and attempt, or the exact
+a proved fresh launch; then a sealed three-part readiness recheck; then alternate
+launch and attempt, or the exact
 single-engine/unavailable marker; then the matching clean, recovered, or blocked
 terminal. Missing, duplicated, reordered, or branch-incompatible actions are
 invalid even if their individual fields look plausible.

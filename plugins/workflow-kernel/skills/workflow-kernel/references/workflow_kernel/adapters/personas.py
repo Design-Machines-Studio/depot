@@ -13,6 +13,7 @@ from ..limits import parse_json_document
 from ..policies import PolicyDocument, _snapshot_policy_document, load_policy
 from ..verification import (
     EvidenceRef, PersonaCase, VerificationProfile, digest_target_origin,
+    digest_target_route,
     validate_viewport, _snapshot_evidence_ref, _snapshot_persona_case,
     _snapshot_verification_profile,
 )
@@ -36,8 +37,32 @@ _ROUTE_TEMPLATE = re.compile(
     r"/(?:[A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]*\})?"
     r"(?:/(?:[A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]*\}))*\Z",
 )
+_ROUTE_PARAMETER = re.compile(r"\{([a-z][a-z0-9_]*)\}")
+_ROUTE_BINDING = re.compile(r"[A-Za-z0-9._~-]+\Z")
 _YAML_IMPLICIT_SCALARS = frozenset({
     "false", "n", "no", "null", "off", "on", "true", "y", "yes",
+})
+_IMPLICIT_NUMBER_OR_DATE = re.compile(
+    r"(?:[-+]?(?:(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?(?:e[-+]?[0-9]+)?"
+    r"|\.inf|\.nan)|0x[0-9a-f_]+|0o[0-7_]+|0b[01_]+|~"
+    r"|[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}(?:[Tt ]\S+)?"
+    r"|[0-9]{1,2}:[0-9]{2}(?::[0-9]{2}(?:\.[0-9]+)?)?)\Z",
+    re.IGNORECASE | re.ASCII,
+)
+_TASK_KEYS = frozenset({
+    "area", "auth_fields", "baseplate_notes", "complexity", "feature",
+    "heuristics", "id", "implementation_status", "personas", "planned_session",
+    "preconditions", "priority", "prototype_route", "requires_auth",
+    "requires_role", "route", "screenshot_points", "source_project", "tags", "title",
+})
+_PERSONA_KEYS = frozenset({
+    "account_type", "device", "email", "governance_knowledge", "groups", "id",
+    "member_id", "motivation", "name", "password", "role", "status",
+    "tech_comfort", "viewport",
+})
+_SUITE_KEYS = frozenset({"id", "title", "task_ids"})
+_TASK_LIST_KEYS = frozenset({
+    "auth_fields", "heuristics", "preconditions", "screenshot_points", "tags",
 })
 _MATRIX_PERSONAS = {
     "EC": "engaged-chair", "PS": "power-secretary",
@@ -376,7 +401,41 @@ def _frontmatter(path, declarations, *, optional=False):
     return frontmatter
 
 
-def _scalars(frontmatter):
+def _validate_frontmatter_lines(frontmatter, kind):
+    allowed = {"task": _TASK_KEYS, "persona": _PERSONA_KEYS, "suite": _SUITE_KEYS}[kind]
+    block_keys = (
+        _TASK_LIST_KEYS | {"personas"} if kind == "task"
+        else {"task_ids"} if kind == "suite" else frozenset()
+    )
+    active = None
+    seen = set()
+    for line in frontmatter.splitlines():
+        if not line.strip():
+            continue
+        if line.startswith((" ", "\t")):
+            if active is None:
+                _fail()
+            if active == "personas":
+                if (re.fullmatch(r"  - id:\s*.+", line) is None
+                        and re.fullmatch(r"    (?:expected|required|reason):\s*.+", line) is None):
+                    _fail()
+            elif re.fullmatch(r"  - .+", line) is None:
+                _fail()
+            continue
+        match = re.fullmatch(r"([a-z_]+):(?:[ \t]*(.*))?", line)
+        if match is None:
+            _fail()
+        key, raw = match.group(1), match.group(2) or ""
+        if key not in allowed or key in seen:
+            _fail()
+        seen.add(key)
+        active = key if key in block_keys and not raw.strip() else None
+        if key in block_keys and raw.strip() or key not in block_keys and not raw.strip():
+            _fail()
+
+
+def _scalars(frontmatter, *, kind):
+    _validate_frontmatter_lines(frontmatter, kind)
     pairs = _TOP.findall(frontmatter)
     keys = [key for key, _value in pairs]
     if len(keys) != len(set(keys)):
@@ -389,13 +448,19 @@ def _scalars(frontmatter):
             raw, allow_viewport_mapping=key == "viewport",
             allow_group_list=key == "groups",
             allow_route_template=key == "route",
+            allowed_implicit=(
+                {"true", "false"} if key == "requires_auth"
+                else {str(number) for number in range(6)}
+                if key in {"tech_comfort", "governance_knowledge"}
+                else set()
+            ),
         )
     return result
 
 
 def _yaml_scalar(
     raw, *, plain_pattern=None, allow_viewport_mapping=False,
-    allow_group_list=False, allow_route_template=False,
+    allow_group_list=False, allow_route_template=False, allowed_implicit=(),
 ):
     """Parse the deliberately small YAML scalar subset used by UX declarations."""
     if type(raw) is not str:
@@ -422,6 +487,10 @@ def _yaml_scalar(
         return raw
     if allow_route_template and _ROUTE_TEMPLATE.fullmatch(raw) is not None:
         return raw
+    if (raw.casefold() in _YAML_IMPLICIT_SCALARS
+            or _IMPLICIT_NUMBER_OR_DATE.fullmatch(raw) is not None):
+        if raw not in allowed_implicit:
+            _fail()
     if (raw[0] in "!&*|>[{?-,@`"
             or any(character in "[]{}" for character in raw)
             or re.search(r":(?:\s|$)", raw) is not None
@@ -453,8 +522,6 @@ def _list(frontmatter, key):
         if line.startswith("  - "):
             raw = line[4:].strip()
             value = _yaml_scalar(raw, plain_pattern=_PLAIN_LIST_SCALAR)
-            if raw[:1] not in {'"', "'"} and raw.casefold() in _YAML_IMPLICIT_SCALARS:
-                _fail()
             result.append(value)
         elif not line.strip():
             continue
@@ -493,7 +560,10 @@ def _assignments(frontmatter):
         match = re.fullmatch(r"    (expected|required|reason):\s*(.+)", line)
         if match is None or current is None or match.group(1) in current:
             _fail()
-        value = _yaml_scalar(match.group(2))
+        value = _yaml_scalar(
+            match.group(2),
+            allowed_implicit={"true", "false"} if match.group(1) == "required" else (),
+        )
         current[match.group(1)] = value
     if current is not None:
         result.append(current)
@@ -515,7 +585,7 @@ def _task_at(path, declarations):
     frontmatter = _frontmatter(path, declarations, optional=True)
     if frontmatter is None:
         return None
-    values = _scalars(frontmatter)
+    values = _scalars(frontmatter, kind="task")
     assignments = _assignments(frontmatter)
     if not {"id", "title", "route", "requires_auth"} <= set(values) or not assignments:
         _fail()
@@ -563,7 +633,9 @@ def _persona_index(root, declarations):
 def _persona_defaults(declarations, persona_paths):
     result = {}
     for path in persona_paths:
-        values = _scalars(_frontmatter(path, declarations)); persona_id = values.get("id")
+        values = _scalars(
+            _frontmatter(path, declarations), kind="persona",
+        ); persona_id = values.get("id")
         if not persona_id or persona_id in result or path.stem != persona_id:
             _fail()
         viewport = None
@@ -638,7 +710,7 @@ def _suite(root, suite_id, declarations):
     matches = []
     for path in declarations.markdown_files(root / "suites"):
         frontmatter = _frontmatter(path, declarations)
-        if _scalars(frontmatter).get("id") == suite_id:
+        if _scalars(frontmatter, kind="suite").get("id") == suite_id:
             matches.append({item.lower() for item in _list(frontmatter, "task_ids")})
     if len(matches) != 1 or not matches[0]:
         _fail()
@@ -711,6 +783,7 @@ class ProjectPersonaAdapter:
                 or result.verification_profile_id != profile.profile_id
                 or result.configured_engines != profile.configured_engines
                 or result.target_origin_digest != profile.target_origin_digest
+                or result.declared_route_digest != bound_case.declared_route_digest
             ):
                 raise ValueError
             return result
@@ -770,6 +843,7 @@ class ProjectPersonaAdapter:
         engines = policy["browser_engines"]; viewports = None
         browser_source = "workflow_policy_default"; viewport_source = "workflow_policy_default"
         selected_suite = None; statuses = set(_RUNNABLE); configured_origin = None
+        route_bindings = {}
         config_path = ux / "verification.json"
         if config_path.is_symlink():
             _fail()
@@ -782,7 +856,7 @@ class ProjectPersonaAdapter:
                 _fail()
             allowed = {
                 "schema_version", "suite", "browser_engines", "viewports",
-                "include_statuses", "target_origin",
+                "include_statuses", "target_origin", "route_bindings",
             }
             if (type(config) is not dict or set(config) - allowed
                     or type(config.get("schema_version")) is not int
@@ -807,6 +881,25 @@ class ProjectPersonaAdapter:
                 if type(config["target_origin"]) is not str:
                     _fail()
                 configured_origin = digest_target_origin(config["target_origin"])
+            if "route_bindings" in config:
+                route_bindings = config["route_bindings"]
+                if (type(route_bindings) is not dict
+                        or any(type(task_id) is not str or task_id != task_id.lower()
+                               or not task_id for task_id in route_bindings)
+                        or any(type(binding) is not dict or not binding
+                               for binding in route_bindings.values())):
+                    _fail()
+                for binding in route_bindings.values():
+                    for parameter, value in binding.items():
+                        if (type(parameter) is not str
+                                or re.fullmatch(r"[a-z][a-z0-9_]*", parameter) is None
+                                or type(value) is not str
+                                or _ROUTE_BINDING.fullmatch(value) is None):
+                            _fail()
+                        try:
+                            digest_target_route("/" + value)
+                        except Exception:
+                            _fail()
         if (type(engines) is not list or not engines
                 or any(type(item) is not str or item not in {"chromium", "firefox", "webkit"} for item in engines)
                 or len(engines) != len(set(engines))):
@@ -836,6 +929,8 @@ class ProjectPersonaAdapter:
         ids = [task["id"] for task in tasks]
         if len(ids) != len(set(ids)):
             _fail()
+        if set(route_bindings) - set(ids):
+            _fail()
         coverage_diagnostics = _coverage_matrix_diagnostics(
             ux, tasks, declarations,
         )
@@ -847,10 +942,31 @@ class ProjectPersonaAdapter:
             if not runnable_present <= statuses:
                 _fail()
         cases, auth_names = [], set()
+        route_binding_gaps = []
         for task in tasks:
             if selected is not None and task["id"] not in selected: continue
             if selected is None and (task["status"] or "current") not in statuses: continue
             auth_names.update(task["auth_fields"])
+            route = task["route"]
+            declared_route_digest = digest_target_route(route)
+            parameters = tuple(_ROUTE_PARAMETER.findall(route))
+            binding = route_bindings.get(task["id"], {})
+            if parameters:
+                if set(binding) != set(parameters):
+                    if binding:
+                        _fail()
+                    route_binding_gaps.append(
+                        task["id"] + ":" + ",".join(sorted(set(parameters))),
+                    )
+                    continue
+                route = _ROUTE_PARAMETER.sub(
+                    lambda match: binding[match.group(1)], route,
+                )
+                if "{" in route or "}" in route:
+                    _fail()
+                digest_target_route(route)
+            elif binding:
+                _fail()
             for persona_id, expected, required in task["personas"]:
                 if persona_id not in defaults: _fail()
                 device, persona_viewport = defaults[persona_id]
@@ -863,12 +979,18 @@ class ProjectPersonaAdapter:
                 else: case_viewports, source = [policy["desktop_viewport"]], "workflow_policy_default"
                 for engine in engines:
                     for viewport in case_viewports:
-                        cases.append(PersonaCase(persona_id, task["id"], task["role"], task["route"], engine,
+                        cases.append(PersonaCase(persona_id, task["id"], task["role"], route, engine,
                                                  viewport, required, expected, task["requires_auth"], browser_source,
-                                                 source, task["legacy"]))
+                                                 source, task["legacy"], declared_route_digest))
         if selected is not None and not selected <= set(ids): _fail()
         cases.sort(key=lambda item: item.case_id)
-        if not cases:
+        if route_binding_gaps:
+            cases = []
+            selection_status = "blocked_route_bindings"
+            coverage_diagnostics = tuple(sorted(set(coverage_diagnostics) | {
+                "unresolved_route_parameters",
+            }))
+        elif not cases:
             selection_status = "no_runnable_tasks"
         elif any(case.required for case in cases):
             selection_status = "runnable_cases"
@@ -881,4 +1003,5 @@ class ProjectPersonaAdapter:
             1, "project_declaration", tuple(cases), tuple(sorted(auth_names)),
             "declared", selection_status, tuple(engines),
             runtime_origin or configured_origin, coverage_diagnostics,
+            tuple(route_binding_gaps),
         )
