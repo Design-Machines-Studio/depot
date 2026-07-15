@@ -160,9 +160,7 @@ def snapshot_browser_request(value):
     if type(value) is not BrowserRequest:
         raise ValueError("invalid browser request")
     try:
-        captured = tuple(
-            getattr(value, name) for name in value.__dataclass_fields__
-        )
+        captured = _field_values(value, BrowserRequest)
         _validate_capture(
             value, "BrowserRequest", captured, value._origin_primitives(),
         )
@@ -700,9 +698,7 @@ class BrowserRecovery:
             )
         if type(item) is BrowserQuitEvidence:
             try:
-                item = BrowserQuitEvidence(**{
-                    name: getattr(item, name) for name in item.__dataclass_fields__
-                })
+                item = BrowserQuitEvidence(*_field_values(item, BrowserQuitEvidence))
             except Exception:
                 item = None
         if (type(item) is not BrowserQuitEvidence or item.engine != request.primary_engine
@@ -731,9 +727,7 @@ class BrowserRecovery:
             )
         if type(item) is BrowserLaunchEvidence:
             try:
-                item = BrowserLaunchEvidence(**{
-                    name: getattr(item, name) for name in item.__dataclass_fields__
-                })
+                item = BrowserLaunchEvidence(*_field_values(item, BrowserLaunchEvidence))
             except Exception:
                 item = None
         if type(item) is not BrowserLaunchEvidence or item.engine != engine:

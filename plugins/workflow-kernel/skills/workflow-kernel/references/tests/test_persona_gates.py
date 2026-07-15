@@ -83,6 +83,36 @@ class PersonaGateTests(unittest.TestCase):
         with self.assertRaises(InvalidSchemaError):
             VerificationGate().evaluate(profile, ())
 
+    def test_profile_snapshot_ignores_instance_controlled_dataclass_fields(self):
+        case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (), configured_engines=("chromium",),
+        ).bind_target_origin(TARGET_ORIGIN)
+        forged = {
+            "forged_schema": 1,
+            "forged_source": "project_declaration",
+            "forged_cases": (),
+            "forged_auth": (),
+            "forged_discovery": "declared",
+            "forged_selection": "no_runnable_tasks",
+            "forged_engines": ("chromium",),
+            "forged_origin": None,
+            "forged_diagnostics": (),
+        }
+        for name, value in forged.items():
+            object.__setattr__(profile, name, value)
+        object.__setattr__(
+            profile, "__dataclass_fields__", dict.fromkeys(forged),
+        )
+
+        decision = VerificationGate().evaluate(profile, ())
+
+        self.assertFalse(decision.allowed)
+        self.assertEqual(decision.reason_code, "missing_required_persona_evidence")
+
         case = PersonaCase(
             "member", "dashboard", "member", "/dashboard", "chromium",
             "1440x900", True,

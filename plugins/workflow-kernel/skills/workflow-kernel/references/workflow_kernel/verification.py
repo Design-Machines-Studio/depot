@@ -4,7 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from typing import Iterable, Tuple
 from urllib.parse import unquote, urlsplit
 
@@ -38,6 +38,15 @@ def _invalid(reason="invalid_verification_declaration"):
     raise invalid_policy(reason)
 
 
+def _field_values(value, expected_type):
+    return tuple(getattr(value, field.name) for field in fields(expected_type))
+
+
+def _unsafe_route_character(character):
+    codepoint = ord(character)
+    return codepoint < 32 or codepoint == 127 or 0xD800 <= codepoint <= 0xDFFF
+
+
 def _validate_id(value, *, reject_secret_shape=False):
     secret_parts = {"token", "key", "secret", "password", "authorization", "cookie", "dsn"}
     if (type(value) is not str or len(value) > 128 or _ID.fullmatch(value) is None
@@ -60,7 +69,7 @@ def _validate_route(route):
     if (type(route) is not str or len(route) > 2_048
             or not route.startswith("/") or route.startswith("//")
             or "?" in route or "#" in route or "\\" in route
-            or any(ord(character) < 32 or ord(character) == 127 for character in route)
+            or any(_unsafe_route_character(character) for character in route)
             or _PERCENT_ESCAPE.search(route)):
         _invalid("invalid_verification_target")
     for raw_part in route.split("/"):
@@ -75,7 +84,7 @@ def _validate_route(route):
             _invalid("invalid_verification_target")
         if (part in {".", ".."} or "/" in part or "\\" in part
                 or "?" in part or "#" in part
-                or any(ord(character) < 32 or ord(character) == 127 for character in part)
+                or any(_unsafe_route_character(character) for character in part)
                 or _CREDENTIAL_VALUE.match(part)):
             _invalid("invalid_verification_target")
     return route
@@ -144,7 +153,7 @@ class PersonaCase:
         _register_origin(self, "PersonaCase", self._origin_primitives())
 
     def _origin_primitives(self):
-        return tuple(getattr(self, name) for name in self.__dataclass_fields__)
+        return _field_values(self, PersonaCase)
 
     @property
     def case_id(self):
@@ -324,7 +333,7 @@ def _snapshot_persona_case(value):
     if type(value) is not PersonaCase:
         _invalid("invalid_verification_profile")
     try:
-        captured = tuple(getattr(value, name) for name in value.__dataclass_fields__)
+        captured = _field_values(value, PersonaCase)
         _validate_capture(value, "PersonaCase", captured, value._origin_primitives())
         return PersonaCase(*captured)
     except Exception:
@@ -335,7 +344,7 @@ def _snapshot_verification_profile(value):
     if type(value) is not VerificationProfile:
         _invalid("invalid_verification_gate")
     try:
-        captured = tuple(getattr(value, name) for name in value.__dataclass_fields__)
+        captured = _field_values(value, VerificationProfile)
         cases = tuple(_snapshot_persona_case(case) for case in captured[2])
         captured = captured[:2] + (cases,) + captured[3:]
         _validate_capture(
@@ -454,9 +463,7 @@ def _snapshot_evidence_ref(value):
     if type(value) is not EvidenceRef:
         _invalid("invalid_verification_evidence")
     try:
-        captured = tuple(
-            getattr(value, name) for name in value.__dataclass_fields__
-        )
+        captured = _field_values(value, EvidenceRef)
         _validate_capture(
             value, "EvidenceRef", captured, value._origin_primitives(),
         )

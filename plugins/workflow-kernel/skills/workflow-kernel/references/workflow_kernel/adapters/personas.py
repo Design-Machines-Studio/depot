@@ -17,7 +17,7 @@ from ..verification import (
     _snapshot_verification_profile,
 )
 
-_TOP = re.compile(r"^([a-z_]+):\s*(.*?)\s*$", re.M)
+_TOP = re.compile(r"^([a-z_]+):[ \t]*(.*?)[ \t]*$", re.M)
 _VIEWPORT = re.compile(r"([1-9][0-9]{1,4})x([1-9][0-9]{1,4})")
 _RUNNABLE = frozenset({"current", "redirected-current"})
 _KNOWN_STATUSES = frozenset({
@@ -26,6 +26,16 @@ _KNOWN_STATUSES = frozenset({
 })
 _INDEX_LINK = re.compile(r"\[[^\]]+\]\(([^)]+\.md)\)\Z")
 _PLAIN_LIST_SCALAR = re.compile(r"[A-Za-z][A-Za-z0-9._/-]*\Z")
+_VIEWPORT_MAPPING = re.compile(
+    r"\{\s*width:\s*[0-9]+,\s*height:\s*[0-9]+\s*\}\Z",
+)
+_GROUP_LIST = re.compile(
+    r"\[(?:[a-z][a-z0-9._-]*(?:,\s*[a-z][a-z0-9._-]*)*)?\]\Z",
+)
+_ROUTE_TEMPLATE = re.compile(
+    r"/(?:[A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]*\})?"
+    r"(?:/(?:[A-Za-z0-9._~-]+|\{[a-z][a-z0-9_]*\}))*\Z",
+)
 _YAML_IMPLICIT_SCALARS = frozenset({
     "false", "n", "no", "null", "off", "on", "true", "y", "yes",
 })
@@ -371,7 +381,57 @@ def _scalars(frontmatter):
     keys = [key for key, _value in pairs]
     if len(keys) != len(set(keys)):
         _fail()
-    return {key: value.strip().strip('"\'') for key, value in pairs}
+    result = {}
+    for key, raw in pairs:
+        if not raw.strip():
+            continue
+        result[key] = _yaml_scalar(
+            raw, allow_viewport_mapping=key == "viewport",
+            allow_group_list=key == "groups",
+            allow_route_template=key == "route",
+        )
+    return result
+
+
+def _yaml_scalar(
+    raw, *, plain_pattern=None, allow_viewport_mapping=False,
+    allow_group_list=False, allow_route_template=False,
+):
+    """Parse the deliberately small YAML scalar subset used by UX declarations."""
+    if type(raw) is not str:
+        _fail()
+    raw = raw.strip()
+    if not raw or len(raw) > 4_096:
+        _fail()
+    if raw[:1] in {'"', "'"}:
+        quote = raw[0]
+        if len(raw) < 3 or raw[-1] != quote:
+            _fail()
+        value = raw[1:-1]
+        if (quote in value or "\\" in value
+                or any(ord(character) < 32 or ord(character) == 127
+                       or 0xD800 <= ord(character) <= 0xDFFF
+                       for character in value)):
+            _fail()
+        return value
+    if raw[-1:] in {'"', "'"}:
+        _fail()
+    if allow_viewport_mapping and _VIEWPORT_MAPPING.fullmatch(raw) is not None:
+        return raw
+    if allow_group_list and _GROUP_LIST.fullmatch(raw) is not None:
+        return raw
+    if allow_route_template and _ROUTE_TEMPLATE.fullmatch(raw) is not None:
+        return raw
+    if (raw[0] in "!&*|>[{?-,@`"
+            or any(character in "[]{}" for character in raw)
+            or re.search(r":(?:\s|$)", raw) is not None
+            or re.search(r"(?:^|\s)#", raw) is not None
+            or any(ord(character) < 32 or ord(character) == 127
+                   or 0xD800 <= ord(character) <= 0xDFFF
+                   for character in raw)
+            or plain_pattern is not None and plain_pattern.fullmatch(raw) is None):
+        _fail()
+    return raw
 
 
 def _list(frontmatter, key):
@@ -392,20 +452,9 @@ def _list(frontmatter, key):
     for line in lines[start:]:
         if line.startswith("  - "):
             raw = line[4:].strip()
-            if raw[:1] in {'"', "'"}:
-                quote = raw[0]
-                if len(raw) < 3 or raw[-1] != quote:
-                    _fail()
-                value = raw[1:-1]
-                if (quote in value or "\\" in value
-                        or any(ord(character) < 32 or ord(character) == 127
-                               for character in value)):
-                    _fail()
-            elif (_PLAIN_LIST_SCALAR.fullmatch(raw) is None
-                    or raw.casefold() in _YAML_IMPLICIT_SCALARS):
+            value = _yaml_scalar(raw, plain_pattern=_PLAIN_LIST_SCALAR)
+            if raw[:1] not in {'"', "'"} and raw.casefold() in _YAML_IMPLICIT_SCALARS:
                 _fail()
-            else:
-                value = raw
             result.append(value)
         elif not line.strip():
             continue
@@ -444,9 +493,7 @@ def _assignments(frontmatter):
         match = re.fullmatch(r"    (expected|required|reason):\s*(.+)", line)
         if match is None or current is None or match.group(1) in current:
             _fail()
-        value = match.group(2).strip()
-        if not value or len(value) > 4_096:
-            _fail()
+        value = _yaml_scalar(match.group(2))
         current[match.group(1)] = value
     if current is not None:
         result.append(current)

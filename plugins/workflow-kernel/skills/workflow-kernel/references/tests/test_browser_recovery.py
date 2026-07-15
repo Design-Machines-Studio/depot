@@ -9,7 +9,7 @@ from tests import schema_matches
 from workflow_kernel.adapters.browser import (
     BrowserAttempt, BrowserLaunchEvidence, BrowserLifecycleEvidence,
     BrowserQuitEvidence, BrowserRecovery, BrowserRecoveryReceipt, BrowserRequest,
-    snapshot_browser_recovery_receipt,
+    snapshot_browser_recovery_receipt, snapshot_browser_request,
 )
 
 
@@ -91,6 +91,31 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.actual_engine, "chromium")
         self.assertIsNone(receipt.substitution_provenance)
         self.assertEqual(adapter.calls, [("attempt", "chromium")])
+
+    def test_request_snapshot_ignores_instance_controlled_dataclass_fields(self):
+        forged = {
+            "forged_case": "forged-case",
+            "forged_url": "https://attacker.invalid/forged",
+            "forged_viewport": VIEWPORT,
+            "forged_primary": "firefox",
+            "forged_secondary": "chromium",
+            "forged_profile": PROFILE_ID,
+            "forged_engines": ("firefox", "chromium"),
+            "forged_origin": "origin-sha256:" + hashlib.sha256(
+                b"https://attacker.invalid"
+            ).hexdigest(),
+        }
+        for name, value in forged.items():
+            object.__setattr__(self.request, name, value)
+        object.__setattr__(
+            self.request, "__dataclass_fields__", dict.fromkeys(forged),
+        )
+
+        snapshot = snapshot_browser_request(self.request)
+
+        self.assertEqual(snapshot.case_id, self.request.case_id)
+        self.assertEqual(snapshot.url, self.request.url)
+        self.assertEqual(snapshot.primary_engine, self.request.primary_engine)
 
     def test_failure_is_preserved_then_primary_process_quit_fresh_launch_and_retry(self):
         adapter = FakeBrowserAdapter(
@@ -266,6 +291,29 @@ class BrowserRecoveryTests(unittest.TestCase):
         receipt = BrowserRecovery().run(self.request, adapter)
         self.assertIn("application_restart", [item.action for item in receipt.lifecycle])
         self.assertIn("primary_restart_unavailable", [item.result for item in receipt.lifecycle])
+
+    def test_quit_reconstruction_ignores_instance_controlled_dataclass_fields(self):
+        quit_result = BrowserQuitEvidence(
+            "chromium", False, "primary-1", action="application_restart",
+        )
+        object.__setattr__(
+            quit_result, "__dataclass_fields__",
+            dict.fromkeys(("engine", "confirmed", "session_id")),
+        )
+        adapter = FakeBrowserAdapter(
+            [
+                attempt(1, "chromium", "failed", session="primary-1"),
+                attempt(2, "firefox", "failed", session="secondary-1"),
+            ],
+            quit_result=quit_result,
+            launches=[BrowserLaunchEvidence("firefox", True, True, "secondary-1")],
+        )
+
+        receipt = BrowserRecovery().run(self.request, adapter)
+
+        self.assertIn("application_restart", [item.action for item in receipt.lifecycle])
+        self.assertIn("primary_restart_unavailable", [item.result for item in receipt.lifecycle])
+        self.assertNotIn(("launch_engine", "chromium", True), adapter.calls)
 
     def test_restart_proof_binds_quit_launch_and_retry_to_exact_sessions(self):
         adapter = FakeBrowserAdapter(

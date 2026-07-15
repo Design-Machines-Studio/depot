@@ -11,7 +11,7 @@ from tests import detail_digest, schema_matches
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import load_policy
 from workflow_kernel.verification import (
-    PersonaCase, VerificationProfile, _validate_route,
+    PersonaCase, VerificationProfile, _validate_route, digest_target_route,
 )
 from workflow_kernel.adapters.personas import _DeclarationTree, ProjectPersonaAdapter
 from workflow_kernel._files import PinnedDirectory
@@ -479,6 +479,50 @@ class VerificationProfileTests(unittest.TestCase):
             ).discover(project)
             self.assertTrue(profile.cases)
 
+    def test_scalar_grammar_rejects_yaml_structures_in_all_scalar_positions(self):
+        structures = (
+            "!!omap []", "!!pairs []", "!!set {}", "!!str value",
+            "|", ">", "&anchor value", "*anchor", "- nested",
+            "? key", "key: value", "[mobile, responsive]", "{kind: mobile}",
+        )
+        replacements = (
+            ("title: Review a proposal", "title: {}"),
+            ('    reason: "A live-shape descriptive explanation that is never retained"',
+             "    reason: {}"),
+        )
+        for original, template in replacements:
+            for value in structures:
+                with self.subTest(original=original, value=value), \
+                        tempfile.TemporaryDirectory() as directory:
+                    project = Path(directory)
+                    shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                    task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                    task.write_text(task.read_text().replace(
+                        original, template.format(value), 1,
+                    ))
+                    with self.assertRaises(InvalidSchemaError):
+                        ProjectPersonaAdapter(
+                            policy_path=ROOT / "workflow-policy.json",
+                        ).discover(project)
+
+    def test_quoted_yaml_structure_lookalikes_are_supported_scalars(self):
+        lookalikes = ("!!omap []", "&anchor value", "|", "[mobile, responsive]")
+        for value in lookalikes:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
+                task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
+                task.write_text(task.read_text().replace(
+                    "title: Review a proposal", "title: " + json.dumps(value), 1,
+                ).replace(
+                    '    reason: "A live-shape descriptive explanation that is never retained"',
+                    "    reason: " + json.dumps(value), 1,
+                ))
+                profile = ProjectPersonaAdapter(
+                    policy_path=ROOT / "workflow-policy.json",
+                ).discover(project)
+                self.assertTrue(profile.cases)
+
     def test_identifier_and_route_runtime_and_schema_boundaries_match(self):
         PersonaCase("p" * 128, "s" * 128, "m" * 128, "/" + "a" * 2047,
                     "chromium", "1440x900", True)
@@ -549,6 +593,7 @@ class VerificationProfileTests(unittest.TestCase):
             "/safe/%2", "/safe/%GG", "/safe/\x1fcontrol",
             "/safe/%80", "/safe/%C2", "/safe/%E2%82",
             "/safe/%F0%9F%92", "/safe/%C0%AF", "/safe/%ED%A0%80",
+            "/safe\n", "/safe/" + chr(0xD800), "/safe/" + chr(0xDFFF),
         )
         for route in invalid_routes:
             with self.subTest(route=route), self.assertRaises(InvalidSchemaError):
@@ -560,6 +605,8 @@ class VerificationProfileTests(unittest.TestCase):
             ).to_dict()
             payload["cases"][0]["route"] = route
             self.assertFalse(schema_matches(payload, schema), route)
+            with self.assertRaises(InvalidSchemaError):
+                digest_target_route(route)
 
         for encoded in (
             "%C2%A2", "%C3%A9", "%E2%82%AC", "%F0%90%80%80",
@@ -601,11 +648,11 @@ class VerificationProfileTests(unittest.TestCase):
 
         def compare(route):
             try:
-                _validate_route(route)
+                digest_target_route(route)
                 runtime_valid = True
-            except InvalidSchemaError:
+            except (InvalidSchemaError, UnicodeEncodeError):
                 runtime_valid = False
-            schema_valid = route_pattern.fullmatch(route) is not None
+            schema_valid = route_pattern.search(route) is not None
             if runtime_valid != schema_valid:
                 mismatches.append((route, runtime_valid, schema_valid))
 
@@ -629,6 +676,9 @@ class VerificationProfileTests(unittest.TestCase):
                                 first, second, third, fourth,
                             ),
                         )
+        compare("/safe\n")
+        for codepoint in range(0x110000):
+            compare("/safe/" + chr(codepoint))
         self.assertEqual(mismatches, [])
 
     def test_declaration_root_pin_rejects_ancestor_swap_before_open(self):
