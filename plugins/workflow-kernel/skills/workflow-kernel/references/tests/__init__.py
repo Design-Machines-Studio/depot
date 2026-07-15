@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+import re
 import threading
 from unittest.mock import patch
 
@@ -182,7 +183,17 @@ def schema_matches(value, schema, root=None):
         _json_equal(value, candidate) for candidate in schema["enum"]
     ):
         return False
+    if "oneOf" in schema and sum(
+        schema_matches(value, candidate, root) for candidate in schema["oneOf"]
+    ) != 1:
+        return False
     if type(value) is str and len(value) < schema.get("minLength", 0):
+        return False
+    if type(value) is str and len(value) > schema.get("maxLength", len(value)):
+        return False
+    if type(value) is str and "pattern" in schema and re.search(
+        schema["pattern"], value,
+    ) is None:
         return False
     if type(value) is int and value < schema.get("minimum", value):
         return False
@@ -201,6 +212,11 @@ def schema_matches(value, schema, root=None):
             return False
         if type(additional) is dict and any(
             not schema_matches(value[name], additional, root) for name in extras
+        ):
+            return False
+        if "propertyNames" in schema and any(
+            not schema_matches(name, schema["propertyNames"], root)
+            for name in value
         ):
             return False
         if any(

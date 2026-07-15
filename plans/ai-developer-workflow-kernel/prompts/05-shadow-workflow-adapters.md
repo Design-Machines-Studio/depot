@@ -119,7 +119,9 @@ plan-create --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanu
 plan-compose --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
 record-create --state-dir PATH --plan PATH --result PATH --before-inventory PATH --after-inventory PATH
 plan-cleanup --state-dir PATH --run-id ID [--node-id ID] --output PATH
-record-cleanup --state-dir PATH --plan PATH --results PATH
+next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH
+execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH
+record-cleanup --state-dir PATH --plan PATH --outcomes PATH
 plan-reconcile --state-dir PATH --run-id ID --ttl-hours 24 --output PATH
 metrics --events PATH --output PATH
 ```
@@ -127,8 +129,8 @@ metrics --events PATH --output PATH
 Observation, comparison, and metrics commands are side-effect free. Planning
 commands output exact argv plus proof/reason data but never execute them.
 `record-create` reconciles every single- or multi-resource registration intent
-against command results and before/after inventory. `record-cleanup` only consumes
-orchestrator-produced command results. Use stable
+against command results and before/after inventory. `record-cleanup` only
+consumes registry-issued guarded command or terminal-observation outcomes. Use stable
 exit codes: `0` success, `2` invalid input/schema, `3` unsafe/blocked plan, `4`
 runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict.
 
@@ -137,6 +139,43 @@ runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict.
 `kernel_prediction_gap`, and `unsafe_to_promote`. A raw text difference is not
 automatically a semantic gap; normalize known host mechanism labels while
 preserving required transition/evidence semantics.
+
+Cleanup execution uses a stable, one-step-at-a-time authority boundary.
+`next-cleanup-step` validates a gap-free outcome prefix and returns either the
+next dependency-eligible action or an actionless terminal disposition requiring
+fresh observation. Its canonical combined identity binds the immutable full-plan
+digest, step index, and step type. Combined order is every command action in plan
+order followed by every actionless `MISSING` disposition in disposition order;
+terminal observation may not skip an unfinished command or earlier observation.
+`execute-cleanup-step` is the single non-splittable authorization and execution
+step for the exact plan plus index; it derives the sealed action/disposition and
+must not accept a caller-supplied free-standing capability. Through the
+registry's per-kind-and-ID execution guard it
+atomically reloads the exact registry record and its
+active/retired state regardless of owner. Registered mode requires the active
+action owner; explicit stale-orphan mode requires total global absence, with a
+retired historical record failing closed. It consumes a fresh exact-ID
+inventory, requires a complete fresh authoritative node-status proof for every
+dependency, and binds the exact successful predecessor result when the action
+declares one. For actionless `MISSING`, it instead runs a fresh exact-ID inspect
+inside that same guard and binds the canonical disposition plus exact-not-found
+evidence. Registration, reassignment, and disposition for that key fail closed
+until the command or observation result exists, while unrelated keys keep
+progressing. Before returning, the registry durably issues a random opaque
+authority bound to plan digest, step index, step type, capability/evidence
+digest, owner, registry-state generation, result identity, and expiry.
+`record-cleanup` enforces a bijection between the canonical plan/receipt steps
+and supplied authorities: duplicate plan steps, one authority covering duplicate
+dispositions, duplicate authorities for one step, missing/extraneous/out-of-order
+authorities, step gaps, and cross-plan reuse all fail closed. It then requires
+each exact issued payload and atomically consumes each authority ID; unissued,
+altered, expired, replayed, or generation-stale authority also fails closed. A
+host/executor crash
+releases the OS-backed guard, and the next attempt must freshly inspect and
+reauthorize. Cached plans,
+translated events, comparator output, metrics, and all other shadow state are
+observation only and can never supply registry, dependency, inventory, or
+predecessor authority.
 
 ## Pipeline Translation Map
 
@@ -308,13 +347,23 @@ At Step 3j, after validation, review, evidence, and merge disposition:
 2. Run Git cleanup using the existing decision table.
 3. Invoke `plan-cleanup`; treat its exact argv/proof output as a proposal, not an
    authorization from shadow state.
-4. The Markdown orchestrator, as authoritative lifecycle owner, rechecks the
-   plan's labels/registry/scope/dependencies and explicitly executes only its
-   exact argv. Eligible running `stop-remove` containers are stopped with the
-   bounded exact-argv policy before removal.
-5. Invoke `record-cleanup` with those command results so the observer records
+4. Loop through `next-cleanup-step` and `execute-cleanup-step`. For each
+   immutable step index, reload the exact registry record/context, collect a
+   complete fresh authoritative node-status proof, inspect the exact resource
+   into a fresh inventory, and supply the exact predecessor result. The
+   revalidator derives dependency requirements from the registry record, never
+   action precondition strings, labels, or shadow state. Explicit stale-orphan
+   mode instead requires authoritative registry absence, complete positive
+   ownership labels, strict TTL evidence, and a fresh inactive lease.
+5. `execute-cleanup-step` calls the injected host executor only inside the
+   exact-key guard; the Markdown orchestrator must never execute a returned argv
+   separately. Eligible running `stop-remove` containers are stopped with the
+   bounded exact-argv policy before removal. Actionless `MISSING` steps perform
+   only their fresh exact-ID inspect. Each guarded outcome and durable issuance
+   receipt is appended to the ordered trace before selecting another step.
+6. Invoke `record-cleanup` with those guarded outcomes so the observer records
    dispositions. Preserve run-shared resources required by incomplete dependents.
-6. A cleanup failure marks cleanup failed/blocked and cannot be written as clean.
+7. A cleanup failure marks cleanup failed/blocked and cannot be written as clean.
 
 At Step 5b, invoke `plan-reconcile` after artifact cleanup. The Markdown
 orchestrator rechecks and explicitly executes the exact safe reconciliation and
@@ -448,6 +497,15 @@ Any routing change is a proposal with evidence and requires human approval.
 - [ ] Step 3j's authoritative orchestrator obtains, rechecks, and executes a
       chunk-scoped Docker cleanup plan after validation, review, evidence, and
       merge disposition, beside existing Git cleanup; shadow records results.
+- [ ] Cleanup execution selects one immutable action-or-observation step at a
+      time and executes it through the stable guarded authoritative interface using the fresh
+      registry record/context, complete dependency-status proof, exact-ID
+      inventory, step index, and predecessor result. Shadow state cannot
+      authorize any of these inputs; stale-orphan mode proves registry absence.
+      The same-key guard spans final validation through command or exact-absence
+      result, issued authorities are opaque, durable, expiring, and single-use,
+      and unrelated resource keys remain concurrent. No separate
+      revalidate-then-execute interface is permitted.
 - [ ] Step 3j stops positively owned `stop-remove` chunk containers with a
       bounded timeout only after the last dependent, then removes them. Step 5b
       applies the same rule to run-scoped containers. Stop timeout/failure and
