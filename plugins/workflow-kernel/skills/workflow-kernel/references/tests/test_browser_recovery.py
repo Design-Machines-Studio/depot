@@ -16,6 +16,14 @@ from workflow_kernel.adapters.browser import (
 
 PROFILE_ID = "profile-sha256:" + "a" * 64
 ENGINES = ("chromium", "firefox")
+ALTERNATE_ENGINE_PAIRS = (
+    ("chromium", "firefox"),
+    ("chromium", "webkit"),
+    ("firefox", "chromium"),
+    ("firefox", "webkit"),
+    ("webkit", "chromium"),
+    ("webkit", "firefox"),
+)
 TARGET_URL = "https://example.invalid/page"
 TARGET_URL_DIGEST = "url-sha256:" + hashlib.sha256(TARGET_URL.encode()).hexdigest()
 TARGET_ORIGIN_DIGEST = "origin-sha256:" + hashlib.sha256(b"https://example.invalid").hexdigest()
@@ -233,11 +241,7 @@ class BrowserRecoveryTests(unittest.TestCase):
         schema = json.loads(
             (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
         )
-        for primary, alternate in (
-            ("chromium", "firefox"),
-            ("firefox", "webkit"),
-            ("webkit", "chromium"),
-        ):
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
                 receipt = self.recovered_on_alternate(primary, alternate)
                 self.assertEqual(
@@ -249,11 +253,7 @@ class BrowserRecoveryTests(unittest.TestCase):
         schema = json.loads(
             (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
         )
-        for primary, alternate in (
-            ("chromium", "firefox"),
-            ("firefox", "webkit"),
-            ("webkit", "chromium"),
-        ):
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
                 payload = self.recovered_on_alternate(primary, alternate).to_dict()
                 payload["lifecycle"] = [
@@ -266,15 +266,55 @@ class BrowserRecoveryTests(unittest.TestCase):
         schema = json.loads(
             (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
         )
-        for primary, alternate in (
-            ("chromium", "firefox"),
-            ("firefox", "webkit"),
-            ("webkit", "chromium"),
-        ):
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
                 payload = self.recovered_on_alternate(primary, alternate).to_dict()
                 payload["lifecycle"][-1]["actual_engine"] = primary
                 self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_rejects_recovered_same_engine_passing_attempt(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
+            with self.subTest(primary=primary, alternate=alternate):
+                payload = self.recovered_on_alternate(primary, alternate).to_dict()
+                payload["attempts"][-1]["actual_engine"] = primary
+                self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_rejects_recovered_same_engine_receipt(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
+            with self.subTest(primary=primary, alternate=alternate):
+                payload = self.recovered_on_alternate(primary, alternate).to_dict()
+                payload["actual_engine"] = primary
+                self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_rejects_mismatched_recovered_engine_pair(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
+            mismatched = next(
+                engine for engine in ("chromium", "firefox", "webkit")
+                if engine not in (primary, alternate)
+            )
+            for component in ("lifecycle", "attempt", "receipt"):
+                with self.subTest(
+                    primary=primary, alternate=alternate, component=component,
+                ):
+                    payload = self.recovered_on_alternate(
+                        primary, alternate,
+                    ).to_dict()
+                    if component == "lifecycle":
+                        payload["lifecycle"][-1]["actual_engine"] = mismatched
+                    elif component == "attempt":
+                        payload["attempts"][-1]["actual_engine"] = mismatched
+                    else:
+                        payload["actual_engine"] = mismatched
+                    self.assertFalse(schema_matches(payload, schema))
 
     def test_recovered_receipt_recomputes_readiness_digest(self):
         adapter = FakeBrowserAdapter(
