@@ -184,6 +184,30 @@ class CompatibilityTests(unittest.TestCase):
                 (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "workflow-kernel", "version": "0.1.0"}))
                 self.assertEqual(resolve_workflow_kernel_runtime(pipeline, home=root / "home"), package.parent.resolve())
 
+    def test_runtime_trust_serves_any_plugins_sibling_but_rejects_foreign_roots(self):
+        # Finding 089: the kernel never hardcodes a consumer allowlist; any
+        # plugins/<name> sibling under the same depot boundary resolves, while
+        # a path outside a plugins/ directory still fails closed.
+        from workflow_kernel.cli import resolve_workflow_kernel_runtime
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            plugin = root / "home" / ".claude" / "plugins" / "cache" / "depot" / "workflow-kernel" / "0.1.0"
+            package = plugin / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
+            package.mkdir(parents=True)
+            (package / "__main__.py").write_text("")
+            (plugin / ".claude-plugin").mkdir()
+            (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "workflow-kernel", "version": "0.1.0"}))
+            future = root / "depot" / "plugins" / "future-orchestrator"
+            future.mkdir(parents=True)
+            self.assertEqual(
+                resolve_workflow_kernel_runtime(future, home=root / "home"),
+                package.parent.resolve(),
+            )
+            foreign = root / "depot" / "not-plugins" / "pipeline"
+            foreign.mkdir(parents=True)
+            with self.assertRaises(ValueError):
+                resolve_workflow_kernel_runtime(foreign, home=root / "home")
+
 
 if __name__ == "__main__":
     unittest.main()

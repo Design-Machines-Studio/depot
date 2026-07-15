@@ -758,9 +758,20 @@ def compatible_kernel_version(text):
 
 
 def resolve_workflow_kernel_runtime(canonical_plugin_root, *, home=None):
-    """Resolve only the canonical Depot sibling, then named versioned caches."""
+    """Resolve only the canonical Depot sibling, then named versioned caches.
+
+    Validator-side mirror of the runtime-resolution.md trust boundaries. The
+    normative production entry point is workflow-kernel-launcher.sh, which
+    enforces the same checks (realpath containment, manifest name/version,
+    semver compatibility) before executing any candidate; this function is
+    used by tools/validate-workflow-kernel.py and never launches the runtime.
+    """
     source = Path(canonical_plugin_root).resolve(strict=True)
-    if source.name not in {"pipeline", "dm-review"} or source.parent.name != "plugins":
+    # Any plugins/<name> sibling may consume the kernel: runtime-resolution.md
+    # promises the contract to every future orchestrator, so the kernel never
+    # hardcodes plugin-layer knowledge. The security property comes from the
+    # realpath boundary checks below, not from a consumer allowlist.
+    if not source.is_dir() or source.parent.name != "plugins":
         raise ValueError("invalid canonical plugin root")
     depot = source.parent.parent.resolve(strict=True)
     lexical_depot = Path(os.path.abspath(str(canonical_plugin_root))).parent.parent
