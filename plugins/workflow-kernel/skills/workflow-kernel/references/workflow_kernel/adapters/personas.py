@@ -499,7 +499,7 @@ def _yaml_scalar(
             or _IMPLICIT_NUMBER_OR_DATE.fullmatch(raw) is not None):
         if raw not in allowed_implicit:
             _fail()
-    if (raw[0] in "!&*|>[{?-,@`"
+    if (raw[0] in "!&*|>[{?-,%@`"
             or any(character in "[]{}" for character in raw)
             or re.search(r":(?:\s|$)", raw) is not None
             or re.search(r"(?:^|\s)#", raw) is not None

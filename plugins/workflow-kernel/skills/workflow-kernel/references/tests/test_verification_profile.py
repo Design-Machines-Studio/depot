@@ -159,6 +159,33 @@ class VerificationProfileTests(unittest.TestCase):
                 ).discover(project)
                 self.assertEqual("runnable_cases", profile.selection_status)
 
+    def test_yaml_percent_directives_require_quotes(self):
+        for value in ("%TAG", "%YAML"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests/ux")
+                task = project / "tests/ux/tasks/governance/sample-task.md"
+                task.write_text(task.read_text().replace(
+                    "title: Review a proposal", "title: " + value,
+                ))
+                with self.assertRaises(InvalidSchemaError):
+                    ProjectPersonaAdapter(
+                        policy_path=ROOT / "workflow-policy.json",
+                    ).discover(project)
+
+            with self.subTest(value="quoted " + value), \
+                    tempfile.TemporaryDirectory() as directory:
+                project = Path(directory)
+                shutil.copytree(FIXTURES / "assembly", project / "tests/ux")
+                task = project / "tests/ux/tasks/governance/sample-task.md"
+                task.write_text(task.read_text().replace(
+                    "title: Review a proposal", "title: " + json.dumps(value),
+                ))
+                profile = ProjectPersonaAdapter(
+                    policy_path=ROOT / "workflow-policy.json",
+                ).discover(project)
+                self.assertEqual("runnable_cases", profile.selection_status)
+
     def test_schemas_accept_runtime_receipts_and_policy_defaults(self):
         profile_schema = json.loads((ROOT / "verification-profile-schema.json").read_text())
         recovery_schema = json.loads((ROOT / "browser-recovery-schema.json").read_text())
