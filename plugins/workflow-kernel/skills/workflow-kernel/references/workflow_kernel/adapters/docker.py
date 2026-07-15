@@ -14,8 +14,10 @@ from workflow_kernel.model import invalid_policy
 from workflow_kernel.resources import (
     VALID_CLEANUP_POLICIES, VALID_LIFECYCLES,
     CleanupAction, CleanupDisposition, CleanupPlan, CleanupReceipt, CleanupScope,
-    CommandResult, CreationReceipt, ResourceDisposition, ResourceKind, ResourceRecord,
-    ResourceRegistrationIntent, ResourceRegistry, build_cleanup_action,
+    CommandResult, CreationReceipt, GuardedCleanupAdapter, ResourceDisposition,
+    ResourceKind, ResourceRecord,
+    ResourceRegistrationIntent, ResourceRegistry, _inspect_argv,
+    _is_exact_not_found, _seal_guarded_cleanup_adapter, build_cleanup_action,
     cleanup_proof_digest, cleanup_result_id, disposition_for,
     reseal_cleanup_action,
 )
@@ -292,7 +294,8 @@ class DockerCreationPlan:
         object.__setattr__(self, "environment", environment)
 
 
-class DockerAdapter:
+@_seal_guarded_cleanup_adapter
+class DockerAdapter(GuardedCleanupAdapter):
     def __init__(
         self, runner: CommandRunner, *, now: Optional[Callable[[], datetime]] = None,
         repository_scope_id: str,
@@ -1498,24 +1501,9 @@ def _offset_dependencies(actions: Sequence[CleanupAction], offset: int) -> Tuple
     )
 
 
-def _inspect_argv(kind: ResourceKind, resource_id: str) -> Tuple[str, ...]:
-    if kind is ResourceKind.CONTAINER:
-        return ("docker", "container", "inspect", resource_id)
-    return ("docker", kind.value, "inspect", resource_id)
-
-
-def _is_exact_not_found(
-    kind: ResourceKind, resource_id: str, result: CommandResult,
-) -> bool:
-    if result.argv != _inspect_argv(kind, resource_id) or result.exit_code != 1 or result.stdout:
-        return False
-    noun = "container" if kind is ResourceKind.CONTAINER else kind.value
-    messages = {
-        "Error: No such object: " + resource_id,
-        "Error: No such " + noun + ": " + resource_id,
-        "Error response from daemon: No such " + noun + ": " + resource_id,
-    }
-    return result.stderr.strip() in messages
+# _inspect_argv and _is_exact_not_found are core validation policy and live in
+# workflow_kernel.resources; they are re-exported here (imported above) for
+# adapter-internal use and existing import sites.
 
 
 def _authoritative_absent_keys(inventory: DockerInventory) -> set[tuple[ResourceKind, str]]:

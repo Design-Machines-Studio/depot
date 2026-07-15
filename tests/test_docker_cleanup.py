@@ -428,6 +428,79 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual((), blocked.actions)
         self.assertEqual("resource_use_unknown", blocked.dispositions[0].reason)
 
+    def test_guarded_paths_reject_unsealed_and_subclassed_adapters(self):
+        # Finding 084: the concrete DockerAdapter type check became a
+        # core-owned sealed marker. The guard must stay exactly as strict:
+        # a plain object, an unsealed marker subclass, and even a subclass
+        # of the sealed DockerAdapter are all rejected on every guarded path.
+        from workflow_kernel.resources import GuardedCleanupAdapter
+
+        class Unsealed(GuardedCleanupAdapter):
+            pass
+
+        class SubclassOfSealed(DockerAdapter):
+            def __init__(self):
+                pass
+
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        executor = lambda argv: CommandResult(tuple(argv), 0, "", "")
+        for impostor in (object(), Unsealed(), SubclassOfSealed()):
+            with self.subTest(impostor=type(impostor).__name__):
+                with self.assertRaises(InvalidSchemaError):
+                    self.registry.execute_guarded_action(
+                        impostor, plan, 0, value, executor,
+                    )
+                with self.assertRaises(InvalidSchemaError):
+                    self.registry.observe_guarded_absence(
+                        impostor, plan, 0, executor,
+                    )
+                with self.assertRaises(InvalidSchemaError):
+                    self.registry.record_guarded_results(
+                        impostor, plan, (), DockerInventory((value,)),
+                        exact_absent(),
+                    )
+
+    def test_core_modules_have_no_runtime_adapter_imports(self):
+        # Finding 084: dependency direction. Core validation modules may not
+        # runtime-import the adapters package; only annotation-time
+        # (TYPE_CHECKING) imports are permitted.
+        import ast
+        import workflow_kernel
+
+        def runtime_adapter_imports(nodes, type_checking=False):
+            found = []
+            for node in nodes:
+                if isinstance(node, ast.If):
+                    guard = node.test
+                    is_tc = (
+                        isinstance(guard, ast.Name) and guard.id == "TYPE_CHECKING"
+                    ) or (
+                        isinstance(guard, ast.Attribute) and guard.attr == "TYPE_CHECKING"
+                    )
+                    found += runtime_adapter_imports(node.body, type_checking or is_tc)
+                    found += runtime_adapter_imports(node.orelse, type_checking)
+                    continue
+                if isinstance(node, ast.ImportFrom) and not type_checking:
+                    if node.module and "adapters" in node.module:
+                        found.append(node.module)
+                elif isinstance(node, ast.Import) and not type_checking:
+                    found += [
+                        alias.name for alias in node.names if "adapters" in alias.name
+                    ]
+                body = getattr(node, "body", None)
+                if body and not isinstance(node, (ast.Import, ast.ImportFrom)):
+                    found += runtime_adapter_imports(body, type_checking)
+            return found
+
+        core = Path(workflow_kernel.__file__).parent
+        for name in ("resources.py", "verification.py", "browser_evidence.py"):
+            with self.subTest(module=name):
+                tree = ast.parse((core / name).read_text())
+                self.assertEqual(runtime_adapter_imports(tree.body), [])
+
     def test_result_recording_requires_success_and_preserves_removed(self):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")

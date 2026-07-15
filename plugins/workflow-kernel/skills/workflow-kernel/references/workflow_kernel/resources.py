@@ -85,6 +85,57 @@ class CommandResult:
         object.__setattr__(self, "argv", argv)
 
 
+class GuardedCleanupAdapter:
+    """Core-owned sealed marker for adapters entrusted with guarded cleanup.
+
+    Core validation must never import a concrete adapter class (dependency
+    direction: adapters import core, never the reverse). An adapter earns
+    guarded-cleanup authority by subclassing this marker AND being sealed via
+    ``_seal_guarded_cleanup_adapter`` at class-definition time. The runtime
+    check stays exact-type -- a subclass of a sealed adapter does not inherit
+    authority -- preserving the strictness of the previous
+    ``type(adapter) is DockerAdapter`` guard without the concrete import.
+    """
+
+    __slots__ = ()
+
+
+_SEALED_GUARDED_CLEANUP_ADAPTERS: set = set()
+
+
+def _seal_guarded_cleanup_adapter(adapter_type: type) -> type:
+    if not (isinstance(adapter_type, type)
+            and issubclass(adapter_type, GuardedCleanupAdapter)):
+        raise invalid_policy("invalid_guarded_cleanup_adapter_seal")
+    _SEALED_GUARDED_CLEANUP_ADAPTERS.add(adapter_type)
+    return adapter_type
+
+
+def _is_sealed_cleanup_adapter(adapter: object) -> bool:
+    return type(adapter) in _SEALED_GUARDED_CLEANUP_ADAPTERS
+
+
+def _inspect_argv(kind: "ResourceKind", resource_id: str) -> Tuple[str, ...]:
+    if kind is ResourceKind.CONTAINER:
+        return ("docker", "container", "inspect", resource_id)
+    return ("docker", kind.value, "inspect", resource_id)
+
+
+def _is_exact_not_found(
+    kind: "ResourceKind", resource_id: str, result: CommandResult,
+) -> bool:
+    """Exact-ID absence policy: validation, not I/O, so it lives in core."""
+    if result.argv != _inspect_argv(kind, resource_id) or result.exit_code != 1 or result.stdout:
+        return False
+    noun = "container" if kind is ResourceKind.CONTAINER else kind.value
+    messages = {
+        "Error: No such object: " + resource_id,
+        "Error: No such " + noun + ": " + resource_id,
+        "Error response from daemon: No such " + noun + ": " + resource_id,
+    }
+    return result.stderr.strip() in messages
+
+
 @dataclass(frozen=True)
 class CleanupStepIdentity:
     """One immutable authority-bearing position in a canonical cleanup plan."""
@@ -1143,10 +1194,8 @@ class ResourceRegistry:
         authority_prefix: object = None,
     ) -> GuardedCommandResult:
         """Execute the exact command step sealed into one immutable plan."""
-        from workflow_kernel.adapters.docker import DockerAdapter
-
         if (
-            type(adapter) is not DockerAdapter
+            not _is_sealed_cleanup_adapter(adapter)
             or type(step_index) is not int or not callable(executor)
         ):
             raise invalid_policy("invalid_guarded_cleanup_execution")
@@ -1218,12 +1267,8 @@ class ResourceRegistry:
         *, authority_prefix: object = None,
     ) -> GuardedTerminalObservation:
         """Issue one exact-ID absence observation while its resource key is locked."""
-        from workflow_kernel.adapters.docker import (
-            DockerAdapter, _inspect_argv, _is_exact_not_found,
-        )
-
         if (
-            type(adapter) is not DockerAdapter
+            not _is_sealed_cleanup_adapter(adapter)
             or type(step_index) is not int or not callable(executor)
         ):
             raise invalid_policy("invalid_guarded_terminal_observation")
@@ -1378,9 +1423,7 @@ class ResourceRegistry:
         before: object, after: object,
         authorities: Tuple[GuardedAuthority, ...],
     ) -> CleanupReceipt:
-        from workflow_kernel.adapters.docker import DockerAdapter
-
-        if type(adapter) is not DockerAdapter or type(plan) is not CleanupPlan:
+        if not _is_sealed_cleanup_adapter(adapter) or type(plan) is not CleanupPlan:
             raise invalid_policy("invalid_cleanup_result_adapter")
         plan, step_entries = _cleanup_step_entries(plan)
         if len({value.authority_id for value in authorities}) != len(authorities):
@@ -1494,7 +1537,6 @@ class ResourceRegistry:
                 != (action.run_id, action.node_id)
             ):
                 raise invalid_policy("guarded_cleanup_authority_changed")
-        from workflow_kernel.adapters.docker import _is_exact_not_found
         for authority in authorities:
             if type(authority) is not GuardedTerminalObservation:
                 continue

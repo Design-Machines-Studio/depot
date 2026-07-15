@@ -474,7 +474,7 @@ class EvidenceRef:
         except Exception:
             _invalid("invalid_verification_evidence")
         if self.proof_kind == "browser":
-            from .adapters.browser import snapshot_browser_recovery_receipt
+            from .browser_evidence import snapshot_browser_recovery_receipt
             try:
                 receipt = snapshot_browser_recovery_receipt(self.recovery_receipt)
             except Exception:
