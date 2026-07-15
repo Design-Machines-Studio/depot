@@ -24,6 +24,26 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 
 class RetryPolicyTests(unittest.TestCase):
+    def test_policy_viewport_validation_is_local_and_layer_independent(self):
+        package = Path(__file__).parents[1] / "workflow_kernel"
+        policies = (package / "policies.py").read_text()
+        self.assertIn("def _validate_policy_viewport", policies)
+        self.assertNotIn("from .verification import validate_viewport", policies)
+
+        environment = dict(os.environ, PYTHONPATH=str(package.parent))
+        result = subprocess.run(
+            [
+                sys.executable, "-c",
+                "import sys\n"
+                "import workflow_kernel.policies\n"
+                "assert 'workflow_kernel.verification' not in sys.modules\n"
+                "assert 'workflow_kernel.adapters.personas' not in sys.modules\n",
+            ],
+            cwd="/tmp", env=environment, capture_output=True, text=True,
+            timeout=10,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_policy_value_classifier_has_one_exact_type_taxonomy(self):
         document = load_policy()
         trusted = document.retry_budgets

@@ -227,6 +227,14 @@ When the target repo contains `tests/ux/`, reference persona tasks in UI chunk p
 
 **Rule:** If `tests/ux/` exists, each UI chunk's Research Context must reference which persona tasks cover the affected routes. If no task file exists for a new route, add an acceptance criterion: "Create task file at `tests/ux/tasks/{area}/{task-name}.md`."
 
+Use `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
+Carry the complete selected persona/scenario/route/browser/viewport case set into
+UI and integration acceptance criteria. Task frontmatter is authoritative; do
+not turn the generated coverage matrix or a fixed persona sample into coverage.
+Required browser criteria must preserve the evidence -> primary process quit ->
+fresh primary relaunch/retry -> different engine -> `human_help_required` ladder.
+Curl/reachability never satisfies browser evidence.
+
 ### Phase 3k: Parallel Prompt Isolation Gate
 
 Sibling parallel prompts must not cross-reference each other. A prompt in a parallel group that says "after chunk-02 adds the handler" is broken if chunk-02 runs concurrently.

@@ -115,11 +115,17 @@ outcome, not an exception swallowed by the caller.
 
 ## Persona Discovery Contract
 
-Parse the real Assembly conventions: `tests/ux/personas/_index.md`, persona
-Markdown frontmatter, `tests/ux/tasks/**/*.md`, `coverage-matrix.md`, optional
-`suites/*.md`, and optional project verification config. Task files are the
-source of truth; the generated coverage matrix is a discovery/index aid and
-must never override task frontmatter. `implementation_status` selects runnable
+Parse the real Assembly conventions only under the production `tests/ux/`
+declaration root: `personas/_index.md`, persona Markdown frontmatter, actual task
+frontmatter in `tasks/**/*.md`, `coverage-matrix.md`, optional `suites/*.md`, and
+optional project verification config. Alternate sanitized fixture roots require
+an explicit adapter argument; unrelated root `tasks/` paths are not declarations.
+Supporting Markdown without frontmatter is ignored. Task frontmatter is the
+source of truth; the generated coverage matrix is a discovery/index aid whose
+drift may emit a safe diagnostic but must never override or invalidate valid task
+frontmatter. Descriptive persona-assignment `reason` fields are accepted and
+discarded. A missing legacy `requires_role` defaults to `member` when
+`requires_auth:true` and `public` otherwise. `implementation_status` selects runnable
 cases (`current` and `redirected-current` by default); future/inactive tasks are
 reported but are not blocking unless an explicit suite/config opts them in. A
 statusless task is a legacy Assembly declaration: record
@@ -211,6 +217,12 @@ browser restart. The receipt must say which one occurred.
 - [ ] Sanitized fixtures matching both Assembly layouts produce deterministic
       cases from `_index.md`, persona/task frontmatter, implementation statuses,
       coverage matrix, and suites; task frontmatter overrides summaries.
+- [ ] Only `tests/ux/` is an implicit production declaration tree; supporting
+      Markdown without frontmatter is ignored, and alternate fixture roots are
+      explicit. Live Assembly assignment `reason` and legacy missing-role shapes
+      discover without retaining descriptive or credential values.
+- [ ] Coverage-matrix mismatch is diagnostic and never invalidates valid task
+      frontmatter; profile cases and auth-field names have canonical ordering.
 - [ ] Statusless legacy Assembly tasks remain runnable with recorded compatibility
       provenance, and a fixture omitting both `implementation_status` and
       `required` produces a non-empty blocking case set.
@@ -240,6 +252,9 @@ browser restart. The receipt must say which one occurred.
 - [ ] A host unable to prove a fresh primary records
       `primary_restart_unavailable` and proceeds to the alternate engine rather
       than silently skipping or claiming recovery.
+- [ ] A blocked multi-engine receipt proves an alternate attempt or explicit
+      alternate unavailability, and records `primary_restart_unavailable` when
+      the primary retry was skipped.
 - [ ] A continuing primary failure attempts exactly one genuinely different
       browser engine, not merely another tab or tool wrapper for the same engine.
 - [ ] Exhausted/unavailable secondary verification returns blocked with

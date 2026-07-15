@@ -163,7 +163,8 @@ def schema_matches(value, schema, root=None):
         target = root
         for part in schema["$ref"].removeprefix("#/").split("/"):
             target = target[part]
-        return schema_matches(value, target, root)
+        if not schema_matches(value, target, root):
+            return False
     expected_type = schema.get("type")
     if expected_type is not None:
         names = expected_type if isinstance(expected_type, list) else [expected_type]
@@ -233,8 +234,19 @@ def schema_matches(value, schema, root=None):
             json.dumps(item, sort_keys=True) for item in value
         }) != len(value):
             return False
+        prefix = schema.get("prefixItems", [])
+        if any(
+            not schema_matches(value[index], item_schema, root)
+            for index, item_schema in enumerate(prefix[:len(value)])
+        ):
+            return False
         if "items" in schema and any(
-            not schema_matches(item, schema["items"], root) for item in value
+            not schema_matches(item, schema["items"], root)
+            for item in value[len(prefix):]
+        ):
+            return False
+        if "contains" in schema and not any(
+            schema_matches(item, schema["contains"], root) for item in value
         ):
             return False
     return True
