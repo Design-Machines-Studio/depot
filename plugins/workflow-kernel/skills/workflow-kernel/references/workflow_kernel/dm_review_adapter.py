@@ -55,9 +55,12 @@ class ReviewRequest:
         if type(value) is not dict:
             raise ValueError("review request must be an object")
         raw_class = value.get("workflow_class", value.get("workflowClass"))
+        raw_lanes = value.get("required_lanes", value.get("requested_lanes", ()))
+        if type(raw_lanes) not in {list, tuple}:
+            raise ValueError("invalid review lanes")
         return cls(
             value.get("run_id", value.get("runId")),
-            tuple(value.get("required_lanes", value.get("requested_lanes", ()))),
+            tuple(raw_lanes),
             value.get("mode", "full"),
             "feature" if raw_class is None else raw_class,
             value.get("execution_mode", value.get("executionMode", "generic")),

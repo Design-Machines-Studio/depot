@@ -665,6 +665,35 @@ def _authority_json(value: GuardedAuthority) -> dict[str, object]:
     }
 
 
+def _snapshot_guarded_authority(value: GuardedAuthority) -> GuardedAuthority:
+    try:
+        result = CommandResult(
+            tuple(value.result.argv), value.result.exit_code,
+            value.result.stdout, value.result.stderr,
+        )
+        identity = CleanupStepIdentity(
+            value.step_identity.plan_digest, value.step_identity.step_index,
+            value.step_identity.step_type,
+        )
+        if type(value) is GuardedCommandResult:
+            return GuardedCommandResult(
+                result, value.kind, value.resource_id, value.run_id,
+                value.node_id, value.action_digest, value.state_generation,
+                value.issued_at, value.expires_at, value.authority_id, identity,
+            )
+        if type(value) is GuardedTerminalObservation:
+            return GuardedTerminalObservation(
+                _disposition_from_json(_disposition_json(value.disposition)),
+                result, value.evidence_digest, value.state_generation,
+                value.issued_at, value.expires_at, value.authority_id, identity,
+            )
+    except InvalidSchemaError:
+        raise
+    except Exception:
+        pass
+    raise invalid_policy("invalid_guarded_cleanup_results")
+
+
 def _validated_authority_json(value: object) -> dict[str, object]:
     required = {
         "authority_id", "plan_digest", "step_index", "step_type",
@@ -1106,6 +1135,7 @@ class ResourceRegistry:
         executor: Callable[[Tuple[str, ...]], CommandResult],
         lease_proof: object = None, predecessor_result: object = None, *,
         incomplete_node_proof: object = None, orphan_mode: bool = False,
+        authority_prefix: object = None,
     ) -> GuardedCommandResult:
         """Execute the exact command step sealed into one immutable plan."""
         from workflow_kernel.adapters.docker import DockerAdapter
@@ -1126,6 +1156,23 @@ class ResourceRegistry:
             raise invalid_policy("invalid_guarded_cleanup_step")
         key = (action.kind, action.resource_id)
         with self._exclusive_key_locks((key,)):
+            if authority_prefix is not None:
+                with self._exclusive_lock():
+                    self._reload_unlocked()
+                    validated_prefix = self._validate_authority_prefix_unlocked(
+                        plan, authority_prefix,
+                    )
+                if len(validated_prefix) != step_index:
+                    raise invalid_policy("guarded_cleanup_authority_conflict")
+                predecessor_index = action.requires_success_of
+                if predecessor_index is None:
+                    if validated_prefix:
+                        predecessor_result = None
+                else:
+                    predecessor = validated_prefix[predecessor_index]
+                    if type(predecessor) is not GuardedCommandResult:
+                        raise invalid_policy("guarded_cleanup_authority_conflict")
+                    predecessor_result = predecessor.result
             adapter.revalidate_action(
                 action, resource, lease_proof=lease_proof,
                 predecessor_result=predecessor_result,
@@ -1163,6 +1210,7 @@ class ResourceRegistry:
     def observe_guarded_absence(
         self, adapter: object, plan: CleanupPlan, step_index: int,
         executor: Callable[[Tuple[str, ...]], CommandResult],
+        *, authority_prefix: object = None,
     ) -> GuardedTerminalObservation:
         """Issue one exact-ID absence observation while its resource key is locked."""
         from workflow_kernel.adapters.docker import (
@@ -1194,6 +1242,12 @@ class ResourceRegistry:
         with self._exclusive_key_locks((key,)):
             with self._exclusive_lock():
                 self._reload_unlocked()
+                if authority_prefix is not None:
+                    validated_prefix = self._validate_authority_prefix_unlocked(
+                        plan, authority_prefix,
+                    )
+                    if len(validated_prefix) != step_index:
+                        raise invalid_policy("guarded_cleanup_authority_conflict")
                 record = self._records.get(key)
                 if (
                     record is None or self._is_retired(key)
@@ -1265,44 +1319,9 @@ class ResourceRegistry:
             for value in guarded_results
         ):
             raise invalid_policy("invalid_guarded_cleanup_results")
-        try:
-            normalized = []
-            for value in guarded_results:
-                result = CommandResult(
-                    tuple(value.result.argv), value.result.exit_code,
-                    value.result.stdout, value.result.stderr,
-                )
-                if type(value) is GuardedCommandResult:
-                    normalized.append(GuardedCommandResult(
-                        result, value.kind, value.resource_id,
-                        value.run_id, value.node_id, value.action_digest,
-                        value.state_generation, value.issued_at,
-                        value.expires_at, value.authority_id,
-                        CleanupStepIdentity(
-                            value.step_identity.plan_digest,
-                            value.step_identity.step_index,
-                            value.step_identity.step_type,
-                        ),
-                    ))
-                else:
-                    disposition = _disposition_from_json(
-                        _disposition_json(value.disposition)
-                    )
-                    normalized.append(GuardedTerminalObservation(
-                        disposition, result, value.evidence_digest,
-                        value.state_generation, value.issued_at,
-                        value.expires_at, value.authority_id,
-                        CleanupStepIdentity(
-                            value.step_identity.plan_digest,
-                            value.step_identity.step_index,
-                            value.step_identity.step_type,
-                        ),
-                    ))
-            guarded_results = tuple(normalized)
-        except InvalidSchemaError:
-            raise
-        except Exception:
-            raise invalid_policy("invalid_guarded_cleanup_results") from None
+        guarded_results = tuple(
+            _snapshot_guarded_authority(value) for value in guarded_results
+        )
         return self._record_results(
             adapter, plan, tuple(
                 value.result for value in guarded_results
@@ -1310,6 +1329,44 @@ class ResourceRegistry:
             ),
             before, after, guarded_results,
         )
+
+    def validate_authority_prefix(
+        self, plan: CleanupPlan, authorities: Tuple[GuardedAuthority, ...],
+    ) -> Tuple[GuardedAuthority, ...]:
+        """Resolve a gap-free, live prefix against registry-issued authority."""
+        if type(plan) is not CleanupPlan or type(authorities) is not tuple:
+            raise invalid_policy("guarded_cleanup_authority_conflict")
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            return self._validate_authority_prefix_unlocked(plan, authorities)
+
+    def _validate_authority_prefix_unlocked(
+        self, plan: CleanupPlan, authorities: object,
+    ) -> Tuple[GuardedAuthority, ...]:
+        if type(authorities) is not tuple or any(
+            type(value) not in {GuardedCommandResult, GuardedTerminalObservation}
+            for value in authorities
+        ):
+            raise invalid_policy("guarded_cleanup_authority_conflict")
+        normalized = tuple(_snapshot_guarded_authority(value) for value in authorities)
+        identities = cleanup_step_identities(plan)
+        if (
+            len(normalized) > len(identities)
+            or tuple(value.step_identity for value in normalized)
+            != identities[:len(normalized)]
+            or len({value.authority_id for value in normalized}) != len(normalized)
+        ):
+            raise invalid_policy("guarded_cleanup_authority_conflict")
+        try:
+            self._validate_execution_authorities(
+                plan,
+                tuple(value.result for value in normalized
+                      if type(value) is GuardedCommandResult),
+                normalized,
+            )
+        except InvalidSchemaError:
+            raise invalid_policy("guarded_cleanup_authority_conflict") from None
+        return normalized
 
     def _record_results(
         self, adapter: object, plan: CleanupPlan, results: Tuple[CommandResult, ...],

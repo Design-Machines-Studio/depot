@@ -29,6 +29,11 @@ class DmReviewAdapterTests(unittest.TestCase):
         self.assertEqual(spec.workflow_class, WorkflowClass.FEATURE)
         self.assertEqual(spec.execution_mode, "claude_full")
 
+    def test_mapping_requires_an_exact_lane_collection(self):
+        for lanes in ("security", {"security": True}, (value for value in ("security",))):
+            with self.subTest(lanes=type(lanes).__name__), self.assertRaises(ValueError):
+                ReviewRequest.from_mapping({"run_id": "review-1", "requested_lanes": lanes})
+
     def test_receipts_preserve_fallback_findings_coverage_convergence_and_terminal(self):
         receipts = json.loads((FIXTURES / "dm-review.json").read_text())
         events = translate_review_receipts(receipts)

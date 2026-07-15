@@ -11,7 +11,7 @@ from .adapters.base import (
     BuilderSessionDecision, HostCapabilities, NodeSpec, WorkflowClass,
     WorkflowContext,
 )
-from .redaction import redact
+from .redaction import normalize_evidence_reference, redact
 from .schema import WorkflowEvent
 from .workflows import WorkflowTemplates
 
@@ -42,6 +42,7 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "execution_mode", "requested_provider", "attempted_provider", "lane",
     "fallback", "cleanup_policy", "cleanup_disposition", "resource_kind",
     "resource_name", "topology", "topology_node", "topology_edge",
+    "workflow_class_defaulted",
 })
 _RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
 
@@ -129,12 +130,10 @@ def _run_identity(value: object) -> str:
 
 def _safe_reference(value: object) -> str:
     reference = _required_text(value, "authoritative receipt")
-    if "\\" in reference or reference.startswith("/") or any(
-        segment in ("", ".", "..") for segment in reference.split("/")
-    ):
-        if not reference.startswith(("sha256:", "url-sha256:")):
-            raise ValueError("unsafe authoritative receipt")
-    return reference
+    try:
+        return normalize_evidence_reference(reference)
+    except ValueError:
+        raise ValueError("unsafe authoritative receipt") from None
 
 
 def _chunks(value: object) -> Tuple[ChunkSpec, ...]:
@@ -296,6 +295,7 @@ def _translate_receipts(
     run_identity = None
     workflow_class = None
     execution_mode = None
+    workflow_class_defaulted = None
     for position, receipt in enumerate(values):
         if type(receipt) is not dict:
             raise ValueError("receipt must be an object")
@@ -303,10 +303,24 @@ def _translate_receipts(
         sequence = receipt.get("sequence")
         if type(sequence) is not int or sequence != position:
             raise ValueError("invalid receipt sequence")
+        class_was_present = "workflow_class" in receipt
         current_class = _required_text(
             receipt.get("workflow_class", workflow_class or "feature"),
             "workflow class",
         )
+        try:
+            current_class = WorkflowClass(current_class).value
+        except ValueError:
+            raise ValueError("invalid workflow class") from None
+        if "workflow_class_defaulted" in receipt:
+            current_defaulted = receipt["workflow_class_defaulted"]
+            if type(current_defaulted) is not bool:
+                raise ValueError("invalid workflow class provenance")
+        else:
+            current_defaulted = (
+                not class_was_present if position == 0 else
+                workflow_class_defaulted if not class_was_present else False
+            )
         current_mode = _required_text(
             receipt.get("execution_mode", execution_mode or "generic"),
             "execution mode",
@@ -315,7 +329,10 @@ def _translate_receipts(
             raise ValueError("invalid execution mode")
         if position == 0:
             run_identity, workflow_class, execution_mode = run_id, current_class, current_mode
-        elif (run_id, current_class, current_mode) != (run_identity, workflow_class, execution_mode):
+            workflow_class_defaulted = current_defaulted
+        elif (run_id, current_class, current_mode, current_defaulted) != (
+            run_identity, workflow_class, execution_mode, workflow_class_defaulted,
+        ):
             raise ValueError("receipt context discontinuity")
         stage = _required_text(receipt.get("stage"), "stage")
         if stage not in allowed_stages:
@@ -327,6 +344,7 @@ def _translate_receipts(
         reference = _safe_reference(receipt.get("authoritative_receipt"))
         normalized_receipt = dict(receipt)
         normalized_receipt["workflow_class"] = current_class
+        normalized_receipt["workflow_class_defaulted"] = current_defaulted
         normalized_receipt["execution_mode"] = current_mode
         events.append(WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,

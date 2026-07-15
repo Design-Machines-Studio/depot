@@ -34,15 +34,16 @@ class ShadowParityTests(unittest.TestCase):
     def test_missing_authoritative_evidence_is_unsafe(self):
         authoritative = ReceiptSet.from_events(self.load("pipeline-claude.json"))
         report = ShadowComparator().compare(state(()), authoritative)
-        self.assertIn(report.reason, ("kernel_prediction_gap", "missing_authoritative_evidence"))
+        self.assertEqual(report.reason, "semantic_receipts_required")
         self.assertFalse(report.safe_to_promote)
 
     def test_exact_authoritative_evidence_matches(self):
         authoritative = ReceiptSet.from_events(self.load("pipeline-claude.json"))
         refs = tuple(event.payload["authoritative_receipt"] for event in authoritative.events)
         report = ShadowComparator().compare(state(refs), authoritative)
-        self.assertEqual(report.reason, "match")
-        self.assertTrue(report.semantic_match)
+        self.assertEqual(report.reason, "semantic_receipts_required")
+        self.assertFalse(report.semantic_match)
+        self.assertFalse(report.safe_to_promote)
 
     def test_semantic_mutations_never_report_safe_match(self):
         original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
@@ -76,8 +77,54 @@ class ShadowParityTests(unittest.TestCase):
         generic = ReceiptSet.from_events(self.load("pipeline-generic.json"))
         claude = ReceiptSet.from_events(self.load("pipeline-claude.json"))
         report = ShadowComparator().compare_receipt_sets(generic, claude)
-        self.assertIn(report.reason, ("match", "explained_host_difference"))
+        self.assertEqual(report.reason, "explained_host_difference")
         self.assertTrue(report.semantic_match)
+        self.assertFalse(report.safe_to_promote)
+
+    def test_same_host_provider_or_reference_mutation_is_unsafe(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        authoritative = ReceiptSet.from_events(translate_pipeline_receipts(original))
+        for key, value in (
+            ("provider", "openai"),
+            ("authoritative_receipt", "receipts/codex/chunk-a-dispatch.json"),
+        ):
+            mutated = copy.deepcopy(original)
+            mutated[2][key] = value
+            report = ShadowComparator().compare_receipt_sets(
+                ReceiptSet.from_events(translate_pipeline_receipts(mutated)),
+                authoritative,
+            )
+            with self.subTest(key=key):
+                self.assertFalse(report.semantic_match)
+                self.assertFalse(report.safe_to_promote)
+
+    def test_routing_cleanup_and_convergence_mutations_are_semantic(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        authoritative = ReceiptSet.from_events(translate_pipeline_receipts(original))
+        changes = {
+            "attempt": 2, "retry_reason": "browser_restart",
+            "isolation_mode": "worktree", "requested_executor": "builder",
+            "attempted_executor": "fallback", "cleanup_policy": "stop-remove",
+            "resource_kind": "container", "resource_name": "review-box",
+            "finding_count": 2, "prior_findings_signature": "prior-signature",
+            "convergence_signature": "current-signature",
+        }
+        for key, value in changes.items():
+            mutated = copy.deepcopy(original)
+            mutated[2][key] = value
+            report = ShadowComparator().compare_receipt_sets(
+                ReceiptSet.from_events(translate_pipeline_receipts(mutated)), authoritative,
+            )
+            with self.subTest(key=key):
+                self.assertFalse(report.semantic_match)
+                self.assertFalse(report.safe_to_promote)
+        mutated = copy.deepcopy(original)
+        for receipt in mutated:
+            receipt["workflow_class_defaulted"] = True
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_pipeline_receipts(mutated)), authoritative,
+        )
+        self.assertFalse(report.semantic_match)
 
 
 if __name__ == "__main__":

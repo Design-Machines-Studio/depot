@@ -877,6 +877,42 @@ class DockerLifecycleTests(unittest.TestCase):
                 self.adapter, plan, (observation,), absent, absent,
             )
 
+    def test_public_authority_prefix_rejects_forged_expired_consumed_and_out_of_order(self):
+        clock = [NOW]
+        registry = ResourceRegistry(
+            Path(self.directory.name) / "prefix-resources.jsonl",
+            now=lambda: clock[0], authority_ttl=timedelta(minutes=1),
+        )
+        adapter = DockerAdapter(FakeRunner(), now=lambda: clock[0])
+        value = resource()
+        registry.register(ResourceRecord(
+            value.resource_id, value.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=value.labels,
+        ))
+        before = DockerInventory((value,))
+        plan = adapter.plan_chunk_cleanup(registry, before, "run-1", "node-1")
+        guarded = registry.execute_guarded_action(
+            adapter, plan, 0, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        self.assertEqual((guarded,), registry.validate_authority_prefix(plan, (guarded,)))
+        forged = replace(guarded, authority_id="sha256:" + "f" * 64)
+        out_of_order = replace(guarded, step_identity=CleanupStepIdentity(
+            guarded.step_identity.plan_digest, 1, "command_action",
+        ))
+        for invalid in (forged, out_of_order):
+            with self.assertRaises(InvalidSchemaError):
+                registry.validate_authority_prefix(plan, (invalid,))
+        clock[0] = NOW + timedelta(minutes=2)
+        with self.assertRaises(InvalidSchemaError):
+            registry.validate_authority_prefix(plan, (guarded,))
+        clock[0] = NOW
+        registry.record_guarded_results(
+            adapter, plan, (guarded,), before, exact_absent(),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            registry.validate_authority_prefix(plan, (guarded,))
+
     def test_guarded_recording_rejects_unmatched_terminal_state(self):
         first, _ = self.register(resource("ctr-a"))
         second = resource("ctr-b")

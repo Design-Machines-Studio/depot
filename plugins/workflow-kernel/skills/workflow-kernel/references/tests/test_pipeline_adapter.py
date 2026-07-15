@@ -94,6 +94,28 @@ class PipelineAdapterTests(unittest.TestCase):
             with self.subTest(receipts=receipts[:2]), self.assertRaises(ValueError):
                 translate_pipeline_receipts(receipts)
 
+    def test_receipts_validate_workflow_class_and_preserve_default_provenance(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        invalid = copy.deepcopy(receipts)
+        for receipt in invalid:
+            receipt["workflow_class"] = "not-a-workflow-class"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(invalid)
+        legacy = copy.deepcopy(receipts)
+        for receipt in legacy:
+            receipt.pop("workflow_class", None)
+        events = translate_pipeline_receipts(legacy)
+        self.assertTrue(all(event.payload["workflow_class_defaulted"] for event in events))
+        self.assertTrue(all(event.payload["workflow_class"] == "feature" for event in events))
+        explicit = copy.deepcopy(receipts)
+        for receipt in explicit:
+            receipt["workflow_class_defaulted"] = True
+        events = translate_pipeline_receipts(explicit)
+        self.assertTrue(all(event.payload["workflow_class_defaulted"] for event in events))
+        explicit[2]["workflow_class_defaulted"] = "true"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(explicit)
+
     def test_receipt_redaction_preserves_safe_routing_facts_and_drops_secret_shapes(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         receipts[2].update({

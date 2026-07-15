@@ -23,7 +23,7 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(report.cleanup_removed, 2)
         self.assertEqual(report.tokens, 1200)
         self.assertAlmostEqual(report.cost_usd, 0.24)
-        self.assertTrue(all(item["human_approval_required"] for item in report.proposals))
+        self.assertEqual(report.proposals, ())
         self.assertEqual(before, tuple(event.to_dict() for event in events))
 
     def test_empty_report_has_zero_rates(self):
@@ -36,10 +36,21 @@ class MetricsTests(unittest.TestCase):
         self.assertIsNone(report.time_to_clean_seconds)
         self.assertEqual(report.proposals, ())
 
-    def test_time_to_clean_uses_cleanup_window_only(self):
+    def test_time_to_clean_uses_run_start_to_terminal_cleanup(self):
         events = translate_pipeline_receipts(json.loads((FIXTURES / "pipeline-claude.json").read_text()))
         report = MetricsAggregator().aggregate(events)
-        self.assertEqual(report.time_to_clean_seconds, 120.0)
+        self.assertEqual(report.time_to_clean_seconds, 540.0)
+
+    def test_invalid_numeric_facts_raise_and_proposals_name_observed_rationale(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        invalid = copy.deepcopy(receipts); invalid[-1]["cost_usd"] = -1
+        with self.assertRaises(ValueError):
+            MetricsAggregator().aggregate(translate_pipeline_receipts(invalid))
+        fallback = copy.deepcopy(receipts)
+        fallback[2]["fallback_reason"] = "provider_unavailable"
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(fallback))
+        self.assertEqual(report.proposals[0]["rationale"], "observed_fallback")
+        self.assertEqual(report.proposals[0]["evidence_count"], 1)
 
     def test_replay_duplicate_gap_and_order_are_rejected(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())

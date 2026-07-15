@@ -76,9 +76,11 @@ class ReliabilityReport:
 
 
 def _number(payload, key, kind):
-    value = payload.get(key, 0)
-    if type(value) not in ((int,) if kind is int else (int, float)) or value < 0:
+    if key not in payload:
         return kind(0)
+    value = payload[key]
+    if type(value) not in ((int,) if kind is int else (int, float)) or value < 0:
+        raise ValueError("invalid numeric metric: " + key)
     return kind(value)
 
 
@@ -158,23 +160,35 @@ class MetricsAggregator:
             "cleanup_removed", "cleanup_retained", "cleanup_blocked",
         ))
         clean_total = totals["cleanup_removed"] + totals["cleanup_retained"]
+        event_times = []
         cleanup_times = []
         for event in values:
+            try:
+                parsed_time = datetime.fromisoformat(event.occurred_at.replace("Z", "+00:00"))
+                event_times.append(parsed_time)
+            except ValueError:
+                continue
             if event.payload.get("stage") in {
                 "chunk_cleanup", "repository_cleanup", "terminal_reconciliation",
             }:
-                try:
-                    cleanup_times.append(datetime.fromisoformat(event.occurred_at.replace("Z", "+00:00")))
-                except ValueError:
-                    pass
+                cleanup_times.append(parsed_time)
         clean_seconds = (
-            (max(cleanup_times) - min(cleanup_times)).total_seconds()
-            if len(cleanup_times) > 1 else None
+            (max(cleanup_times) - min(event_times)).total_seconds()
+            if cleanup_times and event_times else None
         )
-        proposals = ({
-            "kind": "routing_or_workflow_change", "mode": "proposal_only",
-            "human_approval_required": True,
-        },) if values else ()
+        proposals = ()
+        if fallbacks:
+            proposals += ({
+                "kind": "routing_or_workflow_change", "mode": "proposal_only",
+                "human_approval_required": True, "rationale": "observed_fallback",
+                "evidence_count": fallbacks,
+            },)
+        if totals["cleanup_blocked"]:
+            proposals += ({
+                "kind": "cleanup_change", "mode": "proposal_only",
+                "human_approval_required": True, "rationale": "observed_cleanup_block",
+                "evidence_count": totals["cleanup_blocked"],
+            },)
         return ReliabilityReport(
             len(values), durations, dict(attempts), dict(dimensions["provider"]),
             dict(dimensions["model"]), dict(dimensions["host"]),
