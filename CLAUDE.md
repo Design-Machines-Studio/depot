@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. The repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material, with one sanctioned executable exception: the workflow-kernel plugin ships a stdlib-only Python 3.12 reference runtime (no build step, no third-party dependencies) plus its test suite, validated by `tools/validate-workflow-kernel.py` as part of `./tools/validate-composition.sh --all`. Everything else has no build system, test suite, or application code.
+Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. The repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material, with one sanctioned executable exception: the workflow-kernel plugin ships a stdlib-only Python 3.12 reference runtime (no build step, no third-party dependencies). Its test suite is a repository development artifact at the top-level `tests/` directory -- it never ships into user plugin caches -- and is run by `tools/validate-workflow-kernel.py` as part of `./tools/validate-composition.sh --all`. Everything else has no build system, test suite, or application code.
 
 ## Repository Structure
 
