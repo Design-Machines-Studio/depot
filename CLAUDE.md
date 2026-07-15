@@ -127,6 +127,13 @@ Plugins compose through five patterns documented in `docs/orchestration-patterns
 - **Pipeline Orchestration** -- a conductor plugin composes all three patterns into an autonomous multi-phase workflow with review-fix loops (e.g. pipeline)
 - **CLI-Mediated Model Delegation** -- a Claude subagent invokes an external AI model via CLI/API, parses structured output, and formats findings for the calling workflow (e.g. deepseek, openrouter)
 
+Workflow Kernel is the neutral mechanics leaf beneath pipeline and dm-review.
+It owns deterministic run state, replay, receipts, verification evidence,
+shadow comparison, and exact owned-resource cleanup. The consuming Markdown
+workflows remain authoritative in v0.1.0; shadow is the default, and unavailable
+runtime falls back to Markdown without deleting event history. See
+`docs/workflow-kernel.md`.
+
 ## Composition Validation
 
 Validate all cross-plugin references, dependencies, eval accuracy, and search index freshness in one command:
@@ -135,7 +142,7 @@ Validate all cross-plugin references, dependencies, eval accuracy, and search in
 ./tools/validate-composition.sh --all
 ```
 
-Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution), `validate-composition.sh` (composition references), `validate-workflow-contracts.sh` (repository cleanup contract, Datastar-first contract, Baseplate evidence gates).
+Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution and the workflow-kernel leaf contract), `validate-workflow-kernel.py` (offline behavioral proof), `validate-composition.sh` (composition references), `validate-workflow-contracts.sh` (repository cleanup, Datastar-first, Baseplate evidence, and workflow-kernel integration anchors).
 
 Before tagging or pushing a release, run the preflight. It is read-only and prints a release receipt:
 
@@ -209,6 +216,12 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 
 ## The Plugins
 
+19 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 40 agent cards | 34 commands
+
+The generated search index counts every manifest-discovered surface, including
+the internal kernel skill: 40 skills and 40 agents. The 39 count above preserves
+the domain-facing skill inventory used by the release plan.
+
 | Plugin | Purpose |
 |---|---|
 | **ned** | Personal knowledge graph (ai-memory MCP) and session recorder |
@@ -226,6 +239,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 | **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, worktree execution with review-fix loops, and `/pipeline-fix` fix-pass flavor for addressing numbered review findings |
+| **workflow-kernel** | Neutral deterministic run state, event-ledger replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by pipeline and dm-review |
 | **deepseek** | DeepSeek V4 API subagent for delegating code review and bulk diff analysis at Sonnet-class quality and lower cost. Includes a generic agent runner that policy-routes dm-review's mechanical agents via `routing-policy.json` -- DeepSeek is primary for pattern-recognition and code-simplicity, and the fallback provider for doc-sync and test-coverage (OpenRouter-primary) -- when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota. |
 | **openrouter** | OpenRouter API provider plugin (leaf): policy-routed review, bulk/large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution via GLM-5.2 (z-ai/glm-5.2, 1M context) and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail (including the `openrouter-exec` agentic runner) and dm-review's policy-selected external routing. Privacy-pinned (OPENROUTER_ZDR). |
 | **airlift** | Model- and harness-agnostic session-handoff capability. Writes a deterministic `.airlift/` bundle (HANDOFF.md, state.json, git-diff patch, RESUME_PROMPT.md) so a usage cap or rate limit becomes a non-event -- resume in any harness (Claude Code, Codex, DeepSeek, Kiro, OpenCode). Tier-1 deterministic checkpoint (no model budget) plus optional ccusage early-warning monitor; wired into pipeline and dm-review phase boundaries. |

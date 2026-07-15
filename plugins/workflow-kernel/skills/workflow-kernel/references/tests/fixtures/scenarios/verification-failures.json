@@ -1,0 +1,413 @@
+{
+  "schema_version": 1,
+  "suite": "verification-failures",
+  "scenarios": [
+    {
+      "id": "no_declared_personas",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/no_declared_personas.json"
+        ],
+        "criterion": "persona_completeness_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "no_declared_personas"
+        ],
+        "retained_evidence": [
+          "evidence/no_declared_personas.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "persona_completeness_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "legacy_statusless_required",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/legacy_statusless_required.json"
+        ],
+        "criterion": "persona_completeness_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "legacy_statusless_required"
+        ],
+        "retained_evidence": [
+          "evidence/legacy_statusless_required.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "persona_completeness_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "missing_required_persona",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/missing_required_persona.json"
+        ],
+        "criterion": "persona_completeness_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "missing_required_persona"
+        ],
+        "retained_evidence": [
+          "evidence/missing_required_persona.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "persona_completeness_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "failed_persona_authentication",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/failed_persona_authentication.json"
+        ],
+        "criterion": "persona_completeness_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "failed_persona_authentication"
+        ],
+        "retained_evidence": [
+          "evidence/failed_persona_authentication.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "persona_completeness_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "secret_persona_fixture",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/secret_persona_fixture.json"
+        ],
+        "criterion": "persona_completeness_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "secret_persona_fixture"
+        ],
+        "retained_evidence": [
+          "evidence/secret_persona_fixture.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "persona_completeness_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "primary_browser_lock",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/primary_browser_lock.json",
+          "attempt:primary"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "primary_browser_lock"
+        ],
+        "retained_evidence": [
+          "evidence/primary_browser_lock.json",
+          "attempt:primary"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "failed_primary_close",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/failed_primary_close.json",
+          "attempt:primary",
+          "attempt:close"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "failed_primary_close"
+        ],
+        "retained_evidence": [
+          "evidence/failed_primary_close.json",
+          "attempt:primary",
+          "attempt:close"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "failed_primary_relaunch",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/failed_primary_relaunch.json",
+          "attempt:primary",
+          "attempt:close",
+          "attempt:relaunch"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "failed_primary_relaunch"
+        ],
+        "retained_evidence": [
+          "evidence/failed_primary_relaunch.json",
+          "attempt:primary",
+          "attempt:close",
+          "attempt:relaunch"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "failed_primary_retry",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/failed_primary_retry.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:primary-retry"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "failed_primary_retry"
+        ],
+        "retained_evidence": [
+          "evidence/failed_primary_retry.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:primary-retry"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "secondary_unavailable",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/secondary_unavailable.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:secondary"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "secondary_unavailable"
+        ],
+        "retained_evidence": [
+          "evidence/secondary_unavailable.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:secondary"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "secondary_failure",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/secondary_failure.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:secondary"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "secondary_failure"
+        ],
+        "retained_evidence": [
+          "evidence/secondary_failure.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:secondary"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "human_help_terminal",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/human_help_terminal.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:secondary"
+        ],
+        "criterion": "browser_recovery_scenarios_passed",
+        "reason_codes": [
+          "human_help_required"
+        ]
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "human_help_required"
+        ],
+        "retained_evidence": [
+          "evidence/human_help_terminal.json",
+          "attempt:primary",
+          "attempt:relaunch",
+          "attempt:secondary"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "curl_without_browser",
+      "category": "verification",
+      "driver": "verification_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/curl_without_browser.json",
+          "proof:curl",
+          "browser_evidence:absent"
+        ],
+        "criterion": "browser_recovery_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "curl_without_browser"
+        ],
+        "retained_evidence": [
+          "evidence/curl_without_browser.json",
+          "proof:curl",
+          "browser_evidence:absent"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "browser_recovery_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    }
+  ]
+}

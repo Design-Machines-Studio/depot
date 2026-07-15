@@ -718,6 +718,20 @@ class BuilderResumeTests(unittest.TestCase):
         self.assertEqual(decision.observations, (BuilderObservation.SESSION_RESUMED,))
         self.assertEqual(decision.outcome, BuilderOutcome.SESSION_RESUMED)
 
+    def test_successful_resume_without_evidence_requires_replacement(self):
+        adapter = FakeHostAdapter(
+            host_capabilities(), resume_results=(session_result(evidence=()),),
+        )
+        decision = BuilderSessionManager(adapter).resume_or_replace(
+            builder_node(), handle(),
+            ValidationFeedback("build", "deterministic_validation_failure"),
+            context=receipt_context(), now=NOW,
+        )
+        self.assertEqual(decision.status, "resume_unavailable")
+        self.assertEqual(decision.reason_code, "session_resume_unavailable")
+        self.assertIsNone(decision.result)
+        self.assertEqual(len(adapter.resume_calls), 1)
+
     def test_unavailable_resume_paths_emit_observations_and_label_replacement(self):
         cases = {
             "missing": None,

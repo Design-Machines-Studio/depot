@@ -1,0 +1,276 @@
+{
+  "schema_version": 1,
+  "suite": "resource-failures",
+  "scenarios": [
+    {
+      "id": "partial_resource_creation",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/partial_resource_creation.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed",
+        "resource_dispositions": [
+          "retained:unregistered_partial"
+        ],
+        "resource_kinds": [
+          "worktree",
+          "container",
+          "network",
+          "volume"
+        ]
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "partial_resource_creation"
+        ],
+        "retained_evidence": [
+          "evidence/partial_resource_creation.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "retained:unregistered_partial"
+        ],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "exit_before_registration",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "interrupted",
+        "retained_evidence": [
+          "evidence/exit_before_registration.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed",
+        "resource_dispositions": [
+          "retained:unproven"
+        ]
+      },
+      "expected": {
+        "final_state": "interrupted",
+        "reason_codes": [
+          "exit_before_registration"
+        ],
+        "retained_evidence": [
+          "evidence/exit_before_registration.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "retained:unproven"
+        ],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "foreign_labels",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/foreign_labels.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed",
+        "resource_dispositions": [
+          "foreign:untouched"
+        ]
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "foreign_labels"
+        ],
+        "retained_evidence": [
+          "evidence/foreign_labels.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "foreign:untouched"
+        ],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "running_resource",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/running_resource.json"
+        ],
+        "criterion": "docker_cleanup_blocking",
+        "resource_dispositions": [
+          "retained:in_use"
+        ]
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "running_resource"
+        ],
+        "retained_evidence": [
+          "evidence/running_resource.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "retained:in_use"
+        ],
+        "promotion_impact": {
+          "criterion": "docker_cleanup_blocking",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "volume_inspect_failure",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/volume_inspect_failure.json"
+        ],
+        "criterion": "docker_cleanup_failure",
+        "resource_dispositions": [
+          "retained:inspect_failed"
+        ]
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "volume_inspect_failure"
+        ],
+        "retained_evidence": [
+          "evidence/volume_inspect_failure.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "retained:inspect_failed"
+        ],
+        "promotion_impact": {
+          "criterion": "docker_cleanup_failure",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "chunk_removal_failure",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/chunk_removal_failure.json"
+        ],
+        "criterion": "docker_cleanup_failure",
+        "resource_dispositions": [
+          "retained:remove_failed"
+        ]
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "chunk_removal_failure"
+        ],
+        "retained_evidence": [
+          "evidence/chunk_removal_failure.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "retained:remove_failed"
+        ],
+        "promotion_impact": {
+          "criterion": "docker_cleanup_failure",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "terminal_reconciliation_failure",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/terminal_reconciliation_failure.json"
+        ],
+        "criterion": "docker_cleanup_failure",
+        "resource_dispositions": [
+          "retained:reconcile_failed"
+        ]
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "terminal_reconciliation_failure"
+        ],
+        "retained_evidence": [
+          "evidence/terminal_reconciliation_failure.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "retained:reconcile_failed"
+        ],
+        "promotion_impact": {
+          "criterion": "docker_cleanup_failure",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "second_cleanup_idempotent",
+      "category": "resource",
+      "driver": "resource_failure",
+      "input": {
+        "final_state": "succeeded",
+        "retained_evidence": [
+          "evidence/second_cleanup_idempotent.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed",
+        "resource_dispositions": [
+          "removed:already_absent"
+        ]
+      },
+      "expected": {
+        "final_state": "succeeded",
+        "reason_codes": [
+          "second_cleanup_idempotent"
+        ],
+        "retained_evidence": [
+          "evidence/second_cleanup_idempotent.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [
+          "removed:already_absent"
+        ],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    }
+  ]
+}
