@@ -4,6 +4,7 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
+from tests import KERNEL_REFERENCES
 from tests import schema_matches
 
 from workflow_kernel.adapters.browser import (
@@ -362,7 +363,7 @@ class BrowserRecoveryTests(unittest.TestCase):
         self.assertEqual(receipt.lifecycle[-1].action, "browser_process_launch")
         self.assertEqual(receipt.lifecycle[-1].result, "unavailable")
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         self.assertTrue(schema_matches(receipt.to_dict(), schema))
         truncated = receipt.to_dict()
@@ -371,7 +372,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_multi_engine_human_help_without_readiness(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         payload = self.blocked_with_unavailable_readiness().to_dict()
         payload["lifecycle"] = [
@@ -382,7 +383,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_same_engine_alternate_evidence(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         payload = self.blocked_with_unavailable_readiness().to_dict()
         payload["lifecycle"][-1]["actual_engine"] = payload["requested_engine"]
@@ -390,7 +391,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_accepts_runtime_alternate_recovery_for_each_primary(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
@@ -402,7 +403,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_recovered_receipt_without_readiness(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
@@ -415,7 +416,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_recovered_same_engine_alternate_evidence(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
@@ -425,7 +426,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_recovered_same_engine_passing_attempt(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
@@ -435,7 +436,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_recovered_same_engine_receipt(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             with self.subTest(primary=primary, alternate=alternate):
@@ -445,7 +446,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_mismatched_recovered_engine_pair(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             mismatched = next(
@@ -469,7 +470,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_accepts_every_runtime_recovered_alternate_shape(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             for primary_path in PRIMARY_RECOVERY_PATHS:
@@ -490,7 +491,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_accepts_every_runtime_blocked_multi_engine_shape(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             for primary_path in PRIMARY_RECOVERY_PATHS:
@@ -512,7 +513,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_recovered_alternate_lifecycle_grammar_forgeries(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             for primary_path in PRIMARY_RECOVERY_PATHS:
@@ -549,7 +550,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_blocked_multi_engine_pair_and_grammar_forgeries(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             third = next(
@@ -598,7 +599,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_accepts_every_runtime_single_engine_human_help_shape(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary in ("chromium", "firefox", "webkit"):
             for primary_path in PRIMARY_RECOVERY_PATHS:
@@ -609,7 +610,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_single_engine_lifecycle_grammar_forgeries(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary in ("chromium", "firefox", "webkit"):
             for primary_path in PRIMARY_RECOVERY_PATHS:
@@ -633,7 +634,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_accepts_every_runtime_application_failure_terminal(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary in ("chromium", "firefox", "webkit"):
             with self.subTest(branch="initial-single", primary=primary):
@@ -679,7 +680,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_schema_rejects_application_failure_terminal_forgeries(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         for primary, alternate in ALTERNATE_ENGINE_PAIRS:
             third = next(
@@ -1150,7 +1151,7 @@ class BrowserRecoveryTests(unittest.TestCase):
 
     def test_single_engine_clean_and_primary_recovered_receipts_match_schema(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+            (KERNEL_REFERENCES / "browser-recovery-schema.json").read_text()
         )
         request = BrowserRequest(
             "case-1", TARGET_URL, VIEWPORT, "chromium", None,
@@ -1461,7 +1462,7 @@ class BrowserRecoveryTests(unittest.TestCase):
             [attempt(1, "chromium", "passed", session="primary-1")],
         )
         receipt = BrowserRecovery().run(self.request, adapter).to_dict()
-        schema_path = Path(__file__).parents[1] / "browser-recovery-schema.json"
+        schema_path = KERNEL_REFERENCES / "browser-recovery-schema.json"
         schema = json.loads(schema_path.read_text())
         self.assertTrue(schema_matches(receipt, schema))
         invalid = dict(receipt, attempts=[{}])

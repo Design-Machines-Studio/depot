@@ -317,5 +317,9 @@ newline terminated so Claude, Codex, and generic hosts consume identical bytes.
 
 ## Reference Runtime
 
-Import the package from `references/workflow_kernel/`. Run its tests from
-`references/tests/` before integrating an orchestrator.
+Import the package from `references/workflow_kernel/`. The test suite is a
+repository development artifact at the depot's top-level `tests/` directory,
+run by `tools/validate-workflow-kernel.py` as part of
+`./tools/validate-composition.sh --all`; it does not ship into user plugin
+caches, and installed hosts do not self-test. Validate in the depot
+repository before integrating an orchestrator.

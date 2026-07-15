@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests import KERNEL_REFERENCES
 from tests import (
     detail_digest, ignored_json_boundary_corpus, json_document_boundary_corpus,
     schema_matches,
@@ -15,7 +16,7 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 class WorkflowClassTests(unittest.TestCase):
     def test_workflow_class_json_loader_has_explicit_parser_boundaries(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         canonical = source.read_text(encoding="utf-8")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -45,7 +46,7 @@ class WorkflowClassTests(unittest.TestCase):
     def test_default_sensitive_globs_are_kernel_owned_and_synced_with_routing_policy(self):
         from workflow_kernel.workflows import DEFAULT_SENSITIVE_POLICY_PATH
 
-        references = Path(__file__).parents[1]
+        references = KERNEL_REFERENCES
         self.assertEqual(
             DEFAULT_SENSITIVE_POLICY_PATH,
             references / "sensitive-path-policy.json",
@@ -154,7 +155,7 @@ class WorkflowClassTests(unittest.TestCase):
         self.assertFalse(schema_matches(True, {"enum": [1]}))
 
     def test_authoritative_json_expands_to_dependency_valid_graphs(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         definitions = json.loads(source.read_text(encoding="utf-8"))["classes"]
         templates = WorkflowTemplates()
         self.assertEqual({kind.value for kind in WorkflowClass}, set(definitions))
@@ -313,7 +314,7 @@ class WorkflowClassTests(unittest.TestCase):
                     )
 
     def test_trusted_policy_owns_the_only_versioned_safety_anchor(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         document = json.loads((root / "workflow-classes.json").read_text())
         policy = json.loads((root / "workflow-policy.json").read_text())
         class_schema = json.loads((root / "workflow-classes-schema.json").read_text())
@@ -354,7 +355,7 @@ class WorkflowClassTests(unittest.TestCase):
         self.assertTrue(schema_matches(policy, policy_schema))
 
     def test_schema_and_runtime_reject_empty_gated_evidence_and_impossible_routes(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         document = json.loads((root / "workflow-classes.json").read_text())
         schema = json.loads((root / "workflow-classes-schema.json").read_text())
         mutations = []
@@ -383,7 +384,7 @@ class WorkflowClassTests(unittest.TestCase):
         self.assertFalse(hasattr(host_module, "_json_shape"))
 
     def test_malformed_scalar_shapes_fail_with_stable_errors(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         for field, value, reason in (
             ("gate_kind", [], "unknown_gate_kind"),
@@ -402,7 +403,7 @@ class WorkflowClassTests(unittest.TestCase):
                                  detail_digest(reason))
 
     def test_executor_capability_relationship_mutations_match_schema_contract(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
         null_with_capability = json.loads(json.dumps(base))
@@ -451,7 +452,7 @@ class WorkflowClassTests(unittest.TestCase):
             self.assertTrue(gate_kinds <= actual)
 
     def test_invalid_version_missing_id_and_cycle_fail_with_stable_reason_codes(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
         invalid_version = json.loads(json.dumps(base))
@@ -472,7 +473,7 @@ class WorkflowClassTests(unittest.TestCase):
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest(reason))
 
     def test_template_loader_rejects_only_generic_mandatory_constraints(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
 
@@ -506,7 +507,7 @@ class WorkflowClassTests(unittest.TestCase):
                 self.assertEqual(raised.exception.details["reason_code"], detail_digest(reason))
 
     def test_declared_semantic_requirements_reject_class_and_cleanup_mutations(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
         for class_name, node_id, replacement in (
@@ -538,7 +539,7 @@ class WorkflowClassTests(unittest.TestCase):
                 )
 
     def test_trusted_safety_anchor_rejects_removed_rewired_or_weakened_stages(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
 
@@ -594,7 +595,7 @@ class WorkflowClassTests(unittest.TestCase):
                 )
 
     def test_trusted_safety_anchor_rejects_unanchored_executable_work(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         mutations = []
         cases = (
@@ -649,7 +650,7 @@ class WorkflowClassTests(unittest.TestCase):
                 )
 
     def test_investigation_base_rejects_direct_and_rewired_execution(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
 
         inserted = json.loads(json.dumps(base))
@@ -694,7 +695,7 @@ class WorkflowClassTests(unittest.TestCase):
                 )
 
     def test_boolean_schema_versions_fail_schema_and_runtime(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         cases = (
             (
                 "workflow-classes.json", "workflow-classes-schema.json",
@@ -761,7 +762,7 @@ class WorkflowClassTests(unittest.TestCase):
         )
 
     def test_canonical_safety_anchor_rejects_removed_cleanup_and_promotion(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
 
         no_cleanup = json.loads(json.dumps(base))
@@ -781,7 +782,7 @@ class WorkflowClassTests(unittest.TestCase):
                     WorkflowTemplates(path)
 
     def test_anthropic_native_constraint_requires_claude_native_dispatch(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         for executor, dispatch in (("codex", "native_dispatch"),
                                    ("claude", None)):
@@ -802,7 +803,7 @@ class WorkflowClassTests(unittest.TestCase):
                 )
 
         schema = json.loads(
-            (Path(__file__).parents[1] / "workflow-classes-schema.json").read_text()
+            (KERNEL_REFERENCES / "workflow-classes-schema.json").read_text()
         )
         clause = next(
             item for item in schema["$defs"]["executor_constraint"]["allOf"]
@@ -816,7 +817,7 @@ class WorkflowClassTests(unittest.TestCase):
         )
 
     def test_template_loader_rejects_forward_order_and_multiple_terminal_sinks(self):
-        source = Path(__file__).parents[1] / "workflow-classes.json"
+        source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
         forward = json.loads(json.dumps(base))
         nodes = forward["classes"]["chore"]["nodes"]

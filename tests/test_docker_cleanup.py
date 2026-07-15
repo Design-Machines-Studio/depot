@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
+from tests import KERNEL_REFERENCES
 from tests import schema_matches
 from workflow_kernel.adapters.docker import (
     DockerAdapter,
@@ -506,7 +507,7 @@ class DockerLifecycleTests(unittest.TestCase):
         object.__setattr__(mutated, "actions", (object(),))
         with self.assertRaises(InvalidSchemaError):
             self.adapter.record_results(mutated, (), exact_absent())
-        schema = json.loads((Path(__file__).parents[1] / "cleanup-plan-schema.json").read_text())
+        schema = json.loads((KERNEL_REFERENCES / "cleanup-plan-schema.json").read_text())
         self.assertTrue(schema_matches(plan.to_dict(), schema))
 
     def test_revalidation_binds_argv_and_accepts_expected_stop_transition(self):

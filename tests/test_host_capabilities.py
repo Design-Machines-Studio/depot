@@ -11,6 +11,7 @@ from unittest.mock import patch
 from pathlib import Path
 from typing import get_type_hints, Optional, Union
 
+from tests import KERNEL_REFERENCES
 from tests import (
     canonical_harness_profile, detail_digest, ignored_json_boundary_corpus,
     snapshot_during_validated_mutation,
@@ -968,7 +969,7 @@ class HostCapabilityTests(unittest.TestCase):
                 )
 
     def test_required_modules_import_in_clean_processes_without_cycles(self):
-        root = str(Path(__file__).parents[1])
+        root = str(KERNEL_REFERENCES)
         environment = dict(os.environ, PYTHONPATH=root)
         statements = (
             "import workflow_kernel.policies",

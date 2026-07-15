@@ -10,6 +10,8 @@ from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from tests import KERNEL_REFERENCES
+
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 SCOPE_ID = "a" * 64
@@ -40,7 +42,7 @@ def shadow_artifact(role, run_spec, events=None):
 
 class RuntimeCliTests(unittest.TestCase):
     def run_cli(self, *args, env_extra=None):
-        env = dict(os.environ, PYTHONPATH=str(Path(__file__).parents[1]))
+        env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))
         if env_extra:
             env.update(env_extra)
         return subprocess.run([sys.executable, "-m", "workflow_kernel", *map(str, args)], text=True, capture_output=True, env=env, check=False)

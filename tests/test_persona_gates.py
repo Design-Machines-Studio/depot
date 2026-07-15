@@ -10,10 +10,11 @@ from workflow_kernel.verification import (
 )
 from workflow_kernel.adapters.personas import ProjectPersonaAdapter
 from workflow_kernel.schema import ErrorDetailKey, InvalidSchemaError
+from tests import KERNEL_REFERENCES
 from tests import detail_digest
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = KERNEL_REFERENCES
 FIXTURE = Path(__file__).parent / "fixtures" / "ux" / "assembly"
 SECRET = "sk-fixture-persona-password-must-not-survive"
 TARGET_ORIGIN = "https://example.invalid"

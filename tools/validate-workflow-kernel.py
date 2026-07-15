@@ -22,7 +22,9 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCES = ROOT / "plugins" / "workflow-kernel" / "skills" / "workflow-kernel" / "references"
-TESTS = REFERENCES / "tests"
+# The test suite is a repository development artifact; only the runtime under
+# references/ ships into user plugin caches. This validator is the one runner.
+TESTS = ROOT / "tests"
 SCENARIOS = TESTS / "fixtures" / "scenarios"
 RECEIPTS = TESTS / "fixtures" / "receipts"
 PERSONAS = TESTS / "fixtures" / "ux" / "assembly"
@@ -74,6 +76,7 @@ BEHAVIORAL_CLI_CASES = {
 SUCCESSFUL_CLI_COMMANDS = frozenset(BEHAVIORAL_CLI_CASES)
 
 sys.path.insert(0, str(REFERENCES))
+sys.path.insert(0, str(ROOT))
 
 
 class ValidationFailure(RuntimeError):
@@ -154,7 +157,7 @@ def check_documents(context):
 def check_unittests(context):
     command = [
         sys.executable, "-m", "unittest", "discover", "-s", str(TESTS),
-        "-t", str(REFERENCES), "-p", "test_*.py",
+        "-t", str(ROOT), "-p", "test_*.py",
     ]
     completed = run(command)
     require(

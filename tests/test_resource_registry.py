@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
+from tests import KERNEL_REFERENCES
 from tests import detail_digest, schema_matches
 from workflow_kernel.resources import (
     CleanupDisposition,
@@ -212,7 +213,7 @@ class ResourceRegistryTests(unittest.TestCase):
             ),),
         )
         payload = receipt.to_dict()
-        schema_path = Path(__file__).parents[1] / "cleanup-receipt-schema.json"
+        schema_path = KERNEL_REFERENCES / "cleanup-receipt-schema.json"
         schema = json.loads(schema_path.read_text())
         self.assertTrue(schema_matches(payload, schema))
         self.assertEqual(["container:shared"], payload["before"])
@@ -245,7 +246,7 @@ class ResourceRegistryTests(unittest.TestCase):
             ),),
         )
         payload = receipt.to_dict()
-        schema = json.loads((Path(__file__).parents[1] / "cleanup-receipt-schema.json").read_text())
+        schema = json.loads((KERNEL_REFERENCES / "cleanup-receipt-schema.json").read_text())
         self.assertTrue(schema_matches(payload, schema))
         encoded = json.dumps(payload, sort_keys=True)
         for secret in ("session-secret", "password@host", "top-secret", "private", "u:p@host", "env-secret"):
@@ -279,8 +280,8 @@ class ResourceRegistryTests(unittest.TestCase):
             CleanupPlan(CleanupScope("run-1"), ("container:shared", "container:shared"), (), ())
 
     def test_registry_and_receipt_schemas_match_runtime_action_and_identity_limits(self):
-        registry_schema = json.loads((Path(__file__).parents[1] / "resource-registry-schema.json").read_text())
-        receipt_schema = json.loads((Path(__file__).parents[1] / "cleanup-receipt-schema.json").read_text())
+        registry_schema = json.loads((KERNEL_REFERENCES / "resource-registry-schema.json").read_text())
+        receipt_schema = json.loads((KERNEL_REFERENCES / "cleanup-receipt-schema.json").read_text())
         resource = registry_schema["$defs"]["resource"]["properties"]
         persisted_disposition = registry_schema["$defs"]["disposition"]["properties"]
         receipt_disposition = receipt_schema["properties"]["dispositions"]["items"]["properties"]
@@ -291,7 +292,7 @@ class ResourceRegistryTests(unittest.TestCase):
 
     def test_registry_schema_rejects_fields_from_other_event_variants(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+            (KERNEL_REFERENCES / "resource-registry-schema.json").read_text()
         )
         payload = {
             "event": "registered",
@@ -308,7 +309,7 @@ class ResourceRegistryTests(unittest.TestCase):
 
     def test_registry_schema_reserves_terminal_dispositions_for_transactions(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+            (KERNEL_REFERENCES / "resource-registry-schema.json").read_text()
         )
         disposition_payload = {
             "resource_id": "shared", "kind": "container",
@@ -329,7 +330,7 @@ class ResourceRegistryTests(unittest.TestCase):
 
     def test_registry_schema_reserves_authority_consumption_for_transactions(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+            (KERNEL_REFERENCES / "resource-registry-schema.json").read_text()
         )
         consumed = {
             "event": "authority_consumed",
@@ -344,7 +345,7 @@ class ResourceRegistryTests(unittest.TestCase):
 
     def test_registry_schema_records_opaque_authority_issuance(self):
         schema = json.loads(
-            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+            (KERNEL_REFERENCES / "resource-registry-schema.json").read_text()
         )
         issued = {
             "event": "authority_issued",
@@ -384,7 +385,7 @@ class ResourceRegistryTests(unittest.TestCase):
             ),),
         )
         payload = receipt.to_dict()
-        schema = json.loads((Path(__file__).parents[1] / "cleanup-receipt-schema.json").read_text())
+        schema = json.loads((KERNEL_REFERENCES / "cleanup-receipt-schema.json").read_text())
         self.assertTrue(schema_matches(payload, schema))
         self.assertIn("value-sha256:", json.dumps(payload))
 
@@ -544,7 +545,7 @@ class ResourceRegistryTests(unittest.TestCase):
         )
         payload = plan.to_dict()
         self.assertEqual("blocked", payload["dispositions"][0]["disposition"])
-        schema = json.loads((Path(__file__).parents[1] / "cleanup-plan-schema.json").read_text())
+        schema = json.loads((KERNEL_REFERENCES / "cleanup-plan-schema.json").read_text())
         self.assertTrue(schema_matches(payload, schema))
 
 

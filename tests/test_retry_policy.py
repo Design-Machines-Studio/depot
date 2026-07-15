@@ -11,6 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 from unittest.mock import patch
 
+from tests import KERNEL_REFERENCES
 from tests import detail_digest, json_document_boundary_corpus, schema_matches
 import workflow_kernel.model as kernel_model
 from workflow_kernel.model import (
@@ -25,7 +26,7 @@ from workflow_kernel.workflows import WorkflowTemplates
 
 class RetryPolicyTests(unittest.TestCase):
     def test_policy_viewport_validation_is_local_and_layer_independent(self):
-        package = Path(__file__).parents[1] / "workflow_kernel"
+        package = KERNEL_REFERENCES / "workflow_kernel"
         policies = (package / "policies.py").read_text()
         self.assertIn("def _validate_policy_viewport", policies)
         self.assertNotIn("from .verification import validate_viewport", policies)
@@ -185,7 +186,7 @@ class RetryPolicyTests(unittest.TestCase):
         ))
 
     def test_file_and_injected_anchor_share_the_actual_item_budget(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         payload = json.loads(source.read_text(encoding="utf-8"))
         payload["workflow_safety_anchor"]["common"]["stages"][0][
             "required_evidence"
@@ -306,7 +307,7 @@ class RetryPolicyTests(unittest.TestCase):
         )
 
         payload = json.loads(
-            (Path(__file__).parents[1] / "workflow-policy.json").read_text(
+            (KERNEL_REFERENCES / "workflow-policy.json").read_text(
                 encoding="utf-8",
             )
         )
@@ -332,7 +333,7 @@ class RetryPolicyTests(unittest.TestCase):
             )
 
             wide_payload = json.loads(
-                (Path(__file__).parents[1] / "workflow-policy.json").read_text(
+                (KERNEL_REFERENCES / "workflow-policy.json").read_text(
                     encoding="utf-8",
                 )
             )
@@ -349,7 +350,7 @@ class RetryPolicyTests(unittest.TestCase):
             )
 
     def test_policy_json_loader_has_explicit_parser_boundaries(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         canonical = source.read_text(encoding="utf-8")
         self.assertFalse(hasattr(policy_module, "_load_json_document"))
         self.assertIsNotNone(importlib.util.find_spec("workflow_kernel.limits"))
@@ -434,7 +435,7 @@ class RetryPolicyTests(unittest.TestCase):
     def test_large_policy_and_class_integers_ignore_interpreter_digit_limits(self):
         if not hasattr(sys, "set_int_max_str_digits"):
             self.skipTest("interpreter integer digit controls unavailable")
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         policy = (root / "workflow-policy.json").read_text(encoding="utf-8")
         classes = (root / "workflow-classes.json").read_text(encoding="utf-8")
         cases = (
@@ -653,7 +654,7 @@ class RetryPolicyTests(unittest.TestCase):
             )
 
     def test_file_and_injected_policy_share_canonical_normalization(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         source = root / "workflow-policy.json"
         canonical_payload = json.loads(source.read_text(encoding="utf-8"))
         document = load_policy(source)
@@ -739,7 +740,7 @@ class RetryPolicyTests(unittest.TestCase):
             )
 
     def test_malformed_downgrade_tuples_reach_the_canonical_normalizer(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         canonical_payload = json.loads(source.read_text(encoding="utf-8"))
         document = load_policy(source)
         cases = (
@@ -776,7 +777,7 @@ class RetryPolicyTests(unittest.TestCase):
             )
 
     def test_downgrade_shape_errors_precede_unknown_modes_in_every_order(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         canonical_payload = json.loads(source.read_text(encoding="utf-8"))
         malformed = ["remote_sandbox"]
         unknown = {"from": "remote_sandbox", "to": "unknown"}
@@ -825,7 +826,7 @@ else:
             env = dict(os.environ)
             env.update({
                 "PYTHONHASHSEED": seed,
-                "PYTHONPATH": str(Path(__file__).parents[1]),
+                "PYTHONPATH": str(KERNEL_REFERENCES),
             })
             result = subprocess.run(
                 [sys.executable, "-c", code], check=True, capture_output=True,
@@ -841,7 +842,7 @@ else:
         )
 
     def test_downgrade_payload_and_document_order_are_canonical(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         canonical_payload = json.loads(source.read_text(encoding="utf-8"))
         valid = [
             {"from": "remote_sandbox", "to": "container"},
@@ -899,7 +900,7 @@ else:
             env = dict(os.environ)
             env.update({
                 "PYTHONHASHSEED": seed,
-                "PYTHONPATH": str(Path(__file__).parents[1]),
+                "PYTHONPATH": str(KERNEL_REFERENCES),
             })
             result = subprocess.run(
                 [sys.executable, "-c", code], check=True, capture_output=True,
@@ -918,7 +919,7 @@ else:
         })
 
     def test_policy_origin_seal_never_executes_malformed_nested_containers(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         canonical_payload = json.loads(source.read_text(encoding="utf-8"))
         document = load_policy(source)
         calls = []
@@ -1073,7 +1074,7 @@ else:
         self.assertEqual(ledger.count(FailureReason.PROVIDER_UNAVAILABLE), 0)
 
     def test_policy_decisions_do_not_mutate_proposal_only_economics_or_policy_file(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         before = source.read_bytes()
         policy = RetryPolicy(source)
         self.assertEqual(policy.economics_mode, "proposal_only")
@@ -1085,7 +1086,7 @@ else:
         self.assertEqual(source.read_bytes(), before)
 
     def test_invalid_policy_version_fails_closed(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         payload = json.loads(source.read_text(encoding="utf-8"))
         payload["schema_version"] = 99
         with tempfile.TemporaryDirectory() as directory:
@@ -1123,7 +1124,7 @@ else:
         )
 
     def test_runtime_rejects_duplicate_capability_names_like_json_schema(self):
-        source = Path(__file__).parents[1] / "workflow-policy.json"
+        source = KERNEL_REFERENCES / "workflow-policy.json"
         payload = json.loads(source.read_text(encoding="utf-8"))
         payload["capability_names"].append(payload["capability_names"][0])
         with tempfile.TemporaryDirectory() as directory:
@@ -1137,7 +1138,7 @@ else:
         )
 
     def test_policy_schema_and_runtime_require_exactly_thirteen_capabilities(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         schema = json.loads((root / "workflow-policy-schema.json").read_text())
         capability_schema = schema["properties"]["capability_names"]
         self.assertEqual(capability_schema["minItems"], 13)
@@ -1161,7 +1162,7 @@ else:
         )
 
     def test_canonical_policy_schema_coherence_lives_in_tests_not_runtime(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         self.assertFalse(hasattr(policy_module, "_matches_schema"))
         self.assertFalse(hasattr(policy_module, "validate_canonical_policy_schema"))
         payload = json.loads((root / "workflow-policy.json").read_text())
@@ -1180,7 +1181,7 @@ else:
         self.assertFalse(schema_matches(invalid, schema))
 
     def test_policy_schema_and_runtime_validate_the_safety_anchor_shape(self):
-        root = Path(__file__).parents[1]
+        root = KERNEL_REFERENCES
         payload = json.loads((root / "workflow-policy.json").read_text())
         schema = json.loads((root / "workflow-policy-schema.json").read_text())
         self.assertTrue(schema_matches(payload, schema))

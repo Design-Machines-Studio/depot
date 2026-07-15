@@ -1,4 +1,11 @@
-"""Workflow kernel tests."""
+"""Workflow kernel tests (repo-level; runtime stays under references/)."""
+from pathlib import Path as _Path
+
+import workflow_kernel as _workflow_kernel
+
+# The references directory that ships in the plugin (the runtime home).
+# Tests are repository development artifacts and are not shipped there.
+KERNEL_REFERENCES = _Path(_workflow_kernel.__file__).resolve().parents[1]
 import hashlib
 import json
 import os

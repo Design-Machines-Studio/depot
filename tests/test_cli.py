@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tests import KERNEL_REFERENCES
 from tests import detail_digest, detail_key_digest
 from workflow_kernel import cli
 from workflow_kernel.cli import command_append, command_init, command_replay, command_validate
@@ -17,7 +18,7 @@ from workflow_kernel.schema import ErrorMessage, InvalidSchemaError, UnsafePaylo
 class CliTests(unittest.TestCase):
     def run_cli(self, *args):
         env = dict(os.environ)
-        env["PYTHONPATH"] = str(Path(__file__).parents[1])
+        env["PYTHONPATH"] = str(KERNEL_REFERENCES)
         return subprocess.run([sys.executable, "-m", "workflow_kernel", *args], text=True, capture_output=True, env=env, check=False)
 
     def canonical_run(self, directory, run_id="run-1"):
@@ -551,8 +552,8 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("foreign-major-runtime", result.stdout)
 
     def test_documented_contract_names_cooperating_writer_and_lookahead_boundaries(self):
-        skill = (Path(__file__).parents[2] / "SKILL.md").read_text()
-        plan = (Path(__file__).parents[6] / "plans/ai-developer-workflow-kernel/plan.html").read_text()
+        skill = (KERNEL_REFERENCES.parent / "SKILL.md").read_text()
+        plan = (Path(__file__).resolve().parents[1] / "plans/ai-developer-workflow-kernel/plan.html").read_text()
         for document in (skill, plan):
             self.assertIn("cooperating writers", document)
             self.assertIn("non-cooperating filesystem mutation", document)

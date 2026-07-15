@@ -6,13 +6,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests import KERNEL_REFERENCES
+
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 
 
 class PredictionAuthorityTests(unittest.TestCase):
     def run_cli(self, root, *args):
-        env = dict(os.environ, PYTHONPATH=str(Path(__file__).parents[1]))
+        env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))
         return subprocess.run(
             [sys.executable, "-m", "workflow_kernel", *map(str, args)],
             cwd=root, env=env, text=True, capture_output=True, check=False,

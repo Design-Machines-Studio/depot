@@ -7,6 +7,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
+from tests import KERNEL_REFERENCES
 from tests import detail_digest, schema_matches
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import load_policy
@@ -18,7 +19,7 @@ from workflow_kernel.adapters.personas import _DeclarationTree, ProjectPersonaAd
 from workflow_kernel._files import PinnedDirectory
 
 
-ROOT = Path(__file__).parents[1]
+ROOT = KERNEL_REFERENCES
 FIXTURES = Path(__file__).parent / "fixtures" / "ux"
 
 
