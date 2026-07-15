@@ -589,7 +589,42 @@ def _assignments(frontmatter):
     return normalized
 
 
-def _task_at(path, declarations):
+_AREA_SLUG = re.compile(r"[a-z][a-z0-9_-]*\Z")
+
+
+def _task_governance_area(path, tasks_root, values):
+    """Fail-closed governance area resolution (finding 090).
+
+    The declared layout encodes the area as the first directory segment under
+    tasks/ (tasks/governance/..., tasks/baseplate/auth/...), so the gate keys
+    on the path, not only the optional frontmatter value -- omitting `area:`
+    inside tasks/governance/ no longer bypasses the requires_role gate. Any
+    explicit `area:` must be a lowercase slug (a mis-cased `Governance` is an
+    invalid declaration, never a silent non-match), and governance membership
+    must agree between the path and the frontmatter in both directions.
+    Non-governance explicit areas may refine a broader directory (live
+    Assembly layouts declare e.g. `area: members` under tasks/baseplate/);
+    the fail-closed consistency rule is scoped to the security-relevant
+    governance area that G1 Permission Clarity protects.
+    """
+    try:
+        relative = path.parent.relative_to(tasks_root)
+    except ValueError:
+        _fail()
+    derived = relative.parts[0] if relative.parts else None
+    if derived is not None and _AREA_SLUG.fullmatch(derived) is None:
+        _fail()
+    explicit = values.get("area")
+    if explicit is not None and (
+        type(explicit) is not str or _AREA_SLUG.fullmatch(explicit) is None
+    ):
+        _fail()
+    if explicit is not None and (derived == "governance") != (explicit == "governance"):
+        _fail()
+    return derived == "governance" or explicit == "governance"
+
+
+def _task_at(path, declarations, tasks_root):
     frontmatter = _frontmatter(path, declarations, optional=True)
     if frontmatter is None:
         return None
@@ -602,7 +637,7 @@ def _task_at(path, declarations):
     status = values.get("implementation_status")
     if status is not None and status not in _KNOWN_STATUSES:
         _fail()
-    if values.get("area") == "governance" and "requires_role" not in values:
+    if _task_governance_area(path, tasks_root, values) and "requires_role" not in values:
         # Fail closed: a governance task without an explicit requires_role
         # would silently default to ordinary-member scope, under-declaring a
         # director/board-only action and defeating G1 Permission Clarity.
@@ -935,7 +970,7 @@ class ProjectPersonaAdapter:
         declarations.revalidate()
         tasks = [
             task for path in task_paths
-            if (task := _task_at(path, declarations)) is not None
+            if (task := _task_at(path, declarations, ux / "tasks")) is not None
         ]
         if not tasks:
             _fail()

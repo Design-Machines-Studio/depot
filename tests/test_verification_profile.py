@@ -264,7 +264,11 @@ class VerificationProfileTests(unittest.TestCase):
             # Exercise the legacy requires_auth-based role default: drop the
             # explicit requires_role and leave the governance area (which
             # requires an explicit role) for the onboarding area instead.
-            task.write_text("".join(
+            # The area is path-derived (finding 090), so the relocated task
+            # moves to tasks/onboarding/ to match its declared area.
+            relocated = task.parents[1] / "onboarding" / task.name
+            relocated.parent.mkdir()
+            relocated.write_text("".join(
                 line for line in task.read_text().replace(
                     "requires_auth: true", "requires_auth: false",
                 ).replace(
@@ -274,7 +278,8 @@ class VerificationProfileTests(unittest.TestCase):
                 ).splitlines(keepends=True)
                 if not line.startswith("requires_role:")
             ))
-            (task.parent / "supporting-checklist.md").write_text(
+            task.unlink()
+            (relocated.parent / "supporting-checklist.md").write_text(
                 "# Supporting checklist\n\nThis is not a task declaration.\n"
             )
             profile = ProjectPersonaAdapter(

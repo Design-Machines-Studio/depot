@@ -314,6 +314,61 @@ class PersonaGateTests(unittest.TestCase):
                 detail_digest("invalid_verification_declaration"),
             )
 
+    def test_governance_gate_cannot_be_bypassed_by_omitted_miscased_or_mismatched_area(self):
+        # Finding 090: the fail-closed governance gate keys on the task
+        # path's tasks/<area>/ directory, not only the optional frontmatter
+        # value. Omitting `area:`, mis-casing it, contradicting the
+        # governance directory, or declaring governance outside it all fail
+        # closed instead of silently defaulting to member/public scope.
+        import shutil
+
+        def drop_role(text):
+            return "".join(
+                line for line in text.splitlines(keepends=True)
+                if not line.startswith("requires_role:")
+            )
+
+        mutations = (
+            ("omitted-area", lambda text: drop_role("".join(
+                line for line in text.splitlines(keepends=True)
+                if not line.startswith("area:")
+            ))),
+            ("mis-cased-area", lambda text: drop_role(
+                text.replace("area: governance", "area: Governance")
+            )),
+            ("mismatched-area", lambda text: text.replace(
+                "area: governance", "area: onboarding",
+            )),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "ux"
+                shutil.copytree(FIXTURE, target, ignore=shutil.ignore_patterns("__pycache__"))
+                task = target / "tasks" / "governance" / "sample-task.md"
+                task.write_text(mutate(task.read_text()))
+                adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
+                with self.assertRaises(InvalidSchemaError) as raised:
+                    adapter.discover(target, declaration_root=".")
+                self.assertEqual(
+                    raised.exception.details[ErrorDetailKey.REASON_CODE.value],
+                    detail_digest("invalid_verification_declaration"),
+                )
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "ux"
+            shutil.copytree(FIXTURE, target, ignore=shutil.ignore_patterns("__pycache__"))
+            task = target / "tasks" / "governance" / "sample-task.md"
+            misfiled = target / "tasks" / "onboarding" / task.name
+            misfiled.parent.mkdir()
+            misfiled.write_text(task.read_text())  # keeps `area: governance`
+            task.unlink()
+            adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                adapter.discover(target, declaration_root=".")
+            self.assertEqual(
+                raised.exception.details[ErrorDetailKey.REASON_CODE.value],
+                detail_digest("invalid_verification_declaration"),
+            )
+
     def test_discovery_outputs_and_failures_do_not_retain_auth_values(self):
         profile = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
             FIXTURE, declaration_root=".",
