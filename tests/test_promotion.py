@@ -44,18 +44,18 @@ class PromotionTests(unittest.TestCase):
             "builder_resume_evidence", "builder_non_resume_evidence",
             "git_cleanup_success", "git_cleanup_failure", "git_cleanup_blocking",
             "docker_cleanup_success", "docker_cleanup_failure", "docker_cleanup_blocking",
-            "real_shadow_run:claude", "real_shadow_run:codex", "real_shadow_run:generic",
+            "real_shadow_run:claude-code", "real_shadow_run:codex", "real_shadow_run:generic",
         ))
         blocked = evaluate_promotion(
             "enforce_available", "native_available", base + native_fixture,
         )
         self.assertFalse(blocked.allowed)
         self.assertEqual(blocked.missing_evidence, (
-            "real_shadow_run:claude", "real_shadow_run:codex", "real_shadow_run:generic",
+            "real_shadow_run:claude-code", "real_shadow_run:codex", "real_shadow_run:generic",
         ))
 
         real = evidence(
-            ("real_shadow_run:claude", "real_shadow_run:codex", "real_shadow_run:generic"),
+            ("real_shadow_run:claude-code", "real_shadow_run:codex", "real_shadow_run:generic"),
             EvidenceOrigin.REAL_RUN,
         )
         allowed = evaluate_promotion(

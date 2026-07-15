@@ -75,6 +75,12 @@ NATIVE_CRITERIA = ENFORCE_CRITERIA + (
 )
 
 
+# Canonical host IDs (shadow.CANONICAL_HOSTS drift-guarded by
+# tests/test_shadow_parity.py): real-run promotion evidence is keyed by the
+# canonical `claude-code` host ID, never the legacy `claude` spelling.
+SUPPORTED_PROMOTION_HOSTS = ("claude-code", "codex", "generic")
+
+
 def _state(value: object) -> PromotionState:
     if type(value) is PromotionState:
         return value
@@ -108,7 +114,7 @@ def evaluate_promotion(
     target_state: object,
     evidence: Iterable[PromotionEvidence],
     *,
-    supported_hosts: Iterable[str] = ("claude", "codex", "generic"),
+    supported_hosts: Iterable[str] = SUPPORTED_PROMOTION_HOSTS,
 ) -> PromotionDecision:
     """Evaluate one adjacent promotion without enabling workflow authority."""
     current = _state(current_state)
@@ -163,5 +169,5 @@ def evaluate_promotion(
 __all__ = [
     "EvidenceOrigin", "PromotionDecision", "PromotionEvidence",
     "PromotionState", "ENFORCE_CRITERIA", "NATIVE_CRITERIA",
-    "evaluate_promotion",
+    "SUPPORTED_PROMOTION_HOSTS", "evaluate_promotion",
 ]

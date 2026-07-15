@@ -34,6 +34,13 @@ class ShadowParityTests(unittest.TestCase):
         self.assertEqual(
             {profile[0] for profile in KNOWN_HOST_PROFILES}, CANONICAL_HOSTS,
         )
+        # Finding 086: promotion evidence uses the same canonical host IDs --
+        # native promotion must be satisfiable by real_shadow_run:claude-code.
+        from workflow_kernel.promotion import SUPPORTED_PROMOTION_HOSTS
+        self.assertEqual(set(SUPPORTED_PROMOTION_HOSTS), CANONICAL_HOSTS)
+        self.assertEqual(
+            len(SUPPORTED_PROMOTION_HOSTS), len(set(SUPPORTED_PROMOTION_HOSTS)),
+        )
 
     def test_real_claude_code_host_receipts_classify_as_known_host_difference(self):
         codex = ReceiptSet.from_events(self.load("pipeline-codex.json"))

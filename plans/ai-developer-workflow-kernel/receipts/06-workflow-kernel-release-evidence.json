@@ -30,7 +30,7 @@
       "allowed": false,
       "current_state": "enforce_available",
       "missing_evidence": [
-        "real_shadow_run:claude",
+        "real_shadow_run:claude-code",
         "real_shadow_run:codex",
         "real_shadow_run:generic"
       ],
