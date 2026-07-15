@@ -1,0 +1,309 @@
+{
+  "feature": "ai-developer-workflow-kernel",
+  "workflowClass": "feature",
+  "description": "Add a neutral executable workflow kernel shared by pipeline and dm-review, adopted through shadow adapters with durable state, owned cleanup, persona proof, and browser recovery.",
+  "baseBranch": "codex/ai-developer-workflow-kernel",
+  "featureBranch": "codex/ai-developer-workflow-kernel-implementation",
+  "generatedAt": "2026-07-14T01:24:29Z",
+  "overlapRisk": "high",
+  "noMergeOnCompletion": true,
+  "campaignSlug": null,
+  "chunks": [
+    {
+      "id": "01-kernel-state-engine",
+      "title": "Kernel State Engine",
+      "prompt": "prompts/01-kernel-state-engine.md",
+      "level": 0,
+      "parallelGroup": null,
+      "dependsOn": [],
+      "filesToModify": [
+        "plugins/workflow-kernel/.claude-plugin/plugin.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/SKILL.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/__init__.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/__main__.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/schema.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/events.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/state.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/transitions.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/receipts.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/redaction.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/__init__.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_schema.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_events.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_state.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_transitions.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_cli.py"
+      ],
+      "companionSkills": [
+        "plugin-dev:plugin-structure",
+        "plugin-dev:skill-development",
+        "developer-essentials:error-handling-patterns",
+        "superpowers:test-driven-development"
+      ],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "02-workflow-policy-hosts",
+      "title": "Workflow Policy and Host Capabilities",
+      "prompt": "prompts/02-workflow-policy-hosts.md",
+      "level": 1,
+      "parallelGroup": null,
+      "dependsOn": [
+        "01-kernel-state-engine"
+      ],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/policies.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/workflows.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/__init__.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/base.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/host.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/isolation.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-policy-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-policy.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-classes-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-classes.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_workflow_classes.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_retry_policy.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_host_capabilities.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_isolation.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_builder_resume.py"
+      ],
+      "companionSkills": [
+        "developer-essentials:error-handling-patterns",
+        "developer-essentials:e2e-testing-patterns",
+        "superpowers:test-driven-development",
+        "plugin-dev:skill-development"
+      ],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "03-owned-resource-lifecycle",
+      "title": "Owned Resource Lifecycle",
+      "prompt": "prompts/03-owned-resource-lifecycle.md",
+      "level": 2,
+      "parallelGroup": "A",
+      "dependsOn": [
+        "01-kernel-state-engine",
+        "02-workflow-policy-hosts"
+      ],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/resources.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/git.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/docker.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/resource-registry-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/cleanup-receipt-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/docker-ownership.md",
+        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_resource_registry.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_git_cleanup.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_docker_cleanup.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_terminal_cleanup.py"
+      ],
+      "companionSkills": [
+        "developer-essentials:error-handling-patterns",
+        "developer-essentials:git-advanced-workflows",
+        "superpowers:test-driven-development",
+        "plugin-dev:skill-development"
+      ],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "04-persona-browser-verification",
+      "title": "Persona and Browser Verification",
+      "prompt": "prompts/04-persona-browser-verification.md",
+      "level": 2,
+      "parallelGroup": "A",
+      "dependsOn": [
+        "01-kernel-state-engine",
+        "02-workflow-policy-hosts"
+      ],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/verification.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/browser.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/personas.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/verification-profile-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/browser-recovery-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-policy-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-policy.json",
+        "plugins/pipeline/skills/assess/SKILL.md",
+        "plugins/pipeline/skills/promptcraft/SKILL.md",
+        "plugins/dm-review/agents/review/visual-browser-tester.md",
+        "plugins/dm-review/agents/review/ux-quality-reviewer.md",
+        "plugins/dm-review/skills/visual-test/SKILL.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_verification_profile.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_persona_gates.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_browser_recovery.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/ux/assembly/personas/_index.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/ux/assembly/personas/casual-member.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/ux/assembly/tasks/governance/sample-task.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/ux/assembly/coverage-matrix.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/ux/assembly-baseplate/tasks/baseplate/sample-mobile-task.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/ux/assembly-baseplate/suites/permissions.md"
+      ],
+      "companionSkills": [
+        "developer-essentials:e2e-testing-patterns",
+        "accessibility-compliance:screen-reader-testing",
+        "dm-review:visual-test",
+        "superpowers:test-driven-development"
+      ],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "05-shadow-workflow-adapters",
+      "title": "Shadow Workflow Adapters",
+      "prompt": "prompts/05-shadow-workflow-adapters.md",
+      "level": 3,
+      "parallelGroup": null,
+      "dependsOn": [
+        "01-kernel-state-engine",
+        "02-workflow-policy-hosts",
+        "03-owned-resource-lifecycle",
+        "04-persona-browser-verification"
+      ],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/pipeline_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/dm_review_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/shadow.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/metrics.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_pipeline_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_dm_review_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_shadow_parity.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_metrics.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_runtime_cli.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/receipts/pipeline-claude.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/receipts/pipeline-codex.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/receipts/dm-review.json",
+        "plugins/pipeline/commands/pipeline.md",
+        "plugins/pipeline/commands/pipeline-run.md",
+        "plugins/pipeline/skills/promptcraft/SKILL.md",
+        "plugins/pipeline/skills/promptcraft/references/manifest-schema.md",
+        "plugins/pipeline/agents/workflow/execution-orchestrator.md",
+        "plugins/pipeline/references/artifact-lifecycle.md",
+        "plugins/pipeline/references/run-postmortem-schema.md",
+        "plugins/dm-review/commands/dm-review.md",
+        "plugins/dm-review/commands/dm-review-loop.md",
+        "plugins/dm-review/commands/dm-review-visual.md",
+        "plugins/dm-review/skills/review/SKILL.md"
+      ],
+      "companionSkills": [
+        "plugin-dev:command-development",
+        "plugin-dev:agent-development",
+        "developer-essentials:error-handling-patterns",
+        "dm-review:review",
+        "superpowers:test-driven-development"
+      ],
+      "estimatedComplexity": "large",
+      "kind": "integration",
+      "executor": "claude"
+    },
+    {
+      "id": "06-hardening-promotion-release",
+      "title": "Hardening, Promotion, and Release",
+      "prompt": "prompts/06-hardening-promotion-release.md",
+      "level": 4,
+      "parallelGroup": null,
+      "dependsOn": [
+        "05-shadow-workflow-adapters"
+      ],
+      "filesToModify": [
+        "tools/validate-workflow-kernel.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/promotion.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_failure_scenarios.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_promotion.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/test_compatibility.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/scenarios/terminal-paths.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/scenarios/provider-failures.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/scenarios/verification-failures.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/tests/fixtures/scenarios/resource-failures.json",
+        "tools/validate-composition.sh",
+        "tools/validate-workflow-contracts.sh",
+        "tools/check-dependencies.sh",
+        "docs/workflow-kernel.md",
+        "tools/README.md",
+        "description-evals/workflow-kernel-workflow-kernel.json",
+        "CLAUDE.md",
+        "AGENTS.md",
+        "plugins/workflow-kernel/.claude-plugin/plugin.json",
+        "plugins/pipeline/.claude-plugin/plugin.json",
+        "plugins/dm-review/.claude-plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
+        ".agents/plugins/marketplace.json",
+        "plugins/workflow-kernel/.codex-plugin/plugin.json",
+        "plugins/pipeline/.codex-plugin/plugin.json",
+        "plugins/dm-review/.codex-plugin/plugin.json",
+        "plugins/pipeline/skills/pipeline/SKILL.md",
+        "plugins/pipeline/skills/pipeline-run/SKILL.md",
+        "plugins/dm-review/skills/dm-review/SKILL.md",
+        "plugins/dm-review/skills/dm-review-loop/SKILL.md",
+        "plugins/dm-review/skills/dm-review-visual/SKILL.md"
+      ],
+      "companionSkills": [
+        "plugin-dev:plugin-structure",
+        "plugin-dev:command-development",
+        "plugin-dev:skill-development",
+        "superpowers:verification-before-completion",
+        "developer-essentials:error-handling-patterns"
+      ],
+      "estimatedComplexity": "large",
+      "kind": "integration",
+      "executor": "claude"
+    }
+  ],
+  "executionPlan": {
+    "levels": [
+      {
+        "level": 0,
+        "strategy": "sequential",
+        "chunks": [
+          "01-kernel-state-engine"
+        ]
+      },
+      {
+        "level": 1,
+        "strategy": "sequential",
+        "chunks": [
+          "02-workflow-policy-hosts"
+        ]
+      },
+      {
+        "level": 2,
+        "strategy": "parallel",
+        "groups": {
+          "A": [
+            "03-owned-resource-lifecycle",
+            "04-persona-browser-verification"
+          ]
+        }
+      },
+      {
+        "level": 3,
+        "strategy": "sequential",
+        "chunks": [
+          "05-shadow-workflow-adapters"
+        ]
+      },
+      {
+        "level": 4,
+        "strategy": "sequential",
+        "chunks": [
+          "06-hardening-promotion-release"
+        ]
+      }
+    ],
+    "totalChunks": 6,
+    "parallelChunks": 2,
+    "sequentialChunks": 4,
+    "maxConcurrency": 2
+  }
+}

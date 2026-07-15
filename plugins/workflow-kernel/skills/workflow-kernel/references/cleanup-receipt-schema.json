@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/workflow-kernel/cleanup-receipt-v1.json",
+  "title": "Workflow kernel cleanup receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope", "before", "after", "dispositions"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "terminal", "stale_sweep", "repository_scope_id"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "terminal": {"type": "boolean"},
+        "stale_sweep": {"type": "boolean"},
+        "repository_scope_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "before": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "uniqueItems": true},
+    "after": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "uniqueItems": true},
+    "dispositions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["resource_id", "kind", "owner", "lifecycle", "disposition", "action", "reason", "command_evidence", "evidence"],
+        "properties": {
+          "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "kind": {"enum": ["worktree", "branch", "container", "network", "volume"]},
+          "owner": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["run_id", "node_id"],
+            "properties": {
+              "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+              "node_id": {"type": "string", "minLength": 1, "maxLength": 256}
+            }
+          },
+          "lifecycle": {"enum": ["chunk", "run"]},
+          "disposition": {"enum": ["removed", "retained_for_dependency", "blocked", "foreign", "missing"]},
+          "action": {"enum": ["none", "remove_exact_id"]},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 4096},
+          "command_evidence": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "maxItems": 32},
+          "evidence": {"type": "array", "items": {}, "maxItems": 32},
+          "follow_up": {"type": "string", "minLength": 1, "maxLength": 4096}
+        }
+      }
+    }
+  }
+}

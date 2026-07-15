@@ -1,0 +1,121 @@
+import unittest
+
+from tests import detail_digest
+from workflow_kernel.model import (
+    HostCapabilities, HostCapability, IsolationMode, IsolationRequirements,
+)
+from workflow_kernel.adapters.isolation import IsolationSelector
+from workflow_kernel.schema import InvalidSchemaError
+
+
+MODE_CAPABILITY = {
+    IsolationMode.REMOTE_SANDBOX: HostCapability.REMOTE_SANDBOX,
+    IsolationMode.CONTAINER: HostCapability.CONTAINER,
+    IsolationMode.WORKTREE: HostCapability.WORKTREE,
+    IsolationMode.SEQUENTIAL_BRANCH: HostCapability.SEQUENTIAL_BRANCH,
+}
+
+
+class IsolationTests(unittest.TestCase):
+    def test_mode_enum_impostors_are_rejected_without_equality_dispatch(self):
+        secret = "sk-secret-isolation-detail"
+        calls = []
+
+        class Hostile:
+            def __eq__(self, other):
+                calls.append("ordinary")
+                raise RuntimeError(secret)
+
+        with self.assertRaises(InvalidSchemaError) as raised:
+            IsolationRequirements(Hostile())
+        self.assertNotIn(secret, repr(raised.exception))
+
+        class FatalConversion(BaseException):
+            pass
+
+        class Fatal:
+            def __eq__(self, other):
+                calls.append("fatal")
+                raise FatalConversion()
+
+        with self.assertRaises(InvalidSchemaError):
+            IsolationRequirements(Fatal())
+        self.assertEqual(calls, [])
+
+    def test_all_modes_select_when_declared(self):
+        selector = IsolationSelector()
+        for mode, capability in MODE_CAPABILITY.items():
+            with self.subTest(mode=mode.value):
+                host = HostCapabilities("host", (capability,))
+                decision = selector.select(IsolationRequirements(mode), host)
+                self.assertFalse(decision.blocked)
+                self.assertEqual(decision.selected, mode)
+                self.assertIsNone(decision.degraded_from)
+
+    def test_degradation_follows_policy_order_and_records_reason(self):
+        host = HostCapabilities("host", (HostCapability.WORKTREE, HostCapability.SEQUENTIAL_BRANCH))
+        decision = IsolationSelector().select(
+            IsolationRequirements(IsolationMode.REMOTE_SANDBOX), host,
+        )
+        self.assertEqual(decision.selected, IsolationMode.WORKTREE)
+        self.assertEqual(decision.degraded_from, IsolationMode.REMOTE_SANDBOX)
+        self.assertEqual(decision.degraded_to, IsolationMode.WORKTREE)
+        self.assertEqual(decision.reason_code, "preferred_isolation_unavailable")
+
+    def test_policy_forbidden_downgrade_blocks_instead_of_using_branch(self):
+        host = HostCapabilities("host", (HostCapability.SEQUENTIAL_BRANCH,))
+        decision = IsolationSelector().select(
+            IsolationRequirements(IsolationMode.REMOTE_SANDBOX), host,
+        )
+        self.assertTrue(decision.blocked)
+        self.assertIsNone(decision.selected)
+        self.assertEqual(decision.degraded_from, IsolationMode.REMOTE_SANDBOX)
+        self.assertEqual(decision.degraded_to, IsolationMode.SEQUENTIAL_BRANCH)
+        self.assertEqual(decision.reason_code, "isolation_downgrade_forbidden")
+
+    def test_request_can_forbid_any_degradation(self):
+        host = HostCapabilities("host", (HostCapability.CONTAINER,))
+        decision = IsolationSelector().select(
+            IsolationRequirements(IsolationMode.REMOTE_SANDBOX, allow_degradation=False), host,
+        )
+        self.assertTrue(decision.blocked)
+        self.assertEqual(decision.reason_code, "isolation_degradation_disallowed")
+
+    def test_selector_revalidates_mutated_public_inputs(self):
+        requirements = IsolationRequirements(IsolationMode.REMOTE_SANDBOX)
+        object.__setattr__(requirements, "preferred", object())
+        with self.assertRaises(InvalidSchemaError) as bad_requirements:
+            IsolationSelector().select(requirements, HostCapabilities("host", ()))
+        self.assertEqual(
+            bad_requirements.exception.details["reason_code"],
+            detail_digest("invalid_isolation_requirements"),
+        )
+
+        capabilities = HostCapabilities("host", (HostCapability.REMOTE_SANDBOX,))
+        object.__setattr__(capabilities, "capabilities", object())
+        with self.assertRaises(InvalidSchemaError) as bad_capabilities:
+            IsolationSelector().select(
+                IsolationRequirements(IsolationMode.REMOTE_SANDBOX), capabilities,
+            )
+        self.assertEqual(
+            bad_capabilities.exception.details["reason_code"],
+            detail_digest("invalid_host_capabilities"),
+        )
+
+    def test_isolation_requirement_seal_cannot_be_spoofed(self):
+        requirements = IsolationRequirements(IsolationMode.REMOTE_SANDBOX)
+        object.__setattr__(requirements, "preferred", IsolationMode.CONTAINER)
+        object.__setattr__(requirements, "_origin_seal", "spoofed")
+        with self.assertRaises(InvalidSchemaError) as raised:
+            IsolationSelector().select(
+                requirements,
+                HostCapabilities("host", (HostCapability.CONTAINER,)),
+            )
+        self.assertEqual(
+            raised.exception.details["reason_code"],
+            detail_digest("invalid_isolation_requirements"),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="assessment">
+  <title>Assessment: AI Developer Workflow Kernel</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 70rem; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: Canvas; color: CanvasText; }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { font-size: 1.875rem; }
+    h2 { font-size: 1.375rem; margin-top: 2rem; }
+    h3 { font-size: 1.125rem; }
+    a { color: LinkText; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { overflow-x: auto; padding: 0.75rem; border: 1px solid GrayText; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid GrayText; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
+    section { margin-block: 1.5rem; }
+    .skip-link { position: absolute; left: -9999px; top: 0; }
+    .skip-link:focus { left: 0; padding: 0.5rem 1rem; z-index: 10; }
+    .artifact-main { max-width: 70rem; margin-inline: auto; padding: 1rem; }
+    .artifact-header { padding-inline: 1rem; }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: 0.75rem; list-style: none; padding: 0; }
+    .artifact-meta, small { color: GrayText; font-size: 0.875rem; }
+    .stack > * + * { margin-block-start: 1.5rem; }
+    .callout { border-inline-start: 0.3rem solid currentColor; padding-inline-start: 1rem; }
+    @media print { nav { display: none; } .artifact-main { max-width: none; } }
+  </style>
+</head>
+<body class="scheme-subtle">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="artifact-header">
+    <nav aria-label="Pipeline artifacts">
+      <ul>
+        <li><a href="original-prompt.md">Original prompt</a></li>
+        <li><a href="brainstorm.html">Brainstorm</a></li>
+        <li><a href="../../docs/superpowers/specs/2026-07-14-ai-developer-workflow-kernel-design.md">Approved design</a></li>
+      </ul>
+    </nav>
+    <p class="artifact-meta"><span class="artifact-kind">assessment</span> &middot; generated 2026-07-14</p>
+  </header>
+
+  <main id="content" class="artifact-main center stack">
+    <h1>Assessment: AI Developer Workflow Kernel</h1>
+
+    <section aria-labelledby="key-requirements">
+      <h2 id="key-requirements">Key Requirements <small>(cached from original-prompt.md)</small></h2>
+      <ol>
+        <li>Deliver the complete workflow-kernel improvement set rather than one isolated recommendation.</li>
+        <li>Use the literal Depot pipeline with design, assessment, research, planning, adversarial review, execution, dm-review, verification, and cleanup gates.</li>
+        <li>Decompose delivery into safe, testable slices while preserving existing pipeline and dm-review compatibility.</li>
+        <li>Build an executable control plane rather than adding orchestration prose alone.</li>
+        <li>Preserve Claude/Codex behavior, provider security boundaries, evidence receipts, and honest degradation.</li>
+        <li>Validate transitions and failure paths behaviorally, not only with text-contract checks.</li>
+        <li>Deliver a clean feature branch with requirement-level evidence.</li>
+        <li>Use an additive Python standard-library kernel with shadow, enforce, and opt-in native modes.</li>
+        <li>Keep the epic repo-local; do not add a daemon or external ticket ingestion.</li>
+        <li>Track and clean owned Git and Docker resources; automatically remove only Depot-labeled Docker resources older than 24 hours.</li>
+        <li>Discover project UX suites and make declared personas blocking for UI/integration completion.</li>
+        <li>On required-browser failure, capture evidence, restart the primary browser, try another browser engine, then require human help.</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="code-state">
+      <h2 id="code-state">Code State</h2>
+
+      <h3>Architecture</h3>
+      <p>Depot already has most of the conceptual pieces of a workflow engine, but they are split among Markdown command contracts, agent definitions, JSON routing policy, shell dispatchers, generated aliases, HTML/JSON planning artifacts, and receipts. The central execution contract is <code>plugins/pipeline/agents/workflow/execution-orchestrator.md</code>, a 1,589-line prose state machine that coordinates manifest validation, host/provider routing, worktree isolation, validation, review, visual proof, merging, postmortems, and cleanup.</p>
+      <p>The executable layer is strongest around narrow deterministic problems: provider cascade descent, manifest generation, JSON checks, generated-shim validation, and selected shell portability cases. It is weakest at cross-phase state, evidence-bound transitions, resource ownership beyond Git, and replayable failure behavior. dm-review has a mature lane model and explicit coverage accounting, but its orchestration remains another large interpreted Markdown contract.</p>
+
+      <h3>Key files</h3>
+      <table>
+        <thead><tr><th>File</th><th>Lines</th><th>Current role</th><th>Kernel relationship</th></tr></thead>
+        <tbody>
+          <tr><td><code>plugins/pipeline/commands/pipeline.md</code></td><td>532</td><td>Top-level phases and human gates</td><td>Remain policy/entry adapter</td></tr>
+          <tr><td><code>plugins/pipeline/commands/pipeline-run.md</code></td><td>91</td><td>Execution entry and Codex adapter</td><td>Host adapter seam</td></tr>
+          <tr><td><code>plugins/pipeline/agents/workflow/execution-orchestrator.md</code></td><td>1,589</td><td>Interpreted execution state machine</td><td>Primary extraction target</td></tr>
+          <tr><td><code>plugins/pipeline/skills/promptcraft/references/manifest-schema.md</code></td><td>194</td><td>Chunk graph and executor contract</td><td>Backward-compatible input adapter</td></tr>
+          <tr><td><code>plugins/pipeline/references/routing-policy.json</code></td><td>140</td><td>Task/provider/security policy</td><td>Remain policy</td></tr>
+          <tr><td><code>plugins/pipeline/references/model-cascade.json</code></td><td>59</td><td>Provider fallback classes</td><td>Policy input</td></tr>
+          <tr><td><code>plugins/pipeline/references/harness-profile.json</code></td><td>44</td><td>Host capability mapping</td><td>Seed host adapter schema</td></tr>
+          <tr><td><code>plugins/pipeline/references/cascade-dispatch.sh</code></td><td>194</td><td>Executable fallback selection</td><td>Wrap first; replace only with parity proof</td></tr>
+          <tr><td><code>plugins/dm-review/skills/review/SKILL.md</code></td><td>829</td><td>Review lane selection and consolidation</td><td>Review adapter/policy source</td></tr>
+          <tr><td><code>plugins/dm-review/commands/dm-review-loop.md</code></td><td>142</td><td>Review/fix convergence</td><td>Transition and convergence adapter</td></tr>
+          <tr><td><code>plugins/dm-review/skills/review/references/repo-cleanup-contract.md</code></td><td>198</td><td>Git ownership and cleanup policy</td><td>Remain canonical; gain Docker sibling</td></tr>
+          <tr><td><code>plugins/dm-review/agents/review/visual-browser-tester.md</code></td><td>—</td><td>Only complete browser restart/fallback ladder</td><td>Extract shared recovery policy</td></tr>
+          <tr><td><code>plugins/dm-review/agents/review/ux-quality-reviewer.md</code></td><td>—</td><td>Persona and coverage-matrix review</td><td>Persona adapter input</td></tr>
+          <tr><td><code>tools/validate-workflow-contracts.sh</code></td><td>245</td><td>Markdown anchor validation</td><td>Retain; complement behaviorally</td></tr>
+          <tr><td><code>tools/validate-codex-native-pipeline.sh</code></td><td>59</td><td>Codex adapter text contract</td><td>Retain until behavioral parity replaces assertions</td></tr>
+          <tr><td><code>tools/validate-routing-economics.sh</code></td><td>121</td><td>JSON/text/dry-run routing checks</td><td>Useful executable-test pattern</td></tr>
+          <tr><td><code>tools/validate-openrouter-cascade.sh</code></td><td>91</td><td>Functional cascade and Bash portability tests</td><td>Best current scenario-test precedent</td></tr>
+          <tr><td><code>tools/validate-composition.sh</code></td><td>662</td><td>Repository-wide validation aggregator</td><td>Kernel suite integration point</td></tr>
+        </tbody>
+      </table>
+
+      <h3>What is working</h3>
+      <ul>
+        <li><strong>Policy separation:</strong> routing policy, model cascade, and harness profiles already distinguish task fit, fallback order, and host capabilities.</li>
+        <li><strong>Honest degradation:</strong> dm-review names failed or unavailable lanes and prevents a missing core reviewer from reading as clean.</li>
+        <li><strong>Durable artifacts:</strong> manifests, Airlift checkpoints, receipts, todos/issues, campaign state, and postmortems provide several useful resumption anchors.</li>
+        <li><strong>Git cleanup:</strong> immediate registration, ownership boundaries, merge proof, and blocked-removal reporting are unusually mature.</li>
+        <li><strong>Provider security:</strong> sensitive-path routing overrides cheaper provider preferences.</li>
+        <li><strong>Persona knowledge:</strong> assessment, promptcraft, orchestrator, and reviewers already understand <code>tests/ux/</code>; the missing piece is a single blocking execution contract.</li>
+        <li><strong>Browser recovery precedent:</strong> the visual browser reviewer already closes/restarts the browser, tries another tool surface, and stops visibly when all attempts fail.</li>
+      </ul>
+
+      <h3>Tech debt and gaps</h3>
+      <ul>
+        <li><strong>God contract:</strong> the 1,589-line execution orchestrator mixes state, policy, shell procedures, receipts, recovery, and prose. Changes are difficult to test in isolation.</li>
+        <li><strong>Inconsistent browser authority:</strong> one reviewer has a recovery ladder, while pipeline preflight can degrade to curl or defer to the caller. The same failure can produce different outcomes by entry point.</li>
+        <li><strong>Advisory persona coverage:</strong> current rules ask for two or three persona lenses but do not prove every declared required persona/scenario executed.</li>
+        <li><strong>No builder continuity:</strong> failed validation marks a chunk failed and skips dependents; no attempt stores a resumable worker handle.</li>
+        <li><strong>No Docker ownership:</strong> Docker is required for verification and influences isolation mode, but containers, networks, and volumes are not registered, labeled, inventoried, or cleaned by the workflow.</li>
+        <li><strong>Fragmented durable state:</strong> several artifacts record partial state, but no versioned append-only event model can reconstruct a run.</li>
+        <li><strong>Text-heavy validation:</strong> important validators assert that required phrases exist, not that failure transitions actually occur.</li>
+        <li><strong>Bootstrap risk:</strong> pipeline will modify its own execution contract. New enforcement cannot become authoritative until old-path shadow comparisons and receipt replay pass.</li>
+      </ul>
+
+      <h3>Dependencies</h3>
+      <ul>
+        <li><strong>Internal:</strong> pipeline commands, promptcraft manifests, dm-review lanes, cleanup contract, Airlift, generated command skills, provider routing files, HTML artifact helpers, and composition validators.</li>
+        <li><strong>External runtime:</strong> Python 3 standard library, Git, optional Docker, browser tool surfaces, Codex/Claude host dispatch, and optional OpenRouter/DeepSeek wrappers.</li>
+        <li><strong>Reverse dependencies:</strong> every project invoking pipeline or dm-review, especially Assembly and assembly-baseplate with Docker-only verification and <code>tests/ux/</code> personas.</li>
+        <li><strong>Cycle risk:</strong> dm-review cannot depend on pipeline as a plugin. Shared kernel policy must live in a neutral executable/reference boundary or be consumed optionally.</li>
+      </ul>
+
+      <h3>Assessment coverage</h3>
+      <p class="callout"><strong>Degraded fan-out:</strong> the environment selected OpenRouter for read-heavy assessment, but workspace-data policy rejected sending private repository architecture to that external provider. The independent native assessment worker also failed to return within its bounded assessment window and was stopped. Consolidation therefore uses direct local inspection, repository history, existing memory evidence, and exact file/line checks. No external assessment output is represented as completed.</p>
+    </section>
+
+    <section aria-labelledby="ux-state">
+      <h2 id="ux-state">UX State</h2>
+      <p><strong>Skipped — no Depot application UI or dev server.</strong> This feature changes orchestration policy and tooling. Existing browser and persona rules were inspected as code; no rendered product baseline exists in this repository.</p>
+    </section>
+
+    <section aria-labelledby="test-personas">
+      <h2 id="test-personas">Test Personas</h2>
+      <p>Depot has no local <code>tests/ux/</code> suite or dev-mode auth personas. Downstream Assembly projects do. The kernel must discover their project-local persona indexes, task files, coverage matrices, auth field names, browsers, and viewports without copying secret values into artifacts.</p>
+    </section>
+
+    <section aria-labelledby="recent-lessons">
+      <h2 id="recent-lessons">Recent Lessons That May Apply</h2>
+      <ul>
+        <li><strong>Host adapters must preserve gates:</strong> the Codex-native adapter succeeded because it mapped host capabilities without weakening worktrees, review, cleanup, memory, or receipts.</li>
+        <li><strong>Runtime staleness is distinct from source correctness:</strong> Assembly browser output has remained stale behind old container child processes; browser recovery must check runtime/container state before changing product code.</li>
+        <li><strong>Cross-browser and role proof matter:</strong> durable UX verification has required both Chrome/Chromium and Firefox plus privileged and ordinary-member flows.</li>
+        <li><strong>Resume from objective artifacts:</strong> browser locks, worktree failures, orchestration stalls, and usage limits are recoverable when manifests, worktrees, checkpoints, and receipts are preserved.</li>
+      </ul>
+      <p>No repository-local <code>tasks/lessons.md</code> exists.</p>
+    </section>
+
+    <section aria-labelledby="baseline-screenshots">
+      <h2 id="baseline-screenshots">Baseline Screenshots</h2>
+      <p>No baselines — UX assessment was skipped because Depot has no application UI surface.</p>
+    </section>
+
+    <section aria-labelledby="key-findings">
+      <h2 id="key-findings">Key Findings</h2>
+      <ol>
+        <li><strong>The design should wrap before replacing.</strong> Manifests, routing policy, cascade dispatch, cleanup, and receipts are proven primitives. Slice 1 should observe them through adapters rather than rewrite them.</li>
+        <li><strong>The orchestrator is the extraction map.</strong> Its size and mixed responsibilities justify a kernel, but also define a detailed parity checklist.</li>
+        <li><strong>Browser and persona behavior needs one authority.</strong> Strong rules already exist, but inconsistent entry points allow silent degradation or partial coverage.</li>
+        <li><strong>Docker cleanup and session continuity are genuine missing capabilities.</strong> They are not currently hidden elsewhere in the system.</li>
+        <li><strong>The four-slice order is correct.</strong> Foundation must precede integration; integration must emit events before dm-review/UX can consume them; hardening and promotion must remain last.</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="recommendations">
+      <h2 id="recommendations">Recommendations</h2>
+      <ol>
+        <li>Define the smallest versioned run/event schema and legal-transition engine first, with atomic storage and replay tests.</li>
+        <li>Build explicit adapters around the current manifest, cascade dispatcher, Git cleanup contract, and receipt formats before moving any authority.</li>
+        <li>Create a shared browser recovery policy and <code>verificationProfile</code> before changing downstream persona rules.</li>
+        <li>Add Docker ownership as a sibling contract to Git cleanup, including labels, registry, 24-hour TTL sweep, and blocked-removal evidence.</li>
+        <li>Use shadow receipt replay as the bootstrap gate; no enforce/native transition should depend on untested new behavior.</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer class="artifact-footer">
+    <p>Pipeline planning artifact. Machine-readable requirements and assessment metadata are stored in the data island below.</p>
+  </footer>
+
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "assessment",
+    "slug": "ai-developer-workflow-kernel",
+    "keyRequirements": [
+      "Deliver the complete workflow-kernel improvement set rather than one isolated recommendation.",
+      "Use the literal Depot pipeline with design, assessment, research, planning, adversarial review, execution, dm-review, verification, and cleanup gates.",
+      "Decompose delivery into safe, testable slices while preserving existing pipeline and dm-review compatibility.",
+      "Build an executable control plane rather than adding orchestration prose alone.",
+      "Preserve Claude/Codex behavior, provider security boundaries, evidence receipts, and honest degradation.",
+      "Validate transitions and failure paths behaviorally, not only with text-contract checks.",
+      "Deliver a clean feature branch with requirement-level evidence.",
+      "Use an additive Python standard-library kernel with shadow, enforce, and opt-in native modes.",
+      "Keep the epic repo-local; do not add a daemon or external ticket ingestion.",
+      "Track and clean owned Git and Docker resources; automatically remove only Depot-labeled Docker resources older than 24 hours.",
+      "Discover project UX suites and make declared personas blocking for UI/integration completion.",
+      "On required-browser failure, capture evidence, restart the primary browser, try another browser engine, then require human help."
+    ],
+    "testPersonas": [],
+    "recentLessons": [
+      "Codex-native compatibility must preserve every workflow gate rather than approximate the Claude contract.",
+      "Stale browser output can come from an old container child process rather than source or cache policy.",
+      "Durable UX proof uses cross-browser and privileged plus ordinary-user flows.",
+      "Interrupted pipeline work should resume from manifests, worktrees, checkpoints, and receipts."
+    ],
+    "baselineScreenshots": []
+  }
+  </script>
+</body>
+</html>

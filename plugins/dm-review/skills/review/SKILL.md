@@ -41,6 +41,44 @@ Match the review depth to the moment. Running full multi-round review on every c
 
 **Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full review with the Opus `security-auditor` -- these lanes are never delegated off-Anthropic and never quick-only.
 
+## Shadow Workflow Kernel Contract
+
+The selected agents, provider routing, review outputs, todos, consolidation, merge recommendation, and cleanup receipts remain authoritative. Kernel prediction is observation-only and cannot select lanes, waive a lane, alter fallback, create a clean recommendation, execute cleanup, or convert any finding.
+
+Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per review run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Use only the launcher's stable subcommands; inline Python source is forbidden. Initialize each review run at `.workflow-kernel/runs/<run-id>`. Missing or incompatible launcher/runtime records `shadow unavailable` and the canonical review continues.
+
+Translate an explicit `workflowClass` unchanged; when absent, use `feature` and record `workflow_class_defaulted=true`. Never infer it from diff kind, path, finding, or severity. Materialize that request at `.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered redacted receipt array at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. Observe only after an authoritative lane/consolidation/cleanup receipt exists. At the end, compare and aggregate metrics without changing review state. Shadow events and builder observations never replace authoritative dispatch/resume receipts.
+
+Produce independent prediction receipts before corresponding authoritative actions, then seal them exactly once:
+
+```text
+"$WORKFLOW_KERNEL" init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
+"$WORKFLOW_KERNEL" bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+Use these exact later observation interfaces:
+
+```text
+"$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+"$WORKFLOW_KERNEL" compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
+"$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+```
+
+If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
+
+```text
+"$WORKFLOW_KERNEL" plan-create --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json .claude/ux-review/workflow-kernel/docker/<node-id>-create-argv.json --dependent-node-ids-json .claude/ux-review/workflow-kernel/docker/<node-id>-dependent-node-ids.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json
+"$WORKFLOW_KERNEL" plan-compose --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json .claude/ux-review/workflow-kernel/docker/<node-id>-compose-argv.json --dependent-node-ids-json .claude/ux-review/workflow-kernel/docker/<node-id>-dependent-node-ids.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json
+```
+
+Execute only its returned label-instrumented creation argv/override exactly once, then immediately invoke:
+
+```text
+"$WORKFLOW_KERNEL" record-create --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json --result .claude/ux-review/workflow-kernel/docker/<node-id>-create-result.json --before-inventory .claude/ux-review/workflow-kernel/docker/<node-id>-before-inventory.json --after-inventory .claude/ux-review/workflow-kernel/docker/<node-id>-after-inventory.json > .claude/ux-review/workflow-kernel/docker/<node-id>-create-receipt.json
+```
+
+Write the exact declared dependent node IDs to the dependency JSON file, using `[]` when there are none. Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned. No returned cleanup argv is ever executed separately.
+
 ## Fix Philosophy
 
 All review agents and fix workflows must follow these principles:
@@ -291,7 +329,7 @@ Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/
 
 1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (openrouter-bulk-analyst or deepseek-bulk-analyst), it receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
-3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents are never dropped.
+3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped. If required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input; do not proceed without the lane.
 
 If any agents were dropped or input was modified, report before proceeding:
 
@@ -299,7 +337,7 @@ If any agents were dropped or input was modified, report before proceeding:
 Input guardrails applied:
 - Diff truncated from 8,200 to 5,000 lines (200 lines/file cap)
 - Stripped 2 sensitive files from non-security agents: .env, config/secrets.yml
-- Dropped 1 agent: visual-browser-tester (token budget)
+- Blocked required browser lane: human_help_required (token budget; user input needed)
 ```
 
 ---
@@ -436,7 +474,11 @@ When uncertain about design principles, CSS best practices, typography, layout, 
 
 #### Browser-based agents
 
-The `visual-browser-tester`, `ux-quality-reviewer`, and `ui-standards-reviewer` agents use Playwright MCP tools (prefixed `mcp__plugin_compound-engineering_pw__browser_*`) instead of reading files. They launch in parallel with all other agents. If the dev server is not running, they report "Skipped" and do not block the review.
+The `visual-browser-tester`, `ux-quality-reviewer`, and `ui-standards-reviewer` agents use Playwright MCP tools (prefixed `mcp__plugin_compound-engineering_pw__browser_*`) instead of reading files. They launch in parallel with all other agents.
+
+For declared UI coverage, discover the complete project verification profile from configuration and `tests/ux/` task frontmatter: persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent. Present but incomplete declarations, unresolved route bindings, or missing required evidence block a clean review and appear in Coverage Gaps.
+
+On missing browser tools, dev server, authentication fixture, route binding, or verification profile, each required case preserves safe attempt evidence, quits the primary browser process/engine session, launches a demonstrably fresh primary profile and retries once, then tries a genuinely different configured engine. If recovery cannot complete, report blocked `human_help_required` with every attempt and exact missing case IDs, ask the user for help, and stop the review. Do not return Skipped, deferred, degraded, or proceed-without-browser. Curl/reachability is diagnostic only and never browser evidence. Product/application assertion failures are findings and do not trigger the recovery ladder.
 
 **Design spec injection:** When `design_spec_context` was discovered in Phase 3.25, append it to the prompt for ALL THREE browser-based agents (visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer). Add this section after `## Caller-Provided Context`:
 
@@ -464,10 +506,10 @@ When no design spec exists, omit this section entirely. The browser agents will 
 
 Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-- If an agent fails or times out (>120s), record the failure in the Agent Summary table and proceed
+- If a non-browser agent fails or times out (>120s), record the failure in the Agent Summary table and apply the documented lane policy. A required browser agent instead runs browser recovery and, on exhaustion, blocks with `human_help_required` and asks the user for help.
 - For agents routed to external LLMs, defer failure classification to Phase 4.5 before applying these policies
 - If a **core agent** (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation
-- If all conditional agents fail but core agents succeed, the review is "Degraded" but still valid
+- If all non-browser conditional agents fail but core agents succeed, the review is "Degraded" but still valid. Missing required browser evidence is never degraded-valid.
 - See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full failure classification table
 
 ---
@@ -488,6 +530,8 @@ A **lane** is a review path with its own provider and its own way of being absen
 Fallback always moves **toward** Claude, never away from it. Sensitive-path routing still holds: diffs touching `internal/auth/**`, `internal/federation/**`, secrets, or deploy paths never leave Anthropic, so they have no external lane to fall back from.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
+
+Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Preserve failed attempts and honest unavailable status across Claude, Codex-native, and generic hosts. A fallback does not weaken the lane's review, verification, or sensitive-path gates.
 
 #### When the external-LLM retry triggers
 
@@ -561,6 +605,12 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
 
 Output the full report to the user.
+
+#### Coverage receipt and shadow observation
+
+Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case. Each row names requested/attempted/implemented-by provider, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
+
+Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` command atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation and direct comparison reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. Observation requires the matching artifact and never creates or changes it. The source input and bound artifact remain until comparison; only an exact semantic match permits their post-match deletion. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity match alone never deletes terminal run state: retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; internal diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` appear only in `differences`.
 
 #### Verify-before-close gate
 
@@ -749,7 +799,7 @@ After the project-level memory capture, record depot-level metrics. This tracks 
 1. Search for `DepotMetrics` entity -- create if missing (type: System)
 2. Add ONE batched observation summarizing the agent dispatch:
    `[YYYY-MM-DD] Review session: X/Y agents completed, Z skipped (<agent>: <reason>, ...)`
-   - Example: `[2026-03-25] Review session: 9/11 agents completed, 2 skipped (visual-browser-tester: no dev server, craft-reviewer: no .twig files)`
+   - Example: `[2026-03-25] Review session: 9/11 agents completed, 1 unavailable (craft-reviewer: no .twig files), browser: human_help_required (dev server unavailable after recovery)`
 3. Search for `DepotPlugin:dm-review` entity -- create if missing (type: PluginMetrics)
 4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
 5. Call `save` to persist
@@ -792,6 +842,36 @@ dm-review creates no worktrees. Its obligations are narrower than pipeline's:
 3. **Leave foreign refs alone.** Orphan `.worktrees/pipeline/**` paths and `pipeline/**` branches from an interrupted pipeline run are **not** dm-review's to delete. Report them under "Remaining after cleanup" with a follow-up command and move on. Deleting a ref you did not create is how a review loses someone's work.
 4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
 5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
+
+dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Atomically write the complete fresh authoritative dependent-node status proof before planning and again before every guarded execute. For node cleanup, invoke exactly:
+
+```text
+"$WORKFLOW_KERNEL" plan-cleanup --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --node-statuses .claude/ux-review/workflow-kernel/docker/<node-id>-node-statuses.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json --outcomes .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-outcomes.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json --step-index N --inventory .claude/ux-review/workflow-kernel/docker/<node-id>-inventory.json --node-statuses .claude/ux-review/workflow-kernel/docker/<node-id>-node-statuses.json --outcomes .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-outcomes.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-step-N-outcome.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json --outcomes .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-outcomes.json > .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-receipt.json
+```
+
+At terminal cleanup, invoke `plan-reconcile` with the fresh bound status proof:
+
+```text
+"$WORKFLOW_KERNEL" plan-reconcile --state-dir .claude/ux-review/workflow-kernel --run-id ID --ttl-hours 24 --node-statuses .claude/ux-review/workflow-kernel/docker/terminal-node-statuses.json --output .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.json
+```
+
+That command writes a non-authorizing descriptor with exact fields `schema_version: 1`, `kind: cleanup-plan-set`, `current_run_plan`, `stale_sweep_plan`, and `ttl_hours`, plus independently sealed sibling artifacts `terminal-reconcile-plans.current-run.json` and `terminal-reconcile-plans.stale-sweep.json`. Each sibling has exact fields `schema_version: 1`, `kind: cleanup-plan-artifact`, `plan`, and `inventory`. Iterate each artifact independently with its own outcomes and receipt, current-run first:
+
+```text
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.current-run.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-current-run-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-current-run-next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.current-run.json --step-index N --inventory .claude/ux-review/workflow-kernel/docker/terminal-current-run-inventory.json --node-statuses .claude/ux-review/workflow-kernel/docker/terminal-node-statuses.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-current-run-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-current-run-step-N-outcome.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.current-run.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-current-run-outcomes.json > .claude/ux-review/workflow-kernel/docker/terminal-current-run-receipt.json
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.stale-sweep.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.stale-sweep.json --step-index N --inventory .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-inventory.json --node-statuses .claude/ux-review/workflow-kernel/docker/terminal-node-statuses.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-step-N-outcome.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.stale-sweep.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-outcomes.json > .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-receipt.json
+```
+
+Never execute proposed cleanup argv separately or cross-use the two plan authorities. Persist only registry-issued ordered outcomes; actionless missing requires fresh exact-ID inspect inside the guard. Stale actions require fresh trusted inactive-lease proof from the fixed state directory; otherwise the stale plan contains blocked dispositions and no actions. Retain unmanaged, incomplete-label, in-use, uninspectable, run-shared, or incomplete-dependent resources and report exact follow-up. Broad Docker prune and name-based ownership are forbidden.
+
+The cleanup report includes Docker before/after inventories and `removed|missing|retained|blocked|unmanaged` dispositions alongside Git. Cleanup runs on every terminal path. A cleanup failure never becomes a clean disposition or changes the authoritative code-review finding result.
 
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 

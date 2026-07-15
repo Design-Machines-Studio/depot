@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/workflow-kernel/resource-registry-event-v1.json",
+  "title": "Workflow kernel resource registry event",
+  "oneOf": [
+    {"$ref": "#/$defs/registrationEvent"},
+    {"$ref": "#/$defs/dispositionEvent"},
+    {"$ref": "#/$defs/authorityIssuedEvent"},
+    {"$ref": "#/$defs/transactionEvent"}
+  ],
+  "$defs": {
+    "kind": {"enum": ["worktree", "branch", "container", "network", "volume"]},
+    "lifecycle": {"enum": ["chunk", "run"]},
+    "registrationEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "resource"],
+      "properties": {"event": {"const": "registered"}, "resource": {"$ref": "#/$defs/resource"}}
+    },
+    "dispositionEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "disposition"],
+      "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/nonterminalDisposition"}}
+    },
+    "transactionEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "transaction_id", "events"],
+      "properties": {
+        "event": {"const": "transaction"},
+        "transaction_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "events": {
+          "type": "array", "minItems": 1,
+          "items": {"oneOf": [
+            {"$ref": "#/$defs/registrationEvent"},
+            {"$ref": "#/$defs/transactionDispositionEvent"},
+            {"$ref": "#/$defs/authorityConsumedEvent"}
+          ]}
+        }
+      }
+    },
+    "transactionDispositionEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "disposition"],
+      "properties": {"event": {"const": "disposition"}, "disposition": {"$ref": "#/$defs/disposition"}}
+    },
+    "authorityConsumedEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "authority_id"],
+      "properties": {
+        "event": {"const": "authority_consumed"},
+        "authority_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "authorityIssuedEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "authority"],
+      "properties": {
+        "event": {"const": "authority_issued"},
+        "authority": {"$ref": "#/$defs/executionAuthority"}
+      }
+    },
+    "executionAuthority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authority_id", "plan_digest", "step_index", "step_type", "kind", "resource_id", "run_id", "node_id", "capability_digest", "state_generation", "result_id", "issued_at", "expires_at"],
+      "properties": {
+        "authority_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "plan_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "step_index": {"type": "integer", "minimum": 0},
+        "step_type": {"enum": ["command_action", "terminal_observation"]},
+        "kind": {"$ref": "#/$defs/kind"},
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "capability_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "state_generation": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "issued_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "kind", "run_id", "node_id", "lifecycle", "cleanup_policy", "created_at", "dependent_node_ids", "labels"],
+      "properties": {
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "kind": {"$ref": "#/$defs/kind"},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "lifecycle": {"$ref": "#/$defs/lifecycle"},
+        "cleanup_policy": {"enum": ["stop-remove", "remove-when-stopped", "retain"]},
+        "created_at": {"type": "string", "format": "date-time"},
+        "dependent_node_ids": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 256}, "uniqueItems": true},
+        "labels": {"type": "object", "propertyNames": {"minLength": 1, "maxLength": 256}, "additionalProperties": {"type": "string", "maxLength": 4096}}
+      }
+    },
+    "disposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource_id", "kind", "run_id", "node_id", "lifecycle", "disposition", "action", "reason", "command", "evidence"],
+      "properties": {
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "kind": {"$ref": "#/$defs/kind"},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "lifecycle": {"$ref": "#/$defs/lifecycle"},
+        "disposition": {"enum": ["removed", "retained_for_dependency", "blocked", "foreign", "missing"]},
+        "action": {"enum": ["none", "remove_exact_id"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "command": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 4096}, "maxItems": 32},
+        "evidence": {"type": "array", "items": {}, "maxItems": 32},
+        "follow_up": {"type": "string", "minLength": 1, "maxLength": 4096}
+      }
+    },
+    "nonterminalDisposition": {
+      "allOf": [
+        {"$ref": "#/$defs/disposition"},
+        {
+          "type": "object",
+          "properties": {
+            "disposition": {"enum": ["retained_for_dependency", "blocked", "foreign"]}
+          }
+        }
+      ]
+    }
+  }
+}

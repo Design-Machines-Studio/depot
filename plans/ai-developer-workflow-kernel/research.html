@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Research: AI Developer Workflow Kernel</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f5f0e6;
+      --ink: #1d2624;
+      --muted: #5f6965;
+      --rule: #c9c0ae;
+      --panel: #fffdf7;
+      --accent: #136f63;
+      --warn: #9a4f14;
+      --gap: 1.25rem;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main, footer { width: min(72rem, calc(100% - 2rem)); margin-inline: auto; }
+    header {
+      border-bottom: 1px solid var(--rule);
+      padding: 3.5rem 0 2rem;
+      margin-bottom: 2rem;
+    }
+    .eyebrow { color: var(--accent); font-size: .8rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3 { line-height: 1.12; text-wrap: balance; }
+    h1 { font-size: clamp(2.3rem, 6vw, 5rem); margin: .4rem 0 1rem; max-width: 13ch; }
+    h2 { border-top: 1px solid var(--rule); padding-top: 1.4rem; margin-top: 2.5rem; }
+    h3 { margin-bottom: .35rem; }
+    p, li { max-width: 78ch; }
+    code { background: #e8e0d1; padding: .08rem .28rem; border-radius: .2rem; }
+    a { color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); }
+    th, td { border: 1px solid var(--rule); padding: .7rem; text-align: left; vertical-align: top; }
+    th { background: #e8e0d1; }
+    .lede { font-size: 1.2rem; max-width: 62ch; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: var(--gap); }
+    .card { background: var(--panel); border: 1px solid var(--rule); padding: 1rem 1.1rem; }
+    .decision { border-left: .35rem solid var(--accent); }
+    .gap { border-left: .35rem solid var(--warn); }
+    .tag { display: inline-block; border: 1px solid currentColor; border-radius: 999px; padding: .08rem .5rem; font-size: .76rem; font-weight: 700; }
+    .artifact-footer { border-top: 1px solid var(--rule); margin-top: 3rem; padding: 1rem 0 3rem; color: var(--muted); }
+    @media (max-width: 42rem) { table { display: block; overflow-x: auto; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Pipeline · Phase 2 · Research</div>
+      <h1>AI Developer Workflow Kernel</h1>
+      <p class="lede">Evidence supports an additive, standard-library control plane that wraps the existing pipeline and dm-review contracts before it enforces them. The new kernel should unify state, ownership, retries, persona proof, and browser recovery while leaving current manifests, routing, receipts, and host adapters authoritative during shadow mode.</p>
+    </header>
+
+    <section aria-labelledby="answer">
+      <h2 id="answer">Research Answer</h2>
+      <div class="grid">
+        <article class="card decision">
+          <span class="tag">Confirmed</span>
+          <h3>Adapter-first is the safe architecture</h3>
+          <p>Current manifests, provider routing, Git cleanup, evaluation receipts, Codex shims, and review convergence are proven contracts. Translate them into kernel events and replay their receipts before moving authority.</p>
+        </article>
+        <article class="card decision">
+          <span class="tag">Confirmed</span>
+          <h3>The four-slice sequence holds</h3>
+          <p>Build core state and replay first, resource ownership second, browser/persona verification third, and workflow adapters plus promotion controls fourth.</p>
+        </article>
+        <article class="card gap">
+          <span class="tag">Correction</span>
+          <h3>Docker cleanup needs typed strategies</h3>
+          <p>Containers and networks accept label plus age filters. Volumes accept label filters but no <code>until</code> filter, so stale owned volumes must be listed, inspected, age-checked, and removed individually.</p>
+        </article>
+        <article class="card gap">
+          <span class="tag">New contract</span>
+          <h3>Atomic write is not concurrency control</h3>
+          <p>Same-directory replacement protects file integrity. A run-scoped single-writer lease and revision check are still required to prevent lost state updates.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="repo">
+      <h2 id="repo">Repository Evidence</h2>
+      <table>
+        <thead><tr><th>Concern</th><th>Stable anchor</th><th>Research conclusion</th></tr></thead>
+        <tbody>
+          <tr><td>Manifest graph</td><td><code>Manifest Schema → Source of Truth / Chunk / Execution Plan</code></td><td>Keep <code>chunks</code> authoritative and translate existing dependency, kind, executor, and ownership fields into kernel nodes.</td></tr>
+          <tr><td>Transition compatibility</td><td><code>execution-orchestrator.md → Progress Ledger; Steps 0, 2, 3e, 3g, 3h, 3i</code></td><td>Use these named stages as the shadow replay map; do not rewrite the 1,589-line contract wholesale.</td></tr>
+          <tr><td>Review convergence</td><td><code>dm-review-loop.md → Initialize / Review-Fix Loop / Repository Cleanup</code></td><td>Normalize bounded attempts and prior-finding signatures into reason-specific retry budgets and convergence events.</td></tr>
+          <tr><td>Evidence</td><td><code>EVAL_GATE_PASSED</code>, <code>BROWSER_VERIFIED</code>, requirements cross-check, cleanup receipt</td><td>Kernel evidence should reference current receipts in shadow mode, not create a competing truth source.</td></tr>
+          <tr><td>Git ownership</td><td><code>repo-cleanup-contract.md → Ref registry / Safe-to-delete table / Blocked-removal reporting</code></td><td>Generalize its register-at-creation and exact-disposition model across worktrees, branches, containers, networks, and volumes.</td></tr>
+          <tr><td>Browser recovery</td><td><code>visual-browser-tester.md → Browser Fallback Chain</code></td><td>It is the strongest precedent, but pipeline and review entry points still permit inconsistent skipping or curl fallback.</td></tr>
+          <tr><td>Persona proof</td><td>Assessment scan, UX protocol, promptcraft <code>tests/ux/</code> rule, UX quality coverage matrix</td><td>Existing lenses are heuristic. Nothing proves every project-declared persona, scenario, route, browser, and viewport ran.</td></tr>
+          <tr><td>Host parity</td><td><code>harness-profile.json</code>, routing policy, Codex-native validator</td><td>Host adapters may differ in mechanism but must preserve state transitions, gates, cleanup, and receipts.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section aria-labelledby="external">
+      <h2 id="external">External Contract Checks</h2>
+      <h3>Crash-safe local state</h3>
+      <p>Python documents <code>os.replace</code> as atomic on success and warns that cross-filesystem replacement may fail. The state writer should therefore create its temporary file in the destination directory, write deterministic UTF-8 JSON, flush, call <code>os.fsync</code>, replace the target, and best-effort fsync the directory on supported Unix hosts. Recovery tests must cover interruption before and after replacement.</p>
+
+      <h3>Owned Docker cleanup</h3>
+      <p>Docker's current CLI supports conjunctive <code>label</code> and <code>until</code> filters for stopped containers and unused networks. Volume pruning supports labels but not age. The safe implementation is a resource-type adapter: filtered prune for containers/networks; label-filtered enumeration, inspect, TTL comparison, and explicit removal for unused volumes. Current-chunk resources should be cleaned at the existing end-of-chunk repository cleanup boundary; explicitly shared resources survive until their last dependent completes, and final cleanup reconciles anything blocked or interrupted. Never call broad <code>system prune</code>.</p>
+
+      <h3>Browser restart and engine fallback</h3>
+      <p>Playwright Test discards a failed worker process and its browser, then starts a new worker; projects run the same suite across Chromium, Firefox, and WebKit. That validates the restart and cross-engine concepts, but the browser MCP path is a different host surface. The kernel must explicitly record: initial failure evidence, close/relaunch primary attempt, alternate-engine attempt, and terminal help request. Screenshots, traces, console output, and attempt metadata belong in the evidence record.</p>
+    </section>
+
+    <section aria-labelledby="gaps">
+      <h2 id="gaps">Confirmed Gaps and Contradictions</h2>
+      <ul>
+        <li>No repository implementation currently provides <code>run-state.json</code>, <code>events.jsonl</code>, a workflow event schema, <code>verificationProfile</code>, resumable builder handle, Docker ownership label namespace, or Docker resource registry.</li>
+        <li>Browser behavior conflicts across entry points: one path restarts and fails visibly, another can report skipped, and pipeline can accept caller-approved curl fallback. An alternate tool surface is not necessarily a different browser engine.</li>
+        <li>Persona rules request two or three lenses but do not enforce completeness against a declared project matrix.</li>
+        <li>Builder failure currently fails the chunk and skips dependents; it does not retain and resume the original builder session.</li>
+        <li>Campaign state is latest-value overwrite state, not an append-only replay log.</li>
+        <li>Receipt enums have drifted across docs and adapters, which argues for a versioned evidence schema.</li>
+        <li>dm-review cannot depend directly on pipeline without a plugin cycle; shared kernel policy and schemas must live in a neutral repository surface.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="sequence">
+      <h2 id="sequence">Recommended Extraction Sequence</h2>
+      <ol>
+        <li>Create <code>tools/workflow_kernel/</code> with versioned models, append-only events, replay, legal transitions, retry policy, atomic state writes, single-writer/revision protection, fake clock, fake host adapters, tests, and a local CLI.</li>
+        <li>Add a shadow manifest translator and compatibility fixtures around the current source-of-truth manifest. Compare predicted transitions and evidence to existing receipts.</li>
+        <li>Generalize the Git registry pattern into a resource registry, then add Docker labels, per-chunk cleanup at the existing repository cleanup boundary, terminal reconciliation, 24-hour labeled-only sweeping, and blocked-removal evidence.</li>
+        <li>Add isolation and builder-session adapters. Resume only when a host returns a real handle; otherwise emit <code>session_resume_unavailable</code> and use the declared terminal policy.</li>
+        <li>Add a shared <code>verificationProfile</code>, declared-persona coverage model, and browser recovery machine. Update assessment, promptcraft, pipeline, visual review, and UX review to reference the shared contract.</li>
+        <li>Integrate dm-review lanes and fallback reporting after pipeline shadow replay is stable.</li>
+        <li>Wire behavioral kernel tests into full composition validation. Promote shadow to enforce only after receipt replay matches; keep native mode separately opt-in.</li>
+        <li>Update canonical Claude command/plugin sources and versions, then regenerate and check Codex manifests and command-skill aliases.</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="validation">
+      <h2 id="validation">Validation Targets</h2>
+      <ul>
+        <li>Legal and illegal state transitions; duplicate, missing, and corrupt events; replay and reconstruction.</li>
+        <li>Atomic-write interruption and revision-conflict tests.</li>
+        <li>Cleanup on success, failure, gate, cancellation, and interrupted resumption paths.</li>
+        <li>Docker label ownership and TTL boundaries for containers, networks, and volumes, including blocked resources.</li>
+        <li>Primary-browser restart, alternate-engine fallback, complete evidence retention, and fail-closed help escalation.</li>
+        <li>Declared-persona completeness and honest <code>not_declared</code> behavior.</li>
+        <li>Builder resume and explicit unavailable-handle behavior.</li>
+        <li>Claude, Codex, and generic-host parity at the transition and receipt layers.</li>
+      </ul>
+      <p>Baseline repository checks reported by the codebase research lane passed: generated manifest checks, generated command-skill checks, workflow-contract validation, Codex-native pipeline validation, OpenRouter cascade validation, and routing-economics validation. The implementation must add standard-library unit tests and a behavioral workflow-kernel validator before running <code>./tools/validate-composition.sh --all</code>.</p>
+    </section>
+
+    <section aria-labelledby="coverage">
+      <h2 id="coverage">Research Coverage and Limits</h2>
+      <ul>
+        <li><strong>Codebase:</strong> completed through a native repository research agent plus direct local inspection.</li>
+        <li><strong>History:</strong> completed through local memory and two directly relevant rollout summaries.</li>
+        <li><strong>AI memory graph:</strong> available and queried; no matching entities were returned.</li>
+        <li><strong>Context7:</strong> completed for current Python, Docker, and Playwright contracts.</li>
+        <li><strong>Web:</strong> completed against official Python, Docker, and Playwright documentation only.</li>
+        <li><strong>RAG:</strong> no callable repository RAG source was exposed; recorded as unavailable.</li>
+        <li><strong>External research executor:</strong> OpenRouter was detected earlier but repository-data routing was policy-blocked, so no private architecture was sent externally. Native/local research replaced that lane without disguising the coverage difference.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="references">
+      <h2 id="references">References</h2>
+      <ul>
+        <li><a href="https://docs.python.org/3/library/os.html#os.replace">Python: <code>os.replace</code></a> and <a href="https://docs.python.org/3/library/os.html#os.fsync"><code>os.fsync</code></a></li>
+        <li><a href="https://docs.python.org/3/library/tempfile.html#tempfile.NamedTemporaryFile">Python: named temporary files</a></li>
+        <li><a href="https://docs.docker.com/reference/cli/docker/container/prune/">Docker container prune</a>, <a href="https://docs.docker.com/reference/cli/docker/network/prune/">network prune</a>, and <a href="https://docs.docker.com/reference/cli/docker/volume/prune/">volume prune</a></li>
+        <li><a href="https://playwright.dev/docs/test-retries">Playwright retries and worker restart</a>, <a href="https://playwright.dev/docs/test-projects">projects and browsers</a>, and <a href="https://playwright.dev/docs/test-use-options">failure evidence options</a></li>
+        <li><code>plugins/pipeline/skills/promptcraft/references/manifest-schema.md</code></li>
+        <li><code>plugins/pipeline/agents/workflow/execution-orchestrator.md</code></li>
+        <li><code>plugins/dm-review/skills/review/references/repo-cleanup-contract.md</code></li>
+        <li><code>plugins/dm-review/agents/review/visual-browser-tester.md</code></li>
+        <li><code>plugins/pipeline/references/harness-profile.json</code> and <code>routing-policy.json</code></li>
+        <li><code>tools/generate-codex-manifests.py</code>, <code>tools/generate-codex-command-skills.py</code>, and workflow validators</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="artifact-footer">
+    <p>Pipeline research artifact · 2026-07-14 · Machine-readable findings and references are stored in the data island below.</p>
+  </footer>
+
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "research",
+    "slug": "ai-developer-workflow-kernel",
+    "findings": [
+      "Use an additive Python standard-library kernel and keep current workflow contracts authoritative during shadow mode.",
+      "Translate existing manifests, routing, cleanup, and receipts through adapters before moving enforcement authority.",
+      "Persist deterministic state with same-directory temporary files, flush and fsync, atomic replace, directory sync where supported, and a separate single-writer revision contract.",
+      "Use resource-type-aware Docker cleanup: label plus age prune for containers and networks; label-filtered inspect and explicit removal for stale volumes.",
+      "Generalize the existing Git ownership registry to Docker resources, clean chunk-owned resources during per-chunk repository cleanup, reconcile at terminal cleanup, and never use broad prune.",
+      "Make every project-declared UX persona and scenario blocking for UI and integration lanes, while recording not_declared honestly when none exist.",
+      "Encode browser recovery as evidence capture, primary browser close and relaunch, alternate engine attempt, then terminal help request.",
+      "Resume the original builder only when a host exposes a durable handle; record session_resume_unavailable otherwise.",
+      "Keep shared kernel contracts neutral to avoid a dm-review to pipeline dependency cycle.",
+      "Require receipt replay and behavioral tests before shadow-to-enforce promotion; keep native mode opt-in."
+    ],
+    "references": [
+      {"title": "Approved workflow-kernel design", "path": "docs/superpowers/specs/2026-07-14-ai-developer-workflow-kernel-design.md", "source": "codebase"},
+      {"title": "Phase 1 assessment", "path": "plans/ai-developer-workflow-kernel/assessment.html", "source": "codebase"},
+      {"title": "Pipeline manifest schema", "path": "plugins/pipeline/skills/promptcraft/references/manifest-schema.md", "source": "codebase"},
+      {"title": "Pipeline execution orchestrator", "path": "plugins/pipeline/agents/workflow/execution-orchestrator.md", "source": "codebase"},
+      {"title": "Repository cleanup contract", "path": "plugins/dm-review/skills/review/references/repo-cleanup-contract.md", "source": "codebase"},
+      {"title": "Visual browser tester", "path": "plugins/dm-review/agents/review/visual-browser-tester.md", "source": "codebase"},
+      {"title": "Docker container prune", "url": "https://docs.docker.com/reference/cli/docker/container/prune/", "source": "official-docs"},
+      {"title": "Docker network prune", "url": "https://docs.docker.com/reference/cli/docker/network/prune/", "source": "official-docs"},
+      {"title": "Docker volume prune", "url": "https://docs.docker.com/reference/cli/docker/volume/prune/", "source": "official-docs"},
+      {"title": "Playwright retries", "url": "https://playwright.dev/docs/test-retries", "source": "official-docs"},
+      {"title": "Playwright projects", "url": "https://playwright.dev/docs/test-projects", "source": "official-docs"},
+      {"title": "Playwright evidence options", "url": "https://playwright.dev/docs/test-use-options", "source": "official-docs"},
+      {"title": "Python os.replace and os.fsync", "url": "https://docs.python.org/3/library/os.html", "source": "official-docs"},
+      {"title": "Python temporary files", "url": "https://docs.python.org/3/library/tempfile.html", "source": "official-docs"},
+      {"title": "Local workflow history registry", "path": "/Users/trav/.codex/memories/MEMORY.md", "source": "memory"},
+      {"title": "Cross-browser review rollout", "path": "/Users/trav/.codex/memories/rollout_summaries/2026-07-04T08-00-02-K6oP-pr340_review_fix_push_and_branch_hygiene.md", "source": "memory"},
+      {"title": "Codex-native pipeline adapter rollout", "path": "/Users/trav/.codex/memories/rollout_summaries/2026-06-19T09-06-51-6oq3-codex_native_pipeline_adapter.md", "source": "memory"}
+    ]
+  }
+  </script>
+</body>
+</html>

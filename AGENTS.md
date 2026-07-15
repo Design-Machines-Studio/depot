@@ -4,7 +4,7 @@ This file provides guidance to Codex when working with code in this repository.
 
 ## What This Is
 
-Depot (DM-013/WORKS) is Design Machines' AI plugin marketplace -- a collection of knowledge-as-code plugins that give AI coding assistants specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON consumed as skills, agents, and reference material.
+Depot (DM-013/WORKS) is Design Machines' AI plugin marketplace -- a collection of knowledge-as-code plugins that give AI coding assistants specialized domain expertise. The repo is structured Markdown and JSON consumed as skills, agents, and reference material, with one sanctioned executable exception: the workflow-kernel plugin ships a stdlib-only Python 3.12 reference runtime (no build step, no third-party dependencies). Its test suite is a repository development artifact at the top-level `tests/` directory -- it never ships into user plugin caches -- and is run by `tools/validate-workflow-kernel.py`. Everything else has no build system, test suite, or application code.
 
 **This marketplace was built for Claude Code.** Codex compatibility is provided via generated manifest shims. CLAUDE.md is the canonical reference for the full documentation -- everything below covers only what differs for Codex.
 
@@ -63,7 +63,7 @@ These aliases live at `plugins/<name>/skills/<command>/SKILL.md` so Codex can ex
 
 ## Runtime Cache Path Resolution
 
-Plugins that resolve paths at runtime (deepseek, openrouter, dm-review, pipeline) use a Claude-first/Codex-fallback loop:
+Plugins that resolve paths at runtime (deepseek, openrouter, dm-review, pipeline, workflow-kernel) use a Claude-first/Codex-fallback loop:
 
 ```bash
 WRAPPER_PATH=""
@@ -83,6 +83,7 @@ When editing cache lookups, always include both roots. Validate with:
 
 ```shell
 ./tools/validate-composition.sh --all    # full validation (includes dual-compat check)
+./tools/validate-workflow-kernel.py      # offline behavioral kernel release gate
 ./tools/validate-dual-compat.sh          # Codex manifest sync + cache fallback check only
 ./tools/eval-descriptions.sh             # skill description trigger accuracy
 ./tools/check-dependencies.sh            # plugin dependency resolution
@@ -102,7 +103,11 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-18 plugins | 38 canonical skills + 34 generated Codex command-skill aliases | 39 agents | 34 commands
+19 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 40 agent cards | 34 commands
+
+The generated search index counts every manifest-discovered surface, including
+the internal kernel skill: 40 skills and 40 agents. The 39 count above preserves
+the domain-facing skill inventory used by the release plan.
 
 | Plugin | Purpose |
 |---|---|
@@ -121,12 +126,15 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 | **the-local** | Self-hosted Matrix network -- Element Web branding, Synapse config |
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
+| **workflow-kernel** | Neutral deterministic run state, replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by workflow plugins |
 | **deepseek** | DeepSeek V4 API subagent for code review and bulk diff analysis |
 | **openrouter** | OpenRouter provider plugin (leaf): GLM-5.2 big-diff analysis + one-shot generation; pipeline cascade rail and dm-review big-diff fallback |
 
 ## Conventions
 
-- Almost all content is Markdown. No code to compile, lint, or test.
+- Almost all content is Markdown. The sanctioned exception is the stdlib-only
+  workflow-kernel Python runtime and top-level `tests/`; verify it with
+  `tools/validate-workflow-kernel.py` and the full composition validator.
 - Skills use `SKILL.md` as the canonical filename. The `name:` field in YAML frontmatter must match the skill folder name.
 - Reference files live in `references/` subdirectories.
 - Agent files are categorized: `review/` for code review agents, `workflow/` for automation agents.

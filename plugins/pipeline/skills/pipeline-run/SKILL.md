@@ -41,8 +41,30 @@ Before executing, verify:
 4. **Git working tree has no blocking user-file changes** -- classify dirty paths as pipeline-owned artifacts (`plans/<feature>/`, generated prompts/manifests/receipts) versus unrelated user files. Commit/gitignore/force-add pipeline-owned artifacts as directed by the orchestrator; block only on unrelated user files.
 5. **On the manifest base branch** with latest changes -- use `manifest.baseBranch` when present, defaulting to `main`. The base may be any existing ref, including an unmerged PR branch, stacked branch, or hotfix branch.
 6. **Bypass permissions active** -- If not, warn: "Autonomous execution requires bypass permissions mode. Enable it and re-run."
+7. **Workflow class is valid** -- Accept only `chore|bug|feature|hotfix|security|investigation|migration`. For a legacy manifest with no `workflowClass`, use `feature` and record `workflow_class_defaulted=true`. Never infer the class. Pass the validated value unchanged to the orchestrator, shadow translator, receipts, and metrics.
 
 If any check fails, report the issue and stop.
+
+## Shadow Workflow Kernel Preflight
+
+The Markdown manifest, this command, routing policy, orchestrator, and receipts remain authoritative. The workflow kernel is observation-only and may not select ready nodes, block a merge, change fallback routing, invoke cleanup, or convert a review result.
+
+Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Store observation and parity artifacts beneath `plans/<feature>/` and initialize every run at `.workflow-kernel/runs/<run-id>`. If resolution or compatibility fails, preserve the authoritative run and record `shadow unavailable` with the safe reason.
+
+Invoke only stable launcher subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
+
+The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulative ordered redacted array `plans/<feature>/authoritative-receipts.json`. Produce the independent prediction before corresponding authoritative actions and seal it first:
+
+```text
+"$WORKFLOW_KERNEL" init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
+"$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature>/manifest.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
+```
+
+Every later boundary observation uses:
+
+```text
+"$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
+```
 
 ## Codex Native Execution Adapter
 
@@ -50,7 +72,9 @@ When this command runs in Codex and the session exposes `multi_agent_v1.spawn_ag
 
 **Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
 
-**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation or documented `sequential-on-branch` mode for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
+The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
+
+**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
 
 **Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
 
@@ -90,9 +114,20 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
    - Merge back to feature branch
    - Final full dm-review
    - ai-memory session recording
+   - shadow observation after each authoritative receipt, when the trusted runtime is available
 6. Present the execution summary
 
 ## After Execution
+
+After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
+
+```text
+"$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
+"$WORKFLOW_KERNEL" compare --state-dir plans/<feature> --authoritative-receipts plans/<feature>/authoritative-receipts.json --output plans/<feature>/shadow-report.json
+"$WORKFLOW_KERNEL" metrics --events plans/<feature>/authoritative-receipts.json --output plans/<feature>/metrics.json
+```
+
+`bind-prediction` runs before corresponding authoritative actions, atomically seals the source, translated events, event digest, and RunSpec context, and appends exact binding authority to the canonical lifecycle ledger before `run.started`. `observe-pipeline` runs only after authoritative receipts exist and requires that ordered authority plus bound `pipeline-shadow-prediction.json`; direct comparison rechecks the same authority, and byte-identical predicted and authoritative receipts are valid only with the pre-start binding. It writes a separate `authoritative_observation` and never creates or changes the prediction. Without matching independent prediction evidence, observation and comparison fail closed. Keep the source and bound artifact until comparison completes. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Never auto-delete the repository-lifetime `.workflow-kernel/repository-scope.json`; retain the terminal run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches, regardless of parity `match`.
 
 Present the summary report from the orchestrator, then ask:
 

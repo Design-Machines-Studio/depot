@@ -59,7 +59,7 @@ Produce a **Current State Report** covering:
 - Dependencies (internal and external)
 - Known issues from project history
 
-**Agent 2: UX Assessment** (conditional -- dev server AND UI-touching feature)
+**Agent 2: UX Assessment** (conditional -- UI-touching feature)
 
 **Skip rule (token budget):** if the feature's scope is entirely backend/logic -- none of the planned work touches templates, CSS, JS modules, or rendered pages -- skip the UX assessment. Log one line: `UX assessment: skipped (no UI/Integration surface detected).`
 
@@ -70,7 +70,9 @@ Heuristic (applied on the user's feature description since the chunk classificat
 
 When in doubt, run the UX assessment -- false positives are cheaper than missing a regression. But a strict backend-only assessment (e.g. "add a new migration column for vote_count") should NOT trigger 3-viewport screenshots.
 
-Only runs if a dev server is detected or a URL is provided. Read `references/ux-assessment-protocol.md` for the full protocol. In summary:
+Run discovery whenever the feature is UI/integration work. Execute browser proof
+when a dev server is detected or a URL is provided. Read
+`references/ux-assessment-protocol.md` for the full protocol. In summary:
 
 - Use Playwright MCP tools to navigate and screenshot the affected area
 - Evaluate: visual hierarchy, spacing, typography, interaction states, responsiveness
@@ -85,7 +87,10 @@ Produce a **Current UX Report** covering:
 - Accessibility quick-check (color contrast, focus indicators, semantic structure)
 - UX debt inventory
 
-If no dev server is available, skip this agent and note: "UX assessment skipped -- no dev server detected."
+If no dev server or supplied URL is available, discovery may continue, but the
+required UI/integration target is unavailable. Record a blocked
+`human_help_required` outcome and ask the user to start/provide the target; never
+mark required browser proof skipped or replace it with curl reachability.
 
 #### Baseline Screenshot Persistence
 
@@ -104,6 +109,13 @@ Baseline screenshots are Tier 1 (ephemeral) artifacts per the artifact lifecycle
 #### Fixture Discovery
 
 Many codebases ship with dev-time auth bypasses or persona-switching helpers. Discovering these up-front saves the prompt-writer from having to re-derive them from handler code.
+
+For projects with `tests/ux/`, emit a sanitized declared verification profile
+using `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
+Include every selected task/persona/route/browser/viewport case and provenance,
+not a representative sample. Task frontmatter overrides the generated coverage
+matrix. Record auth field names only; never copy cookie, bearer, password,
+username, or fixture-secret values into assessment HTML or its data islands.
 
 Protocol:
 
@@ -160,7 +172,8 @@ The brief is written as **HTML with a JSON data island**, not markdown -- assemb
 [From Code Assessment agent]
 
 ## UX State
-[From UX Assessment agent, or "Skipped" if no dev server or no UI surface]
+[From UX Assessment agent; use "Skipped" only for no UI/integration surface.
+For an unavailable required target, record blocked `human_help_required`.]
 
 ## Test Personas
 [From Fixture Discovery, or "No dev-mode auth bypass detected."]
@@ -176,8 +189,10 @@ screenshots inline. Use a `<div class="grid" style="--grid-min: 22rem;">` of
 src="baselines/<file>" alt="<route> at <viewport>" loading="lazy"
 style="width:100%;height:auto;border:1px solid;"></a>` plus a `<figcaption>`
 naming the route. Show the desktop 1440 shot per route; the mobile 375/320 files
-still go in the `baselineScreenshots` island array. If no baselines: "No
-baselines -- skipped UX assessment."]
+still go in the `baselineScreenshots` island array. If the required target is
+unavailable: "No baselines -- target unavailable; human_help_required." If the
+work has no UI/integration surface: "No baselines -- UX assessment not
+applicable."]
 
 ## Key Findings
 - [Top 3-5 findings that should inform planning]
@@ -200,6 +215,8 @@ Present the Assessment Brief to the user. If running as part of `/pipeline`, pas
 
 ## Graceful Degradation
 
-- No Playwright MCP: Skip UX assessment, note in report. Playwright is intentionally not declared in `mcpDependencies` because the UX assessment is optional -- the skill functions without it.
+- No Playwright MCP: discovery may continue, but required UI/integration browser
+  coverage is blocked. Follow the shared recovery ladder and return
+  `human_help_required`; never mark required proof skipped or curl-verified.
 - No ai-memory MCP: Skip project history check, note in report
 - No domain plugins: Use general patterns only, note which plugins would have helped

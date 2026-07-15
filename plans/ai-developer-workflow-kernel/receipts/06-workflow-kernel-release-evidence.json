@@ -1,0 +1,165 @@
+{
+  "checks": [
+    "canonical runtime",
+    "JSON schemas and policy",
+    "unittest suite",
+    "scenario replay",
+    "state reconstruction and event ordering",
+    "terminal cleanup",
+    "Docker cleanup safety",
+    "secret leakage",
+    "host compatibility",
+    "promotion and shadow default",
+    "runtime CLI commands",
+    "workflow classes",
+    "persona layouts"
+  ],
+  "default_mode": "shadow",
+  "evidence_origin": "fixture",
+  "host_compatibility": {
+    "claude-code": "reference",
+    "codex": "explained_host_difference",
+    "generic": "explained_host_difference"
+  },
+  "persona_layouts": [
+    "declaration_root",
+    "tests/ux"
+  ],
+  "promotion": {
+    "enforce_to_native_fixture": {
+      "allowed": false,
+      "current_state": "enforce_available",
+      "missing_evidence": [
+        "real_shadow_run:claude-code",
+        "real_shadow_run:codex",
+        "real_shadow_run:generic"
+      ],
+      "reason_codes": [
+        "promotion_evidence_missing"
+      ],
+      "target_state": "native_available"
+    },
+    "native_to_default": {
+      "allowed": false,
+      "current_state": "native_available",
+      "missing_evidence": [
+        "separate_human_approval"
+      ],
+      "reason_codes": [
+        "separate_human_approval_required"
+      ],
+      "target_state": "native_default"
+    },
+    "shadow_to_enforce_fixture": {
+      "allowed": true,
+      "current_state": "shadow",
+      "missing_evidence": [],
+      "reason_codes": [
+        "promotion_allowed"
+      ],
+      "target_state": "enforce_available"
+    }
+  },
+  "promotion_criteria": [
+    {
+      "criterion": "zero_unexplained_receipt_gaps",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "host compatibility"
+      ]
+    },
+    {
+      "criterion": "illegal_transition_scenarios_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "scenario replay",
+        "state reconstruction and event ordering"
+      ]
+    },
+    {
+      "criterion": "terminal_cleanup_scenarios_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "scenario replay",
+        "terminal cleanup"
+      ]
+    },
+    {
+      "criterion": "host_fixture_claude_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "host compatibility"
+      ]
+    },
+    {
+      "criterion": "host_fixture_codex_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "host compatibility"
+      ]
+    },
+    {
+      "criterion": "host_fixture_generic_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "host compatibility"
+      ]
+    },
+    {
+      "criterion": "persona_completeness_scenarios_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "scenario replay"
+      ]
+    },
+    {
+      "criterion": "browser_recovery_scenarios_passed",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "scenario replay"
+      ]
+    },
+    {
+      "criterion": "provider_security_boundaries_unchanged",
+      "origin": "fixture",
+      "satisfied": true,
+      "sources": [
+        "scenario replay"
+      ]
+    }
+  ],
+  "real_run_evidence": false,
+  "scenario_count": 43,
+  "schema_version": 1,
+  "workflow_classes": [
+    "claude:chore",
+    "claude:bug",
+    "claude:feature",
+    "claude:hotfix",
+    "claude:security",
+    "claude:investigation",
+    "claude:migration",
+    "codex:chore",
+    "codex:bug",
+    "codex:feature",
+    "codex:hotfix",
+    "codex:security",
+    "codex:investigation",
+    "codex:migration",
+    "generic:chore",
+    "generic:bug",
+    "generic:feature",
+    "generic:hotfix",
+    "generic:security",
+    "generic:investigation",
+    "generic:migration"
+  ]
+}

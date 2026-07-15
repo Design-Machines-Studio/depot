@@ -25,7 +25,7 @@ You MUST execute every step for every chunk. Specifically:
 - You MUST record the session to ai-memory
 - You MUST report what you actually did in the summary, honestly
 
-Exception: use `sequential-on-branch` mode instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification.
+Exception: use the `sequential-on-branch` isolation strategy instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification. It is an isolation strategy recorded as `isolationStrategy`, never an `executionMode` value.
 
 ## CRITICAL: Subagent Budget & Dead-Lane Handling
 
@@ -169,7 +169,7 @@ The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list 
 
 ## Progress Ledger
 
-Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), `manual_walkthrough` (user is driving some steps), or `curl_fallback` (degraded -- no browser tools). Include the label in every chunk receipt and in the final Summary Report.
+Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), or `manual_walkthrough` (user is driving some steps). Browser availability is a separate required-evidence status and never an execution mode. Each chunk also carries a separate `isolationStrategy` label from Step 1c (`per-chunk-worktree` or `sequential-on-branch`) -- isolation is never folded into `executionMode`. Include both labels in every chunk receipt and in the final Summary Report.
 
 Before any chunk runs:
 
@@ -190,7 +190,8 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 8. Run Playwright browser check (UI and Integration chunks only)
 [chunk-id] 9. Merge back to feature branch
 [chunk-id] 10. Clean up worktree
-[chunk-id] executionMode: full_cli | codex_native | manual_walkthrough | curl_fallback
+[chunk-id] executionMode: full_cli | codex_native | manual_walkthrough
+[chunk-id] isolationStrategy: per-chunk-worktree | sequential-on-branch
 ```
 
 After all chunks:
@@ -208,6 +209,29 @@ FINAL 6. Present summary report
 
 Do NOT mark a step complete until you have actually done it. Do NOT skip steps.
 
+### Shadow Workflow Kernel Runtime
+
+The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they do not select ready nodes, advance gates, block or approve merges, change provider fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
+
+Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Use only the launcher's stable subcommands; inline Python source is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Initialize the run at `.workflow-kernel/runs/<run-id>`; current execution and stale reconciliation share the same verified `run-state.json`.
+
+Produce the independent prediction before corresponding authoritative actions, then seal it before the first observation:
+
+```text
+"$WORKFLOW_KERNEL" init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
+"$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
+```
+
+Before each observation, atomically materialize the complete ordered redacted receipt array through the latest authoritative boundary at `plans/<feature-slug>/authoritative-receipts.json`, then invoke:
+
+```text
+"$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+```
+
+The validated `manifest.json` and cumulative receipt array remain authoritative observations. `bind-prediction` atomically seals the independently produced source, translated events, event digest, and RunSpec context as `pipeline-shadow-prediction.json`, then appends the exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation rejects missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. `observe-pipeline` only consumes that matching existing artifact and writes `pipeline-shadow-observation.json` as an explicit `authoritative_observation`; it never creates or mutates a prediction. Without independent evidence, comparison fails closed. Keep the prediction source and bound artifact through terminal comparison.
+
+If resolution, observation, comparison, or metrics is unavailable, preserve the authoritative result and record `shadow unavailable` with a safe reason. Stable exits are `0` success, `2` invalid input/schema, `3` unsafe/blocked, `4` unavailable/incompatible, `5` parity gap, and `6` write/state conflict. None authorizes changing the canonical result; cleanup exit `3` or `6` remains blocked. Every observation consumes an authoritative receipt reference; builder observations and shadow state cannot stand in for dispatch, resume, validation, evaluation, browser, merge, or cleanup evidence.
+
 ## Input
 
 You receive:
@@ -223,8 +247,11 @@ Before any git operations, validate the manifest:
 1. **Branch name safety:** Verify `featureBranch` and all chunk `id` values match `^[a-z0-9][a-z0-9\-\/]*$`. Reject and stop if any contain spaces, option-like strings (`--`), or special characters.
 2. **Prompt path containment:** Resolve each chunk's `prompt` path canonically. Verify all resolve within the project's `plans/` directory. Reject and stop if any path escapes.
 3. **Schema check:** Verify `chunks` is an array, each chunk has `id`, `prompt`, `level`, `dependsOn`. Recompute the level groups from `chunks` and compare to `executionPlan.levels` -- if they disagree, `chunks` is authoritative.
+4. **Workflow class:** Accept only `chore|bug|feature|hotfix|security|investigation|migration`. If absent on a legacy manifest, set the translated value to `feature` and record `workflow_class_defaulted=true`; never infer it from `kind`, files, or prose. Pass it unchanged into RunSpec, events, receipts, and metrics. Existing security provider and approval overrides remain authoritative.
 
 If validation fails, report the specific issue and stop.
+
+After the authoritative validation receipt exists, run `observe-pipeline` when the trusted runtime is available. A translator rejection is recorded as shadow evidence and does not replace this validation decision.
 
 ## Step 0b: MCP Pre-Flight Check
 
@@ -247,9 +274,9 @@ Also check for Chrome DevTools MCP:
 
 ### 3. Decision gate
 
-**If UI/Integration chunks > 0 AND no browser MCP tools found:**
+**If UI/Integration chunks > 0 AND no browser MCP tools are initially found:**
 
-STOP. Output:
+Treat discovery failure as the first failed required-browser attempt. Preserve the safe discovery evidence, attempt to quit the primary browser process/engine session, attempt a demonstrably fresh primary launch and retry discovery, then attempt a genuinely different configured browser engine. Record an unavailable attempt when the host cannot perform a recovery action. If the ladder is exhausted, output:
 
 ```text
 BLOCKED: This manifest contains [N] UI/Integration chunks that require browser verification, but no Playwright or Chrome DevTools MCP tools are available. Visual verification cannot be performed.
@@ -257,19 +284,7 @@ BLOCKED: This manifest contains [N] UI/Integration chunks that require browser v
 Fix: Ensure a Playwright or Chrome DevTools MCP server is running before pipeline execution.
 ```
 
-Use AskUserQuestion to ask: "Proceed without visual verification (degraded quality -- visual issues will not be caught), or fix the tool issue first?"
-
-If the user chooses to proceed degraded, record `degradedMode: curl_fallback` in:
-
-1. The Progress Ledger (new field, visible in every TodoWrite update).
-2. Every subsequent chunk receipt (`EVAL_GATE_PASSED` and `BROWSER_VERIFIED` lines).
-3. The final Summary Report's Warnings section.
-
-Log: `MCP Pre-Flight: DEGRADED -- user approved proceeding without browser tools. degradedMode=curl_fallback. Visual verification will be deferred to caller Phase 7.`
-
-**Forbidden phrases under degradedMode=curl_fallback:** do NOT write "visually verified", "visual check passed", "visual criteria met", "looks correct", or any phrase that implies rendered output was evaluated. Use "structurally verified (curl)" or "DOM shape confirmed via grep" instead. curl + grep can confirm DOM presence and class names. It cannot confirm JS runtime state, visual cardinality, layout, or duplicates. Be precise.
-
-Continue to Step 1 but mark every subsequent visual verification step as SKIPPED in chunk receipts, with the reason `curl_fallback`.
+Record the required cases as blocked `human_help_required` with the initial discovery plus primary-quit, fresh-primary, and different-engine attempt evidence, then ask the user to restore a browser engine. Do not offer curl or a silent skip as completion for required browser work. The authoritative merge recommendation remains `BLOCKED PENDING CALLER VERIFICATION` until complete browser evidence exists.
 
 **If browser tools are available:**
 
@@ -287,7 +302,7 @@ If browser tools are available and UI chunks exist, verify the dev server is rea
 
 Use `browser_navigate` to test. If none respond:
 
-Do not hard-stop. Record `browser proof deferred to caller` with the attempted URLs, mark visual verification as `curl_fallback` for this run, and ask the caller to start the application in Phase 7. The final merge recommendation MUST be `BLOCKED PENDING CALLER VERIFICATION` until browser proof is completed.
+Record the attempted URLs as diagnostics and feed the required cases into the Step 3h recovery ladder: preserve the failed attempt, quit/restart the primary browser, then launch a different configured engine after a fresh readiness recheck. If the target remains unavailable, emit blocked `human_help_required` evidence and ask the caller to start the application. Curl may diagnose reachability but cannot satisfy the case. The final merge recommendation MUST be `BLOCKED PENDING CALLER VERIFICATION` until browser proof is completed.
 
 ## Step 0c: Module-Loader Pre-Flight
 
@@ -334,6 +349,7 @@ ENTRIES=(
   'plans/*/prompts/'
   'plans/*/manifest.json'
   'plans/*/brainstorm.html'
+  '.workflow-kernel/'
   '.worktrees/'
   '.claude/ux-review/'
   'todos/'
@@ -452,7 +468,7 @@ In `sequential-on-branch` mode:
 1. Do not create per-chunk worktrees.
 2. Execute chunks sequentially on `<featureBranch>` in manifest order, even if the manifest has parallel groups.
 3. Preserve every other gate: input guardrails, implementation dispatch, build/test validation, anti-pattern scan, evaluation gate, final full review, requirements cross-check, receipt, and cleanup.
-4. Record `executionMode: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report.
+4. Record `isolationStrategy: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report. `executionMode` keeps its closed host-shaped value (`full_cli`, `codex_native`, `manual_walkthrough`, `generic`, `generic_host`) -- sequential-on-branch is an isolation strategy, not a host execution mode, and the workflow-kernel adapters reject any `executionMode` outside the closed set. Runs that use per-chunk worktrees record `isolationStrategy: per-chunk-worktree`.
 
 Tradeoff: no parallel isolation. This is acceptable for sequential manifests and required when Docker-mounted verification would otherwise test the wrong checkout.
 
@@ -463,6 +479,8 @@ Read the `executionPlan.levels` array. Process each level in order.
 **Sequential levels:** Execute chunks one at a time.
 
 **Parallel levels:** Execute all chunks in a parallel group simultaneously using multiple Agent tool calls in a single message.
+
+After each authoritative dependency-ready and dispatch receipt exists, feed that receipt to `observe-pipeline` when available. Kernel readiness is a comparison prediction only and never selects the next chunk.
 
 ## Step 3: Per-Chunk Execution
 
@@ -505,7 +523,7 @@ git worktree add .worktrees/pipeline/<feature>/<chunk-id> -b pipeline/<feature>/
 
 Registration happens at creation, never reconstructed afterward from a glob. If the run dies between `worktree add` and registration, Step 5b's sweep is the only thing that finds the orphan -- and it can only find refs it knows the naming convention for.
 
-In `sequential-on-branch` mode, replace the worktree command with:
+Under the `sequential-on-branch` isolation strategy, replace the worktree command with:
 
 ```bash
 git checkout <featureBranch>
@@ -514,6 +532,25 @@ git checkout <featureBranch>
 No refs are created in that mode, so nothing is registered for this chunk.
 
 Mark `[chunk-id] 2. Create worktree` complete, or `branch selected` for `sequential-on-branch`.
+
+#### Docker/Compose creation ownership
+
+Before any later step creates a Docker container, network, named volume, or Compose project for this run, invoke exactly one of:
+
+```text
+"$WORKFLOW_KERNEL" plan-create --state-dir plans/<feature-slug> --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json plans/<feature-slug>/docker/<node-id>-create-argv.json --dependent-node-ids-json plans/<feature-slug>/docker/<node-id>-dependent-node-ids.json --output plans/<feature-slug>/docker/<node-id>-creation-plan.json
+"$WORKFLOW_KERNEL" plan-compose --state-dir plans/<feature-slug> --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json plans/<feature-slug>/docker/<node-id>-compose-argv.json --dependent-node-ids-json plans/<feature-slug>/docker/<node-id>-dependent-node-ids.json --output plans/<feature-slug>/docker/<node-id>-creation-plan.json
+```
+
+Write the exact declared dependent node IDs to the dependency JSON file, using `[]` when there are none. These planning commands only return validated label-instrumented creation argv and ownership proof; they do not execute. The authoritative orchestrator executes that returned creation argv/labels-only Compose override exactly once. Caller-supplied project names, ambiguous forms, anonymous/external resources, symlink escapes, or unsupported instrumentation are recorded `unmanaged/retained`, never guessed owned by name. This creation execution is separate from cleanup: returned cleanup argv is never executed outside `execute-cleanup-step`.
+
+Immediately after the creation attempt, invoke:
+
+```text
+"$WORKFLOW_KERNEL" record-create --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-creation-plan.json --result plans/<feature-slug>/docker/<node-id>-create-result.json --before-inventory plans/<feature-slug>/docker/<node-id>-before-inventory.json --after-inventory plans/<feature-slug>/docker/<node-id>-after-inventory.json > plans/<feature-slug>/docker/<node-id>-create-receipt.json
+```
+
+Register partial Compose creation as individual resources. Every managed object must carry the complete `com.designmachines.depot.*` ownership labels before creation. If planning or registration cannot prove ownership, do not later auto-remove the object.
 
 ### 3c: Apply Input Guardrails
 
@@ -727,6 +764,8 @@ If any check fails:
 
 Mark `[chunk-id] 5. Validate subagent output` complete.
 
+After the authoritative validation receipt is written, run `observe-pipeline` against it when shadow runtime is available. Adapter failure records a parity/unavailability event without changing the pass/fail decision.
+
 ### 3e.5: Live Wires Lint Guard
 
 Check if any files modified by this chunk match `.html`, `.templ`, `.twig`, or `.css`. If none match, skip this step with: `"livewires-lint: skipped (no CSS/HTML/template files modified)"`
@@ -867,6 +906,8 @@ EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findin
 
 Append `implementedBy: <provider>` and `fallback: <from>-><to>|none` to the chunk receipt adjacent to the eval gate line.
 
+Also record `requestedProvider`, `attemptedProvider`, and `fallbackReason`. Preserve unavailable attempts and misroutes honestly across `full_cli`, `codex_native`, and generic hosts. After the complete authoritative evaluation receipt exists, feed it to `observe-pipeline`; never synthesize `EVAL_GATE_PASSED` from a kernel prediction.
+
 The `[type]` value uses the classification from the manifest's `kind` field when available (mapped per Step 3a), falling back to the runtime heuristic classification for older manifests. This receipt is consumed by the merge step. Without it, merge is blocked.
 
 **Airlift checkpoint (after the EVAL_GATE_PASSED receipt):** After emitting the `EVAL_GATE_PASSED` line for this chunk, fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots per-sub-agent/per-worktree completion state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
@@ -888,9 +929,9 @@ Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 For UI and Integration chunks, verify the rendered output in a browser against the design spec and visual acceptance criteria. A screenshot without evaluation is theatre -- every screenshot must be compared against something.
 
-**If Playwright MCP tools are unavailable,** STOP and ask the user: "Playwright browser tools are unavailable. Visual verification cannot be performed for this UI chunk. Proceed without visual check, or fix the tool issue first?" Do NOT silently continue.
+Discover the complete verification profile from project configuration and `tests/ux/` task frontmatter. Required coverage is the exact declared set of persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation cases. `not_declared` is valid only when declarations are absent. A present but incomplete declaration, unresolved route binding, missing auth fixture, or missing case evidence is blocking; never replace the project case set with a fixed two-persona sample.
 
-**If dev server is not running,** STOP and ask the user: "No dev server detected. Visual verification requires a running application. Start the dev server, or proceed without visual check?" Do NOT silently continue.
+**If browser tools, the dev server, authentication fixture, route binding, or verification profile is unavailable,** treat that as the initial failed required attempt. Preserve safe evidence, run the mandatory recovery ladder (primary process/session quit -> demonstrably fresh primary retry -> different configured browser), then emit blocked `human_help_required` with the exact missing case IDs and ask the user to restore the prerequisite. There is no proceed-without-browser, skipped, deferred, degraded, or curl-proof path for UI/Integration work.
 
 #### Step 1: Design Spec Discovery
 
@@ -916,9 +957,7 @@ Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
 3. Take a full-page screenshot at desktop viewport (1440px)
 4. Verify the page loads without errors (check `browser_console_messages` for errors)
 5. For interactive elements (forms, buttons, modals), click/hover to verify they respond
-6. If the project has `tests/ux/personas/`, evaluate through 2 persona lenses:
-   - **Casual member (David):** Can the primary action be completed without jargon barriers?
-   - **Reluctant board member (Aisha):** Does this work at mobile viewport (375px)?
+6. If the project declares UX personas/tasks, execute every selected case from the verification profile at its declared engine and viewport. Do not fabricate personas or silently sample only two.
 
 #### Step 3: Element-Level Screenshots
 
@@ -979,7 +1018,7 @@ When the chunk's acceptance criteria include a parity requirement ("visually ide
    PARITY MISMATCH: background-color -- reference: rgb(240,248,240), target: rgb(220,240,220)
    ```
 4. **Severity:** Parity mismatches are **P1 findings** when the user explicitly requested visual identity. These are not optional polish.
-5. **Fallback:** If `browser_evaluate` cannot run (no browser tools), log: "Parity diff skipped -- no browser tools available" and flag as DEFERRED with explicit justification. Do NOT silently skip.
+5. **Unavailable evaluation:** If `browser_evaluate` cannot run, preserve the failed attempt and run the same primary-quit, fresh-primary, different-browser recovery ladder. If still unavailable, emit blocked `human_help_required`, ask the user for help, and stop. Never skip or defer a required parity diff.
 
 **Baseline comparison:** If `plans/<feature-slug>/baselines/` exists (created by the assess phase), also compare post-implementation screenshots against the baseline:
 
@@ -997,7 +1036,11 @@ BROWSER_VERIFIED: [chunk-id] | screenshots: [N] | element_screenshots: [N] | spe
 
 Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (minor visual friction). Add findings to the review fix queue.
 
-Mark `[chunk-id] 8. Run visual verification` complete (or "skipped: [reason]").
+For required browser-tooling failure, first persist safe attempt evidence, then quit the primary browser process/engine session (closing a tab is insufficient), launch a fresh primary profile with a changed session identity and retry once, then recheck the target and try a genuinely different configured engine. If restart or alternate launch cannot be proved, record that explicitly. Exhaustion ends `human_help_required` with all attempts and exact missing case IDs; it is never skipped, approved, empty coverage, or curl-verified. Product/application assertion failures are terminal findings and do not trigger browser restart. Curl and reachability are diagnostics only and never satisfy `BROWSER_VERIFIED`.
+
+After the authoritative `BROWSER_VERIFIED` or blocked human-help receipt exists, run `observe-pipeline`. A recovered alternate-engine pass remains degraded recovery evidence, not first-pass clean.
+
+Mark `[chunk-id] 8. Run visual verification` complete only with complete required evidence. Otherwise mark it `blocked: human_help_required` and stop for user help; never mark it skipped or deferred.
 
 ### 3i: Merge Back
 
@@ -1033,7 +1076,24 @@ If merge conflicts occur:
 
 Mark `[chunk-id] 9. Merge back` complete.
 
+Write the authoritative merge disposition, then run `observe-pipeline` against that receipt when available. A predicted merge mismatch is parity evidence and does not reverse or manufacture the merge.
+
 ### 3j: Clean Up Worktree
+
+This boundary runs only after deterministic validation, review/evaluation, required evidence capture (or an explicit blocked receipt), and merge disposition are authoritative. It cleans both registered Docker resources and Git refs for this chunk.
+
+Read the chunk's registered resources and use these exact interfaces:
+
+```text
+"$WORKFLOW_KERNEL" plan-cleanup --state-dir plans/<feature-slug> --run-id ID --node-id ID --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --output plans/<feature-slug>/docker/<node-id>-cleanup-plan.json
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --step-index N --inventory plans/<feature-slug>/docker/<node-id>-inventory.json --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-step-N-outcome.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json > plans/<feature-slug>/docker/<node-id>-cleanup-receipt.json
+```
+
+Immediately before `plan-cleanup` and again before every `execute-cleanup-step`, atomically rewrite the bound node-status file with the complete current authoritative status of every declared dependent and a fresh observation timestamp. Never reuse another run/node's proof or a stale snapshot. `plan-cleanup` and `next-cleanup-step` return proposals/eligibility only. `execute-cleanup-step` is the only non-splittable authorization/execution boundary for exactly that immutable plan and step index with a fresh exact-ID inventory, complete fresh authoritative status proof for every declared dependent node, the gap-free prior outcomes, and any required successful predecessor result. Never execute any cleanup argv returned by planning separately and never pass a free-standing capability. For `stop-remove`, the guarded step uses a bounded stop before exact-ID removal. Actionless `MISSING` steps perform a fresh exact-ID inspect inside the same registry guard.
+
+Append each registry-issued command or terminal-observation outcome durably and in order, stop on blocked/unsafe/conflicting evidence, then call `record-cleanup` with the complete gap-free outcome sequence. Retain run-lifecycle resources while any declared dependent is incomplete. Cleanup failure or missing proof is `blocked/retained`, never reported clean. Broad prune, wildcards, negative filters, and name-based ownership are forbidden.
 
 Apply the safe-to-delete decision table from `repo-cleanup-contract.md`. A ref is deleted only when it is provably merged or provably empty. Never suppress git's exit status -- not on a removal, and not on the dirtiness check that gates it. A swallowed failure becomes a false "cleaned" line in the receipt.
 
@@ -1146,13 +1206,15 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 - `CLEAN` -- zero findings at any severity, dev server verified, all chunks passed visual verification.
 - `APPROVE WITH FIXES` -- zero P1, any P2/P3 findings resolved before this line is emitted (zero-deferral). Emit only when every finding from the final review is resolved.
 - `BLOCKS MERGE` -- any P1 remains, or any finding could not be resolved.
-- `BLOCKED PENDING CALLER VERIFICATION` -- the Progress Ledger has `degradedMode=curl_fallback` for ANY chunk. Emit this regardless of review findings. The caller must complete Phase 7 visual verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
+- `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Emit this regardless of review findings. The caller must resolve the blocked case and complete browser verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
 
 **Docker verification (Assembly projects):** Before emitting any merge recommendation, run `docker compose exec app go build ./cmd/api && docker compose exec app go test ./...` to confirm the feature branch compiles and passes tests inside the container. A merge recommendation emitted without a passing Docker build is invalid.
 
 **Doc-sync check:** Grep for `CLAUDE.md` and `README.md` in the repo root. If the feature introduced new patterns, modules, or architectural conventions, verify these files reflect the changes. Flag missing doc updates as P2.
 
 Mark `FINAL 1. Run full dm-review` complete.
+
+After the authoritative full-review and lane-coverage receipts exist, run `observe-pipeline`. Missing/degraded review lanes remain canonical evidence and cannot be erased by normalized host parity.
 
 ## Step 4b: Requirements Cross-Check
 
@@ -1172,7 +1234,8 @@ Template:
 Feature: <feature-slug>
 Date: <YYYY-MM-DD>
 Branch: <featureBranch>
-executionMode: <full_cli | codex_native | manual_walkthrough | curl_fallback>
+executionMode: <full_cli | codex_native | manual_walkthrough>
+isolationStrategy: <per-chunk-worktree | sequential-on-branch>
 
 | # | Requirement | Addressed In | Evidence |
 |---|-------------|--------------|----------|
@@ -1192,6 +1255,8 @@ If any requirement is not addressed OR lacks evidence:
 Do NOT deliver a branch that misses requirements from the original prompt. The user asked for these things -- delivering without them is a failure.
 
 Mark `FINAL 2. Requirements cross-check` complete.
+
+After the authoritative requirements evidence file exists, run `observe-pipeline`. Missing evidence remains a canonical blocker; shadow comparison cannot waive or manufacture it.
 
 ## Step 4c: Merge Policy Check
 
@@ -1259,6 +1324,8 @@ Post-mortem content:
 - Target comparison against `plugins/pipeline/references/routing-policy.json`.
 - Misroutes: every Claude task classified as `necessary` or `misrouted`; an inline-implemented `executor:{codex,openrouter}` chunk is always `misrouted`.
 - Quality ledger: which provider found each issue, regressions shipped by cheaper models, retries, and cap descents.
+- Kernel reliability: shadow availability, semantic parity reasons, missing authoritative evidence, browser recovery outcomes, exact owned-resource cleanup outcomes, and reconciliation status, grouped by unchanged `workflowClass`.
+- Provider evidence: requested, attempted, implemented-by, fallback, and reason for every dispatch or review lane, including unavailable and misrouted attempts.
 - Ranked recommendations for plugins exercised by this run only. Each recommendation includes exact file/policy edit, expected token/cost delta, confidence, and evidence.
 - Proposal-only status: every recommendation is labeled `AWAITING APPROVAL`. NEVER auto-edit plugin sources or routing policy from the post-mortem.
 - Recurrence promotion: if the same recommendation appears in at least `N` runs (default `3`) in `docs/pipeline-metrics/ledger.md`, promote it to a Standing Recommendation with citations.
@@ -1269,13 +1336,49 @@ Mark `FINAL 5. Run Post-Mortem` complete.
 
 ## Step 5b: Artifact and Repository Cleanup
 
-Clean up ephemeral and run-scoped artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`), then clean up git refs per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
+Reconcile authoritative Docker ownership first, then clean artifacts and Git refs, then write the final authoritative cleanup/terminal receipt, and only then run shadow observation/comparison/metrics. This order is mandatory.
+
+`STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> shadow_tier2_delete_on_match -> manifest_input_cleanup_on_match`
 
 **This step is mandatory and runs on every exit path** -- success, review failure, chunk-blocking failure, pipeline-blocking failure, and every answer to the caller's Phase 7 gate. If the run is aborting because of an exception, this step still runs: it is deterministic git and cannot make the failure worse.
 
-### 1. Write receipt
+### 1. Docker terminal reconciliation
 
-Create `plans/<feature-slug>/receipt.md`:
+On every terminal path, first atomically write complete fresh authoritative node statuses to `plans/<feature-slug>/docker/terminal-node-statuses.json`, then invoke:
+
+```text
+"$WORKFLOW_KERNEL" plan-reconcile --state-dir plans/<feature-slug> --run-id ID --ttl-hours 24 --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --output plans/<feature-slug>/docker/terminal-reconcile-plans.json
+```
+
+The output is this exact non-authorizing descriptor shape:
+
+```json
+{"schema_version":1,"kind":"cleanup-plan-set","current_run_plan":"plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json","stale_sweep_plan":"plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json","ttl_hours":24}
+```
+
+Each sibling has exact envelope fields `schema_version: 1`, `kind: cleanup-plan-artifact`, `plan: <CleanupPlan>`, and `inventory: <exact snapshot>`. The envelopes are independently sealed; neither the descriptor nor one sibling authorizes the other. Process the current-run artifact first with its own empty outcomes array and receipt:
+
+```text
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --step-index N --inventory plans/<feature-slug>/docker/terminal-current-run-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-step-N-outcome.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json > plans/<feature-slug>/docker/terminal-current-run-receipt.json
+```
+
+Only after that receipt exists, process the separately sealed stale-sweep artifact with a distinct empty outcomes array and receipt:
+
+```text
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --step-index N --inventory plans/<feature-slug>/docker/terminal-stale-sweep-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-step-N-outcome.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json > plans/<feature-slug>/docker/terminal-stale-sweep-receipt.json
+```
+
+Before every guarded execute call, refresh the exact inventory input and atomically rewrite the bound node-status proof. The stale plan contains actions only when the fixed state directory supplies fresh trusted inactive-lease proof; missing/untrusted proof produces blocked dispositions and no actions. `next-cleanup-step` is proposal/eligibility only. For every proposed action or actionless missing observation, `execute-cleanup-step` is the sole guarded authorization-and-execution boundary. Never execute returned cleanup argv separately. Persist each plan's registry-issued outcomes only in its own gap-free outcomes array and `record-cleanup` receipt; never combine, reorder, or cross-use the two plan authorities.
+
+Reconciliation covers registered resources missed by an interrupted chunk and eligible stale orphans with complete labels plus fresh inactive-lease proof. Retain run-shared resources while any dependent is incomplete. Never broad-prune Docker, infer ownership by name, remove in-use networks/volumes, or report blocked/uninspectable resources clean. Capture Docker before/after inventories and every `removed|missing|retained|blocked|unmanaged` disposition before constructing the receipt.
+
+### Final receipt schema (write only after Steps 1-4)
+
+Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and readiness checks are complete. Do not write or finalize any field before its authoritative outcome exists.
 
 ```markdown
 # Pipeline Receipt: <feature-slug>
@@ -1286,6 +1389,9 @@ Create `plans/<feature-slug>/receipt.md`:
 - Merge: <merge recommendation from Step 4>
 - Chunks: <N> executed, <M> parallel
 - Mode: <executionMode>
+- Isolation: <isolationStrategy: per-chunk-worktree | sequential-on-branch>
+- Workflow class: <workflowClass>
+- Workflow class defaulted: <true|false>
 - providerSplit: {claude: N, codex: N, openrouter: N, deepseek: N}
 
 ## Evidence
@@ -1295,9 +1401,11 @@ Create `plans/<feature-slug>/receipt.md`:
 
 ## Cleanup
 - Ephemeral removed: <count> files
-- Run-scoped removed: <count> files
+- Pre-shadow run-scoped removed: <count> files
 - Feature-scoped retained: <count> files
 - Deferred findings: none | <list with justifications>
+- Docker resources: created <N>, removed <M>, missing <K>, retained/blocked <J>
+- Reconciliation: <complete|blocked|unavailable> -- <reason>
 
 ## Branch & Worktree Inventory
 
@@ -1318,7 +1426,7 @@ Create `plans/<feature-slug>/receipt.md`:
 
 Every registered ref appears exactly once under "Created this run". A blocked ref is never reported as deleted and never omitted -- reporting a ref as gone when it still exists converts a visible mess into an invisible one.
 
-### 2. Delete artifacts by tier
+### 2. Artifact cleanup
 
 **Always (success or failure) -- delete Tier 1 (ephemeral):**
 
@@ -1326,14 +1434,16 @@ Every registered ref appears exactly once under "Created this run". A blocked re
 rm -rf plans/<feature-slug>/baselines/ plans/<feature-slug>/baselines-pre-fix/ plans/<feature-slug>/baselines-post-fix/ plans/<feature-slug>/screenshots/
 ```
 
-**On success only (merge recommendation is CLEAN or APPROVE WITH FIXES) -- also delete Tier 2 (run-scoped):**
+**On success only (merge recommendation is CLEAN or APPROVE WITH FIXES) -- delete the Tier 2 inputs no longer needed by terminal shadow commands:**
 
 ```bash
 rm -rf plans/<feature-slug>/prompts/
-rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.html
+rm -f plans/<feature-slug>/brainstorm.html
 ```
 
 On failure, preserve Tier 2 for debugging. Log: `Artifact cleanup (partial -- run failed): preserved prompts and manifest for debugging.`
+
+Do not delete `manifest.json`, `authoritative-receipts.json`, `pipeline-shadow-observation.json`, `run-state.json`, `events.jsonl`, `shadow-report.json`, or `metrics.json` here. These terminal inputs and shadow artifacts remain until Step 6 has observed and compared the complete final authoritative receipt.
 
 ### 3. Repository cleanup
 
@@ -1413,9 +1523,11 @@ git worktree list --porcelain   # expect: no prunable entries, no .worktrees/pip
 git status --porcelain          # expect: empty
 ```
 
-### 5. Report
+### 5. Final authoritative cleanup/terminal receipt and report
 
-Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, retained K feature-scoped files.`
+Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state.
+
+Log cleanup stats: `Artifact cleanup before shadow: removed N ephemeral + M run-scoped files, retained K feature-scoped files.` The authoritative receipt does not predict the later shadow/input disposition; Step 6 reports those post-receipt deletions separately after they occur.
 
 Log repository stats: `Repository cleanup: worktrees N->M (pruned K), branches deleted J, blocked L. Feature branch <featureBranch>: kept -- no merge proof.`
 
@@ -1429,6 +1541,20 @@ for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/dep
 done
 if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deliver"; fi
 ```
+
+### 6. Shadow observation, comparison, metrics, and shadow Tier 2 disposition
+
+Only after the complete final authoritative cleanup/terminal receipt exists, append it to the cumulative ordered redacted receipt array and run exactly:
+
+```text
+"$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+"$WORKFLOW_KERNEL" compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
+"$WORKFLOW_KERNEL" metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
+```
+
+These commands are observation-only and cannot alter Docker, Git, artifact, merge, review, or receipt outcomes.
+
+Before deletion, capture the comparison category/reasons and aggregate metric summary in the orchestrator's Step 6 report state. When comparison returns semantic `match`, first delete eligible shadow Tier 2 artifacts (`pipeline-shadow-observation.json`, `pipeline-shadow-prediction.json`, `shadow-report.json`, and `metrics.json`), then delete the consumed terminal inputs (`manifest.json`, `authoritative-receipts.json`, `independent-prediction-receipts.json`, and eligible Docker plan/status/outcome artifacts). Never auto-delete `.workflow-kernel/repository-scope.json`; it is repository-lifetime durable. Parity match alone never authorizes deletion of `.workflow-kernel/runs/<run-id>/`. Keep that terminal run directory, or a durable tombstone, until a new Docker inventory filtered by the exact repository scope proves zero objects with the exact `(scope_id, run_id)` and has no uninspectable matching object. The prediction source and bound prediction are never deleted before binding and comparison. Preserve all terminal inputs for `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, `unsafe_to_promote`, runtime unavailability, invalid input, unsafe/blocked, or write conflict. Record the captured comparison/metrics disposition in the final summary without rewriting the authoritative cleanup receipt.
 
 Mark `FINAL 5b. Artifact and repository cleanup` complete.
 
@@ -1466,6 +1592,8 @@ Mark `FINAL 5c. Campaign state write` complete.
 
 ## Step 6: Summary Report
 
+Before presenting the summary, use the terminal comparison and metrics result captured in Step 5b before any semantic-match cleanup. Report the semantic parity category and reasons without changing the authoritative merge, review, provider, browser, or cleanup result. If unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`; diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` belong only in `differences`.
+
 Present this report:
 
 ```markdown
@@ -1485,8 +1613,11 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - **Mode:** Full (all agents)
 - **Result:** Clean / N findings remaining
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
-- **executionMode:** full_cli / codex_native / manual_walkthrough / curl_fallback
+- **executionMode:** full_cli / codex_native / manual_walkthrough
+- **isolationStrategy:** per-chunk-worktree / sequential-on-branch
 - **providerSplit:** `{claude: N, codex: N, openrouter: N, deepseek: N}` measured from run receipts/postmortem
+- **workflowClass:** `<class>` (`workflow_class_defaulted=true|false`)
+- **shadow:** match / parity-gap / unavailable (reason)
 - **noMergeOnCompletion:** true/false
 
 ## Steps Completed
@@ -1503,6 +1634,8 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - [x] Run Post-Mortem written and measured providerSplit reported: yes/no
 - [x] Artifact cleanup: yes/no
 - [x] Repository cleanup: worktrees N->M, branches deleted K, blocked J
+- [x] Docker cleanup/reconciliation: created N, removed M, missing K, retained/blocked J
+- [x] Shadow comparison/metrics: match/parity-gap/unavailable
 - [x] Zero-deferral enforced: yes/no
 
 ## Artifact Cleanup
@@ -1537,7 +1670,7 @@ docs/post-mortems/. If the run was clean, state "None -- clean run, nothing to c
 - Recommendation status: AWAITING APPROVAL
 
 ## Warnings
-[List any browser verification skips, degraded reviews, or anti-pattern findings that were fixed]
+[List any recovered browser attempts, unresolved `human_help_required` browser blockers, degraded non-browser reviews, or anti-pattern findings that were fixed. Required browser verification is never skipped.]
 
 ## Flagged Items
 [Any chunks or findings needing manual attention]

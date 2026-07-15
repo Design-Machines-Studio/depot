@@ -1,0 +1,270 @@
+{
+  "schema_version": 1,
+  "suite": "provider-failures",
+  "scenarios": [
+    {
+      "id": "empty_agent_output",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/empty_agent_output.json"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "empty_agent_output"
+        ],
+        "retained_evidence": [
+          "evidence/empty_agent_output.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "malformed_agent_output",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/malformed_agent_output.json"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "malformed_agent_output"
+        ],
+        "retained_evidence": [
+          "evidence/malformed_agent_output.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "dead_session",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/dead_session.json"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "dead_session"
+        ],
+        "retained_evidence": [
+          "evidence/dead_session.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "provider_unavailable",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/provider_unavailable.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "provider_unavailable"
+        ],
+        "retained_evidence": [
+          "evidence/provider_unavailable.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "model_cap",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/model_cap.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "model_cap"
+        ],
+        "retained_evidence": [
+          "evidence/model_cap.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "requested_executor_misroute",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/requested_executor_misroute.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "requested_executor_misroute"
+        ],
+        "retained_evidence": [
+          "evidence/requested_executor_misroute.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "repeated_failure_signature",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/repeated_failure_signature.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "criterion": "provider_security_boundaries_unchanged"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "repeated_failure_signature"
+        ],
+        "retained_evidence": [
+          "evidence/repeated_failure_signature.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "provider_security_boundaries_unchanged",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "core_review_failure_after_fallback",
+      "category": "provider",
+      "driver": "provider_failure",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/core_review_failure_after_fallback.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "criterion": "zero_unexplained_receipt_gaps"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "core_review_failure_after_fallback"
+        ],
+        "retained_evidence": [
+          "evidence/core_review_failure_after_fallback.json",
+          "requested_executor:openrouter",
+          "attempted_executor:openrouter",
+          "implemented_by:codex",
+          "fallback_path:claude"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "zero_unexplained_receipt_gaps",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    }
+  ]
+}

@@ -185,6 +185,18 @@
       "category": "Developer Tools"
     },
     {
+      "name": "workflow-kernel",
+      "source": {
+        "source": "local",
+        "path": "./plugins/workflow-kernel"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    },
+    {
       "name": "airlift",
       "source": {
         "source": "local",

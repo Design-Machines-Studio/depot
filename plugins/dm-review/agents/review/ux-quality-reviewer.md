@@ -152,12 +152,15 @@ mkdir -p .claude/ux-review/screenshots/$(date +%Y-%m-%d)
 
 When reviewing an Assembly project (detected by `go.mod` + governance-related templates), load the UX persona framework from `tests/ux/`:
 
-1. **Read `tests/ux/personas/_index.md`** to understand the six personas and their testing focus
+1. **Read `tests/ux/personas/_index.md`** to discover every project-declared persona and testing focus
 2. **Read individual persona profiles** from `tests/ux/personas/<name>.md` for each persona relevant to the pages being reviewed. Extract behavioral details: tech comfort level, time constraints, emotional triggers, typical friction points, and device preferences. Do not rely solely on the summary personas (David/Aisha/Alex) below -- their full profiles contain friction patterns that inform evaluation.
 3. **Read `tests/ux/heuristics/governance-specific.md`** for the G1-G10 governance heuristics
-4. **Check `tests/ux/coverage-matrix.md`** to see which personas and expected outcomes apply to the pages being reviewed
+4. **Treat `tests/ux/tasks/**/*.md` as authority.** The generated `coverage-matrix.md` is an index aid only and cannot add, remove, or override task-frontmatter cases.
 
-During each review phase, evaluate through the lens of at least 2 personas:
+During each review phase, execute every required case selected by the shared
+`plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
+Do not replace complete declared coverage with a fixed two-persona sample. The
+following lenses remain explanatory examples only:
 
 - **The casual member (David)**: Can he complete the primary action in under 15 seconds without governance jargon blocking him?
 - **The reluctant board member (Aisha)**: Does this work on mobile? Does it cause anxiety or confusion?
@@ -173,12 +176,13 @@ For governance pages specifically, check these heuristics from `tests/ux/heurist
 
 If `tests/ux/tasks/` contains task files relevant to the pages under review, reference their success criteria and expected friction points per persona.
 
-### Active Coverage Matrix Validation
+### Coverage Matrix Diagnostics
 
-Parse `tests/ux/coverage-matrix.md` and compare against the routes/pages under review. Flag gaps where:
-- A reviewed page has no corresponding row in the coverage matrix (P3)
-- A coverage matrix row lists a persona but no task file exists in `tests/ux/tasks/` for that flow (P2)
-- New routes added in the diff have zero persona coverage in the matrix (P2)
+Derive runnable cases and review findings only from authoritative task
+declarations; task declarations are the sole case authority. Use
+`coverage-matrix.md` only to locate candidate declarations and
+emit the advisory `coverage_matrix_mismatch` diagnostic when it drifts from task
+frontmatter; never emit a P1, P2, or P3 finding from `coverage-matrix.md`.
 
 ### Persona Task Friction Tracking
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. There is no build system, test suite, or application code. The entire repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material.
+Depot (DM-013/WORKS) is Design Machines' Claude Code plugin marketplace -- a collection of knowledge-as-code plugins that give Claude specialized domain expertise. The repo is structured Markdown and JSON that Claude Code consumes as skills, agents, and reference material, with one sanctioned executable exception: the workflow-kernel plugin ships a stdlib-only Python 3.12 reference runtime (no build step, no third-party dependencies). Its test suite is a repository development artifact at the top-level `tests/` directory -- it never ships into user plugin caches -- and is run by `tools/validate-workflow-kernel.py` as part of `./tools/validate-composition.sh --all`. Everything else has no build system, test suite, or application code.
 
 ## Repository Structure
 
@@ -127,6 +127,13 @@ Plugins compose through five patterns documented in `docs/orchestration-patterns
 - **Pipeline Orchestration** -- a conductor plugin composes all three patterns into an autonomous multi-phase workflow with review-fix loops (e.g. pipeline)
 - **CLI-Mediated Model Delegation** -- a Claude subagent invokes an external AI model via CLI/API, parses structured output, and formats findings for the calling workflow (e.g. deepseek, openrouter)
 
+Workflow Kernel is the neutral mechanics leaf beneath pipeline and dm-review.
+It owns deterministic run state, replay, receipts, verification evidence,
+shadow comparison, and exact owned-resource cleanup. The consuming Markdown
+workflows remain authoritative in v0.1.0; shadow is the default, and unavailable
+runtime falls back to Markdown without deleting event history. See
+`docs/workflow-kernel.md`.
+
 ## Composition Validation
 
 Validate all cross-plugin references, dependencies, eval accuracy, and search index freshness in one command:
@@ -135,7 +142,7 @@ Validate all cross-plugin references, dependencies, eval accuracy, and search in
 ./tools/validate-composition.sh --all
 ```
 
-Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution), `validate-composition.sh` (composition references), `validate-workflow-contracts.sh` (repository cleanup contract, Datastar-first contract, Baseplate evidence gates).
+Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution and the workflow-kernel leaf contract), `validate-workflow-kernel.py` (offline behavioral proof), `validate-composition.sh` (composition references), `validate-workflow-contracts.sh` (repository cleanup, Datastar-first, Baseplate evidence, and workflow-kernel integration anchors).
 
 Before tagging or pushing a release, run the preflight. It is read-only and prints a release receipt:
 
@@ -209,6 +216,12 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 
 ## The Plugins
 
+19 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 40 agent cards | 34 commands
+
+The generated search index counts every manifest-discovered surface, including
+the internal kernel skill: 40 skills and 40 agents. The 39 count above preserves
+the domain-facing skill inventory used by the release plan.
+
 | Plugin | Purpose |
 |---|---|
 | **ned** | Personal knowledge graph (ai-memory MCP) and session recorder |
@@ -226,6 +239,7 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 | **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, worktree execution with review-fix loops, and `/pipeline-fix` fix-pass flavor for addressing numbered review findings |
+| **workflow-kernel** | Neutral deterministic run state, event-ledger replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by pipeline and dm-review |
 | **deepseek** | DeepSeek V4 API subagent for delegating code review and bulk diff analysis at Sonnet-class quality and lower cost. Includes a generic agent runner that policy-routes dm-review's mechanical agents via `routing-policy.json` -- DeepSeek is primary for pattern-recognition and code-simplicity, and the fallback provider for doc-sync and test-coverage (OpenRouter-primary) -- when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota. |
 | **openrouter** | OpenRouter API provider plugin (leaf): policy-routed review, bulk/large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution via GLM-5.2 (z-ai/glm-5.2, 1M context) and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail (including the `openrouter-exec` agentic runner) and dm-review's policy-selected external routing. Privacy-pinned (OPENROUTER_ZDR). |
 | **airlift** | Model- and harness-agnostic session-handoff capability. Writes a deterministic `.airlift/` bundle (HANDOFF.md, state.json, git-diff patch, RESUME_PROMPT.md) so a usage cap or rate limit becomes a non-event -- resume in any harness (Claude Code, Codex, DeepSeek, Kiro, OpenCode). Tier-1 deterministic checkpoint (no model budget) plus optional ccusage early-warning monitor; wired into pipeline and dm-review phase boundaries. |
@@ -279,7 +293,9 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 
 ## Conventions
 
-- Almost all content is Markdown. No code to compile, lint, or test.
+- Almost all content is Markdown. The sanctioned exception is the stdlib-only
+  workflow-kernel Python runtime and top-level `tests/`; verify it with
+  `tools/validate-workflow-kernel.py` and the full composition validator.
 - Skills use `SKILL.md` as the canonical filename for the primary skill definition. The `name:` field in its YAML frontmatter must match the skill folder name exactly.
 - Reference files live in `references/` subdirectories and are named descriptively (e.g., `estimation.md`, `bc-cooperative-act.md`).
 - Reference files are typically Markdown. Executable scripts (`.sh`) are permitted when a skill needs runtime tooling. Established pattern (see `plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh`): shebang line, top-of-file comment block with `WHY THIS EXISTS` / `WHAT THIS FIXES` / `DEPENDENCIES` / `USAGE` sections, executable bit set (`chmod +x`), POSIX-portable bash 3.2+ for macOS compatibility, no `set -e` if the script needs to detect non-zero exits, and a fixed `PATH` reset to prevent caller-controlled hijack of dependencies.
@@ -313,7 +329,7 @@ These failure patterns have been observed in production pipeline runs. Each has 
 5. **Missing visual diff protocol:** When the user says "these should be visually identical," no protocol exists for getComputedStyle comparison. Hardening: Visual Parity Diff step in `execution-orchestrator.md`.
 6. **dm-review-loop not invoked:** The caller never runs dm-review-loop on the final result, trusting the orchestrator's self-report. Hardening: Caller Visual Verification section in `pipeline.md` Phase 7.
 7. **Prompt quality degradation:** Across large chunk sets, later prompts have less detail, fewer acceptance criteria, and weaker visual specifications. Hardening: Prompt Quality Parity Check in `promptcraft SKILL.md`.
-8. **Silent curl-fallback merge claims:** The orchestrator emits "ready to merge" when visual verification was skipped. Hardening: `execution_mode: curl_fallback` flag, forbidden-phrases list, and `BLOCKED PENDING CALLER VERIFICATION` merge recommendation in `execution-orchestrator.md`; Caller Verification Checklist (screenshot + runtime eval + cardinality) in `pipeline.md` Phase 7.
+8. **Silent browser-verification-skipped merge claims:** The orchestrator emits "ready to merge" when visual verification was skipped. Browser availability is a verification-evidence status, never an execution mode. Hardening: required browser-evidence status on every UI chunk receipt, browser-recovery escalation ladder (evidence capture -> primary restart -> alternate engine -> human help) in `execution-orchestrator.md`, forbidden-phrases list, and `BLOCKED PENDING CALLER VERIFICATION` merge recommendation; Caller Verification Checklist (screenshot + runtime eval + cardinality) in `pipeline.md` Phase 7.
 9. **Multi-chunk rename atomicity:** Identifiers renamed across non-adjacent chunks produce a broken window under orchestrator parallelization. Hardening: Rename Atomicity Check in `plan-adversary.md`.
 10. **Append-only revision residue:** Round N amendments coexist with superseded content. Hardening: Append-Only Purge Check + Final Audit + imperative verb discipline (`REPLACE`/`DELETE`/`INSERT`/`RENAME`) in `plan-adversary.md`.
 11. **Dev-mode module loader desync:** New JS module ships without updating the dev-mode module map, loads 404 in browser. Hardening: Step 0c Module-Loader Pre-Flight in `execution-orchestrator.md`.
@@ -338,7 +354,7 @@ After any pipeline run or manual feature implementation, verify:
 - [ ] Zero pending P3 findings OR explicit `--allow-defer-p3` with justification + tracking ID for each (zero-deferral default)
 - [ ] Requirements cross-check with EVIDENCE type for each requirement (screenshot, build pass, computed style)
 - [ ] No "visually identical" requirements left unverified (visual diff protocol applied)
-- [ ] If the orchestrator ran in `execution_mode: curl_fallback`, the 3-item Caller Verification Checklist is complete with attached evidence
+- [ ] If any UI chunk receipt carries a browser-evidence status other than verified (browser unavailable, alternate engine, or human-help escalation), the 3-item Caller Verification Checklist is complete with attached evidence
 - [ ] Repository cleanup phase ran; receipt carries a `## Branch & Worktree Inventory` with every created ref dispositioned, every kept/blocked ref carrying a follow-up command, and a clean `git status --porcelain`
 - [ ] Feature branch preserved unless `git merge-base --is-ancestor <branch> origin/main` proves it landed
 - [ ] UI work uses Datastar/Datastar Pro attributes rather than hand-rolled JS; every Pro attribute has a recorded bundle-presence check

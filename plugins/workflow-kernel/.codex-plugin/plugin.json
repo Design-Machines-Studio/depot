@@ -1,0 +1,59 @@
+{
+  "name": "workflow-kernel",
+  "version": "0.1.0",
+  "description": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
+  },
+  "keywords": [
+    "workflow",
+    "state-machine",
+    "event-ledger",
+    "recovery",
+    "receipts"
+  ],
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "workflow-kernel",
+        "name": "Workflow Kernel",
+        "description": "Inspect, validate, replay, and recover deterministic workflow-kernel run state and event ledgers when explicitly requested.",
+        "triggers": [
+          "validate a workflow-kernel run",
+          "replay workflow events",
+          "inspect workflow-kernel state",
+          "diagnose a corrupt run ledger",
+          "recover workflow run state"
+        ],
+        "tags": [
+          "workflow",
+          "state-machine",
+          "event-ledger",
+          "recovery"
+        ],
+        "mcpDependencies": []
+      }
+    ],
+    "agents": [],
+    "commands": []
+  },
+  "pluginDependencies": {},
+  "optionalPluginDependencies": {},
+  "interface": {
+    "displayName": "Workflow Kernel",
+    "shortDescription": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
+    "longDescription": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
+    "developerName": "Design Machines",
+    "category": "Productivity",
+    "capabilities": [
+      "workflow-kernel",
+      "run-state",
+      "event-ledger",
+      "replay",
+      "recovery",
+      "shadow-mode"
+    ]
+  }
+}

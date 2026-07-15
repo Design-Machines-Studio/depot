@@ -43,9 +43,18 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 3. `https://[project-name].ddev.site` (Craft CMS DDEV)
 4. `http://localhost:5173` (Vite)
 
-Use the first URL that loads successfully. If none respond, ask the user for the URL.
+Use the first URL that loads successfully. If none respond, record `target unavailable`
+and emit a blocked `human_help_required` receipt naming the exact
+missing persona/scenario/route/engine/viewport cases, then ask the user for the
+authoritative URL. Never return a bare stop, skip, approval, or pass.
 
-If Playwright tools fail, follow the Browser Fallback Chain defined in the `visual-browser-tester` agent definition. Never silently skip browser testing.
+If Playwright tools fail, follow
+`plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`
+and the Browser Fallback Chain defined in the `visual-browser-tester` agent.
+The receipt must preserve every failed and recovered attempt, prove a primary
+process/session quit plus fresh relaunch, then try a genuinely different engine.
+Exhaustion returns blocked `human_help_required` with exact missing cases. Never
+silently skip required browser testing, and never treat curl as browser proof.
 
 **Local domain preference:** For Assembly projects, prefer local `.site`/`.test` TLD domains (e.g., `http://assembly.coop.site`) over `localhost:PORT`. These are configured via Caddy/DDEV and match the visual-browser-tester's URL discovery order.
 

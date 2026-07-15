@@ -21,3 +21,7 @@ plans/*/brainstorm.html
 # working tree verbatim and can contain secrets (.env values, tokens) -- review
 # it before force-adding, committing, or sharing any receipt that should travel.
 .airlift/
+
+# Python bytecode (workflow-kernel reference runtime test runs)
+__pycache__/
+*.pyc
