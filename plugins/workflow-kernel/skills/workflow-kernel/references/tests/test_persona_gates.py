@@ -293,6 +293,26 @@ class PersonaGateTests(unittest.TestCase):
         self.assertFalse(VerificationGate().evaluate(profile, (), work_kind="ui").allowed)
         self.assertTrue(VerificationGate().evaluate(profile, (), work_kind="logic").allowed)
 
+    def test_governance_task_without_explicit_role_fails_closed(self):
+        import shutil
+
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "ux"
+            shutil.copytree(FIXTURE, target, ignore=shutil.ignore_patterns("__pycache__"))
+            task = target / "tasks" / "governance" / "sample-task.md"
+            lines = [
+                line for line in task.read_text().splitlines(keepends=True)
+                if not line.startswith("requires_role:")
+            ]
+            task.write_text("".join(lines))
+            adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
+            with self.assertRaises(InvalidSchemaError) as raised:
+                adapter.discover(target, declaration_root=".")
+            self.assertEqual(
+                raised.exception.details[ErrorDetailKey.REASON_CODE.value],
+                detail_digest("invalid_verification_declaration"),
+            )
+
     def test_discovery_outputs_and_failures_do_not_retain_auth_values(self):
         profile = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json").discover(
             FIXTURE, declaration_root=".",

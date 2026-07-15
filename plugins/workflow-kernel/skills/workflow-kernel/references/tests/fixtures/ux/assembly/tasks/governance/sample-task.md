@@ -5,6 +5,7 @@ area: governance
 feature: proposals
 route: /governance/proposals/sample
 requires_auth: true
+requires_role: member
 auth_fields:
   - session_cookie
 preconditions:

@@ -248,9 +248,19 @@ class VerificationProfileTests(unittest.TestCase):
             project = Path(directory)
             shutil.copytree(FIXTURES / "assembly", project / "tests" / "ux")
             task = project / "tests" / "ux" / "tasks" / "governance" / "sample-task.md"
-            task.write_text(task.read_text().replace(
-                "requires_auth: true", "requires_auth: false",
-            ).replace("route: /governance/proposals/sample", "route: /register"))
+            # Exercise the legacy requires_auth-based role default: drop the
+            # explicit requires_role and leave the governance area (which
+            # requires an explicit role) for the onboarding area instead.
+            task.write_text("".join(
+                line for line in task.read_text().replace(
+                    "requires_auth: true", "requires_auth: false",
+                ).replace(
+                    "route: /governance/proposals/sample", "route: /register",
+                ).replace(
+                    "area: governance", "area: onboarding",
+                ).splitlines(keepends=True)
+                if not line.startswith("requires_role:")
+            ))
             (task.parent / "supporting-checklist.md").write_text(
                 "# Supporting checklist\n\nThis is not a task declaration.\n"
             )

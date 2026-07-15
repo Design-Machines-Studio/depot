@@ -602,6 +602,11 @@ def _task_at(path, declarations):
     status = values.get("implementation_status")
     if status is not None and status not in _KNOWN_STATUSES:
         _fail()
+    if values.get("area") == "governance" and "requires_role" not in values:
+        # Fail closed: a governance task without an explicit requires_role
+        # would silently default to ordinary-member scope, under-declaring a
+        # director/board-only action and defeating G1 Permission Clarity.
+        _fail()
     requires_auth = values["requires_auth"] == "true"
     return {"id": values["id"].lower(), "route": values["route"],
             "role": values.get("requires_role", "member" if requires_auth else "public"),
