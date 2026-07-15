@@ -1,0 +1,399 @@
+{
+  "schema_version": 1,
+  "suite": "terminal-paths",
+  "scenarios": [
+    {
+      "id": "success",
+      "category": "terminal",
+      "driver": "terminal_path",
+      "input": {
+        "final_state": "succeeded",
+        "retained_evidence": [
+          "evidence/success.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "succeeded",
+        "reason_codes": [
+          "success"
+        ],
+        "retained_evidence": [
+          "evidence/success.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "failure",
+      "category": "terminal",
+      "driver": "terminal_path",
+      "input": {
+        "final_state": "failed",
+        "retained_evidence": [
+          "evidence/failure.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "failed",
+        "reason_codes": [
+          "failure"
+        ],
+        "retained_evidence": [
+          "evidence/failure.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "blocked",
+      "category": "terminal",
+      "driver": "terminal_path",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/blocked.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "blocked"
+        ],
+        "retained_evidence": [
+          "evidence/blocked.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "cancelled",
+      "category": "terminal",
+      "driver": "terminal_path",
+      "input": {
+        "final_state": "cancelled",
+        "retained_evidence": [
+          "evidence/cancelled.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "cancelled",
+        "reason_codes": [
+          "cancelled"
+        ],
+        "retained_evidence": [
+          "evidence/cancelled.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "interrupted",
+      "category": "terminal",
+      "driver": "terminal_path",
+      "input": {
+        "final_state": "interrupted",
+        "retained_evidence": [
+          "evidence/interrupted.json"
+        ],
+        "criterion": "terminal_cleanup_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "interrupted",
+        "reason_codes": [
+          "interrupted"
+        ],
+        "retained_evidence": [
+          "evidence/interrupted.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "terminal_cleanup_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "duplicate_event",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/duplicate_event.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "duplicate_event"
+        ],
+        "retained_evidence": [
+          "evidence/duplicate_event.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "gapped_event",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/gapped_event.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "gapped_event"
+        ],
+        "retained_evidence": [
+          "evidence/gapped_event.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "truncated_final_record",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/truncated_final_record.json"
+        ],
+        "criterion": "injected_interruption_reconstructs_state"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "truncated_final_record"
+        ],
+        "retained_evidence": [
+          "evidence/truncated_final_record.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "injected_interruption_reconstructs_state",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "corrupt_middle_record",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/corrupt_middle_record.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "corrupt_middle_record"
+        ],
+        "retained_evidence": [
+          "evidence/corrupt_middle_record.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "stale_revision",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/stale_revision.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "stale_revision"
+        ],
+        "retained_evidence": [
+          "evidence/stale_revision.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "concurrent_writer_lease",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/concurrent_writer_lease.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "concurrent_writer_lease"
+        ],
+        "retained_evidence": [
+          "evidence/concurrent_writer_lease.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "exit_before_state_replacement",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "interrupted",
+        "retained_evidence": [
+          "evidence/exit_before_state_replacement.json"
+        ],
+        "criterion": "injected_interruption_reconstructs_state"
+      },
+      "expected": {
+        "final_state": "interrupted",
+        "reason_codes": [
+          "exit_before_state_replacement"
+        ],
+        "retained_evidence": [
+          "evidence/exit_before_state_replacement.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "injected_interruption_reconstructs_state",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "unknown_major_schema",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/unknown_major_schema.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "unknown_major_schema"
+        ],
+        "retained_evidence": [
+          "evidence/unknown_major_schema.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    },
+    {
+      "id": "terminal_replay",
+      "category": "state",
+      "driver": "state_failure",
+      "input": {
+        "final_state": "blocked",
+        "retained_evidence": [
+          "evidence/terminal_replay.json"
+        ],
+        "criterion": "illegal_transition_scenarios_passed"
+      },
+      "expected": {
+        "final_state": "blocked",
+        "reason_codes": [
+          "terminal_replay"
+        ],
+        "retained_evidence": [
+          "evidence/terminal_replay.json"
+        ],
+        "cleanup_invocations": 1,
+        "resource_dispositions": [],
+        "promotion_impact": {
+          "criterion": "illegal_transition_scenarios_passed",
+          "satisfied": false,
+          "origin": "fixture"
+        }
+      }
+    }
+  ]
+}
+
