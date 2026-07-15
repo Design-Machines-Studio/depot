@@ -35,6 +35,17 @@ runtime (its own repo checkout first, then semver-sorted -- never
 mtime-sorted -- versioned cache directories under `~/.claude` then
 `~/.codex`), so a stale launcher copy still runs the newest installed kernel.
 
+The launcher is the normative enforcement point for every trust boundary
+below, in validate-before-execute order: realpath containment, plugin
+manifest name/version checks (a cache candidate's declared version must equal
+its directory segment), and semver compatibility all pass BEFORE the
+importability probe executes any candidate code. It also unsets caller
+`PYTHONPATH`/`PYTHONHOME`/`PYTHONSTARTUP` up front and hop-bounds its own
+symlink-path resolution (a cycle exits `4`, never hangs). The Python
+`resolve_workflow_kernel_runtime` helper in `cli.py` is the validator-side
+mirror of the same rules (used by `tools/validate-workflow-kernel.py`); it
+never launches the runtime.
+
 ## Trust boundaries (fail closed)
 
 - Accept an in-repository runtime only beneath the same canonical Depot

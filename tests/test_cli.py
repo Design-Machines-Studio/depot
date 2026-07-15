@@ -26,9 +26,18 @@ class CliTests(unittest.TestCase):
         subprocess.run(["git", "init", "-q", repo], check=True)
         return repo / ".workflow-kernel" / "runs" / run_id
 
-    def install_cached_runtime(self, home, cache, version, main_source=None, *, mtime=None):
-        refs = (Path(home) / cache / "plugins/cache/depot/workflow-kernel" /
-                version / "skills/workflow-kernel/references")
+    def install_cached_runtime(self, home, cache, version, main_source=None, *,
+                               mtime=None, manifest_name="workflow-kernel",
+                               manifest_version=None, manifest=True):
+        plugin_root = (Path(home) / cache / "plugins/cache/depot/workflow-kernel" /
+                       version)
+        refs = plugin_root / "skills/workflow-kernel/references"
+        if manifest:
+            (plugin_root / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+            (plugin_root / ".claude-plugin" / "plugin.json").write_text(json.dumps({
+                "name": manifest_name,
+                "version": version if manifest_version is None else manifest_version,
+            }))
         if main_source is None:
             refs.mkdir(parents=True)
             if mtime is not None:
@@ -550,6 +559,127 @@ class CliTests(unittest.TestCase):
         self.assertIn("newer-semver-runtime", result.stdout)
         self.assertNotIn("older-semver-runtime", result.stdout)
         self.assertNotIn("foreign-major-runtime", result.stdout)
+
+    def test_documented_cache_resolver_validates_manifest_before_any_probe(self):
+        # Finding 082: validate-before-execute. A wrong-name, version-
+        # mismatched, or manifest-less candidate must never reach the
+        # importability probe, because the probe executes candidate code.
+        cases = (
+            ("wrong-name", {"manifest_name": "not-workflow-kernel"}),
+            ("version-mismatch", {"manifest_version": "0.1.0"}),
+            ("missing-manifest", {"manifest": False}),
+        )
+        for name, kwargs in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                marker = Path(directory) / "rogue-executed"
+                self.install_cached_runtime(
+                    directory, ".claude", "0.9.9",
+                    "import pathlib; pathlib.Path(%r).write_text('x'); print('rogue-runtime')\n"
+                    % str(marker),
+                    **kwargs,
+                )
+                self.install_cached_runtime(
+                    directory, ".claude", "0.1.0", "print('valid-runtime')\n",
+                )
+                result = self.run_cache_resolver(directory)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("valid-runtime", result.stdout)
+                self.assertNotIn("rogue-runtime", result.stdout)
+                self.assertFalse(marker.exists(), "invalid candidate was executed")
+
+    def test_documented_cache_resolver_rejects_symlinked_version_dir_escape(self):
+        # Finding 082: realpath containment. A version directory symlinked
+        # outside the cache boundary is rejected even when its target looks
+        # like a fully valid plugin tree.
+        with tempfile.TemporaryDirectory() as directory:
+            marker = Path(directory) / "escape-executed"
+            outside = Path(directory) / "outside" / "0.9.9"
+            (outside / ".claude-plugin").mkdir(parents=True)
+            (outside / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": "workflow-kernel", "version": "0.9.9"}))
+            package = outside / "skills/workflow-kernel/references/workflow_kernel"
+            package.mkdir(parents=True)
+            (package / "__init__.py").write_text("")
+            (package / "__main__.py").write_text(
+                "import pathlib; pathlib.Path(%r).write_text('x'); print('escape-runtime')\n"
+                % str(marker))
+            cache_root = Path(directory) / ".claude/plugins/cache/depot/workflow-kernel"
+            cache_root.mkdir(parents=True)
+            (cache_root / "0.9.9").symlink_to(outside, target_is_directory=True)
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.0", "print('contained-runtime')\n",
+            )
+            result = self.run_cache_resolver(directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("contained-runtime", result.stdout)
+            self.assertNotIn("escape-runtime", result.stdout)
+            self.assertFalse(marker.exists(), "escaped candidate was executed")
+
+    def test_documented_cache_resolver_ignores_poisoned_python_environment(self):
+        # Finding 082: caller PYTHONPATH/PYTHONHOME/PYTHONSTARTUP must never
+        # execute code during the interpreter check, the probe, or the final
+        # exec, and must not break resolution.
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            poison = home / "poison"
+            poison.mkdir()
+            marker = home / "poison-executed"
+            payload = (
+                "import pathlib; pathlib.Path(%r).write_text('x')\n" % str(marker)
+            )
+            (poison / "sitecustomize.py").write_text(
+                payload + "import sys; sys.stderr.write('poisoned')\n")
+            startup = home / "startup.py"
+            startup.write_text(payload)
+            rogue = poison / "workflow_kernel"
+            rogue.mkdir()
+            (rogue / "__init__.py").write_text("")
+            (rogue / "__main__.py").write_text("print('poison-runtime')\n")
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.0", "print('clean-runtime')\n",
+            )
+            result = self.run_cache_resolver(
+                directory, PYTHONPATH=str(poison),
+                PYTHONHOME="/nonexistent-pythonhome",
+                PYTHONSTARTUP=str(startup),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertIn("clean-runtime", result.stdout)
+            self.assertNotIn("poison-runtime", result.stdout)
+            self.assertFalse(marker.exists(), "poisoned environment was executed")
+
+    def test_launcher_bounds_symlink_cycle_resolution(self):
+        # Finding 082: a symlink cycle at the launcher's own path exits 4
+        # promptly instead of hanging. Sourcing with $0 pointing at the cycle
+        # exercises the launcher's hop-bounded loop directly (the OS refuses
+        # to exec a cycled path, which would otherwise mask the loop).
+        import workflow_kernel
+        source = (
+            Path(workflow_kernel.__file__).resolve().parents[1]
+            / "workflow-kernel-launcher.sh"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            launcher = home / "workflow-kernel-launcher.sh"
+            launcher.write_text(source.read_text())
+            launcher.chmod(0o755)
+            link_a = home / "link-a"
+            link_b = home / "link-b"
+            link_a.symlink_to(link_b)
+            link_b.symlink_to(link_a)
+            env = dict(os.environ, HOME=str(home))
+            direct = subprocess.run(
+                ["bash", str(link_a), "--help"], text=True,
+                capture_output=True, env=env, check=False, timeout=30,
+            )
+            sourced = subprocess.run(
+                ["bash", "-c", '. "$1" --help', str(link_a), str(launcher)],
+                text=True, capture_output=True, env=env, check=False, timeout=30,
+            )
+        self.assertNotEqual(direct.returncode, 0)
+        self.assertEqual(sourced.returncode, 4, sourced.stderr)
+        self.assertIn("symlink chain exceeds", sourced.stderr)
 
     def test_documented_contract_names_cooperating_writer_and_lookahead_boundaries(self):
         skill = (KERNEL_REFERENCES.parent / "SKILL.md").read_text()
