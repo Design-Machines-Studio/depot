@@ -12,36 +12,24 @@ human judgment in their canonical Markdown contracts.
 
 ## Runtime Resolution
 
-Resolve the newest installed runtime from the Claude cache first, then the Codex
-cache. Avoid hardcoded version directories:
+Invoke the kernel exclusively through the launcher shipped beside the runtime:
 
 ```sh
-KERNEL_REFS=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  while IFS= read -r CANDIDATE; do
-    if [ -f "$CANDIDATE/workflow_kernel/__init__.py" ] && \
-       [ -f "$CANDIDATE/workflow_kernel/__main__.py" ] && \
-       (cd "$CANDIDATE" && PYTHONPATH="$CANDIDATE" \
-         python3 -m workflow_kernel --help) >/dev/null 2>&1; then
-      KERNEL_REFS="$CANDIDATE"
-      break
-    fi
-  done < <(find "$CACHE_ROOT/workflow-kernel" -type d \
-    -path "*/skills/workflow-kernel/references" -prune \
-    -exec ls -td {} + 2>/dev/null)
-  [ -n "$KERNEL_REFS" ] && break
-done
-if [ -z "$KERNEL_REFS" ]; then
-  echo "workflow-kernel runtime not found in Claude or Codex plugin cache" >&2
-  exit 1
-fi
-(
-  cd "$KERNEL_REFS" || exit 1
-  PYTHONPATH="$KERNEL_REFS" python3 -m workflow_kernel --help
-)
+"<references>/workflow-kernel-launcher.sh" <subcommand> [args...]
 ```
 
-For repository-local development, invoke the module with
+The launcher resolves the canonical runtime (its own repository checkout
+first, then versioned cache directories under `~/.claude` and `~/.codex`
+ordered by parsed semver -- never `ls -td` mtime, so re-pulling an older
+version cannot shadow a newer one), verifies Python 3.12+, sets the module
+path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
+or above the declared `>=0.1.0` floor. The complete consumer-facing
+resolution and fail-closed contract, including the launcher discovery
+snippet, is `references/runtime-resolution.md`; consuming plugins link there
+instead of restating it.
+
+For repository-local development, either run the launcher directly from the
+checkout or invoke the module with
 `PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references python3 -m workflow_kernel`.
 
 ## Operating Contract
@@ -68,7 +56,8 @@ conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
 `interrupted` as its own terminal outcome. Permit terminal mutation only for
 evidence attachment and one cleanup reconciliation.
 
-Use `python3 -m workflow_kernel --help` for the `init`, `validate`, `append`,
+Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
+--help` in a repository checkout) for the `init`, `validate`, `append`,
 `replay`, and `status` commands. Consume successful operational output and
 errors as stable JSON. Treat `--help` output as plain text.
 

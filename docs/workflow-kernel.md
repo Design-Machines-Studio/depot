@@ -11,9 +11,14 @@ runtime authoritative.
 
 ## Runtime and state layout
 
-Resolve the runtime from the canonical Depot checkout or a compatible
-`workflow-kernel/0.1.x` entry under the Claude cache, then the Codex cache. Do
-not discover it from the downstream project, `PATH`, or a symlink escape.
+Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
+`references/` directory). The launcher resolves the runtime from the canonical
+Depot checkout or a compatible same-major `>=0.1.0` entry under the Claude
+cache, then the Codex cache, ordered by parsed semver (never mtime), verifies
+Python 3.12+, sets the module path, and execs the CLI. Never discover the
+runtime from the downstream project, `PATH`, or a symlink escape. The full
+consumer-facing contract is `references/runtime-resolution.md`; in the
+templates below, `"$WORKFLOW_KERNEL"` is the resolved launcher path.
 
 Each repository owns a random, durable `.workflow-kernel/repository-scope.json`.
 Each run uses `.workflow-kernel/runs/<run-id>/` and includes:
@@ -50,12 +55,12 @@ safe templates; replace placeholders only with run-owned paths and exact IDs.
 ### Base state
 
 ```sh
-python3 -m workflow_kernel init .workflow-kernel/runs/RUN --run-id RUN --mode shadow --occurred-at 2026-01-01T00:00:00Z
-python3 -m workflow_kernel validate .workflow-kernel/runs/RUN
-python3 -m workflow_kernel validate .workflow-kernel/runs/RUN --recovery
-python3 -m workflow_kernel append .workflow-kernel/runs/RUN --event '{"schema_version":1,"sequence":1,"run_id":"RUN","node_id":null,"kind":"run.started","occurred_at":"2026-01-01T00:00:01Z","payload":{}}'
-python3 -m workflow_kernel replay .workflow-kernel/runs/RUN
-python3 -m workflow_kernel status .workflow-kernel/runs/RUN
+"$WORKFLOW_KERNEL" init .workflow-kernel/runs/RUN --run-id RUN --mode shadow --occurred-at 2026-01-01T00:00:00Z
+"$WORKFLOW_KERNEL" validate .workflow-kernel/runs/RUN
+"$WORKFLOW_KERNEL" validate .workflow-kernel/runs/RUN --recovery
+"$WORKFLOW_KERNEL" append .workflow-kernel/runs/RUN --event '{"schema_version":1,"sequence":1,"run_id":"RUN","node_id":null,"kind":"run.started","occurred_at":"2026-01-01T00:00:01Z","payload":{}}'
+"$WORKFLOW_KERNEL" replay .workflow-kernel/runs/RUN
+"$WORKFLOW_KERNEL" status .workflow-kernel/runs/RUN
 ```
 
 `init` defaults to `shadow`. Never initialize a production run in another mode
@@ -67,12 +72,12 @@ Seal an independent prediction before the first authoritative action, observe
 only after canonical receipts exist, then compare:
 
 ```sh
-python3 -m workflow_kernel bind-prediction --type pipeline --manifest manifest.json --prediction-receipts predicted.json --state-dir plans/feature
-python3 -m workflow_kernel bind-prediction --type review --request request.json --prediction-receipts predicted.json --state-dir .claude/ux-review/workflow-kernel
-python3 -m workflow_kernel observe-pipeline --manifest manifest.json --receipts authoritative.json --state-dir plans/feature
-python3 -m workflow_kernel observe-review --request request.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel
-python3 -m workflow_kernel compare --state-dir plans/feature --authoritative-receipts authoritative.json --output shadow-report.json
-python3 -m workflow_kernel metrics --events authoritative.json --output metrics.json
+"$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest manifest.json --prediction-receipts predicted.json --state-dir plans/feature
+"$WORKFLOW_KERNEL" bind-prediction --type review --request request.json --prediction-receipts predicted.json --state-dir .claude/ux-review/workflow-kernel
+"$WORKFLOW_KERNEL" observe-pipeline --manifest manifest.json --receipts authoritative.json --state-dir plans/feature
+"$WORKFLOW_KERNEL" observe-review --request request.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel
+"$WORKFLOW_KERNEL" compare --state-dir plans/feature --authoritative-receipts authoritative.json --output shadow-report.json
+"$WORKFLOW_KERNEL" metrics --events authoritative.json --output metrics.json
 ```
 
 Shadow observation never selects a node, changes an executor, waives a finding,
@@ -92,9 +97,9 @@ Plan creation before invoking Docker and register the exact before/after
 inventory afterward:
 
 ```sh
-python3 -m workflow_kernel plan-create --state-dir plans/feature --run-id RUN --node-id NODE --lifecycle chunk --cleanup-policy stop-remove --argv-json create-argv.json --dependent-node-ids-json dependents.json --output creation-plan.json
-python3 -m workflow_kernel plan-compose --state-dir plans/feature --run-id RUN --node-id NODE --lifecycle run --cleanup-policy stop-remove --argv-json compose-argv.json --dependent-node-ids-json dependents.json --output creation-plan.json
-python3 -m workflow_kernel record-create --state-dir plans/feature --plan creation-plan.json --result command-result.json --before-inventory before.json --after-inventory after.json
+"$WORKFLOW_KERNEL" plan-create --state-dir plans/feature --run-id RUN --node-id NODE --lifecycle chunk --cleanup-policy stop-remove --argv-json create-argv.json --dependent-node-ids-json dependents.json --output creation-plan.json
+"$WORKFLOW_KERNEL" plan-compose --state-dir plans/feature --run-id RUN --node-id NODE --lifecycle run --cleanup-policy stop-remove --argv-json compose-argv.json --dependent-node-ids-json dependents.json --output creation-plan.json
+"$WORKFLOW_KERNEL" record-create --state-dir plans/feature --plan creation-plan.json --result command-result.json --before-inventory before.json --after-inventory after.json
 ```
 
 For per-chunk cleanup, use fresh authoritative node statuses and inventory. The
@@ -102,17 +107,17 @@ guarded execute command is the only authorization boundary; never execute argv
 returned by a plan separately.
 
 ```sh
-python3 -m workflow_kernel plan-cleanup --state-dir plans/feature --run-id RUN --node-id NODE --node-statuses node-statuses.json --output cleanup-plan.json
-python3 -m workflow_kernel next-cleanup-step --state-dir plans/feature --plan cleanup-plan.json --outcomes outcomes.json --output next-step.json
-python3 -m workflow_kernel execute-cleanup-step --state-dir plans/feature --plan cleanup-plan.json --step-index 0 --inventory inventory.json --node-statuses node-statuses.json --outcomes outcomes.json --output outcome-0.json
-python3 -m workflow_kernel record-cleanup --state-dir plans/feature --plan cleanup-plan.json --outcomes outcomes.json
+"$WORKFLOW_KERNEL" plan-cleanup --state-dir plans/feature --run-id RUN --node-id NODE --node-statuses node-statuses.json --output cleanup-plan.json
+"$WORKFLOW_KERNEL" next-cleanup-step --state-dir plans/feature --plan cleanup-plan.json --outcomes outcomes.json --output next-step.json
+"$WORKFLOW_KERNEL" execute-cleanup-step --state-dir plans/feature --plan cleanup-plan.json --step-index 0 --inventory inventory.json --node-statuses node-statuses.json --outcomes outcomes.json --output outcome-0.json
+"$WORKFLOW_KERNEL" record-cleanup --state-dir plans/feature --plan cleanup-plan.json --outcomes outcomes.json
 ```
 
 At every terminal path -- success, failure, blocked, cancelled, or interrupted -- run
 reconciliation before artifact and Git cleanup:
 
 ```sh
-python3 -m workflow_kernel plan-reconcile --state-dir plans/feature --run-id RUN --ttl-hours 24 --node-statuses terminal-statuses.json --output terminal-plans.json
+"$WORKFLOW_KERNEL" plan-reconcile --state-dir plans/feature --run-id RUN --ttl-hours 24 --node-statuses terminal-statuses.json --output terminal-plans.json
 ```
 
 `plan-reconcile` writes independently sealed current-run and stale-sweep plan

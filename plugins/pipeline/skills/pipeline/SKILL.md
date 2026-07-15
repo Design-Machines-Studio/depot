@@ -125,27 +125,27 @@ Mark each item as you complete it. Do not mark a GATE as complete until AskUserQ
 
 The Progress Ledger, canonical Markdown phases, manifest, routing policy, execution-orchestrator, and authoritative receipts remain the source of truth. Kernel hooks run only after the matching authoritative artifact, receipt, or action exists. They may observe and compare; they may not select ready nodes, advance gates, block or approve a merge, alter provider fallback, invoke cleanup, or convert review outcomes.
 
-Resolve the kernel from the real path of the currently executing canonical Depot plugin root. Permit an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` subcommands; inline Python source is forbidden. Store observation artifacts beneath `plans/<feature-slug>/`. Initialize each run at `.workflow-kernel/runs/<run-id>`; the kernel derives the nearest real Git repository from the state directory and binds the canonical `.workflow-kernel` root to an immutable random scope ID plus repository/root device and inode. No caller-selected lease root is accepted. Symlink, cross-repository, scope-metadata, and run-directory mismatches fail closed. If unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
+Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Use only the launcher's stable subcommands; inline Python source is forbidden. Store observation artifacts beneath `plans/<feature-slug>/` and initialize each run at `.workflow-kernel/runs/<run-id>`. If the launcher or runtime is unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
 
 After producing `independent-prediction-receipts.json` and before any corresponding authoritative action, seal it exactly once:
 
 ```text
-python3 -m workflow_kernel init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
-python3 -m workflow_kernel bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
+"$WORKFLOW_KERNEL" init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
+"$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
 At each phase boundary, rewrite `plans/<feature-slug>/authoritative-receipts.json` as the complete ordered, redacted receipt array through that boundary, then invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+"$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
 ```
 
 After the authoritative terminal receipt is appended, invoke exactly:
 
 ```text
-python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
-python3 -m workflow_kernel compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
-python3 -m workflow_kernel metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
+"$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+"$WORKFLOW_KERNEL" compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
+"$WORKFLOW_KERNEL" metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
 `bind-prediction` atomically seals the prediction source, translated events, event digest, and RunSpec context as `pipeline-shadow-prediction.json` and appends exact binding authority to the canonical lifecycle ledger before `run.started`. Observation and direct comparison both require that ordered binding and matching artifact; byte-identical predicted and authoritative receipts are valid only with this durable pre-start proof. `observe-pipeline` writes a separate `authoritative_observation` and never creates or changes the prediction. Keep both the source and bound artifact through comparison. Missing or mismatched independent prediction evidence fails closed. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity `match` alone never deletes the terminal run directory; retain it or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches.
