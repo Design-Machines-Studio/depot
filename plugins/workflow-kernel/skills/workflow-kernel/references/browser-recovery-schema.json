@@ -103,11 +103,49 @@
       {"allOf": [{"$ref": "#/$defs/webkit_chromium_pair"}, {"oneOf": [{"properties": {"actual_engine": {"const": "webkit"}, "attempts": {"oneOf": [{"minItems": 1, "maxItems": 1, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}]}, {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}]}}}, {"properties": {"actual_engine": {"const": "chromium"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_chromium_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_chromium_alternate_evidence"}]}]}}}]}]},
       {"allOf": [{"$ref": "#/$defs/webkit_firefox_pair"}, {"oneOf": [{"properties": {"actual_engine": {"const": "webkit"}, "attempts": {"oneOf": [{"minItems": 1, "maxItems": 1, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}]}, {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}]}}}, {"properties": {"actual_engine": {"const": "firefox"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_firefox_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_firefox_alternate_evidence"}]}]}}}]}]}
     ]}},
-    {"if": {"properties": {"reason_code": {"const": "application_failure"}}}, "then": {"properties": {"status": {"const": "blocked"}}}},
+    {"if": {"properties": {"reason_code": {"const": "application_failure"}}}, "then": {
+      "properties": {"status": {"const": "blocked"}},
+      "oneOf": [
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"$ref": "#/$defs/application_failure_attempt"}]}, "lifecycle": {"maxItems": 0}}},
+        {"properties": {"attempts": {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/nonterminal_failed_attempt"}, {"$ref": "#/$defs/application_failure_attempt"}]}, "lifecycle": {"$ref": "#/$defs/primary_retry_application_failure_lifecycle"}}},
+        {"properties": {"attempts": {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/nonterminal_failed_attempt"}, {"$ref": "#/$defs/application_failure_attempt"}]}, "lifecycle": {"oneOf": [
+          {"allOf": [{"$ref": "#/$defs/restart_unavailable_lifecycle"}, {"prefixItems": [{}, {}, {}, {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}}]}]},
+          {"allOf": [{"$ref": "#/$defs/failed_primary_launch_lifecycle"}, {"prefixItems": [{}, {}, {}, {}, {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}}]}]}
+        ]}}},
+        {"properties": {"attempts": {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/nonterminal_failed_attempt"}, {"$ref": "#/$defs/nonterminal_failed_attempt"}, {"$ref": "#/$defs/application_failure_attempt"}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/restart_proved_lifecycle"}, {"prefixItems": [{}, {}, {}, {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}}]}]}}}
+      ]
+    }},
+    {"if": {"properties": {"reason_code": {"const": "application_failure"}}}, "then": {"oneOf": [
+      {"properties": {"requested_engine": {"const": "chromium"}, "actual_engine": {"const": "chromium"}, "configured_engines": {"contains": {"const": "chromium"}}, "attempts": {"oneOf": [{"minItems": 1, "maxItems": 1, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}]}, {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}]}]}}},
+      {"properties": {"requested_engine": {"const": "firefox"}, "actual_engine": {"const": "firefox"}, "configured_engines": {"contains": {"const": "firefox"}}, "attempts": {"oneOf": [{"minItems": 1, "maxItems": 1, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}]}, {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}]}]}}},
+      {"properties": {"requested_engine": {"const": "webkit"}, "actual_engine": {"const": "webkit"}, "configured_engines": {"contains": {"const": "webkit"}}, "attempts": {"oneOf": [{"minItems": 1, "maxItems": 1, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}]}, {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}]}}},
+      {"allOf": [{"$ref": "#/$defs/chromium_firefox_pair"}, {"properties": {"actual_engine": {"const": "firefox"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_firefox_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_firefox_alternate_evidence"}]}]}}}]},
+      {"allOf": [{"$ref": "#/$defs/chromium_webkit_pair"}, {"properties": {"actual_engine": {"const": "webkit"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_webkit_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_webkit_alternate_evidence"}]}]}}}]},
+      {"allOf": [{"$ref": "#/$defs/firefox_chromium_pair"}, {"properties": {"actual_engine": {"const": "chromium"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_chromium_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_chromium_alternate_evidence"}]}]}}}]},
+      {"allOf": [{"$ref": "#/$defs/firefox_webkit_pair"}, {"properties": {"actual_engine": {"const": "webkit"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_webkit_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_webkit_alternate_evidence"}]}]}}}]},
+      {"allOf": [{"$ref": "#/$defs/webkit_chromium_pair"}, {"properties": {"actual_engine": {"const": "chromium"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_chromium_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_chromium_alternate_evidence"}]}]}}}]},
+      {"allOf": [{"$ref": "#/$defs/webkit_firefox_pair"}, {"properties": {"actual_engine": {"const": "firefox"}, "attempts": {"oneOf": [{"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_firefox_alternate_evidence"}]}, {"minItems": 3, "maxItems": 3, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_firefox_alternate_evidence"}]}]}}}]}
+    ]}},
     {"if": {"properties": {"requested_engine": {"const": "chromium"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "chromium"}}}},
     {"if": {"properties": {"requested_engine": {"const": "firefox"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "firefox"}}}},
     {"if": {"properties": {"requested_engine": {"const": "webkit"}, "reason_code": {"enum": ["browser_verified_first_pass", "primary_recovered_degraded"]}}}, "then": {"properties": {"actual_engine": {"const": "webkit"}}}},
-    {"if": {"required": ["status", "configured_engines"], "properties": {"status": {"const": "blocked"}, "configured_engines": {"maxItems": 1}}}, "then": {"properties": {"reason_code": {"const": "human_help_required"}, "lifecycle": {"contains": {"properties": {"action": {"const": "secondary_engine"}, "result": {"const": "secondary_engine_unavailable"}}, "required": ["action", "result"]}}}}}
+    {"if": {"required": ["reason_code", "configured_engines"], "properties": {"reason_code": {"const": "human_help_required"}, "configured_engines": {"maxItems": 1}}}, "then": {"oneOf": [
+      {"properties": {"requested_engine": {"const": "chromium"}, "actual_engine": {"const": "chromium"}, "configured_engines": {"const": ["chromium"]}}, "oneOf": [
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"allOf": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_restart_unavailable_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}]}]}}},
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"allOf": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_failed_primary_launch_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}]}]}}},
+        {"properties": {"attempts": {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_restart_proved_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}, {"$ref": "#/$defs/chromium_primary_evidence"}]}]}}}
+      ]},
+      {"properties": {"requested_engine": {"const": "firefox"}, "actual_engine": {"const": "firefox"}, "configured_engines": {"const": ["firefox"]}}, "oneOf": [
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"allOf": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_restart_unavailable_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}]}]}}},
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"allOf": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_failed_primary_launch_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}]}]}}},
+        {"properties": {"attempts": {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_restart_proved_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}, {"$ref": "#/$defs/firefox_primary_evidence"}]}]}}}
+      ]},
+      {"properties": {"requested_engine": {"const": "webkit"}, "actual_engine": {"const": "webkit"}, "configured_engines": {"const": ["webkit"]}}, "oneOf": [
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"allOf": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_restart_unavailable_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}]}}},
+        {"properties": {"attempts": {"minItems": 1, "maxItems": 1, "prefixItems": [{"allOf": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"properties": {"result": {"enum": ["failed", "unavailable"]}}}]}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_failed_primary_launch_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}]}}},
+        {"properties": {"attempts": {"minItems": 2, "maxItems": 2, "prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}, "lifecycle": {"allOf": [{"$ref": "#/$defs/single_restart_proved_lifecycle"}, {"prefixItems": [{"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}, {"$ref": "#/$defs/webkit_primary_evidence"}]}]}}}
+      ]}
+    ]}}
   ],
   "$defs": {
     "restart_unavailable_lifecycle": {
@@ -144,6 +182,46 @@
         {}
       ]
     },
+    "single_restart_unavailable_lifecycle": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        {"oneOf": [
+          {"properties": {"action": {"const": "browser_process_quit"}, "result": {"enum": ["unconfirmed", "unavailable"]}}},
+          {"properties": {"action": {"const": "application_restart"}, "result": {"enum": ["confirmed", "unconfirmed"]}}}
+        ]},
+        {"properties": {"action": {"const": "primary_restart"}, "result": {"const": "primary_restart_unavailable"}}},
+        {"properties": {"action": {"const": "secondary_engine"}, "result": {"const": "secondary_engine_unavailable"}}}
+      ]
+    },
+    "single_failed_primary_launch_lifecycle": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "prefixItems": [
+        {"properties": {"action": {"const": "browser_process_quit"}, "result": {"const": "confirmed"}}},
+        {"oneOf": [
+          {"properties": {"action": {"const": "browser_process_launch"}, "result": {"enum": ["unavailable", "fresh_profile_unavailable"]}}},
+          {"properties": {"action": {"const": "session_validation"}, "result": {"const": "session_identity_mismatch"}}}
+        ]},
+        {"properties": {"action": {"const": "primary_restart"}, "result": {"const": "primary_restart_unavailable"}}},
+        {"properties": {"action": {"const": "secondary_engine"}, "result": {"const": "secondary_engine_unavailable"}}}
+      ]
+    },
+    "single_restart_proved_lifecycle": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "prefixItems": [
+        {"properties": {"action": {"const": "browser_process_quit"}, "result": {"const": "confirmed"}}},
+        {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}},
+        {"properties": {"action": {"const": "secondary_engine"}, "result": {"const": "secondary_engine_unavailable"}}}
+      ]
+    },
+    "primary_retry_application_failure_lifecycle": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "prefixItems": [
+        {"properties": {"action": {"const": "browser_process_quit"}, "result": {"const": "confirmed"}}},
+        {"properties": {"action": {"const": "browser_process_launch"}, "result": {"const": "launched"}}}
+      ]
+    },
+    "nonterminal_failed_attempt": {"properties": {"result": {"enum": ["failed", "unavailable"]}, "reason_code": {"enum": ["adapter_exception", "invalid_adapter_evidence", "browser_tool_failure", "browser_unavailable", "curl_not_browser_evidence", "session_identity_mismatch"]}}},
+    "application_failure_attempt": {"properties": {"result": {"enum": ["failed", "unavailable"]}, "reason_code": {"const": "application_failure"}}},
     "chromium_primary_evidence": {"properties": {"requested_engine": {"const": "chromium"}, "actual_engine": {"const": "chromium"}, "substitution_provenance": {"const": null}}},
     "firefox_primary_evidence": {"properties": {"requested_engine": {"const": "firefox"}, "actual_engine": {"const": "firefox"}, "substitution_provenance": {"const": null}}},
     "webkit_primary_evidence": {"properties": {"requested_engine": {"const": "webkit"}, "actual_engine": {"const": "webkit"}, "substitution_provenance": {"const": null}}},

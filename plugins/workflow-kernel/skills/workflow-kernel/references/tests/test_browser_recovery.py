@@ -139,11 +139,13 @@ class BrowserRecoveryTests(unittest.TestCase):
             primary, alternate, "quit_unconfirmed", "launched", "passed",
         )
 
-    def paired_attempt(self, number, primary, alternate, actual, result, session):
-        engines = (primary, alternate)
+    def profiled_attempt(
+        self, number, primary, engines, actual, result, session,
+        reason="browser_tool_failure",
+    ):
         return BrowserAttempt(
             "case-1", number, primary, actual, "verify", result,
-            None if result == "passed" else "browser_tool_failure",
+            None if result == "passed" else reason,
             None if result == "passed" else "tool failed",
             "proof/screenshot.png", "proof/trace.zip", "proof/console.txt",
             session, "browser",
@@ -152,9 +154,20 @@ class BrowserRecoveryTests(unittest.TestCase):
             TARGET_ROUTE_DIGEST, VIEWPORT,
         )
 
+    def paired_attempt(
+        self, number, primary, alternate, actual, result, session,
+        reason="browser_tool_failure",
+    ):
+        return self.profiled_attempt(
+            number, primary, (primary, alternate), actual, result, session, reason,
+        )
+
     def paired_receipt(
         self, primary, alternate, primary_path, alternate_path,
-        alternate_result=None, readiness="confirmed",
+        alternate_result=None, readiness="confirmed", *,
+        initial_reason="browser_tool_failure",
+        primary_retry_reason="browser_tool_failure",
+        alternate_reason="browser_tool_failure",
     ):
         engines = (primary, alternate)
         request = BrowserRequest(
@@ -162,7 +175,10 @@ class BrowserRecoveryTests(unittest.TestCase):
             PROFILE_ID, engines, TARGET_ORIGIN_DIGEST,
         )
         attempts = [
-            self.paired_attempt(1, primary, alternate, primary, "failed", "primary-1")
+            self.paired_attempt(
+                1, primary, alternate, primary, "failed", "primary-1",
+                initial_reason,
+            )
         ]
         launches = []
         current_primary_session = "primary-1"
@@ -184,7 +200,7 @@ class BrowserRecoveryTests(unittest.TestCase):
                 ))
                 attempts.append(self.paired_attempt(
                     2, primary, alternate, primary, "failed",
-                    current_primary_session,
+                    current_primary_session, primary_retry_reason,
                 ))
             elif primary_path == "primary_launch_unavailable":
                 launches.append(BrowserLaunchEvidence(
@@ -205,7 +221,7 @@ class BrowserRecoveryTests(unittest.TestCase):
             ))
             attempts.append(self.paired_attempt(
                 len(attempts) + 1, primary, alternate, alternate,
-                alternate_result, "secondary-1",
+                alternate_result, "secondary-1", alternate_reason,
             ))
         elif alternate_path == "launch_unavailable":
             launches.append(BrowserLaunchEvidence(
@@ -232,6 +248,58 @@ class BrowserRecoveryTests(unittest.TestCase):
             FakeBrowserAdapter(
                 attempts, quit_result=quit_result, launches=launches,
                 readiness=readiness_evidence,
+            ),
+        )
+
+    def single_engine_receipt(
+        self, primary, primary_path, *,
+        initial_reason="browser_tool_failure",
+        primary_retry_reason="browser_tool_failure",
+    ):
+        engines = (primary,)
+        request = BrowserRequest(
+            "case-1", TARGET_URL, VIEWPORT, primary, None,
+            PROFILE_ID, engines, TARGET_ORIGIN_DIGEST,
+        )
+        attempts = [self.profiled_attempt(
+            1, primary, engines, primary, "failed", "primary-1", initial_reason,
+        )]
+        launches = []
+        if primary_path == "quit_unconfirmed":
+            quit_result = BrowserQuitEvidence(primary, False, "primary-1")
+        elif primary_path == "quit_unavailable":
+            quit_result = RuntimeError("quit unavailable")
+        elif primary_path.startswith("application_restart_"):
+            quit_result = BrowserQuitEvidence(
+                primary, primary_path == "application_restart_confirmed", "primary-1",
+                action="application_restart",
+            )
+        else:
+            quit_result = BrowserQuitEvidence(primary, True, "primary-1")
+            if primary_path == "restart_proved":
+                launches.append(BrowserLaunchEvidence(
+                    primary, True, True, "primary-2",
+                ))
+                attempts.append(self.profiled_attempt(
+                    2, primary, engines, primary, "failed", "primary-2",
+                    primary_retry_reason,
+                ))
+            elif primary_path == "primary_launch_unavailable":
+                launches.append(BrowserLaunchEvidence(
+                    primary, False, True, "unavailable-primary",
+                ))
+            elif primary_path == "primary_launch_unfresh":
+                launches.append(BrowserLaunchEvidence(
+                    primary, True, False, "unfresh-primary",
+                ))
+            else:
+                launches.append(BrowserLaunchEvidence(
+                    primary, True, True, "primary-1",
+                ))
+        return BrowserRecovery().run(
+            request,
+            FakeBrowserAdapter(
+                attempts, quit_result=quit_result, launches=launches,
             ),
         )
 
@@ -527,6 +595,176 @@ class BrowserRecoveryTests(unittest.TestCase):
                         else:
                             payload["lifecycle"].append(dict(payload["lifecycle"][0]))
                         self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_accepts_every_runtime_single_engine_human_help_shape(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary in ("chromium", "firefox", "webkit"):
+            for primary_path in PRIMARY_RECOVERY_PATHS:
+                with self.subTest(primary=primary, primary_path=primary_path):
+                    receipt = self.single_engine_receipt(primary, primary_path)
+                    self.assertEqual("human_help_required", receipt.reason_code)
+                    self.assertTrue(schema_matches(receipt.to_dict(), schema))
+
+    def test_schema_rejects_single_engine_lifecycle_grammar_forgeries(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary in ("chromium", "firefox", "webkit"):
+            for primary_path in PRIMARY_RECOVERY_PATHS:
+                receipt = self.single_engine_receipt(primary, primary_path)
+                for mutation in ("duplicate", "decoy", "reordered", "extra"):
+                    with self.subTest(
+                        primary=primary, primary_path=primary_path,
+                        mutation=mutation,
+                    ):
+                        payload = receipt.to_dict()
+                        if mutation == "duplicate":
+                            payload["lifecycle"].insert(-1, dict(payload["lifecycle"][-1]))
+                        elif mutation == "decoy":
+                            payload["lifecycle"].insert(-1, dict(payload["lifecycle"][-1]))
+                            payload["lifecycle"][-1] = dict(payload["lifecycle"][0])
+                        elif mutation == "reordered":
+                            payload["lifecycle"][-2:] = reversed(payload["lifecycle"][-2:])
+                        else:
+                            payload["lifecycle"].append(dict(payload["lifecycle"][0]))
+                        self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_accepts_every_runtime_application_failure_terminal(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary in ("chromium", "firefox", "webkit"):
+            with self.subTest(branch="initial-single", primary=primary):
+                receipt = self.single_engine_receipt(
+                    primary, "quit_unconfirmed", initial_reason="application_failure",
+                )
+                self.assertEqual("application_failure", receipt.reason_code)
+                self.assertTrue(schema_matches(receipt.to_dict(), schema))
+            with self.subTest(branch="primary-single", primary=primary):
+                receipt = self.single_engine_receipt(
+                    primary, "restart_proved",
+                    primary_retry_reason="application_failure",
+                )
+                self.assertEqual("application_failure", receipt.reason_code)
+                self.assertTrue(schema_matches(receipt.to_dict(), schema))
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
+            with self.subTest(branch="initial-pair", primary=primary, alternate=alternate):
+                receipt = self.paired_receipt(
+                    primary, alternate, "quit_unconfirmed", "launched", "failed",
+                    initial_reason="application_failure",
+                )
+                self.assertEqual("application_failure", receipt.reason_code)
+                self.assertTrue(schema_matches(receipt.to_dict(), schema))
+            with self.subTest(branch="primary-pair", primary=primary, alternate=alternate):
+                receipt = self.paired_receipt(
+                    primary, alternate, "restart_proved", "launched", "failed",
+                    primary_retry_reason="application_failure",
+                )
+                self.assertEqual("application_failure", receipt.reason_code)
+                self.assertTrue(schema_matches(receipt.to_dict(), schema))
+            for primary_path in PRIMARY_RECOVERY_PATHS:
+                for readiness in ("confirmed", "unavailable"):
+                    with self.subTest(
+                        branch="alternate", primary=primary, alternate=alternate,
+                        primary_path=primary_path, readiness=readiness,
+                    ):
+                        receipt = self.paired_receipt(
+                            primary, alternate, primary_path, "launched", "failed",
+                            readiness, alternate_reason="application_failure",
+                        )
+                        self.assertEqual("application_failure", receipt.reason_code)
+                        self.assertTrue(schema_matches(receipt.to_dict(), schema))
+
+    def test_schema_rejects_application_failure_terminal_forgeries(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        for primary, alternate in ALTERNATE_ENGINE_PAIRS:
+            third = next(
+                engine for engine in ("chromium", "firefox", "webkit")
+                if engine not in (primary, alternate)
+            )
+            initial = self.paired_receipt(
+                primary, alternate, "quit_unconfirmed", "launched", "failed",
+                initial_reason="application_failure",
+            )
+            donor = self.paired_receipt(
+                primary, alternate, "quit_unconfirmed", "launched", "failed",
+                alternate_reason="application_failure",
+            )
+            for mutation in ("appended_lifecycle", "duplicate_attempt", "mismatched_receipt"):
+                with self.subTest(
+                    branch="initial", primary=primary, alternate=alternate,
+                    mutation=mutation,
+                ):
+                    payload = initial.to_dict()
+                    if mutation == "appended_lifecycle":
+                        payload["lifecycle"].append(dict(donor.to_dict()["lifecycle"][0]))
+                    elif mutation == "duplicate_attempt":
+                        duplicate = dict(payload["attempts"][0])
+                        duplicate["attempt_number"] = 2
+                        payload["attempts"].append(duplicate)
+                    else:
+                        payload["actual_engine"] = alternate
+                    self.assertFalse(schema_matches(payload, schema))
+
+            primary_terminal = self.paired_receipt(
+                primary, alternate, "restart_proved", "launched", "failed",
+                primary_retry_reason="application_failure",
+            )
+            for mutation in (
+                "appended", "duplicate", "reordered",
+                "mismatched_attempt", "mismatched_receipt",
+            ):
+                with self.subTest(
+                    branch="primary", primary=primary, alternate=alternate,
+                    mutation=mutation,
+                ):
+                    payload = primary_terminal.to_dict()
+                    if mutation == "appended":
+                        payload["lifecycle"].append(dict(payload["lifecycle"][0]))
+                    elif mutation == "duplicate":
+                        payload["lifecycle"].insert(-1, dict(payload["lifecycle"][-1]))
+                    elif mutation == "reordered":
+                        payload["lifecycle"] = list(reversed(payload["lifecycle"]))
+                    elif mutation == "mismatched_attempt":
+                        payload["attempts"][-1]["actual_engine"] = alternate
+                        payload["attempts"][-1]["substitution_provenance"] = (
+                            "alternate_engine_recovery"
+                        )
+                    else:
+                        payload["actual_engine"] = alternate
+                    self.assertFalse(schema_matches(payload, schema))
+
+            alternate_terminal = donor
+            for mutation in (
+                "appended", "duplicate", "reordered", "mismatched_lifecycle",
+                "mismatched_attempt", "mismatched_receipt", "configured_pair",
+            ):
+                with self.subTest(
+                    branch="alternate", primary=primary, alternate=alternate,
+                    mutation=mutation,
+                ):
+                    payload = alternate_terminal.to_dict()
+                    if mutation == "appended":
+                        payload["lifecycle"].append(dict(payload["lifecycle"][0]))
+                    elif mutation == "duplicate":
+                        payload["lifecycle"].insert(-1, dict(payload["lifecycle"][-1]))
+                    elif mutation == "reordered":
+                        payload["lifecycle"][-2:] = reversed(payload["lifecycle"][-2:])
+                    elif mutation == "mismatched_lifecycle":
+                        payload["lifecycle"][-1]["actual_engine"] = third
+                    elif mutation == "mismatched_attempt":
+                        payload["attempts"][-1]["actual_engine"] = third
+                    elif mutation == "mismatched_receipt":
+                        payload["actual_engine"] = third
+                    else:
+                        payload["configured_engines"] = [primary, third]
+                        for attempt_payload in payload["attempts"]:
+                            attempt_payload["configured_engines"] = [primary, third]
+                    self.assertFalse(schema_matches(payload, schema))
 
     def test_recovered_receipt_recomputes_readiness_digest(self):
         adapter = FakeBrowserAdapter(
