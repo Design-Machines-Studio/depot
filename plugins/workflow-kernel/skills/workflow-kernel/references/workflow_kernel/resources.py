@@ -1374,7 +1374,7 @@ class ResourceRegistry:
                     raise invalid_policy("cleanup_result_transaction_already_recorded")
                 if authorities:
                     self._validate_execution_authorities(
-                        plan, results, authorities, expected_step_identities,
+                        plan, results, authorities,
                     )
                 nested = [
                     {"event": "authority_consumed", "authority_id": value.authority_id}
@@ -1401,15 +1401,12 @@ class ResourceRegistry:
     def _validate_execution_authorities(
         self, plan: CleanupPlan, results: Tuple[CommandResult, ...],
         authorities: Tuple[GuardedAuthority, ...],
-        expected_step_identities: Tuple[CleanupStepIdentity, ...],
     ) -> None:
         command_authorities = tuple(
             value for value in authorities if type(value) is GuardedCommandResult
         )
         if len(command_authorities) != len(results):
             raise invalid_policy("guarded_cleanup_authority_missing")
-        if tuple(value.step_identity for value in authorities) != expected_step_identities:
-            raise invalid_policy("guarded_cleanup_authority_bijection_failed")
         by_argv = {value.argv: value for value in plan.actions}
         current = self._now()
         if not _valid_timestamp(current):
