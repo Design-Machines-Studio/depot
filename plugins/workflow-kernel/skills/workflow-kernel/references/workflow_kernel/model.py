@@ -1,4 +1,4 @@
-"""Host-neutral workflow policy and adapter value types.
+"""Core domain model: host-neutral workflow policy and boundary value types.
 
 Session handles and results are immutable receipts bound to one
 run/node/attempt and to the provider, concrete dispatch rail, and executor
@@ -18,13 +18,13 @@ from enum import Enum
 from pathlib import PurePosixPath
 from threading import RLock
 from types import MappingProxyType
-from typing import Mapping, Optional, Protocol, Tuple
+from typing import Mapping, Optional, Tuple
 
-from ..redaction import (
+from .redaction import (
     MAX_STRING_LENGTH, MAX_TOTAL_STRING_BYTES, bounded_iterable, is_secret_key,
     normalize_evidence_reference,
 )
-from ..schema import (
+from .schema import (
     ErrorDetailKey, ErrorMessage, InvalidSchemaError, WorkflowEvent,
 )
 
@@ -1726,17 +1726,3 @@ def _builder_decision_primitives(
         result = _session_result_primitives(result_capture)
         _validate_origin(result_value, "SessionResult", result)
     return outcome.value, context, handle, result
-
-
-class HostAdapter(Protocol):
-    def capabilities(self) -> HostCapabilities: ...
-
-    def dispatch(
-        self, node: NodeSpec, context: ResumeStateContext,
-    ) -> Optional[SessionHandle]: ...
-
-    def resume(
-        self,
-        handle: SessionHandle,
-        feedback: ValidationFeedback,
-    ) -> SessionResult: ...

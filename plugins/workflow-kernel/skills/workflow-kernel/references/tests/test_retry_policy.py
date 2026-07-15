@@ -12,8 +12,8 @@ from types import MappingProxyType
 from unittest.mock import patch
 
 from tests import detail_digest, json_document_boundary_corpus, schema_matches
-import workflow_kernel.adapters.base as adapter_base
-from workflow_kernel.adapters.base import (
+import workflow_kernel.model as kernel_model
+from workflow_kernel.model import (
     AttemptLedger, FailureReason, HostCapability, IsolationMode, WorkflowClass,
     WorkflowContext,
 )
@@ -603,7 +603,7 @@ class RetryPolicyTests(unittest.TestCase):
 
     def test_retry_decision_snapshots_attempt_ledger_exactly_once(self):
         snapshots = []
-        original = adapter_base._snapshot_attempt_ledger
+        original = kernel_model._snapshot_attempt_ledger
 
         def snapshot(value):
             snapshots.append(value)
@@ -611,7 +611,7 @@ class RetryPolicyTests(unittest.TestCase):
 
         with (
             patch.object(policy_module, "_snapshot_attempt_ledger", side_effect=snapshot),
-            patch.object(adapter_base, "_snapshot_attempt_ledger", side_effect=snapshot),
+            patch.object(kernel_model, "_snapshot_attempt_ledger", side_effect=snapshot),
         ):
             RetryPolicy().decide(
                 FailureReason.REVIEWER_FINDING,
@@ -796,7 +796,7 @@ class RetryPolicyTests(unittest.TestCase):
         code = """
 import json
 from dataclasses import replace
-from workflow_kernel.adapters.base import IsolationMode
+from workflow_kernel.model import IsolationMode
 from workflow_kernel.policies import GatePolicy, _policy_document_payload, load_policy
 from workflow_kernel.schema import InvalidSchemaError
 candidate = replace(load_policy(), forbidden_downgrades=frozenset({
@@ -868,7 +868,7 @@ else:
         code = """
 import json
 from dataclasses import replace
-from workflow_kernel.adapters.base import IsolationMode
+from workflow_kernel.model import IsolationMode
 from workflow_kernel.policies import GatePolicy, _policy_document_payload, load_policy
 from workflow_kernel.schema import InvalidSchemaError
 document = replace(load_policy(), forbidden_downgrades=frozenset({

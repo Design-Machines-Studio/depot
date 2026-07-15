@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Union
 
 from workflow_kernel._files import LockHandle, PinnedDirectory, bind_durable_path
-from workflow_kernel.adapters.base import invalid_policy
+from workflow_kernel.model import invalid_policy
 from workflow_kernel.redaction import (
     contains_secret_shape, digest_error_detail_string, is_secret_key,
     sanitize_durable_payload,

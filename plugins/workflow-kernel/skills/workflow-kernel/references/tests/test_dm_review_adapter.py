@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from workflow_kernel.adapters.base import HostCapabilities, WorkflowClass
+from workflow_kernel.model import HostCapabilities, WorkflowClass
 from workflow_kernel.dm_review_adapter import ReviewRequest, translate_review, translate_review_receipts
 
 

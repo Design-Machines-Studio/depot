@@ -9,7 +9,7 @@ from pathlib import Path
 
 import workflow_kernel
 
-from workflow_kernel.adapters.base import HostCapabilities, WorkflowClass
+from workflow_kernel.model import HostCapabilities, WorkflowClass
 from workflow_kernel.pipeline_adapter import translate_manifest, translate_pipeline_receipts
 from workflow_kernel.shadow import ReceiptSet, ShadowComparator
 
@@ -63,7 +63,7 @@ class CompatibilityTests(unittest.TestCase):
                 ignore=shutil.ignore_patterns("tests", "__pycache__"),
             )
             script = (
-                "from workflow_kernel.adapters.base import HostCapabilities\n"
+                "from workflow_kernel.model import HostCapabilities\n"
                 "from workflow_kernel.pipeline_adapter import translate_manifest\n"
                 "spec = translate_manifest({\n"
                 "    'feature': 'cache-layout', 'workflowClass': 'feature',\n"

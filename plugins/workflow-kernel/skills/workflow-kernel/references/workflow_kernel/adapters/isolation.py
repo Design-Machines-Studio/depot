@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from .base import (
+from ..model import (
     HostCapabilities, HostCapability, IsolationDecision, IsolationMode,
     IsolationRequirements, _snapshot_host_capabilities,
     _snapshot_isolation_requirements,

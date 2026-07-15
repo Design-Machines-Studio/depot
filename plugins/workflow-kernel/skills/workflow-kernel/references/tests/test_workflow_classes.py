@@ -8,7 +8,7 @@ from tests import (
     detail_digest, ignored_json_boundary_corpus, json_document_boundary_corpus,
     schema_matches,
 )
-from workflow_kernel.adapters.base import HostCapability, WorkflowClass, WorkflowContext
+from workflow_kernel.model import HostCapability, WorkflowClass, WorkflowContext
 from workflow_kernel.schema import InvalidSchemaError
 from workflow_kernel.policies import GatePolicy, load_policy
 from workflow_kernel.workflows import WorkflowTemplates

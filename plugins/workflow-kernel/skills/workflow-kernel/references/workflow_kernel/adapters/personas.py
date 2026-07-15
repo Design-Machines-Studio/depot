@@ -7,7 +7,7 @@ import stat
 from pathlib import Path
 from typing import Protocol
 
-from .base import invalid_policy
+from ..model import invalid_policy
 from .._files import PinnedDirectory
 from ..limits import parse_json_document
 from ..policies import PolicyDocument, _snapshot_policy_document, load_policy

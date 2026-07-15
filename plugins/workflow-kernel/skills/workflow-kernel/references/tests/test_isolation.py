@@ -1,7 +1,7 @@
 import unittest
 
 from tests import detail_digest
-from workflow_kernel.adapters.base import (
+from workflow_kernel.model import (
     HostCapabilities, HostCapability, IsolationMode, IsolationRequirements,
 )
 from workflow_kernel.adapters.isolation import IsolationSelector

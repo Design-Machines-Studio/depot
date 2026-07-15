@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import re
 from typing import Iterable, Mapping, Optional, Tuple
 
-from .adapters.base import (
+from .model import (
     BuilderSessionDecision, GateDecision, HostCapabilities, HostCapability,
     NodeSpec, WorkflowClass, WorkflowContext,
 )

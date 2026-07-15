@@ -1,30 +1,18 @@
-"""Workflow kernel host contracts, closed builder outcomes, and safe persistence.
+"""Workflow kernel host-boundary adapters.
 
-Builder outcomes are closed. Observations project to ``evidence.recorded`` and
-are never node lifecycle transitions. ``SessionHandle`` and ``SessionResult``
-are immutable provenance receipts for one run/node/attempt, provider, concrete
-rail, and capability. Downstream translators must require an authoritative
-receipt reference and safely merge result evidence; the observation helper does
-not invent a receipt. ``ResumeStateBlob`` raw bytes belong only in protected,
-permission-restricted storage with retention/deletion, never ordinary receipts,
-events, evidence, artifacts, shadow reports, Airlift payloads, or checkpoints.
-Its checksum detects corruption and does not claim authenticity.
+Boundary code only: host dispatch/resume management, harness capability
+aggregation, and isolation selection. The domain value types (workflow
+classes, node specs, gate decisions, host capabilities/routes, session
+receipts, builder outcomes) live in the core module ``workflow_kernel.model``;
+import them from there. Builder outcomes remain closed; observations project
+to ``evidence.recorded`` and are never node lifecycle transitions.
 """
 
 from importlib import import_module
 
-from .base import (
-    AttemptLedger, BuilderObservation, BuilderOutcome, BuilderSessionDecision,
-    FailureReason, GateDecision,
-    HostAdapter, HostCapabilities, HostCapability, HostRoute, IsolationDecision, IsolationMode,
-    IsolationRequirements, NodeSpec, ResumeStateBlob, ResumeStateContext,
-    RetryDecision, SessionHandle, SessionResult, SessionStatus,
-    ValidationFeedback, WorkflowClass, WorkflowContext,
-)
-
 _LAZY_EXPORTS = {
     "BuilderSessionManager": (".host", "BuilderSessionManager"),
-    "FakeHostAdapter": (".host", "FakeHostAdapter"),
+    "HostAdapter": (".host", "HostAdapter"),
     "capabilities_from_harness_profile": (".host", "capabilities_from_harness_profile"),
     "IsolationSelector": (".isolation", "IsolationSelector"),
 }
@@ -44,12 +32,6 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
 __all__ = [
-    "AttemptLedger", "BuilderObservation", "BuilderOutcome", "BuilderSessionDecision",
-    "BuilderSessionManager",
-    "FailureReason", "FakeHostAdapter", "GateDecision", "HostAdapter",
-    "HostCapabilities", "HostCapability", "HostRoute", "IsolationDecision", "IsolationMode",
-    "IsolationRequirements", "IsolationSelector", "NodeSpec", "RetryDecision",
-    "ResumeStateBlob", "ResumeStateContext", "SessionHandle", "SessionResult",
-    "SessionStatus", "ValidationFeedback", "WorkflowClass",
-    "WorkflowContext", "capabilities_from_harness_profile",
+    "BuilderSessionManager", "HostAdapter", "IsolationSelector",
+    "capabilities_from_harness_profile",
 ]

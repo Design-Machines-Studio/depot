@@ -15,8 +15,8 @@ from tests import (
     canonical_harness_profile, detail_digest, ignored_json_boundary_corpus,
     snapshot_during_validated_mutation,
 )
-import workflow_kernel.adapters.base as adapter_base
-from workflow_kernel.adapters.base import (
+import workflow_kernel.model as kernel_model
+from workflow_kernel.model import (
     GateDecision, HostCapabilities, HostCapability, HostRoute, NodeSpec,
     WorkflowContext, route_satisfies_node,
 )
@@ -67,7 +67,7 @@ class HostCapabilityTests(unittest.TestCase):
                 HostRoute("openai", HostCapability.CODEX_EXECUTION, "native"),
             )
 
-        context = adapter_base.ResumeStateContext(
+        context = kernel_model.ResumeStateContext(
             "run-1", "build", "attempt-1", "openai", "native",
             HostCapability.CODEX_EXECUTION,
         )
@@ -77,9 +77,9 @@ class HostCapabilityTests(unittest.TestCase):
         with self.assertRaises(InvalidSchemaError):
             context.to_dict()
 
-        handle = adapter_base.SessionHandle(
+        handle = kernel_model.SessionHandle(
             "codex", "opaque-one", "2026-07-14T00:00:00Z", True,
-            adapter_base.ResumeStateContext(
+            kernel_model.ResumeStateContext(
                 "run-1", "build", "attempt-1", "openai", "native",
                 HostCapability.CODEX_EXECUTION,
             ),
@@ -94,7 +94,7 @@ class HostCapabilityTests(unittest.TestCase):
         class Token:
             pass
 
-        registry = adapter_base._IdentitySealRegistry()
+        registry = kernel_model._IdentitySealRegistry()
         live = Token()
         registry.register(live, "Token", ("first",))
         with self.assertRaises(ValueError):
@@ -190,7 +190,7 @@ class HostCapabilityTests(unittest.TestCase):
     def test_snapshots_reconstruct_only_from_one_validated_capture(self):
         context = WorkflowContext(risk="low")
         captured_context = snapshot_during_validated_mutation(
-            context, adapter_base._snapshot_workflow_context,
+            context, kernel_model._snapshot_workflow_context,
             lambda: object.__setattr__(context, "risk", "high"),
         )
         self.assertEqual(captured_context.risk, "low")
@@ -215,7 +215,7 @@ class HostCapabilityTests(unittest.TestCase):
             ))
 
         captured_node = snapshot_during_validated_mutation(
-            node, adapter_base._snapshot_node_spec, mutate_node,
+            node, kernel_model._snapshot_node_spec, mutate_node,
         )
         self.assertEqual(captured_node.executor, "claude")
         self.assertFalse(captured_node.gate_decision.allowed)
@@ -236,7 +236,7 @@ class HostCapabilityTests(unittest.TestCase):
             )
 
         captured_capabilities = snapshot_during_validated_mutation(
-            capabilities, adapter_base._snapshot_host_capabilities,
+            capabilities, kernel_model._snapshot_host_capabilities,
             mutate_capabilities,
         )
         self.assertEqual(captured_capabilities.host_name, "claude")
@@ -298,18 +298,18 @@ class HostCapabilityTests(unittest.TestCase):
             aggregate.supports_route(companion)
 
     def test_module_owned_seal_registry_releases_dead_identities(self):
-        self.assertTrue(hasattr(adapter_base, "_origin_seal_registry_size"))
-        before = adapter_base._origin_seal_registry_size()
+        self.assertTrue(hasattr(kernel_model, "_origin_seal_registry_size"))
+        before = kernel_model._origin_seal_registry_size()
         route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
         reference = weakref.ref(route)
-        self.assertEqual(adapter_base._origin_seal_registry_size(), before + 1)
+        self.assertEqual(kernel_model._origin_seal_registry_size(), before + 1)
         del route
         gc.collect()
         self.assertIsNone(reference())
-        self.assertLessEqual(adapter_base._origin_seal_registry_size(), before)
+        self.assertLessEqual(kernel_model._origin_seal_registry_size(), before)
 
     def test_host_authorization_exposes_immutable_concrete_routes(self):
-        self.assertTrue(hasattr(adapter_base, "HostRoute"))
+        self.assertTrue(hasattr(kernel_model, "HostRoute"))
         self.assertIn("routes", inspect.signature(HostCapabilities).parameters)
 
         explicit = HostCapabilities("test", (), routes=frozenset({
@@ -398,8 +398,8 @@ class HostCapabilityTests(unittest.TestCase):
 
     def test_route_authorization_and_aggregate_snapshot_each_route_once(self):
         route = HostRoute("openai", HostCapability.CODEX_EXECUTION, "native")
-        original = adapter_base._snapshot_host_route
-        with patch.object(adapter_base, "_snapshot_host_route", wraps=original) as snapshot:
+        original = kernel_model._snapshot_host_route
+        with patch.object(kernel_model, "_snapshot_host_route", wraps=original) as snapshot:
             capabilities = HostCapabilities("test", (), routes=(route,))
         self.assertEqual(snapshot.call_count, 1)
         node = NodeSpec(
@@ -407,9 +407,9 @@ class HostCapabilityTests(unittest.TestCase):
             required_capability=HostCapability.CODEX_EXECUTION,
             required_dispatch_capability=HostCapability.NATIVE_DISPATCH,
         )
-        original_node = adapter_base._snapshot_node_spec
-        with patch.object(adapter_base, "_snapshot_host_route", wraps=original) as route_snapshot, \
-                patch.object(adapter_base, "_snapshot_node_spec", wraps=original_node) as node_snapshot:
+        original_node = kernel_model._snapshot_node_spec
+        with patch.object(kernel_model, "_snapshot_host_route", wraps=original) as route_snapshot, \
+                patch.object(kernel_model, "_snapshot_node_spec", wraps=original_node) as node_snapshot:
             self.assertTrue(route_satisfies_node(next(iter(capabilities.routes)), node))
         self.assertEqual(route_snapshot.call_count, 1)
         self.assertEqual(node_snapshot.call_count, 1)

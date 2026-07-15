@@ -8,7 +8,7 @@ from dataclasses import dataclass, fields, replace
 from typing import Iterable, Tuple
 from urllib.parse import unquote, urlsplit
 
-from .adapters.base import _register_origin, _validate_capture, invalid_policy
+from .model import _register_origin, _validate_capture, invalid_policy
 from .redaction import normalize_evidence_reference
 
 _ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")

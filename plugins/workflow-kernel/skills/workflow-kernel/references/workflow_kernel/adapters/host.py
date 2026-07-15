@@ -7,10 +7,10 @@ import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Protocol, Union
 
-from .base import (
-    BuilderOutcome, BuilderSessionDecision, HostAdapter, HostCapabilities,
+from ..model import (
+    BuilderOutcome, BuilderSessionDecision, HostCapabilities,
     DISPATCH_RAIL_CAPABILITIES, HostRoute, HostCapability,
     MAX_RESUME_STATE_BYTES, NodeSpec, ResumeStateBlob, ResumeStateContext,
     SessionHandle, SessionResult, SessionStatus, ValidationFeedback, _snapshot_resume_context,
@@ -23,6 +23,22 @@ from ..schema import InvalidSchemaError
 
 
 _HarnessProfilePath = Union[str, os.PathLike[str]]
+
+
+class HostAdapter(Protocol):
+    """External-host contract: capability report, dispatch, and resume."""
+
+    def capabilities(self) -> HostCapabilities: ...
+
+    def dispatch(
+        self, node: NodeSpec, context: ResumeStateContext,
+    ) -> Optional[SessionHandle]: ...
+
+    def resume(
+        self,
+        handle: SessionHandle,
+        feedback: ValidationFeedback,
+    ) -> SessionResult: ...
 
 
 def capabilities_from_harness_profile(

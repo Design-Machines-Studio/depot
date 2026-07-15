@@ -268,7 +268,7 @@ class RuntimeCliTests(unittest.TestCase):
                 "--state-dir", root,
             )
             self.assertEqual(observed.returncode, 2, observed.stderr)
-            from workflow_kernel.adapters.base import HostCapabilities
+            from workflow_kernel.model import HostCapabilities
             from workflow_kernel.pipeline_adapter import translate_manifest, translate_pipeline_receipts
             receipts = json.loads((FIXTURES / "pipeline-codex.json").read_text())
             spec = translate_manifest(

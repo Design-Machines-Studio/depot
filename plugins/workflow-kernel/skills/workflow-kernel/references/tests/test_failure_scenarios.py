@@ -373,7 +373,7 @@ def _exercise_provider_fault(fault):
         NOW, builder_node, handle, host_capabilities, receipt_context,
         session_result,
     )
-    from workflow_kernel.adapters.base import HostCapabilities, ValidationFeedback
+    from workflow_kernel.model import HostCapabilities, ValidationFeedback
     from workflow_kernel.adapters.host import BuilderSessionManager, FakeHostAdapter
 
     feedback = ValidationFeedback("build", "deterministic_validation_failure")

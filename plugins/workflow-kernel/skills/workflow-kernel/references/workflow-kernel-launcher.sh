@@ -52,18 +52,37 @@ while [ -L "$SELF" ]; do
 done
 SELF_DIR="$(cd "$(dirname "$SELF")" 2>/dev/null && pwd -P)" || fail "cannot resolve launcher directory"
 
+# --- Verify a Python 3.12+ interpreter --------------------------------------
+PYTHON=""
+for CANDIDATE in python3 python3.13 python3.12; do
+  if command -v "$CANDIDATE" >/dev/null 2>&1 && \
+     "$CANDIDATE" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
+    PYTHON="$(command -v "$CANDIDATE")"
+    break
+  fi
+done
+[ -n "$PYTHON" ] || fail "python3 >= 3.12 not found on the fixed PATH"
+
+# Probe a candidate references directory: the module must actually run.
+# -P keeps a workflow_kernel package in the caller's cwd from shadowing the
+# resolved runtime (python -m otherwise prepends cwd to sys.path).
+viable() {
+  PYTHONPATH="$1" "$PYTHON" -P -m workflow_kernel --help >/dev/null 2>&1
+}
+
 # --- Resolve the canonical runtime ------------------------------------------
 # 1. Repo checkout: this launcher ships beside the runtime package. When the
 #    executing copy is a repository checkout (not an installed plugin cache),
 #    its own references directory is the canonical runtime.
 # 2. Otherwise: newest compatible (same-major, >= 0.1.0) semver-named version
-#    directory under ~/.claude then ~/.codex plugin caches. Never mtime order:
-#    re-pulling an older version must not shadow a newer one.
+#    directory under ~/.claude then ~/.codex plugin caches, probed for
+#    importability. Never mtime order: re-pulling an older version must not
+#    shadow a newer one.
 KERNEL_REFS=""
 case "$SELF_DIR" in
   */plugins/cache/depot/workflow-kernel/*) ;; # installed cache copy: prefer cache scan below
   *)
-    if [ -f "$SELF_DIR/workflow_kernel/__main__.py" ]; then
+    if [ -f "$SELF_DIR/workflow_kernel/__main__.py" ] && viable "$SELF_DIR"; then
       KERNEL_REFS="$SELF_DIR"
     fi
     ;;
@@ -76,8 +95,9 @@ if [ -z "$KERNEL_REFS" ]; then
     # Same-major compatibility with the declared >=0.1.0 dependency floor:
     # accept 0.x.y (x >= 1), sort numerically by semver segments, newest first.
     while IFS= read -r VERSION; do
+      [ -n "$VERSION" ] || continue
       CANDIDATE="$CACHE_ROOT/$VERSION/skills/workflow-kernel/references"
-      if [ -f "$CANDIDATE/workflow_kernel/__main__.py" ]; then
+      if [ -f "$CANDIDATE/workflow_kernel/__main__.py" ] && viable "$CANDIDATE"; then
         KERNEL_REFS="$CANDIDATE"
         break
       fi
@@ -89,22 +109,11 @@ EOF
 fi
 
 # Installed-cache copy with no scannable cache (unusual): fall back to itself.
-if [ -z "$KERNEL_REFS" ] && [ -f "$SELF_DIR/workflow_kernel/__main__.py" ]; then
+if [ -z "$KERNEL_REFS" ] && [ -f "$SELF_DIR/workflow_kernel/__main__.py" ] && viable "$SELF_DIR"; then
   KERNEL_REFS="$SELF_DIR"
 fi
 
-[ -n "$KERNEL_REFS" ] || fail "no compatible workflow-kernel runtime found (repo checkout or ~/.claude|~/.codex plugin cache)"
-
-# --- Verify a Python 3.12+ interpreter --------------------------------------
-PYTHON=""
-for CANDIDATE in python3 python3.13 python3.12; do
-  if command -v "$CANDIDATE" >/dev/null 2>&1 && \
-     "$CANDIDATE" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1; then
-    PYTHON="$(command -v "$CANDIDATE")"
-    break
-  fi
-done
-[ -n "$PYTHON" ] || fail "python3 >= 3.12 not found on the fixed PATH"
+[ -n "$KERNEL_REFS" ] || fail "workflow-kernel runtime not found (repo checkout or ~/.claude|~/.codex plugin cache)"
 
 # --- Exec the CLI with the module path set ----------------------------------
-PYTHONPATH="$KERNEL_REFS" exec "$PYTHON" -m workflow_kernel "$@"
+PYTHONPATH="$KERNEL_REFS" exec "$PYTHON" -P -m workflow_kernel "$@"

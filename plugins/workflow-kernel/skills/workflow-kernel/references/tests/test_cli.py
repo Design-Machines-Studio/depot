@@ -43,11 +43,24 @@ class CliTests(unittest.TestCase):
         return refs
 
     def run_cache_resolver(self, home, *, cwd=None, **environment):
-        skill = Path(__file__).parents[2] / "SKILL.md"
-        snippet = skill.read_text().split("```sh\n", 1)[1].split("```", 1)[0]
+        """Run the documented resolver: a detached copy of the launcher.
+
+        Copying the launcher to a neutral directory removes its own repo
+        checkout runtime, so resolution must come from the fixture caches --
+        the installed-plugin scenario the launcher exists for.
+        """
+        import workflow_kernel
+
+        source = (
+            Path(workflow_kernel.__file__).resolve().parents[1]
+            / "workflow-kernel-launcher.sh"
+        )
+        launcher = Path(home) / "workflow-kernel-launcher.sh"
+        launcher.write_text(source.read_text())
+        launcher.chmod(0o755)
         env = dict(os.environ, HOME=str(home), **environment)
         return subprocess.run(
-            ["zsh", "-c", snippet], cwd=cwd, text=True,
+            ["bash", str(launcher), "--help"], cwd=cwd, text=True,
             capture_output=True, env=env, check=False,
         )
 
@@ -450,7 +463,7 @@ class CliTests(unittest.TestCase):
 
     def test_documented_cache_resolver_skips_incomplete_newer_candidates(self):
         with tempfile.TemporaryDirectory() as directory:
-            self.install_cached_runtime(directory, ".claude", "9.9.9")
+            self.install_cached_runtime(directory, ".claude", "0.9.9")
             self.install_cached_runtime(
                 directory, ".codex", "0.1.0", "print('fallback-runtime')\n",
             )
@@ -462,7 +475,7 @@ class CliTests(unittest.TestCase):
     def test_documented_cache_resolver_falls_through_unimportable_candidate_in_one_root(self):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(
-                directory, ".claude", "9.9.9", "raise RuntimeError('broken')\n",
+                directory, ".claude", "0.9.9", "raise RuntimeError('broken')\n",
                 mtime=200,
             )
             self.install_cached_runtime(
@@ -481,7 +494,7 @@ class CliTests(unittest.TestCase):
                 mtime=100,
             )
             self.install_cached_runtime(
-                directory, ".codex", "9.9.9", "print('codex-newer-runtime')\n",
+                directory, ".codex", "0.9.9", "print('codex-newer-runtime')\n",
                 mtime=200,
             )
             result = self.run_cache_resolver(directory)
@@ -493,7 +506,7 @@ class CliTests(unittest.TestCase):
     def test_documented_cache_resolver_quietly_rejects_broken_main(self):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(
-                directory, ".claude", "9.9.9",
+                directory, ".claude", "0.9.9",
                 "raise RuntimeError('broken-main')\n",
             )
             result = self.run_cache_resolver(directory)
@@ -505,7 +518,7 @@ class CliTests(unittest.TestCase):
     def test_documented_cache_resolver_falls_from_broken_claude_to_codex(self):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(
-                directory, ".claude", "9.9.9",
+                directory, ".claude", "0.9.9",
                 "raise RuntimeError('broken-claude')\n",
             )
             self.install_cached_runtime(
@@ -516,6 +529,26 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-fallback-runtime", result.stdout)
+
+    def test_documented_cache_resolver_orders_by_semver_and_rejects_foreign_major(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.install_cached_runtime(
+                directory, ".claude", "9.9.9", "print('foreign-major-runtime')\n",
+                mtime=300,
+            )
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.9", "print('older-semver-runtime')\n",
+                mtime=200,
+            )
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.10", "print('newer-semver-runtime')\n",
+                mtime=100,
+            )
+            result = self.run_cache_resolver(directory)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("newer-semver-runtime", result.stdout)
+        self.assertNotIn("older-semver-runtime", result.stdout)
+        self.assertNotIn("foreign-major-runtime", result.stdout)
 
     def test_documented_contract_names_cooperating_writer_and_lookahead_boundaries(self):
         skill = (Path(__file__).parents[2] / "SKILL.md").read_text()

@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Protocol, Sequence, Tuple
 
-from workflow_kernel.adapters.base import invalid_policy
+from workflow_kernel.model import invalid_policy
 from workflow_kernel.resources import (
     VALID_CLEANUP_POLICIES, VALID_LIFECYCLES,
     CleanupAction, CleanupDisposition, CleanupPlan, CleanupReceipt, CleanupScope,

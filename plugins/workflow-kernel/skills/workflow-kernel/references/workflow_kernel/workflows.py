@@ -7,7 +7,7 @@ from collections import deque
 from pathlib import Path
 from typing import Mapping, Optional
 
-from .adapters.base import (
+from .model import (
     DEFAULT_EXECUTOR_CAPABILITY, GATE_KINDS, HostCapability, NodeSpec,
     WorkflowClass, WorkflowContext, _snapshot_workflow_context, invalid_policy,
     _normalize_enum, normalize_executor_constraint,

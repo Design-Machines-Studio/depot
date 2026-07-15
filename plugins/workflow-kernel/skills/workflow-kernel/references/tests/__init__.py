@@ -104,13 +104,13 @@ def ignored_json_boundary_corpus(canonical):
 
 def snapshot_during_validated_mutation(value, snapshot, mutate):
     """Pause one snapshot after its target seal validates, then mutate it."""
-    from workflow_kernel.adapters import base as adapter_base
+    from workflow_kernel import model as kernel_model
 
     validated = threading.Event()
     release = threading.Event()
     result = []
     failure = []
-    original = adapter_base._ORIGIN_SEALS.validate
+    original = kernel_model._ORIGIN_SEALS.validate
 
     def validate(candidate, kind, primitives):
         original(candidate, kind, primitives)
@@ -124,7 +124,7 @@ def snapshot_during_validated_mutation(value, snapshot, mutate):
         except BaseException as error:
             failure.append(error)
 
-    with patch.object(adapter_base._ORIGIN_SEALS, "validate", side_effect=validate):
+    with patch.object(kernel_model._ORIGIN_SEALS, "validate", side_effect=validate):
         worker = threading.Thread(target=run)
         worker.start()
         if not validated.wait(timeout=2):

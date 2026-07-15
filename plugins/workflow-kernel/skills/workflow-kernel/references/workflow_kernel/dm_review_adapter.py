@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Tuple
 
-from .adapters.base import HostCapabilities, NodeSpec, WorkflowClass
+from .model import HostCapabilities, NodeSpec, WorkflowClass
 from .pipeline_adapter import EXECUTION_MODES, RunSpec, _required_text, _translate_receipts
 from .schema import WorkflowEvent
 from .workflows import WorkflowTemplates

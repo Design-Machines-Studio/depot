@@ -8,7 +8,7 @@ from dataclasses import dataclass, fields, replace
 from typing import Optional, Protocol, Tuple
 from urllib.parse import urlsplit
 
-from .base import _register_origin, _validate_capture
+from ..model import _register_origin, _validate_capture
 from ..redaction import digest_error_detail_string, normalize_evidence_reference
 from ..verification import digest_target_origin, digest_target_route, validate_viewport
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping, Optional, Tuple
 
-from .adapters.base import (
+from .model import (
     AttemptLedger, FailureReason, GATE_KINDS, GateDecision, HostCapability,
     IsolationMode, RetryDecision, WorkflowClass, WorkflowContext,
     _normalize_enum,

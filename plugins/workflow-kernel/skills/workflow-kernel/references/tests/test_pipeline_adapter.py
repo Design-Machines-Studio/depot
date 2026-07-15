@@ -3,7 +3,7 @@ import copy
 import unittest
 from pathlib import Path
 
-from workflow_kernel.adapters.base import BuilderOutcome, BuilderSessionDecision, HostCapabilities, HostCapability, ResumeStateContext, WorkflowClass
+from workflow_kernel.model import BuilderOutcome, BuilderSessionDecision, HostCapabilities, HostCapability, ResumeStateContext, WorkflowClass
 from workflow_kernel.pipeline_adapter import translate_builder_decision, translate_manifest, translate_pipeline_receipts
 
 

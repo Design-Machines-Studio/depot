@@ -554,7 +554,7 @@ def check_cli(context):
 
 
 def check_workflow_classes(context):
-    from workflow_kernel.adapters.base import HostCapabilities, WorkflowClass
+    from workflow_kernel.model import HostCapabilities, WorkflowClass
     from workflow_kernel.pipeline_adapter import translate_manifest
     validated = []
     for host in ("claude", "codex", "generic"):

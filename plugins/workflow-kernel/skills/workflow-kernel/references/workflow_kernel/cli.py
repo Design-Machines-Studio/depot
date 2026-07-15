@@ -278,7 +278,7 @@ def _write_json_once(path, value):
 
 
 def _profile_from_receipts(receipts):
-    from .adapters.base import HostCapabilities
+    from .model import HostCapabilities
 
     host = "generic"
     if receipts and isinstance(receipts[0], dict):

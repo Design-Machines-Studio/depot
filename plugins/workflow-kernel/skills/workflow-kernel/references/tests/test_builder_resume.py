@@ -9,7 +9,7 @@ from tests import (
     canonical_harness_profile, detail_digest,
     snapshot_during_validated_mutation,
 )
-from workflow_kernel.adapters.base import (
+from workflow_kernel.model import (
     BuilderObservation, BuilderOutcome, BuilderSessionDecision, GateDecision,
     AttemptLedger, HostCapabilities,
     HostCapability, HostRoute, NodeSpec, ResumeStateContext, SessionHandle, SessionResult,
@@ -20,8 +20,8 @@ from workflow_kernel.adapters.host import capabilities_from_harness_profile
 from workflow_kernel.schema import InvalidSchemaError, RunState, WorkflowEvent
 from workflow_kernel.transitions import TransitionEngine
 from workflow_kernel.workflows import WorkflowTemplates
-from workflow_kernel.adapters.base import WorkflowClass, WorkflowContext
-import workflow_kernel.adapters.base as adapter_base
+from workflow_kernel.model import WorkflowClass, WorkflowContext
+import workflow_kernel.model as kernel_model
 
 
 NOW = "2026-07-14T00:00:00Z"
@@ -173,7 +173,7 @@ class BuilderResumeTests(unittest.TestCase):
     def test_resume_and_handle_snapshots_use_one_validated_capture(self):
         context = receipt_context()
         captured_context = snapshot_during_validated_mutation(
-            context, adapter_base._snapshot_resume_context,
+            context, kernel_model._snapshot_resume_context,
             lambda: object.__setattr__(context, "run_id", "run-2"),
         )
         self.assertEqual(captured_context.run_id, "run-1")
@@ -186,13 +186,13 @@ class BuilderResumeTests(unittest.TestCase):
             object.__setattr__(candidate, "context", receipt_context(run="run-2"))
 
         captured_handle = snapshot_during_validated_mutation(
-            candidate, adapter_base._snapshot_session_handle, mutate_handle,
+            candidate, kernel_model._snapshot_session_handle, mutate_handle,
         )
         self.assertEqual(captured_handle.opaque_handle, "opaque-original")
         self.assertEqual(captured_handle.context.run_id, "run-1")
 
     def test_builder_decision_captures_parent_fields_before_nested_snapshots(self):
-        original_context_snapshot = adapter_base._snapshot_resume_context
+        original_context_snapshot = kernel_model._snapshot_resume_context
 
         def interleave(decision, mutate):
             entered = threading.Event()
@@ -207,12 +207,12 @@ class BuilderResumeTests(unittest.TestCase):
 
             def run():
                 try:
-                    result.append(adapter_base._snapshot_builder_decision(decision))
+                    result.append(kernel_model._snapshot_builder_decision(decision))
                 except BaseException as error:
                     failure.append(error)
 
             with patch.object(
-                adapter_base, "_snapshot_resume_context",
+                kernel_model, "_snapshot_resume_context",
                 side_effect=pause_context,
             ):
                 worker = threading.Thread(target=run)
@@ -412,7 +412,7 @@ class BuilderResumeTests(unittest.TestCase):
         result_parameters = inspect.signature(SessionResult).parameters
         context_parameters = inspect.signature(ResumeStateContext).parameters
         node_parameters = inspect.signature(NodeSpec).parameters
-        from workflow_kernel.adapters.base import BuilderSessionDecision
+        from workflow_kernel.model import BuilderSessionDecision
         decision_parameters = inspect.signature(BuilderSessionDecision).parameters
         self.assertIn("context", handle_parameters)
         self.assertIn("context", result_parameters)
@@ -499,7 +499,7 @@ class BuilderResumeTests(unittest.TestCase):
             context.to_dict()
         self.assertEqual(repr(context), "ResumeStateContext([INVALID])")
 
-        from workflow_kernel.adapters.base import BuilderSessionDecision, ResumeStateBlob
+        from workflow_kernel.model import BuilderSessionDecision, ResumeStateBlob
 
         blob = ResumeStateBlob(b"safe")
         object.__setattr__(blob, "_payload", object())
@@ -667,7 +667,7 @@ class BuilderResumeTests(unittest.TestCase):
                     self.fail("invalid resume request was accepted")
 
     def test_builder_evidence_event_rejects_foreign_run_or_node(self):
-        from workflow_kernel.adapters.base import BuilderSessionDecision
+        from workflow_kernel.model import BuilderSessionDecision
 
         decision = BuilderSessionDecision(
             BuilderOutcome.NODE_GATE_BLOCKED, receipt_context(),
@@ -684,7 +684,7 @@ class BuilderResumeTests(unittest.TestCase):
             )
 
     def test_builder_evidence_event_snapshots_context_before_projection(self):
-        from workflow_kernel.adapters.base import BuilderSessionDecision
+        from workflow_kernel.model import BuilderSessionDecision
 
         decision = BuilderSessionDecision(
             BuilderOutcome.NODE_GATE_BLOCKED, receipt_context(),
@@ -1011,7 +1011,7 @@ class BuilderResumeTests(unittest.TestCase):
                     self.assertEqual(adapter.dispatch_calls, [])
 
     def test_builder_decision_outcome_enforces_coherent_payloads(self):
-        from workflow_kernel.adapters.base import BuilderSessionDecision
+        from workflow_kernel.model import BuilderSessionDecision
 
         context = receipt_context()
         invalid = (

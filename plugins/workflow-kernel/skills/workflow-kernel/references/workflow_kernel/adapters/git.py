@@ -8,7 +8,7 @@ from pathlib import PurePosixPath
 import re
 from typing import Callable, Tuple
 
-from workflow_kernel.adapters.base import invalid_policy
+from workflow_kernel.model import invalid_policy
 from workflow_kernel.resources import (
     CleanupAction, CleanupDisposition, CleanupPlan, CleanupScope, CommandResult,
     ResourceDisposition, ResourceKind, ResourceRecord, ResourceRegistry,
