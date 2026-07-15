@@ -860,7 +860,10 @@ class StateStoreTests(unittest.TestCase):
             current = replace(base, revision=2)
             candidate = replace(base, revision=1)
             with RunLease(path) as lease:
-                store.write(current, -1, lease=lease)
+                store.publish(
+                    state_module._prepare_replay_state(store, current, -1),
+                    -1, lease=lease,
+                )
             before = path.read_bytes()
             ordinary = store.prepare(candidate)
             with self.assertRaises(TypeError):
@@ -870,6 +873,42 @@ class StateStoreTests(unittest.TestCase):
                     store.publish(ordinary, 2, lease=lease)
             self.assertEqual(path.read_bytes(), before)
 
+    def test_ordinary_publication_preserves_run_identity_and_revision_sequence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            base = RunState.new("run-1", "2026-07-14T00:00:00Z")
+            with RunLease(path) as lease:
+                store.write(base, -1, lease=lease)
+            before = path.read_bytes()
+
+            rejected = (
+                replace(base, run_id="run-2"),
+                replace(base, evidence=("forged.json",)),
+                replace(base, revision=2),
+            )
+            for candidate in rejected:
+                with self.subTest(candidate=candidate), RunLease(path) as lease, \
+                        self.assertRaises(RevisionConflictError):
+                    store.write(candidate, 0, lease=lease)
+                self.assertEqual(path.read_bytes(), before)
+                self.assertEqual(store.load(), base)
+
+            with RunLease(path) as lease:
+                store.write(replace(base, revision=1), 0, lease=lease)
+            self.assertEqual(store.load().revision, 1)
+
+    def test_initial_ordinary_publication_requires_revision_zero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "run-state.json"
+            store = StateStore(path)
+            skipped = replace(
+                RunState.new("run-1", "2026-07-14T00:00:00Z"), revision=2,
+            )
+            with RunLease(path) as lease, self.assertRaises(RevisionConflictError):
+                store.write(skipped, -1, lease=lease)
+            self.assertFalse(path.exists())
+
     def test_replay_static_rejections_preserve_token_for_corrected_publication(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "run-state.json"
@@ -877,7 +916,10 @@ class StateStoreTests(unittest.TestCase):
             base = RunState.new("run-1", "2026-07-14T00:00:00Z")
             current = replace(base, revision=2)
             with RunLease(path) as lease:
-                store.write(current, -1, lease=lease)
+                store.publish(
+                    state_module._prepare_replay_state(store, current, -1),
+                    -1, lease=lease,
+                )
             authoritative = state_module._prepare_replay_state(store, base, 2)
 
             with self.assertRaises(LeaseConflictError):
@@ -937,7 +979,10 @@ class StateStoreTests(unittest.TestCase):
             base = RunState.new("run-1", "2026-07-14T00:00:00Z")
             current = replace(base, revision=2)
             with RunLease(path) as lease:
-                store.write(current, -1, lease=lease)
+                store.publish(
+                    state_module._prepare_replay_state(store, current, -1),
+                    -1, lease=lease,
+                )
             authoritative = state_module._prepare_replay_state(store, base, 2)
 
             with RunLease(path) as lease:

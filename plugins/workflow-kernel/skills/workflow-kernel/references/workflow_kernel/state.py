@@ -75,7 +75,8 @@ def _capability_types():
             })
         prepared = object.__new__(PreparedState)
         record["prepared"][prepared] = (
-            snapshot.revision, encoded, issuance_mode, expected_revision,
+            snapshot.run_id, snapshot.revision, encoded, issuance_mode,
+            expected_revision,
         )
         return prepared
 
@@ -343,7 +344,7 @@ def _capability_types():
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
                 })
             try:
-                revision, encoded, issuance_mode, issued_expected_revision = record["prepared"][prepared]
+                run_id, revision, encoded, issuance_mode, issued_expected_revision = record["prepared"][prepared]
             except (KeyError, TypeError):
                 raise UnsafePayloadError(ErrorMessage.PREPARED_STATE_WRONG_STORE, {
                     ErrorDetailKey.REASON_CODE.value: "prepared_state_owner_mismatch",
@@ -385,22 +386,51 @@ def _capability_types():
                     except FileNotFoundError:
                         observed = None
                     if observed is not None:
-                        actual = _read_state_descriptor(observed, path).revision
+                        current_state = _read_state_descriptor(observed, path)
+                        actual = current_state.revision
                         directory.require_identity(observed, path.name)
                         if actual != expected_revision:
                             raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
                                 ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
                                 ErrorDetailKey.ACTUAL_REVISION.value: actual,
                             })
-                        if (issuance_mode is not ledger_reconciliation_issuance
-                                and revision < actual):
-                            raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
-                                ErrorDetailKey.CANDIDATE_REVISION.value: revision,
-                                ErrorDetailKey.ACTUAL_REVISION.value: actual,
-                            })
+                        if issuance_mode is not ledger_reconciliation_issuance:
+                            same_state = encoded == encode_state(current_state)
+                            if run_id != current_state.run_id:
+                                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                    ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                    ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                                    ErrorDetailKey.REASON_CODE.value: "run_identity_changed",
+                                })
+                            if revision == actual and not same_state:
+                                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                    ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                    ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                                    ErrorDetailKey.REASON_CODE.value: "same_revision_mutation",
+                                })
+                            if revision < actual:
+                                raise RevisionConflictError(ErrorMessage.STATE_REVISION_BACKWARD, {
+                                    ErrorDetailKey.CANDIDATE_REVISION.value: revision,
+                                    ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                                })
+                            if revision > actual + 1:
+                                raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                                    ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                                    ErrorDetailKey.CANDIDATE_REVISION.value: revision,
+                                    ErrorDetailKey.ACTUAL_REVISION.value: actual,
+                                    ErrorDetailKey.REASON_CODE.value: "non_sequential_revision",
+                                })
                     elif expected_revision != -1:
                         raise RevisionConflictError(ErrorMessage.STATE_MISSING_AT_REVISION, {
                             ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                        })
+                    elif (issuance_mode is not ledger_reconciliation_issuance
+                            and revision != 0):
+                        raise RevisionConflictError(ErrorMessage.STATE_REVISION_CHANGED, {
+                            ErrorDetailKey.EXPECTED_REVISION.value: expected_revision,
+                            ErrorDetailKey.CANDIDATE_REVISION.value: revision,
+                            ErrorDetailKey.ACTUAL_REVISION.value: -1,
+                            ErrorDetailKey.REASON_CODE.value: "initial_revision_not_zero",
                         })
                     descriptor, temporary = directory.create_temporary(
                         prefix=f".{path.name}.", suffix=".tmp",

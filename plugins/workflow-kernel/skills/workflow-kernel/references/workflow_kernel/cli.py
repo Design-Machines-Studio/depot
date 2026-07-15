@@ -85,8 +85,12 @@ def _observe_consistent_run(events, states, engine, *, recovery, empty_error):
 
 
 def _append_and_publish(events, states, event, next_state, *,
-                        expected_sequence, expected_revision, lease):
-    prepared = states.prepare(next_state)
+                        expected_sequence, expected_revision, lease,
+                        authoritative_initialization=False):
+    prepared = (
+        _prepare_replay_state(states, next_state, expected_revision)
+        if authoritative_initialization else states.prepare(next_state)
+    )
     events.append(event, expected_sequence=expected_sequence, lease=lease)
     return states.publish(prepared, expected_revision, lease=lease)
 
@@ -121,6 +125,7 @@ def command_init(args):
         evidence = _append_and_publish(
             events, states, event, state, expected_sequence=0,
             expected_revision=-1, lease=lease,
+            authoritative_initialization=True,
         )
     _emit({"run_id": state.run_id, "mode": state.mode.value, "status": state.status.value, "revision": state.revision,
            "durability": evidence})
@@ -161,6 +166,7 @@ def command_append(args):
         evidence = _append_and_publish(
             events, states, event, next_state, expected_sequence=len(existing),
             expected_revision=expected, lease=lease,
+            authoritative_initialization=materialized is None,
         )
     _emit({"appended": event.sequence, "revision": next_state.revision, "status": next_state.status.value,
            "durability": evidence})

@@ -173,7 +173,7 @@ def _exercise_real_state_path(scenario_id, final_state):
         CorruptEventError, InvalidSchemaError, LeaseConflictError,
         RevisionConflictError, SequenceConflictError, WorkflowEvent,
     )
-    from workflow_kernel.state import RunLease, StateStore
+    from workflow_kernel.state import RunLease, StateStore, _prepare_replay_state
     from workflow_kernel.transitions import TransitionEngine
     base = (
         WorkflowEvent(1, 0, "scenario-run", None, "run.initialized", "2026-07-14T00:00:00Z", {}),
@@ -242,7 +242,10 @@ def _exercise_real_state_path(scenario_id, final_state):
             store = StateStore(state_path)
             current = engine.reconstruct(base)
             with RunLease(state_path) as lease:
-                store.write(current, -1, lease=lease)
+                store.publish(
+                    _prepare_replay_state(store, current, -1),
+                    -1, lease=lease,
+                )
                 try:
                     store.write(current, 0, lease=lease)
                 except RevisionConflictError:
@@ -258,7 +261,10 @@ def _exercise_real_state_path(scenario_id, final_state):
             with RunLease(state_path) as lease:
                 first_state = engine.reconstruct((base[0],))
                 events.append(base[0], base[0].sequence, lease=lease)
-                states.write(first_state, -1, lease=lease)
+                states.publish(
+                    _prepare_replay_state(states, first_state, -1),
+                    -1, lease=lease,
+                )
                 events.append(base[1], base[1].sequence, lease=lease)
                 # Simulate process exit after the authoritative append but before
                 # publishing the prepared revision-2 materialization.

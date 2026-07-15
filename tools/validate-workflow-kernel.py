@@ -380,7 +380,7 @@ def check_cli(context):
             completed = run([sys.executable, "-m", "workflow_kernel", command, *argv])
             if command in {
                 "init", "validate", "append", "replay", "status",
-                "plan-cleanup",
+                "plan-cleanup", "plan-reconcile",
             }:
                 require(completed.returncode == 0, f"{command} behavioral execution failed")
             else:
