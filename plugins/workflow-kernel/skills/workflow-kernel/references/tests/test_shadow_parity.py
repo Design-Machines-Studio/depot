@@ -31,6 +31,14 @@ class ShadowParityTests(unittest.TestCase):
         self.assertTrue(report.semantic_match)
         self.assertFalse(report.safe_to_promote)
 
+    def test_empty_receipt_sets_are_missing_evidence_not_a_safe_match(self):
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(()), ReceiptSet.from_events(()),
+        )
+        self.assertEqual(report.reason, "missing_authoritative_evidence")
+        self.assertFalse(report.semantic_match)
+        self.assertFalse(report.safe_to_promote)
+
     def test_missing_authoritative_evidence_is_unsafe(self):
         authoritative = ReceiptSet.from_events(self.load("pipeline-claude.json"))
         report = ShadowComparator().compare(state(()), authoritative)
@@ -64,7 +72,10 @@ class ShadowParityTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertFalse(report.semantic_match)
                 self.assertFalse(report.safe_to_promote)
-                self.assertIn(report.reason, ("kernel_prediction_gap", "unsafe_to_promote"))
+                self.assertEqual(
+                    report.reason,
+                    "unsafe_to_promote" if key == "provider" else "kernel_prediction_gap",
+                )
 
     def test_missing_and_extra_receipts_have_distinct_reasons(self):
         events = self.load("pipeline-claude.json")
@@ -97,6 +108,10 @@ class ShadowParityTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertFalse(report.semantic_match)
                 self.assertFalse(report.safe_to_promote)
+                self.assertEqual(
+                    report.reason,
+                    "unsafe_to_promote" if key == "provider" else "kernel_prediction_gap",
+                )
 
     def test_routing_cleanup_and_convergence_mutations_are_semantic(self):
         original = json.loads((FIXTURES / "pipeline-claude.json").read_text())

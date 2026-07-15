@@ -104,6 +104,8 @@ class MetricsAggregator:
         findings = Counter()
         convergence = []
         node_times = defaultdict(list)
+        explicit_node_durations = Counter()
+        nodes_with_explicit_duration = set()
         totals = Counter()
         tokens = 0
         cost = 0.0
@@ -120,6 +122,11 @@ class MetricsAggregator:
                 node_times[node].append(datetime.fromisoformat(event.occurred_at.replace("Z", "+00:00")))
             except ValueError:
                 pass
+            if "duration_seconds" in payload:
+                nodes_with_explicit_duration.add(node)
+                explicit_node_durations[node] += _number(
+                    payload, "duration_seconds", float,
+                )
             attempt = payload.get("attempt")
             if type(attempt) is int and attempt > 0:
                 attempts[node] = max(attempts[node], attempt)
@@ -153,7 +160,11 @@ class MetricsAggregator:
                 terminals += 1
                 completed += int(payload.get("status") in ("succeeded", "clean", "findings"))
         durations = {
-            node: (max(times) - min(times)).total_seconds() if len(times) > 1 else 0.0
+            node: (
+                explicit_node_durations[node]
+                if node in nodes_with_explicit_duration
+                else (max(times) - min(times)).total_seconds() if len(times) > 1 else 0.0
+            )
             for node, times in node_times.items()
         }
         cleanup_total = sum(totals[name] for name in (

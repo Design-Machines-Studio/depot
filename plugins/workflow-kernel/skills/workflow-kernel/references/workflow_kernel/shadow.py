@@ -140,6 +140,11 @@ class ShadowComparator:
     def compare_receipt_sets(self, predicted: ReceiptSet, authoritative: ReceiptSet) -> ParityReport:
         if type(predicted) is not ReceiptSet or type(authoritative) is not ReceiptSet:
             raise ValueError("invalid parity inputs")
+        if not predicted.events:
+            return ParityReport(
+                "missing_authoritative_evidence", False, False,
+                ("missing_receipt_transition",),
+            )
         if len(predicted.events) < len(authoritative.events):
             return ParityReport(
                 "missing_authoritative_evidence", False, False,
@@ -156,12 +161,14 @@ class ShadowComparator:
             return ParityReport("match", True, True)
         left_profile = _receipt_host_profile(predicted.events)
         right_profile = _receipt_host_profile(authoritative.events)
-        if left_profile is None or right_profile is None or left_profile == right_profile:
+        if left_profile is None or right_profile is None:
             return ParityReport("unsafe_to_promote", False, False, ("semantic_transition_difference",))
+        if left_profile == right_profile:
+            return ParityReport("kernel_prediction_gap", False, False, ("semantic_transition_difference",))
         normalized_left = tuple(_semantic(event, normalize_host=True) for event in predicted.events)
         normalized_right = tuple(_semantic(event, normalize_host=True) for event in authoritative.events)
         if normalized_left != normalized_right:
-            return ParityReport("unsafe_to_promote", False, False, ("semantic_transition_difference",))
+            return ParityReport("kernel_prediction_gap", False, False, ("semantic_transition_difference",))
         return ParityReport("explained_host_difference", True, False, ("coherent_named_host_profile",))
 
 

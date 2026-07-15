@@ -41,6 +41,25 @@ class MetricsTests(unittest.TestCase):
         report = MetricsAggregator().aggregate(events)
         self.assertEqual(report.time_to_clean_seconds, 540.0)
 
+    def test_single_explicit_node_duration_replaces_timestamp_fallback(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2]["duration_seconds"] = 7.5
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(report.duration_seconds_by_node["chunk-a"], 7.5)
+
+    def test_multiple_explicit_node_durations_are_summed(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2]["duration_seconds"] = 7.5
+        receipts[3]["duration_seconds"] = 2.5
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(report.duration_seconds_by_node["chunk-a"], 10.0)
+
+    def test_invalid_explicit_node_duration_is_rejected(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[2]["duration_seconds"] = -0.1
+        with self.assertRaises(ValueError):
+            MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+
     def test_invalid_numeric_facts_raise_and_proposals_name_observed_rationale(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         invalid = copy.deepcopy(receipts); invalid[-1]["cost_usd"] = -1
