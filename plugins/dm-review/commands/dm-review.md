@@ -30,3 +30,11 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
 3. Output the unified review report with merge recommendation (per the zero-deferral policy above)
+
+## Shadow Workflow Kernel Lifecycle
+
+The review skill, selected lanes, findings, coverage receipt, merge recommendation, and repository-cleanup report remain authoritative. Resolve the workflow kernel from the real path of the currently executing canonical Depot dm-review plugin; accept an in-repository runtime only beneath that same canonical Depot repository realpath, otherwise search versioned cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin metadata.
+
+After the authoritative consolidated review and coverage receipt exist, run the stable `python3 -m workflow_kernel observe-review` command. At terminal cleanup, run `compare` and `metrics`; inline Python source is forbidden. Missing/incompatible runtime records `shadow unavailable` and preserves the review result. A parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE`; it is proposal-only evidence.
+
+When a review request has no explicit `workflowClass`, translate it as `feature` with `workflow_class_defaulted=true`; never infer it from findings, diff kinds, or severity. Preserve requested/attempted/implemented-by/fallback/reason evidence for every provider lane.

@@ -247,6 +247,8 @@ Validate the generated manifest against the required schema before handoff.
 
 **Rule:** Every chunk object in `executionPlan.levels[].groups[].chunks[]` must include: `id`, `title`, `prompt`, `kind`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures.
 
+Every new manifest also carries an explicit top-level `workflowClass` selected from `chore|bug|feature|hotfix|security|investigation|migration`. Select it from the approved plan and user intent; do not derive it from filenames, chunk kinds, or keyword heuristics. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
+
 ### Phase 3m: Fixture SDK Conformance Gate
 
 **Trigger:** the chunk touches `internal/fixtures/`, the `Module` interface, or a fixture SDK path.
@@ -313,6 +315,8 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk
 
 Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
+Set top-level `workflowClass` explicitly for every generated manifest and preserve that exact value through handoff. Security classification does not weaken or replace existing sensitive-path provider and approval rules.
+
 Each chunk object in the manifest MUST include `kind` and `executor` fields (classified in Phase 1, step 6 from `routing-policy.json`). Example:
 
 ```json
@@ -337,6 +341,7 @@ The manifest encodes:
 - Overlap analysis results
 - Feature branch naming
 - Execution metadata
+- Workflow class for trusted kernel policy translation
 
 ### Phase 6: Requirements Coverage Check
 

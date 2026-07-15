@@ -45,7 +45,11 @@ mode = "quick" (or "full" if --full flag present)
 allow_defer_p3 = true if --allow-defer-p3 flag present, else false
 target = remaining arguments after flag parsing
 prior_findings_signature = null  # for stalled-convergence detection
+workflowClass = explicit request value, else "feature" with workflow_class_defaulted=true
+shadow_state = trusted runtime state directory, or "shadow unavailable"
 ```
+
+The canonical loop state and todo files remain authoritative. After each complete review/fix iteration receipt, call `observe-review` when the trusted runtime is available. Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
 
 ### 2. Review-Fix Loop
 
@@ -105,7 +109,11 @@ Runs on **all three terminal paths** -- clean, findings remaining, and stalled c
 
 Follow `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: `git worktree prune`, delete only branches this loop created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, emit the inventory. Never delete the branch under review.
 
+Also reconcile only Docker resources explicitly registered as created by this loop/review. Use the workflow-kernel `plan-cleanup`/`plan-reconcile` proposal followed one step at a time by `next-cleanup-step` and the guarded `execute-cleanup-step`; never execute proposed argv separately. Persist the ordered registry-issued outcomes with `record-cleanup`. Existing project containers, unsupported instrumentation, incomplete ownership labels, in-use resources, and incomplete-dependent resources are retained and reported. Broad Docker prune and name-based ownership are forbidden.
+
 ### 4. Report
+
+After authoritative cleanup receipts exist, run shadow `compare` and `metrics` when available. Report `match`, explained host difference, missing evidence, transition/prediction gap, unsafe-to-promote, or honest unavailability without changing convergence.
 
 Output one of:
 

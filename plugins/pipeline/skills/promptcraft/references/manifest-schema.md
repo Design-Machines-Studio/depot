@@ -8,6 +8,7 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
 {
   "feature": "feature-slug",
   "description": "One-line feature description",
+  "workflowClass": "feature",
   "baseBranch": "main",
   "featureBranch": "feature/feature-slug",
   "generatedAt": "2026-03-27T10:00:00Z",
@@ -111,6 +112,8 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
 
 The `chunks` array is authoritative. The `executionPlan` object is a cached denormalization: it groups chunks by level for convenient consumption by the execution-orchestrator. If they ever disagree (e.g. a chunk's `level` or `parallelGroup` was edited), the `chunks` data wins. The execution-orchestrator validates consistency at startup by recomputing the level groups from `chunks` and comparing to `executionPlan`.
 
+`workflowClass` is policy input, not cached execution structure. Validate it against the seven-value enum below and pass it unchanged. Do not copy workflow stages or safety-anchor constants into this schema; the workflow-kernel's separately versioned trusted policy remains authoritative.
+
 ## Field Definitions
 
 ### Top-level
@@ -119,6 +122,7 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 |-------|------|-------------|
 | `feature` | string | URL-safe slug for the feature |
 | `description` | string | One-line human-readable description |
+| `workflowClass` | enum | `chore`, `bug`, `feature`, `hotfix`, `security`, `investigation`, or `migration`. Promptcraft MUST emit it for every new manifest. A legacy manifest with no field translates as `feature` and records `workflow_class_defaulted=true`; consumers MUST NOT infer a class from prompt text, paths, or chunk kinds. Pass the validated value unchanged into RunSpec, events, receipts, and metrics. Existing security routing and approval overrides remain authoritative. |
 | `baseBranch` | string | Branch to create feature branch from (usually "main") |
 | `featureBranch` | string | Name for the feature branch |
 | `generatedAt` | string | ISO 8601 timestamp of manifest generation |

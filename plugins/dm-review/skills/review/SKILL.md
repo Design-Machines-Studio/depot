@@ -41,6 +41,16 @@ Match the review depth to the moment. Running full multi-round review on every c
 
 **Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full review with the Opus `security-auditor` -- these lanes are never delegated off-Anthropic and never quick-only.
 
+## Shadow Workflow Kernel Contract
+
+The selected agents, provider routing, review outputs, todos, consolidation, merge recommendation, and cleanup receipts remain authoritative. Kernel prediction is observation-only and cannot select lanes, waive a lane, alter fallback, create a clean recommendation, execute cleanup, or convert any finding.
+
+Resolve the runtime relative to the real path of the currently executing canonical Depot dm-review plugin. Accept an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin name/version metadata. Use stable `python3 -m workflow_kernel` commands only; inline Python source is forbidden. Missing or incompatible runtime records `shadow unavailable` and the canonical review continues.
+
+Translate an explicit `workflowClass` unchanged; when absent, use `feature` and record `workflow_class_defaulted=true`. Never infer it from diff kind, path, finding, or severity. Observe only after an authoritative lane/consolidation/cleanup receipt exists. At the end, compare and aggregate metrics without changing review state. Shadow events and builder observations never replace authoritative dispatch/resume receipts.
+
+If review setup creates any Docker/Compose resource, first use kernel `plan-create` or `plan-compose` and execute only the returned label-instrumented argv/override, then immediately call `record-create` with result and fresh before/after inventories. Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned.
+
 ## Fix Philosophy
 
 All review agents and fix workflows must follow these principles:
@@ -436,7 +446,11 @@ When uncertain about design principles, CSS best practices, typography, layout, 
 
 #### Browser-based agents
 
-The `visual-browser-tester`, `ux-quality-reviewer`, and `ui-standards-reviewer` agents use Playwright MCP tools (prefixed `mcp__plugin_compound-engineering_pw__browser_*`) instead of reading files. They launch in parallel with all other agents. If the dev server is not running, they report "Skipped" and do not block the review.
+The `visual-browser-tester`, `ux-quality-reviewer`, and `ui-standards-reviewer` agents use Playwright MCP tools (prefixed `mcp__plugin_compound-engineering_pw__browser_*`) instead of reading files. They launch in parallel with all other agents.
+
+For declared UI coverage, discover the complete project verification profile from configuration and `tests/ux/` task frontmatter: persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent. Present but incomplete declarations, unresolved route bindings, or missing required evidence block a clean review and appear in Coverage Gaps.
+
+On browser-tooling failure, each required case preserves safe attempt evidence, quits the primary browser process/engine session, launches a demonstrably fresh primary profile and retries once, then tries a genuinely different configured engine. If recovery cannot complete, report `human_help_required` with every attempt and exact missing case IDs. Do not silently return Skipped. Curl/reachability is diagnostic only and never browser evidence. Product/application assertion failures are findings and do not trigger the recovery ladder.
 
 **Design spec injection:** When `design_spec_context` was discovered in Phase 3.25, append it to the prompt for ALL THREE browser-based agents (visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer). Add this section after `## Caller-Provided Context`:
 
@@ -488,6 +502,8 @@ A **lane** is a review path with its own provider and its own way of being absen
 Fallback always moves **toward** Claude, never away from it. Sensitive-path routing still holds: diffs touching `internal/auth/**`, `internal/federation/**`, secrets, or deploy paths never leave Anthropic, so they have no external lane to fall back from.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
+
+Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Preserve failed attempts and honest unavailable status across Claude, Codex-native, and generic hosts. A fallback does not weaken the lane's review, verification, or sensitive-path gates.
 
 #### When the external-LLM retry triggers
 
@@ -561,6 +577,12 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
 
 Output the full report to the user.
+
+#### Coverage receipt and shadow observation
+
+Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case. Each row names requested/attempted/implemented-by provider, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
+
+Only after this receipt exists, run `observe-review` when the trusted runtime is available. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; recommendations remain proposal-only.
 
 #### Verify-before-close gate
 
@@ -792,6 +814,10 @@ dm-review creates no worktrees. Its obligations are narrower than pipeline's:
 3. **Leave foreign refs alone.** Orphan `.worktrees/pipeline/**` paths and `pipeline/**` branches from an interrupted pipeline run are **not** dm-review's to delete. Report them under "Remaining after cleanup" with a follow-up command and move on. Deleting a ref you did not create is how a review loses someone's work.
 4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
 5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
+
+dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Call `plan-cleanup` (and terminal `plan-reconcile`) as proposal generation, then iterate `next-cleanup-step` plus the guarded `execute-cleanup-step` with fresh exact-ID inventory, complete authoritative dependent-node statuses, ordered prior outcomes, and predecessor result. Never execute proposed cleanup argv separately. Persist only registry-issued ordered outcomes through `record-cleanup`; actionless missing requires fresh exact-ID inspect inside the guard. Retain unmanaged, incomplete-label, in-use, uninspectable, run-shared, or incomplete-dependent resources and report exact follow-up. Broad Docker prune and name-based ownership are forbidden.
+
+The cleanup report includes Docker before/after inventories and `removed|missing|retained|blocked|unmanaged` dispositions alongside Git. Cleanup runs on every terminal path. A cleanup failure never becomes a clean disposition or changes the authoritative code-review finding result.
 
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 

@@ -26,14 +26,25 @@ Before executing, verify:
 4. **Git working tree has no blocking user-file changes** -- classify dirty paths as pipeline-owned artifacts (`plans/<feature>/`, generated prompts/manifests/receipts) versus unrelated user files. Commit/gitignore/force-add pipeline-owned artifacts as directed by the orchestrator; block only on unrelated user files.
 5. **On the manifest base branch** with latest changes -- use `manifest.baseBranch` when present, defaulting to `main`. The base may be any existing ref, including an unmerged PR branch, stacked branch, or hotfix branch.
 6. **Bypass permissions active** -- If not, warn: "Autonomous execution requires bypass permissions mode. Enable it and re-run."
+7. **Workflow class is valid** -- Accept only `chore|bug|feature|hotfix|security|investigation|migration`. For a legacy manifest with no `workflowClass`, use `feature` and record `workflow_class_defaulted=true`. Never infer the class. Pass the validated value unchanged to the orchestrator, shadow translator, receipts, and metrics.
 
 If any check fails, report the issue and stop.
+
+## Shadow Workflow Kernel Preflight
+
+The Markdown manifest, this command, routing policy, orchestrator, and receipts remain authoritative. The workflow kernel is observation-only and may not select ready nodes, block a merge, change fallback routing, invoke cleanup, or convert a review result.
+
+Resolve the runtime from the real path of the currently executing canonical Depot plugin root. Accept an in-repository runtime only beneath that same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` directories under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible manifest name/version metadata. Store `run-state.json`, `events.jsonl`, and `shadow-report.json` beneath the feature's `plans/<feature>/` directory. If resolution or compatibility fails, preserve the authoritative run and record `shadow unavailable` with the safe reason.
+
+Invoke only stable `python3 -m workflow_kernel` subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
 
 ## Codex Native Execution Adapter
 
 When this command runs in Codex and the session exposes `multi_agent_v1.spawn_agent`, use this adapter instead of stopping on Claude-only `Agent` or nested `Skill(...)` availability. This is the supported Codex execution path, not a manual workaround.
 
 **Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
+
+The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
 
 **Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation or documented `sequential-on-branch` mode for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
 
@@ -75,9 +86,12 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
    - Merge back to feature branch
    - Final full dm-review
    - ai-memory session recording
+   - shadow observation after each authoritative receipt, when the trusted runtime is available
 6. Present the execution summary
 
 ## After Execution
+
+After the authoritative terminal receipt exists, run the kernel `compare` and `metrics` commands against the feature state directory. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Report matches, explained host differences, missing authoritative evidence, unexpected transitions, prediction gaps, and unsafe-to-promote findings distinctly. Missing runtime or evidence remains visible in the summary.
 
 Present the summary report from the orchestrator, then ask:
 

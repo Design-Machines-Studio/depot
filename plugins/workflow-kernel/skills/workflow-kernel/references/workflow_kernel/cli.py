@@ -19,6 +19,13 @@ from .state import RunLease, StateStore, _prepare_replay_state
 from .transitions import TransitionEngine
 
 
+EXIT_INVALID = 2
+EXIT_UNSAFE_PLAN = 3
+EXIT_RUNTIME_UNAVAILABLE = 4
+EXIT_PARITY_GAP = 5
+EXIT_CONFLICT = 6
+
+
 class KernelArgumentParser(argparse.ArgumentParser):
     def error(self, message):
         match = re.search(r"argument ([^:]+)", message)
@@ -159,6 +166,130 @@ def command_status(args):
     return 0
 
 
+def _load_json(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_json_input",
+        }) from None
+
+
+def _write_json(path, value):
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _profile_from_receipts(receipts):
+    from .adapters.base import HostCapabilities
+
+    host = "generic"
+    if receipts and isinstance(receipts[0], dict):
+        candidate = receipts[0].get("host")
+        if type(candidate) is str and candidate:
+            host = candidate
+    return HostCapabilities(host, frozenset())
+
+
+def _observed_state(run_id, events):
+    refs = [event.payload["authoritative_receipt"] for event in events]
+    first = events[0].occurred_at if events else "1970-01-01T00:00:00Z"
+    last = events[-1].occurred_at if events else first
+    return {
+        "schema_version": 1, "revision": len(events), "run_id": run_id,
+        "mode": "shadow", "status": "running", "created_at": first,
+        "updated_at": last, "nodes": {}, "evidence": refs,
+        "cleanup_reconciled": False,
+    }
+
+
+def command_observe_pipeline(args):
+    from .pipeline_adapter import translate_manifest, translate_pipeline_receipts
+
+    manifest = _load_json(args.manifest)
+    receipts = _load_json(args.receipts)
+    if not isinstance(manifest, dict) or not isinstance(receipts, list):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    spec = translate_manifest(manifest, _profile_from_receipts(receipts))
+    events = translate_pipeline_receipts(receipts)
+    artifact = {
+        "run_spec": spec.to_dict(), "event_count": len(events),
+        "events": [event.to_dict() for event in events],
+        "run_state": _observed_state(spec.run_id, events),
+        "observation_only": True,
+    }
+    output = Path(args.state_dir) / "pipeline-shadow-observation.json"
+    _write_json(output, artifact)
+    _emit({"observed": True, "event_count": len(events), "output": str(output)})
+    return 0
+
+
+def command_observe_review(args):
+    from .dm_review_adapter import ReviewRequest, translate_review, translate_review_receipts
+
+    request = ReviewRequest.from_mapping(_load_json(args.request))
+    receipts = _load_json(args.receipts)
+    if not isinstance(receipts, list):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    spec = translate_review(request, _profile_from_receipts(receipts))
+    events = translate_review_receipts(receipts)
+    artifact = {
+        "run_spec": spec.to_dict(), "event_count": len(events),
+        "events": [event.to_dict() for event in events],
+        "run_state": _observed_state(spec.run_id, events),
+        "observation_only": True,
+    }
+    output = Path(args.state_dir) / "review-shadow-observation.json"
+    _write_json(output, artifact)
+    _emit({"observed": True, "event_count": len(events), "output": str(output)})
+    return 0
+
+
+def command_compare(args):
+    from .pipeline_adapter import translate_pipeline_receipts
+    from .schema import RunState
+    from .shadow import ReceiptSet, ShadowComparator
+
+    state_dir = Path(args.state_dir)
+    observation = state_dir / "pipeline-shadow-observation.json"
+    if not observation.is_file():
+        observation = state_dir / "review-shadow-observation.json"
+    document = _load_json(observation)
+    receipts = _load_json(args.authoritative_receipts)
+    if not isinstance(document, dict) or not isinstance(receipts, list):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    predicted = RunState.from_dict(document["run_state"])
+    try:
+        events = translate_pipeline_receipts(receipts)
+    except ValueError:
+        from .dm_review_adapter import translate_review_receipts
+        events = translate_review_receipts(receipts)
+    report = ShadowComparator().compare(predicted, ReceiptSet.from_events(events))
+    _write_json(args.output, report.to_dict())
+    return 0 if report.semantic_match else EXIT_PARITY_GAP
+
+
+def command_metrics(args):
+    from .dm_review_adapter import translate_review_receipts
+    from .metrics import MetricsAggregator
+    from .pipeline_adapter import translate_pipeline_receipts
+
+    receipts = _load_json(args.events)
+    if not isinstance(receipts, list):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    try:
+        events = translate_pipeline_receipts(receipts)
+    except ValueError:
+        events = translate_review_receipts(receipts)
+    report = MetricsAggregator().aggregate(events)
+    _write_json(args.output, report.to_dict())
+    return 0
+
+
 def parser():
     result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
     commands = result.add_subparsers(dest="command", required=True)
@@ -187,6 +318,29 @@ def parser():
     status = commands.add_parser("status", help="print materialized state")
     status.add_argument("directory")
     status.set_defaults(handler=command_status)
+
+    observe_pipeline = commands.add_parser("observe-pipeline", help="observe authoritative pipeline receipts")
+    observe_pipeline.add_argument("--manifest", required=True)
+    observe_pipeline.add_argument("--receipts", required=True)
+    observe_pipeline.add_argument("--state-dir", required=True)
+    observe_pipeline.set_defaults(handler=command_observe_pipeline)
+
+    observe_review = commands.add_parser("observe-review", help="observe authoritative review receipts")
+    observe_review.add_argument("--request", required=True)
+    observe_review.add_argument("--receipts", required=True)
+    observe_review.add_argument("--state-dir", required=True)
+    observe_review.set_defaults(handler=command_observe_review)
+
+    compare = commands.add_parser("compare", help="compare shadow state with authoritative receipts")
+    compare.add_argument("--state-dir", required=True)
+    compare.add_argument("--authoritative-receipts", required=True)
+    compare.add_argument("--output", required=True)
+    compare.set_defaults(handler=command_compare)
+
+    metrics = commands.add_parser("metrics", help="aggregate receipt reliability metrics")
+    metrics.add_argument("--events", required=True)
+    metrics.add_argument("--output", required=True)
+    metrics.set_defaults(handler=command_metrics)
     return result
 
 
@@ -202,4 +356,4 @@ def main(argv=None):
             ErrorDetailKey.EXCEPTION_TYPE.value: type(exc).__name__,
         })
         _emit(serialize_kernel_error(error), sys.stderr)
-        return 1
+        return EXIT_INVALID

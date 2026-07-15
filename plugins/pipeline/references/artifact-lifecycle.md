@@ -23,6 +23,9 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `screenshots/*.png` | 1 | Phase 7 verification screenshots |
 | `prompts/*.md` | 2 | Chunk execution prompts consumed by orchestrator |
 | `manifest.json` | 2 | Chunk ordering and dependency metadata |
+| `run-state.json` | 2 | Workflow-kernel shadow state; observation-only and preserved on failure |
+| `events.jsonl` | 2 | Redacted workflow-kernel event stream used for parity and metrics |
+| `shadow-report.json` | 2 | Predicted-versus-authoritative comparison; never changes run outcome |
 | `brainstorm.html` | 2 | Design decisions (HTML + `visualDecisions` island) |
 | `original-prompt.md` | 3 | User's verbatim input -- ground truth (markdown) |
 | `assessment.html` | 3 | Current state report (HTML + cached Key Requirements island) |
@@ -59,6 +62,8 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 | Review session observation | ai-memory (project entity) | review-memory-recorder agent |
 | Activity log row | Notion ops dashboard | Pipeline Phase 7 / dm-review Phase 7c |
 
+Protected builder restore blobs are not ordinary artifacts. Store them only in permission-restricted package-owned storage with their own retention/deletion policy. Artifacts, receipts, events, shadow reports, Airlift bundles, and checkpoints may contain only a safe digest projection plus an authoritative receipt reference, never blob bytes or credentials.
+
 ## Cleanup Rules
 
 Artifact cleanup (below) and repository cleanup (`repo-cleanup-contract.md`) both run in Step 5b, on every exit path -- success, failure, and every answer to the Phase 7 gate. Artifact disposition varies by outcome; the repository cleanup phase does not.
@@ -69,6 +74,8 @@ Artifact cleanup (below) and repository cleanup (`repo-cleanup-contract.md`) bot
 2. Delete all Tier 1 files: `rm -rf plans/<slug>/baselines/ baselines-pre-fix/ baselines-post-fix/ screenshots/`
 3. Delete all Tier 2 files: `rm -rf plans/<slug>/prompts/` and `rm -f plans/<slug>/manifest.json plans/<slug>/brainstorm.html`
 4. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`
+
+Delete `run-state.json`, `events.jsonl`, and `shadow-report.json` only after the terminal comparison, metrics aggregation, receipt write, and reconciliation receipt are complete. Preserve them on failure or parity/unavailability investigation. Shadow artifacts never authorize cleanup or substitute for an authoritative receipt.
 
 ### On failed pipeline run (Step 5b)
 
@@ -104,6 +111,9 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 - Merge: CLEAN | APPROVE WITH FIXES | BLOCKS MERGE
 - Chunks: N executed, M parallel
 - Mode: full_cli | curl_fallback
+- Workflow class: chore | bug | feature | hotfix | security | investigation | migration
+- Workflow class defaulted: true | false
+- Shadow: match | parity-gap | unavailable
 
 ## Evidence
 | # | Requirement | Evidence |
@@ -119,6 +129,9 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 - Run-scoped removed: N files
 - Feature-scoped retained: N files
 - Deferred findings: none | <list>
+- Docker resources: created N, removed M, missing K, retained/blocked J
+- Docker inventory: before <digest/count>, after <digest/count>
+- Reconciliation: complete | blocked | unavailable (reason)
 
 ## Branch & Worktree Inventory
 

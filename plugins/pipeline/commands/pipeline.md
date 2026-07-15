@@ -106,6 +106,14 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 
 Mark each item as you complete it. Do not mark a GATE as complete until AskUserQuestion has returned a response from the user. If you find yourself proceeding past a GATE without an AskUserQuestion response, you have violated the gate.
 
+### Shadow Workflow Kernel Hooks
+
+The Progress Ledger, canonical Markdown phases, manifest, routing policy, execution-orchestrator, and authoritative receipts remain the source of truth. Kernel hooks run only after the matching authoritative artifact, receipt, or action exists. They may observe and compare; they may not select ready nodes, advance gates, block or approve a merge, alter provider fallback, invoke cleanup, or convert review outcomes.
+
+Resolve the kernel from the real path of the currently executing canonical Depot plugin root. Permit an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` subcommands; inline Python source is forbidden. Store shadow state beneath `plans/<feature-slug>/`. If unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
+
+At each phase boundary, feed the saved authoritative receipts to `observe-pipeline`. At the terminal boundary, run `compare` and `metrics`. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result. Shadow state and builder observations never replace an authoritative dispatch, resume, evaluation, browser, merge, or cleanup receipt.
+
 ## Airlift Checkpoint (every phase boundary)
 
 After each phase's artifacts are saved -- that is, immediately after marking the Progress Ledger item for that phase complete (items 2, 4, 6, 8, 10, 12, and 13, covering all 7 phase boundaries: Assess, Research, Plan, Generate prompts, Adversarial review, Execute, Deliver) -- fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots the session into a portable `.airlift/` bundle so a usage cap, rate limit, or model switch becomes a non-event. See `plugins/pipeline/references/airlift-checkpoint.md` for the full contract.
@@ -306,6 +314,8 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
+The manifest MUST include explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration`. Never infer it from chunk kind or file paths. A legacy missing field defaults only at consumption to `feature` with `workflow_class_defaulted=true`; pass the resulting value unchanged through RunSpec, receipts, and metrics. Security keeps all existing provider and approval overrides.
+
 **Verification:** Run `ls plans/<feature-slug>/manifest.json plans/<feature-slug>/prompts/` to confirm all files exist on disk.
 
 Mark ledger item 8 as complete.
@@ -357,6 +367,8 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 **Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and replaces nested `Skill(skill="dm-review:review", ...)` calls with the dm-review inline protocol. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
+Pass `workflowClass` unchanged into Phase 6. Every provider receipt must name requested provider, attempted provider, actual implementer, fallback, and reason. Missing lanes and misroutes remain explicit evidence; provider substitution never changes the required validation, review, browser, requirements, or cleanup gates.
+
 Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with:
 
 - The manifest path: `plans/<feature-slug>/manifest.json`
@@ -398,6 +410,8 @@ Complete ALL THREE checks. Record evidence in the delivery report.
 - [ ] **(3) Cardinality check per AC containing quantity language.** For every acceptance criterion containing "exactly N", "no duplicate", "only one", "should replace", or "instead of", run a `browser_evaluate` that counts matching elements: e.g. `document.querySelectorAll('button[type=submit]').length`. An AC that says "Post comment should REPLACE the old button" passes only when count is 1, not 2.
 
 Any check that cannot be completed (no browser tools, dev server down) MUST be recorded as `FAILED -- no browser tools` in the delivery report, and the merge recommendation MUST escalate to `BLOCKED PENDING CALLER VERIFICATION`. Do NOT deliver as "ready" without these evidence items.
+
+Use the complete verification profile selected from project configuration and `tests/ux/` declarations: persona, scenario, concrete route, browser engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent; a present but incomplete declaration is blocking. Required browser failure follows the evidence-preserving ladder: quit the browser process/session, launch a demonstrably fresh primary session and retry, try a genuinely different configured engine, then stop with `human_help_required` and the exact missing case IDs. Curl is diagnostic only and never produces `BROWSER_VERIFIED`.
 
 ### Caller Visual Verification (mandatory for UI features)
 
