@@ -212,7 +212,15 @@ Do NOT mark a step complete until you have actually done it. Do NOT skip steps.
 
 The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they do not select ready nodes, advance gates, block or approve merges, change provider fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
 
-Resolve the runtime relative to the real path of the currently executing canonical Depot pipeline plugin. Accept an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` commands; inline Python source is forbidden. Keep `run-state.json`, `events.jsonl`, and `shadow-report.json` in `plans/<feature-slug>/`.
+Resolve the runtime relative to the real path of the currently executing canonical Depot pipeline plugin. Accept an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` commands; inline Python source is forbidden. Keep `run-state.json`, `events.jsonl`, `pipeline-shadow-observation.json`, `shadow-report.json`, and `metrics.json` in `plans/<feature-slug>/`.
+
+Before each observation, atomically materialize the complete ordered redacted receipt array through the latest authoritative boundary at `plans/<feature-slug>/authoritative-receipts.json`, then invoke:
+
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+```
+
+The validated `manifest.json`, cumulative receipt array, and generated `pipeline-shadow-observation.json` are the canonical terminal RunSpec/receipt snapshots. Keep them until terminal `observe-pipeline`, `compare`, and `metrics` have all completed.
 
 If resolution, observation, comparison, or metrics is unavailable, preserve the authoritative result and record `shadow unavailable` with a safe reason. Stable exits are `0` success, `2` invalid input/schema, `3` unsafe/blocked, `4` unavailable/incompatible, `5` parity gap, and `6` write/state conflict. None authorizes changing the canonical result; cleanup exit `3` or `6` remains blocked. Every observation consumes an authoritative receipt reference; builder observations and shadow state cannot stand in for dispatch, resume, validation, evaluation, browser, merge, or cleanup evidence.
 
@@ -521,16 +529,16 @@ Mark `[chunk-id] 2. Create worktree` complete, or `branch selected` for `sequent
 Before any later step creates a Docker container, network, named volume, or Compose project for this run, invoke exactly one of:
 
 ```text
-python3 -m workflow_kernel plan-create --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
-python3 -m workflow_kernel plan-compose --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
+python3 -m workflow_kernel plan-create --state-dir plans/<feature-slug> --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json plans/<feature-slug>/docker/<node-id>-create-argv.json --dependent-node-ids-json plans/<feature-slug>/docker/<node-id>-dependent-node-ids.json --output plans/<feature-slug>/docker/<node-id>-creation-plan.json
+python3 -m workflow_kernel plan-compose --state-dir plans/<feature-slug> --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json plans/<feature-slug>/docker/<node-id>-compose-argv.json --dependent-node-ids-json plans/<feature-slug>/docker/<node-id>-dependent-node-ids.json --output plans/<feature-slug>/docker/<node-id>-creation-plan.json
 ```
 
-These planning commands only return validated label-instrumented creation argv and ownership proof; they do not execute. The authoritative orchestrator executes that returned creation argv/labels-only Compose override exactly once. Caller-supplied project names, ambiguous forms, anonymous/external resources, symlink escapes, or unsupported instrumentation are recorded `unmanaged/retained`, never guessed owned by name. This creation execution is separate from cleanup: returned cleanup argv is never executed outside `execute-cleanup-step`.
+Write the exact declared dependent node IDs to the dependency JSON file, using `[]` when there are none. These planning commands only return validated label-instrumented creation argv and ownership proof; they do not execute. The authoritative orchestrator executes that returned creation argv/labels-only Compose override exactly once. Caller-supplied project names, ambiguous forms, anonymous/external resources, symlink escapes, or unsupported instrumentation are recorded `unmanaged/retained`, never guessed owned by name. This creation execution is separate from cleanup: returned cleanup argv is never executed outside `execute-cleanup-step`.
 
 Immediately after the creation attempt, invoke:
 
 ```text
-python3 -m workflow_kernel record-create --state-dir PATH --plan PATH --result PATH --before-inventory PATH --after-inventory PATH
+python3 -m workflow_kernel record-create --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-creation-plan.json --result plans/<feature-slug>/docker/<node-id>-create-result.json --before-inventory plans/<feature-slug>/docker/<node-id>-before-inventory.json --after-inventory plans/<feature-slug>/docker/<node-id>-after-inventory.json > plans/<feature-slug>/docker/<node-id>-create-receipt.json
 ```
 
 Register partial Compose creation as individual resources. Every managed object must carry the complete `com.designmachines.depot.*` ownership labels before creation. If planning or registration cannot prove ownership, do not later auto-remove the object.
@@ -1068,13 +1076,13 @@ This boundary runs only after deterministic validation, review/evaluation, requi
 Read the chunk's registered resources and use these exact interfaces:
 
 ```text
-python3 -m workflow_kernel plan-cleanup --state-dir PATH --run-id ID --node-id ID --output PATH
-python3 -m workflow_kernel next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH
-python3 -m workflow_kernel execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH
-python3 -m workflow_kernel record-cleanup --state-dir PATH --plan PATH --outcomes PATH
+python3 -m workflow_kernel plan-cleanup --state-dir plans/<feature-slug> --run-id ID --node-id ID --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --output plans/<feature-slug>/docker/<node-id>-cleanup-plan.json
+python3 -m workflow_kernel next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-next-step.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --step-index N --inventory plans/<feature-slug>/docker/<node-id>-inventory.json --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-step-N-outcome.json
+python3 -m workflow_kernel record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json > plans/<feature-slug>/docker/<node-id>-cleanup-receipt.json
 ```
 
-`plan-cleanup` and `next-cleanup-step` return proposals/eligibility only. `execute-cleanup-step` is the only non-splittable authorization/execution boundary for exactly that immutable plan and step index with a fresh exact-ID inventory, complete fresh authoritative status proof for every declared dependent node, the gap-free prior outcomes, and any required successful predecessor result. Never execute any cleanup argv returned by planning separately and never pass a free-standing capability. For `stop-remove`, the guarded step uses a bounded stop before exact-ID removal. Actionless `MISSING` steps perform a fresh exact-ID inspect inside the same registry guard.
+Immediately before `plan-cleanup` and again before every `execute-cleanup-step`, atomically rewrite the bound node-status file with the complete current authoritative status of every declared dependent and a fresh observation timestamp. Never reuse another run/node's proof or a stale snapshot. `plan-cleanup` and `next-cleanup-step` return proposals/eligibility only. `execute-cleanup-step` is the only non-splittable authorization/execution boundary for exactly that immutable plan and step index with a fresh exact-ID inventory, complete fresh authoritative status proof for every declared dependent node, the gap-free prior outcomes, and any required successful predecessor result. Never execute any cleanup argv returned by planning separately and never pass a free-standing capability. For `stop-remove`, the guarded step uses a bounded stop before exact-ID removal. Actionless `MISSING` steps perform a fresh exact-ID inspect inside the same registry guard.
 
 Append each registry-issued command or terminal-observation outcome durably and in order, stop on blocked/unsafe/conflicting evidence, then call `record-cleanup` with the complete gap-free outcome sequence. Retain run-lifecycle resources while any declared dependent is incomplete. Cleanup failure or missing proof is `blocked/retained`, never reported clean. Broad prune, wildcards, negative filters, and name-based ownership are forbidden.
 
@@ -1320,22 +1328,41 @@ Mark `FINAL 5. Run Post-Mortem` complete.
 
 Reconcile authoritative Docker ownership first, then clean artifacts and Git refs, then write the final authoritative cleanup/terminal receipt, and only then run shadow observation/comparison/metrics. This order is mandatory.
 
-`STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> shadow_tier2_delete_on_match`
+`STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> shadow_tier2_delete_on_match -> manifest_input_cleanup_on_match`
 
 **This step is mandatory and runs on every exit path** -- success, review failure, chunk-blocking failure, pipeline-blocking failure, and every answer to the caller's Phase 7 gate. If the run is aborting because of an exception, this step still runs: it is deterministic git and cannot make the failure worse.
 
 ### 1. Docker terminal reconciliation
 
-On every terminal path, invoke:
+On every terminal path, first atomically write complete fresh authoritative node statuses to `plans/<feature-slug>/docker/terminal-node-statuses.json`, then invoke:
 
 ```text
-python3 -m workflow_kernel plan-reconcile --state-dir PATH --run-id ID --ttl-hours 24 --output PATH
-python3 -m workflow_kernel next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH
-python3 -m workflow_kernel execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH
-python3 -m workflow_kernel record-cleanup --state-dir PATH --plan PATH --outcomes PATH
+python3 -m workflow_kernel plan-reconcile --state-dir plans/<feature-slug> --run-id ID --ttl-hours 24 --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --output plans/<feature-slug>/docker/terminal-reconcile-plans.json
 ```
 
-`plan-reconcile` and `next-cleanup-step` are proposal/eligibility interfaces only. For every proposed action or actionless missing observation, `execute-cleanup-step` is the sole guarded authorization-and-execution boundary. Supply fresh exact-ID inventory, complete authoritative dependent-node statuses, ordered prior outcomes, and any required predecessor result. Never execute returned cleanup argv separately. Persist only registry-issued outcomes with `record-cleanup`.
+The output is this exact non-authorizing descriptor shape:
+
+```json
+{"schema_version":1,"kind":"cleanup-plan-set","current_run_plan":"plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json","stale_sweep_plan":"plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json","ttl_hours":24}
+```
+
+Each sibling has exact envelope fields `schema_version: 1`, `kind: cleanup-plan-artifact`, `plan: <CleanupPlan>`, and `inventory: <exact snapshot>`. The envelopes are independently sealed; neither the descriptor nor one sibling authorizes the other. Process the current-run artifact first with its own empty outcomes array and receipt:
+
+```text
+python3 -m workflow_kernel next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-next-step.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --step-index N --inventory plans/<feature-slug>/docker/terminal-current-run-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-step-N-outcome.json
+python3 -m workflow_kernel record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json > plans/<feature-slug>/docker/terminal-current-run-receipt.json
+```
+
+Only after that receipt exists, process the separately sealed stale-sweep artifact with a distinct empty outcomes array and receipt:
+
+```text
+python3 -m workflow_kernel next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-next-step.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --step-index N --inventory plans/<feature-slug>/docker/terminal-stale-sweep-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-step-N-outcome.json
+python3 -m workflow_kernel record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json > plans/<feature-slug>/docker/terminal-stale-sweep-receipt.json
+```
+
+Before every guarded execute call, refresh the exact inventory input and atomically rewrite the bound node-status proof. The stale plan contains actions only when the fixed state directory supplies fresh trusted inactive-lease proof; missing/untrusted proof produces blocked dispositions and no actions. `next-cleanup-step` is proposal/eligibility only. For every proposed action or actionless missing observation, `execute-cleanup-step` is the sole guarded authorization-and-execution boundary. Never execute returned cleanup argv separately. Persist each plan's registry-issued outcomes only in its own gap-free outcomes array and `record-cleanup` receipt; never combine, reorder, or cross-use the two plan authorities.
 
 Reconciliation covers registered resources missed by an interrupted chunk and eligible stale orphans with complete labels plus fresh inactive-lease proof. Retain run-shared resources while any dependent is incomplete. Never broad-prune Docker, infer ownership by name, remove in-use networks/volumes, or report blocked/uninspectable resources clean. Capture Docker before/after inventories and every `removed|missing|retained|blocked|unmanaged` disposition before constructing the receipt.
 
@@ -1363,7 +1390,7 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 
 ## Cleanup
 - Ephemeral removed: <count> files
-- Run-scoped removed: <count> files
+- Pre-shadow run-scoped removed: <count> files
 - Feature-scoped retained: <count> files
 - Deferred findings: none | <list with justifications>
 - Docker resources: created <N>, removed <M>, missing <K>, retained/blocked <J>
@@ -1396,16 +1423,16 @@ Every registered ref appears exactly once under "Created this run". A blocked re
 rm -rf plans/<feature-slug>/baselines/ plans/<feature-slug>/baselines-pre-fix/ plans/<feature-slug>/baselines-post-fix/ plans/<feature-slug>/screenshots/
 ```
 
-**On success only (merge recommendation is CLEAN or APPROVE WITH FIXES) -- also delete Tier 2 (run-scoped):**
+**On success only (merge recommendation is CLEAN or APPROVE WITH FIXES) -- delete the Tier 2 inputs no longer needed by terminal shadow commands:**
 
 ```bash
 rm -rf plans/<feature-slug>/prompts/
-rm -f plans/<feature-slug>/manifest.json plans/<feature-slug>/brainstorm.html
+rm -f plans/<feature-slug>/brainstorm.html
 ```
 
 On failure, preserve Tier 2 for debugging. Log: `Artifact cleanup (partial -- run failed): preserved prompts and manifest for debugging.`
 
-Do not delete `run-state.json`, `events.jsonl`, or `shadow-report.json` here. Shadow Tier 2 remains until Step 6 has compared the complete final authoritative receipt.
+Do not delete `manifest.json`, `authoritative-receipts.json`, `pipeline-shadow-observation.json`, `run-state.json`, `events.jsonl`, `shadow-report.json`, or `metrics.json` here. These terminal inputs and shadow artifacts remain until Step 6 has observed and compared the complete final authoritative receipt.
 
 ### 3. Repository cleanup
 
@@ -1489,7 +1516,7 @@ git status --porcelain          # expect: empty
 
 Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state.
 
-Log cleanup stats: `Artifact cleanup: removed N ephemeral + M run-scoped files, retained K feature-scoped files.`
+Log cleanup stats: `Artifact cleanup before shadow: removed N ephemeral + M run-scoped files, retained K feature-scoped files.` The authoritative receipt does not predict the later shadow/input disposition; Step 6 reports those post-receipt deletions separately after they occur.
 
 Log repository stats: `Repository cleanup: worktrees N->M (pruned K), branches deleted J, blocked L. Feature branch <featureBranch>: kept -- no merge proof.`
 
@@ -1506,9 +1533,17 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "deli
 
 ### 6. Shadow observation, comparison, metrics, and shadow Tier 2 disposition
 
-Only after the complete final authoritative cleanup/terminal receipt exists, run `observe-pipeline`, then `compare`, then `metrics` when the trusted runtime is available. These commands are observation-only and cannot alter Docker, Git, artifact, merge, review, or receipt outcomes.
+Only after the complete final authoritative cleanup/terminal receipt exists, append it to the cumulative ordered redacted receipt array and run exactly:
 
-Delete `run-state.json`, `events.jsonl`, and `shadow-report.json` only when comparison returns semantic `match`. Preserve them for `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, `unsafe_to_promote`, runtime unavailability, invalid input, unsafe/blocked, or write conflict. Record the comparison/metrics disposition in the final summary without rewriting the authoritative cleanup receipt.
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
+python3 -m workflow_kernel metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
+```
+
+These commands are observation-only and cannot alter Docker, Git, artifact, merge, review, or receipt outcomes.
+
+Before deletion, capture the comparison category/reasons and aggregate metric summary in the orchestrator's Step 6 report state. When comparison returns semantic `match`, first delete the shadow Tier 2 artifacts (`pipeline-shadow-observation.json`, `run-state.json`, `events.jsonl`, `shadow-report.json`, and `metrics.json`), then delete the consumed terminal inputs (`manifest.json`, `authoritative-receipts.json`, and the Docker plan/status/outcome artifacts). Preserve all of them for `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, `unsafe_to_promote`, runtime unavailability, invalid input, unsafe/blocked, or write conflict. Record the captured comparison/metrics disposition in the final summary without rewriting the authoritative cleanup receipt.
 
 Mark `FINAL 5b. Artifact and repository cleanup` complete.
 
@@ -1546,7 +1581,7 @@ Mark `FINAL 5c. Campaign state write` complete.
 
 ## Step 6: Summary Report
 
-Before presenting the summary, read the terminal comparison and metrics produced in Step 5b. Report the semantic parity category and reasons without changing the authoritative merge, review, provider, browser, or cleanup result. If unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`.
+Before presenting the summary, use the terminal comparison and metrics result captured in Step 5b before any semantic-match cleanup. Report the semantic parity category and reasons without changing the authoritative merge, review, provider, browser, or cleanup result. If unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`.
 
 Present this report:
 

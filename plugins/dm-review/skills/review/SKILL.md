@@ -47,22 +47,30 @@ The selected agents, provider routing, review outputs, todos, consolidation, mer
 
 Resolve the runtime relative to the real path of the currently executing canonical Depot dm-review plugin. Accept an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin name/version metadata. Use stable `python3 -m workflow_kernel` commands only; inline Python source is forbidden. Missing or incompatible runtime records `shadow unavailable` and the canonical review continues.
 
-Translate an explicit `workflowClass` unchanged; when absent, use `feature` and record `workflow_class_defaulted=true`. Never infer it from diff kind, path, finding, or severity. Observe only after an authoritative lane/consolidation/cleanup receipt exists. At the end, compare and aggregate metrics without changing review state. Shadow events and builder observations never replace authoritative dispatch/resume receipts.
+Translate an explicit `workflowClass` unchanged; when absent, use `feature` and record `workflow_class_defaulted=true`. Never infer it from diff kind, path, finding, or severity. Materialize that request at `.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered redacted receipt array at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. Observe only after an authoritative lane/consolidation/cleanup receipt exists. At the end, compare and aggregate metrics without changing review state. Shadow events and builder observations never replace authoritative dispatch/resume receipts.
+
+Use these exact observation interfaces:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
+python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+```
 
 If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
 
 ```text
-python3 -m workflow_kernel plan-create --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
-python3 -m workflow_kernel plan-compose --state-dir PATH --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json PATH --output PATH
+python3 -m workflow_kernel plan-create --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json .claude/ux-review/workflow-kernel/docker/<node-id>-create-argv.json --dependent-node-ids-json .claude/ux-review/workflow-kernel/docker/<node-id>-dependent-node-ids.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json
+python3 -m workflow_kernel plan-compose --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json .claude/ux-review/workflow-kernel/docker/<node-id>-compose-argv.json --dependent-node-ids-json .claude/ux-review/workflow-kernel/docker/<node-id>-dependent-node-ids.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json
 ```
 
 Execute only its returned label-instrumented creation argv/override exactly once, then immediately invoke:
 
 ```text
-python3 -m workflow_kernel record-create --state-dir PATH --plan PATH --result PATH --before-inventory PATH --after-inventory PATH
+python3 -m workflow_kernel record-create --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json --result .claude/ux-review/workflow-kernel/docker/<node-id>-create-result.json --before-inventory .claude/ux-review/workflow-kernel/docker/<node-id>-before-inventory.json --after-inventory .claude/ux-review/workflow-kernel/docker/<node-id>-after-inventory.json > .claude/ux-review/workflow-kernel/docker/<node-id>-create-receipt.json
 ```
 
-Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned. No returned cleanup argv is ever executed separately.
+Write the exact declared dependent node IDs to the dependency JSON file, using `[]` when there are none. Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned. No returned cleanup argv is ever executed separately.
 
 ## Fix Philosophy
 
@@ -828,7 +836,33 @@ dm-review creates no worktrees. Its obligations are narrower than pipeline's:
 4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
 5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
 
-dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Invoke `plan-cleanup --state-dir PATH --run-id ID [--node-id ID] --output PATH` (and terminal `plan-reconcile --state-dir PATH --run-id ID --ttl-hours 24 --output PATH`) as proposal generation, then iterate `next-cleanup-step --state-dir PATH --plan PATH --outcomes PATH --output PATH` plus guarded `execute-cleanup-step --state-dir PATH --plan PATH --step-index N --inventory PATH --node-statuses PATH --outcomes PATH --output PATH`. Never execute proposed cleanup argv separately. Persist only registry-issued ordered outcomes through `record-cleanup --state-dir PATH --plan PATH --outcomes PATH`; actionless missing requires fresh exact-ID inspect inside the guard. Retain unmanaged, incomplete-label, in-use, uninspectable, run-shared, or incomplete-dependent resources and report exact follow-up. Broad Docker prune and name-based ownership are forbidden.
+dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Atomically write the complete fresh authoritative dependent-node status proof before planning and again before every guarded execute. For node cleanup, invoke exactly:
+
+```text
+python3 -m workflow_kernel plan-cleanup --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --node-statuses .claude/ux-review/workflow-kernel/docker/<node-id>-node-statuses.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json
+python3 -m workflow_kernel next-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json --outcomes .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-outcomes.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-next-step.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json --step-index N --inventory .claude/ux-review/workflow-kernel/docker/<node-id>-inventory.json --node-statuses .claude/ux-review/workflow-kernel/docker/<node-id>-node-statuses.json --outcomes .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-outcomes.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-step-N-outcome.json
+python3 -m workflow_kernel record-cleanup --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json --outcomes .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-outcomes.json > .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-receipt.json
+```
+
+At terminal cleanup, invoke `plan-reconcile` with the fresh bound status proof:
+
+```text
+python3 -m workflow_kernel plan-reconcile --state-dir .claude/ux-review/workflow-kernel --run-id ID --ttl-hours 24 --node-statuses .claude/ux-review/workflow-kernel/docker/terminal-node-statuses.json --output .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.json
+```
+
+That command writes a non-authorizing descriptor with exact fields `schema_version: 1`, `kind: cleanup-plan-set`, `current_run_plan`, `stale_sweep_plan`, and `ttl_hours`, plus independently sealed sibling artifacts `terminal-reconcile-plans.current-run.json` and `terminal-reconcile-plans.stale-sweep.json`. Each sibling has exact fields `schema_version: 1`, `kind: cleanup-plan-artifact`, `plan`, and `inventory`. Iterate each artifact independently with its own outcomes and receipt, current-run first:
+
+```text
+python3 -m workflow_kernel next-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.current-run.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-current-run-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-current-run-next-step.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.current-run.json --step-index N --inventory .claude/ux-review/workflow-kernel/docker/terminal-current-run-inventory.json --node-statuses .claude/ux-review/workflow-kernel/docker/terminal-node-statuses.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-current-run-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-current-run-step-N-outcome.json
+python3 -m workflow_kernel record-cleanup --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.current-run.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-current-run-outcomes.json > .claude/ux-review/workflow-kernel/docker/terminal-current-run-receipt.json
+python3 -m workflow_kernel next-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.stale-sweep.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-next-step.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.stale-sweep.json --step-index N --inventory .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-inventory.json --node-statuses .claude/ux-review/workflow-kernel/docker/terminal-node-statuses.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-outcomes.json --output .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-step-N-outcome.json
+python3 -m workflow_kernel record-cleanup --state-dir .claude/ux-review/workflow-kernel --plan .claude/ux-review/workflow-kernel/docker/terminal-reconcile-plans.stale-sweep.json --outcomes .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-outcomes.json > .claude/ux-review/workflow-kernel/docker/terminal-stale-sweep-receipt.json
+```
+
+Never execute proposed cleanup argv separately or cross-use the two plan authorities. Persist only registry-issued ordered outcomes; actionless missing requires fresh exact-ID inspect inside the guard. Stale actions require fresh trusted inactive-lease proof from the fixed state directory; otherwise the stale plan contains blocked dispositions and no actions. Retain unmanaged, incomplete-label, in-use, uninspectable, run-shared, or incomplete-dependent resources and report exact follow-up. Broad Docker prune and name-based ownership are forbidden.
 
 The cleanup report includes Docker before/after inventories and `removed|missing|retained|blocked|unmanaged` dispositions alongside Git. Cleanup runs on every terminal path. A cleanup failure never becomes a clean disposition or changes the authoritative code-review finding result.
 

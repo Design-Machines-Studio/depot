@@ -38,6 +38,12 @@ Resolve the runtime from the real path of the currently executing canonical Depo
 
 Invoke only stable `python3 -m workflow_kernel` subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
 
+The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulative ordered redacted array `plans/<feature>/authoritative-receipts.json`. Every boundary observation uses:
+
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
+```
+
 ## Codex Native Execution Adapter
 
 When this command runs in Codex and the session exposes `multi_agent_v1.spawn_agent`, use this adapter instead of stopping on Claude-only `Agent` or nested `Skill(...)` availability. This is the supported Codex execution path, not a manual workaround.
@@ -91,7 +97,15 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
 
 ## After Execution
 
-After the authoritative terminal receipt exists, run the kernel `compare` and `metrics` commands against the feature state directory. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Report matches, explained host differences, missing authoritative evidence, unexpected transitions, prediction gaps, and unsafe-to-promote findings distinctly. Missing runtime or evidence remains visible in the summary.
+After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
+
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
+python3 -m workflow_kernel compare --state-dir plans/<feature> --authoritative-receipts plans/<feature>/authoritative-receipts.json --output plans/<feature>/shadow-report.json
+python3 -m workflow_kernel metrics --events plans/<feature>/authoritative-receipts.json --output plans/<feature>/metrics.json
+```
+
+Keep the manifest, receipt array, and generated `pipeline-shadow-observation.json` RunSpec snapshot until all three commands complete. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Report matches, explained host differences, missing authoritative evidence, unexpected transitions, prediction gaps, and unsafe-to-promote findings distinctly. Missing runtime or evidence remains visible in the summary.
 
 Present the summary report from the orchestrator, then ask:
 

@@ -49,7 +49,13 @@ workflowClass = explicit request value, else "feature" with workflow_class_defau
 shadow_state = trusted runtime state directory, or "shadow unavailable"
 ```
 
-The canonical loop state and todo files remain authoritative. Pass the exact `workflowClass` and `workflow_class_defaulted` values into every nested `/dm-review-quick` or `/dm-review`, every `/dm-review-fix`, every final re-review, every iteration receipt, and the terminal receipt. Nested commands MUST NOT re-default, infer, or change the class. After each complete review/fix iteration receipt, call `observe-review` when the trusted runtime is available. Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
+The canonical loop state and todo files remain authoritative. Pass the exact `workflowClass` and `workflow_class_defaulted` values into every nested `/dm-review-quick` or `/dm-review`, every `/dm-review-fix`, every final re-review, every iteration receipt, and the terminal receipt. Nested commands MUST NOT re-default, infer, or change the class. Materialize the validated request at `.claude/ux-review/workflow-kernel/request.json` and rewrite `.claude/ux-review/workflow-kernel/authoritative-receipts.json` as the complete ordered redacted receipt array after each iteration. After each complete review/fix iteration receipt, invoke exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
 
 ### 2. Review-Fix Loop
 
@@ -109,11 +115,19 @@ Runs on **all three terminal paths** -- clean, findings remaining, and stalled c
 
 Follow `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: `git worktree prune`, delete only branches this loop created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, emit the inventory. Never delete the branch under review.
 
-Also reconcile only Docker resources explicitly registered as created by this loop/review. Use the workflow-kernel `plan-cleanup`/`plan-reconcile` proposal followed one step at a time by `next-cleanup-step` and the guarded `execute-cleanup-step`; never execute proposed argv separately. Persist the ordered registry-issued outcomes with `record-cleanup`. Existing project containers, unsupported instrumentation, incomplete ownership labels, in-use resources, and incomplete-dependent resources are retained and reported. Broad Docker prune and name-based ownership are forbidden.
+Also reconcile only Docker resources explicitly registered as created by this loop/review. Follow the exact executable Docker interfaces in `plugins/dm-review/skills/review/SKILL.md`: creation includes `--dependent-node-ids-json`; cleanup/reconcile planning and every guarded execute include the bound freshly rewritten `--node-statuses`; terminal `plan-reconcile` produces independently sealed current-run and stale-sweep artifacts that are iterated and recorded separately. Never execute proposed argv separately or cross-use plan authorities. Existing project containers, unsupported instrumentation, incomplete ownership labels, in-use resources, and incomplete-dependent resources are retained and reported. Broad Docker prune and name-based ownership are forbidden.
 
 ### 4. Report
 
-After authoritative cleanup receipts exist, run shadow `compare` and `metrics` when available. Report `match`, explained host difference, missing evidence, transition/prediction gap, unsafe-to-promote, or honest unavailability without changing convergence.
+After authoritative cleanup receipts are appended, invoke exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
+python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+```
+
+Keep the request, receipt array, and `review-shadow-observation.json` snapshot until all three commands complete. Report `match`, explained host difference, missing evidence, transition/prediction gap, unsafe-to-promote, or honest unavailability without changing convergence.
 
 Output one of:
 

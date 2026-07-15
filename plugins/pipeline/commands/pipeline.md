@@ -112,7 +112,21 @@ The Progress Ledger, canonical Markdown phases, manifest, routing policy, execut
 
 Resolve the kernel from the real path of the currently executing canonical Depot plugin root. Permit an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discoveries, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` subcommands; inline Python source is forbidden. Store shadow state beneath `plans/<feature-slug>/`. If unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
 
-At each phase boundary, feed the saved authoritative receipts to `observe-pipeline`. At the terminal boundary, run `compare` and `metrics`. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result. Shadow state and builder observations never replace an authoritative dispatch, resume, evaluation, browser, merge, or cleanup receipt.
+At each phase boundary, rewrite `plans/<feature-slug>/authoritative-receipts.json` as the complete ordered, redacted receipt array through that boundary, then invoke exactly:
+
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+```
+
+After the authoritative terminal receipt is appended, invoke exactly:
+
+```text
+python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
+python3 -m workflow_kernel compare --state-dir plans/<feature-slug> --authoritative-receipts plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/shadow-report.json
+python3 -m workflow_kernel metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
+```
+
+Keep `manifest.json`, `authoritative-receipts.json`, and the generated `pipeline-shadow-observation.json` RunSpec snapshot through all three terminal commands. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result. Shadow state and builder observations never replace an authoritative dispatch, resume, evaluation, browser, merge, or cleanup receipt.
 
 ## Airlift Checkpoint (every phase boundary)
 

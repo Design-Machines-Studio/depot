@@ -35,6 +35,20 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
 
 The review skill, selected lanes, findings, coverage receipt, merge recommendation, and repository-cleanup report remain authoritative. Resolve the workflow kernel from the real path of the currently executing canonical Depot dm-review plugin; accept an in-repository runtime only beneath that same canonical Depot repository realpath, otherwise search versioned cache entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin metadata.
 
-After the authoritative consolidated review and coverage receipt exist, run the stable `python3 -m workflow_kernel observe-review` command. At terminal cleanup, run `compare` and `metrics`; inline Python source is forbidden. Missing/incompatible runtime records `shadow unavailable` and preserves the review result. A parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE`; it is proposal-only evidence.
+Materialize the validated review request at `.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered redacted authoritative receipt array at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. After the authoritative consolidated review and coverage receipt exist, run exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+```
+
+After terminal cleanup receipts are appended, run exactly:
+
+```text
+python3 -m workflow_kernel observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
+python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
+python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+```
+
+Inline Python source is forbidden. Keep the request, receipt array, and generated `review-shadow-observation.json` RunSpec snapshot until all three terminal commands complete. Missing/incompatible runtime records `shadow unavailable` and preserves the review result. A parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE`; it is proposal-only evidence.
 
 When a review request has no explicit `workflowClass`, translate it as `feature` with `workflow_class_defaulted=true`; never infer it from findings, diff kinds, or severity. Preserve requested/attempted/implemented-by/fallback/reason evidence for every provider lane.
