@@ -103,11 +103,19 @@ steps. An actionless `MISSING` outcome instead runs its fresh exact-ID inspect
 inside the same kind-and-ID guard. Registration, reassignment, and disposition
 for that key fail closed until the command or observation result exists; other
 resource keys remain concurrent. Before returning either outcome, the registry
-durably appends an issuance record for a random opaque authority ID bound to
-outcome type, full action or evidence digest, owner, registry-state generation,
-result identity, and expiry. Result recording requires the exact issued payload
-and unchanged generation, then consumes the authority ID in the same journal
-transaction, so forged, replayed, and late persistence fail closed.
+durably appends an issuance record for a random opaque authority ID. Each
+authority binds the immutable canonical plan digest, combined step index, and
+step type in addition to the full action or evidence digest, owner,
+registry-state generation, result identity, and expiry. The combined order is
+all command actions in plan order followed by all actionless `MISSING`
+observations in disposition order. Execution receives that exact plan and step
+index; it never accepts a free-standing action or disposition from the caller.
+Result recording requires a one-to-one, gap-free, ordered mapping between the
+plan/receipt steps and exact issued authorities. Duplicate plan steps, duplicate
+or reused authorities, missing, extraneous, or out-of-order authorities, and
+cross-plan reuse fail closed. Only after that bijection and unchanged generation
+are proven does the registry consume authority IDs in the same journal
+transaction, so forged, replayed, and late persistence also fail closed.
 `DockerAdapter.record_results` remains
 a pure receipt reconciliation helper; `ResourceRegistry.record_results` rejects
 persistence without authority, and only `record_guarded_results` may mutate

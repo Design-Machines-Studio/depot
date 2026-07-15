@@ -350,7 +350,9 @@ class ResourceRegistryTests(unittest.TestCase):
             "event": "authority_issued",
             "authority": {
                 "authority_id": "sha256:" + "1" * 64,
-                "authority_type": "command_result",
+                "plan_digest": "sha256:" + "0" * 64,
+                "step_index": 0,
+                "step_type": "command_action",
                 "kind": "container", "resource_id": "shared",
                 "run_id": "run-1", "node_id": "node-1",
                 "capability_digest": "sha256:" + "2" * 64,

@@ -52,6 +52,7 @@ _MAX_IDENTIFIER = 256
 _MAX_RESOURCE_ID = 4096
 _VALID_DISPOSITION_ACTIONS = {"none", "remove_exact_id"}
 _VALID_CLEANUP_ACTIONS = {"stop", "remove"}
+_VALID_CLEANUP_STEP_TYPES = {"command_action", "terminal_observation"}
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -85,6 +86,25 @@ class CommandResult:
 
 
 @dataclass(frozen=True)
+class CleanupStepIdentity:
+    """One immutable authority-bearing position in a canonical cleanup plan."""
+
+    plan_digest: str
+    step_index: int
+    step_type: str
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.plan_digest) is not str
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.plan_digest)
+            or type(self.step_index) is not int or self.step_index < 0
+            or type(self.step_type) is not str
+            or self.step_type not in _VALID_CLEANUP_STEP_TYPES
+        ):
+            raise invalid_policy("invalid_cleanup_step_identity")
+
+
+@dataclass(frozen=True)
 class GuardedCommandResult:
     """One exact command result authorized under its resource execution guard."""
 
@@ -98,6 +118,7 @@ class GuardedCommandResult:
     issued_at: datetime
     expires_at: datetime
     authority_id: str
+    step_identity: CleanupStepIdentity
 
     def __post_init__(self) -> None:
         try:
@@ -116,6 +137,8 @@ class GuardedCommandResult:
             or not _valid_timestamp(self.issued_at)
             or not _valid_timestamp(self.expires_at)
             or self.expires_at <= self.issued_at
+            or type(self.step_identity) is not CleanupStepIdentity
+            or self.step_identity.step_type != "command_action"
         ):
             raise invalid_policy("invalid_guarded_command_result")
         object.__setattr__(self, "kind", kind)
@@ -222,6 +245,7 @@ class GuardedTerminalObservation:
     issued_at: datetime
     expires_at: datetime
     authority_id: str
+    step_identity: CleanupStepIdentity
 
     def __post_init__(self) -> None:
         if (
@@ -235,6 +259,8 @@ class GuardedTerminalObservation:
             or not _valid_timestamp(self.issued_at)
             or not _valid_timestamp(self.expires_at)
             or self.expires_at <= self.issued_at
+            or type(self.step_identity) is not CleanupStepIdentity
+            or self.step_identity.step_type != "terminal_observation"
         ):
             raise invalid_policy("invalid_guarded_terminal_observation")
 
@@ -405,6 +431,84 @@ class CleanupPlan:
         }
 
 
+def _snapshot_cleanup_plan(plan: CleanupPlan) -> CleanupPlan:
+    """Defensively copy every field that contributes to cleanup authority."""
+    if type(plan) is not CleanupPlan:
+        raise invalid_policy("invalid_cleanup_plan")
+    try:
+        return CleanupPlan(
+            CleanupScope(
+                plan.scope.run_id, plan.scope.node_id,
+                plan.scope.terminal, plan.scope.stale_sweep,
+            ),
+            tuple(plan.before),
+            tuple(CleanupAction(
+                item.resource_id, item.kind, item.action, tuple(item.argv),
+                item.requires_success_of, item.run_id, item.node_id,
+                item.lifecycle, item.proof_digest, tuple(item.preconditions),
+                dict(item.environment), item.predecessor_result_id,
+                item.evidence_digest,
+            ) for item in plan.actions),
+            tuple(_sanitize_disposition(
+                _disposition_from_json(_disposition_json(item))
+            ) for item in plan.dispositions),
+        )
+    except InvalidSchemaError:
+        raise
+    except Exception:
+        raise invalid_policy("invalid_cleanup_plan") from None
+
+
+def cleanup_plan_digest(plan: CleanupPlan) -> str:
+    """Digest one immutable snapshot of every plan field and ordered step."""
+    snapshot = _snapshot_cleanup_plan(plan)
+    return cleanup_proof_digest({"cleanup_plan": snapshot.to_dict()})
+
+
+def _cleanup_step_entries(
+    plan: CleanupPlan,
+) -> tuple[CleanupPlan, Tuple[tuple[CleanupStepIdentity, object], ...]]:
+    snapshot = _snapshot_cleanup_plan(plan)
+    digest = cleanup_proof_digest({"cleanup_plan": snapshot.to_dict()})
+    action_fingerprints = tuple(
+        cleanup_proof_digest({"command_action": value.to_dict()})
+        for value in snapshot.actions
+    )
+    action_argv = tuple(value.argv for value in snapshot.actions)
+    if (
+        len(set(action_fingerprints)) != len(action_fingerprints)
+        or len(set(action_argv)) != len(action_argv)
+    ):
+        raise invalid_policy("duplicate_cleanup_plan_step")
+    terminal = tuple(
+        value for value in snapshot.dispositions
+        if value.disposition is CleanupDisposition.MISSING
+    )
+    terminal_keys = tuple((value.kind, value.resource_id) for value in terminal)
+    action_keys = {(value.kind, value.resource_id) for value in snapshot.actions}
+    if (
+        len(set(terminal_keys)) != len(terminal_keys)
+        or bool(action_keys.intersection(terminal_keys))
+    ):
+        raise invalid_policy("duplicate_cleanup_plan_step")
+    entries: list[tuple[CleanupStepIdentity, object]] = []
+    for action in snapshot.actions:
+        entries.append((CleanupStepIdentity(
+            digest, len(entries), "command_action",
+        ), action))
+    for disposition in terminal:
+        entries.append((CleanupStepIdentity(
+            digest, len(entries), "terminal_observation",
+        ), disposition))
+    return snapshot, tuple(entries)
+
+
+def cleanup_step_identities(plan: CleanupPlan) -> Tuple[CleanupStepIdentity, ...]:
+    """Return action steps followed by actionless terminal observations."""
+    _snapshot, entries = _cleanup_step_entries(plan)
+    return tuple(identity for identity, _value in entries)
+
+
 @dataclass(frozen=True)
 class CleanupReceipt:
     scope: CleanupScope
@@ -518,22 +622,6 @@ def cleanup_result_id(argv: Tuple[str, ...], exit_code: int) -> str:
     return cleanup_proof_digest({"argv": list(argv), "exit_code": exit_code})
 
 
-def execution_authority_id(
-    *, result: CommandResult, kind: ResourceKind, resource_id: str,
-    run_id: str, node_id: str, action_digest: str, state_generation: str,
-    issued_at: datetime, expires_at: datetime,
-) -> str:
-    return cleanup_proof_digest({
-        "action_digest": action_digest,
-        "owner": {"run_id": run_id, "node_id": node_id},
-        "kind": ResourceKind(kind).value, "resource_id": resource_id,
-        "state_generation": state_generation,
-        "result_id": cleanup_result_id(result.argv, result.exit_code),
-        "issued_at": _timestamp(issued_at),
-        "expires_at": _timestamp(expires_at),
-    })
-
-
 GuardedAuthority = Union[GuardedCommandResult, GuardedTerminalObservation]
 
 
@@ -550,13 +638,11 @@ def terminal_observation_evidence_digest(
 
 def _authority_json(value: GuardedAuthority) -> dict[str, object]:
     if type(value) is GuardedCommandResult:
-        authority_type = "command_result"
         kind, resource_id = value.kind, value.resource_id
         run_id, node_id = value.run_id, value.node_id
         capability_digest = value.action_digest
         result = value.result
     elif type(value) is GuardedTerminalObservation:
-        authority_type = "terminal_observation"
         disposition = value.disposition
         kind, resource_id = disposition.kind, disposition.resource_id
         run_id, node_id = disposition.run_id, disposition.node_id
@@ -566,7 +652,9 @@ def _authority_json(value: GuardedAuthority) -> dict[str, object]:
         raise invalid_policy("invalid_execution_authority")
     return {
         "authority_id": value.authority_id,
-        "authority_type": authority_type,
+        "plan_digest": value.step_identity.plan_digest,
+        "step_index": value.step_identity.step_index,
+        "step_type": value.step_identity.step_type,
         "kind": kind.value, "resource_id": resource_id,
         "run_id": run_id, "node_id": node_id,
         "capability_digest": capability_digest,
@@ -579,7 +667,8 @@ def _authority_json(value: GuardedAuthority) -> dict[str, object]:
 
 def _validated_authority_json(value: object) -> dict[str, object]:
     required = {
-        "authority_id", "authority_type", "kind", "resource_id", "run_id",
+        "authority_id", "plan_digest", "step_index", "step_type",
+        "kind", "resource_id", "run_id",
         "node_id", "capability_digest", "state_generation", "result_id",
         "issued_at", "expires_at",
     }
@@ -592,8 +681,9 @@ def _validated_authority_json(value: object) -> dict[str, object]:
     except Exception:
         raise invalid_policy("invalid_execution_authority_issuance") from None
     if (
-        type(value["authority_type"]) is not str
-        or value["authority_type"] not in {"command_result", "terminal_observation"}
+        type(value["step_index"]) is not int or value["step_index"] < 0
+        or type(value["step_type"]) is not str
+        or value["step_type"] not in _VALID_CLEANUP_STEP_TYPES
         or not _valid_text(value["resource_id"], maximum=_MAX_RESOURCE_ID)
         or not all(_valid_text(value[key], maximum=_MAX_IDENTIFIER) for key in (
             "run_id", "node_id",
@@ -602,7 +692,8 @@ def _validated_authority_json(value: object) -> dict[str, object]:
             type(value[key]) is str
             and re.fullmatch(r"sha256:[0-9a-f]{64}", value[key])
             for key in (
-                "authority_id", "capability_digest", "state_generation", "result_id",
+                "authority_id", "plan_digest", "capability_digest",
+                "state_generation", "result_id",
             )
         )
         or expires_at <= issued_at
@@ -1010,30 +1101,35 @@ class ResourceRegistry:
         self._append_unlocked(frame)
 
     def execute_guarded_action(
-        self, adapter: object, action: CleanupAction, resource: object,
+        self, adapter: object, plan: CleanupPlan, step_index: int,
+        resource: object,
         executor: Callable[[Tuple[str, ...]], CommandResult],
         lease_proof: object = None, predecessor_result: object = None, *,
-        action_index: Optional[int] = None,
         incomplete_node_proof: object = None, orphan_mode: bool = False,
     ) -> GuardedCommandResult:
-        """Revalidate and execute one exact argv while its resource key is locked."""
+        """Execute the exact command step sealed into one immutable plan."""
         from workflow_kernel.adapters.docker import DockerAdapter
 
-        if type(adapter) is not DockerAdapter or type(action) is not CleanupAction or not callable(executor):
+        if (
+            type(adapter) is not DockerAdapter
+            or type(step_index) is not int or not callable(executor)
+        ):
             raise invalid_policy("invalid_guarded_cleanup_execution")
-        action = CleanupAction(
-            action.resource_id, action.kind, action.action, tuple(action.argv),
-            action.requires_success_of, action.run_id, action.node_id,
-            action.lifecycle, action.proof_digest, tuple(action.preconditions),
-            dict(action.environment), action.predecessor_result_id,
-            action.evidence_digest,
-        )
+        plan, steps = _cleanup_step_entries(plan)
+        if (
+            step_index < 0 or step_index >= len(steps)
+            or steps[step_index][0].step_type != "command_action"
+        ):
+            raise invalid_policy("invalid_guarded_cleanup_step")
+        step_identity, action = steps[step_index]
+        if type(action) is not CleanupAction:
+            raise invalid_policy("invalid_guarded_cleanup_step")
         key = (action.kind, action.resource_id)
         with self._exclusive_key_locks((key,)):
             adapter.revalidate_action(
                 action, resource, lease_proof=lease_proof,
                 predecessor_result=predecessor_result,
-                action_index=action_index, registry=self,
+                action_index=step_index, registry=self,
                 incomplete_node_proof=incomplete_node_proof,
                 orphan_mode=orphan_mode,
             )
@@ -1059,13 +1155,13 @@ class ResourceRegistry:
                 guarded = GuardedCommandResult(
                     result, action.kind, action.resource_id, action.run_id,
                     action.node_id, action.proof_digest, generation, issued_at,
-                    expires_at, self._new_authority_id_unlocked(),
+                    expires_at, self._new_authority_id_unlocked(), step_identity,
                 )
                 self._issue_authority_unlocked(guarded)
             return guarded
 
     def observe_guarded_absence(
-        self, adapter: object, disposition: ResourceDisposition,
+        self, adapter: object, plan: CleanupPlan, step_index: int,
         executor: Callable[[Tuple[str, ...]], CommandResult],
     ) -> GuardedTerminalObservation:
         """Issue one exact-ID absence observation while its resource key is locked."""
@@ -1075,12 +1171,22 @@ class ResourceRegistry:
 
         if (
             type(adapter) is not DockerAdapter
-            or type(disposition) is not ResourceDisposition
+            or type(step_index) is not int or not callable(executor)
+        ):
+            raise invalid_policy("invalid_guarded_terminal_observation")
+        plan, steps = _cleanup_step_entries(plan)
+        if (
+            step_index < 0 or step_index >= len(steps)
+            or steps[step_index][0].step_type != "terminal_observation"
+        ):
+            raise invalid_policy("invalid_guarded_cleanup_step")
+        step_identity, disposition = steps[step_index]
+        if (
+            type(disposition) is not ResourceDisposition
             or disposition.disposition is not CleanupDisposition.MISSING
             or disposition.kind not in {
                 ResourceKind.CONTAINER, ResourceKind.NETWORK, ResourceKind.VOLUME,
             }
-            or not callable(executor)
         ):
             raise invalid_policy("invalid_guarded_terminal_observation")
         disposition = _disposition_from_json(_disposition_json(disposition))
@@ -1121,6 +1227,7 @@ class ResourceRegistry:
                 guarded = GuardedTerminalObservation(
                     disposition, result, evidence_digest, generation,
                     issued_at, expires_at, self._new_authority_id_unlocked(),
+                    step_identity,
                 )
                 self._issue_authority_unlocked(guarded)
             return guarded
@@ -1171,6 +1278,11 @@ class ResourceRegistry:
                         value.run_id, value.node_id, value.action_digest,
                         value.state_generation, value.issued_at,
                         value.expires_at, value.authority_id,
+                        CleanupStepIdentity(
+                            value.step_identity.plan_digest,
+                            value.step_identity.step_index,
+                            value.step_identity.step_type,
+                        ),
                     ))
                 else:
                     disposition = _disposition_from_json(
@@ -1180,6 +1292,11 @@ class ResourceRegistry:
                         disposition, result, value.evidence_digest,
                         value.state_generation, value.issued_at,
                         value.expires_at, value.authority_id,
+                        CleanupStepIdentity(
+                            value.step_identity.plan_digest,
+                            value.step_identity.step_index,
+                            value.step_identity.step_type,
+                        ),
                     ))
             guarded_results = tuple(normalized)
         except InvalidSchemaError:
@@ -1203,6 +1320,9 @@ class ResourceRegistry:
 
         if type(adapter) is not DockerAdapter or type(plan) is not CleanupPlan:
             raise invalid_policy("invalid_cleanup_result_adapter")
+        plan, step_entries = _cleanup_step_entries(plan)
+        if len({value.authority_id for value in authorities}) != len(authorities):
+            raise invalid_policy("guarded_cleanup_authority_bijection_failed")
         keys = tuple(
             (value.kind, value.resource_id)
             for value in plan.actions + plan.dispositions
@@ -1211,16 +1331,35 @@ class ResourceRegistry:
             receipt, observed = adapter._reconcile_results(
                 plan, results, before, after,
             )
-            authority_keys = {
-                (ResourceKind(payload["kind"]), payload["resource_id"])
-                for payload in (_authority_json(value) for value in authorities)
-            }
-            if any(
-                value.disposition in TERMINAL_DISPOSITIONS
-                and (value.kind, value.resource_id) not in authority_keys
+            terminal_receipt_keys = {
+                (value.kind, value.resource_id)
                 for value in receipt.dispositions
+                if value.disposition is CleanupDisposition.MISSING
+            }
+            if terminal_receipt_keys and len(results) != len(plan.actions):
+                raise invalid_policy("guarded_cleanup_authority_step_gap")
+            expected_step_identities = tuple(
+                identity for identity, value in step_entries
+                if (
+                    identity.step_type == "command_action"
+                    and identity.step_index < len(results)
+                ) or (
+                    identity.step_type == "terminal_observation"
+                    and type(value) is ResourceDisposition
+                    and (value.kind, value.resource_id) in terminal_receipt_keys
+                )
+            )
+            if tuple(
+                value.step_index for value in expected_step_identities
+            ) != tuple(range(len(expected_step_identities))):
+                raise invalid_policy("guarded_cleanup_authority_step_gap")
+            supplied_step_identities = tuple(
+                value.step_identity for value in authorities
+            )
+            if (
+                supplied_step_identities != expected_step_identities
             ):
-                raise invalid_policy("guarded_cleanup_authority_missing")
+                raise invalid_policy("guarded_cleanup_authority_bijection_failed")
             transaction_id = adapter._result_transaction_id(
                 plan, results, before, after,
             )
@@ -1235,7 +1374,7 @@ class ResourceRegistry:
                     raise invalid_policy("cleanup_result_transaction_already_recorded")
                 if authorities:
                     self._validate_execution_authorities(
-                        plan, results, authorities,
+                        plan, results, authorities, expected_step_identities,
                     )
                 nested = [
                     {"event": "authority_consumed", "authority_id": value.authority_id}
@@ -1262,12 +1401,15 @@ class ResourceRegistry:
     def _validate_execution_authorities(
         self, plan: CleanupPlan, results: Tuple[CommandResult, ...],
         authorities: Tuple[GuardedAuthority, ...],
+        expected_step_identities: Tuple[CleanupStepIdentity, ...],
     ) -> None:
         command_authorities = tuple(
             value for value in authorities if type(value) is GuardedCommandResult
         )
         if len(command_authorities) != len(results):
             raise invalid_policy("guarded_cleanup_authority_missing")
+        if tuple(value.step_identity for value in authorities) != expected_step_identities:
+            raise invalid_policy("guarded_cleanup_authority_bijection_failed")
         by_argv = {value.argv: value for value in plan.actions}
         current = self._now()
         if not _valid_timestamp(current):

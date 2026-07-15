@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+import workflow_kernel.resources as resource_models
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,14 +18,32 @@ from workflow_kernel.adapters.docker import (
     LeaseProof,
 )
 from workflow_kernel.resources import (
-    CleanupDisposition, CleanupReceipt, CommandResult, ResourceDisposition,
+    CleanupDisposition, CleanupReceipt, CleanupStepIdentity, CommandResult,
+    ResourceDisposition,
     GuardedCommandResult, ResourceKind, ResourceRecord, ResourceRegistry,
-    execution_authority_id, reseal_cleanup_action,
+    cleanup_proof_digest, cleanup_result_id, reseal_cleanup_action,
 )
 from workflow_kernel.schema import InvalidSchemaError, NodeStatus
 
 
 NOW = datetime(2026, 7, 15, 1, 2, 3, tzinfo=timezone.utc)
+
+
+def legacy_recomputed_authority_id(
+    *, result, kind, resource_id, run_id, node_id, action_digest,
+    state_generation, issued_at, expires_at,
+):
+    def timestamp(value):
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return cleanup_proof_digest({
+        "action_digest": action_digest,
+        "owner": {"run_id": run_id, "node_id": node_id},
+        "kind": kind.value, "resource_id": resource_id,
+        "state_generation": state_generation,
+        "result_id": cleanup_result_id(result.argv, result.exit_code),
+        "issued_at": timestamp(issued_at),
+        "expires_at": timestamp(expires_at),
+    })
 
 
 class FakeRunner:
@@ -384,7 +403,7 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(CleanupDisposition.BLOCKED, absent_without_result.dispositions[0].disposition)
 
         guarded = self.registry.execute_guarded_action(
-            self.adapter, action, value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         receipt = self.registry.record_guarded_results(
@@ -717,14 +736,13 @@ class DockerLifecycleTests(unittest.TestCase):
             self.registry, DockerInventory((value,)), "run-1", "node-1",
         )
         first = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
-            action_index=0,
         )
         second = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[1], replace(value, running=False),
+            self.adapter, plan, 1, replace(value, running=False),
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
-            predecessor_result=first.result, action_index=1,
+            predecessor_result=first.result,
         )
         with self.assertRaises(InvalidSchemaError):
             self.registry.record_guarded_results(
@@ -843,7 +861,7 @@ class DockerLifecycleTests(unittest.TestCase):
             )
 
         observation = self.registry.observe_guarded_absence(
-            self.adapter, plan.dispositions[0], inspect,
+            self.adapter, plan, 0, inspect,
         )
         self.assertEqual(
             [("docker", "container", "inspect", value.resource_id)], inspected,
@@ -879,7 +897,7 @@ class DockerLifecycleTests(unittest.TestCase):
             self.registry, before, "run-1", "node-1",
         )
         guarded = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], first,
+            self.adapter, plan, 0, first,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         after = DockerInventory(
@@ -903,6 +921,123 @@ class DockerLifecycleTests(unittest.TestCase):
             item.resource_id for item in self.registry.resources_for("run-1", "node-1")
         })
 
+    def test_cleanup_step_identity_orders_actions_before_terminal_observations(self):
+        first, _ = self.register(resource("ctr-a"))
+        second = resource("ctr-b")
+        self.registry.register(ResourceRecord(
+            second.resource_id, second.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=second.labels,
+        ))
+        second_key = (second.kind, second.resource_id)
+        before = DockerInventory(
+            (first,), ((first.kind, first.resource_id), second_key),
+            (second_key,), "registered_exact", (CommandResult(
+                ("docker", "container", "inspect", second.resource_id), 1,
+                "", "Error: No such container: " + second.resource_id,
+            ),),
+        )
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, before, "run-1", "node-1",
+        )
+        self.assertTrue(hasattr(resource_models, "cleanup_step_identities"))
+        steps = resource_models.cleanup_step_identities(plan)
+        self.assertEqual([0, 1], [step.step_index for step in steps])
+        self.assertEqual(
+            ["command_action", "terminal_observation"],
+            [step.step_type for step in steps],
+        )
+        self.assertEqual(1, len({step.plan_digest for step in steps}))
+
+    def test_cleanup_step_identity_rejects_malformed_scalars(self):
+        valid = "sha256:" + "0" * 64
+        for digest in (None, 7, True, object()):
+            with self.subTest(digest=digest), self.assertRaises(InvalidSchemaError):
+                CleanupStepIdentity(digest, 0, "command_action")
+        for index in (None, True, -1, "0"):
+            with self.subTest(index=index), self.assertRaises(InvalidSchemaError):
+                CleanupStepIdentity(valid, index, "command_action")
+        for step_type in (None, 7, "command_result", ""):
+            with self.subTest(step_type=step_type), self.assertRaises(InvalidSchemaError):
+                CleanupStepIdentity(valid, 0, step_type)
+
+    def test_cleanup_step_identity_rejects_duplicate_plan_steps(self):
+        value, _ = self.register()
+        action_plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        with self.assertRaises(InvalidSchemaError):
+            resource_models.cleanup_step_identities(replace(
+                action_plan,
+                actions=(action_plan.actions[0], action_plan.actions[0]),
+            ))
+
+        missing_plan = self.adapter.plan_chunk_cleanup(
+            self.registry, exact_absent(), "run-1", "node-1",
+        )
+        with self.assertRaises(InvalidSchemaError):
+            resource_models.cleanup_step_identities(replace(
+                missing_plan,
+                dispositions=(
+                    missing_plan.dispositions[0], missing_plan.dispositions[0],
+                ),
+            ))
+        with self.assertRaises(InvalidSchemaError):
+            resource_models.cleanup_step_identities(replace(
+                action_plan,
+                dispositions=(missing_plan.dispositions[0],),
+            ))
+
+    def test_terminal_authority_cannot_skip_an_unexecuted_command_step(self):
+        first, _ = self.register(resource("ctr-a"))
+        second = resource("ctr-b")
+        third = resource("ctr-c")
+        for value in (second, third):
+            self.registry.register(ResourceRecord(
+                value.resource_id, value.kind, "run-1", "node-1", "chunk",
+                "stop-remove", NOW, labels=value.labels,
+            ))
+        third_key = (third.kind, third.resource_id)
+        third_inspect = ("docker", "container", "inspect", third.resource_id)
+        before = DockerInventory(
+            (first, second),
+            ((first.kind, first.resource_id), (second.kind, second.resource_id), third_key),
+            (third_key,), "registered_exact", (CommandResult(
+                third_inspect, 1, "", "Error: No such container: " + third.resource_id,
+            ),),
+        )
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, before, "run-1", "node-1",
+        )
+        self.assertEqual(2, len(plan.actions))
+        first_authority = self.registry.execute_guarded_action(
+            self.adapter, plan, 0, first,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        terminal_authority = self.registry.observe_guarded_absence(
+            self.adapter, plan, 2,
+            lambda argv: CommandResult(
+                tuple(argv), 1, "", "Error: No such container: " + third.resource_id,
+            ),
+        )
+        after = DockerInventory(
+            (second,),
+            ((first.kind, first.resource_id), (second.kind, second.resource_id), third_key),
+            ((first.kind, first.resource_id), third_key), "registered_exact", (
+                CommandResult(
+                    ("docker", "container", "inspect", first.resource_id), 1,
+                    "", "Error: No such container: " + first.resource_id,
+                ),
+                CommandResult(
+                    third_inspect, 1, "", "Error: No such container: " + third.resource_id,
+                ),
+            ),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, plan, (first_authority, terminal_authority),
+                before, after,
+            )
+
     def test_retired_record_cannot_reauthorize_stale_cleanup_action(self):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(
@@ -910,7 +1045,7 @@ class DockerLifecycleTests(unittest.TestCase):
         )
         action = plan.actions[0]
         guarded = self.registry.execute_guarded_action(
-            self.adapter, action, value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         self.registry.record_guarded_results(
@@ -947,7 +1082,7 @@ class DockerLifecycleTests(unittest.TestCase):
             return CommandResult(tuple(argv), 0, "", "")
 
         guarded = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], orphan, execute,
+            self.adapter, plan, 0, orphan, execute,
             lease_proof=inactive_lease(), orphan_mode=True,
         )
 
@@ -972,7 +1107,7 @@ class DockerLifecycleTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "simulated executor crash"):
             self.registry.execute_guarded_action(
-                self.adapter, plan.actions[0], value, execute_then_fail,
+                self.adapter, plan, 0, value, execute_then_fail,
             )
         self.assertEqual(unrelated, self.registry.resource_state_for_exact(
             unrelated.kind, unrelated.resource_id,
@@ -1000,7 +1135,7 @@ class DockerLifecycleTests(unittest.TestCase):
             registry, DockerInventory((value,)), "run-1", "node-1",
         )
         guarded = registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         registry.record_disposition(ResourceDisposition(
@@ -1015,7 +1150,7 @@ class DockerLifecycleTests(unittest.TestCase):
 
         # A fresh authority can be consumed exactly once.
         fresh = registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         receipt = registry.record_guarded_results(
@@ -1041,7 +1176,7 @@ class DockerLifecycleTests(unittest.TestCase):
             expiry_registry, DockerInventory((value,)), "run-1", "node-1",
         )
         expiring = expiry_registry.execute_guarded_action(
-            self.adapter, expiry_plan.actions[0], value,
+            self.adapter, expiry_plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         clock[0] += timedelta(seconds=6)
@@ -1057,7 +1192,7 @@ class DockerLifecycleTests(unittest.TestCase):
             self.registry, DockerInventory((value,)), "run-1", "node-1",
         )
         guarded = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         resealed = replace(
@@ -1069,13 +1204,97 @@ class DockerLifecycleTests(unittest.TestCase):
                 exact_absent(),
             )
 
+    def test_guarded_result_rejects_duplicate_authority_for_one_step(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, plan, 0, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, plan, (guarded, guarded),
+                DockerInventory((value,)), exact_absent(),
+            )
+
+    def test_guarded_result_rejects_out_of_order_terminal_authorities(self):
+        first, _ = self.register(resource("ctr-a"))
+        second = resource("ctr-b")
+        self.registry.register(ResourceRecord(
+            second.resource_id, second.kind, "run-1", "node-1", "chunk",
+            "stop-remove", NOW, labels=second.labels,
+        ))
+        keys = tuple((value.kind, value.resource_id) for value in (first, second))
+        absent = DockerInventory(
+            (), keys, keys, "registered_exact", tuple(CommandResult(
+                ("docker", "container", "inspect", value.resource_id), 1, "",
+                "Error: No such container: " + value.resource_id,
+            ) for value in (first, second)),
+        )
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, absent, "run-1", "node-1",
+        )
+        authorities = tuple(
+            self.registry.observe_guarded_absence(
+                self.adapter, plan, index,
+                lambda argv: CommandResult(
+                    tuple(argv), 1, "", "Error: No such container: " + argv[-1],
+                ),
+            )
+            for index in range(2)
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, plan, tuple(reversed(authorities)), absent, absent,
+            )
+
+    def test_guarded_result_rejects_cross_plan_authority_reuse(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, plan, 0, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        different_plan = replace(plan, before=plan.before + ("different-plan",))
+        self.assertNotEqual(
+            resource_models.cleanup_plan_digest(plan),
+            resource_models.cleanup_plan_digest(different_plan),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, different_plan, (guarded,),
+                DockerInventory((value,)), exact_absent(),
+            )
+
+    def test_terminal_authority_is_extraneous_when_absence_no_longer_holds(self):
+        value, _ = self.register()
+        absent = exact_absent()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, absent, "run-1", "node-1",
+        )
+        observation = self.registry.observe_guarded_absence(
+            self.adapter, plan, 0,
+            lambda argv: CommandResult(
+                tuple(argv), 1, "", "Error: No such container: " + value.resource_id,
+            ),
+        )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.record_guarded_results(
+                self.adapter, plan, (observation,), absent,
+                DockerInventory((value,)),
+            )
+
     def test_issued_failure_authority_cannot_be_reused_as_success(self):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(
             self.registry, DockerInventory((value,)), "run-1", "node-1",
         )
         guarded = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 17, "", "failed"),
         )
         forged = replace(
@@ -1094,10 +1313,10 @@ class DockerLifecycleTests(unittest.TestCase):
             self.registry, DockerInventory((value,)), "run-1", "node-1",
         )
         guarded = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
-        recomputed = execution_authority_id(
+        recomputed = legacy_recomputed_authority_id(
             result=guarded.result, kind=guarded.kind,
             resource_id=guarded.resource_id, run_id=guarded.run_id,
             node_id=guarded.node_id, action_digest=guarded.action_digest,
@@ -1110,6 +1329,12 @@ class DockerLifecycleTests(unittest.TestCase):
         )
         self.assertEqual("authority_issued", issued["event"])
         self.assertEqual(guarded.authority_id, issued["authority"]["authority_id"])
+        self.assertEqual(
+            guarded.step_identity.plan_digest,
+            issued["authority"]["plan_digest"],
+        )
+        self.assertEqual(0, issued["authority"]["step_index"])
+        self.assertEqual("command_action", issued["authority"]["step_type"])
 
         foreign = ResourceRegistry(Path(self.directory.name) / "foreign.jsonl")
         foreign.register(ResourceRecord(
@@ -1147,13 +1372,13 @@ class DockerLifecycleTests(unittest.TestCase):
         forged = GuardedCommandResult(
             result, action.kind, action.resource_id, action.run_id,
             action.node_id, action.proof_digest, generation, issued_at,
-            expires_at, execution_authority_id(
+            expires_at, legacy_recomputed_authority_id(
                 result=result, kind=action.kind, resource_id=action.resource_id,
                 run_id=action.run_id, node_id=action.node_id,
                 action_digest=action.proof_digest,
                 state_generation=generation, issued_at=issued_at,
                 expires_at=expires_at,
-            ),
+            ), resource_models.cleanup_step_identities(plan)[0],
         )
 
         with self.assertRaises(InvalidSchemaError):
@@ -1177,7 +1402,7 @@ class DockerLifecycleTests(unittest.TestCase):
             evidence=(CommandResult(inspect, 1, "", "Error: No such container: orphan-1"),),
         )
         guarded = orphan_registry.execute_guarded_action(
-            self.adapter, action, orphan,
+            self.adapter, plan, 0, orphan,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
             lease_proof=inactive_lease(), orphan_mode=True,
         )
@@ -1192,7 +1417,7 @@ class DockerLifecycleTests(unittest.TestCase):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
         guarded = self.registry.execute_guarded_action(
-            self.adapter, plan.actions[0], value,
+            self.adapter, plan, 0, value,
             lambda argv: CommandResult(tuple(argv), 0, "", ""),
         )
         real_write = os.write
@@ -1237,11 +1462,11 @@ class DockerLifecycleTests(unittest.TestCase):
         }
         guarded = tuple(
             self.registry.execute_guarded_action(
-                self.adapter, action,
+                self.adapter, plan, index,
                 resources[(action.kind, action.resource_id)],
                 lambda argv: CommandResult(tuple(argv), 0, "", ""),
             )
-            for action in plan.actions
+            for index, action in enumerate(plan.actions)
         )
         receipt = self.registry.record_guarded_results(
             self.adapter, plan, guarded, before, after,

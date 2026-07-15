@@ -60,10 +60,12 @@
     },
     "executionAuthority": {
       "type": "object", "additionalProperties": false,
-      "required": ["authority_id", "authority_type", "kind", "resource_id", "run_id", "node_id", "capability_digest", "state_generation", "result_id", "issued_at", "expires_at"],
+      "required": ["authority_id", "plan_digest", "step_index", "step_type", "kind", "resource_id", "run_id", "node_id", "capability_digest", "state_generation", "result_id", "issued_at", "expires_at"],
       "properties": {
         "authority_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "authority_type": {"enum": ["command_result", "terminal_observation"]},
+        "plan_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "step_index": {"type": "integer", "minimum": 0},
+        "step_type": {"enum": ["command_action", "terminal_observation"]},
         "kind": {"$ref": "#/$defs/kind"},
         "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
         "run_id": {"type": "string", "minLength": 1, "maxLength": 256},

@@ -143,9 +143,14 @@ preserving required transition/evidence semantics.
 Cleanup execution uses a stable, one-step-at-a-time authority boundary.
 `next-cleanup-step` validates a gap-free outcome prefix and returns either the
 next dependency-eligible action or an actionless terminal disposition requiring
-fresh observation, with its immutable plan index.
+fresh observation. Its canonical combined identity binds the immutable full-plan
+digest, step index, and step type. Combined order is every command action in plan
+order followed by every actionless `MISSING` disposition in disposition order;
+terminal observation may not skip an unfinished command or earlier observation.
 `execute-cleanup-step` is the single non-splittable authorization and execution
-step for that index. Through the registry's per-kind-and-ID execution guard it
+step for the exact plan plus index; it derives the sealed action/disposition and
+must not accept a caller-supplied free-standing capability. Through the
+registry's per-kind-and-ID execution guard it
 atomically reloads the exact registry record and its
 active/retired state regardless of owner. Registered mode requires the active
 action owner; explicit stale-orphan mode requires total global absence, with a
@@ -157,11 +162,15 @@ inside that same guard and binds the canonical disposition plus exact-not-found
 evidence. Registration, reassignment, and disposition for that key fail closed
 until the command or observation result exists, while unrelated keys keep
 progressing. Before returning, the registry durably issues a random opaque
-authority bound to outcome type, capability/evidence digest, owner,
-registry-state generation, result identity, and expiry. `record-cleanup`
-requires the exact issued payload and atomically consumes each authority ID;
-unissued, altered, expired, replayed, or generation-stale authority fails
-closed. A host/executor crash
+authority bound to plan digest, step index, step type, capability/evidence
+digest, owner, registry-state generation, result identity, and expiry.
+`record-cleanup` enforces a bijection between the canonical plan/receipt steps
+and supplied authorities: duplicate plan steps, one authority covering duplicate
+dispositions, duplicate authorities for one step, missing/extraneous/out-of-order
+authorities, step gaps, and cross-plan reuse all fail closed. It then requires
+each exact issued payload and atomically consumes each authority ID; unissued,
+altered, expired, replayed, or generation-stale authority also fails closed. A
+host/executor crash
 releases the OS-backed guard, and the next attempt must freshly inspect and
 reauthorize. Cached plans,
 translated events, comparator output, metrics, and all other shadow state are
