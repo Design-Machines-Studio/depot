@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 from .model import _register_origin, _validate_capture
 from .redaction import digest_error_detail_string, normalize_evidence_reference
-from .verification import digest_target_origin, digest_target_route, validate_viewport
+from .browser_target import digest_target_origin, digest_target_route, validate_viewport
 
 _ENGINES = frozenset({"chromium", "firefox", "webkit"})
 _RESULTS = frozenset({"passed", "failed", "unavailable"})

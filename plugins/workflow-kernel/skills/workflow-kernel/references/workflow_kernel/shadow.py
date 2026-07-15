@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Tuple
 
+from .hosts import CANONICAL_HOST_IDS
 from .schema import RunState, WorkflowEvent
 
 
@@ -19,7 +20,7 @@ KNOWN_AGENTIC_PROVIDERS = frozenset({"anthropic", "openai", "generic"})
 # Canonical host identifiers, matching the harness profile's host keys
 # (plugins/pipeline/references/harness-profile.json) and its auto-detection.
 # Receipts must carry these exact names; there are no accepted aliases.
-CANONICAL_HOSTS = frozenset({"claude-code", "codex", "generic"})
+CANONICAL_HOSTS = frozenset(CANONICAL_HOST_IDS)
 KNOWN_HOST_PROFILES = {
     ("claude-code", "claude_native", "anthropic"),
     ("codex", "codex_companion", "openai"),
@@ -107,7 +108,8 @@ def _semantic(event: WorkflowEvent, *, normalize_host: bool = False) -> tuple:
         payload.get("resource_name"),
         payload.get("requested_provider"), payload.get("attempted_provider"),
         payload.get("attempt"), payload.get("retry_reason"),
-        payload.get("isolation_mode"), payload.get("requested_executor"),
+        payload.get("isolation_mode"), payload.get("isolation_strategy"),
+        payload.get("requested_executor"),
         payload.get("attempted_executor"),
         payload.get("implemented_by"), payload.get("fallback"),
         payload.get("fallback_path"), payload.get("fallback_reason"),

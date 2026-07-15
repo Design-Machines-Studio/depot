@@ -147,6 +147,7 @@ class ShadowParityTests(unittest.TestCase):
         changes = {
             "attempt": 2, "retry_reason": "browser_restart",
             "isolation_mode": "worktree", "requested_executor": "builder",
+            "isolation_strategy": "sequential-on-branch",
             "attempted_executor": "fallback", "cleanup_policy": "stop-remove",
             "resource_kind": "container", "resource_name": "review-box",
             "finding_count": 2, "prior_findings_signature": "prior-signature",
@@ -154,7 +155,11 @@ class ShadowParityTests(unittest.TestCase):
         }
         for key, value in changes.items():
             mutated = copy.deepcopy(original)
-            mutated[2][key] = value
+            if key == "isolation_strategy":
+                for receipt in mutated:
+                    receipt[key] = value
+            else:
+                mutated[2][key] = value
             report = ShadowComparator().compare_receipt_sets(
                 ReceiptSet.from_events(translate_pipeline_receipts(mutated)), authoritative,
             )

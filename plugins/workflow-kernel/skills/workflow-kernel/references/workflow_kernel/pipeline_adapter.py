@@ -175,7 +175,9 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
 def translate_pipeline_receipts(
     receipts: Iterable[Mapping[str, object]],
 ) -> Tuple[WorkflowEvent, ...]:
-    return translate_receipts(receipts, PIPELINE_STAGES)
+    return translate_receipts(
+        receipts, PIPELINE_STAGES, isolation_default="per-chunk-worktree",
+    )
 
 
 def translate_builder_decision(

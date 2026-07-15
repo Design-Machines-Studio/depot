@@ -429,13 +429,10 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual("resource_use_unknown", blocked.dispositions[0].reason)
 
     def test_guarded_paths_reject_unsealed_and_subclassed_adapters(self):
-        # Finding 084: the concrete DockerAdapter type check became a
-        # core-owned sealed marker. The guard must stay exactly as strict:
-        # a plain object, an unsealed marker subclass, and even a subclass
-        # of the sealed DockerAdapter are all rejected on every guarded path.
-        from workflow_kernel.resources import GuardedCleanupAdapter
-
-        class Unsealed(GuardedCleanupAdapter):
+        # Guarded cleanup accepts only the exact loaded DockerAdapter type:
+        # a plain object, a foreign implementation, and even a subclass are
+        # rejected on every destructive path.
+        class Unsealed:
             pass
 
         class SubclassOfSealed(DockerAdapter):
@@ -462,6 +459,63 @@ class DockerLifecycleTests(unittest.TestCase):
                         impostor, plan, (), DockerInventory((value,)),
                         exact_absent(),
                     )
+
+    def test_foreign_adapter_cannot_self_register_cleanup_authority(self):
+        import workflow_kernel.resources as resources
+
+        self.assertFalse(hasattr(resources, "_seal_guarded_cleanup_adapter"))
+        self.assertFalse(hasattr(resources, "GuardedCleanupAdapter"))
+
+    def test_foreign_adapter_cannot_bypass_core_authority_issuance(self):
+        calls = []
+
+        class ForeignAdapter:
+            def execute_guarded_action(self, *_args, **_kwargs):
+                calls.append("dispatch")
+
+            def revalidate_action(self, *_args, **_kwargs):
+                calls.append("revalidate")
+
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        executor = lambda argv: CommandResult(tuple(argv), 0, "", "")
+        foreign = ForeignAdapter()
+        with self.assertRaises(InvalidSchemaError):
+            self.registry.execute_guarded_action(
+                foreign, plan, 0, value, executor,
+            )
+        with self.assertRaises(InvalidSchemaError):
+            self.registry._execute_guarded_action(
+                foreign, plan, 0, value, executor,
+            )
+        self.assertEqual(calls, [])
+
+    def test_backend_instance_mutation_cannot_replace_authority_policy(self):
+        value, _ = self.register()
+        plan = self.adapter.plan_chunk_cleanup(
+            self.registry, DockerInventory((value,)), "run-1", "node-1",
+        )
+        backend = object.__getattribute__(self.adapter, "_backend")
+        with self.assertRaises(AttributeError):
+            backend.revalidate_action = lambda *_args, **_kwargs: None
+        guarded = self.registry.execute_guarded_action(
+            self.adapter, plan, 0, value,
+            lambda argv: CommandResult(tuple(argv), 0, "", ""),
+        )
+        with self.assertRaises(AttributeError):
+            backend._reconcile_results = lambda *_args, **_kwargs: None
+        with self.assertRaises(AttributeError):
+            backend._result_transaction_id = lambda *_args, **_kwargs: None
+        receipt = self.registry.record_guarded_results(
+            self.adapter, plan, (guarded,), DockerInventory((value,)),
+            exact_absent(),
+        )
+        self.assertEqual(
+            receipt.dispositions[-1].disposition,
+            CleanupDisposition.REMOVED,
+        )
 
     def test_core_modules_have_no_runtime_adapter_imports(self):
         # Finding 084: dependency direction. Core validation modules may not
@@ -627,6 +681,17 @@ class DockerLifecycleTests(unittest.TestCase):
                     "run-1", (("consumer", NodeStatus.PENDING),), True, NOW,
                 ),
             )
+        with self.assertRaises(InvalidSchemaError):
+            self.adapter.revalidate_action(
+                plan.actions[0], value, registry=registry,
+                incomplete_node_proof=IncompleteNodeProof(
+                    "run-1", (("consumer", NodeStatus.SUCCEEDED),), True,
+                    NOW - timedelta(minutes=2),
+                ),
+            )
+        backend = object.__getattribute__(self.adapter, "_backend")
+        with self.assertRaises(AttributeError):
+            backend._incomplete_node_proof_is_fresh = lambda _proof: True
         with self.assertRaises(InvalidSchemaError):
             self.adapter.revalidate_action(
                 plan.actions[0], value, registry=registry,

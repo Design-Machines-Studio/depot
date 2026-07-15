@@ -78,6 +78,16 @@ class MetricsTests(unittest.TestCase):
         report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
         self.assertEqual(report.models, {"claude-opus-4-8": 1})
 
+    def test_isolation_strategy_feeds_its_own_metrics_dimension(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        for receipt in receipts:
+            receipt["isolationStrategy"] = "sequential-on-branch"
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(
+            report.isolation_strategies,
+            {"sequential-on-branch": len(receipts)},
+        )
+
     def test_replay_duplicate_gap_and_order_are_rejected(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         variants = []

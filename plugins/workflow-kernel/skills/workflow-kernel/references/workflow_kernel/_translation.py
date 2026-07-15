@@ -24,6 +24,9 @@ EXECUTION_MODES = frozenset({
     "full_cli", "codex_native", "manual_walkthrough", "generic",
     "generic_host",
 })
+ISOLATION_STRATEGIES = frozenset({
+    "per-chunk-worktree", "sequential-on-branch",
+})
 COMMON_RECEIPT_FIELDS = frozenset({
     "stage", "status", "host", "mechanism", "workflow_class", "provider",
     "model", "attempt", "duration_seconds", "first_pass", "fallback_reason",
@@ -48,6 +51,9 @@ COMMON_RECEIPT_FIELDS = frozenset({
 # snake_case receipt schema. A conflicting duplicate is rejected, never
 # silently dropped.
 RECEIPT_FIELD_ALIASES = {
+    "executionMode": "execution_mode",
+    "workflowClass": "workflow_class",
+    "workflowClassDefaulted": "workflow_class_defaulted",
     "requestedProvider": "requested_provider",
     "attemptedProvider": "attempted_provider",
     "implementedBy": "implemented_by",
@@ -356,8 +362,11 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
 
 
 def translate_receipts(
-    receipts: Iterable[Mapping[str, object]], allowed_stages: frozenset,
+    receipts: Iterable[Mapping[str, object]], allowed_stages: frozenset, *,
+    isolation_default: object = None,
 ) -> Tuple[WorkflowEvent, ...]:
+    if isolation_default is not None and isolation_default not in ISOLATION_STRATEGIES:
+        raise ValueError("invalid isolation strategy")
     try:
         values = tuple(receipts)
     except Exception:
@@ -367,6 +376,7 @@ def translate_receipts(
     workflow_class = None
     execution_mode = None
     workflow_class_defaulted = None
+    isolation_strategy = None
     for position, receipt in enumerate(values):
         if type(receipt) is not dict:
             raise ValueError("receipt must be an object")
@@ -404,11 +414,26 @@ def translate_receipts(
         )
         if current_mode not in EXECUTION_MODES:
             raise ValueError("invalid execution mode")
+        current_isolation = receipt.get("isolation_strategy", _MISSING)
+        isolation_was_present = current_isolation is not _MISSING
+        if current_isolation is _MISSING:
+            current_isolation = (
+                isolation_strategy
+                if isolation_strategy is not None else isolation_default
+            )
+        if isolation_was_present or current_isolation is not None:
+            current_isolation = required_text(
+                current_isolation, "isolation strategy",
+            )
+            if current_isolation not in ISOLATION_STRATEGIES:
+                raise ValueError("invalid isolation strategy")
         if position == 0:
             run_identity, workflow_class, execution_mode = run_id, current_class, current_mode
             workflow_class_defaulted = current_defaulted
-        elif (run_id, current_class, current_mode, current_defaulted) != (
+            isolation_strategy = current_isolation
+        elif (run_id, current_class, current_mode, current_defaulted, current_isolation) != (
             run_identity, workflow_class, execution_mode, workflow_class_defaulted,
+            isolation_strategy,
         ):
             raise ValueError("receipt context discontinuity")
         stage = required_text(receipt.get("stage"), "stage")
@@ -423,6 +448,10 @@ def translate_receipts(
         normalized_receipt["workflow_class"] = current_class
         normalized_receipt["workflow_class_defaulted"] = current_defaulted
         normalized_receipt["execution_mode"] = current_mode
+        if current_isolation is None:
+            normalized_receipt.pop("isolation_strategy", None)
+        else:
+            normalized_receipt["isolation_strategy"] = current_isolation
         events.append(WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,
             _safe_receipt_payload(normalized_receipt, reference),

@@ -14,10 +14,10 @@ from workflow_kernel.model import invalid_policy
 from workflow_kernel.resources import (
     VALID_CLEANUP_POLICIES, VALID_LIFECYCLES,
     CleanupAction, CleanupDisposition, CleanupPlan, CleanupReceipt, CleanupScope,
-    CommandResult, CreationReceipt, GuardedCleanupAdapter, ResourceDisposition,
+    CommandResult, CreationReceipt, ResourceDisposition,
     ResourceKind, ResourceRecord,
     ResourceRegistrationIntent, ResourceRegistry, _inspect_argv,
-    _is_exact_not_found, _seal_guarded_cleanup_adapter, build_cleanup_action,
+    _is_exact_not_found, build_cleanup_action,
     cleanup_proof_digest, cleanup_result_id, disposition_for,
     reseal_cleanup_action,
 )
@@ -294,8 +294,7 @@ class DockerCreationPlan:
         object.__setattr__(self, "environment", environment)
 
 
-@_seal_guarded_cleanup_adapter
-class DockerAdapter(GuardedCleanupAdapter):
+class DockerBackend:
     def __init__(
         self, runner: CommandRunner, *, now: Optional[Callable[[], datetime]] = None,
         repository_scope_id: str,
@@ -326,6 +325,12 @@ class DockerAdapter(GuardedCleanupAdapter):
         self.incomplete_node_max_age = incomplete_node_max_age
         self.creation_time_skew = creation_time_skew
         self.stop_timeout_seconds = stop_timeout_seconds
+        object.__setattr__(self, "_sealed", True)
+
+    def __setattr__(self, name, value):
+        if getattr(self, "_sealed", False):
+            raise AttributeError("DockerBackend is immutable")
+        object.__setattr__(self, name, value)
 
     def labels_for(self, run_id: str, node_id: str, lifecycle: str, cleanup_policy: str) -> dict[str, str]:
         if not all(type(value) is str and value for value in (run_id, node_id)):
@@ -652,7 +657,9 @@ class DockerAdapter(GuardedCleanupAdapter):
             if (
                 incomplete_node_proof.run_id != scope.run_id
                 or not incomplete_node_proof.readable
-                or not self._incomplete_node_proof_is_fresh(incomplete_node_proof)
+                or not __class__._incomplete_node_proof_is_fresh(
+                    self, incomplete_node_proof,
+                )
             ):
                 raise invalid_policy("invalid_incomplete_node_proof")
             statuses = dict(incomplete_node_proof.node_statuses)
@@ -957,7 +964,9 @@ class DockerAdapter(GuardedCleanupAdapter):
             if (
                 not incomplete_node_proof.readable
                 or incomplete_node_proof.run_id != action.run_id
-                or not self._incomplete_node_proof_is_fresh(incomplete_node_proof)
+                or not __class__._incomplete_node_proof_is_fresh(
+                    self, incomplete_node_proof,
+                )
                 or (record.kind, record.resource_id)
                 != (resource.kind, resource.resource_id)
                 or (record.run_id, record.node_id, record.lifecycle)
@@ -1220,7 +1229,9 @@ class DockerAdapter(GuardedCleanupAdapter):
         self, plan: CleanupPlan, results: Tuple[CommandResult, ...],
         before: DockerInventory, after: DockerInventory,
     ) -> str:
-        receipt, observed = self._reconcile_results(plan, results, before, after)
+        receipt, observed = __class__._reconcile_results(
+            self, plan, results, before, after,
+        )
         return cleanup_proof_digest({
             "plan": plan.to_dict(),
             "results": [
@@ -1545,3 +1556,7 @@ def _resource_from_inspect(kind: ResourceKind, resource_id: str, value: Mapping[
         name=name,
         use_known=kind is not ResourceKind.VOLUME,
     )
+
+
+# Public exact authority boundary; DockerBackend remains implementation detail.
+from workflow_kernel.docker_boundary import DockerAdapter  # noqa: E402

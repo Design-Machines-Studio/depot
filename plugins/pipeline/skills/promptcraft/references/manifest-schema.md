@@ -125,13 +125,23 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 | `description` | string | One-line human-readable description |
 | `workflowClass` | enum | `chore`, `bug`, `feature`, `hotfix`, `security`, `investigation`, or `migration`. Promptcraft MUST copy the single approved value from the plan into every new manifest; missing/ambiguous plan data blocks and returns to the user gate. A legacy manifest with no field translates as `feature` and records `workflow_class_defaulted=true`; consumers MUST NOT infer a class from prompt text, paths, or chunk kinds. Pass the validated value unchanged into RunSpec, events, receipts, and metrics. Existing security routing and approval overrides remain authoritative. |
 | `executionMode` | enum | Optional. Closed set: `full_cli`, `codex_native`, `manual_walkthrough`, `generic`, or `generic_host`. This is the single execution-mode vocabulary shared by the execution-orchestrator's progress ledger, chunk receipts, receipt.md, and the workflow-kernel adapters -- `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter dispatch), `manual_walkthrough` (user is driving some steps), `generic` (neutral host default), `generic_host` (explicitly host-normalized observation). A manifest with no field translates as `generic`. Consumers MUST reject any other value; browser availability is a verification-evidence status, never an execution mode, and worktree isolation is carried by the separate `isolationStrategy` field, never by this one. |
-| `isolationStrategy` | enum | Optional receipt/ledger field, separate from `executionMode`. Closed set: `per-chunk-worktree` (default) or `sequential-on-branch` (orchestrator Step 1c detected a container-mounted test harness that verifies against the repo root). Recorded in the progress ledger, chunk receipts, receipt.md, and the Summary Report; the workflow-kernel adapters pass it through as the canonical `isolation_strategy` receipt field. It never widens the `executionMode` enum -- a receipt may carry both fields. |
 | `baseBranch` | string | Branch to create feature branch from (usually "main") |
 | `featureBranch` | string | Name for the feature branch |
 | `generatedAt` | string | ISO 8601 timestamp of manifest generation |
 | `overlapRisk` | enum | "low" (0-1 overlapping files), "medium" (2-4), "high" (5+) |
 | `noMergeOnCompletion` | boolean | Optional. Default `false`. When `true`, the execution-orchestrator runs every chunk and the final review, but does NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. Use when you want pipeline automation without the final merge (e.g. review-first workflows, fix-pass runs that should keep the branch open for iteration). |
 | `campaignSlug` | string or null | Optional. Campaign identifier for cross-session state tracking. When present, the orchestrator writes `.campaign/state.json` after the run. When null or absent, campaign state is skipped. |
+
+### Runtime receipt context (not manifest fields)
+
+`isolationStrategy` is detected by the execution orchestrator after manifest
+validation, so it is never accepted as planning authority in the top-level
+manifest. It is a closed receipt/ledger field separate from `executionMode`:
+`per-chunk-worktree` (default) or `sequential-on-branch` (Step 1c detected a
+container-mounted test harness rooted at the main checkout). Record it in the
+progress ledger, every receipt, `receipt.md`, and the Summary Report. The
+workflow-kernel normalizes it to `isolation_strategy`, rejects unknown values
+or run-wide discontinuity, and includes it in shadow parity and metrics.
 
 ### Chunk
 

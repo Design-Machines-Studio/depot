@@ -142,18 +142,74 @@ class PipelineAdapterTests(unittest.TestCase):
         # Finding 083: sequential-on-branch is an isolation strategy carried
         # in its own receipt field; executionMode stays in the closed host set.
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
-        receipts[2]["isolationStrategy"] = "sequential-on-branch"
-        receipts[3]["isolation_strategy"] = "per-chunk-worktree"
+        for receipt in receipts:
+            receipt["isolationStrategy"] = "sequential-on-branch"
         events = translate_pipeline_receipts(receipts)
         self.assertEqual(events[2].payload["isolation_strategy"], "sequential-on-branch")
         self.assertEqual(events[2].payload["execution_mode"], "full_cli")
-        self.assertEqual(events[3].payload["isolation_strategy"], "per-chunk-worktree")
+        self.assertEqual(events[3].payload["isolation_strategy"], "sequential-on-branch")
         self.assertNotIn("isolationStrategy", events[2].payload)
         widened = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         for receipt in widened:
             receipt["execution_mode"] = "sequential-on-branch"
         with self.assertRaises(ValueError):
             translate_pipeline_receipts(widened)
+
+    def test_receipts_reject_invalid_or_discontinuous_isolation_strategy(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        invalid = copy.deepcopy(receipts)
+        invalid[2]["isolationStrategy"] = "shared-main"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(invalid)
+        wrong_type = copy.deepcopy(receipts)
+        wrong_type[2]["isolationStrategy"] = {"mode": "sequential-on-branch"}
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(wrong_type)
+        explicit_null = copy.deepcopy(receipts)
+        for receipt in explicit_null:
+            receipt["isolationStrategy"] = None
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(explicit_null)
+        discontinuous = copy.deepcopy(receipts)
+        for receipt in discontinuous:
+            receipt["isolationStrategy"] = "sequential-on-branch"
+        discontinuous[-1]["isolationStrategy"] = "per-chunk-worktree"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(discontinuous)
+
+    def test_review_receipts_do_not_invent_pipeline_isolation(self):
+        from workflow_kernel.dm_review_adapter import translate_review_receipts
+
+        receipts = json.loads((FIXTURES / "dm-review.json").read_text())
+        events = translate_review_receipts(receipts)
+        self.assertTrue(events)
+        self.assertTrue(all(
+            "isolation_strategy" not in event.payload for event in events
+        ))
+        for receipt in receipts:
+            receipt["isolationStrategy"] = None
+        with self.assertRaises(ValueError):
+            translate_review_receipts(receipts)
+
+    def test_documented_camelcase_execution_context_is_normalized(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        for receipt in receipts:
+            receipt["executionMode"] = receipt.pop("execution_mode")
+            receipt["workflowClass"] = receipt.pop("workflow_class")
+            receipt["workflowClassDefaulted"] = False
+            receipt["isolationStrategy"] = "per-chunk-worktree"
+        events = translate_pipeline_receipts(receipts)
+        self.assertTrue(all(event.payload["execution_mode"] == "full_cli" for event in events))
+        self.assertTrue(all(event.payload["workflow_class"] == "feature" for event in events))
+        self.assertTrue(all(not event.payload["workflow_class_defaulted"] for event in events))
+        self.assertTrue(all(
+            event.payload["isolation_strategy"] == "per-chunk-worktree"
+            for event in events
+        ))
+        conflicting = copy.deepcopy(receipts)
+        conflicting[0]["execution_mode"] = "codex_native"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(conflicting)
 
     def test_model_used_alias_normalizes_to_canonical_model_field(self):
         # Finding 087: documented modelUsed descent evidence feeds the

@@ -273,17 +273,23 @@ def check_secrets(context):
 
 def check_hosts(context):
     from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
-    from workflow_kernel.shadow import ReceiptSet, ShadowComparator
+    from workflow_kernel.shadow import CANONICAL_HOSTS, ReceiptSet, ShadowComparator
     sets = {}
-    for host in ("claude", "codex", "generic"):
-        document = json.loads((RECEIPTS / f"pipeline-{host}.json").read_text(encoding="utf-8"))
+    fixture_names = {
+        "claude-code": "pipeline-claude.json",
+        "codex": "pipeline-codex.json",
+        "generic": "pipeline-generic.json",
+    }
+    for host, filename in fixture_names.items():
+        document = json.loads((RECEIPTS / filename).read_text(encoding="utf-8"))
         sets[host] = ReceiptSet.from_events(translate_pipeline_receipts(document))
     results = {}
     for host in ("codex", "generic"):
-        report = ShadowComparator().compare_receipt_sets(sets[host], sets["claude"])
+        report = ShadowComparator().compare_receipt_sets(sets[host], sets["claude-code"])
         require(report.semantic_match and not report.safe_to_promote, f"{host} compatibility mismatch")
         results[host] = report.reason
-    context["host_compatibility"] = {"claude": "reference", **results}
+    context["host_compatibility"] = {"claude-code": "reference", **results}
+    require(set(context["host_compatibility"]) == CANONICAL_HOSTS, "host compatibility IDs drifted")
 
 
 def derive_promotion_evidence(completed_checks):

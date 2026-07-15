@@ -17,6 +17,10 @@ from pathlib import Path
 from ._files import _OwnedResourceScope, bind_durable_path
 from .events import EventStore
 from .repository_scope import repository_scope as _repository_scope
+from .runtime_resolution import (
+    KERNEL_VERSION_FLOOR, compatible_kernel_version,
+    resolve_workflow_kernel_runtime,
+)
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
     RunMode, UnsafePayloadError, WorkflowEvent, serialize_kernel_error,
@@ -734,85 +738,6 @@ def command_metrics(args):
     report = MetricsAggregator().aggregate(events)
     _write_json(args.output, report.to_dict())
     return 0
-
-
-# Declared dependency floor (pipeline/dm-review pluginDependencies:
-# "workflow-kernel": ">=0.1.0"). Compatibility is same-major at or above the
-# floor; this one rule serves both dependency validation and runtime
-# discovery, and orders cache candidates by parsed semver, never mtime.
-KERNEL_VERSION_FLOOR = (0, 1, 0)
-_KERNEL_SEMVER = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
-
-
-def compatible_kernel_version(text):
-    """Return the parsed semver tuple when compatible, otherwise None."""
-    if type(text) is not str:
-        return None
-    match = _KERNEL_SEMVER.fullmatch(text)
-    if match is None:
-        return None
-    version = tuple(int(part) for part in match.groups())
-    if version[0] != KERNEL_VERSION_FLOOR[0] or version < KERNEL_VERSION_FLOOR:
-        return None
-    return version
-
-
-def resolve_workflow_kernel_runtime(canonical_plugin_root, *, home=None):
-    """Resolve only the canonical Depot sibling, then named versioned caches.
-
-    Validator-side mirror of the runtime-resolution.md trust boundaries. The
-    normative production entry point is workflow-kernel-launcher.sh, which
-    enforces the same checks (realpath containment, manifest name/version,
-    semver compatibility) before executing any candidate; this function is
-    used by tools/validate-workflow-kernel.py and never launches the runtime.
-    """
-    source = Path(canonical_plugin_root).resolve(strict=True)
-    # Any plugins/<name> sibling may consume the kernel: runtime-resolution.md
-    # promises the contract to every future orchestrator, so the kernel never
-    # hardcodes plugin-layer knowledge. The security property comes from the
-    # realpath boundary checks below, not from a consumer allowlist.
-    if not source.is_dir() or source.parent.name != "plugins":
-        raise ValueError("invalid canonical plugin root")
-    depot = source.parent.parent.resolve(strict=True)
-    lexical_depot = Path(os.path.abspath(str(canonical_plugin_root))).parent.parent
-    home = Path.home() if home is None else Path(home)
-    roots = [(lexical_depot / "plugins" / "workflow-kernel", depot, None)]
-    for cache_name in (".claude", ".codex"):
-        cache = home / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel"
-        if cache.is_dir():
-            candidates = []
-            for candidate in cache.iterdir():
-                version = compatible_kernel_version(candidate.name)
-                if version is not None:
-                    candidates.append((version, candidate))
-            roots.extend(
-                (candidate, cache.resolve(strict=True), version)
-                for version, candidate in sorted(candidates, reverse=True)
-            )
-    for candidate, boundary, path_version in roots:
-        try:
-            resolved = candidate.resolve(strict=True)
-            if not resolved.is_relative_to(boundary):
-                continue
-            manifest = resolved / ".claude-plugin" / "plugin.json"
-            if not manifest.is_file():
-                manifest = resolved / ".codex-plugin" / "plugin.json"
-            document = _load_json(manifest)
-            version = document.get("version") if type(document) is dict else None
-            declared = compatible_kernel_version(version)
-            if document.get("name") != "workflow-kernel" or declared is None:
-                continue
-            # A cache candidate's semver path segment must match the
-            # runtime's declared version; a mismatch is a corrupt install.
-            if path_version is not None and declared != path_version:
-                continue
-            references = resolved / "skills" / "workflow-kernel" / "references"
-            package = references / "workflow_kernel"
-            if package.is_dir() and (package / "__main__.py").is_file() and package.resolve(strict=True).is_relative_to(resolved):
-                return references.resolve(strict=True)
-        except (OSError, ValueError, InvalidSchemaError):
-            continue
-    raise FileNotFoundError("compatible workflow-kernel runtime unavailable")
 
 
 # Fixed PATH for the one runtime path that shells out; the caller's PATH

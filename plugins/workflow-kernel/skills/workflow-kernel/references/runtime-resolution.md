@@ -16,35 +16,35 @@ interpreter verification (Python 3.12+ on a fixed `PATH`), module-path setup,
 and then execs `python3 -m workflow_kernel "$@"`. Inline Python source is
 forbidden; use only the stable CLI subcommands.
 
-Resolve one launcher copy per run and reuse it:
+Resolve one launcher copy per run from the exact trusted workflow-kernel plugin
+root supplied by the host's dependency loader, then reuse it. Never glob cache
+directories for an executable launcher: executing a candidate is already a
+trust decision.
 
 ```sh
-WORKFLOW_KERNEL=""
-for CANDIDATE in \
-  "<depot-checkout>/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh" \
-  "$HOME"/.claude/plugins/cache/depot/workflow-kernel/*/skills/workflow-kernel/references/workflow-kernel-launcher.sh \
-  "$HOME"/.codex/plugins/cache/depot/workflow-kernel/*/skills/workflow-kernel/references/workflow-kernel-launcher.sh; do
-  if [ -x "$CANDIDATE" ]; then WORKFLOW_KERNEL="$CANDIDATE"; break; fi
-done
+WORKFLOW_KERNEL="<trusted workflow-kernel plugin root>/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
+[ -x "$WORKFLOW_KERNEL" ] || exit 4
 ```
 
-Use the depot-checkout candidate only when the consuming plugin itself
-executes from a depot repository checkout; otherwise omit it. Any launcher
-copy is sufficient: the launcher itself re-resolves the newest compatible
-runtime (its own repo checkout first, then semver-sorted -- never
-mtime-sorted -- versioned cache directories under `~/.claude` then
-`~/.codex`), so a stale launcher copy still runs the newest installed kernel.
+The host dependency loader owns that trusted root. In a Depot checkout it is
+the repository's `plugins/workflow-kernel` root; in an installed environment
+it is the exact dependency instance selected and manifest-validated by the
+host. The launcher then uses the shared side-effect-free Python resolver to
+select the newest compatible runtime (repository sibling first, then
+semver-sorted caches under `~/.claude` and `~/.codex`). Installed launchers
+derive that account root from their own canonical cache path; repository
+launchers use the operating-system account database. Caller-supplied `HOME`
+never selects executable code.
 
-The launcher is the normative enforcement point for every trust boundary
-below, in validate-before-execute order: realpath containment, plugin
-manifest name/version checks (a cache candidate's declared version must equal
-its directory segment), and semver compatibility all pass BEFORE the
-importability probe executes any candidate code. It also unsets caller
-`PYTHONPATH`/`PYTHONHOME`/`PYTHONSTARTUP` up front and hop-bounds its own
-symlink-path resolution (a cycle exits `4`, never hangs). The Python
-`resolve_workflow_kernel_runtime` helper in `cli.py` is the validator-side
-mirror of the same rules (used by `tools/validate-workflow-kernel.py`); it
-never launches the runtime.
+The dependency-neutral `workflow_kernel/runtime_resolution.py` module is the
+single policy owner. The launcher runs its trusted copy with Python isolated
+mode, receives only fully canonical candidate paths, and probes them in order.
+It validates the manifest, references directory, package, every package
+symlink, bootstrap resolver, initializer, and entry point beneath the plugin
+root before any candidate code executes. The same resolver functions are
+imported by `cli.py` for validation. The launcher also
+starts Bash in privileged isolation, uses Python `-I`, unsets caller startup
+variables, and hop-bounds its own symlink path (a cycle exits `4`).
 
 ## Trust boundaries (fail closed)
 

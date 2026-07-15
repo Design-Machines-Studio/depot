@@ -20,6 +20,7 @@ class ReliabilityReport:
     hosts: Mapping[str, int]
     workflow_classes: Mapping[str, int]
     isolation_modes: Mapping[str, int]
+    isolation_strategies: Mapping[str, int]
     retry_reasons: Mapping[str, int]
     convergence_signatures: Tuple[str, ...]
     validation_first_pass_rate: float
@@ -54,6 +55,7 @@ class ReliabilityReport:
             "providers": dict(self.providers), "models": dict(self.models),
             "hosts": dict(self.hosts), "workflow_classes": dict(self.workflow_classes),
             "isolation_modes": dict(self.isolation_modes),
+            "isolation_strategies": dict(self.isolation_strategies),
             "retry_reasons": dict(self.retry_reasons),
             "convergence_signatures": list(self.convergence_signatures),
             "validation_first_pass_rate": self.validation_first_pass_rate,
@@ -98,6 +100,7 @@ class MetricsAggregator:
             raise ValueError("non-contiguous metric events")
         dimensions = {name: Counter() for name in (
             "provider", "model", "host", "workflow_class", "isolation_mode",
+            "isolation_strategy",
         )}
         attempts = Counter()
         retry_reasons = Counter()
@@ -204,6 +207,7 @@ class MetricsAggregator:
             len(values), durations, dict(attempts), dict(dimensions["provider"]),
             dict(dimensions["model"]), dict(dimensions["host"]),
             dict(dimensions["workflow_class"]), dict(dimensions["isolation_mode"]),
+            dict(dimensions["isolation_strategy"]),
             dict(retry_reasons), tuple(convergence),
             validation_first / validation_count if validation_count else 0.0,
             dict(findings), len(findings), totals["persona_expected"],

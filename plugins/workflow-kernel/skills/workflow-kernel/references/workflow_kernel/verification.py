@@ -6,31 +6,19 @@ import json
 import re
 from dataclasses import dataclass, fields, replace
 from typing import Iterable, Tuple
-from urllib.parse import unquote, urlsplit
-
 from .model import _register_origin, _validate_capture, invalid_policy
 from .redaction import normalize_evidence_reference
+from .browser_target import (
+    VIEWPORT_DIMENSION_PATTERN, VIEWPORT_PATTERN, _validate_route,
+    digest_target_origin, digest_target_route, validate_viewport,
+)
 
 _ID = re.compile(r"[a-z0-9][a-z0-9._-]*\Z")
-VIEWPORT_DIMENSION_PATTERN = (
-    r"(?:[1-9][0-9]{1,3}|1[0-5][0-9]{3}|16[0-2][0-9]{2}|"
-    r"163[0-7][0-9]|1638[0-4])"
-)
-VIEWPORT_PATTERN = VIEWPORT_DIMENSION_PATTERN + "x" + VIEWPORT_DIMENSION_PATTERN
-_VIEWPORT = re.compile("(" + VIEWPORT_DIMENSION_PATTERN + ")x(" + VIEWPORT_DIMENSION_PATTERN + r")\Z")
 _ENGINES = frozenset({"chromium", "firefox", "webkit"})
 _OUTCOMES = frozenset({"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"})
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
 _CASE_ID = re.compile(r"case-sha256:[0-9a-f]{64}\Z")
 _ORIGIN_ID = re.compile(r"origin-sha256:[0-9a-f]{64}\Z")
-_CREDENTIAL_VALUE = re.compile(
-    r"(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)", re.IGNORECASE | re.ASCII,
-)
-_PERCENT_ESCAPE = re.compile(r"%(?![0-9A-Fa-f]{2})")
-_PERCENT_BYTE = re.compile(r"%([0-9A-Fa-f]{2})")
-_UNRESERVED_BYTES = frozenset(
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-)
 _COVERAGE_DIAGNOSTICS = frozenset({
     "coverage_matrix_mismatch", "unresolved_route_parameters",
 })
@@ -47,11 +35,6 @@ def _field_values(value, expected_type):
     return tuple(getattr(value, field.name) for field in fields(expected_type))
 
 
-def _unsafe_route_character(character):
-    codepoint = ord(character)
-    return codepoint < 32 or codepoint == 127 or 0xD800 <= codepoint <= 0xDFFF
-
-
 def _validate_id(value, *, reject_secret_shape=False):
     secret_parts = {"token", "key", "secret", "password", "authorization", "cookie", "dsn"}
     if (type(value) is not str or len(value) > 128 or _ID.fullmatch(value) is None
@@ -59,74 +42,6 @@ def _validate_id(value, *, reject_secret_shape=False):
             and any(part in secret_parts for part in re.split(r"[._-]", value.casefold()))):
         _invalid()
     return value
-
-
-def validate_viewport(value):
-    if type(value) is not str:
-        _invalid()
-    match = _VIEWPORT.fullmatch(value)
-    if match is None or any(int(item) > 16_384 for item in match.groups()):
-        _invalid()
-    return value
-
-
-def _validate_route(route):
-    if (type(route) is not str or len(route) > 2_048
-            or not route.startswith("/") or route.startswith("//")
-            or "?" in route or "#" in route or "\\" in route
-            or any(_unsafe_route_character(character) for character in route)
-            or _PERCENT_ESCAPE.search(route)):
-        _invalid("invalid_verification_target")
-    for raw_part in route.split("/"):
-        for match in _PERCENT_BYTE.finditer(raw_part):
-            byte = int(match.group(1), 16)
-            if (byte in _UNRESERVED_BYTES or byte < 32 or byte == 127
-                    or byte in {ord("/"), ord("\\"), ord("%")}):
-                _invalid("invalid_verification_target")
-        try:
-            part = unquote(raw_part, errors="strict")
-        except UnicodeError:
-            _invalid("invalid_verification_target")
-        if (part in {".", ".."} or "/" in part or "\\" in part
-                or "?" in part or "#" in part
-                or any(_unsafe_route_character(character) for character in part)
-                or _CREDENTIAL_VALUE.match(part)):
-            _invalid("invalid_verification_target")
-    return route
-
-
-def digest_target_route(route):
-    _validate_route(route)
-    return "sha256:" + hashlib.sha256(route.encode("utf-8")).hexdigest()
-
-
-def digest_target_origin(origin):
-    if type(origin) is not str or not origin or len(origin) > 2_048:
-        _invalid("invalid_verification_target")
-    if any(_unsafe_route_character(character) for character in origin):
-        _invalid("invalid_verification_target")
-    try:
-        parsed = urlsplit(origin)
-        if (parsed.scheme not in {"http", "https"} or not parsed.netloc
-                or parsed.hostname is None or parsed.username is not None
-                or parsed.password is not None or parsed.path not in {"", "/"}
-                or parsed.query or parsed.fragment):
-            _invalid("invalid_verification_target")
-        port = parsed.port
-    except (TypeError, ValueError):
-        _invalid("invalid_verification_target")
-    host = parsed.hostname.lower()
-    if ":" in host and not host.startswith("["):
-        host = "[" + host + "]"
-    default_port = 80 if parsed.scheme == "http" else 443
-    canonical = parsed.scheme + "://" + host
-    if port is not None and port != default_port:
-        canonical += ":" + str(port)
-    try:
-        encoded = canonical.encode("utf-8")
-    except UnicodeError:
-        _invalid("invalid_verification_target")
-    return "origin-sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
 @dataclass(frozen=True)

@@ -293,7 +293,9 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 
 ## Conventions
 
-- Almost all content is Markdown. No code to compile, lint, or test.
+- Almost all content is Markdown. The sanctioned exception is the stdlib-only
+  workflow-kernel Python runtime and top-level `tests/`; verify it with
+  `tools/validate-workflow-kernel.py` and the full composition validator.
 - Skills use `SKILL.md` as the canonical filename for the primary skill definition. The `name:` field in its YAML frontmatter must match the skill folder name exactly.
 - Reference files live in `references/` subdirectories and are named descriptively (e.g., `estimation.md`, `bc-cooperative-act.md`).
 - Reference files are typically Markdown. Executable scripts (`.sh`) are permitted when a skill needs runtime tooling. Established pattern (see `plugins/deepseek/skills/deepseek-delegate/references/deepseek-wrapper.sh`): shebang line, top-of-file comment block with `WHY THIS EXISTS` / `WHAT THIS FIXES` / `DEPENDENCIES` / `USAGE` sections, executable bit set (`chmod +x`), POSIX-portable bash 3.2+ for macOS compatibility, no `set -e` if the script needs to detect non-zero exits, and a fixed `PATH` reset to prevent caller-controlled hijack of dependencies.

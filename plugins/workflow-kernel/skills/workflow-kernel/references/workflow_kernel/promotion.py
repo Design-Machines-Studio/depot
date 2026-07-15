@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable, Tuple
 
+from .hosts import CANONICAL_HOST_IDS
+
 
 class PromotionState(str, Enum):
     SHADOW = "shadow"
@@ -78,7 +80,7 @@ NATIVE_CRITERIA = ENFORCE_CRITERIA + (
 # Canonical host IDs (shadow.CANONICAL_HOSTS drift-guarded by
 # tests/test_shadow_parity.py): real-run promotion evidence is keyed by the
 # canonical `claude-code` host ID, never the legacy `claude` spelling.
-SUPPORTED_PROMOTION_HOSTS = ("claude-code", "codex", "generic")
+SUPPORTED_PROMOTION_HOSTS = CANONICAL_HOST_IDS
 
 
 def _state(value: object) -> PromotionState:

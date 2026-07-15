@@ -65,12 +65,21 @@ class CliTests(unittest.TestCase):
             Path(workflow_kernel.__file__).resolve().parents[1]
             / "workflow-kernel-launcher.sh"
         )
-        launcher = Path(home) / "workflow-kernel-launcher.sh"
+        bootstrap = (
+            Path(home) / ".claude/plugins/cache/depot/workflow-kernel/0.0.0"
+            / "skills/workflow-kernel/references"
+        )
+        bootstrap.mkdir(parents=True)
+        launcher = bootstrap / "workflow-kernel-launcher.sh"
         launcher.write_text(source.read_text())
         launcher.chmod(0o755)
+        resolver_source = source.parent / "workflow_kernel/runtime_resolution.py"
+        resolver_target = bootstrap / "workflow_kernel/runtime_resolution.py"
+        resolver_target.parent.mkdir()
+        resolver_target.write_text(resolver_source.read_text())
         env = dict(os.environ, HOME=str(home), **environment)
         return subprocess.run(
-            ["bash", str(launcher), "--help"], cwd=cwd, text=True,
+            [str(launcher), "--help"], cwd=cwd, text=True,
             capture_output=True, env=env, check=False,
         )
 
@@ -648,6 +657,167 @@ class CliTests(unittest.TestCase):
             self.assertIn("clean-runtime", result.stdout)
             self.assertNotIn("poison-runtime", result.stdout)
             self.assertFalse(marker.exists(), "poisoned environment was executed")
+
+    def test_launcher_ignores_shell_and_python_user_site_startup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            marker = home / "startup-executed"
+            bash_env = home / "bash-env.sh"
+            bash_env.write_text("printf x > " + str(marker) + "\n")
+            user_site = home / "userbase/lib/python3.12/site-packages"
+            user_site.mkdir(parents=True)
+            (user_site / "sitecustomize.py").write_text(
+                "from pathlib import Path; Path(%r).write_text('x')\n" % str(marker)
+            )
+            self.install_cached_runtime(
+                directory, ".claude", "0.1.0", "print('isolated-runtime')\n",
+            )
+            result = self.run_cache_resolver(
+                directory, BASH_ENV=str(bash_env), PYTHONUSERBASE=str(home / "userbase"),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("isolated-runtime", result.stdout)
+            self.assertFalse(marker.exists(), "caller startup hook executed")
+
+    def test_launcher_rejects_symlinked_bootstrap_resolver(self):
+        import workflow_kernel
+
+        source = (
+            Path(workflow_kernel.__file__).resolve().parents[1]
+            / "workflow-kernel-launcher.sh"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "plugins/workflow-kernel"
+            refs = root / "skills/workflow-kernel/references"
+            package = refs / "workflow_kernel"
+            package.mkdir(parents=True)
+            (root / ".claude-plugin").mkdir()
+            (root / ".claude-plugin/plugin.json").write_text(json.dumps({
+                "name": "workflow-kernel", "version": "0.1.0",
+            }))
+            launcher = refs / "workflow-kernel-launcher.sh"
+            launcher.write_text(source.read_text())
+            launcher.chmod(0o755)
+            marker = Path(directory) / "escaped-resolver-executed"
+            escaped = Path(directory) / "escaped-resolver.py"
+            escaped.write_text(
+                "from pathlib import Path; Path(%r).write_text('x')\n" % str(marker)
+            )
+            (package / "runtime_resolution.py").symlink_to(escaped)
+            result = subprocess.run(
+                [str(launcher), "--help"], text=True, capture_output=True,
+                env=dict(os.environ, HOME=directory), check=False,
+            )
+            self.assertEqual(result.returncode, 4, result.stderr)
+            self.assertFalse(marker.exists(), "escaped bootstrap resolver executed")
+
+    def test_launcher_rejects_symlinked_package_initializer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            marker = home / "escaped-initializer-executed"
+            refs = self.install_cached_runtime(
+                directory, ".claude", "0.1.0", "print('runtime-main')\n",
+            )
+            initializer = home / "escaped-init.py"
+            initializer.write_text(
+                "from pathlib import Path; Path(%r).write_text('x')\n" % str(marker)
+            )
+            (refs / "workflow_kernel/__init__.py").unlink()
+            (refs / "workflow_kernel/__init__.py").symlink_to(initializer)
+            result = self.run_cache_resolver(directory)
+            self.assertNotIn("runtime-main", result.stdout)
+            self.assertFalse(marker.exists(), "escaped package initializer executed")
+
+    def test_launcher_ignores_caller_controlled_home_for_cache_discovery(self):
+        import workflow_kernel
+
+        source = (
+            Path(workflow_kernel.__file__).resolve().parents[1]
+            / "workflow-kernel-launcher.sh"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            trusted = Path(directory) / "account-home/.codex/plugins/cache/depot/workflow-kernel/0.1.0"
+            refs = trusted / "skills/workflow-kernel/references"
+            package = refs / "workflow_kernel"
+            package.mkdir(parents=True)
+            (trusted / ".claude-plugin").mkdir()
+            (trusted / ".claude-plugin/plugin.json").write_text(json.dumps({
+                "name": "workflow-kernel", "version": "0.1.0",
+            }))
+            launcher = refs / "workflow-kernel-launcher.sh"
+            launcher.write_text(source.read_text())
+            launcher.chmod(0o755)
+            resolver = source.parent / "workflow_kernel/runtime_resolution.py"
+            (package / "runtime_resolution.py").write_text(resolver.read_text())
+
+            attacker_home = Path(directory) / "attacker-home"
+            marker = Path(directory) / "attacker-runtime-executed"
+            self.install_cached_runtime(
+                attacker_home, ".claude", "0.9.9",
+                "from pathlib import Path; Path(%r).write_text('x')\n" % str(marker),
+            )
+            result = subprocess.run(
+                [str(launcher), "--help"], text=True, capture_output=True,
+                env=dict(os.environ, HOME=str(attacker_home)), check=False,
+            )
+            self.assertIn(result.returncode, {0, 4}, result.stderr)
+            self.assertFalse(marker.exists(), "caller HOME selected executable code")
+
+    def test_documented_cache_resolver_rejects_nested_runtime_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            marker = home / "nested-escape-executed"
+            refs = self.install_cached_runtime(directory, ".claude", "0.9.9")
+            outside = home / "outside-package"
+            outside.mkdir()
+            (outside / "__init__.py").write_text("")
+            (outside / "__main__.py").write_text(
+                "from pathlib import Path; Path(%r).write_text('x')\n" % str(marker)
+            )
+            (refs / "workflow_kernel").symlink_to(outside, target_is_directory=True)
+            self.install_cached_runtime(
+                directory, ".codex", "0.1.0", "print('contained-runtime')\n",
+            )
+            result = self.run_cache_resolver(directory)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("contained-runtime", result.stdout)
+            self.assertFalse(marker.exists(), "nested symlink candidate executed")
+
+    def test_installed_cache_launcher_cannot_fallback_past_version_mismatch(self):
+        import workflow_kernel
+        source = (
+            Path(workflow_kernel.__file__).resolve().parents[1]
+            / "workflow-kernel-launcher.sh"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            refs = self.install_cached_runtime(
+                directory, ".claude", "0.9.9", "print('mismatched-runtime')\n",
+                manifest_version="0.1.0",
+            )
+            launcher = refs / "workflow-kernel-launcher.sh"
+            launcher.write_text(source.read_text())
+            launcher.chmod(0o755)
+            resolver_source = source.parent / "workflow_kernel/runtime_resolution.py"
+            (refs / "workflow_kernel/runtime_resolution.py").write_text(
+                resolver_source.read_text()
+            )
+            result = subprocess.run(
+                [str(launcher), "--help"], text=True, capture_output=True,
+                env=dict(os.environ, HOME=directory), check=False,
+            )
+            self.assertEqual(result.returncode, 4, result.stderr)
+            self.assertNotIn("mismatched-runtime", result.stdout)
+
+    def test_runtime_resolver_policy_has_one_python_owner(self):
+        cli_source = Path(cli.__file__).read_text(encoding="utf-8")
+        self.assertIn("from .runtime_resolution import", cli_source)
+        self.assertNotIn("def compatible_kernel_version", cli_source)
+        self.assertNotIn("def resolve_workflow_kernel_runtime", cli_source)
+
+    def test_runtime_resolution_bootstrap_never_globs_unvalidated_launchers(self):
+        contract = (KERNEL_REFERENCES / "runtime-resolution.md").read_text()
+        self.assertNotIn("plugins/cache/depot/workflow-kernel/*/", contract)
+        self.assertIn("trusted workflow-kernel plugin root", contract)
 
     def test_launcher_bounds_symlink_cycle_resolution(self):
         # Finding 082: a symlink cycle at the launcher's own path exits 4

@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Union
 
 from workflow_kernel._files import LockHandle, PinnedDirectory, bind_durable_path
+from workflow_kernel.docker_boundary import DockerAdapter
 from workflow_kernel.model import invalid_policy
 from workflow_kernel.redaction import (
     contains_secret_shape, digest_error_detail_string, is_secret_key,
@@ -83,36 +84,6 @@ class CommandResult:
         if type(self.exit_code) is not int or type(self.stdout) is not str or type(self.stderr) is not str:
             raise invalid_policy("invalid_command_result")
         object.__setattr__(self, "argv", argv)
-
-
-class GuardedCleanupAdapter:
-    """Core-owned sealed marker for adapters entrusted with guarded cleanup.
-
-    Core validation must never import a concrete adapter class (dependency
-    direction: adapters import core, never the reverse). An adapter earns
-    guarded-cleanup authority by subclassing this marker AND being sealed via
-    ``_seal_guarded_cleanup_adapter`` at class-definition time. The runtime
-    check stays exact-type -- a subclass of a sealed adapter does not inherit
-    authority -- preserving the strictness of the previous
-    ``type(adapter) is DockerAdapter`` guard without the concrete import.
-    """
-
-    __slots__ = ()
-
-
-_SEALED_GUARDED_CLEANUP_ADAPTERS: set = set()
-
-
-def _seal_guarded_cleanup_adapter(adapter_type: type) -> type:
-    if not (isinstance(adapter_type, type)
-            and issubclass(adapter_type, GuardedCleanupAdapter)):
-        raise invalid_policy("invalid_guarded_cleanup_adapter_seal")
-    _SEALED_GUARDED_CLEANUP_ADAPTERS.add(adapter_type)
-    return adapter_type
-
-
-def _is_sealed_cleanup_adapter(adapter: object) -> bool:
-    return type(adapter) in _SEALED_GUARDED_CLEANUP_ADAPTERS
 
 
 def _inspect_argv(kind: "ResourceKind", resource_id: str) -> Tuple[str, ...]:
@@ -1193,9 +1164,24 @@ class ResourceRegistry:
         incomplete_node_proof: object = None, orphan_mode: bool = False,
         authority_prefix: object = None,
     ) -> GuardedCommandResult:
+        """Execute through the exact core-owned Docker authority boundary."""
+        return self._execute_guarded_action(
+            adapter, plan, step_index, resource, executor,
+            lease_proof, predecessor_result,
+            incomplete_node_proof=incomplete_node_proof,
+            orphan_mode=orphan_mode, authority_prefix=authority_prefix,
+        )
+
+    def _execute_guarded_action(
+        self, adapter: object, plan: CleanupPlan, step_index: int, resource: object,
+        executor: Callable[[Tuple[str, ...]], CommandResult],
+        lease_proof: object = None, predecessor_result: object = None, *,
+        incomplete_node_proof: object = None, orphan_mode: bool = False,
+        authority_prefix: object = None,
+    ) -> GuardedCommandResult:
         """Execute the exact command step sealed into one immutable plan."""
         if (
-            not _is_sealed_cleanup_adapter(adapter)
+            type(adapter) is not DockerAdapter
             or type(step_index) is not int or not callable(executor)
         ):
             raise invalid_policy("invalid_guarded_cleanup_execution")
@@ -1266,9 +1252,20 @@ class ResourceRegistry:
         executor: Callable[[Tuple[str, ...]], CommandResult],
         *, authority_prefix: object = None,
     ) -> GuardedTerminalObservation:
+        """Observe through the exact core-owned Docker authority boundary."""
+        return self._observe_guarded_absence(
+            adapter, plan, step_index, executor,
+            authority_prefix=authority_prefix,
+        )
+
+    def _observe_guarded_absence(
+        self, adapter: object, plan: CleanupPlan, step_index: int,
+        executor: Callable[[Tuple[str, ...]], CommandResult], *,
+        authority_prefix: object = None,
+    ) -> GuardedTerminalObservation:
         """Issue one exact-ID absence observation while its resource key is locked."""
         if (
-            not _is_sealed_cleanup_adapter(adapter)
+            type(adapter) is not DockerAdapter
             or type(step_index) is not int or not callable(executor)
         ):
             raise invalid_policy("invalid_guarded_terminal_observation")
@@ -1364,9 +1361,21 @@ class ResourceRegistry:
         before: object, after: object,
     ) -> CleanupReceipt:
         """Persist results only with fresh, generation-bound execution authority."""
-        if not guarded_results or type(guarded_results) is not tuple or any(
+        return self._record_guarded_results(
+            adapter, plan, guarded_results, before, after,
+        )
+
+    def _record_guarded_results(
+        self, adapter: object, plan: CleanupPlan,
+        guarded_results: Tuple[GuardedAuthority, ...],
+        before: object, after: object,
+    ) -> CleanupReceipt:
+        if (
+            type(adapter) is not DockerAdapter
+            or not guarded_results or type(guarded_results) is not tuple or any(
             type(value) not in {GuardedCommandResult, GuardedTerminalObservation}
             for value in guarded_results
+            )
         ):
             raise invalid_policy("invalid_guarded_cleanup_results")
         guarded_results = tuple(
@@ -1423,7 +1432,7 @@ class ResourceRegistry:
         before: object, after: object,
         authorities: Tuple[GuardedAuthority, ...],
     ) -> CleanupReceipt:
-        if not _is_sealed_cleanup_adapter(adapter) or type(plan) is not CleanupPlan:
+        if type(adapter) is not DockerAdapter or type(plan) is not CleanupPlan:
             raise invalid_policy("invalid_cleanup_result_adapter")
         plan, step_entries = _cleanup_step_entries(plan)
         if len({value.authority_id for value in authorities}) != len(authorities):

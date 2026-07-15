@@ -17,7 +17,7 @@
   "default_mode": "shadow",
   "evidence_origin": "fixture",
   "host_compatibility": {
-    "claude": "reference",
+    "claude-code": "reference",
     "codex": "explained_host_difference",
     "generic": "explained_host_difference"
   },

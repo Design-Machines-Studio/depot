@@ -49,6 +49,18 @@ class ReleaseValidatorTests(unittest.TestCase):
             "06-workflow-kernel-release-evidence.json",
         )
 
+    def test_generated_host_compatibility_uses_canonical_host_ids(self):
+        context = {}
+        VALIDATOR.check_hosts(context)
+        from workflow_kernel.shadow import CANONICAL_HOSTS
+        self.assertEqual(set(context["host_compatibility"]), CANONICAL_HOSTS)
+
+    def test_canonical_host_ids_have_one_dependency_neutral_owner(self):
+        shadow = (VALIDATOR.REFERENCES / "workflow_kernel" / "shadow.py").read_text()
+        promotion = (VALIDATOR.REFERENCES / "workflow_kernel" / "promotion.py").read_text()
+        self.assertNotIn('"claude-code", "codex", "generic"', shadow)
+        self.assertNotIn('"claude-code", "codex", "generic"', promotion)
+
     def test_docker_scan_catches_split_and_shell_built_broad_cleanup(self):
         cases = (
             'COMMAND = ("docker", "system", "prune")',

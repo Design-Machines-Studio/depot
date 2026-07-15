@@ -132,7 +132,9 @@ the domain-facing skill inventory used by the release plan.
 
 ## Conventions
 
-- Almost all content is Markdown. No code to compile, lint, or test.
+- Almost all content is Markdown. The sanctioned exception is the stdlib-only
+  workflow-kernel Python runtime and top-level `tests/`; verify it with
+  `tools/validate-workflow-kernel.py` and the full composition validator.
 - Skills use `SKILL.md` as the canonical filename. The `name:` field in YAML frontmatter must match the skill folder name.
 - Reference files live in `references/` subdirectories.
 - Agent files are categorized: `review/` for code review agents, `workflow/` for automation agents.

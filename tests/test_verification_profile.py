@@ -24,6 +24,16 @@ FIXTURES = Path(__file__).parent / "fixtures" / "ux"
 
 
 class VerificationProfileTests(unittest.TestCase):
+    def test_browser_target_validation_has_no_core_import_cycle(self):
+        import workflow_kernel.browser_evidence as browser_evidence
+        import workflow_kernel.verification as verification
+
+        browser_source = Path(browser_evidence.__file__).read_text(encoding="utf-8")
+        verification_source = Path(verification.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("from .verification import", browser_source)
+        self.assertIn("from .browser_target import", browser_source)
+        self.assertIn("from .browser_target import", verification_source)
+
     def test_origin_rejects_lone_surrogate_with_stable_policy_error(self):
         with self.assertRaises(InvalidSchemaError) as raised:
             digest_target_origin("https://\ud800.invalid")
