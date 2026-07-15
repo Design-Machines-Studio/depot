@@ -342,6 +342,30 @@ class ResourceRegistryTests(unittest.TestCase):
             "events": [consumed],
         }, schema))
 
+    def test_registry_schema_records_opaque_authority_issuance(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "resource-registry-schema.json").read_text()
+        )
+        issued = {
+            "event": "authority_issued",
+            "authority": {
+                "authority_id": "sha256:" + "1" * 64,
+                "authority_type": "command_result",
+                "kind": "container", "resource_id": "shared",
+                "run_id": "run-1", "node_id": "node-1",
+                "capability_digest": "sha256:" + "2" * 64,
+                "state_generation": "sha256:" + "3" * 64,
+                "result_id": "sha256:" + "4" * 64,
+                "issued_at": "2026-07-15T01:02:03Z",
+                "expires_at": "2026-07-15T01:03:03Z",
+            },
+        }
+        self.assertTrue(schema_matches(issued, schema))
+        self.assertFalse(schema_matches({
+            "event": "transaction", "transaction_id": "sha256:" + "5" * 64,
+            "events": [issued],
+        }, schema))
+
     def test_receipt_digests_overdeep_cyclic_evidence_without_losing_schema(self):
         root = []
         cursor = root

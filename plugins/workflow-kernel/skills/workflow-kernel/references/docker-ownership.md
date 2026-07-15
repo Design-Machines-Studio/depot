@@ -99,13 +99,16 @@ beginning at action zero; a dependent action is accepted only after its declared
 predecessor result appears earlier and succeeded.
 
 Final fresh revalidation and exact argv execution are never separate host
-steps. Registration, reassignment, and disposition for the same kind-and-ID
-acquire the same guard and fail closed until the executor returns a result;
-other resource keys remain concurrent. The guarded result carries a short-lived
-authority ID over the full action digest, owner, registry-state generation,
-result identity, and expiry. Result recording requires that the generation is
-unchanged and consumes the authority ID in the same journal transaction, so
-replay and late persistence fail closed. `DockerAdapter.record_results` remains
+steps. An actionless `MISSING` outcome instead runs its fresh exact-ID inspect
+inside the same kind-and-ID guard. Registration, reassignment, and disposition
+for that key fail closed until the command or observation result exists; other
+resource keys remain concurrent. Before returning either outcome, the registry
+durably appends an issuance record for a random opaque authority ID bound to
+outcome type, full action or evidence digest, owner, registry-state generation,
+result identity, and expiry. Result recording requires the exact issued payload
+and unchanged generation, then consumes the authority ID in the same journal
+transaction, so forged, replayed, and late persistence fail closed.
+`DockerAdapter.record_results` remains
 a pure receipt reconciliation helper; `ResourceRegistry.record_results` rejects
 persistence without authority, and only `record_guarded_results` may mutate
 terminal registry state. The persistent lock inode is advisory
@@ -140,8 +143,9 @@ cyclic, and otherwise unsafe values are redacted or hashed before durable
 persistence while safe resource identities remain available as evidence.
 `REMOVED` and `MISSING` cannot be written through the public disposition API or
 a detached receipt. They become durable only inside a registry-owned,
-single-use result transaction after the canonical plan, exact command results,
-and before/after inventories have been reconstructed. All observed orphan
+single-use result transaction after the canonical plan, registry-issued command
+or terminal-observation outcomes, and before/after inventories have been
+reconstructed. All observed orphan
 registrations and outcomes are written in the same framed journal event. A
 truncated final frame is ignored as interrupted; interior corruption fails
 closed, so a multi-resource result can never partially retire ownership. If an

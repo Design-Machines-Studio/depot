@@ -5,6 +5,7 @@
   "oneOf": [
     {"$ref": "#/$defs/registrationEvent"},
     {"$ref": "#/$defs/dispositionEvent"},
+    {"$ref": "#/$defs/authorityIssuedEvent"},
     {"$ref": "#/$defs/transactionEvent"}
   ],
   "$defs": {
@@ -47,6 +48,31 @@
       "properties": {
         "event": {"const": "authority_consumed"},
         "authority_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "authorityIssuedEvent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["event", "authority"],
+      "properties": {
+        "event": {"const": "authority_issued"},
+        "authority": {"$ref": "#/$defs/executionAuthority"}
+      }
+    },
+    "executionAuthority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authority_id", "authority_type", "kind", "resource_id", "run_id", "node_id", "capability_digest", "state_generation", "result_id", "issued_at", "expires_at"],
+      "properties": {
+        "authority_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "authority_type": {"enum": ["command_result", "terminal_observation"]},
+        "kind": {"$ref": "#/$defs/kind"},
+        "resource_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "node_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "capability_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "state_generation": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "result_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "issued_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
       }
     },
     "resource": {

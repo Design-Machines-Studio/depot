@@ -6,12 +6,13 @@ import hashlib
 import json
 import os
 import re
+import secrets
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterable, Mapping, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Callable, Iterable, Mapping, Optional, Sequence, Tuple, Union
 
 from workflow_kernel._files import LockHandle, PinnedDirectory, bind_durable_path
 from workflow_kernel.adapters.base import invalid_policy
@@ -115,13 +116,6 @@ class GuardedCommandResult:
             or not _valid_timestamp(self.issued_at)
             or not _valid_timestamp(self.expires_at)
             or self.expires_at <= self.issued_at
-            or self.authority_id != execution_authority_id(
-                result=self.result, kind=kind, resource_id=self.resource_id,
-                run_id=self.run_id, node_id=self.node_id,
-                action_digest=self.action_digest,
-                state_generation=self.state_generation,
-                issued_at=self.issued_at, expires_at=self.expires_at,
-            )
         ):
             raise invalid_policy("invalid_guarded_command_result")
         object.__setattr__(self, "kind", kind)
@@ -215,6 +209,34 @@ class ResourceDisposition:
         object.__setattr__(self, "disposition", state)
         object.__setattr__(self, "evidence", self.evidence)
         object.__setattr__(self, "command", command)
+
+
+@dataclass(frozen=True)
+class GuardedTerminalObservation:
+    """Fresh exact-ID terminal observation issued under its resource guard."""
+
+    disposition: ResourceDisposition
+    result: CommandResult
+    evidence_digest: str
+    state_generation: str
+    issued_at: datetime
+    expires_at: datetime
+    authority_id: str
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.disposition) is not ResourceDisposition
+            or self.disposition.disposition is not CleanupDisposition.MISSING
+            or self.disposition.action != "none"
+            or type(self.result) is not CommandResult
+            or not all(re.fullmatch(r"sha256:[0-9a-f]{64}", value or "") for value in (
+                self.evidence_digest, self.state_generation, self.authority_id,
+            ))
+            or not _valid_timestamp(self.issued_at)
+            or not _valid_timestamp(self.expires_at)
+            or self.expires_at <= self.issued_at
+        ):
+            raise invalid_policy("invalid_guarded_terminal_observation")
 
 
 @dataclass(frozen=True)
@@ -512,6 +534,83 @@ def execution_authority_id(
     })
 
 
+GuardedAuthority = Union[GuardedCommandResult, GuardedTerminalObservation]
+
+
+def terminal_observation_evidence_digest(
+    disposition: ResourceDisposition, result: CommandResult,
+) -> str:
+    if type(disposition) is not ResourceDisposition or type(result) is not CommandResult:
+        raise invalid_policy("invalid_terminal_observation_evidence")
+    return cleanup_proof_digest({
+        "disposition": _disposition_json(disposition),
+        "result_id": cleanup_result_id(result.argv, result.exit_code),
+    })
+
+
+def _authority_json(value: GuardedAuthority) -> dict[str, object]:
+    if type(value) is GuardedCommandResult:
+        authority_type = "command_result"
+        kind, resource_id = value.kind, value.resource_id
+        run_id, node_id = value.run_id, value.node_id
+        capability_digest = value.action_digest
+        result = value.result
+    elif type(value) is GuardedTerminalObservation:
+        authority_type = "terminal_observation"
+        disposition = value.disposition
+        kind, resource_id = disposition.kind, disposition.resource_id
+        run_id, node_id = disposition.run_id, disposition.node_id
+        capability_digest = value.evidence_digest
+        result = value.result
+    else:
+        raise invalid_policy("invalid_execution_authority")
+    return {
+        "authority_id": value.authority_id,
+        "authority_type": authority_type,
+        "kind": kind.value, "resource_id": resource_id,
+        "run_id": run_id, "node_id": node_id,
+        "capability_digest": capability_digest,
+        "state_generation": value.state_generation,
+        "result_id": cleanup_result_id(result.argv, result.exit_code),
+        "issued_at": _timestamp(value.issued_at),
+        "expires_at": _timestamp(value.expires_at),
+    }
+
+
+def _validated_authority_json(value: object) -> dict[str, object]:
+    required = {
+        "authority_id", "authority_type", "kind", "resource_id", "run_id",
+        "node_id", "capability_digest", "state_generation", "result_id",
+        "issued_at", "expires_at",
+    }
+    if type(value) is not dict or set(value) != required:
+        raise invalid_policy("invalid_execution_authority_issuance")
+    try:
+        ResourceKind(value["kind"])
+        issued_at = _parse_timestamp(value["issued_at"])
+        expires_at = _parse_timestamp(value["expires_at"])
+    except Exception:
+        raise invalid_policy("invalid_execution_authority_issuance") from None
+    if (
+        type(value["authority_type"]) is not str
+        or value["authority_type"] not in {"command_result", "terminal_observation"}
+        or not _valid_text(value["resource_id"], maximum=_MAX_RESOURCE_ID)
+        or not all(_valid_text(value[key], maximum=_MAX_IDENTIFIER) for key in (
+            "run_id", "node_id",
+        ))
+        or not all(
+            type(value[key]) is str
+            and re.fullmatch(r"sha256:[0-9a-f]{64}", value[key])
+            for key in (
+                "authority_id", "capability_digest", "state_generation", "result_id",
+            )
+        )
+        or expires_at <= issued_at
+    ):
+        raise invalid_policy("invalid_execution_authority_issuance")
+    return dict(value)
+
+
 def cleanup_action_digest(
     *, evidence_digest: str, resource_id: str, kind: ResourceKind,
     action: str, argv: Tuple[str, ...], requires_success_of: Optional[int],
@@ -645,6 +744,7 @@ class ResourceRegistry:
         self._records: dict[tuple[ResourceKind, str], ResourceRecord] = {}
         self._attempts: dict[tuple[ResourceKind, str], list[ResourceDisposition]] = {}
         self._transactions: set[str] = set()
+        self._issued_authorities: dict[str, dict[str, object]] = {}
         self._consumed_authorities: set[str] = set()
         self._current_transaction: Optional[_RegistryTransaction] = None
         self._now = now or (lambda: datetime.now(timezone.utc))
@@ -739,6 +839,7 @@ class ResourceRegistry:
         self._records = {}
         self._attempts = {}
         self._transactions = set()
+        self._issued_authorities = {}
         self._consumed_authorities = set()
         try:
             transaction = self._require_transaction()
@@ -785,11 +886,21 @@ class ResourceRegistry:
                 raise invalid_policy("terminal_disposition_requires_cleanup_transaction")
             self._apply_disposition(disposition, persist=False)
             return
+        if set(event) == {"event", "authority"} and event["event"] == "authority_issued":
+            if in_transaction:
+                raise invalid_policy("invalid_execution_authority_issuance")
+            authority = _validated_authority_json(event["authority"])
+            authority_id = authority["authority_id"]
+            if authority_id in self._issued_authorities:
+                raise invalid_policy("invalid_execution_authority_issuance")
+            self._issued_authorities[authority_id] = authority
+            return
         if set(event) == {"event", "authority_id"} and event["event"] == "authority_consumed":
             authority_id = event["authority_id"]
             if (
                 not in_transaction or type(authority_id) is not str
                 or not re.fullmatch(r"sha256:[0-9a-f]{64}", authority_id)
+                or authority_id not in self._issued_authorities
                 or authority_id in self._consumed_authorities
             ):
                 raise invalid_policy("invalid_execution_authority_consumption")
@@ -806,6 +917,7 @@ class ResourceRegistry:
                 raise invalid_policy("invalid_resource_registry_transaction")
             saved_records = dict(self._records)
             saved_attempts = {key: list(values) for key, values in self._attempts.items()}
+            saved_issued = dict(self._issued_authorities)
             saved_authorities = set(self._consumed_authorities)
             try:
                 for item in nested:
@@ -815,6 +927,7 @@ class ResourceRegistry:
             except Exception:
                 self._records = saved_records
                 self._attempts = saved_attempts
+                self._issued_authorities = saved_issued
                 self._consumed_authorities = saved_authorities
                 raise
             self._transactions.add(transaction_id)
@@ -883,6 +996,19 @@ class ResourceRegistry:
             ],
         })
 
+    def _new_authority_id_unlocked(self) -> str:
+        for _attempt in range(8):
+            authority_id = "sha256:" + secrets.token_hex(32)
+            if authority_id not in self._issued_authorities:
+                return authority_id
+        raise invalid_policy("execution_authority_id_exhausted")
+
+    def _issue_authority_unlocked(self, value: GuardedAuthority) -> None:
+        authority = _authority_json(value)
+        frame = {"event": "authority_issued", "authority": authority}
+        self._apply_registry_event(frame)
+        self._append_unlocked(frame)
+
     def execute_guarded_action(
         self, adapter: object, action: CleanupAction, resource: object,
         executor: Callable[[Tuple[str, ...]], CommandResult],
@@ -926,18 +1052,78 @@ class ResourceRegistry:
             if not _valid_timestamp(issued_at):
                 raise invalid_policy("resource_registry_clock_invalid")
             expires_at = issued_at + self.authority_ttl
-            authority_id = execution_authority_id(
-                result=result, kind=action.kind,
-                resource_id=action.resource_id, run_id=action.run_id,
-                node_id=action.node_id, action_digest=action.proof_digest,
-                state_generation=generation, issued_at=issued_at,
-                expires_at=expires_at,
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                if generation != self._state_generation_unlocked(key):
+                    raise invalid_policy("guarded_cleanup_authority_changed")
+                guarded = GuardedCommandResult(
+                    result, action.kind, action.resource_id, action.run_id,
+                    action.node_id, action.proof_digest, generation, issued_at,
+                    expires_at, self._new_authority_id_unlocked(),
+                )
+                self._issue_authority_unlocked(guarded)
+            return guarded
+
+    def observe_guarded_absence(
+        self, adapter: object, disposition: ResourceDisposition,
+        executor: Callable[[Tuple[str, ...]], CommandResult],
+    ) -> GuardedTerminalObservation:
+        """Issue one exact-ID absence observation while its resource key is locked."""
+        from workflow_kernel.adapters.docker import (
+            DockerAdapter, _inspect_argv, _is_exact_not_found,
+        )
+
+        if (
+            type(adapter) is not DockerAdapter
+            or type(disposition) is not ResourceDisposition
+            or disposition.disposition is not CleanupDisposition.MISSING
+            or disposition.kind not in {
+                ResourceKind.CONTAINER, ResourceKind.NETWORK, ResourceKind.VOLUME,
+            }
+            or not callable(executor)
+        ):
+            raise invalid_policy("invalid_guarded_terminal_observation")
+        disposition = _disposition_from_json(_disposition_json(disposition))
+        key = (disposition.kind, disposition.resource_id)
+        with self._exclusive_key_locks((key,)):
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                record = self._records.get(key)
+                if (
+                    record is None or self._is_retired(key)
+                    or (record.run_id, record.node_id, record.lifecycle)
+                    != (disposition.run_id, disposition.node_id, disposition.lifecycle)
+                ):
+                    raise invalid_policy("guarded_terminal_observation_changed")
+                generation = self._state_generation_unlocked(key)
+            argv = _inspect_argv(disposition.kind, disposition.resource_id)
+            result = executor(argv)
+            if type(result) is not CommandResult:
+                raise invalid_policy("invalid_guarded_terminal_observation_result")
+            result = CommandResult(
+                tuple(result.argv), result.exit_code, result.stdout, result.stderr,
             )
-            return GuardedCommandResult(
-                result, action.kind, action.resource_id, action.run_id,
-                action.node_id, action.proof_digest, generation, issued_at,
-                expires_at, authority_id,
+            if not _is_exact_not_found(
+                disposition.kind, disposition.resource_id, result,
+            ):
+                raise invalid_policy("guarded_terminal_observation_not_absent")
+            issued_at = self._now()
+            if not _valid_timestamp(issued_at):
+                raise invalid_policy("resource_registry_clock_invalid")
+            expires_at = issued_at + self.authority_ttl
+            evidence_digest = terminal_observation_evidence_digest(
+                disposition, result,
             )
+            with self._exclusive_lock():
+                self._reload_unlocked()
+                if generation != self._state_generation_unlocked(key):
+                    raise invalid_policy("guarded_terminal_observation_changed")
+                guarded = GuardedTerminalObservation(
+                    disposition, result, evidence_digest, generation,
+                    issued_at, expires_at, self._new_authority_id_unlocked(),
+                )
+                self._issue_authority_unlocked(guarded)
+            return guarded
 
     def record_disposition(self, value: ResourceDisposition) -> ResourceDisposition:
         if type(value) is not ResourceDisposition:
@@ -963,37 +1149,55 @@ class ResourceRegistry:
 
     def record_guarded_results(
         self, adapter: object, plan: CleanupPlan,
-        guarded_results: Tuple[GuardedCommandResult, ...],
+        guarded_results: Tuple[GuardedAuthority, ...],
         before: object, after: object,
     ) -> CleanupReceipt:
         """Persist results only with fresh, generation-bound execution authority."""
         if not guarded_results or type(guarded_results) is not tuple or any(
-            type(value) is not GuardedCommandResult for value in guarded_results
+            type(value) not in {GuardedCommandResult, GuardedTerminalObservation}
+            for value in guarded_results
         ):
             raise invalid_policy("invalid_guarded_cleanup_results")
         try:
-            guarded_results = tuple(GuardedCommandResult(
-                CommandResult(
+            normalized = []
+            for value in guarded_results:
+                result = CommandResult(
                     tuple(value.result.argv), value.result.exit_code,
                     value.result.stdout, value.result.stderr,
-                ),
-                value.kind, value.resource_id, value.run_id, value.node_id,
-                value.action_digest, value.state_generation, value.issued_at,
-                value.expires_at, value.authority_id,
-            ) for value in guarded_results)
+                )
+                if type(value) is GuardedCommandResult:
+                    normalized.append(GuardedCommandResult(
+                        result, value.kind, value.resource_id,
+                        value.run_id, value.node_id, value.action_digest,
+                        value.state_generation, value.issued_at,
+                        value.expires_at, value.authority_id,
+                    ))
+                else:
+                    disposition = _disposition_from_json(
+                        _disposition_json(value.disposition)
+                    )
+                    normalized.append(GuardedTerminalObservation(
+                        disposition, result, value.evidence_digest,
+                        value.state_generation, value.issued_at,
+                        value.expires_at, value.authority_id,
+                    ))
+            guarded_results = tuple(normalized)
         except InvalidSchemaError:
             raise
         except Exception:
             raise invalid_policy("invalid_guarded_cleanup_results") from None
         return self._record_results(
-            adapter, plan, tuple(value.result for value in guarded_results),
+            adapter, plan, tuple(
+                value.result for value in guarded_results
+                if type(value) is GuardedCommandResult
+            ),
             before, after, guarded_results,
         )
 
     def _record_results(
         self, adapter: object, plan: CleanupPlan, results: Tuple[CommandResult, ...],
         before: object, after: object,
-        authorities: Tuple[GuardedCommandResult, ...],
+        authorities: Tuple[GuardedAuthority, ...],
     ) -> CleanupReceipt:
         from workflow_kernel.adapters.docker import DockerAdapter
 
@@ -1008,7 +1212,8 @@ class ResourceRegistry:
                 plan, results, before, after,
             )
             authority_keys = {
-                (value.kind, value.resource_id) for value in authorities
+                (ResourceKind(payload["kind"]), payload["resource_id"])
+                for payload in (_authority_json(value) for value in authorities)
             }
             if any(
                 value.disposition in TERMINAL_DISPOSITIONS
@@ -1056,26 +1261,52 @@ class ResourceRegistry:
 
     def _validate_execution_authorities(
         self, plan: CleanupPlan, results: Tuple[CommandResult, ...],
-        authorities: Tuple[GuardedCommandResult, ...],
+        authorities: Tuple[GuardedAuthority, ...],
     ) -> None:
-        if len(authorities) != len(results):
+        command_authorities = tuple(
+            value for value in authorities if type(value) is GuardedCommandResult
+        )
+        if len(command_authorities) != len(results):
             raise invalid_policy("guarded_cleanup_authority_missing")
         by_argv = {value.argv: value for value in plan.actions}
         current = self._now()
         if not _valid_timestamp(current):
             raise invalid_policy("resource_registry_clock_invalid")
-        for result, authority in zip(results, authorities):
+        for authority in authorities:
+            payload = _authority_json(authority)
+            key = (ResourceKind(payload["kind"]), payload["resource_id"])
+            if (
+                self._issued_authorities.get(authority.authority_id) != payload
+                or authority.authority_id in self._consumed_authorities
+                or not authority.issued_at <= current <= authority.expires_at
+                or authority.state_generation != self._state_generation_unlocked(key)
+            ):
+                raise invalid_policy("guarded_cleanup_authority_changed")
+        for result, authority in zip(results, command_authorities):
             action = by_argv.get(result.argv)
             key = (authority.kind, authority.resource_id)
             if (
                 action is None or authority.result != result
-                or authority.authority_id in self._consumed_authorities
-                or not authority.issued_at <= current <= authority.expires_at
                 or authority.action_digest != action.proof_digest
                 or key != (action.kind, action.resource_id)
                 or (authority.run_id, authority.node_id)
                 != (action.run_id, action.node_id)
-                or authority.state_generation != self._state_generation_unlocked(key)
+            ):
+                raise invalid_policy("guarded_cleanup_authority_changed")
+        from workflow_kernel.adapters.docker import _is_exact_not_found
+        for authority in authorities:
+            if type(authority) is not GuardedTerminalObservation:
+                continue
+            disposition = authority.disposition
+            if (
+                disposition not in plan.dispositions
+                or disposition.disposition is not CleanupDisposition.MISSING
+                or authority.evidence_digest != terminal_observation_evidence_digest(
+                    disposition, authority.result,
+                )
+                or not _is_exact_not_found(
+                    disposition.kind, disposition.resource_id, authority.result,
+                )
             ):
                 raise invalid_policy("guarded_cleanup_authority_changed")
 
