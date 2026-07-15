@@ -95,6 +95,21 @@ class BrowserRecoveryTests(unittest.TestCase):
             PROFILE_ID, ENGINES, TARGET_ORIGIN_DIGEST,
         )
 
+    def blocked_with_unavailable_readiness(self):
+        unavailable = BrowserReadinessEvidence(
+            "case-1", "primary-1", TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST,
+            False, True, True, "dev_server_unavailable",
+        )
+        return BrowserRecovery().run(
+            self.request,
+            FakeBrowserAdapter(
+                [attempt(1, "chromium", "failed", session="primary-1")],
+                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
+                launches=[RuntimeError("alternate unavailable")],
+                readiness=unavailable,
+            ),
+        )
+
     def test_primary_first_pass_is_clean_without_recovery(self):
         adapter = FakeBrowserAdapter([attempt(1, "chromium", "passed", session="primary-1")])
         receipt = BrowserRecovery().run(self.request, adapter)
@@ -148,19 +163,7 @@ class BrowserRecoveryTests(unittest.TestCase):
         ])
 
     def test_unavailable_readiness_still_records_alternate_launch_unavailable(self):
-        unavailable = BrowserReadinessEvidence(
-            "case-1", "primary-1", TARGET_URL_DIGEST, TARGET_ORIGIN_DIGEST,
-            False, True, True, "dev_server_unavailable",
-        )
-        receipt = BrowserRecovery().run(
-            self.request,
-            FakeBrowserAdapter(
-                [attempt(1, "chromium", "failed", session="primary-1")],
-                quit_result=BrowserQuitEvidence("chromium", False, "primary-1"),
-                launches=[RuntimeError("alternate unavailable")],
-                readiness=unavailable,
-            ),
-        )
+        receipt = self.blocked_with_unavailable_readiness()
         self.assertEqual(receipt.reason_code, "human_help_required")
         self.assertEqual(receipt.lifecycle[-2].action, "readiness_recheck")
         self.assertEqual(receipt.lifecycle[-1].action, "browser_process_launch")
@@ -172,6 +175,25 @@ class BrowserRecoveryTests(unittest.TestCase):
         truncated = receipt.to_dict()
         truncated["lifecycle"] = truncated["lifecycle"][:-1]
         self.assertFalse(schema_matches(truncated, schema))
+
+    def test_schema_rejects_multi_engine_human_help_without_readiness(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        payload = self.blocked_with_unavailable_readiness().to_dict()
+        payload["lifecycle"] = [
+            item for item in payload["lifecycle"]
+            if item["action"] != "readiness_recheck"
+        ]
+        self.assertFalse(schema_matches(payload, schema))
+
+    def test_schema_rejects_same_engine_alternate_evidence(self):
+        schema = json.loads(
+            (Path(__file__).parents[1] / "browser-recovery-schema.json").read_text()
+        )
+        payload = self.blocked_with_unavailable_readiness().to_dict()
+        payload["lifecycle"][-1]["actual_engine"] = payload["requested_engine"]
+        self.assertFalse(schema_matches(payload, schema))
 
     def test_recovered_receipt_recomputes_readiness_digest(self):
         adapter = FakeBrowserAdapter(

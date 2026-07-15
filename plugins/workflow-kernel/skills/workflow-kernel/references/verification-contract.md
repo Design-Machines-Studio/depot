@@ -119,13 +119,13 @@ For a required browser failure, preserve safe attempt evidence first, then:
 1. quit the primary browser process or engine session (a tab/context close is not proof);
 2. launch a fresh primary profile with a changed process/session identity and retry once;
 3. if restart cannot be proved, record `primary_restart_unavailable` and continue;
-4. independently recheck the current dev server, target URL, and authentication
-   fixture and persist their sealed statuses and canonical readiness digest;
-5. treat readiness as typed diagnostic evidence, never as permission to omit the
-   configured alternate: launch one genuinely different configured engine and
-   retry once even when a readiness check is unavailable, or persist explicit
-   alternate-launch-unavailable evidence; a valid single-engine profile instead
-   records `secondary_engine_unavailable`;
+4. on a multi-engine path, independently recheck the current dev server, target
+   URL, and authentication fixture and persist their sealed statuses and
+   canonical readiness digest, then launch one genuinely different configured
+   engine and retry once even when readiness is unavailable, or persist explicit
+   alternate-launch-unavailable evidence;
+5. on a single-engine path, record `secondary_engine_unavailable` immediately
+   after exhausted primary recovery, without a readiness recheck;
 6. if it fails or is unavailable, return blocked `human_help_required` with all
    attempts and exact missing case IDs.
 
@@ -171,14 +171,17 @@ must agree, attempts are ordered and retain all failures before the sole winning
 attempt, action/result pairs are coherent, relaunch sessions are fresh and bind
 the following attempt, recovered/clean receipts have no missing cases, and a
 blocked human-help receipt names the exact missing case.
-Receipt history follows one exact grammar: initial attempt; on failure, primary
-quit; primary launch or `primary_restart_unavailable`; primary retry only after
-a proved fresh launch; then a sealed three-part readiness recheck whose status is
-diagnostic; then alternate launch and attempt, or explicit alternate-launch
-unavailability, or the exact
-single-engine/unavailable marker; then the matching clean, recovered, or blocked
-terminal. Missing, duplicated, reordered, or branch-incompatible actions are
-invalid even if their individual fields look plausible.
+Receipt history follows two exact terminal grammars after the shared primary
+sequence of initial attempt, quit, primary launch or
+`primary_restart_unavailable`, and primary retry only after a proved fresh
+launch. A multi-engine path then records a sealed three-part diagnostic readiness
+recheck followed by alternate launch and attempt or explicit alternate-launch
+unavailability. A single-engine path instead records
+`secondary_engine_unavailable` immediately after exhausted primary recovery and
+contains no readiness recheck. Each path then records the matching clean,
+recovered, or blocked terminal. Missing, duplicated, reordered, or
+branch-incompatible actions are invalid even if their individual fields look
+plausible.
 
 Every browser `EvidenceRef`, including clean first-pass primary evidence, carries
 a complete `BrowserRecoveryReceipt`. The verification gate canonically
