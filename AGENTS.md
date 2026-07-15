@@ -63,7 +63,7 @@ These aliases live at `plugins/<name>/skills/<command>/SKILL.md` so Codex can ex
 
 ## Runtime Cache Path Resolution
 
-Plugins that resolve paths at runtime (deepseek, openrouter, dm-review, pipeline) use a Claude-first/Codex-fallback loop:
+Plugins that resolve paths at runtime (deepseek, openrouter, dm-review, pipeline, workflow-kernel) use a Claude-first/Codex-fallback loop:
 
 ```bash
 WRAPPER_PATH=""
@@ -83,6 +83,7 @@ When editing cache lookups, always include both roots. Validate with:
 
 ```shell
 ./tools/validate-composition.sh --all    # full validation (includes dual-compat check)
+./tools/validate-workflow-kernel.py      # offline behavioral kernel release gate
 ./tools/validate-dual-compat.sh          # Codex manifest sync + cache fallback check only
 ./tools/eval-descriptions.sh             # skill description trigger accuracy
 ./tools/check-dependencies.sh            # plugin dependency resolution
@@ -102,7 +103,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-18 plugins | 38 canonical skills + 34 generated Codex command-skill aliases | 39 agents | 34 commands
+19 plugins | 39 canonical skills + 34 generated Codex command-skill aliases | 39 agents | 34 commands
 
 | Plugin | Purpose |
 |---|---|
@@ -121,6 +122,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 | **the-local** | Self-hosted Matrix network -- Element Web branding, Synapse config |
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
+| **workflow-kernel** | Neutral deterministic run state, replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by workflow plugins |
 | **deepseek** | DeepSeek V4 API subagent for code review and bulk diff analysis |
 | **openrouter** | OpenRouter provider plugin (leaf): GLM-5.2 big-diff analysis + one-shot generation; pipeline cascade rail and dm-review big-diff fallback |
 

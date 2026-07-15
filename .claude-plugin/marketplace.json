@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.41.0",
+      "version": "1.42.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.26.0",
+      "version": "1.27.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -367,6 +367,29 @@
           "prompt-generation",
           "review-loop",
           "fix-pass"
+        ]
+      }
+    },
+    {
+      "name": "workflow-kernel",
+      "source": "./plugins/workflow-kernel",
+      "version": "0.1.0",
+      "author": {
+        "name": "Design Machines",
+        "url": "https://designmachines.studio"
+      },
+      "description": "Neutral deterministic workflow run-state, event-ledger, replay, recovery, and shadow-observation mechanics shared by Depot workflows.",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 0,
+        "commands": 0,
+        "tags": [
+          "workflow-kernel",
+          "run-state",
+          "event-ledger",
+          "replay",
+          "recovery",
+          "shadow-mode"
         ]
       }
     },

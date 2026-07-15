@@ -87,6 +87,39 @@ nothing else enforces:
 Markdown rots silently. These grep assertions fail loudly when a required anchor
 disappears. Included in `./tools/validate-composition.sh`.
 
+## validate-workflow-kernel.py
+
+Runs the deterministic offline behavioral release gate for Workflow Kernel. It
+validates schemas and policy, runs the complete `unittest` suite, replays the
+failure-injection fixtures, checks event reconstruction and exact-once terminal
+cleanup intent, scans for unsafe Docker cleanup and secret leakage, verifies
+Claude/Codex/generic compatibility and promotion evidence, exercises every
+runtime CLI command, and covers all workflow classes plus both supported
+Assembly persona layouts.
+
+It requires only the Python standard library. It does not require Docker, a
+browser, network access, API keys, or a running project.
+
+```bash
+./tools/validate-workflow-kernel.py
+./tools/validate-workflow-kernel.py --verbose
+./tools/validate-workflow-kernel.py --help
+```
+
+This validator is a named stage in `./tools/validate-composition.sh --all`.
+The default composition-only invocation remains unchanged.
+
+For direct runtime CLI development, set the local references directory on
+`PYTHONPATH` and inspect the stable command surface:
+
+```bash
+PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references \
+  python3 -m workflow_kernel --help
+```
+
+See `docs/workflow-kernel.md` for architecture, command examples, shadow
+authority boundaries, cleanup safety, promotion gates, and troubleshooting.
+
 ## check-release-preflight.sh
 
 Read-only. Verifies a release is actually safe to tag and push, then prints a

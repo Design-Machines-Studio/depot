@@ -8,7 +8,7 @@
 # Usage:
 #   ./tools/validate-composition.sh                  # composition checks only
 #   ./tools/validate-composition.sh --generate-index # regenerate docs/search-index.md
-#   ./tools/validate-composition.sh --all            # run all validators (evals + deps + composition)
+#   ./tools/validate-composition.sh --all            # run all validators (evals + deps + kernel + composition)
 #
 # Exit codes:
 #   0 -- all checks pass
@@ -365,7 +365,7 @@ print(sum(len(c.get('skills',[])) for c in pjs), sum(len(c.get('agents',[])) for
 run_all() {
   local any_failed=0
 
-  printf "\n${BOLD}1/3: Description Evals${RESET}\n"
+  printf "\n${BOLD}1/4: Description Evals${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if "$SCRIPT_DIR/eval-descriptions.sh"; then
     :
@@ -373,7 +373,7 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}2/3: Dependency Validation${RESET}\n"
+  printf "\n${BOLD}2/4: Dependency Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if "$SCRIPT_DIR/check-dependencies.sh"; then
     :
@@ -381,7 +381,15 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}3/3: Composition Validation${RESET}\n"
+  printf "\n${BOLD}3/4: Workflow Kernel Behavioral Validation${RESET}\n"
+  printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+  if validate_workflow_kernel; then
+    :
+  else
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}4/4: Composition Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if run_composition_checks --no-header; then
     :
@@ -396,6 +404,12 @@ run_all() {
     printf "\n${GREEN}PASS: All validators passed${RESET}\n\n"
     exit 0
   fi
+}
+
+# Run the offline workflow-kernel behavioral suite as a named full gate. Keep
+# it out of the default composition-only mode: --all is the release gate.
+validate_workflow_kernel() {
+  "$SCRIPT_DIR/validate-workflow-kernel.py"
 }
 
 # --------------------------------------------------------------------------

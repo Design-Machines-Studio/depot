@@ -210,6 +210,42 @@ sys.exit(0)
 PYEOF
 }
 
+# Prove the workflow-kernel release graph contract explicitly: it remains a
+# leaf, and both workflow consumers require the released compatibility floor.
+check_workflow_kernel_contract() {
+  PLUGINS_DIR="$PLUGINS_DIR" python3 << 'PYEOF'
+import glob
+import json
+import os
+import sys
+
+plugins_dir = os.environ["PLUGINS_DIR"]
+manifests = {}
+for path in sorted(glob.glob(os.path.join(plugins_dir, "*/.claude-plugin/plugin.json"))):
+    with open(path, encoding="utf-8") as handle:
+        manifest = json.load(handle)
+    manifests[manifest["name"]] = manifest
+
+errors = []
+kernel = manifests.get("workflow-kernel")
+if kernel is None:
+    errors.append("workflow-kernel manifest missing")
+elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependencies", {}):
+    errors.append("workflow-kernel must remain a leaf with no dependencies")
+
+for consumer in ("pipeline", "dm-review"):
+    manifest = manifests.get(consumer)
+    actual = None if manifest is None else manifest.get("pluginDependencies", {}).get("workflow-kernel")
+    if actual != ">=0.1.0":
+        errors.append(f"{consumer} must require workflow-kernel >=0.1.0")
+
+if errors:
+    for error in errors:
+        print(f"  CONTRACT: {error}")
+    sys.exit(1)
+PYEOF
+}
+
 # --------------------------------------------------------------------------
 # Validate all dependencies for one plugin
 # --------------------------------------------------------------------------
@@ -343,6 +379,14 @@ print('yes' if has else 'no')
     any_failed=1
   else
     printf "  ${GREEN}OK${RESET}    dependency graph is acyclic\n"
+  fi
+
+  local kernel_contract_output
+  if ! kernel_contract_output=$(check_workflow_kernel_contract); then
+    printf "  ${RED}FAIL${RESET}  workflow-kernel dependency contract:\n%s\n" "$kernel_contract_output"
+    any_failed=1
+  else
+    printf "  ${GREEN}OK${RESET}    workflow-kernel is a leaf required by pipeline and dm-review\n"
   fi
 
   printf "\n${BOLD}%d plugins with dependencies checked${RESET}\n" "$checked"

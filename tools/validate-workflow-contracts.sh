@@ -73,6 +73,9 @@ review_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
 review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
 review_fix="$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
+kernel_skill="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/SKILL.md"
+kernel_cli="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py"
+kernel_promotion="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/promotion.py"
 
 printf "Repository cleanup contract:\n"
 
@@ -242,10 +245,26 @@ require_text "$sec" "Public/Private URL Boundary" "security-auditor guards the p
 require_text "$sec" "Update / Release Preflight" "security-auditor checks update/release preflight"
 require_text "$sec" "Responder-side share transport" "security-auditor reviews the federation responder side"
 
+# --------------------------------------------------------------------------
+# Group 4: Workflow-kernel integration anchors
+# --------------------------------------------------------------------------
+
+printf "\nWorkflow-kernel integration anchors:\n"
+
+require_text "$pipeline_run" "The Markdown manifest, this command, routing policy, orchestrator, and receipts remain authoritative." "pipeline preserves Markdown authority in shadow mode"
+require_text "$pipeline_run" "runtime unavailable/incompatible" "pipeline preserves fallback when the kernel is unavailable"
+require_text "$review_skill" "Kernel prediction is observation-only" "dm-review keeps shadow observation non-authoritative"
+require_text "$review_skill" "human_help_required" "dm-review preserves required browser recovery escalation"
+require_text "$orchestrator" "STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics" "orchestrator preserves terminal cleanup ordering"
+require_text "$orchestrator" "Broad prune, wildcards, negative filters, and name-based ownership are forbidden." "orchestrator forbids broad Docker cleanup"
+require_text "$kernel_skill" "Initialize every run in shadow mode" "kernel documents shadow default"
+require_text "$kernel_cli" "default=RunMode.SHADOW.value" "kernel CLI defaults to shadow"
+require_text "$kernel_promotion" "separate_human_approval_required" "promotion rejects native default without human approval"
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel)\n"

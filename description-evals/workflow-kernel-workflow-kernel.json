@@ -1,0 +1,19 @@
+[
+  {"query": "validate this workflow-kernel run state", "should_trigger": true},
+  {"query": "replay the workflow events for this run", "should_trigger": true},
+  {"query": "inspect the workflow-kernel state ledger", "should_trigger": true},
+  {"query": "diagnose a corrupt workflow run ledger", "should_trigger": true},
+  {"query": "use the workflow kernel to recover this run", "should_trigger": true},
+  {"query": "materialize workflow state from the event ledger", "should_trigger": true},
+  {"query": "why does workflow-kernel replay reject this event sequence", "should_trigger": true},
+  {"query": "check this kernel run after an interrupted workflow", "should_trigger": true},
+  {"query": "build the account settings feature", "should_trigger": false},
+  {"query": "run the ordinary pipeline for this feature", "should_trigger": false},
+  {"query": "check this pull request for issues", "should_trigger": false},
+  {"query": "run dm-review on this PR", "should_trigger": false},
+  {"query": "how do I clean up Docker containers safely", "should_trigger": false},
+  {"query": "test this page in the browser", "should_trigger": false},
+  {"query": "write a Python state machine", "should_trigger": false},
+  {"query": "fix my failing unit tests", "should_trigger": false},
+  {"query": "restart the web application", "should_trigger": false}
+]
