@@ -90,6 +90,12 @@ require_text "$orchestrator" "git worktree prune" "orchestrator prunes stale wor
 require_text "$orchestrator" "## Branch & Worktree Inventory" "orchestrator receipt carries the inventory"
 require_text "$orchestrator" "Never delete the feature branch without merge proof" "orchestrator forbids unproven feature-branch deletion"
 require_text "$orchestrator" "Always run the repository cleanup phase" "orchestrator makes cleanup unconditional"
+require_text "$lifecycle" "Repository-lifetime durable identity; never Tier 2 and never auto-deleted" "repository scope is durable, not run-scoped"
+require_text "$lifecycle" 'Semantic parity `match` alone never authorizes its deletion' "parity cannot delete terminal run state"
+require_text "$lifecycle" 'exact `(scope_id, run_id)`' "terminal run deletion requires exact scope and run absence"
+require_text "$lifecycle" "no uninspectable match remains" "terminal run deletion blocks on uninspectable Docker matches"
+require_text "$orchestrator" 'Never auto-delete `.workflow-kernel/repository-scope.json`' "orchestrator preserves repository scope identity"
+require_absent "$orchestrator" '`.workflow-kernel/runs/<run-id>/`, `shadow-report.json`' "orchestrator does not delete run state on parity match alone"
 
 # The old fragile sweep must stay gone: `grep -o` on porcelain output breaks on
 # feature slugs containing regex metacharacters.

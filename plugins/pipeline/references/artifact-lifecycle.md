@@ -24,9 +24,9 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `prompts/*.md` | 2 | Chunk execution prompts consumed by orchestrator |
 | `manifest.json` | 2 | Chunk ordering and dependency metadata; retained through terminal observe/compare/metrics |
 | `authoritative-receipts.json` | 2 | Cumulative ordered redacted receipt array; canonical input to observe/compare/metrics |
-| `.workflow-kernel/repository-scope.json` | 2 | Immutable random repository scope identity bound to the real repository and lease-root path, device, and inode |
-| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Canonical lifecycle and lease state beneath the scope derived from the state directory; callers cannot select a lease root |
-| `.workflow-kernel/runs/<run-id>/events.jsonl` | 2 | Canonical redacted lifecycle ledger paired with the lease state |
+| `.workflow-kernel/repository-scope.json` | 4 | Repository-lifetime durable identity; never Tier 2 and never auto-deleted |
+| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Canonical lifecycle and lease state; retain the terminal run directory or a durable tombstone until exact-scope Docker absence is proven |
+| `.workflow-kernel/runs/<run-id>/events.jsonl` | 2 | Canonical redacted lifecycle ledger paired with the lease state and retained under the same terminal-run rule |
 | `pipeline-shadow-observation.json` | 2 | Explicit `authoritative_observation` RunSpec/event snapshot generated after authoritative receipts |
 | `pipeline-shadow-prediction.json` | 2 | Immutable, context/digest-bound `independent_prediction`; bound once and never overwritten by re-observation |
 | `independent-prediction-receipts.json` | 2 | Independently produced pre-action prediction source; retained with the bound prediction through comparison and deleted only after semantic match |
@@ -80,7 +80,7 @@ Protected builder restore blobs are not ordinary artifacts. Store them only in p
 
 ## Cleanup Rules
 
-Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: Docker reconciliation; artifact and Git cleanup while preserving terminal shadow inputs; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; shadow Tier 2 deletion only on semantic `match`; then manifest/receipt-input cleanup on that same match. Receipt fields never precede their Docker/Git/artifact outcomes, and `manifest.json` is never removed before terminal observation finishes.
+Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: Docker reconciliation; artifact and Git cleanup while preserving terminal shadow inputs; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; eligible shadow Tier 2 deletion only on semantic `match`; then manifest/receipt-input cleanup on that same match. Receipt fields never precede their Docker/Git/artifact outcomes, and `manifest.json` is never removed before terminal observation finishes. The repository scope file is not eligible Tier 2, and parity match alone never authorizes terminal run-state deletion.
 
 ### On successful pipeline completion (Step 5b)
 
@@ -88,10 +88,22 @@ Step 5b runs on every exit path -- success, failure, and every answer to the Pha
 2. Delete Tier 1 plus consumed prompts/brainstorm artifacts and complete Git cleanup/readiness checks. Preserve `manifest.json`, `authoritative-receipts.json`, and shadow/RunSpec artifacts.
 3. Write `plans/<feature-slug>/receipt.md` from those completed authoritative outcomes.
 4. Append the terminal receipt, run terminal observation, comparison, and metrics using the retained manifest and cumulative receipt array.
-5. On semantic `match`, delete shadow Tier 2, including the bound prediction and canonical run directory, then delete the consumed manifest, authoritative receipt array, independent prediction source, and Docker plan/proof inputs. The source and bound prediction are never deleted before bind and comparison. On any other result, preserve all terminal inputs and shadow artifacts for investigation.
+5. On semantic `match`, delete eligible shadow Tier 2 such as the bound prediction, then delete the consumed manifest, authoritative receipt array, independent prediction source, and Docker plan/proof inputs. The source and bound prediction are never deleted before bind and comparison. Preserve `.workflow-kernel/repository-scope.json` unconditionally. Preserve the terminal run directory unless a fresh Docker inventory filtered by the exact `repository_scope_id` proves zero objects for that exact `(scope_id, run_id)` and contains no matching object whose inspect failed; only then may the directory be replaced by or reduced to a durable terminal tombstone. On any other parity result, preserve all terminal inputs and shadow artifacts for investigation.
 6. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`.
 
 Shadow artifacts never authorize cleanup, supply receipt fields, or substitute for an authoritative receipt.
+
+### Kernel scope and terminal-run retention
+
+`.workflow-kernel/repository-scope.json` is repository-lifetime durable state. It
+is never a Tier 2 artifact, never participates in semantic-match deletion, and
+is never auto-deleted. A terminal run directory remains the authoritative lease
+and ownership witness while any Docker object may still carry its scope and run
+labels. Before removing detailed run state, obtain a fresh managed inventory
+with the exact repository-scope filter, inspect every returned object, and prove
+that no inspectable object has the run ID and no uninspectable match remains.
+Missing, stale, cross-scope, or partially uninspectable inventory preserves the
+run directory. Semantic parity `match` alone never authorizes its deletion.
 
 ### On failed pipeline run (Step 5b)
 

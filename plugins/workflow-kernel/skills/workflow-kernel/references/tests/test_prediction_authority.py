@@ -125,6 +125,47 @@ class PredictionAuthorityTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
 
+    def test_compare_rechecks_missing_or_reordered_lifecycle_authority(self):
+        for mutation in ("deleted", "missing_binding", "reordered"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root, state_dir, manifest = self.repository(directory)
+                self.init_run(root)
+                receipts = state_dir / "prediction.json"
+                receipts.write_text((FIXTURES / "pipeline-codex.json").read_text())
+                bound = self.run_cli(
+                    root, "bind-prediction", "--type", "pipeline",
+                    "--manifest", manifest, "--prediction-receipts", receipts,
+                    "--state-dir", state_dir,
+                )
+                self.assertEqual(bound.returncode, 0, bound.stderr)
+                self.assertEqual(self.append_started(root).returncode, 0)
+                authoritative = state_dir / "authoritative.json"
+                authoritative.write_text(receipts.read_text())
+                observed = self.run_cli(
+                    root, "observe-pipeline", "--manifest", manifest,
+                    "--receipts", authoritative, "--state-dir", state_dir,
+                )
+                self.assertEqual(observed.returncode, 0, observed.stderr)
+                event_path = root / ".workflow-kernel" / "runs" / "pipeline-1" / "events.jsonl"
+                lines = event_path.read_text().splitlines()
+                if mutation == "deleted":
+                    event_path.unlink()
+                elif mutation == "missing_binding":
+                    event_path.write_text("\n".join((lines[0], lines[2])) + "\n")
+                else:
+                    event_path.write_text("\n".join((lines[0], lines[2], lines[1])) + "\n")
+                output = state_dir / "parity.json"
+                compared = self.run_cli(
+                    root, "compare", "--state-dir", state_dir,
+                    "--authoritative-receipts", authoritative, "--output", output,
+                )
+                self.assertEqual(compared.returncode, 5, compared.stderr)
+                self.assertIn(json.loads(output.read_text())["reason"], {
+                    "explained_host_difference", "missing_authoritative_evidence",
+                    "unexpected_authoritative_transition", "kernel_prediction_gap",
+                    "unsafe_to_promote",
+                })
+
 
 if __name__ == "__main__":
     unittest.main()

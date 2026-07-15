@@ -328,8 +328,8 @@ class RuntimeCliTests(unittest.TestCase):
                         if mutation == "missing_events":
                             self.assertIn("semantic_receipts_required", report["differences"])
                     else:
-                        self.assertEqual(report["reason"], "kernel_prediction_gap")
-                        self.assertIn("run_spec_receipt_context_mismatch", report["differences"])
+                        self.assertEqual(report["reason"], "missing_authoritative_evidence")
+                        self.assertIn("prediction_lifecycle_authority_invalid", report["differences"])
 
     def test_compare_selects_translator_from_observation_type(self):
         with tempfile.TemporaryDirectory() as directory:

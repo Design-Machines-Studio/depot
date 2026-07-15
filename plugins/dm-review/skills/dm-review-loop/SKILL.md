@@ -148,7 +148,7 @@ python3 -m workflow_kernel compare --state-dir .claude/ux-review/workflow-kernel
 python3 -m workflow_kernel metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 ```
 
-The pre-action bind seals `review-shadow-prediction.json`; later authoritative observation only consumes it and cannot create or overwrite it. Keep the prediction source and bound artifact through comparison, and delete them only after semantic `match`. Missing or reused prediction evidence fails closed without changing convergence.
+The pre-action bind seals `review-shadow-prediction.json`; later authoritative observation only consumes it and cannot create or overwrite it. Keep the prediction source and bound artifact through comparison, and delete them only after semantic `match`. Missing or reused prediction evidence fails closed without changing convergence. The repository-lifetime scope file is never auto-deleted, and parity match alone never deletes terminal run state; retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches.
 
 Output one of:
 

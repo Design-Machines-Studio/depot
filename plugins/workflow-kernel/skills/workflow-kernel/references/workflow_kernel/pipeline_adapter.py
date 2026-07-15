@@ -8,8 +8,8 @@ import re
 from typing import Iterable, Mapping, Optional, Tuple
 
 from .adapters.base import (
-    BuilderSessionDecision, HostCapabilities, NodeSpec, WorkflowClass,
-    WorkflowContext,
+    BuilderSessionDecision, GateDecision, HostCapabilities, HostCapability,
+    NodeSpec, WorkflowClass, WorkflowContext,
 )
 from .redaction import normalize_evidence_reference, redact
 from .schema import WorkflowEvent
@@ -71,6 +71,91 @@ class RunSpec:
     execution_plan_disagreement: bool = False
     required_lanes: Tuple[str, ...] = ()
     review_mode: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, value: object) -> "RunSpec":
+        fields = {
+            "run_id", "workflow_class", "workflow_class_defaulted",
+            "execution_mode", "host_name", "nodes", "chunks",
+            "execution_levels", "execution_plan_disagreement",
+            "required_lanes", "review_mode", "observation_only",
+        }
+        node_fields = {
+            "id", "depends_on", "gate_kind", "required_evidence",
+            "executor", "routing_reason", "gate_decision",
+            "required_capability", "required_dispatch_capability",
+            "executor_overridable",
+        }
+        gate_fields = {
+            "allowed", "reason_code", "missing_evidence", "human_required",
+        }
+        if type(value) is not dict or set(value) != fields:
+            raise ValueError("invalid RunSpec")
+        if (
+            value.get("observation_only") is not True
+            or type(value.get("workflow_class_defaulted")) is not bool
+            or type(value.get("execution_plan_disagreement")) is not bool
+            or type(value.get("nodes")) is not list
+            or type(value.get("chunks")) is not list
+            or type(value.get("execution_levels")) is not list
+            or type(value.get("required_lanes")) is not list
+            or value.get("review_mode") is not None
+            and type(value.get("review_mode")) is not str
+        ):
+            raise ValueError("invalid RunSpec")
+        nodes = []
+        for item in value["nodes"]:
+            if type(item) is not dict or set(item) != node_fields:
+                raise ValueError("invalid RunSpec node")
+            gate = item["gate_decision"]
+            if type(gate) is not dict or set(gate) != gate_fields:
+                raise ValueError("invalid RunSpec gate")
+            if (
+                type(item["depends_on"]) is not list
+                or type(item["required_evidence"]) is not list
+                or type(gate["missing_evidence"]) is not list
+            ):
+                raise ValueError("invalid RunSpec node")
+            nodes.append(NodeSpec(
+                item["id"], tuple(item["depends_on"]), item["gate_kind"],
+                tuple(item["required_evidence"]), item["executor"],
+                item["routing_reason"], GateDecision(
+                    gate["allowed"], gate["reason_code"],
+                    tuple(gate["missing_evidence"]), gate["human_required"],
+                ),
+                None if item["required_capability"] is None else HostCapability(item["required_capability"]),
+                None if item["required_dispatch_capability"] is None else HostCapability(item["required_dispatch_capability"]),
+                item["executor_overridable"],
+            ))
+        chunks = []
+        for item in value["chunks"]:
+            if (
+                type(item) is not dict or set(item) != {"id", "depends_on"}
+                or type(item["depends_on"]) is not list
+            ):
+                raise ValueError("invalid RunSpec chunk")
+            chunks.append(ChunkSpec(item["id"], tuple(item["depends_on"])))
+        if any(type(level) is not list for level in value["execution_levels"]):
+            raise ValueError("invalid RunSpec levels")
+        spec = cls(
+            _required_text(value["run_id"], "run_id"),
+            WorkflowClass(value["workflow_class"]),
+            value["workflow_class_defaulted"],
+            _required_text(value["execution_mode"], "execution_mode"),
+            _required_text(value["host_name"], "host_name"),
+            tuple(nodes), tuple(chunks),
+            tuple(tuple(level) for level in value["execution_levels"]),
+            value["execution_plan_disagreement"],
+            tuple(value["required_lanes"]), value["review_mode"],
+        )
+        if (
+            spec.execution_mode not in EXECUTION_MODES
+            or any(type(item) is not str or not item for item in spec.required_lanes)
+            or len(spec.required_lanes) != len(set(spec.required_lanes))
+            or spec.to_dict() != value
+        ):
+            raise ValueError("invalid RunSpec")
+        return spec
 
     def to_dict(self) -> dict:
         return {

@@ -570,6 +570,7 @@ def command_observe_review(args):
 
 def command_compare(args):
     from .shadow import ParityReport, ReceiptSet, ShadowComparator
+    from .pipeline_adapter import RunSpec
 
     state_dir = Path(args.state_dir)
     observation = state_dir / "pipeline-shadow-observation.json"
@@ -631,7 +632,30 @@ def command_compare(args):
         )
         _write_json(args.output, report.to_dict())
         return EXIT_PARITY_GAP
-    if type(run_spec) is not dict or not events:
+    try:
+        spec = RunSpec.from_dict(run_spec)
+        prediction = _require_bound_prediction(
+            args.state_dir, observation_type, spec,
+        )
+    except (KernelError, OSError, TypeError, ValueError):
+        report = ParityReport(
+            "missing_authoritative_evidence", False, False,
+            ("prediction_lifecycle_authority_invalid",),
+        )
+        _write_json(args.output, report.to_dict())
+        return EXIT_PARITY_GAP
+    raw_events = prediction.get("events")
+    if (
+        type(raw_events) is not list
+        or prediction.get("event_digest") != _document_digest(raw_events)
+    ):
+        report = ParityReport(
+            "missing_authoritative_evidence", False, False,
+            ("semantic_receipts_required", "observation_events_missing"),
+        )
+        _write_json(args.output, report.to_dict())
+        return EXIT_PARITY_GAP
+    if not events:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     first = events[0]
     expected_context = (
@@ -640,9 +664,8 @@ def command_compare(args):
         first.payload.get("execution_mode"),
     )
     observed_context = (
-        run_spec.get("run_id"), run_spec.get("workflow_class"),
-        run_spec.get("workflow_class_defaulted"),
-        run_spec.get("execution_mode"),
+        spec.run_id, spec.workflow_class.value,
+        spec.workflow_class_defaulted, spec.execution_mode,
     )
     if observed_context != expected_context:
         report = ParityReport(
