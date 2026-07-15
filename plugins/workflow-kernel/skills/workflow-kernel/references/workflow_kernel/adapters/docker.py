@@ -29,7 +29,11 @@ NODE_LABEL = LABEL_PREFIX + "node-id"
 CREATED_LABEL = LABEL_PREFIX + "created-at"
 LIFECYCLE_LABEL = LABEL_PREFIX + "lifecycle"
 POLICY_LABEL = LABEL_PREFIX + "cleanup-policy"
-REQUIRED_LABELS = (MANAGED_LABEL, RUN_LABEL, NODE_LABEL, CREATED_LABEL, LIFECYCLE_LABEL, POLICY_LABEL)
+REPOSITORY_SCOPE_LABEL = LABEL_PREFIX + "repository-scope-id"
+REQUIRED_LABELS = (
+    MANAGED_LABEL, RUN_LABEL, NODE_LABEL, CREATED_LABEL, LIFECYCLE_LABEL,
+    POLICY_LABEL, REPOSITORY_SCOPE_LABEL,
+)
 KIND_ORDER = {ResourceKind.CONTAINER: 0, ResourceKind.NETWORK: 1, ResourceKind.VOLUME: 2}
 COMPOSE_MATCH_LABEL = {
     ResourceKind.CONTAINER: "com.docker.compose.service",
@@ -75,6 +79,7 @@ class LeaseProof:
     active: bool
     readable: bool
     observed_at: datetime
+    repository_scope_id: str
 
     def __post_init__(self) -> None:
         if not _valid_lease_proof(self):
@@ -88,6 +93,8 @@ def _valid_lease_proof(proof: object) -> bool:
         and type(proof.active) is bool and type(proof.readable) is bool
         and type(proof.observed_at) is datetime
         and proof.observed_at.tzinfo is not None and proof.observed_at.utcoffset() is not None
+        and type(proof.repository_scope_id) is str
+        and re.fullmatch(r"[0-9a-f]{64}", proof.repository_scope_id) is not None
     )
 
 
@@ -288,12 +295,18 @@ class DockerCreationPlan:
 class DockerAdapter:
     def __init__(
         self, runner: CommandRunner, *, now: Optional[Callable[[], datetime]] = None,
+        repository_scope_id: str,
         lease_reader: Optional[LeaseReader] = None,
         lease_max_age: timedelta = timedelta(minutes=1),
         incomplete_node_max_age: timedelta = timedelta(minutes=1),
         creation_time_skew: timedelta = timedelta(minutes=5),
         stop_timeout_seconds: int = 10,
     ):
+        if (
+            type(repository_scope_id) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", repository_scope_id) is None
+        ):
+            raise invalid_policy("invalid_repository_scope_id")
         if type(stop_timeout_seconds) is not int or not 1 <= stop_timeout_seconds <= 60:
             raise invalid_policy("invalid_docker_stop_timeout")
         if (
@@ -303,6 +316,7 @@ class DockerAdapter:
         ):
             raise invalid_policy("invalid_docker_proof_window")
         self.runner = runner
+        self.repository_scope_id = repository_scope_id
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.lease_reader = lease_reader
         self.lease_max_age = lease_max_age
@@ -324,6 +338,7 @@ class DockerAdapter:
             MANAGED_LABEL: "true", RUN_LABEL: run_id, NODE_LABEL: node_id,
             CREATED_LABEL: _timestamp(created), LIFECYCLE_LABEL: lifecycle,
             POLICY_LABEL: cleanup_policy,
+            REPOSITORY_SCOPE_LABEL: self.repository_scope_id,
         }
 
     def plan_create(
@@ -456,10 +471,11 @@ class DockerAdapter:
     def inventory(self) -> DockerInventory:
         resources = []
         evidence = []
+        scope_filter = "label=" + REPOSITORY_SCOPE_LABEL + "=" + self.repository_scope_id
         list_commands = (
-            (ResourceKind.CONTAINER, ("docker", "ps", "-a", "--filter", "label=" + MANAGED_LABEL + "=true", "--format", "{{.ID}}")),
-            (ResourceKind.NETWORK, ("docker", "network", "ls", "--filter", "label=" + MANAGED_LABEL + "=true", "--format", "{{.ID}}")),
-            (ResourceKind.VOLUME, ("docker", "volume", "ls", "--filter", "label=" + MANAGED_LABEL + "=true", "--format", "{{.Name}}")),
+            (ResourceKind.CONTAINER, ("docker", "ps", "-a", "--filter", "label=" + MANAGED_LABEL + "=true", "--filter", scope_filter, "--format", "{{.ID}}")),
+            (ResourceKind.NETWORK, ("docker", "network", "ls", "--filter", "label=" + MANAGED_LABEL + "=true", "--filter", scope_filter, "--format", "{{.ID}}")),
+            (ResourceKind.VOLUME, ("docker", "volume", "ls", "--filter", "label=" + MANAGED_LABEL + "=true", "--filter", scope_filter, "--format", "{{.Name}}")),
         )
         for kind, argv in list_commands:
             listed = self.runner.run(argv)
@@ -597,7 +613,10 @@ class DockerAdapter:
     ) -> CleanupPlan:
         records = [value for value in registry.resources_for(run_id, node_id) if value.lifecycle == "chunk" and value.kind in KIND_ORDER]
         return self._plan_registered(
-            inventory, records, CleanupScope(run_id, node_id),
+            inventory, records, CleanupScope(
+                run_id, node_id,
+                repository_scope_id=self.repository_scope_id,
+            ),
             incomplete_node_proof=incomplete_node_proof,
         )
 
@@ -608,7 +627,10 @@ class DockerAdapter:
     ) -> CleanupPlan:
         records = [value for value in registry.resources_for(run_id) if value.kind in KIND_ORDER]
         return self._plan_registered(
-            inventory, records, CleanupScope(run_id, terminal=terminal),
+            inventory, records, CleanupScope(
+                run_id, terminal=terminal,
+                repository_scope_id=self.repository_scope_id,
+            ),
             incomplete_node_proof=incomplete_node_proof,
         )
 
@@ -646,7 +668,10 @@ class DockerAdapter:
             if not resource.inspect_ok:
                 dispositions.append(disposition_for(record, CleanupDisposition.BLOCKED, "none", "docker_inspect_failed"))
                 continue
-            if not _registry_labels_agree(record, resource, self.creation_time_skew):
+            if not _registry_labels_agree(
+                record, resource, self.creation_time_skew,
+                self.repository_scope_id,
+            ):
                 dispositions.append(disposition_for(record, CleanupDisposition.FOREIGN, "none", "registry_label_disagreement"))
                 continue
             if record.dependent_node_ids and incomplete_node_proof is None:
@@ -692,7 +717,9 @@ class DockerAdapter:
                 if key in registered_keys:
                     continue
                 if (
-                    not resource.inspect_ok or not _valid_ownership_labels(resource.labels)
+                    not resource.inspect_ok or not _valid_ownership_labels(
+                        resource.labels, self.repository_scope_id,
+                    )
                     or resource.labels.get(RUN_LABEL) != scope.run_id
                 ):
                     if resource.labels.get(RUN_LABEL) == scope.run_id:
@@ -743,6 +770,12 @@ class DockerAdapter:
             if not _valid_ownership_labels(labels):
                 dispositions.append(_docker_disposition(resource, CleanupDisposition.FOREIGN, "none", "invalid_ownership_labels"))
                 continue
+            if labels[REPOSITORY_SCOPE_LABEL] != self.repository_scope_id:
+                dispositions.append(_docker_disposition(
+                    resource, CleanupDisposition.FOREIGN, "none",
+                    "foreign_repository_scope",
+                ))
+                continue
             created = _parse_timestamp(labels[CREATED_LABEL])
             if resource.created_at.tzinfo is None or abs(resource.created_at - created) > self.creation_time_skew:
                 dispositions.append(_docker_disposition(resource, CleanupDisposition.FOREIGN, "none", "created_at_label_disagreement"))
@@ -769,7 +802,10 @@ class DockerAdapter:
             if disposition is not None:
                 dispositions.append(disposition)
         return CleanupPlan(
-            CleanupScope("stale", stale_sweep=True),
+            CleanupScope(
+                "stale", stale_sweep=True,
+                repository_scope_id=self.repository_scope_id,
+            ),
             tuple(sorted(_resource_identity(value) for value in inventory.resources)),
             tuple(actions), tuple(dispositions),
         )
@@ -786,6 +822,7 @@ class DockerAdapter:
         if (
             type(proof) is not LeaseProof or not _valid_lease_proof(proof)
             or proof.run_id != run_id or not proof.readable
+            or proof.repository_scope_id != self.repository_scope_id
         ):
             return None, "lease_proof_unreadable"
         age = now - proof.observed_at
@@ -895,7 +932,9 @@ class DockerAdapter:
         if orphan_mode:
             if (
                 record is not None or incomplete_node_proof is not None
-                or not _valid_ownership_labels(resource.labels)
+                or not _valid_ownership_labels(
+                    resource.labels, self.repository_scope_id,
+                )
             ):
                 raise invalid_policy("docker_cleanup_precondition_changed")
             record = _record_from_resource(resource)
@@ -938,7 +977,16 @@ class DockerAdapter:
             and not lease_proof.active
             and timedelta(0) <= self.now() - lease_proof.observed_at <= self.lease_max_age
         ) if requires_lease else lease_proof is None
-        if not resource.inspect_ok or not _registry_labels_agree(record, resource, self.creation_time_skew) or not lease_valid:
+        if (
+            not resource.inspect_ok
+            or not _registry_labels_agree(
+                record, resource, self.creation_time_skew,
+                self.repository_scope_id,
+            )
+            or not lease_valid
+            or (lease_proof is not None and
+                lease_proof.repository_scope_id != self.repository_scope_id)
+        ):
             raise invalid_policy("docker_cleanup_precondition_changed")
         base_preconditions = (
             "registered_kind_and_exact_id", "ownership_labels_exact",
@@ -1024,6 +1072,7 @@ class DockerAdapter:
             raise invalid_policy("invalid_cleanup_result_models")
         if (
             type(plan.scope) is not CleanupScope
+            or plan.scope.repository_scope_id != self.repository_scope_id
             or type(plan.before) is not tuple or type(plan.actions) is not tuple
             or type(plan.dispositions) is not tuple
             or any(type(value) is not CleanupAction for value in plan.actions)
@@ -1041,7 +1090,10 @@ class DockerAdapter:
             raise invalid_policy("invalid_cleanup_result_models")
         # Reconstruct every externally supplied frozen model before trusting it.
         plan = CleanupPlan(
-            CleanupScope(plan.scope.run_id, plan.scope.node_id, plan.scope.terminal, plan.scope.stale_sweep),
+            CleanupScope(
+                plan.scope.run_id, plan.scope.node_id, plan.scope.terminal,
+                plan.scope.stale_sweep, plan.scope.repository_scope_id,
+            ),
             tuple(plan.before),
             tuple(CleanupAction(
                 item.resource_id, item.kind, item.action, tuple(item.argv), item.requires_success_of,
@@ -1157,7 +1209,7 @@ class DockerAdapter:
         observed = tuple(
             _record_from_resource(value) for value in before.resources
             if (value.kind, value.resource_id) in disposition_keys
-            and _valid_ownership_labels(value.labels)
+            and _valid_ownership_labels(value.labels, self.repository_scope_id)
         )
         return receipt, observed
 
@@ -1299,7 +1351,9 @@ def _ownership_labels(labels: Mapping[str, str]) -> dict[str, str]:
     return {key: labels[key] for key in REQUIRED_LABELS if key in labels}
 
 
-def _valid_ownership_labels(labels: Mapping[str, str]) -> bool:
+def _valid_ownership_labels(
+    labels: Mapping[str, str], repository_scope_id: Optional[str] = None,
+) -> bool:
     if set(_ownership_labels(labels)) != set(REQUIRED_LABELS):
         return False
     if labels.get(MANAGED_LABEL) != "true":
@@ -1310,6 +1364,9 @@ def _valid_ownership_labels(labels: Mapping[str, str]) -> bool:
         not _normalized_docker_text(labels.get(RUN_LABEL), 256)
         or not _normalized_docker_text(labels.get(NODE_LABEL), 256)
         or not _normalized_docker_text(labels.get(CREATED_LABEL), 128)
+        or re.fullmatch(r"[0-9a-f]{64}", labels.get(REPOSITORY_SCOPE_LABEL, "")) is None
+        or (repository_scope_id is not None
+            and labels.get(REPOSITORY_SCOPE_LABEL) != repository_scope_id)
     ):
         return False
     try:
@@ -1321,11 +1378,15 @@ def _valid_ownership_labels(labels: Mapping[str, str]) -> bool:
 
 def _registry_labels_agree(
     record: ResourceRecord, resource: DockerResource, creation_time_skew: timedelta,
+    repository_scope_id: str,
 ) -> bool:
     labels = _ownership_labels(resource.labels)
     if not record.labels or set(record.labels) != set(REQUIRED_LABELS):
         return False
-    if not _valid_ownership_labels(labels) or dict(record.labels) != labels:
+    if (
+        not _valid_ownership_labels(labels, repository_scope_id)
+        or dict(record.labels) != labels
+    ):
         return False
     if resource.kind is not record.kind:
         return False
@@ -1405,6 +1466,7 @@ def _docker_cleanup_evidence(
         payload["lease"] = {
             "run_id": lease_proof.run_id, "active": lease_proof.active,
             "readable": lease_proof.readable,
+            "repository_scope_id": lease_proof.repository_scope_id,
         }
     return payload
 

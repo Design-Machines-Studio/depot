@@ -9,6 +9,7 @@ Docker creates it:
 | Label | Value |
 |---|---|
 | `com.designmachines.depot.managed` | exactly `true` |
+| `com.designmachines.depot.repository-scope-id` | immutable 256-bit repository scope identity |
 | `com.designmachines.depot.run-id` | owning workflow run |
 | `com.designmachines.depot.node-id` | creating node |
 | `com.designmachines.depot.created-at` | RFC 3339 timestamp |
@@ -29,6 +30,17 @@ ownership cannot be shadowed.
 External resources, anonymous
 volumes, invalid config, and unsupported or ambiguous command forms are
 explicitly unmanaged.
+
+The scope identity lives in `.workflow-kernel/repository-scope.json`. It is
+created once from cryptographically random bytes and binds the real repository
+root and canonical lease root by absolute path, device, and inode. The kernel
+derives the nearest Git repository from each state directory; callers cannot
+select a lease root or scope ID. Worktree `.git` files are supported, while
+symlinked boundaries, cross-repository state, and changed scope metadata fail
+closed. Docker creation plans copy this exact scope ID into every managed
+object. Managed inventory applies both the positive managed label and exact
+repository-scope label at the Docker query boundary, so identical run or node
+IDs in another repository never enter this repository's cleanup inventory.
 
 ## Registration and cleanup proof
 
@@ -135,7 +147,8 @@ Cleanup uses only exact IDs:
   kind+ID inspect command returns exit code 1 and an exact Docker not-found
   response for that same kind and ID; transport failures and caller-asserted
   inventory source strings never prove absence;
-- filtered managed-label inventory is used only for orphan reconciliation;
+- inventory filtered by both the managed label and exact repository-scope
+  label is used only for orphan reconciliation;
 - volumes are removed by explicit IDs only.
 
 Broad cleanup is forbidden. The kernel never emits `docker system prune`, any

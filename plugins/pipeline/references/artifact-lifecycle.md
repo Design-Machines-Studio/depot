@@ -24,7 +24,8 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `prompts/*.md` | 2 | Chunk execution prompts consumed by orchestrator |
 | `manifest.json` | 2 | Chunk ordering and dependency metadata; retained through terminal observe/compare/metrics |
 | `authoritative-receipts.json` | 2 | Cumulative ordered redacted receipt array; canonical input to observe/compare/metrics |
-| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Repository-scoped canonical lifecycle and lease state; every run writes and locks the same path stale reconciliation reads |
+| `.workflow-kernel/repository-scope.json` | 2 | Immutable random repository scope identity bound to the real repository and lease-root path, device, and inode |
+| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Canonical lifecycle and lease state beneath the scope derived from the state directory; callers cannot select a lease root |
 | `.workflow-kernel/runs/<run-id>/events.jsonl` | 2 | Canonical redacted lifecycle ledger paired with the lease state |
 | `pipeline-shadow-observation.json` | 2 | Explicit `authoritative_observation` RunSpec/event snapshot generated after authoritative receipts |
 | `pipeline-shadow-prediction.json` | 2 | Immutable, context/digest-bound `independent_prediction`; bound once and never overwritten by re-observation |

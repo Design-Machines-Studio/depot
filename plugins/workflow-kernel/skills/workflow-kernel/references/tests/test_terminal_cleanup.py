@@ -15,6 +15,7 @@ from workflow_kernel.schema import InvalidSchemaError, NodeStatus, RunStatus
 
 
 NOW = datetime(2026, 7, 15, tzinfo=timezone.utc)
+SCOPE_ID = "a" * 64
 
 
 class FakeRunner:
@@ -28,7 +29,7 @@ class FakeRunner:
 
 class FakeLeaseReader:
     def read(self, run_id):
-        return LeaseProof(run_id, False, True, NOW)
+        return LeaseProof(run_id, False, True, NOW, SCOPE_ID)
 
 
 class TerminalCleanupTests(unittest.TestCase):
@@ -36,7 +37,10 @@ class TerminalCleanupTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.registry = ResourceRegistry(Path(self.directory.name) / "resources.jsonl")
         self.runner = FakeRunner()
-        self.adapter = DockerAdapter(self.runner, now=lambda: NOW, lease_reader=FakeLeaseReader())
+        self.adapter = DockerAdapter(
+            self.runner, now=lambda: NOW, lease_reader=FakeLeaseReader(),
+            repository_scope_id=SCOPE_ID,
+        )
         labels = self.adapter.labels_for("run-1", "node-1", "chunk", "stop-remove")
         self.inventory = DockerInventory((DockerResource("ctr-1", ResourceKind.CONTAINER, labels, NOW),))
         creation = self.adapter.plan_create(("docker", "run", "alpine"), "run-1", "node-1", "chunk", "stop-remove")

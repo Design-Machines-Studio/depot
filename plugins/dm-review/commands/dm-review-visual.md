@@ -22,7 +22,7 @@ Visual findings at any severity (P1/P2/P3) are mandatory fixes before merge. See
    - `--a11y`: focus on runtime accessibility checks
 3. Output the visual testing report
 
-Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `.claude/ux-review/workflow-kernel/request.json`; maintain its cumulative ordered redacted receipts at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. Use repository-scoped `.workflow-kernel` as the canonical lease root for this repository only, with the run under `.workflow-kernel/runs/<run-id>`. Before authoritative browser actions, seal the independent prediction:
+Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `.claude/ux-review/workflow-kernel/request.json`; maintain its cumulative ordered redacted receipts at `.claude/ux-review/workflow-kernel/authoritative-receipts.json`. Initialize the run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Before authoritative browser actions, seal the independent prediction:
 
 ```text
 python3 -m workflow_kernel bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel

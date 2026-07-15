@@ -378,12 +378,14 @@ class CleanupScope:
     node_id: Optional[str] = None
     terminal: bool = False
     stale_sweep: bool = False
+    repository_scope_id: str = "0" * 64
 
     def __post_init__(self) -> None:
         if (
             not _valid_text(self.run_id, maximum=_MAX_IDENTIFIER)
             or (self.node_id is not None and not _valid_text(self.node_id, maximum=_MAX_IDENTIFIER))
             or type(self.terminal) is not bool or type(self.stale_sweep) is not bool
+            or re.fullmatch(r"[0-9a-f]{64}", self.repository_scope_id) is None
         ):
             raise invalid_policy("invalid_cleanup_scope")
 
@@ -424,6 +426,7 @@ class CleanupPlan:
                 "run_id": self.scope.run_id,
                 **({"node_id": self.scope.node_id} if self.scope.node_id is not None else {}),
                 "terminal": self.scope.terminal, "stale_sweep": self.scope.stale_sweep,
+                "repository_scope_id": self.scope.repository_scope_id,
             },
             "before": list(self.before),
             "actions": [value.to_dict() for value in self.actions],
@@ -440,6 +443,7 @@ def _snapshot_cleanup_plan(plan: CleanupPlan) -> CleanupPlan:
             CleanupScope(
                 plan.scope.run_id, plan.scope.node_id,
                 plan.scope.terminal, plan.scope.stale_sweep,
+                plan.scope.repository_scope_id,
             ),
             tuple(plan.before),
             tuple(CleanupAction(
@@ -540,6 +544,7 @@ class CleanupReceipt:
                 **({"node_id": self.scope.node_id} if self.scope.node_id is not None else {}),
                 "terminal": self.scope.terminal,
                 "stale_sweep": self.scope.stale_sweep,
+                "repository_scope_id": self.scope.repository_scope_id,
             },
             "before": list(self.before),
             "after": list(self.after),

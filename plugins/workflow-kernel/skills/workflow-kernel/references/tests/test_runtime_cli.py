@@ -12,6 +12,7 @@ from pathlib import Path
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
+SCOPE_ID = "a" * 64
 
 
 def shadow_artifact(role, run_spec, events=None):
@@ -44,9 +45,51 @@ class RuntimeCliTests(unittest.TestCase):
             env.update(env_extra)
         return subprocess.run([sys.executable, "-m", "workflow_kernel", *map(str, args)], text=True, capture_output=True, env=env, check=False)
 
+    def init_repository_scope(self, root):
+        subprocess.run(["git", "init", "-q", root], check=True)
+        lease_root = root / ".workflow-kernel"
+        lease_root.mkdir(exist_ok=True)
+        repo_stat = root.stat()
+        lease_stat = lease_root.stat()
+        (lease_root / "repository-scope.json").write_text(json.dumps({
+            "schema_version": 1,
+            "scope_id": SCOPE_ID,
+            "repo_root": {
+                "path": str(root.resolve()), "device": repo_stat.st_dev,
+                "inode": repo_stat.st_ino,
+            },
+            "lease_root": {
+                "path": str(lease_root.resolve()), "device": lease_stat.st_dev,
+                "inode": lease_stat.st_ino,
+            },
+        }))
+        return lease_root
+
+    def init_lifecycle(self, root, run_id="pipeline-1"):
+        self.init_repository_scope(root)
+        result = self.run_cli(
+            "init", root / ".workflow-kernel" / "runs" / run_id,
+            "--run-id", run_id, "--mode", "shadow",
+            "--occurred-at", "2026-07-15T00:00:00Z",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def start_lifecycle(self, root, run_id="pipeline-1"):
+        event = json.dumps({
+            "schema_version": 1, "sequence": 2, "run_id": run_id,
+            "node_id": None, "kind": "run.started",
+            "occurred_at": "2026-07-15T00:00:02Z", "payload": {},
+        })
+        result = self.run_cli(
+            "append", root / ".workflow-kernel" / "runs" / run_id,
+            "--event", event,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_observe_pipeline_writes_shadow_artifact_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.init_lifecycle(root)
             manifest = root / "manifest.json"
             manifest.write_text(json.dumps({
                 "feature": "pipeline-1", "workflowClass": "feature", "executionMode": "codex_native",
@@ -63,6 +106,7 @@ class RuntimeCliTests(unittest.TestCase):
                 "--state-dir", root,
             )
             self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.start_lifecycle(root)
             result = self.run_cli("observe-pipeline", "--manifest", manifest, "--receipts", FIXTURES / "pipeline-codex.json", "--state-dir", root)
             self.assertEqual(result.returncode, 0, result.stderr)
             artifact = json.loads((root / "pipeline-shadow-observation.json").read_text())
@@ -71,9 +115,10 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(artifact["run_spec"]["workflow_class"], "feature")
             self.assertEqual(artifact["event_count"], 11)
 
-    def test_observe_rejects_prediction_source_reused_as_authoritative_by_digest(self):
+    def test_observe_accepts_identical_source_after_prestart_lifecycle_binding(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.init_lifecycle(root)
             manifest = root / "manifest.json"
             manifest.write_text(json.dumps({
                 "feature":"pipeline-1", "workflowClass":"feature",
@@ -90,16 +135,18 @@ class RuntimeCliTests(unittest.TestCase):
                 "--state-dir", root,
             )
             self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.start_lifecycle(root)
             observed = self.run_cli(
                 "observe-pipeline", "--manifest", manifest,
                 "--receipts", authoritative, "--state-dir", root,
             )
-            self.assertEqual(observed.returncode, 2, observed.stderr)
-            self.assertFalse((root / "pipeline-shadow-observation.json").exists())
+            self.assertEqual(observed.returncode, 0, observed.stderr)
+            self.assertTrue((root / "pipeline-shadow-observation.json").exists())
 
     def test_independent_prediction_is_bound_once_and_terminal_observation_cannot_overwrite_it(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            self.init_lifecycle(root)
             manifest = root / "manifest.json"
             manifest.write_text(json.dumps({
                 "feature":"pipeline-1","workflowClass":"feature",
@@ -120,6 +167,7 @@ class RuntimeCliTests(unittest.TestCase):
             document = json.loads(bound)
             self.assertEqual(document["artifact_role"], "independent_prediction")
             self.assertTrue(document["event_digest"].startswith("sha256:"))
+            self.start_lifecycle(root)
             observed = self.run_cli(
                 "observe-pipeline", "--manifest", manifest,
                 "--receipts", FIXTURES / "pipeline-codex.json",
@@ -307,8 +355,9 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertIn(command, help_result.stdout)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); argv = root / "argv.json"; output = root / "plan.json"
+            self.init_lifecycle(root, "run-1")
             argv.write_text(json.dumps(["docker", "run", "--name", "review-box", "image:latest"]))
-            result = self.run_cli("plan-create", "--state-dir", root, "--run-id", "run-1", "--node-id", "chunk-1", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", argv, "--output", output)
+            result = self.run_cli("plan-create", "--state-dir", root / ".workflow-kernel" / "runs" / "run-1", "--run-id", "run-1", "--node-id", "chunk-1", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", argv, "--output", output)
             self.assertEqual(result.returncode, 0, result.stderr)
             plan = json.loads(output.read_text())
             self.assertTrue(plan["managed"])
@@ -406,6 +455,7 @@ class RuntimeCliTests(unittest.TestCase):
             MANAGED_LABEL: "true", RUN_LABEL: "old-run", NODE_LABEL: "chunk-1",
             CREATED_LABEL: created.isoformat().replace("+00:00", "Z"),
             LIFECYCLE_LABEL: "run", POLICY_LABEL: "remove-when-stopped",
+            "com.designmachines.depot.repository-scope-id": SCOPE_ID,
         }
         inventory = DockerInventory((DockerResource(
             "container-1", ResourceKind.CONTAINER, labels, created,
@@ -417,13 +467,18 @@ class RuntimeCliTests(unittest.TestCase):
 
         class InactiveLease:
             def read(self, run_id):
-                return LeaseProof(run_id, False, True, now)
+                return LeaseProof(run_id, False, True, now, SCOPE_ID)
 
-        proved = DockerAdapter(Runner(), now=lambda: now, lease_reader=InactiveLease())
+        proved = DockerAdapter(
+            Runner(), now=lambda: now, lease_reader=InactiveLease(),
+            repository_scope_id=SCOPE_ID,
+        )
         self.assertTrue(_stale_cleanup_plan(proved, inventory, 24).actions)
         retained = _stale_cleanup_plan(proved, inventory, 72)
         self.assertEqual(retained.dispositions[0].reason, "ttl_not_expired")
-        blocked = _stale_cleanup_plan(DockerAdapter(Runner(), now=lambda: now), inventory, 24)
+        blocked = _stale_cleanup_plan(DockerAdapter(
+            Runner(), now=lambda: now, repository_scope_id=SCOPE_ID,
+        ), inventory, 24)
         self.assertFalse(blocked.actions)
         self.assertEqual(blocked.dispositions[0].reason, "lease_reader_unavailable")
 
@@ -437,7 +492,10 @@ class RuntimeCliTests(unittest.TestCase):
         now = datetime.now(timezone.utc).replace(microsecond=0)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); registry = ResourceRegistry(root / "resources.jsonl")
-            plan = DockerAdapter(type("Runner", (), {"run": lambda _self, argv: None})()).plan_reconcile_run(
+            plan = DockerAdapter(
+                type("Runner", (), {"run": lambda _self, argv: None})(),
+                repository_scope_id=SCOPE_ID,
+            ).plan_reconcile_run(
                 registry, DockerInventory(()), "run-1", terminal=True,
             )
             document = _cleanup_artifact_document(plan, DockerInventory(()))
@@ -449,16 +507,24 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(current.name, "reconcile.current-run.json")
             self.assertEqual(stale.name, "reconcile.stale-sweep.json")
 
-            run_dir = root / "runs" / "old-run"; run_dir.mkdir(parents=True)
-            state = {
-                "schema_version":1,"revision":1,"run_id":"old-run","mode":"shadow","status":"succeeded",
-                "created_at":now.isoformat(),"updated_at":now.isoformat(),"nodes":{},"evidence":[],"cleanup_reconciled":True,
-            }
-            (run_dir / "run-state.json").write_text(json.dumps(state))
-            proof = StateDirectoryLeaseReader(root, now=lambda: now).read("old-run")
+            repo = root / "repo"
+            self.init_lifecycle(repo, "old-run")
+            lease_root = repo / ".workflow-kernel"
+            run_dir = lease_root / "runs" / "old-run"
+            for sequence, kind, payload in (
+                (1, "run.started", {}),
+                (2, "run.succeeded", {"evidence": ["receipt.json"]}),
+            ):
+                result = self.run_cli("append", run_dir, "--event", json.dumps({
+                    "schema_version": 1, "sequence": sequence,
+                    "run_id": "old-run", "node_id": None, "kind": kind,
+                    "occurred_at": now.isoformat(), "payload": payload,
+                }))
+                self.assertEqual(result.returncode, 0, result.stderr)
+            proof = StateDirectoryLeaseReader(lease_root, SCOPE_ID, now=lambda: now).read("old-run")
             self.assertFalse(proof.active)
             self.assertTrue(proof.readable)
-            self.assertIsNone(StateDirectoryLeaseReader(root, now=lambda: now).read("missing"))
+            self.assertIsNone(StateDirectoryLeaseReader(lease_root, SCOPE_ID, now=lambda: now).read("missing"))
 
     def test_stale_state_reader_treats_live_os_lease_as_active_and_guard_is_nonblocking(self):
         from workflow_kernel.cli import StateDirectoryLeaseReader
@@ -466,23 +532,19 @@ class RuntimeCliTests(unittest.TestCase):
         from workflow_kernel.state import RunLease
         now = datetime.now(timezone.utc).replace(microsecond=0)
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); run_dir = root / "runs" / "old-run"
-            run_dir.mkdir(parents=True)
+            repo = Path(directory) / "repo"
+            self.init_lifecycle(repo, "old-run")
+            root = repo / ".workflow-kernel"; run_dir = root / "runs" / "old-run"
             state_path = run_dir / "run-state.json"
-            state_path.write_text(json.dumps({
-                "schema_version":1,"revision":1,"run_id":"old-run",
-                "mode":"shadow","status":"succeeded",
-                "created_at":now.isoformat(),"updated_at":now.isoformat(),
-                "nodes":{},"evidence":[],"cleanup_reconciled":True,
-            }))
-            reader = StateDirectoryLeaseReader(root, now=lambda: now)
+            reader = StateDirectoryLeaseReader(root, SCOPE_ID, now=lambda: now)
             with RunLease(state_path):
                 self.assertTrue(reader.read("old-run").active)
                 with self.assertRaises(LeaseConflictError):
                     with reader.inactive_guard("old-run"):
                         self.fail("live run lease must not yield an inactive guard")
-            with reader.inactive_guard("old-run") as proof:
-                self.assertFalse(proof.active)
+            with self.assertRaises(ValueError):
+                with reader.inactive_guard("old-run"):
+                    self.fail("planned run must remain active")
 
     def test_canonical_run_init_is_reachable_from_shared_lease_root(self):
         from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory
@@ -490,11 +552,12 @@ class RuntimeCliTests(unittest.TestCase):
         from workflow_kernel.cli import StateDirectoryLeaseReader
         now = "2026-07-15T00:00:00Z"
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory) / ".workflow-kernel"
+            repo = Path(directory) / "repo"
+            root = self.init_repository_scope(repo)
             run_dir = root / "runs" / "old-run"
             initialized = self.run_cli(
                 "init", run_dir, "--run-id", "old-run",
-                "--lease-root", root, "--occurred-at", now,
+                "--occurred-at", now,
             )
             self.assertEqual(initialized.returncode, 0, initialized.stderr)
             for sequence, kind, occurred_at, payload in (
@@ -508,13 +571,13 @@ class RuntimeCliTests(unittest.TestCase):
                 })
                 appended = self.run_cli("append", run_dir, "--event", event)
                 self.assertEqual(appended.returncode, 0, appended.stderr)
-            proof = StateDirectoryLeaseReader(root).read("old-run")
+            proof = StateDirectoryLeaseReader(root, SCOPE_ID).read("old-run")
             self.assertFalse(proof.active)
-            state_dir = Path(directory) / "plans" / "feature"
+            state_dir = repo / "plans" / "feature"
             state_dir.mkdir(parents=True)
             output = state_dir / "reconcile.json"
             args = SimpleNamespace(
-                state_dir=state_dir, lease_root=root, run_id="current-run",
+                state_dir=state_dir, run_id="current-run",
                 ttl_hours=24, node_statuses=None, output=output,
             )
             with (
@@ -539,15 +602,17 @@ class RuntimeCliTests(unittest.TestCase):
         created = now - timedelta(hours=48)
         labels = {
             "com.designmachines.depot.managed":"true",
+            "com.designmachines.depot.repository-scope-id":SCOPE_ID,
             "com.designmachines.depot.run-id":"old-run",
             "com.designmachines.depot.node-id":"old-node",
             "com.designmachines.depot.created-at":created.isoformat().replace("+00:00","Z"),
             "com.designmachines.depot.lifecycle":"run",
             "com.designmachines.depot.cleanup-policy":"remove-when-stopped",
         }
-        container_list = ("docker","ps","-a","--filter","label=com.designmachines.depot.managed=true","--format","{{.ID}}")
-        network_list = ("docker","network","ls","--filter","label=com.designmachines.depot.managed=true","--format","{{.ID}}")
-        volume_list = ("docker","volume","ls","--filter","label=com.designmachines.depot.managed=true","--format","{{.Name}}")
+        scope_filter = "label=com.designmachines.depot.repository-scope-id=" + SCOPE_ID
+        container_list = ("docker","ps","-a","--filter","label=com.designmachines.depot.managed=true","--filter",scope_filter,"--format","{{.ID}}")
+        network_list = ("docker","network","ls","--filter","label=com.designmachines.depot.managed=true","--filter",scope_filter,"--format","{{.ID}}")
+        volume_list = ("docker","volume","ls","--filter","label=com.designmachines.depot.managed=true","--filter",scope_filter,"--format","{{.Name}}")
         inspect = ("docker","container","inspect","ctr-old")
         remove = ("docker","rm","ctr-old")
         inspected = json.dumps([{
@@ -569,18 +634,24 @@ class RuntimeCliTests(unittest.TestCase):
                 return self.results[argv]
 
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory); run_dir = root / "runs" / "old-run"
-            run_dir.mkdir(parents=True)
-            (run_dir / "run-state.json").write_text(json.dumps({
-                "schema_version":1,"revision":1,"run_id":"old-run",
-                "mode":"shadow","status":"succeeded",
-                "created_at":created.isoformat(),"updated_at":now.isoformat(),
-                "nodes":{},"evidence":[],"cleanup_reconciled":True,
-            }))
+            repo = Path(directory) / "repo"
+            self.init_lifecycle(repo, "old-run")
+            root = repo / ".workflow-kernel"; run_dir = root / "runs" / "old-run"
+            for sequence, kind, payload in (
+                (1, "run.started", {}),
+                (2, "run.succeeded", {"evidence": ["receipt.json"]}),
+            ):
+                result = self.run_cli("append", run_dir, "--event", json.dumps({
+                    "schema_version": 1, "sequence": sequence,
+                    "run_id": "old-run", "node_id": None, "kind": kind,
+                    "occurred_at": now.isoformat(), "payload": payload,
+                }))
+                self.assertEqual(result.returncode, 0, result.stderr)
             runner = Runner()
             adapter = DockerAdapter(
                 runner, now=lambda: now,
-                lease_reader=StateDirectoryLeaseReader(root, now=lambda: now),
+                lease_reader=StateDirectoryLeaseReader(root, SCOPE_ID, now=lambda: now),
+                repository_scope_id=SCOPE_ID,
             )
             inventory = adapter.inventory()
             plan = adapter.plan_stale_sweep(inventory, timedelta(hours=24))
@@ -594,7 +665,6 @@ class RuntimeCliTests(unittest.TestCase):
             outcomes.write_text("[]")
             args = SimpleNamespace(
                 plan=plan_path, step_index=0, state_dir=root,
-                lease_root=root,
                 outcomes=outcomes, inventory=inventory_path,
                 node_statuses=root / "must-not-be-read.json", output=output,
             )
@@ -624,6 +694,7 @@ class RuntimeCliTests(unittest.TestCase):
         now = datetime.now(timezone.utc).replace(microsecond=0)
         labels = {
             "com.designmachines.depot.managed":"true",
+            "com.designmachines.depot.repository-scope-id":SCOPE_ID,
             "com.designmachines.depot.run-id":"run-1",
             "com.designmachines.depot.node-id":"node-1",
             "com.designmachines.depot.created-at":now.isoformat().replace("+00:00","Z"),
@@ -642,7 +713,9 @@ class RuntimeCliTests(unittest.TestCase):
                 raise AssertionError("runner must not be called")
 
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            repo = Path(directory) / "repo"
+            self.init_lifecycle(repo, "run-1")
+            root = repo / ".workflow-kernel" / "runs" / "run-1"
             registry = ResourceRegistry(root / "resources.jsonl")
             record = ResourceRecord(
                 "ctr-1", ResourceKind.CONTAINER, "run-1", "node-1",
@@ -653,7 +726,9 @@ class RuntimeCliTests(unittest.TestCase):
                 "ctr-1", ResourceKind.CONTAINER, labels, now, running=True,
             )
             inventory = DockerInventory((resource,))
-            adapter = DockerAdapter(PlanningRunner())
+            adapter = DockerAdapter(
+                PlanningRunner(), repository_scope_id=SCOPE_ID,
+            )
             plan = adapter.plan_chunk_cleanup(
                 registry, inventory, "run-1", "node-1",
             )

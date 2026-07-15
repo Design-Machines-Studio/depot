@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
 from .events import EventStore
+from .repository_scope import repository_scope as _repository_scope
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
     RunMode, UnsafePayloadError, WorkflowEvent, serialize_kernel_error,
@@ -99,17 +100,23 @@ def _coordinated_run(states):
 
 def command_init(args):
     root = Path(args.directory)
-    lease_root = getattr(args, "lease_root", None)
-    if lease_root is not None:
-        expected = Path(lease_root) / "runs" / args.run_id
-        if root.resolve(strict=False) != expected.resolve(strict=False):
-            raise ValueError("run directory does not match canonical lease root")
+    scope = _repository_scope(root, create=True)
+    expected = scope.lease_root / "runs" / args.run_id
+    if root.resolve(strict=False) != expected.resolve(strict=False):
+        raise ValueError("run directory does not match canonical repository scope")
     root.mkdir(parents=True, exist_ok=True)
     root, events, states = _paths(root)
     with _coordinated_run(states) as lease:
         events.require_absent()
         states.require_absent()
-        event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {"mode": args.mode})
+        event = WorkflowEvent(1, 0, args.run_id, None, "run.initialized", args.occurred_at, {
+            "mode": args.mode,
+            "repository_scope_id": scope.scope_id,
+            "repository_root_device": scope.repo_device,
+            "repository_root_inode": scope.repo_inode,
+            "lease_root_device": scope.lease_device,
+            "lease_root_inode": scope.lease_inode,
+        })
         state = TransitionEngine().reconstruct((event,))
         evidence = _append_and_publish(
             events, states, event, state, expected_sequence=0,
@@ -311,8 +318,86 @@ def _document_digest(value):
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
-def _bind_prediction(path, observation_type, spec, events, source):
+def _prediction_binding_payload(scope, observation_type, spec, event_digest, source_digest):
+    return {
+        "stage": "independent_prediction_bound",
+        "observation_type": observation_type,
+        "run_spec_digest": _document_digest(spec.to_dict()),
+        "event_digest": event_digest,
+        "source_digest": source_digest,
+        "repository_scope_id": scope.scope_id,
+        "evidence": [f"{observation_type}-shadow-prediction.json"],
+    }
+
+
+def _prediction_lifecycle(scope, spec):
+    return scope.lease_root / "runs" / spec.run_id
+
+
+def _prediction_binding_matches(event, expected_payload):
+    return (
+        type(event) is WorkflowEvent and event.kind == "evidence.recorded"
+        and event.to_dict().get("payload") == expected_payload
+    )
+
+
+def _load_prediction_lifecycle(scope, spec):
+    directory = _prediction_lifecycle(scope, spec)
+    _, events, states = _paths(directory)
+    with _coordinated_run(states):
+        replayed, _notes, reconstructed, _materialized = _observe_consistent_run(
+            events, states, TransitionEngine(), recovery=False,
+            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
+        )
+    return replayed, reconstructed
+
+
+def _append_prediction_binding(scope, observation_type, spec, document):
+    directory = _prediction_lifecycle(scope, spec)
+    _, events, states = _paths(directory)
+    engine = TransitionEngine()
+    expected_payload = _prediction_binding_payload(
+        scope, observation_type, spec,
+        document["event_digest"], document["source_digest"],
+    )
+    with _coordinated_run(states) as lease:
+        replayed, _notes, reconstructed, materialized = _observe_consistent_run(
+            events, states, engine, recovery=False,
+            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
+        )
+        if len(replayed) == 2 and replayed[1].kind == "evidence.recorded":
+            if not _prediction_binding_matches(replayed[1], expected_payload):
+                raise ValueError("prediction lifecycle binding mismatch")
+            return False
+        if (
+            len(replayed) != 1 or replayed[0].kind != "run.initialized"
+            or reconstructed.status.value != "planned"
+        ):
+            raise ValueError("prediction must be bound before run start")
+        current = datetime.now(timezone.utc)
+        prior = datetime.fromisoformat(
+            reconstructed.updated_at.replace("Z", "+00:00"),
+        )
+        occurred_at = max(current, prior + timedelta(microseconds=1)).isoformat().replace(
+            "+00:00", "Z",
+        )
+        event = WorkflowEvent(
+            1, 1, spec.run_id, None, "evidence.recorded", occurred_at,
+            expected_payload,
+        )
+        next_state = engine.apply(reconstructed, event)
+        expected_revision = materialized.revision if materialized is not None else -1
+        _append_and_publish(
+            events, states, event, next_state, expected_sequence=1,
+            expected_revision=expected_revision, lease=lease,
+        )
+    return True
+
+
+def _bind_prediction(path, observation_type, spec, events, source, scope):
     event_documents = [event.to_dict() for event in events]
+    event_digest = _document_digest(event_documents)
+    source_digest = _document_digest(source)
     document = {
         "schema_version": 1, "artifact_role": "independent_prediction",
         "observation_type": observation_type,
@@ -320,8 +405,11 @@ def _bind_prediction(path, observation_type, spec, events, source):
         "run_spec_digest": _document_digest(spec.to_dict()),
         "event_count": len(events),
         "events": event_documents,
-        "event_digest": _document_digest(event_documents),
-        "source_digest": _document_digest(source),
+        "event_digest": event_digest,
+        "source_digest": source_digest,
+        "lifecycle_binding": _prediction_binding_payload(
+            scope, observation_type, spec, event_digest, source_digest,
+        ),
         "observation_only": True,
     }
     try:
@@ -338,12 +426,16 @@ def _bind_prediction(path, observation_type, spec, events, source):
             or existing.get("events") != event_documents
             or existing.get("event_digest") != _document_digest(event_documents)
             or existing.get("source_digest") != _document_digest(source)
+            or existing.get("lifecycle_binding") != document["lifecycle_binding"]
         ):
             raise ValueError("invalid bound prediction artifact") from None
         return False
 
 
-def _require_bound_prediction(state_dir, observation_type, spec, authoritative_source):
+def _require_bound_prediction(state_dir, observation_type, spec):
+    from .repository_scope import repository_scope
+
+    scope = repository_scope(state_dir)
     path = Path(state_dir) / f"{observation_type}-shadow-prediction.json"
     prediction = _load_json(path)
     run_spec = spec.to_dict()
@@ -357,13 +449,28 @@ def _require_bound_prediction(state_dir, observation_type, spec, authoritative_s
         or type(events) is not list
         or prediction.get("event_digest") != _document_digest(events)
         or not re.fullmatch(r"sha256:[0-9a-f]{64}", prediction.get("source_digest", ""))
-        or prediction.get("source_digest") == _document_digest(authoritative_source)
+        or prediction.get("lifecycle_binding") != _prediction_binding_payload(
+            scope, observation_type, spec,
+            prediction.get("event_digest"), prediction.get("source_digest"),
+        )
     ):
         raise ValueError("bound prediction artifact mismatch")
+    replayed, _state = _load_prediction_lifecycle(scope, spec)
+    if (
+        len(replayed) < 3
+        or replayed[0].kind != "run.initialized"
+        or not _prediction_binding_matches(
+            replayed[1], prediction["lifecycle_binding"],
+        )
+        or replayed[2].kind != "run.started"
+    ):
+        raise ValueError("prediction lifecycle authority missing or reordered")
     return prediction
 
 
 def command_bind_prediction(args):
+    from .repository_scope import repository_scope
+
     source = _load_json(args.prediction_receipts)
     if type(source) is not list:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
@@ -385,8 +492,20 @@ def command_bind_prediction(args):
         events = translate_review_receipts(source)
         name = "review-shadow-prediction.json"
     _require_spec_receipt_context(spec, events)
+    scope = repository_scope(args.state_dir)
+    replayed, state = _load_prediction_lifecycle(scope, spec)
+    if (
+        len(replayed) not in {1, 2} or state.status.value != "planned"
+        or replayed[0].kind != "run.initialized"
+        or (len(replayed) == 2 and replayed[1].kind != "evidence.recorded")
+    ):
+        raise ValueError("prediction must be bound before run start")
     output = Path(args.state_dir) / name
-    bound = _bind_prediction(output, args.type, spec, events, source)
+    artifact_bound = _bind_prediction(output, args.type, spec, events, source, scope)
+    lifecycle_bound = _append_prediction_binding(
+        scope, args.type, spec, _load_json(output),
+    )
+    bound = artifact_bound or lifecycle_bound
     _emit({"prediction_bound": bound, "event_count": len(events), "output": str(output)})
     return 0
 
@@ -401,7 +520,7 @@ def command_observe_pipeline(args):
     spec = translate_manifest(manifest, _profile_from_receipts(receipts))
     events = translate_pipeline_receipts(receipts)
     _require_spec_receipt_context(spec, events)
-    _require_bound_prediction(args.state_dir, "pipeline", spec, receipts)
+    _require_bound_prediction(args.state_dir, "pipeline", spec)
     artifact = {
         "schema_version": 1,
         "artifact_role": "authoritative_observation",
@@ -430,7 +549,7 @@ def command_observe_review(args):
     spec = translate_review(request, _profile_from_receipts(receipts))
     events = translate_review_receipts(receipts)
     _require_spec_receipt_context(spec, events)
-    _require_bound_prediction(args.state_dir, "review", spec, receipts)
+    _require_bound_prediction(args.state_dir, "review", spec)
     artifact = {
         "schema_version": 1,
         "artifact_role": "authoritative_observation",
@@ -487,13 +606,6 @@ def command_compare(args):
         or prediction.get("observation_type") != observation_type
     ):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
-    if prediction.get("source_digest") == _document_digest(receipts):
-        report = ParityReport(
-            "unsafe_to_promote", False, False,
-            ("prediction_source_reused_as_authoritative",),
-        )
-        _write_json(args.output, report.to_dict())
-        return EXIT_PARITY_GAP
     raw_events = prediction.get("events")
     if (
         type(raw_events) is not list
@@ -634,6 +746,19 @@ class _SubprocessRunner:
 def _registry(state_dir):
     from .resources import ResourceRegistry
     return ResourceRegistry(Path(state_dir) / "resources.jsonl")
+
+
+def _scoped_docker_adapter(state_dir, *, lease_reader=False):
+    from .adapters.docker import DockerAdapter
+    scope = _repository_scope(state_dir)
+    reader = (
+        StateDirectoryLeaseReader(scope.lease_root, scope.scope_id)
+        if lease_reader else None
+    )
+    return scope, DockerAdapter(
+        _SubprocessRunner(), repository_scope_id=scope.scope_id,
+        lease_reader=reader,
+    )
 
 
 def _exact_object(value, fields, name):
@@ -788,8 +913,8 @@ def _cleanup_plan(value):
         raise ValueError("invalid cleanup plan")
     scope = value["scope"]
     if type(scope) is not dict or set(scope) not in (
-        {"run_id", "terminal", "stale_sweep"},
-        {"run_id", "node_id", "terminal", "stale_sweep"},
+        {"run_id", "terminal", "stale_sweep", "repository_scope_id"},
+        {"run_id", "node_id", "terminal", "stale_sweep", "repository_scope_id"},
     ):
         raise ValueError("invalid cleanup plan")
     action_fields = {
@@ -827,7 +952,8 @@ def _cleanup_plan(value):
     ) for item in value["dispositions"])
     return CleanupPlan(
         CleanupScope(scope["run_id"], scope.get("node_id"),
-                     scope.get("terminal", False), scope.get("stale_sweep", False)),
+                     scope.get("terminal", False), scope.get("stale_sweep", False),
+                     scope["repository_scope_id"]),
         tuple(value["before"]), actions, dispositions,
     )
 
@@ -910,10 +1036,13 @@ class StateDirectoryLeaseReader:
 
     _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}")
 
-    def __init__(self, root, *, now=None):
+    def __init__(self, root, repository_scope_id, *, now=None):
         self.root = Path(root).resolve(strict=True)
         if not self.root.is_dir():
             raise ValueError("invalid state directory")
+        if re.fullmatch(r"[0-9a-f]{64}", repository_scope_id) is None:
+            raise ValueError("invalid repository scope identity")
+        self.repository_scope_id = repository_scope_id
         self.now = now or (lambda: datetime.now(timezone.utc))
 
     def _state_path(self, run_id):
@@ -929,6 +1058,13 @@ class StateDirectoryLeaseReader:
             state = StateStore(state_path).load()
         except FileNotFoundError:
             return None
+        ledger, _notes = EventStore(state_path.parent).validate(recovery=False)
+        if (
+            not ledger
+            or ledger[0].kind != "run.initialized"
+            or ledger[0].payload.get("repository_scope_id") != self.repository_scope_id
+        ):
+            raise ValueError("lease state repository scope mismatch")
         if state.run_id != run_id:
             raise ValueError("lease state identity mismatch")
         terminal = {
@@ -941,7 +1077,10 @@ class StateDirectoryLeaseReader:
             or observed_at.utcoffset() is None
         ):
             raise ValueError("invalid lease reader clock")
-        return LeaseProof(run_id, state.status not in terminal, True, observed_at)
+        return LeaseProof(
+            run_id, state.status not in terminal, True, observed_at,
+            self.repository_scope_id,
+        )
 
     def read(self, run_id):
         from .adapters.docker import LeaseProof
@@ -959,7 +1098,9 @@ class StateDirectoryLeaseReader:
                 or observed_at.utcoffset() is None
             ):
                 raise ValueError("invalid lease reader clock") from None
-            return LeaseProof(run_id, True, True, observed_at)
+            return LeaseProof(
+                run_id, True, True, observed_at, self.repository_scope_id,
+            )
 
     @contextmanager
     def inactive_guard(self, run_id):
@@ -999,14 +1140,14 @@ def _cleanup_receipt_status(receipt):
 
 
 def command_plan_create(args):
-    from .adapters.docker import DockerAdapter
     argv = _load_json(args.argv_json)
     dependencies = ()
     if args.dependent_node_ids_json:
         dependencies = _load_json(args.dependent_node_ids_json)
     if type(argv) is not list or type(dependencies) not in {list, tuple}:
         raise ValueError("invalid Docker argv")
-    plan = DockerAdapter(_SubprocessRunner()).plan_create(
+    _scope, adapter = _scoped_docker_adapter(args.state_dir)
+    plan = adapter.plan_create(
         argv, args.run_id, args.node_id, args.lifecycle, args.cleanup_policy,
         dependent_node_ids=tuple(dependencies),
     )
@@ -1015,12 +1156,12 @@ def command_plan_create(args):
 
 
 def command_plan_compose(args):
-    from .adapters.docker import DockerAdapter
     argv = _load_json(args.argv_json)
     dependencies = () if not args.dependent_node_ids_json else _load_json(args.dependent_node_ids_json)
     if type(argv) is not list or type(dependencies) not in {list, tuple}:
         raise ValueError("invalid Docker argv")
-    plan = DockerAdapter(_SubprocessRunner()).plan_compose(
+    _scope, adapter = _scoped_docker_adapter(args.state_dir)
+    plan = adapter.plan_compose(
         argv, args.run_id, args.node_id, args.lifecycle, args.cleanup_policy,
         dependent_node_ids=tuple(dependencies),
     )
@@ -1029,9 +1170,9 @@ def command_plan_compose(args):
 
 
 def command_record_create(args):
-    from .adapters.docker import DockerAdapter
     from .resources import _disposition_json, _resource_json
-    receipt = DockerAdapter(_SubprocessRunner()).record_creation(
+    _scope, adapter = _scoped_docker_adapter(args.state_dir)
+    receipt = adapter.record_creation(
         _registry(args.state_dir), _creation_plan(_load_json(args.plan)),
         _command_result(_load_json(args.result)),
         _inventory(_load_json(args.before_inventory)),
@@ -1051,13 +1192,12 @@ def _registered_inventory(adapter, registry, run_id, node_id=None):
 
 
 def command_plan_cleanup(args):
-    from .adapters.docker import DockerAdapter
-    adapter = DockerAdapter(_SubprocessRunner())
+    scope, adapter = _scoped_docker_adapter(args.state_dir)
     registry = _registry(args.state_dir)
     records = registry.resources_for(args.run_id, args.node_id)
     inventory = adapter.inventory_registered(records)
     proof = _incomplete_node_proof(
-        Path(args.lease_root) / "runs" / args.run_id,
+        scope.lease_root / "runs" / args.run_id,
         args.run_id, records, args.node_statuses,
     )
     if args.node_id is None:
@@ -1075,16 +1215,14 @@ def command_plan_cleanup(args):
 
 
 def command_plan_reconcile(args):
-    from .adapters.docker import DockerAdapter
-    lease_reader = StateDirectoryLeaseReader(args.lease_root)
-    adapter = DockerAdapter(_SubprocessRunner(), lease_reader=lease_reader)
+    scope, adapter = _scoped_docker_adapter(args.state_dir, lease_reader=True)
     registry = _registry(args.state_dir)
     records = registry.resources_for(args.run_id)
     inventory = adapter.inventory_registered(records)
     plan = adapter.plan_reconcile_run(
         registry, inventory, args.run_id,
         incomplete_node_proof=_incomplete_node_proof(
-            Path(args.lease_root) / "runs" / args.run_id,
+            scope.lease_root / "runs" / args.run_id,
             args.run_id, records, args.node_statuses,
         ), terminal=True,
     )
@@ -1110,6 +1248,8 @@ def _stale_cleanup_plan(adapter, inventory, ttl_hours):
 def command_next_cleanup_step(args):
     from .resources import cleanup_step_identities
     plan, _sealed_inventory = _cleanup_document(_load_json(args.plan))
+    if plan.scope.repository_scope_id != _repository_scope(args.state_dir).scope_id:
+        raise ValueError("cleanup plan repository scope mismatch")
     prior = _load_json(args.outcomes)
     if type(prior) is not list or len(prior) > len(cleanup_step_identities(plan)):
         raise ValueError("invalid cleanup results")
@@ -1193,13 +1333,14 @@ def _authority(value):
 
 
 def command_execute_cleanup_step(args):
-    from .adapters.docker import DockerAdapter
     from .resources import cleanup_step_identities
+    scope, adapter = _scoped_docker_adapter(args.state_dir)
     plan, sealed_inventory = _cleanup_document(_load_json(args.plan))
+    if plan.scope.repository_scope_id != scope.scope_id:
+        raise ValueError("cleanup plan repository scope mismatch")
     identities = cleanup_step_identities(plan)
     if args.step_index < 0 or args.step_index >= len(identities):
         raise ValueError("invalid cleanup step")
-    adapter = DockerAdapter(_SubprocessRunner())
     registry = _registry(args.state_dir)
     prior = _load_json(args.outcomes)
     if type(prior) is not list:
@@ -1224,7 +1365,9 @@ def command_execute_cleanup_step(args):
             raise ValueError("cleanup resource absent from sealed inventory")
         orphan_mode = plan.scope.stale_sweep
         lease_context = (
-            StateDirectoryLeaseReader(args.lease_root).inactive_guard(action.run_id)
+            StateDirectoryLeaseReader(
+                scope.lease_root, scope.scope_id,
+            ).inactive_guard(action.run_id)
             if orphan_mode else nullcontext(None)
         )
         with lease_context as lease_proof:
@@ -1241,7 +1384,7 @@ def command_execute_cleanup_step(args):
                 records = (record,)
                 current = adapter.inventory_registered(records)
                 proof = _incomplete_node_proof(
-                    Path(args.lease_root) / "runs" / action.run_id,
+                    scope.lease_root / "runs" / action.run_id,
                     action.run_id, records,
                     args.node_statuses,
                 )
@@ -1266,13 +1409,14 @@ def command_execute_cleanup_step(args):
 
 
 def command_record_cleanup(args):
-    from .adapters.docker import DockerAdapter
+    scope, adapter = _scoped_docker_adapter(args.state_dir)
     plan, before = _cleanup_document(_load_json(args.plan))
+    if plan.scope.repository_scope_id != scope.scope_id:
+        raise ValueError("cleanup plan repository scope mismatch")
     raw_results = _load_json(args.outcomes)
     if type(raw_results) is not list:
         raise ValueError("invalid guarded cleanup results")
     results = tuple(_authority(item) for item in raw_results)
-    adapter = DockerAdapter(_SubprocessRunner())
     registry = _registry(args.state_dir)
     registry.validate_authority_prefix(plan, results)
     if plan.scope.stale_sweep:
@@ -1300,7 +1444,6 @@ def parser():
     init = commands.add_parser("init", help="initialize a shadow-mode run")
     init.add_argument("directory")
     init.add_argument("--run-id", required=True)
-    init.add_argument("--lease-root")
     init.add_argument("--mode", choices=[item.value for item in RunMode], default=RunMode.SHADOW.value)
     init.add_argument("--occurred-at", required=True, help="timezone-aware ISO-8601 timestamp")
     init.set_defaults(handler=command_init)
@@ -1381,7 +1524,6 @@ def parser():
 
     plan_cleanup = commands.add_parser("plan-cleanup", help="plan registered resource cleanup")
     plan_cleanup.add_argument("--state-dir", required=True)
-    plan_cleanup.add_argument("--lease-root", required=True)
     plan_cleanup.add_argument("--run-id", required=True)
     plan_cleanup.add_argument("--node-id")
     plan_cleanup.add_argument("--node-statuses")
@@ -1397,7 +1539,6 @@ def parser():
 
     execute_step = commands.add_parser("execute-cleanup-step", help="execute one sealed cleanup step under registry guard")
     execute_step.add_argument("--state-dir", required=True)
-    execute_step.add_argument("--lease-root", required=True)
     execute_step.add_argument("--plan", required=True)
     execute_step.add_argument("--step-index", type=int, required=True)
     execute_step.add_argument("--inventory", required=True)
@@ -1414,7 +1555,6 @@ def parser():
 
     reconcile = commands.add_parser("plan-reconcile", help="plan terminal registered-resource reconciliation")
     reconcile.add_argument("--state-dir", required=True)
-    reconcile.add_argument("--lease-root", required=True)
     reconcile.add_argument("--run-id", required=True)
     reconcile.add_argument("--ttl-hours", type=float, default=24.0)
     reconcile.add_argument("--node-statuses")

@@ -212,12 +212,12 @@ Do NOT mark a step complete until you have actually done it. Do NOT skip steps.
 
 The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they do not select ready nodes, advance gates, block or approve merges, change provider fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
 
-Resolve the runtime relative to the real path of the currently executing canonical Depot pipeline plugin. Accept an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` commands; inline Python source is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Use exactly one repository-scoped canonical lease root, `.workflow-kernel`, for this repository only. Initialize the run at `.workflow-kernel/runs/<run-id>` with `init ... --lease-root .workflow-kernel` and append every authoritative lifecycle transition there, so current execution and stale reconciliation write, read, and lock the same `run-state.json`. Never use a home-global or cross-repository root.
+Resolve the runtime relative to the real path of the currently executing canonical Depot pipeline plugin. Accept an in-repository runtime only beneath the same canonical Depot repository realpath; otherwise search versioned `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then `~/.codex/plugins/cache/depot/`. Reject symlink escapes, project-cwd/PATH discovery, and incompatible plugin name/version metadata. Use only stable `python3 -m workflow_kernel` commands; inline Python source is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Initialize the run at `.workflow-kernel/runs/<run-id>`; the kernel derives the nearest real Git repository from the state directory and binds the canonical `.workflow-kernel` root to an immutable random scope ID plus repository/root device and inode. No caller-selected lease root is accepted. Symlink, cross-repository, scope-metadata, and run-directory mismatches fail closed, while current execution and stale reconciliation share the same verified `run-state.json`.
 
 Produce the independent prediction before corresponding authoritative actions, then seal it before the first observation:
 
 ```text
-python3 -m workflow_kernel init .workflow-kernel/runs/<run-id> --run-id <run-id> --lease-root .workflow-kernel --mode shadow --occurred-at <timezone-aware-ISO-8601>
+python3 -m workflow_kernel init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
 python3 -m workflow_kernel bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
@@ -227,7 +227,7 @@ Before each observation, atomically materialize the complete ordered redacted re
 python3 -m workflow_kernel observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
 ```
 
-The validated `manifest.json` and cumulative receipt array remain authoritative observations. `bind-prediction` atomically seals the independently produced source, translated events, event digest, and RunSpec context as `pipeline-shadow-prediction.json`. `observe-pipeline` only consumes that matching existing artifact and writes `pipeline-shadow-observation.json` as an explicit `authoritative_observation`; it never creates or mutates a prediction. Reusing prediction-source content as the authoritative source is rejected by digest even when paths differ. Without independent evidence, comparison fails closed. Keep the prediction source and bound artifact through terminal comparison.
+The validated `manifest.json` and cumulative receipt array remain authoritative observations. `bind-prediction` atomically seals the independently produced source, translated events, event digest, and RunSpec context as `pipeline-shadow-prediction.json`, then appends the exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation rejects missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. `observe-pipeline` only consumes that matching existing artifact and writes `pipeline-shadow-observation.json` as an explicit `authoritative_observation`; it never creates or mutates a prediction. Without independent evidence, comparison fails closed. Keep the prediction source and bound artifact through terminal comparison.
 
 If resolution, observation, comparison, or metrics is unavailable, preserve the authoritative result and record `shadow unavailable` with a safe reason. Stable exits are `0` success, `2` invalid input/schema, `3` unsafe/blocked, `4` unavailable/incompatible, `5` parity gap, and `6` write/state conflict. None authorizes changing the canonical result; cleanup exit `3` or `6` remains blocked. Every observation consumes an authoritative receipt reference; builder observations and shadow state cannot stand in for dispatch, resume, validation, evaluation, browser, merge, or cleanup evidence.
 
@@ -1084,9 +1084,9 @@ This boundary runs only after deterministic validation, review/evaluation, requi
 Read the chunk's registered resources and use these exact interfaces:
 
 ```text
-python3 -m workflow_kernel plan-cleanup --state-dir plans/<feature-slug> --lease-root .workflow-kernel --run-id ID --node-id ID --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --output plans/<feature-slug>/docker/<node-id>-cleanup-plan.json
+python3 -m workflow_kernel plan-cleanup --state-dir plans/<feature-slug> --run-id ID --node-id ID --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --output plans/<feature-slug>/docker/<node-id>-cleanup-plan.json
 python3 -m workflow_kernel next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-next-step.json
-python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --lease-root .workflow-kernel --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --step-index N --inventory plans/<feature-slug>/docker/<node-id>-inventory.json --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-step-N-outcome.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --step-index N --inventory plans/<feature-slug>/docker/<node-id>-inventory.json --node-statuses plans/<feature-slug>/docker/<node-id>-node-statuses.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json --output plans/<feature-slug>/docker/<node-id>-step-N-outcome.json
 python3 -m workflow_kernel record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/<node-id>-cleanup-plan.json --outcomes plans/<feature-slug>/docker/<node-id>-cleanup-outcomes.json > plans/<feature-slug>/docker/<node-id>-cleanup-receipt.json
 ```
 
@@ -1345,7 +1345,7 @@ Reconcile authoritative Docker ownership first, then clean artifacts and Git ref
 On every terminal path, first atomically write complete fresh authoritative node statuses to `plans/<feature-slug>/docker/terminal-node-statuses.json`, then invoke:
 
 ```text
-python3 -m workflow_kernel plan-reconcile --state-dir plans/<feature-slug> --lease-root .workflow-kernel --run-id ID --ttl-hours 24 --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --output plans/<feature-slug>/docker/terminal-reconcile-plans.json
+python3 -m workflow_kernel plan-reconcile --state-dir plans/<feature-slug> --run-id ID --ttl-hours 24 --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --output plans/<feature-slug>/docker/terminal-reconcile-plans.json
 ```
 
 The output is this exact non-authorizing descriptor shape:
@@ -1358,7 +1358,7 @@ Each sibling has exact envelope fields `schema_version: 1`, `kind: cleanup-plan-
 
 ```text
 python3 -m workflow_kernel next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-next-step.json
-python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --lease-root .workflow-kernel --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --step-index N --inventory plans/<feature-slug>/docker/terminal-current-run-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-step-N-outcome.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --step-index N --inventory plans/<feature-slug>/docker/terminal-current-run-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json --output plans/<feature-slug>/docker/terminal-current-run-step-N-outcome.json
 python3 -m workflow_kernel record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.current-run.json --outcomes plans/<feature-slug>/docker/terminal-current-run-outcomes.json > plans/<feature-slug>/docker/terminal-current-run-receipt.json
 ```
 
@@ -1366,7 +1366,7 @@ Only after that receipt exists, process the separately sealed stale-sweep artifa
 
 ```text
 python3 -m workflow_kernel next-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-next-step.json
-python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --lease-root .workflow-kernel --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --step-index N --inventory plans/<feature-slug>/docker/terminal-stale-sweep-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-step-N-outcome.json
+python3 -m workflow_kernel execute-cleanup-step --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --step-index N --inventory plans/<feature-slug>/docker/terminal-stale-sweep-inventory.json --node-statuses plans/<feature-slug>/docker/terminal-node-statuses.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json --output plans/<feature-slug>/docker/terminal-stale-sweep-step-N-outcome.json
 python3 -m workflow_kernel record-cleanup --state-dir plans/<feature-slug> --plan plans/<feature-slug>/docker/terminal-reconcile-plans.stale-sweep.json --outcomes plans/<feature-slug>/docker/terminal-stale-sweep-outcomes.json > plans/<feature-slug>/docker/terminal-stale-sweep-receipt.json
 ```
 
