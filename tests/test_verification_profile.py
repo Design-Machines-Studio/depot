@@ -216,11 +216,23 @@ class VerificationProfileTests(unittest.TestCase):
     def test_legacy_assembly_task_is_runnable_required_and_matrix_is_not_authority(self):
         adapter = ProjectPersonaAdapter(policy_path=ROOT / "workflow-policy.json")
         profile = adapter.discover(FIXTURES / "assembly", declaration_root=".")
-        self.assertEqual(len(profile.cases), 2)
+        # 2 personas (casual-member required, reluctant-board-member optional)
+        # x 2 configured engines.
+        self.assertEqual(len(profile.cases), 4)
         self.assertEqual({case.browser_engine for case in profile.cases}, {"chromium", "firefox"})
-        self.assertTrue(all(case.required for case in profile.cases))
+        self.assertTrue(all(
+            case.required for case in profile.cases
+            if case.persona_id == "casual-member"
+        ))
+        self.assertTrue(all(
+            not case.required for case in profile.cases
+            if case.persona_id == "reluctant-board-member"
+        ))
         self.assertTrue(all(case.legacy_status_defaulted for case in profile.cases))
-        self.assertEqual({case.persona_id for case in profile.cases}, {"casual-member"})
+        self.assertEqual(
+            {case.persona_id for case in profile.cases},
+            {"casual-member", "reluctant-board-member"},
+        )
         self.assertEqual({case.expected_outcome for case in profile.cases}, {"FRICTION"})
         self.assertEqual({case.role for case in profile.cases}, {"member"})
         self.assertEqual(profile.auth_field_names, ("session_cookie",))

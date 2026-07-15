@@ -14,6 +14,10 @@ personas:
   - id: casual-member
     expected: FRICTION
     reason: "A live-shape descriptive explanation that is never retained"
+  - id: reluctant-board-member
+    expected: FRICTION
+    required: false
+    reason: "Time-poor director with low software trust needs the next action stated plainly"
 ---
 
 # Scenario
