@@ -14,6 +14,7 @@ Decision table for choosing the right OpenRouter model for each delegation task.
 | `openai/gpt-5.5` | GPT-5.5 | Frontier fallback, one rung under Sol. | 1.05M | Frontier |
 | `anthropic/claude-opus-4.8` | Claude Opus 4.8 | Frontier alternate. Used only on the cascade's `frontier_api` rung (never the main loop). | 1M | Frontier |
 | `openai/gpt-5.6-terra` | GPT-5.6 Terra | Mid frontier rung ($2.50/$15). OpenAI's recommended production default; sits between Opus 4.8 and Sonnet 5. | 1.05M | Frontier (mid) |
+| `moonshotai/kimi-k3` | Kimi K3 | Open-weight frontier (Moonshot AI, 2.8T MoE). Only vision-capable model on the OpenRouter rail; strong long-horizon agentic and frontend work. $3/$15, $0.30 cache hits, max-only reasoning, ~20 TPS. Moonshot-hosted only until the weights ship -- see Privacy for the opt-in ZDR interaction. | 1M | Frontier (mid, vision) |
 | `openai/gpt-5.6-luna` | GPT-5.6 Luna | Frontier TAIL, not a cheap rung. At $1/$6 it is the cheapest OpenAI model but its output costs 3.4x GLM-5.2 and 6.9x DeepSeek V4 Pro -- never put it above `z-ai/glm-5.2` on `cheap_api`. | 1.05M | Frontier (tail) |
 
 ## Task -> Model Mapping
@@ -36,9 +37,11 @@ z-ai/glm-5.2 -> minimax/minimax-m3 -> deepseek/deepseek-v4-pro -> deepseek/deeps
 
 For direct wrapper calls, pass `minimax/minimax-m3` as the immediate fallback when cost-per-action matters, or `deepseek/deepseek-v4-pro` when quality is more important than price. The pipeline cascade owns the full ladder and will continue walking through later models on per-model failures.
 
-## Privacy
+## Privacy (demoted -- opt-in only)
 
-For any review of private code, set `OPENROUTER_ZDR=1` so the wrapper pins providers that do not train on or retain data (`data_collection: deny`). The cascade's cheap/frontier wrapper rungs set this by default.
+Model selection priority is **Quality > Price > Speed > Provider privacy** (user directive, 2026-07-18). `OPENROUTER_ZDR=1` is **opt-in**, never a default: Chinese first-party hosting (Moonshot/DeepSeek/Z.AI) is acceptable by default. Set it per-call only for genuinely sensitive material (client code under NDA, credentials-adjacent diffs); it pins providers with `data_collection: deny`.
+
+**Kimi K3 interaction:** its sole OpenRouter provider is currently Moonshot's own first-party API (weights ship 2026-07-27), which has no `data_collection: deny` variant. K3 is fully live by default. If you do opt into `OPENROUTER_ZDR=1`, K3 requests find no eligible provider and error -- the cascade treats this as a per-model failure and walks to the next `frontier_api` rung; K3 becomes reachable under ZDR once a Western no-log host (Fireworks/Together) carries the weights.
 
 ## Note on Roles vs Slugs
 

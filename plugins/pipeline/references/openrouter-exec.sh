@@ -55,7 +55,7 @@ done
 [ -x "$WRAPPER" ] || { echo "openrouter-exec: openrouter-wrapper.sh not found" >&2; exit 1; }
 
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
-RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-1}" "$WRAPPER" "$MODEL" "$PROMPT" "$TIMEOUT")"
+RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-0}" "$WRAPPER" "$MODEL" "$PROMPT" "$TIMEOUT")"
 
 TMPDIR="${TMPDIR:-/tmp}"
 PATCH_FILE="$(mktemp "$TMPDIR/openrouter-exec.XXXXXX.patch")"

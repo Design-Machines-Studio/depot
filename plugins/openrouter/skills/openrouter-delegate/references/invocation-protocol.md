@@ -38,7 +38,7 @@ done
 # GLM-5.2, explicit 120s timeout, DeepSeek V4 rate-limit fallback (wrapper default timeout is 90s)
 bash "$WRAPPER_PATH" "z-ai/glm-5.2" "your prompt" 120 "deepseek/deepseek-v4-pro"
 
-# Custom system prompt (env), privacy-pinned, prompt via stdin (large content)
+# Custom system prompt (env), opt-in ZDR, prompt via stdin (large content)
 echo "large diff content" | OPENROUTER_ZDR=1 \
   OPENROUTER_SYSTEM="You are a senior code reviewer." \
   bash "$WRAPPER_PATH" "z-ai/glm-5.2" - 180 "deepseek/deepseek-v4-pro"
@@ -49,7 +49,7 @@ echo "large diff content" | OPENROUTER_ZDR=1 \
 - `OPENROUTER_API_KEY` (required): your OpenRouter API key. Never commit it.
 - `OPENROUTER_SYSTEM` (default: terse coding assistant): system prompt.
 - `OPENROUTER_BASE` (default `https://openrouter.ai/api/v1`): API base URL.
-- `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Use for any review of private code.
+- `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Opt-in only -- privacy is demoted (Quality > Price > Speed > Provider privacy); set for genuinely sensitive material (client code under NDA, credentials-adjacent diffs).
 - `OPENROUTER_REQUIRE_PARAMS` (default `1`): skip providers that do not support the requested params (keeps agentic calls from silently degrading).
 - `OPENROUTER_PROVIDER_SORT` (`throughput|latency|price`): bias provider selection.
 

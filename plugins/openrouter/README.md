@@ -1,6 +1,6 @@
 # openrouter
 
-OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to GLM-5.2 (`z-ai/glm-5.2`, 1M context) and DeepSeek V4 over a single OpenAI-compatible endpoint. Privacy-pinned (`OPENROUTER_ZDR`). Powers the pipeline cascade's OpenRouter rail (including the `openrouter-exec` agentic runner) and dm-review's policy-selected external routing.
+OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to GLM-5.2 (`z-ai/glm-5.2`, 1M context) and DeepSeek V4 over a single OpenAI-compatible endpoint. ZDR opt-in (`OPENROUTER_ZDR`; privacy demoted below quality/price/speed). Powers the pipeline cascade's OpenRouter rail (including the `openrouter-exec` agentic runner) and dm-review's policy-selected external routing.
 
 ## What it routes
 
@@ -25,4 +25,4 @@ Security findings and any auth/federation/secrets review are Claude-native and O
 ## Requirements
 
 - `OPENROUTER_API_KEY` set in the environment. When unset, routing falls back to DeepSeek (if keyed) or Claude, and this plugin is a no-op.
-- `OPENROUTER_ZDR=1` recommended to pin zero-data-retention providers.
+- `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).

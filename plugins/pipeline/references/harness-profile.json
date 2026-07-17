@@ -6,12 +6,12 @@
 
   "hosts": {
     "claude-code": {
-      "_comment": "Cockpit = Claude Code on Max. Codex reachable via codex-companion.mjs on the ChatGPT sub. OpenRouter for open models. native_judgment leads with fable (Mythos-class) -- PLAN-CONDITIONAL: when the plan does not carry fable, the orchestrator degrades the native directive to the next model in this list (opus). gpt-5.6-sol outranks fable but CANNOT appear in native_judgment here (Claude-only `kind: native`); it reaches this host via premium_sub and frontier_api. See docs/opus-4-8-tuning.md (Fable vs GPT-5.6 Sol).",
+      "_comment": "Cockpit = Claude Code on PRO (downgraded from Max, effective 2026-08). Codex Pro 20x via codex-companion.mjs is now the deep subscription rail -- prefer it for anything not needing Claude-native visual judgment. native_judgment is demoted to Pro-level acceptance: sonnet leads (the Pro daily driver); opus and fable are likely plan-unavailable on Pro and stay as inert upgrade-path entries -- RC-64 degrades an unavailable native directive to the next model in the list, and if the plan later carries them again, promote them back to the head. gpt-5.6-sol CANNOT appear in native_judgment here (Claude-only `kind: native`); it reaches this host via premium_sub and frontier_api. See docs/opus-4-8-tuning.md (Fable vs GPT-5.6 Sol).",
       "roles": {
         "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro"] },
         "premium_sub":     { "kind": "codex_companion", "probe": "codex",      "models": ["gpt-5.6-sol"] },
-        "native_judgment": { "kind": "native",          "probe": "claude",     "models": ["fable", "opus", "sonnet", "haiku"] },
-        "frontier_api":    { "kind": "wrapper",         "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
+        "native_judgment": { "kind": "native",          "probe": "claude",     "models": ["sonnet", "opus", "fable", "haiku"] },
+        "frontier_api":    { "kind": "wrapper",         "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "moonshotai/kimi-k3", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
         "cheap_api":       { "kind": "wrapper",         "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] },
         "bulk_api":        { "kind": "wrapper",         "probe": "openrouter", "models": ["minimax/minimax-m3", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder", "deepseek/deepseek-v4-pro"] }
       }
@@ -23,7 +23,7 @@
         "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro"] },
         "premium_sub":     { "kind": "native",  "probe": "codex",      "models": ["gpt-5.6-sol", "gpt-5.5", "gpt-5.6-terra", "gpt-5.6-luna"] },
         "native_judgment": { "kind": "native",  "probe": "codex",      "models": ["gpt-5.6-sol", "gpt-5.5", "gpt-5.6-terra", "gpt-5.6-luna"] },
-        "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
+        "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "moonshotai/kimi-k3", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
         "cheap_api":       { "kind": "wrapper", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] },
         "bulk_api":        { "kind": "wrapper", "probe": "openrouter", "models": ["minimax/minimax-m3", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] }
       }
@@ -34,8 +34,8 @@
       "roles": {
         "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-pro"] },
         "premium_sub":     { "kind": "none" },
-        "native_judgment": { "kind": "wrapper", "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
-        "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
+        "native_judgment": { "kind": "wrapper", "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "moonshotai/kimi-k3", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
+        "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["openai/gpt-5.6-sol", "openai/gpt-5.5", "anthropic/claude-opus-4.8", "openai/gpt-5.6-terra", "moonshotai/kimi-k3", "anthropic/claude-sonnet-5", "openai/gpt-5.6-luna"] },
         "cheap_api":       { "kind": "wrapper", "probe": "openrouter", "models": ["z-ai/glm-5.2", "minimax/minimax-m3", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] },
         "bulk_api":        { "kind": "wrapper", "probe": "openrouter", "models": ["minimax/minimax-m3", "deepseek/deepseek-v4-flash", "qwen/qwen3-coder"] }
       }

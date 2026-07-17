@@ -55,7 +55,7 @@ if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
   exit 1
 fi
 
-RESULT=$(echo "${USER_PROMPT}" | OPENROUTER_ZDR=1 bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}")
+RESULT=$(echo "${USER_PROMPT}" | bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}")
 ```
 
 The wrapper JSON-encodes the prompt safely; never embed raw user input directly in a curl `-d` body.

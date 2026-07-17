@@ -14,7 +14,7 @@ This note covers the `world-b-openrouter` changes: a shared `openrouter` provide
 |----------|-------|--------|
 | `OPENROUTER_API_KEY` | env / settings (never committed) | Opt-in signal. Required for any wrapper call. Its presence activates the pipeline cascade and makes `openrouter-bulk-analyst` the preferred dm-review big-diff analyst. |
 | `PIPELINE_CASCADE=1` | env | Manual override that activates the cascade even without an API key (for testing the native-reroute and Airlift-on-cap paths). |
-| `OPENROUTER_ZDR=1` | env (wrapper) | Privacy pin: restrict to providers that do not train on / retain data (`data_collection: deny`). Set by the bulk analyst and recommended for any private-code review. |
+| `OPENROUTER_ZDR=1` | env (wrapper) | Opt-in privacy pin: restrict to providers that do not train on / retain data (`data_collection: deny`). Demoted by default (Quality > Price > Speed > Provider privacy); set only for genuinely sensitive material. |
 | `OPENROUTER_SYSTEM` | env (wrapper) | System prompt. |
 | `OPENROUTER_BASE` | env (wrapper) | API base URL (default `https://openrouter.ai/api/v1`). |
 | `OPENROUTER_REQUIRE_PARAMS` | env (wrapper, default `1`) | Skip providers that do not support requested params. |

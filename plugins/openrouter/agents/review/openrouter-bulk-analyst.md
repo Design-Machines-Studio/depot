@@ -89,10 +89,10 @@ EOF
 fi
 ```
 
-Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`. Then invoke the wrapper, piping the filled prompt via stdin (diffs exceed shell argument limits). Pin privacy with `OPENROUTER_ZDR=1`:
+Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`. Then invoke the wrapper, piping the filled prompt via stdin (diffs exceed shell argument limits). ZDR is opt-in (privacy demoted: Quality > Price > Speed > Provider privacy) -- omit `OPENROUTER_ZDR` unless the diff is genuinely sensitive:
 
 ```bash
-echo "${FILLED_USER_PROMPT}" | OPENROUTER_ZDR=1 \
+echo "${FILLED_USER_PROMPT}" | \
   OPENROUTER_SYSTEM="You are a senior code reviewer. Analyze diffs for security vulnerabilities, architectural violations, code quality issues, and potential bugs. Be precise: cite file paths and line numbers. Report only genuine issues, not style preferences." \
   bash "$WRAPPER_PATH" "z-ai/glm-5.2" - "${TIMEOUT}" "deepseek/deepseek-v4-pro"
 ```
