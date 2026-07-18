@@ -49,7 +49,7 @@ It runs on:
 
 A run that exits without executing the cleanup phase is a contract violation. If the run is aborting because of an exception, the cleanup phase still runs -- it is deterministic git, it cannot make the failure worse.
 
-Cleanup is plain git executed by the orchestrator. It is never delegated to a subagent, and never routed through `openrouter-wrapper.sh`, `deepseek-wrapper.sh`, `openrouter-exec.sh`, or a Codex `multi_agent_v1.spawn_agent` call. Deleting refs is not a judgment task.
+Cleanup is plain git executed by the orchestrator. It is never delegated to a subagent, and never routed through `openrouter-wrapper.sh`, `openrouter-exec.sh`, or a Codex `multi_agent_v1.spawn_agent` call. Deleting refs is not a judgment task.
 
 ## 3. Safe-to-delete decision table
 

@@ -55,7 +55,7 @@ if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
   exit 1
 fi
 
-RESULT=$(echo "${USER_PROMPT}" | OPENROUTER_ZDR=1 bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}")
+RESULT=$(echo "${USER_PROMPT}" | bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}")
 ```
 
 The wrapper JSON-encodes the prompt safely; never embed raw user input directly in a curl `-d` body.
@@ -66,4 +66,4 @@ Exit codes: `0` success, `28` timeout, `1` exhausted/error, `2` bad args. On err
 
 ### Step 6: Present Response
 
-The wrapper prints the model's text content directly -- `$RESULT` is the answer. Present it to the user. (Unlike `/deepseek`, there is no JSON envelope to parse.)
+The wrapper prints the model's text content directly -- `$RESULT` is the answer. Present it to the user; there is no JSON envelope to parse.

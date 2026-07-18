@@ -4,7 +4,7 @@ Complete reference for invoking the OpenRouter API from Claude Code via the Bash
 
 ## The Wrapper
 
-`openrouter-wrapper.sh` is a single-turn completion runner. Its exit-code semantics match `deepseek-wrapper.sh` (0/28/1/2) so results slot into the same consolidator path, but its arg shape is POSITIONAL (`<model> <prompt|-> [timeout] [fallback]`) whereas `deepseek-wrapper.sh` is flag-based (`-m`/`-s`/`-p`) -- a caller built for deepseek's flags needs an adapter, not just a path swap. It centralizes provider preferences, rate-limit fallback, JSON body construction, and timeout enforcement.
+`openrouter-wrapper.sh` is a single-turn completion runner with stable exit codes (`0` success, `28` timeout, `1` exhausted/error, `2` bad arguments). It uses positional arguments (`<model> <prompt|-> [timeout] [fallback]`) and centralizes provider preferences, rate-limit fallback, JSON body construction, response extraction, and timeout enforcement.
 
 **Argument shape (positional):**
 
@@ -17,7 +17,7 @@ openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 - `[timeout_s]` -- per-attempt timeout in seconds (default `90`)
 - `[fallback-slug]` -- a second model to try if the primary returns HTTP 429/503
 
-**Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- the stdout IS the answer. (This differs from `deepseek-wrapper.sh`, which returns the raw JSON envelope.)
+**Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- stdout is the answer.
 
 ## Resolve the Wrapper Path
 
@@ -38,7 +38,7 @@ done
 # GLM-5.2, explicit 120s timeout, DeepSeek V4 rate-limit fallback (wrapper default timeout is 90s)
 bash "$WRAPPER_PATH" "z-ai/glm-5.2" "your prompt" 120 "deepseek/deepseek-v4-pro"
 
-# Custom system prompt (env), privacy-pinned, prompt via stdin (large content)
+# Custom system prompt (env), opt-in ZDR, prompt via stdin (large content)
 echo "large diff content" | OPENROUTER_ZDR=1 \
   OPENROUTER_SYSTEM="You are a senior code reviewer." \
   bash "$WRAPPER_PATH" "z-ai/glm-5.2" - 180 "deepseek/deepseek-v4-pro"
@@ -49,7 +49,7 @@ echo "large diff content" | OPENROUTER_ZDR=1 \
 - `OPENROUTER_API_KEY` (required): your OpenRouter API key. Never commit it.
 - `OPENROUTER_SYSTEM` (default: terse coding assistant): system prompt.
 - `OPENROUTER_BASE` (default `https://openrouter.ai/api/v1`): API base URL.
-- `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Use for any review of private code.
+- `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Opt-in only -- privacy is demoted (Quality > Price > Speed > Provider privacy); set for genuinely sensitive material (client code under NDA, credentials-adjacent diffs).
 - `OPENROUTER_REQUIRE_PARAMS` (default `1`): skip providers that do not support the requested params (keeps agentic calls from silently degrading).
 - `OPENROUTER_PROVIDER_SORT` (`throughput|latency|price`): bias provider selection.
 
@@ -89,4 +89,4 @@ POST https://openrouter.ai/api/v1/chat/completions
 | `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` to stderr. Skip gracefully. |
 | `2` | Bad args | Missing model or prompt. |
 
-Internally, HTTP 429/503 on the primary triggers the `[fallback-slug]` model if provided; if the fallback also fails, the wrapper returns `1`. All failures are graceful skips -- emit a clean "no findings" report so any consolidator can proceed.
+Internally, HTTP 429/503 on the primary triggers the `[fallback-slug]` model if provided; if the fallback also fails, the wrapper returns `1`. Automated review runners convert failures into `### RUNNER FAILURE` so dm-review can retry the coding lane on Codex. Direct `/openrouter` calls report failure to the user.

@@ -980,7 +980,7 @@ class BuilderResumeTests(unittest.TestCase):
         self.assertEqual(missing.reason_code, "host_capability_unavailable")
         self.assertEqual(adapter.resume_calls, [])
 
-    def test_codex_and_generic_hosts_reject_sensitive_and_security_native_work(self):
+    def test_sensitive_and_security_work_use_only_trusted_codex_routes(self):
         templates = WorkflowTemplates()
         security = templates.expand(
             WorkflowClass.SECURITY,
@@ -995,20 +995,42 @@ class BuilderResumeTests(unittest.TestCase):
             WorkflowContext(changed_paths=("internal/auth/keys.py",)),
         )
         sensitive_build = next(node for node in sensitive if node.node_id == "build")
-        for host in ("codex", "generic"):
+        trusted_routes = {
+            "codex": ("native", HostCapability.CODEX_EXECUTION),
+            "claude-code": ("codex_companion", HostCapability.CODEX_EXECUTION),
+        }
+        for host, (rail, capability) in trusted_routes.items():
             for node in (security_build, sensitive_build):
                 with self.subTest(host=host, node=node.node_id):
                     adapter = FakeHostAdapter(
                         capabilities_from_harness_profile(host, canonical_harness_profile()),
-                        dispatch_handles=(handle(host=host),),
+                        dispatch_handles=(handle(
+                            host=host,
+                            context=receipt_context(
+                                node=node.node_id, provider="openai", rail=rail,
+                                capability=capability,
+                            ),
+                        ),),
                     )
                     context = receipt_context(
-                        node=node.node_id, provider="anthropic", rail="native",
-                        capability=HostCapability.ANTHROPIC_NATIVE_EXECUTION,
+                        node=node.node_id, provider="openai", rail=rail,
+                        capability=capability,
                     )
                     decision = BuilderSessionManager(adapter).dispatch(node, context)
-                    self.assertEqual(decision.reason_code, "host_capability_unavailable")
-                    self.assertEqual(adapter.dispatch_calls, [])
+                    self.assertEqual(decision.reason_code, "builder_dispatched")
+                    self.assertEqual(len(adapter.dispatch_calls), 1)
+
+        for node in (security_build, sensitive_build):
+            with self.subTest(host="generic", node=node.node_id):
+                adapter = FakeHostAdapter(
+                    capabilities_from_harness_profile("generic", canonical_harness_profile()),
+                )
+                context = receipt_context(
+                    node=node.node_id, provider="openrouter", rail="openrouter_exec",
+                    capability=HostCapability.CODEX_EXECUTION,
+                )
+                with self.assertRaises(InvalidSchemaError):
+                    BuilderSessionManager(adapter).dispatch(node, context)
 
     def test_builder_decision_outcome_enforces_coherent_payloads(self):
         from workflow_kernel.model import BuilderSessionDecision

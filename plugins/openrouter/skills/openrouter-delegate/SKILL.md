@@ -1,11 +1,11 @@
 ---
 name: openrouter-delegate
-description: Delegate policy-selected review, second-opinion analysis, config/doc generation, and bounded OpenRouter execution to GLM-5.2 / DeepSeek V4 at lower cost than Anthropic. GLM-5.2 (z-ai/glm-5.2, 1M context) is the default quality-per-dollar model. Powers the pipeline cascade's OpenRouter rail, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.
+description: Delegate policy-selected review, second-opinion analysis, config/doc generation, and bounded execution to quality- and cost-ranked OpenRouter model slugs. GLM-5.2 (z-ai/glm-5.2, 1M context) is the mechanical default. Powers the pipeline cascade's OpenRouter rail, generic review-agent runner, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.
 ---
 
 # OpenRouter Delegation
 
-Invoke the OpenRouter API as a supplementary provider for tasks where cost-per-token or large-context capacity matters. OpenRouter is always supplementary -- Opus remains the primary thinker, and Claude's main loop is never routed through OpenRouter.
+Invoke OpenRouter for coding tasks where model quality, cost, or large context make it the right rail. Coding uses Codex and OpenRouter; Claude is reserved for non-coding work.
 
 OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin pins **GLM-5.2** (`z-ai/glm-5.2`) as the default quality-per-dollar model, with **DeepSeek V4** (`deepseek/deepseek-v4-pro`) as the alternate. Both carry 1M-token context.
 
@@ -16,31 +16,31 @@ The wrapper (`references/openrouter-wrapper.sh`) is a **single-turn completion c
 Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter-exec.sh`, which asks OpenRouter for a unified diff, applies it in the worktree, runs verification, commits, and emits `implementedBy: openrouter` plus usage. Use that runner only for config/docs/mechanical-logic chunks selected by `plugins/pipeline/references/routing-policy.json`.
 
 - **Valid uses:** big-diff analysis, code review, second-opinion analysis, and config/doc text generation the caller then writes to disk.
-- **Invalid use:** complex autonomous chunk implementation that needs exploratory tool use, visual review, or cross-chunk judgment. For that work, the pipeline cascade descends to Codex/Claude. Never pipe raw wrapper text in as a chunk implementation.
+- **Invalid use:** complex autonomous chunk implementation that needs exploratory tool use, visual review, or cross-chunk judgment. For that work, the pipeline cascade returns to Codex or an eligible agentic OpenRouter rung. Never pipe raw wrapper text in as a chunk implementation.
 
 ## When to Delegate
 
 | Advantage | Use Case | Why OpenRouter |
 |-----------|----------|----------------|
-| **Quality-per-dollar** | Big-diff review, pattern analysis, second opinions | GLM-5.2 at a fraction of frontier cost; doesn't burn Anthropic Max quota. |
+| **Quality-per-dollar** | Big-diff review, pattern analysis, second opinions | GLM-5.2 supplies inexpensive large-context analysis while Codex remains the native coding authority. |
 | **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. GLM-5.2 and DeepSeek V4 both hold large context. |
 | **Provider routing** | Privacy / throughput control | Per-request provider preferences (`OPENROUTER_ZDR=1` for no-train/no-retain providers). |
-| **Capacity relief** | Pipeline / review runs burning Max quota | Every token routed to OpenRouter is a token NOT counted against the Anthropic weekly limit. |
+| **Capacity relief** | Pipeline / review runs burning Codex quota | Every eligible token routed to OpenRouter preserves Codex subscription headroom. |
 
 ## When NOT to Delegate
 
 - Autonomous chunk implementation (single-turn; no file I/O or tool loop -- see above)
 - Tasks requiring Claude's conversation context (OpenRouter calls are stateless)
 - Tasks requiring MCP server access
-- Adversarial review, ambiguity detection, or security-critical analysis (keep on Anthropic)
+- Security-critical code analysis (keep on Codex-native review)
 
 ### Security Boundary (hard rule)
 
-**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Enforce `security` in `plugins/pipeline/references/routing-policy.json` before any delegation:
+**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` before any delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
 
-- **Path exclusions -- route Anthropic-side.** If the diff/context touches `internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`, DECLINE and return the chunk to the Anthropic-native reviewer. A single matching file taints the whole chunk. This applies to the one-shot delegate AND the `openrouter-exec` agentic runner.
-- **Content redaction.** Strip environment values, API tokens/keys, connection strings/DSNs, and production hostnames-with-paths before sending. If they cannot be stripped, do not send that content -- return it to Anthropic-side review.
-- **Intended lanes.** Style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency route off-Anthropic freely when no boundary is tripped.
+- **Path exclusions -- route Codex-side.** If the diff/context touches auth, federation, secret, deploy, or env paths, decline and return the chunk to Codex-native review.
+- **Content redaction.** If sensitive values cannot be removed safely, return the chunk to Codex-native review.
+- **Intended lanes.** Style, duplication, pattern-recognition, large-diff triage, and doc consistency.
 
 ## Invocation Protocol
 
@@ -66,7 +66,8 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 
 | Agent | File | Purpose |
 |-------|------|---------|
-| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Full-diff review using GLM-5.2 (DeepSeek V4 fallback) 1M context |
+| **openrouter-agent-runner** | `plugins/openrouter/agents/workflow/openrouter-agent-runner.md` | Runs any eligible review-agent criteria through a policy-selected full OpenRouter model slug |
+| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Full-diff review using GLM-5.2 with a DeepSeek V4 OpenRouter model fallback |
 
 ## Prerequisites
 

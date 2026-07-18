@@ -14,7 +14,7 @@ The canonical unified report format produced by the review-consolidator after al
 **Mode:** [Full / Quick]
 **Project Type:** [Go+Templ+Datastar / Craft CMS / CSS Framework / Mixed]
 **Agents Launched:** X of Y applicable
-**Lanes:** claude: ran | deepseek: fallback:claude | openrouter: ran | codex: skipped:cli-absent
+**Lanes:** codex: ran | openrouter: fallback:codex | claude-noncoding: ran | codex-perspective: skipped:cli-absent
 **Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
 
 ---

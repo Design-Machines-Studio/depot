@@ -1200,7 +1200,7 @@ else:
                 "hotfix"
             ]["stages"] if item["id"] == "review"
         )
-        stage["required_dispatch_capability"] = "companion_dispatch"
+        stage["required_dispatch_capability"] = "wrapper_dispatch"
         mutations.append(impossible_tuple)
         for mutation in mutations:
             self.assertFalse(schema_matches(mutation, schema))

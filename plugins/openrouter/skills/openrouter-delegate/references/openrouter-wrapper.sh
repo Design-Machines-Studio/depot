@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 # openrouter-wrapper.sh -- generalized single-turn model runner for the World B
-# OpenRouter rail. Exit-code semantics match deepseek-wrapper.sh (0/28/1/2) so
-# output slots into the same dm-review consolidator path. NOTE: the arg shape
-# differs -- this runner is POSITIONAL (<model> <prompt|-> [timeout] [fallback]),
-# whereas deepseek-wrapper uses flags (-m/-s/-p). A caller built for deepseek's
-# flags needs an adapter, not just a path swap.
+# OpenRouter rail. Stable exit codes (0/28/1/2) and direct text stdout let the
+# generic review-agent runner map success, timeout, exhausted, and invocation
+# outcomes without provider-specific response parsing. Arguments are positional:
+# <model> <prompt|-> [timeout] [fallback].
 #
 # Usage:
 #   ./openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]

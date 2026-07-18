@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "neverRouteToOpenRouter": {
+    "pathGlobs": [
+      "internal/auth/**",
+      "internal/federation/**",
+      "**/secretbox*",
+      "**/destructive_confirmation*",
+      "internal/baseplate/email/settings*",
+      "deploy/**",
+      "*.env*"
+    ],
+    "onMatch": "route-codex",
+    "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native review. One matching file prevents OpenRouter delegation."
+  },
+  "contentRedaction": {
+    "refusePatterns": [
+      "environment variable values",
+      "API tokens or keys",
+      "connection strings / DSNs",
+      "production hostnames with request paths",
+      "migration or seed files containing credentials"
+    ],
+    "onMatch": "return-to-codex",
+    "rationale": "Strip or refuse sensitive content before delegation. If it remains after filtering, return the chunk to Codex-native review."
+  },
+  "positiveRouting": {
+    "intendedLanes": [
+      "style / formatting",
+      "duplication",
+      "pattern-recognition",
+      "large-diff first-pass triage",
+      "doc consistency"
+    ],
+    "rationale": "These are the OpenRouter mechanical lanes when no security boundary is matched."
+  }
+}

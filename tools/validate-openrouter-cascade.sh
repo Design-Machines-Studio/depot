@@ -40,11 +40,30 @@ else
   role="$(printf '%s' "$out" | jq -r '.role // empty' 2>/dev/null || true)"
   kind="$(printf '%s' "$out" | jq -r '.kind // empty' 2>/dev/null || true)"
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
-  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "z-ai/glm-5.2" ]; then
+  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "moonshotai/kimi-k3" ]; then
     pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter exec"
   else
-    fail "cascade should descend to openrouter_exec z-ai/glm-5.2 when --exhausted-rail codex is set"
+    fail "cascade should descend to quality-first openrouter_exec moonshotai/kimi-k3 when --exhausted-rail codex is set"
     printf "  ${YELLOW}GOT${RESET}   %s\n" "${out:-<empty>}"
+    any_failed=1
+  fi
+
+  ui_out="$("$cascade" --kind ui --prompt test --host codex --dry-run 2>/dev/null || true)"
+  ui_role="$(printf '%s' "$ui_out" | jq -r '.role // empty' 2>/dev/null || true)"
+  ui_kind="$(printf '%s' "$ui_out" | jq -r '.kind // empty' 2>/dev/null || true)"
+  if [ "$ui_role" = "premium_sub" ] && [ "$ui_kind" = "native" ]; then
+    pass "UI coding selects Codex-native subscription execution"
+  else
+    fail "UI coding must resolve to Codex-native execution, never Claude"
+    any_failed=1
+  fi
+
+  or_out="$("$cascade" --kind docs --prompt test --host codex --dry-run --exhausted-rail openrouter 2>/dev/null || true)"
+  or_role="$(printf '%s' "$or_out" | jq -r '.role // empty' 2>/dev/null || true)"
+  if [ "$or_role" = "premium_sub" ]; then
+    pass "OpenRouter-primary coding returns to Codex when OpenRouter is exhausted"
+  else
+    fail "OpenRouter-primary coding must return to Codex, never Claude"
     any_failed=1
   fi
 

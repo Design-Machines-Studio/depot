@@ -1,46 +1,45 @@
 {
-  "_comment": "World B usage-aware cascade. Routing policy lives in routing-policy.json; this file supplies the executable cascade classes. A chunk's executor intent maps to a class here; cascade-dispatch.sh walks that class's role ladder, resolves roles per host via harness-profile.json, checks live headroom (usage-probe.sh) + the quality_floor, dispatches the best available rung, and on a cap error fires the Airlift Tier-1 checkpoint and DESCENDS. DeepSeek/OpenRouter mechanical-agent routing in dm-review reads the same routing policy.",
+  "_comment": "World B usage-aware cascade. Routing policy lives in routing-policy.json; this file supplies the executable cascade classes. A chunk's executor intent maps to a class here; cascade-dispatch.sh walks that class's role ladder, resolves roles per host via harness-profile.json, checks live headroom (usage-probe.sh) + the quality_floor, dispatches the best available rung, and on a cap error fires the Airlift Tier-1 checkpoint and DESCENDS. OpenRouter mechanical-agent routing in dm-review reads the same policy; DeepSeek names are model slugs, never a separate provider.",
   "routing_policy": "routing-policy.json",
 
   "class_from_kind": {
-    "_comment": "kind (manifest) -> cascade class. Detailed task-fit lives in routing-policy.json; config/docs go OpenRouter-primary, logic goes Codex-primary, ui/integration stay Claude-primary.",
-    "logic": "codex", "config": "openrouter", "docs": "openrouter", "ui": "claude", "integration": "claude"
+    "_comment": "Coding kind -> cascade class. Config/docs go OpenRouter-primary; logic, ui, and integration go Codex-primary. Claude is non-coding-only and appears in no executable coding class.",
+    "logic": "codex", "config": "openrouter", "docs": "openrouter", "ui": "codex", "integration": "codex"
   },
 
   "roles": ["openrouter_exec", "premium_sub", "native_judgment", "frontier_api", "cheap_api", "bulk_api"],
 
   "quality_rank": {
     "_comment": "Global model->score; enforces quality_floor regardless of which role surfaced the model. Higher = better. Bare slugs (gpt-5.6-sol) are the Codex-native names; openai/-prefixed slugs are the same models via the OpenRouter wrapper -- both carry the same score.",
-    "_comment_gpt56": "GPT-5.6 (Sol/Terra/Luna, GA 2026-07-09) supersedes GPT-5.5. Sol is same price and same 1.05M context as gpt-5.5 ($5/$30 per 1M) and a newer generation, so it strictly dominates and takes the frontier head; gpt-5.5 is retained one rung down as a fallback (it is also the rung an older codex-cli can still reach, via the orchestrator's Native Model Descent -- cascade-dispatch.sh itself never walks past the first floor-clearing model of a `kind: native` role). Terra ($2.50/$15) slots between opus-4.8 and sonnet-5. Luna ($1/$6) is the cheapest OpenAI rung but is NOT a cheap_api model -- its output tokens cost 3.4x z-ai/glm-5.2 ($1.76) and 6.9x deepseek-v4-pro ($0.87), so it lives at the frontier_api tail, never at the cheap head.",
+    "_comment_gpt56": "GPT-5.6 (Sol/Terra/Luna, GA 2026-07-09) supersedes GPT-5.5. Sol is the quality head at $5/$30 per 1M and 1.05M context. GPT-5.5 is retained as the older-codex-cli native fallback, but on the paid API ladder Terra precedes it: both score 55 on Artificial Analysis v4.1 at max effort, while Terra costs half as much ($2.50/$15 versus $5/$30). Luna ($1/$6) and GLM-5.2 (about $0.91/$2.86 live on OpenRouter 2026-07-18) both score 51; price breaks the quality tie in GLM's favour, so Luna remains at the frontier_api tail rather than cheap_api.",
     "_comment_codex_mini": "gpt-5.1-codex-mini keeps a rank so a stray re-add scores above the codex floor rather than silently resolving to 0, but it appears in NO ladder: `codex exec --model gpt-5.1-codex-mini` returns HTTP 400 'not supported when using Codex with a ChatGPT account', and the codex host runs on the ChatGPT sub. Do not re-add it to harness-profile.json.",
+    "_comment_kimi_k3": "Kimi K3 (moonshotai/kimi-k3, Moonshot AI, GA 2026-07-16) is the planned-open-weight, API-only-today quality head for OpenRouter: 2.8T-param MoE, native vision, 1M context, $3/$15 with $0.30 cache hits, and max-only reasoning. Artificial Analysis v4.1 scores K3 at 57: behind Fable 5 (60) and GPT-5.6 Sol max (59), ahead of Opus 4.8 max (56), Terra/GPT-5.5 max (55), Sonnet 5 max (53), and GLM-5.2 max (51). Rank 97 reflects quality-first placement; price breaks ties, not cross-tier quality gaps. K3 leads openrouter_exec and sits second on frontier_api, while GLM remains the cheaper default for mechanical review and bulk work. OpenRouter currently shows one K3 provider and warns of limited upstream capacity, so every K3 placement has a fallback. The current wrapper is text-only despite model multimodality. PRIVACY: provider privacy is demoted; OPENROUTER_ZDR=1 remains opt-in.",
+    "fable": 99,
     "gpt-5.6-sol": 98, "openai/gpt-5.6-sol": 98,
-    "fable": 97,
-    "gpt-5.5": 96, "openai/gpt-5.5": 96,
-    "anthropic/claude-opus-4.8": 95,
-    "opus": 92,
-    "gpt-5.6-terra": 91, "openai/gpt-5.6-terra": 91,
-    "sonnet": 90, "anthropic/claude-sonnet-5": 90,
-    "gpt-5.6-luna": 86, "openai/gpt-5.6-luna": 86,
-    "z-ai/glm-5.2": 84, "deepseek/deepseek-v4-pro": 83,
-    "minimax/minimax-m3": 79, "deepseek/deepseek-v4-flash": 74, "qwen/qwen3-coder": 72,
+    "moonshotai/kimi-k3": 97,
+    "opus": 95, "anthropic/claude-opus-4.8": 95,
+    "gpt-5.6-terra": 94, "openai/gpt-5.6-terra": 94,
+    "gpt-5.5": 94, "openai/gpt-5.5": 94,
+    "sonnet": 92, "anthropic/claude-sonnet-5": 92,
+    "x-ai/grok-4.5": 93,
+    "z-ai/glm-5.2": 90, "meta/muse-spark-1.1": 90,
+    "gpt-5.6-luna": 90, "openai/gpt-5.6-luna": 90,
+    "google/gemini-3.5-flash": 89,
+    "deepseek/deepseek-v4-pro": 83, "minimax/minimax-m3": 83,
+    "deepseek/deepseek-v4-flash": 78, "qwen/qwen3-coder": 72,
     "gpt-5.1-codex-mini": 70, "haiku": 60
   },
 
   "cascades": {
     "codex": {
-      "_comment": "Primary executor = Codex (kind logic/config). Sub first; when Codex caps, descend to a cheap open model via OpenRouter BEFORE falling all the way to Claude -- this is the key cost win and the generalization of the merged single fallback.",
+      "_comment": "Primary executor = Codex for logic, UI, and integration. When Codex caps, descend through agentic and wrapper OpenRouter models; Claude has no coding rung.",
       "quality_floor": 70,
-      "ladder": ["premium_sub", "openrouter_exec", "cheap_api", "native_judgment"]
+      "ladder": ["premium_sub", "openrouter_exec", "frontier_api", "cheap_api"]
     },
     "openrouter": {
-      "_comment": "Primary executor = OpenRouter for config/docs/mechanical-logic. The openrouter_exec rung writes, verifies, commits, and emits usage; Codex is secondary and Claude native judgment is last.",
+      "_comment": "Primary executor = OpenRouter for config/docs/mechanical logic. Codex is the trusted coding fallback; Claude has no coding rung.",
       "quality_floor": 70,
-      "ladder": ["openrouter_exec", "premium_sub", "native_judgment"]
-    },
-    "claude": {
-      "_comment": "Primary executor = Claude (kind ui/integration -- needs visual/Live Wires judgment). Claude first; cross to a frontier API model only when the Max plan is capped. Never drops to a cheap model -- quality floor 80 protects ui/integration work.",
-      "quality_floor": 80,
-      "ladder": ["native_judgment", "frontier_api"]
+      "ladder": ["openrouter_exec", "premium_sub", "frontier_api", "cheap_api"]
     }
   },
 
@@ -50,10 +49,11 @@
     "reentry": "highest_quality",
     "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again -- prefer quality).",
     "on_cap_error": ["airlift_checkpoint", "mark_exhausted_until_resets_at", "descend"],
-    "_comment_fable": "fable (Claude Fable 5, Mythos-class, rank 97) is PLAN-CONDITIONAL: available only when the user's current plan carries it. It leads the claude-code native_judgment ladder for hardest-task dispatch, but no probe can detect plan-level availability -- if a native directive names a model the plan does not carry, the orchestrator dispatches the next model in the native list (see execution-orchestrator RC-64 rule). Keep the entry when fable is off-plan; it is inert until availability returns.",
-    "_comment_native_host_constraint": "gpt-5.6-sol outranks fable (98 vs 97) but leads native_judgment only on the CODEX host -- claude-code's `kind: native` accepts Claude aliases only. Rationale and failure mode: docs/opus-4-8-tuning.md (Fable vs GPT-5.6 Sol).",
-    "privacy": "For cheap_api/frontier_api wrapper rows, pin a no-logging Western provider (Fireworks/Together) for any model whose first-party API trains on data (e.g. DeepSeek). Enforced per-call via OPENROUTER_ZDR=1 in openrouter-wrapper.sh.",
-    "_comment_headroom_unknown": "usage-probe state 'unknown' is treated as HAS-headroom (fail-open): a stale/unverified parser prefers dispatch + reactive cap detection over a false 'capped' that needlessly skips a healthy rail. The codex rail has a reactive cap detector (usage-limit string match) in cascade-dispatch.sh; the claude native rail relies on the orchestrator's own cap handling.",
+    "_comment_subscriptions": "Coding rails: Codex Pro 20x is the active flat-rate workhorse, with a named 5x profile; OpenRouter carries external agentic and mechanical work. Claude Pro is reserved for non-coding tasks and is absent from coding cascades.",
+    "_comment_fable": "Fable 5 keeps its quality score for research and non-coding comparison only. Claude is outside the executable coding graph, so availability never adds Fable or Opus to a coding ladder.",
+    "_comment_native_host_constraint": "GPT-5.6 Sol leads Codex-native and OpenRouter paid coding ladders. Claude aliases retained in harness-profile native_judgment are compatibility metadata for explicit non-coding workflows and are referenced by no coding cascade.",
+    "privacy": "DEMOTED (2026-07-18, user directive): model selection priority is Quality > Price > Speed > Provider privacy. OPENROUTER_ZDR is OPT-IN, never a default pin -- Chinese first-party hosting (Moonshot/DeepSeek/Z.AI) is acceptable by default. Set OPENROUTER_ZDR=1 per-call only for genuinely sensitive material (client code under NDA, credentials-adjacent diffs); when set, a model with no eligible ZDR provider (e.g. moonshotai/kimi-k3 pre-weights) is a per-model failure and the ladder walks on.",
+    "_comment_headroom_unknown": "usage-probe state 'unknown' is treated as HAS-headroom: dispatch plus reactive cap detection is preferred over falsely skipping a healthy Codex or OpenRouter rail.",
     "_comment_agentic_seam": "openrouter_exec is the agentic OpenRouter rung for config/docs/mechanical-logic. Wrapper rungs (cheap_api/frontier_api) remain single-turn analysis/text generation and are still invalid for complex logic/ui/integration implementation."
   }
 }

@@ -81,7 +81,7 @@ Wait for the worker result before validating that chunk. Do not dispatch overlap
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
 
-**Repository cleanup is host-independent.** The Codex adapter runs the same cleanup contract as the Claude path, at the same points (Step 0e registry init, Step 3j per chunk, Step 5b sweep + inventory) -- see `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. Cleanup is deterministic git executed by the orchestrator in-process. It is never delegated to a `multi_agent_v1.spawn_agent` worker, and never routed through `openrouter-exec.sh`, `openrouter-wrapper.sh`, or `deepseek-wrapper.sh`. Deleting refs is not a judgment task, and a worker sandbox cannot be trusted to report honestly which refs survived.
+**Repository cleanup is host-independent.** The Codex adapter runs the same cleanup contract as the Claude path, at the same points (Step 0e registry init, Step 3j per chunk, Step 5b sweep + inventory) -- see `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. Cleanup is deterministic git executed by the orchestrator in-process. It is never delegated to a `multi_agent_v1.spawn_agent` worker and never routed through `openrouter-exec.sh` or `openrouter-wrapper.sh`. Deleting refs is not a judgment task, and a worker sandbox cannot be trusted to report honestly which refs survived.
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.
 

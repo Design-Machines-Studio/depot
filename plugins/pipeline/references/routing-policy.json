@@ -1,12 +1,12 @@
 {
   "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
   "targets": {
-    "providerSplit": {
-      "codex": 50,
-      "claude": 35,
-      "openrouter": 15
+    "activeSubscriptionProfile": "codex-20x",
+    "subscriptionProfiles": {
+      "codex-20x": {"codex": 65, "claude": 0, "openrouter": 35},
+      "codex-5x": {"codex": 40, "claude": 0, "openrouter": 60}
     },
-    "rationale": "Execution-provider target: Codex leads at 50 (was 35) since the GPT-5.6 subscription deal (Jul 2026) makes the premium_sub rail flat-rate -- per-token cost is irrelevant there, so it is the cheapest place to spend judgment. Claude drops to 35 (was 50) and still owns ui/integration by chunkKind, where visual and Live Wires judgment is required. OpenRouter holds 15, carrying config, docs, mechanical checks, and large-context synthesis. These three sum to 100 across the chunk-implementation providers. DeepSeek is review-only (mechanical dm-review agents), so it has no execution target here; the post-mortem measures a fourth deepseek providerSplit bucket and compares it against the combined external-provider (openrouter + deepseek) envelope, not against a standalone deepseek target."
+    "rationale": "Coding-only calibration: subscriptionProfiles[activeSubscriptionProfile] is the sole target. Codex Pro 20x uses 65/0/35 Codex/Claude/OpenRouter; switching to codex-5x uses 40/0/60. Claude is non-coding-only and therefore has zero coding share. Live headroom and availability remain authoritative. DeepSeek V4 usage is counted under OpenRouter."
   },
   "chunkKind": {
     "_comment_kinds": "config/docs/mechanical-logic/logic/ui/integration are ROUTING buckets, not manifest kind enum values. The manifest kind enum stays {ui, logic, integration, config}; docs and mechanical-logic are refinements carried by the manifest `executor` field (derived from kind + estimatedComplexity per manifest-schema.md Executor Mapping), not first-class kinds. model-cascade.class_from_kind bridges only the manifest kinds (logic/config/docs/ui/integration); mechanical-logic routes via `executor: openrouter` set at prompt-generation time, so it needs no class_from_kind entry.",
@@ -28,51 +28,59 @@
     "logic": {
       "provider": "codex",
       "cascadeClass": "codex",
-      "rationale": "Complex service and handler logic benefits from Codex agentic coding before falling back to OpenRouter or Claude."
+      "rationale": "Complex service and handler logic uses Codex agentic coding with OpenRouter fallback."
     },
     "ui": {
-      "provider": "claude",
-      "cascadeClass": "claude",
-      "rationale": "UI work needs visual judgment, browser verification, and Live Wires design quality review."
+      "provider": "codex",
+      "cascadeClass": "codex",
+      "rationale": "UI implementation and code review use Codex with browser evidence; Claude is reserved for non-coding work."
     },
     "integration": {
-      "provider": "claude",
-      "cascadeClass": "claude",
-      "rationale": "Cross-chunk wiring and route verification need stronger orchestration judgment."
+      "provider": "codex",
+      "cascadeClass": "codex",
+      "rationale": "Cross-chunk wiring and route verification use Codex, with OpenRouter fallbacks and no Claude coding rung."
     }
   },
   "agentType": {
     "pattern-recognition-specialist": {
-      "provider": "deepseek",
-      "fallbackProvider": "openrouter",
-      "rationale": "Pattern checks are mechanical code analysis and do not need Claude unless external providers fail."
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.2",
+      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackProvider": "codex",
+      "rationale": "Pattern checks use GLM-5.2, then DeepSeek V4 Pro through OpenRouter, before Codex fallback."
     },
     "code-simplicity-reviewer": {
-      "provider": "deepseek",
-      "fallbackProvider": "openrouter",
-      "rationale": "Simplification review is mechanical enough for cheaper review models."
+      "provider": "openrouter",
+      "model": "z-ai/glm-5.2",
+      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackProvider": "codex",
+      "rationale": "Simplification review uses the quality-first OpenRouter mechanical ladder before Codex fallback."
     },
     "doc-sync-reviewer": {
       "provider": "openrouter",
-      "fallbackProvider": "deepseek",
-      "rationale": "Documentation consistency benefits from large context and cheap prose analysis at any diff size."
+      "model": "z-ai/glm-5.2",
+      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackProvider": "codex",
+      "rationale": "Documentation consistency uses OpenRouter large-context models at any diff size."
     },
     "test-coverage-reviewer": {
       "provider": "openrouter",
-      "fallbackProvider": "deepseek",
-      "rationale": "Coverage gap detection is read-heavy and works well on large-context models."
+      "model": "z-ai/glm-5.2",
+      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackProvider": "codex",
+      "rationale": "Coverage gap detection is read-heavy and uses the OpenRouter mechanical ladder."
     },
     "openrouter-bulk-analyst": {
       "provider": "openrouter",
       "rationale": "Bulk/large-context analysis is OpenRouter-primary whenever OPENROUTER_API_KEY is present, not only over a line-count threshold."
     },
     "security-auditor": {
-      "provider": "claude",
-      "rationale": "Security remains Claude-native for high-stakes judgment."
+      "provider": "codex",
+      "rationale": "Security code review is Codex-native and never delegated to OpenRouter."
     },
     "architecture-reviewer": {
-      "provider": "claude",
-      "rationale": "Architecture remains Claude-native for cross-cutting judgment."
+      "provider": "codex",
+      "rationale": "Architecture code review is Codex-native; Claude is non-coding-only."
     }
   },
   "phase": {
@@ -101,8 +109,9 @@
     "proposalOnlyEconomics": true
   },
   "security": {
-    "_comment": "Hard boundary for off-Anthropic delegation (DeepSeek / OpenRouter / GLM). Third-party models are bulk pattern reviewers, NEVER security reviewers. This block overrides chunkKind and agentType routing: any diff matching neverRouteOffAnthropic.pathGlobs, or containing a contentRedaction pattern, is force-routed to Anthropic-side review regardless of what the routing buckets above would select. Consumed by deepseek-agent-runner, deepseek-bulk-analyst, openrouter-bulk-analyst, and the delegate wrapper prompts, which each re-check it as a second layer.",
-    "neverRouteOffAnthropic": {
+    "_comment": "Validated mirror of the OpenRouter-owned delegation policy. The canonical installed-runtime source is plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json. This block keeps pipeline planning self-contained and tools/validate-routing-economics.sh rejects drift.",
+    "delegationSecurityPolicy": "../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json",
+    "neverRouteToOpenRouter": {
       "pathGlobs": [
         "internal/auth/**",
         "internal/federation/**",
@@ -112,8 +121,8 @@
         "deploy/**",
         "*.env*"
       ],
-      "onMatch": "route-anthropic",
-      "rationale": "Auth, federation trust, secret encryption (secretbox), destructive-confirmation HMAC tokens, email-delivery secrets, deploy secrets, and env files must be reviewed by Anthropic-native seats only. A single matching file in the diff forces the whole chunk Anthropic-side."
+      "onMatch": "route-codex",
+      "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native review. One matching file prevents OpenRouter delegation."
     },
     "contentRedaction": {
       "refusePatterns": [
@@ -123,8 +132,8 @@
         "production hostnames with request paths",
         "migration or seed files containing credentials"
       ],
-      "onMatch": "return-to-anthropic",
-      "rationale": "The delegate MUST strip or refuse these before sending a diff off-Anthropic. If the diff still contains any of them after stripping, do NOT send it -- return the chunk to Anthropic-side review. This catches secrets that live outside the path globs (e.g. a credential pasted into a migration)."
+      "onMatch": "return-to-codex",
+      "rationale": "Strip or refuse sensitive content before delegation. If it remains after filtering, return the chunk to Codex-native review."
     },
     "positiveRouting": {
       "intendedLanes": [
@@ -134,7 +143,7 @@
         "large-diff first-pass triage",
         "doc consistency"
       ],
-      "rationale": "These are the lanes DeepSeek / GLM are for. Route them off-Anthropic freely when no security boundary above is tripped."
+      "rationale": "These are the OpenRouter mechanical lanes when no security boundary is matched."
     }
   }
 }

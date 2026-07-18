@@ -38,7 +38,7 @@ Each agent runs in its own context. They don't share a budget.
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)
 3. test-coverage-reviewer (LOW -- advisory only)
-4. openrouter-bulk-analyst / deepseek-bulk-analyst (MEDIUM -- supplementary full-diff analysis, mutually exclusive, requires provider plugin)
+4. openrouter-bulk-analyst (MEDIUM -- supplementary full-diff analysis, requires the OpenRouter provider plugin)
 5. craft-reviewer (MEDIUM -- domain-specific)
 6. governance-domain (MEDIUM -- domain-specific)
 7. a11y-dynamic-content-reviewer (MEDIUM)
@@ -89,7 +89,7 @@ Don't match exact header text -- agents use different formatting (`## Findings`,
 
 | Scenario | Policy |
 |----------|--------|
-| Agent timeout (>120s) | Skip. Record "Timed out" in Agent Summary. No retry. The 120s threshold provides a buffer above the routed-agent ceilings (90s for v4-pro, 60s for v4-flash, per dm-review Phase 3.75). If those ceilings are ever raised above 120s, this guardrail must be raised in lockstep or it will silently pass timed-out agents. |
+| Agent timeout (>120s) | Skip. Record "Timed out" in Agent Summary. No retry. The 120s threshold provides a buffer above the routed-agent ceilings (90s or 60s, per dm-review Phase 3.75). If those ceilings are ever raised above 120s, this guardrail must be raised in lockstep or it will silently pass timed-out agents. |
 | Agent returns empty | Treat as "Clean (empty response)" in Agent Summary. |
 | Agent returns error | Record error message in Agent Summary. Don't retry. |
 | Agent output contains `### RUNNER FAILURE` | External-LLM-routed runner failed. See Phase 4.5 for fallback procedure. If fallback also fails, apply core/conditional failure policies (REVIEW INCOMPLETE for core agents, degraded for conditional). Extract failure reasons from both runs for the Agent Summary. |

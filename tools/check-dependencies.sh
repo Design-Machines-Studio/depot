@@ -236,8 +236,13 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
 for consumer in ("pipeline", "dm-review"):
     manifest = manifests.get(consumer)
     actual = None if manifest is None else manifest.get("pluginDependencies", {}).get("workflow-kernel")
-    if actual != ">=0.1.0":
-        errors.append(f"{consumer} must require workflow-kernel >=0.1.0")
+    if actual != ">=0.1.1":
+        errors.append(f"{consumer} must require workflow-kernel >=0.1.1")
+
+pipeline = manifests.get("pipeline")
+dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")
+if dm_review_floor != ">=1.43.0":
+    errors.append("pipeline must require dm-review >=1.43.0")
 
 if errors:
     for error in errors:

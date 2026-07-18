@@ -26,7 +26,7 @@ The core contract is a `.airlift/` bundle with deterministic files that any supp
 
 Harness profiles live in `skills/airlift/references/harness-profiles.json`. The first registry includes Claude Code, Codex, DeepSeek, Kiro, and OpenCode, with an explicit fallback for unknown targets: paste `RESUME_PROMPT.md` into a new session.
 
-DeepSeek is a first-class resume target through the existing delegate plugin when it is installed.
+DeepSeek remains a first-class resume target through the OpenRouter plugin. The compatibility path uses `deepseek/deepseek-v4-pro` with `OPENROUTER_API_KEY`; it does not require a standalone DeepSeek plugin or API key.
 
 ## Honest limits
 

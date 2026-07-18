@@ -26,16 +26,16 @@ Before classifying an agent failure as "Review Compromised" or "Safe to Skip," r
 
 | Lane | Failure signal | Resolution | Reported as |
 |---|---|---|---|
-| DeepSeek / OpenRouter | `### RUNNER FAILURE` | Retry on Claude (Phase 4.5) | "Completed (fallback)" or classify below |
+| OpenRouter | `### RUNNER FAILURE` | Retry on Codex (Phase 4.5) | "Completed (fallback)" or classify below |
 | Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | None -- lane is optional | Coverage Gaps: "codex-perspective: skipped -- CLI absent" |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback | Header: `**Evidence source:** <source>` |
-| Claude-native agent | Errored or timed out | None -- no retry | Classify immediately below |
+| Codex-native coding agent | Errored or timed out | No Claude retry | Classify immediately below |
 
-Fallback always moves **toward** Claude, never away. Diffs on sensitive paths (`internal/auth/**`, `internal/federation/**`, secrets, deploy) never had an external lane to fall back from -- they are Anthropic-only by routing policy, and a failure there is a Claude-native failure.
+Coding fallback moves between OpenRouter and Codex only. Sensitive paths start on Codex and never enter the external lane.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. Reporting "all agents completed" while the Codex lane never ran is a false clean.
 
-Agents that succeed via Claude fallback are reported as "Completed (fallback)" in the Agent Summary. They do not affect the merge recommendation -- their findings are treated identically to primary-run findings, tagged with `[claude-fallback/{agent-name}]` for traceability.
+Agents that succeed via Codex fallback are reported as "Completed (fallback)" and tagged `[codex-fallback/{agent-name}]`.
 
 ### Review Compromised (core agent failure)
 

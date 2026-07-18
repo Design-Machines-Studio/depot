@@ -1,7 +1,7 @@
 {
-  "_comment": "Kernel-owned safety data: the never-route-off-Anthropic path globs the workflow kernel needs for sensitive-path routing overrides. The kernel ships this copy so an installed runtime (~/.claude or ~/.codex plugin cache) never resolves files from a depot repository checkout. Source of truth for orchestrator routing remains plugins/pipeline/references/routing-policy.json (security.neverRouteOffAnthropic.pathGlobs); tests/test_workflow_classes.py asserts the two lists stay identical. Callers may still pass an explicit routing_policy_path to WorkflowTemplates.",
+  "_comment": "Kernel-owned safety data for paths that never route to OpenRouter. Sensitive coding remains Codex-native. This installed copy is synchronized with routing-policy.json security.neverRouteToOpenRouter.pathGlobs.",
   "security": {
-    "neverRouteOffAnthropic": {
+    "neverRouteToOpenRouter": {
       "pathGlobs": [
         "internal/auth/**",
         "internal/federation/**",
