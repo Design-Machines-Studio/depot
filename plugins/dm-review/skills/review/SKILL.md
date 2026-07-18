@@ -36,10 +36,10 @@ Match the review depth to the moment. Running full multi-round review on every c
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 5 core agents (+ ui-standards-reviewer when UI files changed). No memory capture, no conditional agents beyond file-type triggers. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
-| **Bulk second opinions / large-diff first pass** | DeepSeek or GLM via `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. Never security or sensitive paths (see the delegation plugins' routing policy). |
+| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. Never security or sensitive paths (see the OpenRouter security policy). |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
-**Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full review with the Opus `security-auditor` -- these lanes are never delegated off-Anthropic and never quick-only.
+**Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full Codex-native `security-auditor` review. These lanes never go to OpenRouter and are never quick-only.
 
 ## Shadow Workflow Kernel Contract
 
@@ -179,39 +179,43 @@ This classification scales agent count in Phase 3. Only applies to quick mode --
 
 Select which agents to launch based on mode, diff classification, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern).
 
-**Session-model escalation (Fable, plan-conditional):** the deep Claude reviewers (security-auditor, architecture-reviewer, and other unpinned agents) inherit the session model, so running the session on Claude Fable 5 (`/model claude-fable-5`, Mythos-class, above Opus) upgrades them automatically while it is available on the plan -- prefer that for the highest-stakes reviews. Pinned mechanical/external agents are unaffected by design. Do not pin `model: fable` in any agent frontmatter: availability is plan-conditional, and a hard pin would break dispatch when it lapses.
+**Coding-provider boundary:** Claude is non-coding-only. Core code review, security, architecture, UI, and test review use Codex or OpenRouter regardless of legacy agent frontmatter. Claude may still run clearly non-coding lanes such as voice/editorial review, research synthesis, or strategy.
 
 #### Routing Policy for Mechanical Agents
 
-Read `plugins/pipeline/references/routing-policy.json` before selecting providers **when it is present**. That file is owned by the `pipeline` plugin; when dm-review is installed standalone (no pipeline), it is absent. In that case fall back to the inline provider annotations in the agent lists below -- DeepSeek primary / OpenRouter fallback for pattern-recognition and code-simplicity, OpenRouter primary / DeepSeek fallback for doc-sync and test-coverage, Claude-native for security, architecture, and visual/UI. The policy read is an enrichment that keeps routing in one shared source when pipeline is installed, never a hard prerequisite: do NOT add a `pipeline` dependency to dm-review -- pipeline already depends on dm-review, so that edge would be a cycle. Mechanical agents default to external providers when keys are present; security, architecture, and visual/UI reviewers stay Claude-native either way.
+Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline OpenRouter model table. OpenRouter is the only external model provider; DeepSeek identifiers are OpenRouter slugs. Security, architecture, and visual/UI code reviewers stay Codex-native. Claude is allowed only for non-coding lanes such as voice/editorial review.
 
 **Before selecting agents, check external routing availability:**
 
 ```bash
-RUNNER_PATH=""
-if [ -n "$DEEPSEEK_API_KEY" ]; then
+OPENROUTER_RUNNER_PATH=""
+OPENROUTER_SECURITY_POLICY_PATH=""
+if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    RUNNER_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/agents/workflow/deepseek-agent-runner.md 2>/dev/null | head -1)
-    [ -n "$RUNNER_PATH" ] && break
+    OPENROUTER_RUNNER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/agents/workflow/openrouter-agent-runner.md 2>/dev/null | head -1)
+    if [ -n "$OPENROUTER_RUNNER_PATH" ]; then
+      OPENROUTER_VERSION_ROOT=$(cd "$(dirname "$OPENROUTER_RUNNER_PATH")/../.." && pwd -P)
+      OPENROUTER_SECURITY_POLICY_PATH="$OPENROUTER_VERSION_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+      [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && break
+    fi
   done
 fi
-DEEPSEEK_AVAILABLE=$( [ -n "$RUNNER_PATH" ] && [ -f "$RUNNER_PATH" ] && echo true || echo false )
-OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && echo true || echo false )
+OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] && [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && echo true || echo false )
 ```
 
-**When `OPENROUTER_AVAILABLE=true` or `DEEPSEEK_AVAILABLE=true`:** agents marked by `routing-policy.json` MUST be dispatched to the selected external provider, NOT on Claude. This is a cost architecture decision. Dispatching mechanical agents on Claude when policy-selected external providers are available is a misroute.
+**When `OPENROUTER_AVAILABLE=true`:** agents marked for OpenRouter MUST use `openrouter-agent-runner`. Mechanical orchestration runs on Codex or directly in the host; do not spend Claude coding quota to invoke the wrapper.
 
-**When both are false:** all agents run on Claude as before.
+**When false:** coding agents run on Codex. Record whether the API key, runner, or policy was missing. Non-coding agents may still use Claude.
 
 #### Quick mode with `lightweight` classification (diff < 100 lines)
 
 Run only these 3 agents:
 
-1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Claude** (security judgment, never offload)
-2. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback when available)
-3. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback when available)
+1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex** (security judgment, never OpenRouter)
+2. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+3. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
-Skip architecture-reviewer and doc-sync-reviewer -- small diffs rarely have architectural or documentation-sync impact. Net: 1 Claude agent + 2 DeepSeek agents (or 3 Claude if DeepSeek unavailable).
+Skip architecture-reviewer and doc-sync-reviewer. Net: 1 Codex agent + 2 OpenRouter-routed agents, or 3 Codex agents when OpenRouter is unavailable.
 
 Skip to Phase 4 with these 3 agents.
 
@@ -219,11 +223,11 @@ Skip to Phase 4 with these 3 agents.
 
 These 5 agents always run in standard+ quick mode and all full-mode reviews:
 
-1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Claude** (never offload)
-2. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Claude** (multi-file SOLID reasoning)
-3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback)
-4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **-> routing-policy.json** (DeepSeek primary, OpenRouter fallback)
-5. **doc-sync-reviewer** -- `dm-review/*/agents/review/doc-sync-reviewer.md` -- **-> routing-policy.json** (OpenRouter primary, DeepSeek fallback)
+1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex** (never OpenRouter)
+2. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Codex**
+3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+5. **doc-sync-reviewer** -- `dm-review/*/agents/review/doc-sync-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
 #### Configurable Codex Perspective
 
@@ -232,7 +236,7 @@ When `DM_REVIEW_CODEX_PERSPECTIVE` is not `0` and the `codex` CLI is installed, 
 Invocation:
 
 ```bash
-codex exec -s read-only -c service_tier=fast --skip-git-repo-check "<prompt>"
+printf '%s' "$REVIEW_PROMPT" | codex exec -s read-only -c service_tier=fast --skip-git-repo-check -
 ```
 
 Use `-c service_tier=fast` even when a user config sets another tier. A stale `~/.codex/config.toml` with `service_tier = "default"` can prevent startup, and `flex` may be API-rejected; retry once with the known-good `service_tier=fast` override before recording `codex-perspective: unavailable`. For write-capable Codex fix workflows outside review, the known-good form is `codex exec -s workspace-write -c service_tier=fast --skip-git-repo-check`.
@@ -262,7 +266,7 @@ done
 [ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ]
 ```
 
-Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` per row. The Phase 3.75 routing condition shows the same pattern for the deepseek runner.
+Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` per row. Phase 3 shows the same pattern for the OpenRouter runner.
 
 | Condition | Agent | Cache-relative path components |
 |-----------|-------|--------------------------------|
@@ -271,15 +275,14 @@ Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` p
 | `.css` changed | **css-reviewer** | `live-wires/*/agents/review/css-reviewer.md` |
 | `.templ`, `.js`, or `.ts` changed AND project is Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `accessibility-compliance/*/agents/review/a11y-dynamic-content-reviewer.md` |
 | `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `ghostwriter/*/agents/review/voice-editor.md` |
-| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- **-> DeepSeek v4-flash** (60s) when available | `dm-review/*/agents/review/test-coverage-reviewer.md` |
+| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- **OpenRouter when available** (60s) | `dm-review/*/agents/review/test-coverage-reviewer.md` |
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
-| `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis AND `OPENROUTER_API_KEY` set | **openrouter-bulk-analyst** | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
-| `routing-policy.json` selects DeepSeek fallback for bulk read or mechanical checks AND `DEEPSEEK_API_KEY` set | **deepseek-bulk-analyst** | `deepseek/*/agents/review/deepseek-bulk-analyst.md` |
+| `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis AND `OPENROUTER_AVAILABLE=true` | **openrouter-bulk-analyst** | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
 
 #### Report Selection
 
@@ -327,7 +330,7 @@ This context is injected ONLY into the browser-based agents (ux-quality-reviewer
 
 Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If a bulk diff analyst is active (openrouter-bulk-analyst or deepseek-bulk-analyst), it receives the full untruncated diff separately.
+1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If `openrouter-bulk-analyst` is active, it receives the full untruncated diff separately.
 2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
 3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped. If required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input; do not proceed without the lane.
 
@@ -346,24 +349,24 @@ Input guardrails applied:
 
 Routing decisions come from `plugins/pipeline/references/routing-policy.json`, with inline notes above for readability. This section documents the technical details for Phase 4 dispatch.
 
-**DeepSeek models + timeouts** (used in Phase 4 Branch A dispatch):
+**OpenRouter models + timeouts** (used in Phase 4 Branch A dispatch):
 
-| Agent ID | DeepSeek Model | Timeout |
-|---|---|---|
-| `pattern-recognition-specialist` | `v4-pro` | 90s |
-| `code-simplicity-reviewer` | `v4-pro` | 90s |
-| `doc-sync-reviewer` | `v4-flash` | 60s |
-| `test-coverage-reviewer` | `v4-flash` | 60s |
+| Agent ID | Primary model slug | Fallback model slug | Timeout |
+|---|---|---|---|
+| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 90s |
+| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 90s |
+| `doc-sync-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 60s |
+| `test-coverage-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 60s |
 
-All run with `thinking: disabled` (set by wrapper). V4-Pro for code analysis, V4-Flash for mechanical checks.
+When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
 **Routing report** -- print before Phase 4:
 
 ```
-Provider routing (OPENROUTER_AVAILABLE={true|false}, DEEPSEEK_AVAILABLE={true|false}):
-- N agents -> OpenRouter (doc-sync, test-coverage, openrouter-bulk-analyst when selected)
-- N agents -> DeepSeek (pattern-recognition, code-simplicity, fallbacks when selected)
-- N agents -> Claude (security, architecture, visual/UI, unavailable-provider fallbacks)
+Provider routing (OPENROUTER_AVAILABLE={true|false}):
+- N agents -> OpenRouter (pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
+- N coding agents -> Codex (security, architecture, visual/UI, unavailable-provider fallbacks)
+- N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
 
 ---
@@ -374,27 +377,31 @@ Launch ALL selected agents simultaneously using multiple Agent tool calls in a s
 
 #### How to launch each agent
 
-For each selected agent, check whether it is `codex-perspective` first. Use Branch C for that reviewer. For all other agents, check `routing-policy.json` and the Phase 3.75 routing decision:
+For each selected agent, check whether it is `codex-perspective` first. Use Branch C for that reviewer. Check `openrouter-bulk-analyst` next and use Branch A0. For all other agents, check `routing-policy.json` and the Phase 3.75 routing decision:
 
-**A. If the agent is routed to DeepSeek** (in the offload table AND `DEEPSEEK_API_KEY` is set):
+**A0. If the agent is `openrouter-bulk-analyst`:**
 
-1. **Read the deepseek-agent-runner definition** from `$RUNNER_PATH` (resolved in Phase 3.75 condition #2). If `$RUNNER_PATH` was not preserved between phases, recompute it using the same Claude-first/Codex-fallback cache-root loop from Phase 3. Never use a depot-relative path here -- pipeline runs in worktrees outside the depot.
+1. Read its installed agent definition directly; do not nest it inside `openrouter-agent-runner`. The bulk agent is already a wrapper-orchestration contract, while the generic runner expects pure review criteria plus an explicit target model.
+2. Build its prompt with the unfiltered changed-file list, the full untruncated diff, project context, and `$OPENROUTER_SECURITY_POLICY_PATH`. Its first action is the same fail-closed boundary check; a decline returns the lane to Codex.
+3. On a Codex host, launch a native Codex subagent with the combined prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -` so large diffs never cross the process argument limit. The Codex process performs deterministic orchestration; GLM-5.2/DeepSeek V4 performs the external analysis. Never launch this coding-review lane through a Claude `Agent` call.
+
+**A. If the agent is routed to OpenRouter** (in the model table and `OPENROUTER_AVAILABLE=true`):
+
+1. **Read the openrouter-agent-runner definition** from `$OPENROUTER_RUNNER_PATH` (resolved in Phase 3). If the path was not preserved between phases, recompute it with the same Claude-first/Codex-fallback cache-root loop. Never use a depot-relative path here -- reviews run in worktrees outside the depot.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
    - `target_agent_path` -- path to the original agent's definition file
    - `target_agent_name` -- bare ID (e.g., `pattern-recognition-specialist`)
-   - `target_model` -- `v4-pro` or `v4-flash` per the offload table
-   - `target_timeout` -- `90` (v4-pro agents) or `60` (v4-flash agents) per the offload table
+   - `target_model` -- full primary OpenRouter slug from policy or the inline table
+   - `fallback_model` -- full fallback OpenRouter slug from policy or the inline table
+   - `target_timeout` -- `90` or `60` per the table
+   - `security_policy_path` -- `$OPENROUTER_SECURITY_POLICY_PATH`, resolved beside the installed runner
    - The list of changed files
    - The diff content
    - Project context
-3. **Launch via the Agent tool** with:
-   - `subagent_type`: "general-purpose"
-   - `description`: e.g., "DeepSeek-routed: pattern-recognition"
-   - `prompt`: the combined runner prompt from step 2
-   - `model`: "haiku" (per deepseek-agent-runner frontmatter -- mechanical orchestration only)
+3. **Launch without Claude coding execution:** on a Codex host, use a native Codex subagent with the combined runner prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. The runner performs mechanical orchestration and OpenRouter performs the review judgment; a Claude `Agent` call is not a valid Branch A launcher.
 
-**B. Otherwise, dispatch normally on Claude:**
+**B. Otherwise, dispatch coding review on Codex:**
 
 1. **Read the agent definition file** by resolving the path components from the agent selection table via the plugin cache:
 
@@ -414,13 +421,9 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    - The list of changed files
    - The diff content
    - Any relevant context (project type, file paths)
-3. **Launch via the Agent tool** with:
-   - `subagent_type`: "general-purpose"
-   - `description`: short description (e.g., "Security audit of changes")
-   - `prompt`: the combined prompt from step 2
-   - `model`: use the agent's frontmatter `model:` field if declared (e.g., "haiku" for mechanical agents), otherwise "sonnet"
+3. On a Codex host, launch a native Codex subagent with the combined prompt. On another host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. Legacy Claude-model frontmatter is compatibility metadata and must not override the coding-provider policy. Clearly non-coding agents such as `voice-editor` may use their declared Claude model.
 
-Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime -- the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[deepseek/...]` against findings from other agents using the same file:line key.
+Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime -- the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[openrouter/{model}/{agent}]` against findings from other agents using the same file:line key.
 
 **C. If the selected agent is `codex-perspective`:**
 
@@ -428,12 +431,12 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 2. Build a read-only prompt with the changed files, diff content, project context, and the standard Fix Philosophy.
 3. Run:
    ```bash
-   codex exec -s read-only -c service_tier=fast --skip-git-repo-check "<prompt>"
+   printf '%s' "$REVIEW_PROMPT" | codex exec -s read-only -c service_tier=fast --skip-git-repo-check -
    ```
 4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
 5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
-**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, do not classify the failure yet -- Phase 4.5 retries external-LLM failures on Claude before applying failure policies from `guardrails.md`. Do NOT mark the run clean until Phase 4.5 completes.
+**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. Do not mark the run clean until the retry completes.
 
 **Example prompt structure for each agent:**
 
@@ -516,33 +519,33 @@ Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 ### Phase 4.5: Lane Fallback
 
-A **lane** is a review path with its own provider and its own way of being absent: the Claude lane, the DeepSeek lane, the OpenRouter lane, the Codex-perspective lane, and the evidence lane from Phase 1b. A lane that is unavailable must be named, never silently dropped. This phase resolves each unavailable lane before the failure policies apply.
+A **lane** is a review path with its own provider and absence mode: Codex, OpenRouter, optional non-coding Claude, Codex perspective, and evidence. An unavailable lane must be named.
 
 #### Lane failure modes
 
 | Lane | Failure signal | Resolution |
 |------|----------------|------------|
-| DeepSeek / OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Claude (procedure below) |
+| OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Codex (procedure below) |
 | Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
-| Claude-native agent | Agent errored or timed out | No retry -- guardrails.md failure policy applies immediately |
+| Codex-native coding agent | Agent errored or timed out | No Claude retry; apply guardrails immediately |
 
-Fallback always moves **toward** Claude, never away from it. Sensitive-path routing still holds: diffs touching `internal/auth/**`, `internal/federation/**`, secrets, or deploy paths never leave Anthropic, so they have no external lane to fall back from.
+Coding fallback moves between OpenRouter and Codex only. Sensitive paths never go to OpenRouter and start on Codex, so they have no external lane to fall back from.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
 
-Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Preserve failed attempts and honest unavailable status across Claude, Codex-native, and generic hosts. A fallback does not weaken the lane's review, verification, or sensitive-path gates.
+Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Preserve failed attempts across Codex, OpenRouter, optional non-coding Claude, and generic hosts.
 
 #### When the external-LLM retry triggers
 
-Only applies to agents that were routed to an external LLM (DeepSeek, OpenRouter) in Phase 4 Branch A. Claude-native agents that fail do NOT get retried -- their failure policies in guardrails.md apply immediately.
+Only applies to agents routed through OpenRouter. Codex-native agents that fail are classified immediately.
 
 #### Retry procedure
 
 For each agent whose output contains `### RUNNER FAILURE`:
 
-1. **Re-dispatch using Phase 4 Branch B** (normal Claude dispatch) with the same agent definition file, diff content, and project context. Use the agent's default model (`sonnet` unless frontmatter declares otherwise).
-2. **Tag fallback findings** with `[claude-fallback/{agent-name}]` to distinguish from primary-run results. The consolidator in Phase 5 treats these as normal findings for deduplication and severity mapping.
+1. **Re-dispatch using Phase 4 Branch B** on Codex with the same agent definition, diff, and project context.
+2. **Tag fallback findings** with `[codex-fallback/{agent-name}]` for traceability.
 3. **Timeout:** Use the same 120s ceiling from guardrails.md. The fallback is a single retry, not a retry loop.
 
 #### If fallback also fails
@@ -557,14 +560,14 @@ Report the fallback in the Agent Summary table:
 
 | Agent | Provider | Status |
 |-------|----------|--------|
-| pattern-recognition-specialist | DeepSeek v4-pro | RUNNER FAILURE |
-| pattern-recognition-specialist | Claude (fallback) | Completed |
+| pattern-recognition-specialist | OpenRouter `z-ai/glm-5.2` | RUNNER FAILURE |
+| pattern-recognition-specialist | Codex (fallback) | Completed |
 
-Summarize: "pattern-recognition-specialist: DeepSeek failed -> Claude fallback succeeded"
+Summarize: "pattern-recognition-specialist: OpenRouter failed -> Codex fallback succeeded"
 
 #### Cost note
 
-This fallback exists for resilience, not as replacement routing. DeepSeek remains the preferred provider for cost. If fallback triggers frequently (>30% of reviews in a sprint), investigate DeepSeek provider health rather than switching to Claude-primary routing.
+This fallback exists for resilience. If it triggers frequently, investigate OpenRouter health rather than changing the coding boundary.
 
 ---
 

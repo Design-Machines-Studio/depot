@@ -4,7 +4,7 @@ Complete reference for invoking the OpenRouter API from Claude Code via the Bash
 
 ## The Wrapper
 
-`openrouter-wrapper.sh` is a single-turn completion runner. Its exit-code semantics match `deepseek-wrapper.sh` (0/28/1/2) so results slot into the same consolidator path, but its arg shape is POSITIONAL (`<model> <prompt|-> [timeout] [fallback]`) whereas `deepseek-wrapper.sh` is flag-based (`-m`/`-s`/`-p`) -- a caller built for deepseek's flags needs an adapter, not just a path swap. It centralizes provider preferences, rate-limit fallback, JSON body construction, and timeout enforcement.
+`openrouter-wrapper.sh` is a single-turn completion runner with stable exit codes (`0` success, `28` timeout, `1` exhausted/error, `2` bad arguments). It uses positional arguments (`<model> <prompt|-> [timeout] [fallback]`) and centralizes provider preferences, rate-limit fallback, JSON body construction, response extraction, and timeout enforcement.
 
 **Argument shape (positional):**
 
@@ -17,7 +17,7 @@ openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 - `[timeout_s]` -- per-attempt timeout in seconds (default `90`)
 - `[fallback-slug]` -- a second model to try if the primary returns HTTP 429/503
 
-**Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- the stdout IS the answer. (This differs from `deepseek-wrapper.sh`, which returns the raw JSON envelope.)
+**Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- stdout is the answer.
 
 ## Resolve the Wrapper Path
 
@@ -89,4 +89,4 @@ POST https://openrouter.ai/api/v1/chat/completions
 | `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` to stderr. Skip gracefully. |
 | `2` | Bad args | Missing model or prompt. |
 
-Internally, HTTP 429/503 on the primary triggers the `[fallback-slug]` model if provided; if the fallback also fails, the wrapper returns `1`. All failures are graceful skips -- emit a clean "no findings" report so any consolidator can proceed.
+Internally, HTTP 429/503 on the primary triggers the `[fallback-slug]` model if provided; if the fallback also fails, the wrapper returns `1`. Automated review runners convert failures into `### RUNNER FAILURE` so dm-review can retry the coding lane on Codex. Direct `/openrouter` calls report failure to the user.

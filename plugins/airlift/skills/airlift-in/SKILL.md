@@ -65,19 +65,18 @@ Then continue from the `Next steps` section in `HANDOFF.md`.
 
 ## Delegate resume paths
 
-For `resume-via-deepseek`, require env `DEEPSEEK_API_KEY`. Resolve the wrapper and invoke it with the resume prompt as system context and the handoff as prompt:
+For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name remains stable for compatibility, but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve the OpenRouter wrapper, pass the resume prompt as system context, and pipe the handoff as the user prompt:
 
 ```bash
 WRAPPER=""
 for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER=$(ls -t "$CACHE"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+  WRAPPER=$(ls -t "$CACHE"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
   [ -n "$WRAPPER" ] && break
 done
-bash "$WRAPPER" -m v4-pro -s "$(cat .airlift/RESUME_PROMPT.md)" -p "$(cat .airlift/HANDOFF.md)"
-```
-
-One-line form:
-
-```bash
-WRAPPER=""; for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do WRAPPER=$(ls -t "$CACHE"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1); [ -n "$WRAPPER" ] && break; done; bash "$WRAPPER" -m v4-pro -s "$(cat .airlift/RESUME_PROMPT.md)" -p "$(cat .airlift/HANDOFF.md)"
+if [ -z "$WRAPPER" ] || [ ! -x "$WRAPPER" ]; then
+  echo "openrouter wrapper not found in plugin cache" >&2
+  exit 1
+fi
+OPENROUTER_SYSTEM="$(cat .airlift/RESUME_PROMPT.md)" \
+  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < .airlift/HANDOFF.md
 ```

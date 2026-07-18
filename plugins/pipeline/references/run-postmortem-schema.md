@@ -4,8 +4,8 @@ Every full pipeline run writes `plans/<slug>/run-postmortem.md` after memory cap
 
 ## Required Sections
 
-- `providerSplit` - measured token and cost totals by `claude`, `codex`, `openrouter`, and `deepseek`.
-- `measurementSources` - Claude JSONL delta, `ccusage blocks --json` cross-check when available, Codex `tokens used`, OpenRouter/DeepSeek API `usage` objects, and any estimated fallbacks with reasons.
+- `providerSplit` - measured token and cost totals by `claude`, `codex`, and `openrouter`; DeepSeek-model calls are OpenRouter usage.
+- `measurementSources` - Claude JSONL delta, `ccusage blocks --json` cross-check when available, Codex `tokens used`, OpenRouter API `usage` objects, and any estimated fallbacks with reasons.
 - `routingTargetComparison` - configured target from `routing-policy.json`, actual split, and variance.
 - `misroutes` - every Claude-executed task that the policy says should have gone to Codex/OpenRouter, including token cost and exact policy edit.
 - `qualityLedger` - which provider found each review issue, retries, cap descents, and regressions shipped by cheaper models.

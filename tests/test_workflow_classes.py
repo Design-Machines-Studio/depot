@@ -52,7 +52,7 @@ class WorkflowClassTests(unittest.TestCase):
             references / "sensitive-path-policy.json",
         )
         owned = json.loads(DEFAULT_SENSITIVE_POLICY_PATH.read_text(encoding="utf-8"))
-        owned_globs = owned["security"]["neverRouteOffAnthropic"]["pathGlobs"]
+        owned_globs = owned["security"]["neverRouteToOpenRouter"]["pathGlobs"]
         self.assertEqual(
             tuple(owned_globs), WorkflowTemplates()._sensitive_globs,
         )
@@ -68,14 +68,14 @@ class WorkflowClassTests(unittest.TestCase):
         upstream = json.loads(routing_policy.read_text(encoding="utf-8"))
         self.assertEqual(
             owned_globs,
-            upstream["security"]["neverRouteOffAnthropic"]["pathGlobs"],
+            upstream["security"]["neverRouteToOpenRouter"]["pathGlobs"],
             "kernel-owned sensitive-path-policy.json drifted from routing-policy.json",
         )
 
     def test_sensitive_routing_policy_uses_shared_json_boundaries(self):
         canonical = json.dumps({
             "security": {
-                "neverRouteOffAnthropic": {"pathGlobs": ["secret/**"]},
+                "neverRouteToOpenRouter": {"pathGlobs": ["secret/**"]},
             },
         })
         with tempfile.TemporaryDirectory() as directory:
@@ -215,7 +215,7 @@ class WorkflowClassTests(unittest.TestCase):
                 nodes = templates.expand(kind, context)
                 routed = [node for node in nodes if node.executor is not None]
                 self.assertTrue(routed)
-                self.assertTrue(all(node.executor == "claude" for node in routed))
+                self.assertTrue(all(node.executor == "codex" for node in routed))
                 self.assertTrue(all(node.routing_reason in {
                     "sensitive_path_override", "security_workflow_override"
                 } for node in routed))
@@ -230,10 +230,10 @@ class WorkflowClassTests(unittest.TestCase):
         nodes = WorkflowTemplates().expand(WorkflowClass.SECURITY, context)
         routed = [node for node in nodes if node.executor is not None]
         self.assertTrue(routed)
-        self.assertTrue(all(node.executor == "claude" for node in routed))
+        self.assertTrue(all(node.executor == "codex" for node in routed))
         self.assertTrue(all(node.routing_reason == "sensitive_path_override" for node in routed))
         self.assertTrue(all(
-            node.required_capability is HostCapability.ANTHROPIC_NATIVE_EXECUTION
+            node.required_capability is HostCapability.CODEX_EXECUTION
             for node in routed
         ))
 
@@ -287,9 +287,19 @@ class WorkflowClassTests(unittest.TestCase):
         self.assertEqual(build.executor, "openrouter")
         self.assertEqual(build.required_capability, HostCapability.OPENROUTER_EXECUTION)
         self.assertIsNone(build.required_dispatch_capability)
-        self.assertEqual(review.executor, "claude")
-        self.assertEqual(review.required_capability, HostCapability.CLAUDE_EXECUTION)
+        self.assertEqual(review.executor, "codex")
+        self.assertEqual(review.required_capability, HostCapability.CODEX_EXECUTION)
         self.assertEqual(review.routing_reason, "workflow_default")
+
+    def test_legacy_claude_builder_request_normalizes_to_codex(self):
+        nodes = WorkflowTemplates().expand(
+            WorkflowClass.FEATURE, WorkflowContext(requested_executor="claude"),
+        )
+        build = next(node for node in nodes if node.node_id == "build")
+        self.assertEqual(build.executor, "codex")
+        self.assertEqual(build.required_capability, HostCapability.CODEX_EXECUTION)
+        self.assertIsNone(build.required_dispatch_capability)
+        self.assertEqual(build.routing_reason, "legacy_claude_normalized")
 
     def test_executor_nodes_declare_matching_provider_capability(self):
         expected = {
@@ -302,16 +312,9 @@ class WorkflowClassTests(unittest.TestCase):
                 with self.subTest(kind=kind.value, node=node.node_id):
                     self.assertEqual(
                         node.required_capability,
-                        (HostCapability.ANTHROPIC_NATIVE_EXECUTION
-                         if kind is WorkflowClass.SECURITY and node.executor == "claude"
-                         else expected[node.executor] if node.executor is not None else None),
+                        expected[node.executor] if node.executor is not None else None,
                     )
-                    self.assertEqual(
-                        node.required_dispatch_capability,
-                        (HostCapability.NATIVE_DISPATCH
-                         if kind is WorkflowClass.SECURITY and node.executor is not None
-                         else None),
-                    )
+                    self.assertIsNone(node.required_dispatch_capability)
 
     def test_trusted_policy_owns_the_only_versioned_safety_anchor(self):
         root = KERNEL_REFERENCES
@@ -364,6 +367,8 @@ class WorkflowClassTests(unittest.TestCase):
         mutations.append(empty)
         claude_companion = json.loads(json.dumps(document))
         review = claude_companion["classes"]["feature"]["nodes"][4]
+        review["executor"] = "claude"
+        review["required_capability"] = "claude_execution"
         review["required_dispatch_capability"] = "companion_dispatch"
         mutations.append(claude_companion)
         codex_wrapper = json.loads(json.dumps(document))
@@ -488,8 +493,9 @@ class WorkflowClassTests(unittest.TestCase):
             node for node in weakened_security["classes"]["security"]["nodes"]
             if node["id"] == "security_build"
         )
-        security_build["required_capability"] = "claude_execution"
-        security_build["required_dispatch_capability"] = None
+        security_build["executor"] = "openrouter"
+        security_build["required_capability"] = "openrouter_execution"
+        security_build["required_dispatch_capability"] = "openrouter_exec"
         mutations.append(("workflow_requirement_unsatisfied", weakened_security))
 
         bypassed_promotion = json.loads(json.dumps(base))
@@ -564,7 +570,7 @@ class WorkflowClassTests(unittest.TestCase):
             if node["id"] == "security_build"
         )
         security_build.update({
-            "executor": "codex", "required_capability": "codex_execution",
+            "executor": "claude", "required_capability": "anthropic_native_execution",
             "required_dispatch_capability": "native_dispatch",
         })
         mutations.append(changed_executor)
@@ -784,11 +790,14 @@ class WorkflowClassTests(unittest.TestCase):
     def test_anthropic_native_constraint_requires_claude_native_dispatch(self):
         source = KERNEL_REFERENCES / "workflow-classes.json"
         base = json.loads(source.read_text(encoding="utf-8"))
-        for executor, dispatch in (("codex", "native_dispatch"),
-                                   ("claude", None)):
+        for executor, capability, dispatch in (
+            ("codex", "anthropic_native_execution", "native_dispatch"),
+            ("claude", "anthropic_native_execution", None),
+        ):
             payload = json.loads(json.dumps(base))
             node = payload["classes"]["security"]["nodes"][1]
             node["executor"] = executor
+            node["required_capability"] = capability
             node["required_dispatch_capability"] = dispatch
             with self.subTest(executor=executor, dispatch=dispatch), \
                     tempfile.TemporaryDirectory() as directory:

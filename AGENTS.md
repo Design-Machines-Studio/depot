@@ -63,12 +63,12 @@ These aliases live at `plugins/<name>/skills/<command>/SKILL.md` so Codex can ex
 
 ## Runtime Cache Path Resolution
 
-Plugins that resolve paths at runtime (deepseek, openrouter, dm-review, pipeline, workflow-kernel) use a Claude-first/Codex-fallback loop:
+Plugins that resolve paths at runtime (openrouter, dm-review, pipeline, workflow-kernel) use a Claude-first/Codex-fallback loop:
 
 ```bash
 WRAPPER_PATH=""
 for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/deepseek/*/skills/deepseek-delegate/references/deepseek-wrapper.sh 2>/dev/null | head -1)
+  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
   [ -n "$WRAPPER_PATH" ] && break
 done
 ```
@@ -103,10 +103,10 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-19 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 40 agent cards | 34 commands
+18 plugins | 38 domain-facing skills + 1 internal workflow-kernel skill + 33 generated Codex command-skill aliases | 38 agent cards | 33 commands
 
 The generated search index counts every manifest-discovered surface, including
-the internal kernel skill: 40 skills and 40 agents. The 39 count above preserves
+the internal kernel skill: 39 skills and 38 agents. The 38 count above preserves
 the domain-facing skill inventory used by the release plan.
 
 | Plugin | Purpose |
@@ -127,8 +127,7 @@ the domain-facing skill inventory used by the release plan.
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
 | **workflow-kernel** | Neutral deterministic run state, replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by workflow plugins |
-| **deepseek** | DeepSeek V4 API subagent for code review and bulk diff analysis |
-| **openrouter** | OpenRouter provider plugin (leaf): GLM-5.2 big-diff analysis + one-shot generation; pipeline cascade rail and dm-review big-diff fallback |
+| **openrouter** | Unified OpenRouter provider: Kimi K3 agentic execution plus GLM-5.2/DeepSeek V4 mechanical review, pipeline cascade, and dm-review routing |
 
 ## Conventions
 

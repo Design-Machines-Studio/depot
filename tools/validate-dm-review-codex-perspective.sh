@@ -34,7 +34,7 @@ require_text "$review_skill" "service_tier=fast" "review skill forces fast tier 
 require_text "$review_skill" "Verify-before-close" "review skill gates stale/already-fixed dispositions"
 require_text "$review_skill" "code-evidence re-verification at HEAD" "review skill requires HEAD evidence before stale closeout"
 require_text "$consolidator" "merge findings from both" "consolidator merges dual-perspective findings"
-require_text "$consolidator" "a finding from either is in-scope" "consolidator treats either perspective as actionable"
+require_text "$consolidator" "a finding from either coding provider is in-scope" "consolidator treats either coding provider as actionable"
 require_text "$registry" "codex-perspective" "agent registry includes codex-perspective"
 require_text "$codex_agent" "Normalize output to P1/P2/P3" "codex-perspective agent normalizes output"
 

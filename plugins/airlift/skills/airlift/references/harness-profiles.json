@@ -15,7 +15,7 @@
   "deepseek": {
     "instructionsFile": "AGENTS.md",
     "sessionLog": "n/a",
-    "resume": "seed via deepseek plugin delegate",
+    "resume": "seed via OpenRouter using deepseek/deepseek-v4-pro",
     "agentsMd": true
   },
   "kiro": {

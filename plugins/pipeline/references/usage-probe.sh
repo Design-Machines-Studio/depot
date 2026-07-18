@@ -14,7 +14,7 @@ set -uo pipefail
 
 iso_or_null() { [ -n "${1:-}" ] && printf '"%s"' "$1" || printf 'null'; }
 
-# --- Claude Max via ccusage (Airlift's Tier-3 signal) -------------------------
+# --- Claude Pro via ccusage (Airlift's Tier-3 signal) -------------------------
 # `ccusage` reports rolling 5h + weekly windows. TODO: confirm JSON flag/fields.
 claude_json() {
   local out="" pct="" reset="" state="unknown"

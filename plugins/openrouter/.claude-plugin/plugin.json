@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
-  "description": "OpenRouter API provider plugin for policy-routed review, second-opinion analysis, config/doc generation, and bounded OpenRouter execution via GLM-5.2 and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.",
-  "version": "1.3.0",
+  "description": "OpenRouter API provider plugin for policy-routed review, second-opinion analysis, config/doc generation, and bounded OpenRouter execution across quality- and cost-ranked model slugs over one OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail, generic review-agent runner, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.",
+  "version": "1.4.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -24,7 +24,7 @@
       {
         "id": "openrouter-delegate",
         "name": "OpenRouter Delegation",
-        "description": "Delegate big-diff analysis, second-opinion review, and one-shot text generation to OpenRouter models (GLM-5.2, DeepSeek V4) at lower cost. Use when offloading large-diff review or config/doc generation from Anthropic quota.",
+        "description": "Delegate big-diff analysis, second-opinion review, and one-shot text generation to quality- and cost-ranked OpenRouter models. Use when offloading large-diff review or config/doc generation from Anthropic quota.",
         "triggers": [
           "use openrouter",
           "ask openrouter",
@@ -53,13 +53,26 @@
         "id": "openrouter-bulk-analyst",
         "name": "OpenRouter Bulk Diff Analyst",
         "category": "review",
-        "description": "Analyzes full diffs using GLM-5.2 (DeepSeek V4 fallback) 1M token context when diffs exceed Claude's truncation threshold. Produces P1/P2/P3 findings compatible with the dm-review consolidator.",
+        "description": "Policy-selected bulk and large-context diff analysis using GLM-5.2 with a DeepSeek V4 OpenRouter-model fallback; diffs above the truncation threshold are one trigger, not a requirement. Produces P1/P2/P3 findings for dm-review consolidation.",
         "tags": [
           "diff",
           "review",
           "large-context",
           "glm",
           "openrouter"
+        ]
+      },
+      {
+        "id": "openrouter-agent-runner",
+        "name": "OpenRouter Agent Runner",
+        "category": "workflow",
+        "description": "Loads a trusted review-agent definition and runs its criteria through a policy-selected OpenRouter model slug with security filtering, refusal detection, and Codex fallback receipts.",
+        "tags": [
+          "workflow",
+          "review",
+          "delegation",
+          "openrouter",
+          "provider-routing"
         ]
       }
     ],

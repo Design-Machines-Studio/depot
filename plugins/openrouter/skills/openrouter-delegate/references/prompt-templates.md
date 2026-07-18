@@ -13,7 +13,7 @@ Structured prompt patterns for each OpenRouter delegation type. Every prompt mus
 
 ## Diff Analysis Template
 
-For analyzing diffs that exceed Claude's truncation threshold or to offload from Anthropic quota.
+For analyzing large diffs or preserving Codex subscription headroom.
 
 **System prompt (`OPENROUTER_SYSTEM`):**
 ```

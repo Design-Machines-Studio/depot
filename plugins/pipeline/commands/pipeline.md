@@ -14,7 +14,7 @@ Before starting, assess the feature scope and select the appropriate mode:
 
 **Lean mode** -- Use when the feature is small enough for single-pass execution but still needs quality gates:
 
-- Touches fewer than 10 files (Opus can sustain coherent multi-file builds without chunking)
+- Touches fewer than 10 files and remains one coherent coding concern
 - One logical concern (not multiple subsystems)
 - No dependency ordering needed (everything is sequential)
 - Can be implemented in one pass
@@ -35,19 +35,16 @@ In lean mode:
 
 **How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change that still benefits from quality checks, use lean mode. When in doubt, use full mode.
 
-## Model-Adaptive Complexity
+## Provider-Adaptive Complexity
 
-The pipeline's complexity should match the model and its effort level, not a hardcoded model version. Model aliases (`opus`/`sonnet`) auto-resolve to the latest release -- on the Anthropic API `opus` is Opus 4.8 (adaptive reasoning, `high` effort default). Tune the pipeline through effort levers rather than version checks. See `docs/opus-4-8-tuning.md` for the full effort matrix and depot's per-agent effort policy.
+Choose lean versus full mode from dependency shape, risk, and verification needs—not from a Claude model. Coding execution and review use Codex or OpenRouter. Claude effort settings may deepen explicitly non-coding planning, strategy, research synthesis, voice/editorial work, or optional plan critique, but they never change coding routes or justify broader implementation chunks.
 
-**Effort levers (Opus 4.7+):**
+- Complex, security-sensitive, or multi-subsystem work uses full mode regardless of provider quality.
+- `plan-adversary` may use high Claude effort only when it is an explicitly non-coding plan critique; Codex and OpenRouter remain the coding evaluators.
+- Fable is non-coding-only. Never dispatch `execution-orchestrator`, implementation, security, architecture, or code review to Fable.
+- Mechanical OpenRouter runners remain bounded by the security policy and return to Codex when they cannot execute safely.
 
-- For complex or high-stakes features, raise session effort before running: `/effort xhigh` for deeper reasoning, or `ultracode` (xhigh plus dynamic-workflow orchestration) for substantive multi-step builds. A higher-effort model sustains coherent multi-file builds without explicit sprint decomposition, so lean mode applies more aggressively.
-- `plan-adversary` pins `effort: xhigh` in its frontmatter -- adversarial review feeds a hard decision gate, so it reasons deeply regardless of session effort.
-- **Fable escalation (plan-conditional):** when the session model is Fable (`claude-fable-5`, Mythos-class, above Opus) or the user opts in, dispatch the decision-gate agents (`plan-adversary`, and the `execution-orchestrator` itself for the hardest runs) with a dispatch-time `model: fable` override -- the Agent tool's model parameter takes precedence over frontmatter. Frontmatter pins stay `opus` so nothing breaks when Fable is off-plan; if a `fable` dispatch errors as model-unavailable, silently re-dispatch with the frontmatter default. Unpinned agents already inherit the session model, so a Fable session upgrades them automatically.
-- Mechanical and external-LLM-wrapper agents (test runners, diff/code analysts, validators) pin `effort: low`/`medium` -- they delegate or run commands, so deep reasoning there only burns tokens.
-- Lower-effort sessions (Sonnet, or Opus at `medium`/`low`): always use full mode for features touching more than 3 files. Chunking and explicit acceptance criteria prevent premature wrap-up as context fills.
-
-**These stay mandatory regardless of model or effort:**
+**These stay mandatory regardless of provider:**
 
 - The adversarial review (Phase 5) -- self-evaluation is unreliable at any capability level.
 - dm-review-loop -- separating generator from evaluator is an architectural principle, not a model limitation.

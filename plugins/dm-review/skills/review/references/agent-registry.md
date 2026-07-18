@@ -8,13 +8,13 @@ Complete catalog of all review agents with trigger conditions, file matchers, an
 
 These 5 agents run on every review regardless of file types changed.
 
-| # | Agent | Source | Model | What it reviews |
-|---|-------|--------|-------|-----------------|
-| 1 | code-simplicity-reviewer | dm-review | sonnet | Complexity, redundancy, dead code, over-engineering, naming clarity |
-| 2 | security-auditor | dm-review | sonnet | SQL injection, XSS, CSRF, auth, input validation, data exposure |
-| 3 | pattern-recognition-specialist | dm-review | sonnet | Anti-patterns, naming conventions, duplication, magic values |
-| 4 | architecture-reviewer | dm-review | sonnet | Component boundaries, SOLID, coupling, layer violations |
-| 5 | doc-sync-reviewer | dm-review | sonnet | CLAUDE.md, README, manual pages, docs, references, CHANGELOG |
+| # | Agent | Source | Coding provider | What it reviews |
+|---|-------|--------|-----------------|-----------------|
+| 1 | code-simplicity-reviewer | dm-review | OpenRouter, then Codex | Complexity, redundancy, dead code, over-engineering, naming clarity |
+| 2 | security-auditor | dm-review | Codex only | SQL injection, XSS, CSRF, auth, input validation, data exposure |
+| 3 | pattern-recognition-specialist | dm-review | OpenRouter, then Codex | Anti-patterns, naming conventions, duplication, magic values |
+| 4 | architecture-reviewer | dm-review | Codex only | Component boundaries, SOLID, coupling, layer violations |
+| 5 | doc-sync-reviewer | dm-review | OpenRouter, then Codex | CLAUDE.md, README, manual pages, docs, references, CHANGELOG |
 
 ### Configurable Parallel Reviewer
 
@@ -22,7 +22,7 @@ These 5 agents run on every review regardless of file types changed.
 |---|---|---|---|
 | codex-perspective | dm-review | `codex exec -s read-only -c service_tier=fast --skip-git-repo-check` | Enabled by default when `codex` is installed; set `DM_REVIEW_CODEX_PERSPECTIVE=0` to disable |
 
-`codex-perspective` runs in parallel with the selected Claude/DeepSeek/OpenRouter agents and reports in the same P1/P2/P3 shape. It is a second-opinion lane, not a replacement for security-auditor or architecture-reviewer.
+`codex-perspective` runs in parallel with the selected Codex/OpenRouter agents and reports in the same P1/P2/P3 shape. It is a second-opinion lane, not a replacement for security-auditor or architecture-reviewer. Legacy `model:` frontmatter is Claude Code compatibility metadata, not a provider-routing instruction.
 
 ---
 

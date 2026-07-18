@@ -331,6 +331,12 @@ def route_satisfies_node(route: HostRoute, node: "NodeSpec") -> bool:
         return False
     if node.executor is None or route.capability is not node.required_capability:
         return False
+    if node.routing_reason in {
+        "sensitive_path_override", "security_workflow_override",
+    } and not (
+        route.provider == "openai" and route.rail in {"native", "codex_companion"}
+    ):
+        return False
     if (
         node.required_dispatch_capability is not None
         and DISPATCH_RAIL_CAPABILITIES[route.rail]

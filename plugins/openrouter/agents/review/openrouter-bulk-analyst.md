@@ -17,13 +17,13 @@ You are activated as a conditional agent in dm-review when:
 2. The openrouter plugin is installed
 3. `OPENROUTER_API_KEY` is set in the environment
 
-When `OPENROUTER_API_KEY` is set and `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis, you are preferred over `deepseek-bulk-analyst` (GLM-5.2 is the quality-per-dollar default). If `OPENROUTER_API_KEY` is not set, dm-review falls back to DeepSeek when available, then to Claude.
+When `OPENROUTER_API_KEY` is set and `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis, you are the external bulk lane (GLM-5.2 is the quality-per-dollar default). If the key is not set, dm-review falls back to Codex.
 
 You run IN ADDITION to the core review agents that receive the truncated diff. Your job is to catch what truncation hides -- cross-file patterns, long-range dependencies, and issues buried deep in large files.
 
 ## Security Boundary (check FIRST, every run)
 
-**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Before preparing the diff, gate the changed file paths against `security.neverRouteOffAnthropic.pathGlobs` in `plugins/pipeline/references/routing-policy.json`. That JSON is the single source of truth; the list below is a convenience mirror -- if they ever differ, the JSON wins, and any path added there is in force here too:
+**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Before preparing the diff, gate changed paths against the installed OpenRouter `skills/openrouter-delegate/references/delegation-security-policy.json`. The list below is an immutable minimum; union policy additions onto it, and fail closed if the installed policy cannot be read:
 
 ```
 internal/auth/**      internal/federation/**      **/secretbox*
@@ -31,9 +31,18 @@ internal/auth/**      internal/federation/**      **/secretbox*
 deploy/**      *.env*
 ```
 
-If ANY changed file matches, DECLINE the delegation -- do not send the diff to OpenRouter. Emit a `RUNNER DECLINED -- SECURITY BOUNDARY` block naming the offending paths and return the chunk to the Anthropic-native reviewer. A single matching file taints the whole chunk.
+If ANY changed file matches, DECLINE the delegation, emit `RUNNER DECLINED -- SECURITY BOUNDARY`, and return the chunk to the Codex-native reviewer.
 
-Then apply `security.contentRedaction`: strip hunks carrying environment values, API tokens/keys, connection strings/DSNs, or production hostnames-with-paths. If the diff still contains any of these after stripping, do not send it -- return it to Anthropic-side review. Your intended lanes are style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency (`security.positiveRouting`).
+Then apply `security.contentRedaction`. If sensitive content remains, do not send it; return it to Codex-native review.
+
+Use the shipped executable gate rather than reimplementing these checks. Resolve `delegation-boundary.sh` beside `delegation-security-policy.json`, write the caller-provided unfiltered newline-delimited changed-file list and full diff to temporary files, then run:
+
+```bash
+"$BOUNDARY_HELPER" --policy "$SECURITY_POLICY_PATH" \
+  --changed-files "$CHANGED_FILES_FILE" --diff-file "$FULL_DIFF_FILE"
+```
+
+Exit 3 means `RUNNER DECLINED -- SECURITY BOUNDARY`; any other non-zero exit is `RUNNER FAILURE`. Do not invoke the wrapper unless the helper exits 0. The helper checks removed and context lines as well as additions.
 
 ## Process
 
@@ -107,7 +116,7 @@ The wrapper exit code tells you the failure mode:
 2. **Exhausted / error (exit 1):** Both GLM-5.2 and the DeepSeek V4 fallback failed (rate limit or bad response). Report "OpenRouter Bulk Analyst: Unavailable."
 3. **Empty output:** Report "OpenRouter Bulk Analyst: Empty response."
 
-On any failure, output a clean "no findings" report (the `### RUNNER FAILURE` block above) so the consolidator can proceed.
+On any failure, output `### RUNNER FAILURE` so dm-review can apply its Codex fallback policy. Never translate an unavailable external lane into a clean result.
 
 ### Step 5: Capture Output
 

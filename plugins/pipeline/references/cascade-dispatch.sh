@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 # cascade-dispatch.sh -- World B usage-aware model-cascade decision engine.
 # Harness-neutral (Claude Code / Codex / opencode / Pi). Generalizes the merged
-# execution-orchestrator 3d fallback ("Codex unavailable -> Claude") into a full
+# execution-orchestrator fallback into a Codex/OpenRouter coding ladder.
 # usage-gauged ladder. Reads model-cascade.json (executor-intent classes ->
 # role ladders) + routing-policy.json + harness-profile.json (role->rail per host) + usage-probe.sh
 # (live headroom). Picks the best rung above the class quality_floor; on a cap
 # error fires the Airlift Tier-1 checkpoint and descends.
 #
 # Usage:
-#   cascade-dispatch.sh --class <codex|claude> --prompt <text|-> \
+#   cascade-dispatch.sh --class <codex|openrouter> --prompt <text|-> \
 #       [--kind <ui|logic|integration|config>] [--phase <p>] [--host H] \
 #       [--timeout N] [--dry-run] [--probe-file <json>] \
-#       [--exhausted-rail <codex|claude|openrouter>]
+#       [--exhausted-rail <codex|openrouter>]
 #   (--kind is an alternative to --class; mapped via cascade.class_from_kind)
 #
 # Exit codes:
@@ -52,7 +52,7 @@ while [ $# -gt 0 ]; do
 done
 command -v jq >/dev/null 2>&1 || { echo "cascade-dispatch: jq required" >&2; exit 2; }
 [ -z "$CLASS" ] && [ -n "$KIND" ] && CLASS="$(jq -r --arg k "$KIND" '.class_from_kind[$k] // empty' "$CASCADE")"
-[ -z "$CLASS" ] || [ -z "$PROMPT" ] && { echo "usage: $0 --class <codex|claude>|--kind <k> --prompt <p|-> [opts]" >&2; exit 2; }
+[ -z "$CLASS" ] || [ -z "$PROMPT" ] && { echo "usage: $0 --class <codex|openrouter>|--kind <k> --prompt <p|-> [opts]" >&2; exit 2; }
 [ "$PROMPT" = "-" ] && PROMPT="$(cat)"
 
 # --- host detection ----------------------------------------------------------
@@ -118,6 +118,51 @@ dispatch_openrouter_exec() {
   printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT" 2>&1
 }
 
+# Gate the prompt once before any OpenRouter execution or wrapper role. A
+# missing/unverifiable boundary makes the entire OpenRouter rail unavailable;
+# trusted Codex roles may still run.
+OPENROUTER_GATE_STATE="unchecked"
+openrouter_allowed() {
+  [ "$DRYRUN" = "1" ] && return 0
+  [ "$OPENROUTER_GATE_STATE" = "safe" ] && return 0
+  [ "$OPENROUTER_GATE_STATE" = "denied" ] && return 1
+  [ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || {
+    OPENROUTER_GATE_STATE="denied"
+    return 1
+  }
+  local policy="" helper="" task_tmp_root prompt_file allowed_file rc
+  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+    policy="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json 2>/dev/null | head -1 || true)"
+    [ -n "$policy" ] && break
+  done
+  [ -z "$policy" ] && policy="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
+  helper="$(dirname "$policy")/delegation-boundary.sh"
+  [ -f "$policy" ] && [ -x "$helper" ] || {
+    OPENROUTER_GATE_STATE="denied"
+    return 1
+  }
+  task_tmp_root="${TMPDIR:-/tmp}"
+  prompt_file="$(mktemp "$task_tmp_root/cascade-boundary.XXXXXX.prompt")" || return 1
+  allowed_file="$(mktemp "$task_tmp_root/cascade-boundary.XXXXXX.allowed")" || {
+    rm -f "$prompt_file"
+    return 1
+  }
+  printf '%s' "$PROMPT" > "$prompt_file"
+  printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$allowed_file"
+  if "$helper" --policy "$policy" --changed-files "$allowed_file" --content-file "$prompt_file"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  rm -f "$prompt_file" "$allowed_file"
+  if [ "$rc" -eq 0 ]; then
+    OPENROUTER_GATE_STATE="safe"
+    return 0
+  fi
+  OPENROUTER_GATE_STATE="denied"
+  return 1
+}
+
 probe_json() { [ -n "$PROBE_FILE" ] && cat "$PROBE_FILE" || { [ -x "$PROBE" ] && "$PROBE" || echo '{}'; }; }
 PROBES="$(probe_json)"
 FLOOR="$(jq -r --arg c "$CLASS" '.cascades[$c].quality_floor // 0' "$CASCADE")"
@@ -150,6 +195,10 @@ for role in $LADDER; do
   [ "$kind" = "none" ] && continue
   prail="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].probe // "none"' "$PROFILE")"
   rail_has_headroom "$prail" || continue
+  if [ "$prail" = "openrouter" ] && ! openrouter_allowed; then
+    EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
+    continue
+  fi
   models="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].models[]?' "$PROFILE")"
   for model in $models; do
     q="$(jq -r --arg m "$model" '.quality_rank[$m] // 0' "$CASCADE")"
@@ -176,7 +225,7 @@ for role in $LADDER; do
           checkpoint; break                            # CAP -> handoff, next role
         fi
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
-        break;;                                        # other codex failure -> next role (Claude)
+        break;;                                        # other Codex failure -> next OpenRouter role
       wrapper)
         fb="$(printf '%s' "$models" | awk -v m="$model" 'f{print;exit} $0==m{f=1}')"
         out="$(dispatch_wrapper "$model" "$fb")"; rc=$?
@@ -185,6 +234,11 @@ for role in $LADDER; do
       openrouter_exec)
         out="$(dispatch_openrouter_exec "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
+        if [ $rc -eq 77 ]; then
+          OPENROUTER_GATE_STATE="denied"
+          EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
+          break                                    # skip every later OpenRouter role
+        fi
         continue;;
     esac
   done

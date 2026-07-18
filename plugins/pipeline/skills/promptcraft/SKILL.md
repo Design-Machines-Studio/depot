@@ -49,8 +49,8 @@ Read the plan and identify discrete chunks of work. A chunk is:
    - `config` / docs / pure prose -> `openrouter`
    - mechanical `logic` (rename follow-through, test tables, seed/migration edits) -> `openrouter` or `codex` per policy
    - complex `logic` (new service methods, refactors, multi-file behavior) -> `codex`
-   - `ui` -> `claude`
-   - `integration` -> `claude`
+   - `ui` -> `codex` (browser evidence remains mandatory)
+   - `integration` -> `codex`
 
    When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
 

@@ -228,21 +228,21 @@ assess (parallel: code + UX agents)
 
 ---
 
-## Pattern 5: CLI-Mediated Model Delegation
+## Pattern 5: API-Wrapper Model Delegation
 
-A Claude subagent constructs a prompt, invokes an external AI model via a CLI tool, parses the structured response, and formats findings for the calling workflow.
+A lightweight orchestration agent constructs a self-contained prompt, invokes an external model through a guarded API wrapper, validates the returned text, and formats findings for the calling workflow.
 
 ### When to use
 
-A task benefits from capabilities that Claude doesn't have natively -- Google search grounding with citations, very large context windows (2M tokens), or a code execution sandbox. The external model supplements Claude; it never replaces Claude as the orchestrator.
+A task benefits from provider diversity, large context, or better quality-per-dollar for mechanical review. The external model supplements the native orchestrator; it does not inherit conversation context or tool access.
 
 ### How it works
 
-1. A Claude subagent (model: sonnet) is dispatched as part of a normal Multi-Agent Dispatch
-2. The subagent constructs a self-contained prompt (the external model has no conversation context)
-3. The subagent invokes the external CLI via Bash with `timeout` and `--output-format json`
-4. The subagent parses the JSON response and formats findings for the consolidator
-5. On any failure (timeout, rate limit, empty, malformed), the subagent reports gracefully and the review/research proceeds without it
+1. A lightweight runner is dispatched as part of a normal Multi-Agent Dispatch.
+2. It applies the OpenRouter-owned path and content security policy, then constructs a self-contained prompt.
+3. It invokes `openrouter-wrapper.sh`, which calls the OpenRouter HTTP API with a timeout and optional single fallback model.
+4. The wrapper extracts `.choices[0].message.content`; the runner validates that text directly and formats it for the consolidator.
+5. On timeout, refusal, empty output, or API failure, the lane reports a structured failure and follows its native fallback policy.
 
 ### Key constraint
 
@@ -250,20 +250,20 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 ### Real example
 
-`plugins/deepseek/` and `plugins/openrouter/` wrap external model APIs as subagents. Agents using this pattern:
+`plugins/openrouter/` wraps external model APIs behind one provider and credential. Agents using this pattern:
 
-- **deepseek-bulk-analyst** / **openrouter-bulk-analyst** -- dm-review conditional agents. When `routing-policy.json` selects OpenRouter or DeepSeek for bulk/large-context read (whenever the key is set, not only above a 5000-line diff), send the full untruncated diff to a 1M-token-context model (DeepSeek V4, or GLM-5.2 via OpenRouter) for analysis alongside the truncated-diff core agents.
-- **deepseek-agent-runner** -- routes dm-review's mechanical agents through DeepSeek V4 when `DEEPSEEK_API_KEY` is set.
+- **openrouter-bulk-analyst** -- sends the full untruncated diff to GLM-5.2 with a DeepSeek V4 model fallback whenever policy selects the OpenRouter bulk lane.
+- **openrouter-agent-runner** -- routes dm-review's mechanical agents through OpenRouter models when `OPENROUTER_API_KEY` is set.
 - The pipeline cascade (`cascade-dispatch.sh`) drives the OpenRouter wrapper as a one-shot rung for config/doc generation and second-opinion analysis.
 
 ### Failure modes
 
 | Failure | Handling |
 |---------|----------|
-| CLI timeout | Report "timed out," proceed without external input |
-| Model rate limit (quota exhausted) | Fall back through model chain (pro -> flash -> flash-lite -> skip) |
-| Empty or malformed response | Report and skip gracefully |
-| CLI not installed | Skip at source detection phase (graceful skip) |
+| API or wrapper timeout | Report a structured timeout and invoke the lane fallback |
+| Primary model HTTP 429/503 | Retry the configured single fallback model; the pipeline cascade owns any longer ladder |
+| Empty output or refusal | Report `RUNNER FAILURE`; never issue a clean review receipt |
+| Key, wrapper, runner, or security policy unavailable | Mark OpenRouter unavailable at source detection and run the native fallback |
 
 ---
 

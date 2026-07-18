@@ -32,7 +32,6 @@ CATEGORY_BY_PLUGIN = {
     "chef": "Lifestyle",
     "council": "Knowledge",
     "craft-developer": "Developer Tools",
-    "deepseek": "Developer Tools",
     "design-machines": "Business",
     "design-practice": "Design",
     "dm-review": "Developer Tools",

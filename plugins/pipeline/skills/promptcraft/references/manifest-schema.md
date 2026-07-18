@@ -62,7 +62,7 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development", "live-wires:livewires"],
       "estimatedComplexity": "medium",
       "kind": "ui",
-      "executor": "claude"
+      "executor": "codex"
     },
     {
       "id": "03-integration",
@@ -78,7 +78,7 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development"],
       "estimatedComplexity": "medium",
       "kind": "integration",
-      "executor": "claude"
+      "executor": "codex"
     }
   ],
   "executionPlan": {
@@ -157,7 +157,7 @@ or run-wide discontinuity, and includes it in shadow parity and metrics.
 | `companionSkills` | string[] | Skills to load in format "plugin:skill" |
 | `estimatedComplexity` | enum | "small" (1-2 files), "medium" (3-5 files), "large" (6+ files) |
 | `kind` | enum | Chunk type classification: `"ui"`, `"logic"`, `"integration"`, or `"config"`. Inferred from `filesToModify` during prompt generation. Used by the execution-orchestrator for evaluation depth and by the `executor` field for tool routing. See Classification Rules below. |
-| `executor` | enum | Execution tool: `"codex"`, `"claude"`, or `"openrouter"`. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. Determines whether the chunk is dispatched to Codex, Claude, or OpenRouter for implementation. See Executor Mapping below. |
+| `executor` | enum | Coding execution tool: `"codex"` or `"openrouter"`; legacy `"claude"` remains parseable but normalizes to Codex. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. See Executor Mapping below. |
 
 ### Execution Plan
 
@@ -195,12 +195,12 @@ The `executor` field is derived from `kind`, `estimatedComplexity`, and `routing
 | `config` / docs | `openrouter` | Documentation and configuration edits are text-heavy and fit cheap large-context models |
 | mechanical `logic` | `openrouter` or `codex` | Rename follow-through, test tables, seed data, and migration edits can run on OpenRouter when bounded; Codex is secondary |
 | complex `logic` | `codex` | New service methods and refactors need agentic code execution before falling back |
-| `ui` | `claude` | Visual verification and Live Wires judgment require Claude |
-| `integration` | `claude` | Cross-chunk wiring and route verification require Claude's broader context |
+| `ui` | `codex` | UI implementation uses Codex; browser and Live Wires evidence remain mandatory |
+| `integration` | `codex` | Cross-chunk wiring and route verification are code-heavy orchestration |
 
 ## Graceful Fallback
 
-If a non-Claude executor is unavailable, the orchestrator falls back through the cascade in `model-cascade.json` and records the fallback in the chunk receipt. The `executor` field is no longer advisory for `codex` or `openrouter` chunks: the orchestrator MUST dispatch to a provider and MUST NOT silently implement the chunk in-process.
+If an executor is unavailable, the orchestrator falls back through the Codex/OpenRouter cascade in `model-cascade.json` and records the fallback in the chunk receipt. Claude is non-coding-only. The `executor` field is not advisory: the orchestrator MUST dispatch to the selected coding provider and MUST NOT silently implement a non-native chunk in-process.
 
 ## Naming Conventions
 

@@ -26,7 +26,7 @@ Then install individual plugins:
 /plugin install the-local@depot
 /plugin install chef@depot
 /plugin install pipeline@depot
-/plugin install deepseek@depot
+/plugin install openrouter@depot
 ```
 
 Codex compatibility is generated from the Claude manifests. Claude remains the
@@ -45,7 +45,7 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-17 plugins | 36 canonical skills + 31 generated Codex command-skill aliases | 41 agents | 31 commands
+18 plugins | 38 domain-facing skills + 1 internal workflow-kernel skill + 33 generated Codex command-skill aliases | 38 agents | 33 commands
 
 ### ned
 
@@ -205,15 +205,14 @@ Autonomous feature development pipeline. 3 skills, 2 agents, 4 commands.
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
 - `/pipeline-run` -- Execute prompts in worktrees with review-fix loops
 
-### deepseek
+### openrouter
 
-DeepSeek V4 delegation for lower-cost code review and bulk diff analysis. 1 skill, 3 agents, 1 command.
+Unified external-model provider for quality-first agentic work and lower-cost mechanical review. 1 skill, 2 agents, 1 command.
 
-- **deepseek-delegate** -- Delegates code analysis and review work to DeepSeek V4-Pro/V4-Flash with fallback handling
-- **deepseek-bulk-analyst** (agent) -- Reviews large diffs with DeepSeek's long context
-- **deepseek-code-analyst** (agent) -- Performs focused code analysis and refactoring review
-- **deepseek-agent-runner** (agent) -- Runs dm-review mechanical agents through DeepSeek-compatible prompts
-- `/deepseek` -- Delegate a task to DeepSeek
+- **openrouter-delegate** -- Delegates through OpenRouter to Kimi K3, GLM-5.2, DeepSeek V4, MiniMax M3, and frontier models
+- **openrouter-bulk-analyst** (agent) -- Reviews full diffs with GLM-5.2 and a DeepSeek V4 model fallback
+- **openrouter-agent-runner** (agent) -- Runs dm-review mechanical agents through OpenRouter model slugs
+- `/openrouter` -- Delegate a task to any configured OpenRouter model
 
 ## Orchestration
 

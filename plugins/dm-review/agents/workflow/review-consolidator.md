@@ -72,7 +72,7 @@ Extract every finding from every agent. For each finding, record:
 - Description
 - Reference (OWASP, WCAG, pattern name, etc.)
 
-When both Claude-family reviewers and `codex-perspective` ran, merge findings from both before applying severity mapping; a finding from either is in-scope unless direct code evidence at HEAD disproves it.
+When Codex-native and OpenRouter reviewers both ran, merge findings from both before applying severity mapping; a finding from either coding provider is in-scope unless direct code evidence at HEAD disproves it. Optional Claude output is limited to non-coding voice/editorial lanes.
 
 ### Step 2: Deduplicate
 When multiple agents flag the same file and line:
@@ -115,4 +115,4 @@ If there are no gaps, state `Coverage Gaps: none -- all lanes completed within b
 8. Count deduplicated findings, not raw findings (don't double-count)
 9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
 10. **Flag band-aid recommendations** -- if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended -- replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
-11. **Dual-perspective findings are additive** -- `codex-perspective` and Claude-family reviewers are peers. Dedup overlapping findings; never discard a unique Codex or Claude finding merely because the other perspective did not mention it.
+11. **Dual-perspective findings are additive** -- Codex-native and OpenRouter review lanes are peers. Dedup overlapping findings; never discard a unique finding merely because the other coding provider did not mention it. Optional Claude voice/editorial findings remain additive but are non-coding.

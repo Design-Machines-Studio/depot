@@ -44,29 +44,74 @@ fi
 
 PROMPT="$(cat)"
 [ -n "$PROMPT" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
+[ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || {
+  echo "openrouter-exec: OPENROUTER_EXEC_ALLOWED_PATHS is required" >&2
+  exit 2
+}
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WRAPPER=""
 for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)"
+  WRAPPER="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1 || true)"
   [ -n "$WRAPPER" ] && break
 done
 [ -z "$WRAPPER" ] && WRAPPER="$DIR/../../openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 [ -x "$WRAPPER" ] || { echo "openrouter-exec: openrouter-wrapper.sh not found" >&2; exit 1; }
 
+POLICY=""
+for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+  POLICY="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json 2>/dev/null | head -1 || true)"
+  [ -n "$POLICY" ] && break
+done
+[ -z "$POLICY" ] && POLICY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
+BOUNDARY="$(dirname "$POLICY")/delegation-boundary.sh"
+[ -f "$POLICY" ] && [ -x "$BOUNDARY" ] || {
+  echo "openrouter-exec: delegation security boundary unavailable" >&2
+  exit 2
+}
+
+TASK_TMP_ROOT="${TMPDIR:-/tmp}"
+PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.patch")"
+PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.prompt")"
+ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.allowed")"
+PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.paths")"
+MSG_FILE=""
+trap 'rm -f "$PATCH_FILE" "$PROMPT_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$MSG_FILE"' EXIT
+printf '%s' "$PROMPT" > "$PROMPT_FILE"
+printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
+if "$BOUNDARY" --policy "$POLICY" --changed-files "$ALLOWED_FILE" --content-file "$PROMPT_FILE"; then
+  :
+else
+  rc=$?
+  [ "$rc" -eq 3 ] && {
+    echo "openrouter-exec: delegation declined; return chunk to Codex" >&2
+    exit 77
+  }
+  echo "openrouter-exec: delegation boundary validation failed" >&2
+  exit 2
+fi
+
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
 RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-0}" "$WRAPPER" "$MODEL" "$PROMPT" "$TIMEOUT")"
 
-TMPDIR="${TMPDIR:-/tmp}"
-PATCH_FILE="$(mktemp "$TMPDIR/openrouter-exec.XXXXXX.patch")"
-MSG_FILE=""
-# Remove the run's temp files on any exit path (patch/msg diffs should not linger in TMPDIR).
-trap 'rm -f "$PATCH_FILE" "$MSG_FILE"' EXIT
 printf '%s\n' "$RAW_OUT" | sed -n '/^diff --git /,$p' > "$PATCH_FILE"
 
 if [ ! -s "$PATCH_FILE" ]; then
   echo "openrouter-exec: model returned no unified diff" >&2
   exit 1
+fi
+
+if "$BOUNDARY" --policy "$POLICY" --changed-files "$ALLOWED_FILE" \
+    --diff-file "$PATCH_FILE" --output-paths "$PATCH_PATHS_FILE"; then
+  :
+else
+  rc=$?
+  [ "$rc" -eq 3 ] && {
+    echo "openrouter-exec: model patch exceeded chunk/security boundary; return to Codex" >&2
+    exit 77
+  }
+  echo "openrouter-exec: model patch could not be validated" >&2
+  exit 2
 fi
 
 git apply --check "$PATCH_FILE"
@@ -81,13 +126,13 @@ fi
 
 # Stage only the paths the model patch touched, not the whole tree -- an
 # incidental/pre-existing worktree change must not be folded into this commit.
-git apply --numstat "$PATCH_FILE" | awk -F'\t' '{print $3}' | git add --pathspec-from-file=-
+git add --pathspec-from-file="$PATCH_PATHS_FILE" --pathspec-file-nul
 if git diff --cached --quiet; then
   echo "openrouter-exec: patch produced no staged changes" >&2
   exit 1
 fi
 
-MSG_FILE="$(mktemp "$TMPDIR/openrouter-exec.XXXXXX.msg")"
+MSG_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.msg")"
 printf '%s\n\nImplementedBy: openrouter\nVerification: %s\n' "$COMMIT_MSG" "$VERIFY_RESULT" > "$MSG_FILE"
 git commit -F "$MSG_FILE" >/dev/null
 

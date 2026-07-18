@@ -1,10 +1,10 @@
-# Opus 4.8 Tuning
+# Claude Non-Coding Tuning
 
 How depot plugins leverage Opus 4.8 and the effort levers. This is the canonical reference -- pipeline and dm-review point here instead of restating the effort model.
 
 ## What Changed in Opus 4.8
 
-Opus 4.8 (released 2026-05-28, model ID `claude-opus-4-8`) is the current Anthropic API flagship. Relevant deltas for depot:
+Claude remains supported for non-coding work and Claude Code compatibility, but it is outside Depot's executable coding graph. Implementation, code review, security, and architecture use Codex or OpenRouter. The model notes below apply only to strategy, writing/voice, research synthesis, planning, and compatibility metadata.
 
 - **Effort levers replace version branches.** The model decides whether and how much to think per step (adaptive reasoning). You steer that with an effort level, not by detecting which model version is running. Hardcoded "if Opus 4.6 / if Sonnet" branches are stale -- tune by effort instead.
 - **Adaptive-reasoning only.** Fixed thinking budgets (`MAX_THINKING_TOKENS`, `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`) do not apply to Opus 4.7+. Effort level is the primary control.
@@ -41,28 +41,25 @@ Precedence: `CLAUDE_CODE_EFFORT_LEVEL` env var > skill/subagent frontmatter (whi
 
 ## Depot Effort Policy
 
-Right-size effort per agent rather than running everything at the session default. Most depot review/workflow agents are mechanical or delegate to external models, so deep reasoning there only burns tokens. The policy below is mostly tuned *down* (cost-offload) with one strategic *up* where output feeds a hard decision gate.
+Claude effort applies only to explicitly non-coding lanes. Coding-agent `model:` and `effort:` frontmatter remains parseable for Claude Code compatibility, but dm-review and pipeline provider routing override it with Codex/OpenRouter execution.
 
 | Tier | Agents | Effort | Why |
 | :--- | :----- | :----- | :-- |
-| Decision-gate reasoning | `plan-adversary` (opus) | `xhigh` | Adversarial plan review gates whether expensive execution proceeds. Deepest reasoning pays off; runs once per pipeline, not per chunk. |
-| External-LLM wrappers / analysis | `deepseek-bulk-analyst`, `deepseek-code-analyst`, `openrouter-bulk-analyst` (sonnet) | `medium` | The Claude side constructs the prompt, invokes the CLI/API, and maps structured output for the consolidator. The real analysis happens in DeepSeek/OpenRouter -- Claude only needs enough care to not mangle the handoff. |
-| Pure command runners | `go-test-runner` (sonnet) | `low` | Run a command and report. Not intelligence-sensitive. |
-| Mechanical validators | `nats-reviewer`, `migration-validator` (sonnet) | `medium` | Pattern-and-rule checks with light judgment (PII detection, FK constraints, subject naming). |
-| Deep Claude reviewers | `architecture-reviewer`, `security-auditor`, et al. (inherit) | session default | Inherit the session level (`high` on Opus 4.8). Raise the whole session to `xhigh` for high-stakes reviews rather than baking cost into every run. |
-| Haiku-tier | `go-build-verifier`, `deepseek-agent-runner` | n/a | Haiku ignores effort; left unset. |
+| Non-coding decision-gate reasoning | optional `plan-adversary` (opus compatibility alias) | `xhigh` | Deep plan critique may use Claude when explicitly selected; it never implements or reviews code. |
+| Non-coding editorial/synthesis | `voice-editor`, strategy, research synthesis | session-controlled | Raise effort only when the writing or synthesis warrants it. |
+| Coding and review agents | `execution-orchestrator`, `architecture-reviewer`, `security-auditor`, OpenRouter runners, validators | n/a | Codex/OpenRouter routing is authoritative. Claude model/effort frontmatter is inert compatibility metadata for these lanes. |
 
-For the pipeline, raise *session* effort (`/effort xhigh` or `ultracode`) for complex or high-stakes features rather than pinning the workhorse `execution-orchestrator` to `xhigh` -- that keeps cost user-controlled per run.
+For non-coding planning and strategy, raise *session* effort (`/effort xhigh` or `ultracode`) when deeper synthesis is useful. Coding execution remains on Codex/OpenRouter regardless of the Claude session effort.
 
 ## Fable (Mythos-Class) Escalation -- plan-conditional
 
 Claude Fable 5 (`claude-fable-5`, alias `fable`) sits ABOVE Opus in a Mythos-class tier. Availability is **plan-conditional**: it comes and goes with the user's subscription window, so it is an escalation option, never a baseline dependency. Rules:
 
 - **Never pin `model: fable` in agent frontmatter.** Pins must always resolve; a lapsed plan would break dispatch. Defaults stay `opus`.
-- **Use it via inheritance:** unpinned agents (the deep Claude reviewers) inherit the session model. Run the session on Fable (`/model claude-fable-5`) and they upgrade automatically -- the preferred way to spend a Fable availability window on the hardest reviews and builds.
-- **Use it via dispatch-time override for pinned decision gates:** the Agent tool's `model` parameter takes precedence over frontmatter. When the session runs Fable (or the user opts in), dispatch `plan-adversary` -- and the `execution-orchestrator` for the hardest runs -- with `model: fable`. If the dispatch errors as model-unavailable, silently re-dispatch with the frontmatter default.
-- **Cascade:** `model-cascade.json` ranks `fable` at 97 and it leads the claude-code `native_judgment` ladder in `harness-profile.json`. No probe can detect plan-level availability, so the orchestrator's RC-64 rule degrades an unavailable directive model to the next in the native list (`opus`). The entries are inert while Fable is off-plan -- keep them.
-- **Fable vs GPT-5.6 Sol:** `gpt-5.6-sol` outranks `fable` (98 vs 97) but does **not** displace it on the claude-code native ladder. On that host `kind: native` dispatches a *Claude* subagent, and the Agent tool's `model:` field accepts only `opus`/`sonnet`/`haiku`/`fable` -- naming an OpenAI model there would emit a directive the orchestrator cannot fulfil, and RC-64 would silently degrade every dispatch. Sol leads `native_judgment` on the **codex** host (where native *is* OpenAI) and reaches claude-code through `premium_sub` (codex_companion) and the `frontier_api` wrapper.
+- **Use it via inheritance for non-coding agents:** strategy, voice/editorial, research-synthesis, and planning agents may inherit Fable from the session. Coding reviewers do not.
+- **Use it via dispatch-time override for non-coding decision gates:** the Agent tool's `model` parameter takes precedence over frontmatter. When the session runs Fable (or the user opts in), an explicitly non-coding `plan-adversary` may use `model: fable`. If unavailable, re-dispatch with its frontmatter default.
+- **Coding cascade:** `model-cascade.json` retains Fable's quality rank for research comparison only. `harness-profile.json` exposes Claude aliases solely for explicit non-coding compatibility; no coding cascade references that role.
+- **Fable vs GPT-5.6 Sol:** the quality scores remain useful research context, but they do not imply a shared executable ladder. Sol leads Codex coding; Fable is non-coding-only.
 - Effort levels on Fable: assume the full range (it is above Opus); confirm against the model-config docs when a new tier ships.
 
 ## Dynamic Workflows (opportunity, not yet adopted)
@@ -71,4 +68,4 @@ Claude Fable 5 (`claude-fable-5`, alias `fable`) sits ABOVE Opus in a Mythos-cla
 
 ## Maintenance
 
-When a new flagship ships: the aliases auto-upgrade, so check (1) the effort matrix above against the model-config docs, (2) whether any new effort level changes the per-agent policy, and (3) the external-model comparison framing in the `model-selection.md` references under `plugins/deepseek/` and `plugins/openrouter/` (position external models as Sonnet-class cost-offload, never as flagship-replacements).
+When a new flagship ships: the aliases auto-upgrade, so check (1) the effort matrix above against the model-config docs, (2) whether any new effort level changes the per-agent policy, and (3) the quality-first model ordering in `plugins/openrouter/skills/openrouter-delegate/references/model-selection.md`.

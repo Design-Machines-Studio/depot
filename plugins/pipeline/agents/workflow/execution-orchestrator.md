@@ -105,7 +105,7 @@ The stalled-convergence check is critical -- without it, the orchestrator can lo
 
 Default the per-chunk review gate to **quick** mode -- 5 core agents (+ ui-standards-reviewer for UI files). Full review runs once at the end against the feature branch, not per chunk. This is the token-economy default; do not run full review on every chunk.
 
-**Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so the Opus `security-auditor` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
+**Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so the Codex-native `security-auditor` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
 
 ```
 internal/auth/**            internal/federation/**
@@ -115,11 +115,11 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These lanes are never quick-only and are never delegated off-Anthropic (see the DeepSeek/OpenRouter routing policy). A chunk that touches auth/federation/secrets and was reviewed quick-only is a run-postmortem miss.
+These lanes are never quick-only and are never delegated to OpenRouter (see the OpenRouter routing policy). A chunk that touches auth/federation/secrets and was reviewed quick-only is a run-postmortem miss.
 
-### Why this matters for DeepSeek routing
+### Why this matters for OpenRouter routing
 
-The 4-agent DeepSeek offload (pattern-recognition, code-simplicity, doc-sync, test-coverage) only fires when `dm-review:review` is invoked AND `DEEPSEEK_API_KEY` is set. If you skip the skill invocation (e.g., by reporting "slash command not callable" and moving on), the routing never engages and you forfeit the cost-shift. You MUST invoke the skill.
+The four mechanical review lanes (pattern-recognition, code-simplicity, doc-sync, test-coverage) route through OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is set. DeepSeek V4 is a model fallback inside that OpenRouter rail, not a separate plugin or credential. If you skip the skill invocation, the routing never engages. You MUST invoke the skill.
 
 ## Codex Native Adapter Parity
 
@@ -564,7 +564,7 @@ Mark `[chunk-id] 3. Apply input guardrails` complete.
 
 ### 3d: Dispatch Implementation Subagent
 
-Read `plugins/pipeline/references/routing-policy.json` before dispatch. The cascade generalizes the binary "Codex unavailable -> Claude" fallback into a usage-aware ladder: task-fit primary provider, headroom probe, Airlift checkpoint on cap, then descent to the next rung.
+Read `plugins/pipeline/references/routing-policy.json` before dispatch. Coding uses Codex and OpenRouter only. The cascade selects the task-fit primary, probes headroom, checkpoints on cap, and descends without a Claude coding rung.
 
 Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orchestrator MUST dispatch to that provider or through the cascade and MUST NOT implement it in-process. If dispatch is unavailable, fall back per the cascade and log the fallback provider in the chunk receipt. A silently inline-implemented `executor:{codex,openrouter}` chunk is a run-postmortem misroute.
 
@@ -583,33 +583,39 @@ if [ -n "$CASCADE_DISPATCH" ] && [ -x "$CASCADE_DISPATCH" ] \
 fi
 ```
 
-`OPENROUTER_API_KEY` (OpenRouter execution/review available) or `PIPELINE_CASCADE=1` (manual override for testing native-reroute/Airlift behavior without a key) activates the cascade. **If `CASCADE_ACTIVE=0`, execute 3d-LEGACY below for `codex`/`claude`; `executor: openrouter` must be recorded as unavailable and routed to the next provider, not implemented inline.**
+`OPENROUTER_API_KEY` or `PIPELINE_CASCADE=1` activates the cascade. **If `CASCADE_ACTIVE=0`, normalize any legacy `executor: claude` value to `codex`; an unavailable OpenRouter executor falls back to Codex. If Codex is also unavailable, fail the chunk rather than dispatching coding work to Claude.**
 
 **Step 3d.1 -- Select task-fit primary (cascade active only).** Determine the chunk's primary rail from `routing-policy.json`, not kind alone:
 
 - `config` / docs / pure prose -> `openrouter`
 - mechanical `logic` -> `openrouter` or `codex` according to policy
 - complex `logic` -> `codex`
-- `ui` / `integration` -> `claude`
+- `integration` -> `codex`
+- `ui` -> `codex`
 
 You may consult `usage-probe.sh` (resolved from the same pipeline cache dir) to skip a known-capped primary; otherwise proceed to 3d.2 and let a cap error trigger descent. `cascade-dispatch.sh` re-probes internally, so an orchestrator-level probe is an optimization, not a requirement.
 
-**Step 3d.2 -- Primary rail has headroom: dispatch AS TODAY.** Run the existing dispatch unchanged using the 3d-LEGACY path (codex-companion for `executor: codex`; the Claude implementation subagent for `executor: claude`/absent). On success -> proceed to **Step 3e** (the eval gate, `EVAL_GATE_PASSED` receipt, livewires-lint, and worktree merge are untouched -- the cascade changes only WHO produces the commit, never WHAT happens after). On a **cap/usage-limit/quota error or unavailability** (Codex auth error, plugin missing, rate-limit string in output, native quota wall) -> go to Step 3d.3. On a **non-cap quality failure** (build error in the subagent's own work, malformed output) -> this is NOT a cascade event; flag the chunk failed per the existing Step 3e logic. Do not descend the ladder for a quality failure.
+**Step 3d.2 -- Primary rail has headroom.** Dispatch Codex or OpenRouter using the compatibility block below. Legacy `executor: claude` values normalize to Codex. On success, proceed to Step 3e. On cap or provider unavailability, consult the cascade. On a non-cap quality failure, flag the chunk failed; do not change models to hide a bad implementation.
 
 **Step 3d.3 -- Cap/unavailable: consult the cascade.** Log `"Primary rail capped for chunk [id]; consulting cascade."` then invoke the decision engine with the chunk's kind and prompt on stdin. The Airlift Tier-1 checkpoint on cap is fired INSIDE `cascade-dispatch.sh` (guarded resolve, no model budget) -- do not call Airlift directly here.
+
+Before any OpenRouter execution attempt, export `OPENROUTER_EXEC_ALLOWED_PATHS` as the newline-delimited, normalized `filesToModify` list from the current manifest chunk. The runner refuses a missing/empty allowlist, gates the prompt before disclosure, and rejects any returned patch path outside that list or inside the security denylist.
 
 ```bash
 case "<executor>" in
   openrouter) PRIMARY_RAIL="openrouter" ;;
   codex) PRIMARY_RAIL="codex" ;;
-  claude) PRIMARY_RAIL="claude" ;;
+  claude) PRIMARY_RAIL="codex" ;; # legacy manifest compatibility; Claude is non-coding-only
   *) case "<kind>" in
     config) PRIMARY_RAIL="openrouter" ;;
     logic) PRIMARY_RAIL="codex" ;;
-    ui|integration) PRIMARY_RAIL="claude" ;;
+    integration) PRIMARY_RAIL="codex" ;;
+    ui) PRIMARY_RAIL="codex" ;;
     *) PRIMARY_RAIL="codex" ;;
   esac ;;
 esac
+OPENROUTER_EXEC_ALLOWED_PATHS="$CHUNK_FILES_TO_MODIFY_NEWLINE"
+export OPENROUTER_EXEC_ALLOWED_PATHS
 CASCADE_OUT=$(printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
   --kind "<kind>" --prompt - --phase execute --timeout 120 \
   --exhausted-rail "$PRIMARY_RAIL")
@@ -627,30 +633,26 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
-| other | Bad args / engine error. | Fall back to the 3d-LEGACY Claude subagent at the default model. Do NOT re-invoke the cascade (avoids a loop on a persistent engine error). |
+| other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
 
-1. **Resolve the native path from the active host** (`harness-profile.json` `_detect`):
-   - `claude-code` -> the 3d-LEGACY **Claude subagent** path, passing the directive as the Agent tool's `model:` (e.g. `sonnet` when `opus` is capped).
-   - `codex` -> the **Codex CLI**, `codex exec --model <model>`.
+1. **Resolve the native Codex path from the active host** (`harness-profile.json` `_detect`): use codex-companion from Claude Code, or `codex exec --model <model>` from Codex. Coding cascades never emit a Claude-native directive.
 2. **On a model-unavailability error, retry with the next model in that role's native list for the active host**, in order, until one succeeds or the list is exhausted. Unavailability is NOT a cap event -- do not checkpoint, do not mark the rail exhausted. Recognise at least:
-   - Claude, plan-level: a model-unavailable message (e.g. `fable` when the plan does not carry Mythos-class access) -> next model (`opus`).
    - Codex, CLI-version: `requires a newer version of Codex` (a `codex-cli` older than 0.144.x rejects the whole GPT-5.6 family) -> next model (`gpt-5.5`).
    - Codex, account-tier: `not supported when using Codex with a ChatGPT account` -> next model.
 3. **If the whole native list is exhausted by unavailability**, do NOT retry in place -- re-invoke `cascade-dispatch.sh` once with `--exhausted-rail <probe_rail>` (the `probe_rail` from the directive), as Step 3d.3 does. That is the only mechanism that makes `rail_has_headroom()` skip the role; without the flag the script re-walks the same ladder and returns the identical RC-64 directive, looping forever.
-   - **Carry forward prior exclusions.** Pass every rail already excluded earlier in this chunk's dispatch chain, not just the new one -- repeat the flag (`--exhausted-rail codex --exhausted-rail claude`); the script comma-accumulates them. Dropping an earlier exclusion lets the fresh walk re-try a rail that already failed this chunk.
+   - **Carry forward prior exclusions.** Pass every Codex/OpenRouter rail already excluded earlier in the chunk. Dropping an exclusion can re-try a rail that already failed.
    - **Loop guard:** re-invoke with `--exhausted-rail` at most once per rail per chunk. If a second RC 64 names a model you have already tried and failed, stop and treat the chunk as `75` (ladder exhausted) rather than dispatching again.
-   - **Codex-host gotcha:** `premium_sub` and `native_judgment` share `probe: "codex"` there, so `--exhausted-rail codex` skips BOTH roles in one call. "Next ROLE" does not mean a second native attempt on that host -- it descends to `openrouter_exec`.
-4. Record the model actually used in the chunk receipt as a **separate `modelUsed:` field** (e.g. `modelUsed: gpt-5.5`), so a post-mortem can see that descent occurred. Do NOT put the model slug in `implementedBy:` -- that field stays the provider enum `{codex|openrouter|claude}` that the Step 3e misroute check string-compares and that `providerSplit` buckets on. A native descent from `gpt-5.6-sol` to `gpt-5.5` is still `implementedBy: codex`.
+4. Record the model in `modelUsed:`. `implementedBy:` remains the coding-provider enum `{codex|openrouter}`; Claude may appear only in separate non-coding metrics.
 
 **One-shot validity rule (RC 0).** A wrapper rung returns single-turn text, not an agentic commit. It is acceptable ONLY for chunks whose deliverable IS pure text the orchestrator then writes to files:
 - `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR
 - a cheap second-opinion that does not become the implementation.
 
-For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail: do NOT pipe wrapper text in as the chunk implementation. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex/Claude."` and re-dispatch through the next cascade provider. The agentic OpenRouter path is `openrouter-exec.sh`, which is valid only when it writes files, verifies the worktree, commits, and emits `implementedBy: openrouter` plus API `usage`.
+For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex."` The agentic OpenRouter path is valid only when it writes files, verifies, commits, and emits an OpenRouter receipt.
 
-After any valid RC-0 path or re-dispatched native/Claude path produces a commit in the worktree, write a chunk receipt containing `implementedBy: {codex|openrouter|claude}`, fallback source/target when applicable, verification result, and token/API `usage` if available -> proceed to Step 3e. The eval gate and merge flow are identical.
+After a valid Codex or OpenRouter path produces a commit, write a receipt with `implementedBy: {codex|openrouter}`, fallback source/target, verification, and usage, then proceed to Step 3e.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
@@ -661,10 +663,10 @@ After any valid RC-0 path or re-dispatched native/Claude path produces a commit 
 **When `executor: openrouter` (or derived from `kind: config` / docs / mechanical logic):**
 
 1. Resolve `plugins/pipeline/references/openrouter-exec.sh` via the dual-cache resolver.
-2. Pipe the full chunk prompt to the runner from the chunk worktree.
+2. Export `OPENROUTER_EXEC_ALLOWED_PATHS` from the chunk's newline-delimited `filesToModify`, then pipe the full chunk prompt to the runner from the chunk worktree.
 3. Require a committed change and receipt with `implementedBy: openrouter`.
 4. Parse the runner receipt for files changed, verification result, and OpenRouter API `usage`.
-5. On runner failure or quality failure, descend through the cascade to Codex before Claude. Log every fallback.
+5. On runner failure or quality failure, descend to Codex. If Codex is unavailable, fail the chunk.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**
 
@@ -679,11 +681,11 @@ After any valid RC-0 path or re-dispatched native/Claude path produces a commit 
 2. If `CODEX_ROOT` is found, invoke: `node "${CODEX_ROOT}/scripts/codex-companion.mjs" task --write "<chunk prompt>"`
 3. Parse task output for completion (exit code 0 + commit present in worktree) and Codex `tokens used` when present
 4. On success: proceed to eval gate (Step 3e onward)
-5. On failure (auth error, plugin not installed, timeout): log `"Codex unavailable for chunk [id], falling back to Claude execution."` and dispatch via the existing Claude subagent path below
+5. On failure, use OpenRouter only when the cascade selected an eligible agentic rung; otherwise fail the chunk. Never fall back to Claude for coding.
 
 Do NOT use slash command invocation (`/codex:*`) -- use direct node CLI invocation. Slash commands are unreliable from subagent context.
 
-**When `executor: claude` (or field absent, or Codex fallback):**
+**When `executor: claude` (legacy manifest) or the field is absent:** normalize it to `executor: codex`. Launch the Codex worker with the full prompt content inlined and the following template:
 
 Launch a subagent with the full prompt content inlined (do not pass a file path), working directory set to the worktree, and this template:
 
@@ -753,7 +755,7 @@ You MUST verify these before proceeding:
 1. **Completion check:** The subagent reported completion (not an error or question)
 2. **Commit check:** Run `git log <featureBranch>..<chunk-branch> --oneline` -- there MUST be at least one commit
 3. **Build check:** If available (Go: `go build ./...`, CSS: `npm run build`), run it
-4. **Provider receipt check:** The chunk receipt includes `implementedBy:`. If the manifest executor was `codex` or `openrouter` and `implementedBy: claude`, log the fallback reason; if no dispatch/fallback evidence exists, mark it as a misroute.
+4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
 If any check fails:
 
@@ -859,7 +861,7 @@ Mark `[chunk-id] 6. Run anti-pattern scan` complete.
 
 The evaluation depth depends on the chunk classification from Step 3a.
 
-**Per-chunk review uses Codex (OpenAI), NOT Claude dm-review.** This offloads review work from Anthropic Max quota to OpenAI's Codex. dm-review is reserved for the final full review in Step 4.
+**Per-chunk review uses Codex, not Claude.** Claude is outside the coding graph; dm-review is reserved for the final full review in Step 4 and also runs its coding lanes on Codex or OpenRouter.
 
 **UI chunks and Logic chunks -- Codex review loop:**
 
@@ -1149,7 +1151,7 @@ Mark `[chunk-id] 10. Clean up worktree` complete (or `blocked: [reason]`).
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
 
-Verification invariant: retain an independent Claude or cross-provider verification gate for each dispatched chunk, and the final review must run on a different provider than the provider that implemented the majority of code. Do not trade tokens for regressions. If OpenRouter implemented a chunk, Codex or Claude must review it. If Codex implemented a chunk, OpenRouter or Claude must review it. If Claude implemented a chunk, Codex/OpenRouter perspective review must run before a clean recommendation.
+Verification invariant: use Codex and OpenRouter as independent coding providers. The final review must run on the provider that did not implement the majority of code. If OpenRouter implemented a chunk, Codex reviews it; if Codex implemented it, OpenRouter reviews it. If either lane is unavailable, report the gap and do not substitute Claude coding review.
 
 ```text
 Run a full-mode review on the feature branch using the helper pattern above:
@@ -1315,7 +1317,7 @@ Measurement requirements:
 1. **Claude JSONL delta:** Snapshot cumulative Claude tokens at the start of Phase 6 and again here by parsing the current Claude session transcript JSONL. Sum `message.usage.{input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens}` grouped by `model`. Report the DELTA as this run's Claude main-loop spend.
 2. If `ccusage` is on PATH, run `ccusage blocks --json` as a cost/pricing cross-check. Prefer ccusage cost and the Claude JSONL delta for run-scoped token counts.
 3. **Codex:** sum each exec's `tokens used` lines from chunk receipts.
-4. **OpenRouter/DeepSeek:** sum each API `usage` object from `openrouter-exec.sh`, OpenRouter reviewer, and DeepSeek runner receipts.
+4. **OpenRouter:** sum each API `usage` object from `openrouter-exec.sh`, `openrouter-agent-runner`, and `openrouter-bulk-analyst` receipts. Calls whose model slug is `deepseek/*` remain in this OpenRouter bucket.
 5. Record shell-proxy or rtk savings separately as input-avoidance context. Do not mix them into providerSplit.
 
 Post-mortem content:
@@ -1392,7 +1394,7 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 - Isolation: <isolationStrategy: per-chunk-worktree | sequential-on-branch>
 - Workflow class: <workflowClass>
 - Workflow class defaulted: <true|false>
-- providerSplit: {claude: N, codex: N, openrouter: N, deepseek: N}
+- providerSplit: {claude: N, codex: N, openrouter: N}
 
 ## Evidence
 | # | Requirement | Evidence |
@@ -1615,7 +1617,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
 - **executionMode:** full_cli / codex_native / manual_walkthrough
 - **isolationStrategy:** per-chunk-worktree / sequential-on-branch
-- **providerSplit:** `{claude: N, codex: N, openrouter: N, deepseek: N}` measured from run receipts/postmortem
+- **providerSplit:** `{claude: N, codex: N, openrouter: N}` measured from run receipts/postmortem; DeepSeek-model calls count under OpenRouter
 - **workflowClass:** `<class>` (`workflow_class_defaulted=true|false`)
 - **shadow:** match / parity-gap / unavailable (reason)
 - **noMergeOnCompletion:** true/false
@@ -1703,7 +1705,7 @@ Before reporting any pipeline-blocking failure, run the Step 5b repository clean
 
 **Degraded operation (continue with note):**
 
-- If the `dm-review:review` skill itself is unavailable (deepseek/dm-review plugins missing), fall back to a manual review pass using the `Agent` tool to dispatch general-purpose review subagents directly. Flag as "Degraded" in the chunk receipt. NEVER report "slash command not callable" -- the slash command was never the mechanism; the skill was.
+- If the `dm-review:review` skill itself is unavailable, fall back to a manual review pass using the `Agent` tool to dispatch general-purpose review subagents directly. Flag as "Degraded" in the chunk receipt. NEVER report "slash command not callable" -- the slash command was never the mechanism; the skill was.
 - ai-memory unavailable -- skip capture, note in report
 - Input guardrails can't estimate tokens -- proceed untruncated, note in log
 

@@ -615,6 +615,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}OpenRouter delegation boundary:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-openrouter-runner-policy.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}Routing economics:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-routing-economics.sh"; then
     any_failed=1

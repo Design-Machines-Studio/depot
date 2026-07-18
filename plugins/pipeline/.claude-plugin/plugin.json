@@ -1,15 +1,15 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review (with ambiguity surfacing), orchestrate concurrent worktree execution with review-fix loops and surgical-change discipline, and deliver clean branches",
-  "version": "1.28.0",
+  "version": "1.29.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
   },
   "pluginDependencies": {
-    "dm-review": ">=1.14.0",
+    "dm-review": ">=1.43.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.1.0"
+    "workflow-kernel": ">=0.1.1"
   },
   "optionalPluginDependencies": {
     "design-machines": ">=1.3.0",
@@ -20,7 +20,7 @@
     "ghostwriter": ">=3.7.0",
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.0.0"
+    "openrouter": ">=1.4.0"
   },
   "keywords": [
     "pipeline",

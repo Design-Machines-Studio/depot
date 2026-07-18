@@ -18,7 +18,7 @@ from .policies import GatePolicy, load_policy
 
 WORKFLOW_CLASSES_SCHEMA_VERSION = 1
 DEFAULT_CLASSES_PATH = Path(__file__).resolve().parent.parent / "workflow-classes.json"
-# Kernel-owned copy of the never-route-off-Anthropic path globs. The default
+# Kernel-owned copy of the never-route-to-OpenRouter path globs. The default
 # must resolve inside the installed plugin itself; installed caches
 # (~/.claude, ~/.codex) have no depot repository ancestor to walk.
 DEFAULT_SENSITIVE_POLICY_PATH = (
@@ -30,7 +30,7 @@ def _load_sensitive_globs(path: Optional[Path]) -> tuple[str, ...]:
     source = Path(path) if path is not None else DEFAULT_SENSITIVE_POLICY_PATH
     try:
         payload = load_json_document(source)
-        globs = payload["security"]["neverRouteOffAnthropic"]["pathGlobs"]
+        globs = payload["security"]["neverRouteToOpenRouter"]["pathGlobs"]
     except (OSError, UnicodeError, ValueError, RecursionError, KeyError, TypeError):
         raise invalid_policy("invalid_routing_policy") from None
     if not isinstance(globs, list) or any(type(value) is not str or not value for value in globs):
@@ -328,22 +328,25 @@ class WorkflowTemplates:
             routing_reason = None
             if executor is not None:
                 if sensitive:
-                    executor = "claude"
-                    required_capability = HostCapability.ANTHROPIC_NATIVE_EXECUTION
-                    required_dispatch_capability = HostCapability.NATIVE_DISPATCH
+                    executor = "codex"
+                    required_capability = HostCapability.CODEX_EXECUTION
+                    required_dispatch_capability = None
                     executor_overridable = False
                     routing_reason = "sensitive_path_override"
                 elif normalized is WorkflowClass.SECURITY:
-                    executor = "claude"
-                    required_capability = HostCapability.ANTHROPIC_NATIVE_EXECUTION
-                    required_dispatch_capability = HostCapability.NATIVE_DISPATCH
+                    executor = "codex"
+                    required_capability = HostCapability.CODEX_EXECUTION
+                    required_dispatch_capability = None
                     executor_overridable = False
                     routing_reason = "security_workflow_override"
                 elif context.requested_executor is not None and executor_overridable:
-                    executor = context.requested_executor
+                    executor = ("codex" if context.requested_executor == "claude"
+                                else context.requested_executor)
                     required_capability = DEFAULT_EXECUTOR_CAPABILITY[executor]
                     required_dispatch_capability = None
-                    routing_reason = "requested_executor"
+                    routing_reason = ("legacy_claude_normalized"
+                                      if context.requested_executor == "claude"
+                                      else "requested_executor")
                 else:
                     routing_reason = "workflow_default"
             gate = self._gate_policy.decide(

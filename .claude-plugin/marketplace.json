@@ -274,12 +274,12 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.42.0",
+      "version": "1.43.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, Codex second-opinion review, OpenRouter/DeepSeek policy routing, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
+      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, Codex second-opinion review, OpenRouter policy routing with DeepSeek model fallbacks, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
       "capabilities_summary": {
         "skills": 2,
         "agents": 15,
@@ -348,7 +348,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.28.0",
+      "version": "1.29.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -373,7 +373,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -396,7 +396,7 @@
     {
       "name": "airlift",
       "source": "./plugins/airlift",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -418,35 +418,9 @@
       }
     },
     {
-      "name": "deepseek",
-      "source": "./plugins/deepseek",
-      "version": "1.3.1",
-      "author": {
-        "name": "Design Machines",
-        "url": "https://designmachines.studio"
-      },
-      "description": "DeepSeek V4 API subagent for policy-routed code review and diff analysis to V4-Pro or V4-Flash at Sonnet-class quality and lower cost. Includes generic agent runner that routes dm-review mechanical agents through DeepSeek when DEEPSEEK_API_KEY is set, offsetting Anthropic Max quota.",
-      "capabilities_summary": {
-        "skills": 1,
-        "agents": 3,
-        "commands": 1,
-        "tags": [
-          "deepseek",
-          "subagent",
-          "code-review",
-          "diff-analysis",
-          "cost-optimization",
-          "multi-provider",
-          "delegation",
-          "agent-runner",
-          "offload"
-        ]
-      }
-    },
-    {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -454,7 +428,7 @@
       "description": "OpenRouter API provider plugin: delegates policy-routed review, second-opinion analysis, config/doc generation, and bounded OpenRouter execution to GLM-5.2 and DeepSeek V4 over a single OpenAI-compatible endpoint. Powers the pipeline cascade's OpenRouter rail, openrouter-exec runner, and dm-review external routing.",
       "capabilities_summary": {
         "skills": 1,
-        "agents": 1,
+        "agents": 2,
         "commands": 1,
         "tags": [
           "openrouter",
