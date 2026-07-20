@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
-  "description": "Autonomous feature development pipeline: assess current state, research context, generate execution prompts with dependency ordering, adversarial review (with ambiguity surfacing), orchestrate concurrent worktree execution with review-fix loops and surgical-change discipline, and deliver clean branches",
-  "version": "1.30.0",
+  "description": "Autonomous feature development pipeline: assess current state, research context, generate bounded execution prompts with dependency ordering, adversarial review, orchestrate worktree execution with risk-tiered review and surgical-change discipline, and deliver clean branches",
+  "version": "1.31.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -9,7 +9,7 @@
   "pluginDependencies": {
     "dm-review": ">=1.44.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.1.1"
+    "workflow-kernel": ">=0.2.0"
   },
   "optionalPluginDependencies": {
     "design-machines": ">=1.3.0",
@@ -132,7 +132,7 @@
         "id": "execution-orchestrator",
         "name": "Execution Orchestrator",
         "category": "workflow",
-        "description": "Autonomously executes sub-prompts in worktrees with dm-review-loop review-fix loops and zero-deferral policy",
+        "description": "Autonomously executes sub-prompts in worktrees with focused Codex review, sensitive-path escalation, final full review, and zero-deferral policy",
         "tags": [
           "orchestration",
           "worktrees",
@@ -164,7 +164,7 @@
       {
         "id": "pipeline-run",
         "name": "Pipeline Run",
-        "description": "Execute generated prompts in worktrees with review-fix loops",
+        "description": "Execute generated prompts in worktrees with risk-tiered review gates",
         "argumentHint": "[path to manifest.json or prompts directory]"
       },
       {

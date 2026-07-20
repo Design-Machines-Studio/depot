@@ -10,6 +10,14 @@ from typing import Iterable, Mapping, Optional, Tuple
 from .schema import WorkflowEvent
 
 
+WAIT_CATEGORIES = (
+    "human_gate",
+    "external_dependency",
+    "capacity",
+    "ci",
+)
+
+
 @dataclass(frozen=True)
 class ReliabilityReport:
     event_count: int
@@ -42,6 +50,9 @@ class ReliabilityReport:
     cost_usd: Optional[float]
     completion_rate: float
     time_to_clean_seconds: Optional[float]
+    wall_clock_seconds: Optional[float]
+    active_compute_seconds: Optional[float]
+    wait_seconds_by_category: Mapping[str, float]
     cost_to_clean: Optional[float]
     fallback_rate: float
     cleanup_reliability: float
@@ -70,6 +81,9 @@ class ReliabilityReport:
             "tokens": self.tokens, "cost_usd": self.cost_usd,
             "completion_rate": self.completion_rate,
             "time_to_clean_seconds": self.time_to_clean_seconds,
+            "wall_clock_seconds": self.wall_clock_seconds,
+            "active_compute_seconds": self.active_compute_seconds,
+            "wait_seconds_by_category": dict(self.wait_seconds_by_category),
             "cost_to_clean": self.cost_to_clean, "fallback_rate": self.fallback_rate,
             "cleanup_reliability": self.cleanup_reliability,
             "proposals": [dict(value) for value in self.proposals],
@@ -114,6 +128,7 @@ class MetricsAggregator:
         cost = 0.0
         saw_tokens = saw_cost = False
         validation_count = validation_first = fallbacks = completed = terminals = 0
+        wait_seconds = Counter()
         for event in values:
             payload = event.payload
             for name, counter in dimensions.items():
@@ -128,6 +143,13 @@ class MetricsAggregator:
             if "duration_seconds" in payload:
                 nodes_with_explicit_duration.add(node)
                 explicit_node_durations[node] += _number(
+                    payload, "duration_seconds", float,
+                )
+            wait_category = payload.get("wait_category")
+            if wait_category is not None:
+                if wait_category not in WAIT_CATEGORIES:
+                    raise ValueError("invalid wait category: " + str(wait_category))
+                wait_seconds[wait_category] += _number(
                     payload, "duration_seconds", float,
                 )
             attempt = payload.get("attempt")
@@ -190,6 +212,14 @@ class MetricsAggregator:
             (max(cleanup_times) - min(event_times)).total_seconds()
             if cleanup_times and event_times else None
         )
+        wall_clock_seconds = (
+            (max(event_times) - min(event_times)).total_seconds()
+            if event_times else None
+        )
+        active_compute_seconds = (
+            max(0.0, wall_clock_seconds - sum(wait_seconds.values()))
+            if wall_clock_seconds is not None else None
+        )
         proposals = ()
         if fallbacks:
             proposals += ({
@@ -220,6 +250,9 @@ class MetricsAggregator:
             cost if saw_cost else None,
             completed / terminals if terminals else 0.0,
             clean_seconds,
+            wall_clock_seconds,
+            active_compute_seconds,
+            {category: wait_seconds[category] for category in WAIT_CATEGORIES},
             cost / clean_total if saw_cost and clean_total else None,
             fallbacks / len(values) if values else 0.0,
             clean_total / cleanup_total if cleanup_total else 0.0,

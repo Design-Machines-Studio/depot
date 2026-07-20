@@ -34,12 +34,42 @@ class MetricsTests(unittest.TestCase):
         self.assertIsNone(report.tokens)
         self.assertIsNone(report.cost_usd)
         self.assertIsNone(report.time_to_clean_seconds)
+        self.assertIsNone(report.wall_clock_seconds)
+        self.assertIsNone(report.active_compute_seconds)
+        self.assertEqual(
+            report.wait_seconds_by_category,
+            {
+                "human_gate": 0,
+                "external_dependency": 0,
+                "capacity": 0,
+                "ci": 0,
+            },
+        )
         self.assertEqual(report.proposals, ())
 
     def test_time_to_clean_uses_run_start_to_terminal_cleanup(self):
         events = translate_pipeline_receipts(json.loads((FIXTURES / "pipeline-claude.json").read_text()))
         report = MetricsAggregator().aggregate(events)
         self.assertEqual(report.time_to_clean_seconds, 540.0)
+
+    def test_wall_clock_separates_active_compute_from_typed_waits(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[1]["wait_category"] = "human_gate"
+        receipts[1]["duration_seconds"] = 120
+        receipts[4]["wait_category"] = "ci"
+        receipts[4]["duration_seconds"] = 30
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(report.wall_clock_seconds, 600.0)
+        self.assertEqual(report.active_compute_seconds, 450.0)
+        self.assertEqual(report.wait_seconds_by_category["human_gate"], 120.0)
+        self.assertEqual(report.wait_seconds_by_category["ci"], 30.0)
+
+    def test_unknown_wait_category_is_rejected(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[1]["wait_category"] = "mystery"
+        receipts[1]["duration_seconds"] = 1
+        with self.assertRaises(ValueError):
+            MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
 
     def test_single_explicit_node_duration_replaces_timestamp_fallback(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())

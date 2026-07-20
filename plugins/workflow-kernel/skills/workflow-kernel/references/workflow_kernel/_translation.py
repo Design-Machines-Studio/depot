@@ -29,7 +29,7 @@ ISOLATION_STRATEGIES = frozenset({
 })
 COMMON_RECEIPT_FIELDS = frozenset({
     "stage", "status", "host", "mechanism", "workflow_class", "provider",
-    "model", "attempt", "duration_seconds", "first_pass", "fallback_reason",
+    "model", "attempt", "duration_seconds", "wait_category", "first_pass", "fallback_reason",
     "retry_reason", "isolation_mode", "isolation_strategy",
     "persona_expected", "persona_passed",
     "persona_recovered", "persona_missing", "cleanup_removed",

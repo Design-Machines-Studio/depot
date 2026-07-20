@@ -39,7 +39,12 @@ Read the plan and identify discrete chunks of work. A chunk is:
 3. Integration work (wiring things together) depends on the pieces it connects
 4. Test-only chunks are rare -- tests should live with their implementation chunk
 5. Configuration/deployment chunks run last
-6. After determining `filesToModify` for each chunk, classify its `kind` using the file-extension heuristic:
+6. Do not create an orchestrator-owned closeout chunk. Verification summaries,
+   requirements cross-checks, post-mortems, cleanup, delivery receipts, PR
+   publication, and issue disposition belong to the pipeline's final stages.
+   They may appear in a product chunk only when that chunk also contains real
+   integration code required by its acceptance criteria.
+7. After determining `filesToModify` for each chunk, classify its `kind` using the file-extension heuristic:
    - `ui`: any `.templ`, `.twig`, `.html`, `.css`, or files in `pages/`, `templates/`, `views/`
    - `logic`: `.go`, `.py`, `.ts`, `.php` handlers/services/migrations without templates
    - `integration`: prompt contains wiring verbs ("wire," "integrate," "connect") OR modifies route files / `main.go`
@@ -55,6 +60,18 @@ Read the plan and identify discrete chunks of work. A chunk is:
    When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
 
    Before assigning Codex because a task needs a live connector, browser, GitHub/Notion operation, or another host-only tool, split the live-tool action from offline analysis/config/docs whenever file ownership and dependency order permit. The offline chunk keeps its policy-selected OpenRouter executor. If a chunk's `executor` differs from the routing-policy default, add a `routingOverride` object with `reasonCode`, a concrete `reason`, `splitAttempted`, and `splitBlockedBy`. A `config`/docs chunk with `executor: codex` and no complete `routingOverride` is invalid; tool mentions alone are never a silent override.
+
+**Run-size and scope budget:**
+
+- Default to no more than 8 total chunks and no more than 6 chunks classified
+  `large`. This is a run budget, not permission to make oversized chunks.
+- If the approved work exceeds either limit, return to the planning user gate
+  with a campaign split. A single oversized run requires an explicit approved
+  rationale in the plan; promptcraft must not invent one.
+- Freeze scope when the execution prompts are approved. New desirable work is
+  written to a follow-up manifest unless it is a correctness blocker for an
+  approved requirement. Do not expand a running chunk merely because adjacent
+  cleanup or polish becomes visible.
 
 ### Phase 2: Context Extraction
 

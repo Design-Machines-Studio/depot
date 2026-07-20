@@ -62,7 +62,7 @@ Choose lean versus full mode from dependency shape, risk, and verification needs
 **These stay mandatory regardless of provider:**
 
 - The adversarial review (Phase 5) -- self-evaluation is unreliable at any capability level.
-- dm-review-loop -- separating generator from evaluator is an architectural principle, not a model limitation.
+- A focused Codex review after ordinary chunks, full review for sensitive paths, and final full dm-review -- separating generator from evaluator is an architectural principle, not a model limitation.
 
 **Periodically question whether each pipeline component is still necessary.** Every component encodes an assumption about model limitations. Test whether scaffolding remains needed as models and effort levels improve.
 
@@ -72,7 +72,7 @@ You MUST execute every phase in order. You MUST NOT skip phases, combine phases,
 
 - You MUST NOT skip research because you think you have enough context
 - You MUST NOT execute chunks yourself -- you MUST launch the execution-orchestrator agent
-- You MUST NOT skip dm-review-loop after each chunk
+- You MUST NOT skip the risk-tiered evaluation gate after each chunk
 - You MUST NOT skip the final full dm-review
 - You MUST pause for user input at every marked pause point
 - You MUST save all artifacts to disk (briefs, plans, prompts, manifest) -- not just hold them in context
@@ -90,7 +90,7 @@ The pipeline enforces gates, review loops, visual verification, memory capture, 
 - Visual verification gets skipped entirely (documented in `docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md`)
 - Requirements get marked "done" without evidence (documented in `docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`)
 - The adversarial review never runs, so hallucinated APIs and missing edge cases ship
-- dm-review-loop never runs, so the evaluator/generator separation is lost
+- the independent evaluation gate never runs, so evaluator/generator separation is lost
 
 If you catch yourself planning to "just do it quickly" without invoking the pipeline skill, you are about to repeat a documented failure. Stop and invoke the skill.
 
@@ -118,6 +118,16 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 
 Mark each item as you complete it. Do not mark a GATE as complete until AskUserQuestion has returned a response from the user. If you find yourself proceeding past a GATE without an AskUserQuestion response, you have violated the gate.
 
+### Wait Measurement
+
+Timestamp immediately before each user gate and immediately after the response.
+Append one authoritative `progress` receipt with `wait_category: human_gate` and
+the measured nonnegative `duration_seconds`. Record orchestration-level waits,
+not one receipt per parallel lane, so elapsed intervals never double-count.
+Use the same receipt shape for any later `external_dependency`, `capacity`, or
+`ci` wait. Do not estimate missing timestamps and do not label active review or
+implementation time as waiting.
+
 ### Shadow Workflow Kernel Hooks
 
 The Progress Ledger, canonical Markdown phases, manifest, routing policy, execution-orchestrator, and authoritative receipts remain the source of truth. Kernel hooks run only after the matching authoritative artifact, receipt, or action exists. They may observe and compare; they may not select ready nodes, advance gates, block or approve a merge, alter provider fallback, invoke cleanup, or convert review outcomes.
@@ -131,7 +141,11 @@ After producing `independent-prediction-receipts.json` and before any correspond
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
-At each phase boundary, rewrite `plans/<feature-slug>/authoritative-receipts.json` as the complete ordered, redacted receipt array through that boundary, then invoke exactly:
+At each phase boundary, append the authoritative receipt to the cumulative
+ordered redacted ledger. Do not invoke the observer for every phase. After all
+implementation chunks are complete and before final full review, rewrite
+`plans/<feature-slug>/authoritative-receipts.json` through the
+`all-chunks-complete` boundary and invoke exactly:
 
 ```text
 "$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
@@ -400,9 +414,9 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 2. Confirm git working tree has no blocking user-file changes (pipeline-owned artifacts may be committed/gitignored/force-added per the orchestrator)
 3. Confirm on `manifest.baseBranch` with latest changes, defaulting to `main` only when the field is absent
 
-**You MUST launch the execution-orchestrator agent.** You MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles worktree isolation, input guardrails, Fix Philosophy injection, output validation, dm-review-loop after each chunk, merging, final full dm-review, and memory capture. If you skip it, all of those steps get skipped.
+**You MUST launch the execution-orchestrator agent.** You MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles worktree isolation, input guardrails, Fix Philosophy injection, output validation, focused Codex review for ordinary chunks, full review for sensitive chunks, merging, final full dm-review, and memory capture. If you skip it, all of those steps get skipped.
 
-**Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and replaces nested `Skill(skill="dm-review:review", ...)` calls with the dm-review inline protocol. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
+**Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
 Pass `workflowClass` unchanged into Phase 6. Every provider receipt must name requested provider, attempted provider, actual implementer, fallback, and reason. Missing lanes and misroutes remain explicit evidence; provider substitution never changes the required validation, review, browser, requirements, or cleanup gates.
 
@@ -571,7 +585,7 @@ Before delivering to the user, verify your own compliance by answering these que
 6. Did I check requirements coverage against the cached Key Requirements?
 7. Did I run the adversarial review (max 4 rounds)?
 8. Did I launch the actual execution-orchestrator agent (not run chunks manually)?
-9. Did the orchestrator run dm-review-loop after each chunk?
+9. Did the orchestrator run the risk-tiered evaluation gate after each chunk?
 10. Did the orchestrator run a final full dm-review?
 11. Did the orchestrator record the session to ai-memory?
 12. **Browser authority audit:** Did every required UI/Integration case produce browser evidence, or a blocked `human_help_required` receipt after primary quit, fresh-primary retry, and different-browser attempt? Curl and grep are not visual verification.

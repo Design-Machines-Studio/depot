@@ -17,6 +17,9 @@ Every full pipeline run writes `plans/<slug>/run-postmortem.md` after memory cap
 - `kernelReliability` - shadow availability, semantic parity status, comparison reason counts, observation/adapter failures, missing authoritative evidence, browser recovery outcomes, owned-resource cleanup outcomes, and reconciliation results.
 - `workflowClass` - validated class plus `workflow_class_defaulted`; metrics retain the authoritative manifest value unchanged.
 - `providerReceipts` - requested, attempted, implemented-by, fallback, and reason for every routed lane, including unavailable and misrouted lanes.
+- `wallClockSeconds` - elapsed seconds from the first authoritative event to the last event in the run.
+- `activeComputeSeconds` - wall-clock seconds minus typed waits, floored at zero.
+- `waitSecondsByCategory` - nonnegative durations grouped into `human_gate`, `external_dependency`, `capacity`, and `ci`. A wait receipt carries both `wait_category` and `duration_seconds`; unknown categories are invalid rather than silently folded into active work.
 
 Kernel reliability data is measurement only. A parity report or reliability recommendation cannot mutate routing policy, workflow stages, cleanup state, merge results, or review outcomes. Promotion requires a separate human-approved source change after evidence review.
 

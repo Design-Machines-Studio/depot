@@ -1,6 +1,6 @@
 ---
 name: pipeline-run
-description: Codex skill alias for /pipeline-run. Execute generated prompts in worktrees with review-fix loops
+description: Codex skill alias for /pipeline-run. Execute generated prompts in worktrees with risk-tiered review gates
 argument-hint: "[path to manifest.json or prompts directory]"
 ---
 
@@ -21,7 +21,10 @@ argument-hint: "[path to manifest.json or prompts directory]"
 
 # Pipeline Run
 
-Execute a set of generated prompts autonomously in worktrees with review-fix loops. This is the execution engine -- it creates branches, runs subagents, reviews, fixes, merges, and delivers a clean feature branch.
+Execute a set of generated prompts autonomously in worktrees with focused
+ordinary-chunk review, sensitive-path escalation, and a final full review. This
+is the execution engine -- it creates branches, runs subagents, reviews, fixes,
+merges, and delivers a clean feature branch.
 
 ## Input
 
@@ -60,7 +63,9 @@ The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulat
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature>/manifest.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
 ```
 
-Every later boundary observation uses:
+Append every later authoritative receipt to the cumulative ledger. Observe only
+at the `all-chunks-complete` checkpoint before final full review and at the
+terminal checkpoint. Each observation uses:
 
 ```text
 "$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature>/manifest.json --receipts plans/<feature>/authoritative-receipts.json --state-dir plans/<feature>
@@ -74,6 +79,12 @@ When this command runs in Codex and the session exposes `multi_agent_v1.spawn_ag
 
 The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
 
+Measure orchestration pauses with authoritative `progress` receipts carrying a
+nonnegative `duration_seconds` and exactly one `wait_category` from
+`human_gate`, `external_dependency`, `capacity`, or `ci`. Emit one receipt for
+the non-overlapping orchestrator-level interval, not one per parallel worker.
+Never estimate an interval or classify active implementation/review as waiting.
+
 **Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
 
 **Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
@@ -86,11 +97,12 @@ The adapter also preserves `workflowClass` and provider evidence across hosts. E
 
 Wait for the worker result before validating that chunk. Do not dispatch overlapping chunks in parallel unless the manifest level grouping and file ownership are disjoint.
 
-**dm-review inline protocol:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Replace those nested calls with an inline execution of `plugins/dm-review/skills/review/SKILL.md` in the current orchestrator context:
+**Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
-- For per-chunk gates, run the review skill's quick-mode protocol against the chunk worktree.
+- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one repair/recheck pass. Preserve pending/done todo receipts and zero-deferral handling.
+- For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
 - For the final gate, run the review skill's full-mode protocol against the feature branch.
-- Use `multi_agent_v1.spawn_agent` for the review agents selected by the dm-review protocol when available.
+- Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the full dm-review protocol when available.
 - Preserve zero-deferral: fix all P1, P2, and P3 findings or record an explicit deferred-finding justification after the documented convergence limits.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
@@ -110,11 +122,11 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
    - Branch creation
    - Worktree creation per chunk
    - Subagent dispatch with inlined prompt content
-   - dm-review-loop after each chunk (quick mode, zero-deferral)
+   - focused Codex review after ordinary chunks; full review for sensitive paths
    - Merge back to feature branch
    - Final full dm-review
    - ai-memory session recording
-   - shadow observation after each authoritative receipt, when the trusted runtime is available
+   - cumulative shadow observation after all chunks and at terminal, when the trusted runtime is available
 6. Present the execution summary
 
 ## After Execution

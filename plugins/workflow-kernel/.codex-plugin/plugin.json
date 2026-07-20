@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "version": "0.1.1",
-  "description": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
+  "version": "0.2.0",
+  "description": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -43,8 +43,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Workflow Kernel",
-    "shortDescription": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
-    "longDescription": "Neutral deterministic run-state, replay, recovery, receipts, and shadow observation for Design Machines workflows.",
+    "shortDescription": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics ",
+    "longDescription": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics for Design Machines workflows.",
     "developerName": "Design Machines",
     "category": "Productivity",
     "capabilities": [
