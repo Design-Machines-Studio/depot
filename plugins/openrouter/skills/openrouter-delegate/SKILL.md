@@ -38,7 +38,9 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 
 **Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` before any delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
 
-- **Path exclusions -- route Codex-side.** If the diff/context touches auth, federation, secret, deploy, or env paths, decline and return the chunk to Codex-native review.
+- **Execution mode -- route Codex-side.** If a coding chunk touches auth, federation, secret, deploy, or env paths, decline the whole chunk and return it to Codex.
+- **Mechanical-review mode -- filter first.** Remove complete protected-file diff sections and delegate only a non-empty safe remainder. Codex security and architecture lanes still review the full diff.
+- **Artifact-review mode -- distinguish references from values.** Plans and prompt packs may name protected paths; credential values still decline before disclosure.
 - **Content redaction.** If sensitive values cannot be removed safely, return the chunk to Codex-native review.
 - **Intended lanes.** Style, duplication, pattern-recognition, large-diff triage, and doc consistency.
 

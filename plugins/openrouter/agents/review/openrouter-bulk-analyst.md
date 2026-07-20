@@ -31,18 +31,20 @@ internal/auth/**      internal/federation/**      **/secretbox*
 deploy/**      *.env*
 ```
 
-If ANY changed file matches, DECLINE the delegation, emit `RUNNER DECLINED -- SECURITY BOUNDARY`, and return the chunk to the Codex-native reviewer.
-
-Then apply `security.contentRedaction`. If sensitive content remains, do not send it; return it to Codex-native review.
+Protected files stay on Codex, but their presence does not discard safe mechanical-review work. Filter complete protected-file diff sections, then delegate only the safe remainder. If no safe remainder exists, emit `RUNNER DECLINED -- SECURITY BOUNDARY` and return the lane to the Codex-native reviewer. If credential material remains in the safe remainder, decline the entire OpenRouter lane.
 
 Use the shipped executable gate rather than reimplementing these checks. Resolve `delegation-boundary.sh` beside `delegation-security-policy.json`, write the caller-provided unfiltered newline-delimited changed-file list and full diff to temporary files, then run:
 
 ```bash
-"$BOUNDARY_HELPER" --policy "$SECURITY_POLICY_PATH" \
-  --changed-files "$CHANGED_FILES_FILE" --diff-file "$FULL_DIFF_FILE"
+"$BOUNDARY_HELPER" --mode mechanical-review \
+  --policy "$SECURITY_POLICY_PATH" \
+  --changed-files "$CHANGED_FILES_FILE" \
+  --diff-file "$FULL_DIFF_FILE" \
+  --output-paths "$FILTERED_PATHS_FILE" \
+  --output-diff "$FILTERED_DIFF_FILE"
 ```
 
-Exit 3 means `RUNNER DECLINED -- SECURITY BOUNDARY`; any other non-zero exit is `RUNNER FAILURE`. Do not invoke the wrapper unless the helper exits 0. The helper checks removed and context lines as well as additions.
+Exit 3 means `RUNNER DECLINED -- SECURITY BOUNDARY`; any other non-zero exit is `RUNNER FAILURE`. Do not invoke the wrapper unless the helper exits 0, and never use the original diff after this step. The helper checks removed and context lines as well as additions.
 
 ## Process
 
@@ -98,11 +100,11 @@ EOF
 fi
 ```
 
-Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`. Then invoke the wrapper, piping the filled prompt via stdin (diffs exceed shell argument limits). ZDR is opt-in (privacy demoted: Quality > Price > Speed > Provider privacy) -- omit `OPENROUTER_ZDR` unless the diff is genuinely sensitive:
+Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`, using only `FILTERED_DIFF_FILE` for the diff content. Then invoke the wrapper, piping the filled prompt via stdin (diffs exceed shell argument limits). ZDR is opt-in (privacy demoted: Quality > Price > Speed > Provider privacy) -- omit `OPENROUTER_ZDR` unless the safe remainder is still operationally sensitive:
 
 ```bash
 echo "${FILLED_USER_PROMPT}" | \
-  OPENROUTER_SYSTEM="You are a senior code reviewer. Analyze diffs for security vulnerabilities, architectural violations, code quality issues, and potential bugs. Be precise: cite file paths and line numbers. Report only genuine issues, not style preferences." \
+  OPENROUTER_SYSTEM="You are a mechanical code reviewer. Analyze the supplied safe diff for patterns, duplication, documentation consistency, test gaps, code quality issues, and potential bugs. Do not perform security or architecture sign-off. Be precise: cite file paths and line numbers. Report only genuine issues, not style preferences." \
   bash "$WRAPPER_PATH" "z-ai/glm-5.2" - "${TIMEOUT}" "deepseek/deepseek-v4-pro"
 ```
 

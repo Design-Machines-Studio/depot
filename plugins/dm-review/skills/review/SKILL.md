@@ -36,7 +36,7 @@ Match the review depth to the moment. Running full multi-round review on every c
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 5 core agents (+ ui-standards-reviewer when UI files changed). No memory capture, no conditional agents beyond file-type triggers. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
-| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. Never security or sensitive paths (see the OpenRouter security policy). |
+| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. Protected file sections are removed before disclosure; security review stays on Codex. |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
 **Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full Codex-native `security-auditor` review. These lanes never go to OpenRouter and are never quick-only.
@@ -382,7 +382,7 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
 **A0. If the agent is `openrouter-bulk-analyst`:**
 
 1. Read its installed agent definition directly; do not nest it inside `openrouter-agent-runner`. The bulk agent is already a wrapper-orchestration contract, while the generic runner expects pure review criteria plus an explicit target model.
-2. Build its prompt with the unfiltered changed-file list, the full untruncated diff, project context, and `$OPENROUTER_SECURITY_POLICY_PATH`. Its first action is the same fail-closed boundary check; a decline returns the lane to Codex.
+2. Build its prompt with the unfiltered changed-file list, the full untruncated diff, project context, and `$OPENROUTER_SECURITY_POLICY_PATH`. Its first action MUST run `delegation-boundary.sh --mode mechanical-review` and use only the emitted filtered paths and filtered diff. A decline means no safe remainder or credential-bearing content and returns the lane to Codex. The parallel security and architecture lanes still receive the full diff on Codex.
 3. On a Codex host, launch a native Codex subagent with the combined prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -` so large diffs never cross the process argument limit. The Codex process performs deterministic orchestration; GLM-5.2/DeepSeek V4 performs the external analysis. Never launch this coding-review lane through a Claude `Agent` call.
 
 **A. If the agent is routed to OpenRouter** (in the model table and `OPENROUTER_AVAILABLE=true`):
@@ -396,8 +396,8 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    - `fallback_model` -- full fallback OpenRouter slug from policy or the inline table
    - `target_timeout` -- `90` or `60` per the table
    - `security_policy_path` -- `$OPENROUTER_SECURITY_POLICY_PATH`, resolved beside the installed runner
-   - The list of changed files
-   - The diff content
+   - The unfiltered list of changed files (the runner filters it before disclosure)
+   - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
 3. **Launch without Claude coding execution:** on a Codex host, use a native Codex subagent with the combined runner prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. The runner performs mechanical orchestration and OpenRouter performs the review judgment; a Claude `Agent` call is not a valid Branch A launcher.
 

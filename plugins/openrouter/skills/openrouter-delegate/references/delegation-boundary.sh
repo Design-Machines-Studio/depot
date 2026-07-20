@@ -10,6 +10,8 @@ CHANGED_FILES=""
 CONTENT_FILE=""
 DIFF_FILE=""
 OUTPUT_PATHS=""
+OUTPUT_DIFF=""
+MODE="execution"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -18,6 +20,8 @@ while [ $# -gt 0 ]; do
     --content-file) CONTENT_FILE="$2"; shift 2;;
     --diff-file) DIFF_FILE="$2"; shift 2;;
     --output-paths) OUTPUT_PATHS="$2"; shift 2;;
+    --output-diff) OUTPUT_DIFF="$2"; shift 2;;
+    --mode) MODE="$2"; shift 2;;
     *) echo "delegation-boundary: unknown argument" >&2; exit 2;;
   esac
 done
@@ -28,8 +32,12 @@ done
 }
 [ -z "$CONTENT_FILE" ] || [ -f "$CONTENT_FILE" ] || exit 2
 [ -z "$DIFF_FILE" ] || [ -f "$DIFF_FILE" ] || exit 2
+case "$MODE" in
+  execution|mechanical-review|artifact-review) ;;
+  *) echo "delegation-boundary: invalid mode" >&2; exit 2;;
+esac
 
-python3 - "$POLICY" "$CHANGED_FILES" "$CONTENT_FILE" "$DIFF_FILE" "$OUTPUT_PATHS" <<'PY'
+python3 - "$POLICY" "$CHANGED_FILES" "$CONTENT_FILE" "$DIFF_FILE" "$OUTPUT_PATHS" "$OUTPUT_DIFF" "$MODE" <<'PY'
 import fnmatch
 import json
 import re
@@ -37,7 +45,7 @@ import shlex
 import sys
 from pathlib import PurePosixPath
 
-policy_path, changed_path, content_path, diff_path, output_path = sys.argv[1:]
+policy_path, changed_path, content_path, diff_path, output_path, output_diff_path, mode = sys.argv[1:]
 
 def fail(code):
     raise SystemExit(code)
@@ -65,49 +73,72 @@ canon = [
 ]
 globs = [item.replace("**/", "*").replace("**", "*") for item in sorted(set(canon) | set(configured))]
 
+def sensitive(path):
+    return any(fnmatch.fnmatch(path, pattern) for pattern in globs)
+
 try:
     changed = {normalize(line) for line in open(changed_path, encoding="utf-8").read().splitlines() if line}
 except (OSError, UnicodeError):
     fail(2)
 if not changed:
     fail(2)
-if any(any(fnmatch.fnmatch(path, pattern) for pattern in globs) for path in changed):
+if mode == "execution" and any(sensitive(path) for path in changed):
     fail(3)
 
 parsed = set()
 diff_text = ""
+filtered_diff = ""
 if diff_path:
     try:
         diff_text = open(diff_path, encoding="utf-8", errors="replace").read()
     except OSError:
         fail(2)
-    for line in diff_text.splitlines():
-        if not line.startswith("diff --git "):
-            continue
+    lines = diff_text.splitlines(keepends=True)
+    starts = [index for index, line in enumerate(lines) if line.startswith("diff --git ")]
+    sections = []
+    for position, start in enumerate(starts):
+        line = lines[start].rstrip("\r\n")
         try:
             fields = shlex.split(line)
         except ValueError:
             fail(2)
         if len(fields) != 4 or not fields[2].startswith("a/") or not fields[3].startswith("b/"):
             fail(2)
-        parsed.update((normalize(fields[2][2:]), normalize(fields[3][2:])))
+        paths = (normalize(fields[2][2:]), normalize(fields[3][2:]))
+        parsed.update(paths)
+        end = starts[position + 1] if position + 1 < len(starts) else len(lines)
+        sections.append((paths, "".join(lines[start:end])))
     if diff_text.strip() and not parsed:
         fail(2)
     if not parsed.issubset(changed):
         fail(3)
-    if any(any(fnmatch.fnmatch(path, pattern) for pattern in globs) for path in parsed):
+    if mode == "execution" and any(sensitive(path) for path in parsed):
         fail(3)
+    if mode == "mechanical-review":
+        safe_sections = [section for paths, section in sections if not any(sensitive(path) for path in paths)]
+        if not safe_sections:
+            fail(3)
+        filtered_diff = "".join(safe_sections)
+        parsed = {
+            path
+            for paths, _section in sections
+            if not any(sensitive(candidate) for candidate in paths)
+            for path in paths
+        }
+    else:
+        filtered_diff = diff_text
 
-texts = [diff_text]
+texts = [filtered_diff]
 if content_path:
     try:
         texts.append(open(content_path, encoding="utf-8", errors="replace").read())
     except OSError:
         fail(2)
 payload = "\n".join(texts)
-path_tokens = set(re.findall(r"(?:^|[\s'\"`(])([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.*-]+)+|\.env[A-Za-z0-9_.-]*)", payload))
-if any(any(fnmatch.fnmatch(token, pattern) for pattern in globs) for token in path_tokens):
-    fail(3)
+if mode == "execution":
+    path_tokens = set(re.findall(r"(?:^|[\s'\"`(])([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.*-]+)+|\.env[A-Za-z0-9_.-]*)", payload))
+    if any(sensitive(token) for token in path_tokens):
+        fail(3)
 patterns = (
     re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
     re.compile(r"(?:sk-or-v1-|sk-ant-|ghp_|github_pat_|AKIA)[A-Za-z0-9_-]{16,}"),
@@ -127,6 +158,12 @@ if output_path:
         with open(output_path, "wb") as output:
             for path in sorted(parsed):
                 output.write(path.encode("utf-8") + b"\0")
+    except OSError:
+        fail(2)
+if output_diff_path:
+    try:
+        with open(output_diff_path, "w", encoding="utf-8") as output:
+            output.write(filtered_diff)
     except OSError:
         fail(2)
 PY

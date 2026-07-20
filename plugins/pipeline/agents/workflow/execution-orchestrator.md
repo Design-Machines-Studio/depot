@@ -566,7 +566,13 @@ Mark `[chunk-id] 3. Apply input guardrails` complete.
 
 Read `plugins/pipeline/references/routing-policy.json` before dispatch. Coding uses Codex and OpenRouter only. The cascade selects the task-fit primary, probes headroom, checkpoints on cap, and descends without a Claude coding rung.
 
-Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orchestrator MUST dispatch to that provider or through the cascade and MUST NOT implement it in-process. If dispatch is unavailable, fall back per the cascade and log the fallback provider in the chunk receipt. A silently inline-implemented `executor:{codex,openrouter}` chunk is a run-postmortem misroute.
+Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orchestrator MUST dispatch to that provider, an explicitly receipted target-pressure adjustment allowed by `targets.enforcement.flexibleBuckets`, or through the cascade, and MUST NOT implement it in-process. If dispatch is unavailable, fall back per the cascade and log the fallback provider in the chunk receipt. A silently inline-implemented `executor:{codex,openrouter}` chunk is a run-postmortem misroute.
+
+**Manifest routing validation (before any dispatch):** Derive the task-fit default from `routing-policy.json`. If the manifest's `executor` differs, require a complete `routingOverride` containing `reasonCode`, concrete `reason`, `splitAttempted`, and `splitBlockedBy`; otherwise stop with an invalid-manifest error. A `config`/docs chunk whose manifest declares `executor: codex` without that object is always invalid. A later target-pressure adjustment does not mutate the manifest and instead requires its own runtime receipt. For `reasonCode: required-live-tool`, require `splitAttempted: true` and a non-empty explanation of why connector/browser/host-tool work could not be separated from offline analysis or edits. Tool names in prompt prose are not proof that a split is impossible.
+
+**Run-level routing pressure:** Read `targets.subscriptionProfiles[targets.activeSubscriptionProfile]` and maintain counters for provider-eligible chunks. Only the named `targets.enforcement.flexibleBuckets` (`config`, docs, and bounded mechanical logic) enter the target denominator. Fixed complex logic/UI/integration work, security-bound work, work requiring an inseparable host-only tool, a provider outage/cap, and work below a provider's quality floor are appended to `routingExclusions` with chunk ID and reason. Before every flexible eligible chunk, apply the configured `deficit-round-robin` strategy: compare actual eligible dispatch counts with the cumulative target, choose the provider with the largest positive deficit, and record any target-driven adjustment from the manifest executor. Task-fit fixed lanes remain fixed; security and tool-capability rules always override the target. Never create a low-quality or unsafe dispatch merely to improve the percentage.
+
+Every chunk receipt records `routingEligibility`, target profile, selected provider, actual provider, and exclusion or adjustment reason. The run summary records both the raw `providerSplit:` and `eligibleProviderSplit:` plus target variance; a variance with no recorded cause is an invalid run receipt.
 
 **Step 3d.0 -- Cascade activation gate.** Resolve the decision engine from the pipeline plugin cache and decide whether the cascade is active:
 
@@ -1323,6 +1329,9 @@ Measurement requirements:
 Post-mortem content:
 
 - `providerSplit:` measured tokens and cost by provider.
+- `eligibleProviderSplit:` chunk counts and percentages after removing documented security, required-tool, outage/cap, and quality-floor exclusions.
+- `routingExclusions:` every excluded chunk with its reason.
+- `routingVariance:` eligible actual minus the active subscription target, with a reason for every material variance.
 - Target comparison against `plugins/pipeline/references/routing-policy.json`.
 - Misroutes: every Claude task classified as `necessary` or `misrouted`; an inline-implemented `executor:{codex,openrouter}` chunk is always `misrouted`.
 - Quality ledger: which provider found each issue, regressions shipped by cheaper models, retries, and cap descents.
@@ -1395,6 +1404,7 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 - Workflow class: <workflowClass>
 - Workflow class defaulted: <true|false>
 - providerSplit: {claude: N, codex: N, openrouter: N}
+- eligibleProviderSplit: {codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}
 
 ## Evidence
 | # | Requirement | Evidence |

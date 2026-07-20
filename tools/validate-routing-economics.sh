@@ -15,7 +15,7 @@ require_text() {
   local pattern="$2"
   local label="$3"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  OK    %s\n" "$label"
   else
     printf "  FAIL  %s\n" "$label"
@@ -28,7 +28,7 @@ require_absent() {
   local pattern="$2"
   local label="$3"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  FAIL  %s\n" "$label"
     failures=1
   else
@@ -71,6 +71,13 @@ if [ -f "$routing" ]; then
       and ($targets.subscriptionProfiles["codex-20x"] == {"codex":65,"claude":0,"openrouter":35})
       and ($targets.subscriptionProfiles["codex-5x"] == {"codex":40,"claude":0,"openrouter":60})
       and ([ $targets.subscriptionProfiles[] | .claude == 0 ] | all)
+      and ($targets.enforcement.scope == "eligible-chunks-per-run")
+      and ($targets.enforcement.strategy == "deficit-round-robin")
+      and ($targets.enforcement.flexibleBuckets == ["config","docs","mechanical-logic"])
+      and ($targets.enforcement.fixedBuckets == ["logic","ui","integration"])
+      and ($targets.enforcement.securityOverridesTarget == true)
+      and ($targets.enforcement.toolCapabilityOverridesTarget == true)
+      and ($targets.enforcement.varianceReceiptRequired == true)
       and ($targets.providerSplit == null)
   ' "$routing" >/dev/null || { printf "  FAIL  active subscription profile is the sole valid 100%% routing target\n"; failures=1; }
   jq -e '[.agentType[] | select(.fallbackProvider? != null) | .fallbackProvider == "codex"] | all' "$routing" >/dev/null || { printf "  FAIL  coding reviewer fallbacks return to Codex\n"; failures=1; }
@@ -92,12 +99,19 @@ fi
 
 require_text "$schema" '`"openrouter"`' "manifest schema includes openrouter executor"
 require_text "$schema" '| `integration` | `codex` |' "manifest schema maps integration to Codex"
+require_text "$schema" "routingOverride" "manifest schema defines explicit routing overrides"
+require_text "$schema" "splitAttempted" "manifest override records whether offline work was split"
 require_text "$promptcraft" "routing-policy.json" "promptcraft reads shared routing policy"
 require_text "$promptcraft" '`integration` -> `codex`' "promptcraft maps integration to Codex"
+require_text "$promptcraft" "routingOverride" "promptcraft requires explicit executor override receipts"
+require_text "$promptcraft" "splitAttempted" "promptcraft splits tool-dependent and offline work first"
 require_text "$orchestrator" "MUST NOT implement it in-process" "orchestrator forbids absorbing externally routed chunks"
 require_text "$orchestrator" 'integration) PRIMARY_RAIL="codex"' "orchestrator fallback maps integration to Codex"
 require_text "$orchestrator" "implementedBy:" "orchestrator receipts record implementedBy"
 require_text "$orchestrator" "providerSplit:" "orchestrator summary records providerSplit"
+require_text "$orchestrator" "eligibleProviderSplit:" "orchestrator records eligible provider usage"
+require_text "$orchestrator" "deficit-round-robin" "orchestrator applies routing pressure during dispatch"
+require_text "$orchestrator" "routingOverride" "orchestrator rejects silent executor overrides"
 require_text "$orchestrator" "final review must run on the provider that did not implement" "orchestrator enforces cross-provider final review"
 require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-mortem step"
 require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JSONL delta"
@@ -138,16 +152,22 @@ require_absent "$dm_review" "DEEPSEEK_API_KEY" "dm-review has no standalone Deep
 require_text "$dm_review" '**A0. If the agent is `openrouter-bulk-analyst`:**' "dm-review special-cases the bulk wrapper agent"
 require_text "$dm_review" "Never launch this coding-review lane through a Claude" "dm-review keeps bulk review off Claude execution"
 require_text "$dm_review" 'a Claude `Agent` call is not a valid Branch A launcher' "dm-review keeps generic OpenRouter review off Claude execution"
+require_text "$dm_review" '--mode mechanical-review' "dm-review delegates the safe remainder of mixed diffs"
 require_text "$agent_runner" 'set(canon) | set(configured)' "OpenRouter runner cannot weaken the minimum path denylist"
 require_text "$agent_runner" "RUNNER DECLINED -- SENSITIVE CONTENT" "OpenRouter runner declines high-confidence secrets in added lines"
 require_text "$agent_runner" 'neverRouteToOpenRouter' "OpenRouter runner reads the Codex-return security boundary"
 require_text "$agent_runner" "Codex" "OpenRouter runner returns sensitive work to Codex"
 require_text "$pipeline_cmd" "Codex + OpenRouter" "Phase 5 defaults to Codex plus OpenRouter lenses"
 require_text "$pipeline_cmd" "PIPELINE_CLAUDE_ADVERSARY=1" "Claude adversary is optional third lens"
+require_text "$pipeline_cmd" '--mode artifact-review' "Phase 5 allows safe sensitive-path references in review artifacts"
 require_text "$assess" "ASSESS_EXECUTOR" "assess supports non-Claude executor knob"
 require_text "$research" "RESEARCH_EXECUTOR" "research supports non-Claude executor knob"
 require_text "$postmortem_schema" "providerSplit" "run postmortem schema documents providerSplit"
+require_text "$postmortem_schema" "eligibleProviderSplit" "run postmortem schema separates eligible provider usage"
+require_text "$postmortem_schema" "routingExclusions" "run postmortem schema records security and tool exclusions"
+require_text "$postmortem_schema" "routingVariance" "run postmortem schema explains target variance"
 require_text "$ledger" "providerSplit" "rolling metrics ledger exists"
+require_text "$ledger" "eligibleProviderSplit" "rolling ledger tracks eligible OpenRouter utilization"
 
 if [ -x "$runner" ]; then
   if "$runner" --dry-run >/dev/null; then
