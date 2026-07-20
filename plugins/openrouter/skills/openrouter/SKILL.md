@@ -28,7 +28,7 @@ Delegate a prompt directly to an OpenRouter model (single-turn completion).
 ```
 /openrouter Review this function for potential race conditions
 /openrouter --model deepseek/deepseek-v4-pro Analyze the architectural coupling between these modules
-/openrouter --model z-ai/glm-5.2 Summarize the security implications of this diff
+/openrouter --model z-ai/glm-5.2 Find duplicated validation patterns in this diff
 ```
 
 ## Process

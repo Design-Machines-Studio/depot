@@ -54,6 +54,8 @@ Read the plan and identify discrete chunks of work. A chunk is:
 
    When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
 
+   Before assigning Codex because a task needs a live connector, browser, GitHub/Notion operation, or another host-only tool, split the live-tool action from offline analysis/config/docs whenever file ownership and dependency order permit. The offline chunk keeps its policy-selected OpenRouter executor. If a chunk's `executor` differs from the routing-policy default, add a `routingOverride` object with `reasonCode`, a concrete `reason`, `splitAttempted`, and `splitBlockedBy`. A `config`/docs chunk with `executor: codex` and no complete `routingOverride` is invalid; tool mentions alone are never a silent override.
+
 ### Phase 2: Context Extraction
 
 For each chunk, extract from the plan, research brief, and assessment brief:
@@ -245,7 +247,7 @@ Sibling parallel prompts must not cross-reference each other. A prompt in a para
 
 Validate the generated manifest against the required schema before handoff.
 
-**Rule:** Every chunk object in `executionPlan.levels[].groups[].chunks[]` must include: `id`, `title`, `prompt`, `kind`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures.
+**Rule:** Every chunk object in `executionPlan.levels[].groups[].chunks[]` must include: `id`, `title`, `prompt`, `kind`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures. When the selected executor differs from the routing-policy default, `routingOverride` is also required and must include `splitAttempted`; omit the object when no override occurred.
 
 Every new manifest also carries the explicit top-level `workflowClass` copied unchanged from the approved plan island. Accepted values are `chore|bug|feature|hotfix|security|investigation|migration`. If the plan does not contain exactly one approved value, stop and return to the pipeline Phase 3 user gate; promptcraft never chooses or infers it from filenames, chunk kinds, prompt prose, risk, or keyword heuristics. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
 
@@ -332,6 +334,17 @@ Each chunk object in the manifest MUST include `kind` and `executor` fields (cla
   "estimatedComplexity": "small",
   "kind": "logic",
   "executor": "openrouter"
+}
+```
+
+If the example were forced from its default OpenRouter rail to Codex for an inseparable live-tool requirement, it would also carry:
+
+```json
+"routingOverride": {
+  "reasonCode": "required-live-tool",
+  "reason": "The same atomic file edit must be verified through the authenticated connector.",
+  "splitAttempted": true,
+  "splitBlockedBy": "The connector result determines the exact value written to this file."
 }
 ```
 

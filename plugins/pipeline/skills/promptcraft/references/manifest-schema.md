@@ -158,6 +158,7 @@ or run-wide discontinuity, and includes it in shadow parity and metrics.
 | `estimatedComplexity` | enum | "small" (1-2 files), "medium" (3-5 files), "large" (6+ files) |
 | `kind` | enum | Chunk type classification: `"ui"`, `"logic"`, `"integration"`, or `"config"`. Inferred from `filesToModify` during prompt generation. Used by the execution-orchestrator for evaluation depth and by the `executor` field for tool routing. See Classification Rules below. |
 | `executor` | enum | Coding execution tool: `"codex"` or `"openrouter"`; legacy `"claude"` remains parseable but normalizes to Codex. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. See Executor Mapping below. |
+| `routingOverride` | object, conditional | Required only when `executor` differs from the routing-policy default. Contains `reasonCode`, concrete `reason`, `splitAttempted`, and `splitBlockedBy`. A config/docs chunk routed to Codex without this object is invalid. |
 
 ### Execution Plan
 
@@ -198,9 +199,24 @@ The `executor` field is derived from `kind`, `estimatedComplexity`, and `routing
 | `ui` | `codex` | UI implementation uses Codex; browser and Live Wires evidence remain mandatory |
 | `integration` | `codex` | Cross-chunk wiring and route verification are code-heavy orchestration |
 
+Before overriding a policy-selected OpenRouter chunk because it needs a connector or other host-only tool, split the live-tool operation from offline analysis/config/docs whenever ownership permits. A valid override has this shape:
+
+```json
+{
+  "routingOverride": {
+    "reasonCode": "required-live-tool",
+    "reason": "The authenticated connector result determines the same atomic edit.",
+    "splitAttempted": true,
+    "splitBlockedBy": "The offline edit cannot be specified until the connector returns."
+  }
+}
+```
+
+Allowed `reasonCode` values are `sensitive-path`, `required-live-tool`, `provider-unavailable`, and `quality-floor`. `splitAttempted` must be true for `required-live-tool`; `splitBlockedBy` must explain why a separate offline OpenRouter chunk was not possible. Tool or sensitive-path words appearing in prompt prose are not sufficient evidence for an override.
+
 ## Graceful Fallback
 
-If an executor is unavailable, the orchestrator falls back through the Codex/OpenRouter cascade in `model-cascade.json` and records the fallback in the chunk receipt. Claude is non-coding-only. The `executor` field is not advisory: the orchestrator MUST dispatch to the selected coding provider and MUST NOT silently implement a non-native chunk in-process.
+If an executor is unavailable, the orchestrator falls back through the Codex/OpenRouter cascade in `model-cascade.json` and records the fallback in the chunk receipt. Claude is non-coding-only. The `executor` field is not advisory: the orchestrator MUST dispatch to the selected coding provider and MUST NOT silently implement a non-native chunk in-process. The only policy-level adjustment is `targets.enforcement.strategy` for a named flexible bucket; it does not mutate the manifest and must be recorded as a target-pressure adjustment in the chunk receipt.
 
 ## Naming Conventions
 

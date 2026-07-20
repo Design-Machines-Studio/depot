@@ -11,7 +11,7 @@
       "*.env*"
     ],
     "onMatch": "route-codex",
-    "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native review. One matching file prevents OpenRouter delegation."
+    "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native execution and substantive review. Mechanical review may delegate only the filtered safe remainder."
   },
   "contentRedaction": {
     "refusePatterns": [
@@ -23,6 +23,21 @@
     ],
     "onMatch": "return-to-codex",
     "rationale": "Strip or refuse sensitive content before delegation. If it remains after filtering, return the chunk to Codex-native review."
+  },
+  "delegationModes": {
+    "execution": {
+      "sensitiveMatch": "route-codex",
+      "scope": "whole-chunk"
+    },
+    "mechanical-review": {
+      "sensitiveMatch": "filter-file-sections",
+      "emptyRemainder": "route-codex",
+      "credentialValues": "route-codex"
+    },
+    "artifact-review": {
+      "sensitivePathReferences": "allow",
+      "credentialValues": "route-codex"
+    }
   },
   "positiveRouting": {
     "intendedLanes": [

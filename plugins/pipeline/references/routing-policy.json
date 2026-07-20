@@ -6,7 +6,16 @@
       "codex-20x": {"codex": 65, "claude": 0, "openrouter": 35},
       "codex-5x": {"codex": 40, "claude": 0, "openrouter": 60}
     },
-    "rationale": "Coding-only calibration: subscriptionProfiles[activeSubscriptionProfile] is the sole target. Codex Pro 20x uses 65/0/35 Codex/Claude/OpenRouter; switching to codex-5x uses 40/0/60. Claude is non-coding-only and therefore has zero coding share. Live headroom and availability remain authoritative. DeepSeek V4 usage is counted under OpenRouter."
+    "enforcement": {
+      "scope": "eligible-chunks-per-run",
+      "strategy": "deficit-round-robin",
+      "flexibleBuckets": ["config", "docs", "mechanical-logic"],
+      "fixedBuckets": ["logic", "ui", "integration"],
+      "securityOverridesTarget": true,
+      "toolCapabilityOverridesTarget": true,
+      "varianceReceiptRequired": true
+    },
+    "rationale": "Coding-only calibration: subscriptionProfiles[activeSubscriptionProfile] is the sole target. Codex Pro 20x uses 65/0/35 Codex/Claude/OpenRouter; switching to codex-5x uses 40/0/60. Claude is non-coding-only and therefore has zero coding share. Apply the target as routing pressure only among eligible chunks; security and required live-tool capabilities remain authoritative and their exclusions must be receipted. DeepSeek V4 usage is counted under OpenRouter."
   },
   "chunkKind": {
     "_comment_kinds": "config/docs/mechanical-logic/logic/ui/integration are ROUTING buckets, not manifest kind enum values. The manifest kind enum stays {ui, logic, integration, config}; docs and mechanical-logic are refinements carried by the manifest `executor` field (derived from kind + estimatedComplexity per manifest-schema.md Executor Mapping), not first-class kinds. model-cascade.class_from_kind bridges only the manifest kinds (logic/config/docs/ui/integration); mechanical-logic routes via `executor: openrouter` set at prompt-generation time, so it needs no class_from_kind entry.",
@@ -122,7 +131,7 @@
         "*.env*"
       ],
       "onMatch": "route-codex",
-      "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native review. One matching file prevents OpenRouter delegation."
+      "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native execution and substantive review. Mechanical review may delegate only the filtered safe remainder."
     },
     "contentRedaction": {
       "refusePatterns": [
@@ -134,6 +143,21 @@
       ],
       "onMatch": "return-to-codex",
       "rationale": "Strip or refuse sensitive content before delegation. If it remains after filtering, return the chunk to Codex-native review."
+    },
+    "delegationModes": {
+      "execution": {
+        "sensitiveMatch": "route-codex",
+        "scope": "whole-chunk"
+      },
+      "mechanical-review": {
+        "sensitiveMatch": "filter-file-sections",
+        "emptyRemainder": "route-codex",
+        "credentialValues": "route-codex"
+      },
+      "artifact-review": {
+        "sensitivePathReferences": "allow",
+        "credentialValues": "route-codex"
+      }
     },
     "positiveRouting": {
       "intendedLanes": [
