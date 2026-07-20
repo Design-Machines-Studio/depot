@@ -115,6 +115,21 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 
 `workflowClass` is policy input, not cached execution structure. New manifests copy it unchanged from the user-approved plan island; absent or ambiguous plan data returns to the planning user gate and blocks generation. Validate it against the seven-value enum below and pass it unchanged. Do not copy workflow stages or safety-anchor constants into this schema; the workflow-kernel's separately versioned trusted policy remains authoritative.
 
+## Performance Contract
+
+The manifest describes product work, not pipeline closeout. Do not emit an
+orchestrator-owned closeout chunk for verification summaries, requirements
+cross-checks, post-mortems, cleanup, delivery receipts, PR publication, or issue
+disposition. The orchestrator's final stages own those actions. A chunk may
+include one only when it also delivers actual product integration code required
+by an acceptance criterion.
+
+The default single-run budget is 8 total chunks and 6 `large` chunks. Exceeding
+either limit returns to the planning user gate for a campaign split unless the
+approved plan contains an explicit single-run rationale. Approval freezes run
+scope: newly discovered desirable work goes to a follow-up manifest unless it
+blocks correctness of an approved requirement.
+
 ## Field Definitions
 
 ### Top-level

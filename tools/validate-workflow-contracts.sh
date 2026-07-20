@@ -76,6 +76,8 @@ output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-form
 kernel_skill="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/SKILL.md"
 kernel_cli="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py"
 kernel_promotion="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/promotion.py"
+postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
+manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
 
 printf "Repository cleanup contract:\n"
 
@@ -261,10 +263,30 @@ require_text "$kernel_skill" "Initialize every run in shadow mode" "kernel docum
 require_text "$kernel_cli" "default=RunMode.SHADOW.value" "kernel CLI defaults to shadow"
 require_text "$kernel_promotion" "separate_human_approval_required" "promotion rejects native default without human approval"
 
+# --------------------------------------------------------------------------
+# Group 5: Pipeline performance contract
+# --------------------------------------------------------------------------
+
+printf "\nPipeline performance contract:\n"
+
+require_text "$pipeline_cmd" "focused Codex review for ordinary chunks" "pipeline command uses focused ordinary-chunk review"
+require_text "$pipeline_run" "For ordinary non-sensitive chunks, run one focused read-only Codex review" "Codex adapter uses one focused ordinary-chunk reviewer"
+require_text "$orchestrator" "Do not dispatch the 5-agent quick dm-review" "orchestrator avoids the old per-chunk review fanout"
+require_text "$orchestrator" '`all-chunks-complete` boundary' "orchestrator batches intermediate shadow observation"
+require_text "$orchestrator" "Empty-plan fast path" "orchestrator skips no-op cleanup commands"
+require_text "$promptcraft" "Do not create an orchestrator-owned closeout chunk" "promptcraft excludes closeout-only chunks"
+require_text "$promptcraft" "no more than 8 total chunks" "promptcraft enforces the default run-size budget"
+require_text "$manifest_schema" "scope: newly discovered desirable work" "manifest contract freezes approved scope"
+require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
+require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
+require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
+require_absent "$pipeline_run" "shadow observation after each authoritative receipt" "pipeline-run avoids per-receipt observation"
+require_absent "$orchestrator" 'feed it to `observe-pipeline`' "orchestrator avoids intermediate observer invocations"
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance)\n"

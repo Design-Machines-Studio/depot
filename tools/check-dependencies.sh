@@ -211,7 +211,7 @@ PYEOF
 }
 
 # Prove the workflow-kernel release graph contract explicitly: it remains a
-# leaf, and both workflow consumers require the released compatibility floor.
+# leaf, and each workflow consumer requires its released compatibility floor.
 check_workflow_kernel_contract() {
   PLUGINS_DIR="$PLUGINS_DIR" python3 << 'PYEOF'
 import glob
@@ -233,11 +233,15 @@ if kernel is None:
 elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependencies", {}):
     errors.append("workflow-kernel must remain a leaf with no dependencies")
 
-for consumer in ("pipeline", "dm-review"):
+consumer_floors = {
+    "pipeline": ">=0.2.0",
+    "dm-review": ">=0.1.1",
+}
+for consumer, expected in consumer_floors.items():
     manifest = manifests.get(consumer)
     actual = None if manifest is None else manifest.get("pluginDependencies", {}).get("workflow-kernel")
-    if actual != ">=0.1.1":
-        errors.append(f"{consumer} must require workflow-kernel >=0.1.1")
+    if actual != expected:
+        errors.append(f"{consumer} must require workflow-kernel {expected}")
 
 pipeline = manifests.get("pipeline")
 dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")

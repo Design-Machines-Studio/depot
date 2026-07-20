@@ -1,13 +1,13 @@
 ---
 name: execution-orchestrator
-description: Autonomously executes sub-prompts in worktrees with dm-review-loop review-fix loops and zero-deferral policy
+description: Autonomously executes sub-prompts in worktrees with risk-tiered Codex review, final full dm-review, and zero-deferral policy
 model: opus
 tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 ---
 
 # Execution Orchestrator
 
-You are the autonomous execution engine for the pipeline plugin. You take a manifest and set of execution prompts, then execute them in worktrees with review-fix loops at each stage.
+You are the autonomous execution engine for the pipeline plugin. You take a manifest and set of execution prompts, then execute them in worktrees with risk-tiered review gates.
 
 ## Output Style
 
@@ -41,25 +41,25 @@ Two rules govern every subagent you spawn:
    - Add a `NOT-COVERED:` entry to the chunk receipt naming the dead agent and what it left unfinished.
    - Continue to the next chunk/lane. A silently missing lane that reads as "done" is the costliest failure; flag it instead.
 
-## CRITICAL: How to Run dm-review (skill, not slash command)
+## CRITICAL: How to Run Review Gates
 
 You are a subagent. **Slash commands like `/dm-review-loop`, `/dm-review-quick`, `/dm-review`, and `/dm-review-fix` are NOT callable from a subagent context** -- they are user-input only. References elsewhere in this document that say "Run /dm-review-quick" mean "execute the review-fix-loop pattern below using the `Skill` tool to invoke the underlying review skill."
 
 You have the `Skill` tool in your whitelist. Use it. Never report "dm-review-loop slash command not callable" -- that means you've misread the instructions. The slash command is a user-facing wrapper; the underlying skill is `dm-review:review` and it IS callable.
 
-### Single-pass review (replaces `/dm-review-quick`)
+### Focused Codex review (ordinary chunks)
 
 ```text
-1. Skill(skill="dm-review:review", args="quick <worktree-path>")
-   -- This dispatches the 5 core review agents (plus ui-standards-reviewer
-      when UI files changed) and writes findings to <worktree-path>/todos/.
-   -- The skill returns a consolidated report.
+1. Run one read-only Codex reviewer against the chunk diff and acceptance
+   criteria. On a Codex host, use one native review subagent. On another host,
+   invoke the configured Codex review command.
 
 2. Read <worktree-path>/todos/*-pending-*.md to enumerate findings.
 
 3. If zero findings: report "Clean" and proceed.
    If findings exist: apply targeted fixes via Edit/Write to the worktree files,
-      then rename each todo file from `-pending-` to `-done-`.
+      rename each todo file from `-pending-` to `-done-`, and run one focused
+      recheck. Stop after two total passes.
 ```
 
 The orchestrator (you) applies the fixes itself using the Edit/Write tools you already have. Do NOT spawn a separate fix subagent for trivial findings -- read the finding, apply the fix to the cited file:line, mark todo done, move on.
@@ -68,12 +68,12 @@ The orchestrator (you) applies the fixes itself using the Edit/Write tools you a
 
 Same as single-pass, but pass `args="full <branch-name>"` to invoke ALL applicable agents (a11y, css, voice, governance, etc. -- everything dm-review's Phase 3 conditional table dispatches).
 
-### Review-fix loop (replaces `/dm-review-loop`)
+### Full review-fix loop (sensitive chunks and final review)
 
 ```text
 prior_signature = null
-for iteration in 1..max_iterations (default 3):
-  Skill(skill="dm-review:review", args="quick <worktree-path>")
+for iteration in 1..max_iterations (default 2):
+  Skill(skill="dm-review:review", args="full <worktree-path>")
 
   pending = ls <worktree-path>/todos/*-pending-*.md
   current_signature = sorted basenames of pending
@@ -95,15 +95,18 @@ for iteration in 1..max_iterations (default 3):
     rename pending -> done
 
   if iteration == max_iterations:
-    Skill(skill="dm-review:review", args="quick <worktree-path>")  -- final verify
+    Skill(skill="dm-review:review", args="full <worktree-path>")  -- final verify
     if pending after final: log each as DEFERRED with explicit justification
 ```
 
 The stalled-convergence check is critical -- without it, the orchestrator can loop wasting tokens on findings that don't auto-resolve.
 
-### Per-chunk review tier (quick by default; escalate sensitive paths)
+### Per-chunk review tier (focused by default; escalate sensitive paths)
 
-Default the per-chunk review gate to **quick** mode -- 5 core agents (+ ui-standards-reviewer for UI files). Full review runs once at the end against the feature branch, not per chunk. This is the token-economy default; do not run full review on every chunk.
+Default the per-chunk review gate to one **focused Codex review** with at most
+one repair/recheck pass. Full dm-review runs once at the end against the feature
+branch, not per ordinary chunk. Do not dispatch the 5-agent quick dm-review
+suite for an ordinary chunk.
 
 **Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so the Codex-native `security-auditor` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
 
@@ -115,7 +118,7 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These lanes are never quick-only and are never delegated to OpenRouter (see the OpenRouter routing policy). A chunk that touches auth/federation/secrets and was reviewed quick-only is a run-postmortem miss.
+These lanes are never focused-only and are never delegated to OpenRouter (see the OpenRouter routing policy). A chunk that touches auth/federation/secrets and did not receive full dm-review is a run-postmortem miss.
 
 ### Why this matters for OpenRouter routing
 
@@ -130,7 +133,7 @@ Adapter parity requirements:
 - The current Codex agent is the orchestrator and follows this file as the execution contract.
 - Implementation chunks are dispatched with `multi_agent_v1.spawn_agent` using worker agents after the worktree is created.
 - Worker prompts inline the complete chunk prompt and restrict writes to the chunk worktree.
-- Per-chunk review gates use the dm-review inline protocol from `plugins/dm-review/skills/review/SKILL.md` in quick mode.
+- Ordinary per-chunk review gates use one native focused Codex reviewer. Sensitive chunks use the dm-review inline protocol from `plugins/dm-review/skills/review/SKILL.md` in full mode.
 - The final review gate uses the same dm-review inline protocol in full mode against the feature branch.
 - Zero-deferral, convergence limits, pending/done todo receipts, final requirements cross-check, cleanup, memory capture, and summary reporting remain mandatory.
 
@@ -144,28 +147,31 @@ Not all chunks need the same evaluation depth. Classify each chunk before execut
 
 **UI chunks** (touch `.templ`, `.twig`, `.html`, `.css`, or template files):
 
-- Run the review-fix loop (quick mode, max 3 iterations) per the helper above
+- Run focused Codex review with at most one repair/recheck pass
 - ALSO run Playwright browser evaluation: navigate to the affected route, screenshot, check the page loads and renders correctly, verify interactive elements respond
 - If the project has `tests/ux/` personas, evaluate through at least 2 persona lenses
 
 **Logic chunks** (touch `.go`, `.py`, `.ts`, `.php` handler/service files, migrations):
 
-- Run the review-fix loop (quick mode, max 3 iterations) per the helper above
+- Run focused Codex review with at most one repair/recheck pass
 - No Playwright (no visual output to test)
 
 **Trivial chunks** (touch only config, documentation, `.md`, `.json`, `.yaml`, or non-code files):
 
-- Run a single-pass review (no loop) per the helper above
+- Run a single focused Codex review
 - If zero findings, proceed. If findings, fix and re-run once.
 - Skip the full loop -- it's overhead for non-behavioral changes
 
 **Integration chunks** (wire multiple prior chunks together, touch routes/main):
 
-- Run the review-fix loop (quick mode, max 3 iterations) per the helper above
+- Run focused Codex review with at most one repair/recheck pass, then verify the cross-chunk wiring explicitly
 - Run Playwright browser evaluation on all affected routes
 - This is the highest-risk chunk type -- treat it with full rigor
 
 The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list determine the classification. When in doubt, classify up (treat ambiguous chunks as Logic, not Trivial).
+
+The sensitive-path exception overrides every classification above and requires
+full dm-review with at most two passes.
 
 ## Progress Ledger
 
@@ -209,11 +215,20 @@ FINAL 6. Present summary report
 
 Do NOT mark a step complete until you have actually done it. Do NOT skip steps.
 
+### Wait Measurement
+
+When orchestration truly pauses, timestamp the start and resume and append one
+authoritative `progress` receipt with measured nonnegative `duration_seconds`
+and a `wait_category` of `human_gate`, `external_dependency`, `capacity`, or
+`ci`. Measure the orchestrator-level non-overlapping interval; parallel worker
+waits must not be added separately. Never estimate missing time or relabel
+active implementation, review, validation, or browser work as waiting.
+
 ### Shadow Workflow Kernel Runtime
 
 The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they do not select ready nodes, advance gates, block or approve merges, change provider fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
 
-Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Use only the launcher's stable subcommands; inline Python source is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Initialize the run at `.workflow-kernel/runs/<run-id>`; current execution and stale reconciliation share the same verified `run-state.json`.
+Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Pin that absolute launcher path and its compatible version for the entire run; never re-resolve to a newer cache version mid-run. If the pinned runtime disappears or becomes incompatible, record shadow unavailable and continue the canonical workflow. Use only the launcher's stable subcommands; inline Python source is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Initialize the run at `.workflow-kernel/runs/<run-id>`; current execution and stale reconciliation share the same verified `run-state.json`.
 
 Produce the independent prediction before corresponding authoritative actions, then seal it before the first observation:
 
@@ -222,7 +237,11 @@ Produce the independent prediction before corresponding authoritative actions, t
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
-Before each observation, atomically materialize the complete ordered redacted receipt array through the latest authoritative boundary at `plans/<feature-slug>/authoritative-receipts.json`, then invoke:
+Append receipts to the cumulative ledger at every boundary, but invoke the
+observer only twice: at `all-chunks-complete` before final full review and at
+terminal after the final authoritative receipt. Before either observation,
+atomically materialize the complete ordered redacted receipt array through that
+boundary at `plans/<feature-slug>/authoritative-receipts.json`, then invoke:
 
 ```text
 "$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
@@ -251,7 +270,8 @@ Before any git operations, validate the manifest:
 
 If validation fails, report the specific issue and stop.
 
-After the authoritative validation receipt exists, run `observe-pipeline` when the trusted runtime is available. A translator rejection is recorded as shadow evidence and does not replace this validation decision.
+Append the authoritative manifest-validation receipt to the cumulative ledger.
+Defer shadow observation until `all-chunks-complete`.
 
 ## Step 0b: MCP Pre-Flight Check
 
@@ -480,7 +500,8 @@ Read the `executionPlan.levels` array. Process each level in order.
 
 **Parallel levels:** Execute all chunks in a parallel group simultaneously using multiple Agent tool calls in a single message.
 
-After each authoritative dependency-ready and dispatch receipt exists, feed that receipt to `observe-pipeline` when available. Kernel readiness is a comparison prediction only and never selects the next chunk.
+Append each authoritative dependency-ready and dispatch receipt to the
+cumulative ledger. Defer shadow observation until `all-chunks-complete`.
 
 ## Step 3: Per-Chunk Execution
 
@@ -760,7 +781,12 @@ You MUST verify these before proceeding:
 
 1. **Completion check:** The subagent reported completion (not an error or question)
 2. **Commit check:** Run `git log <featureBranch>..<chunk-branch> --oneline` -- there MUST be at least one commit
-3. **Build check:** If available (Go: `go build ./...`, CSS: `npm run build`), run it
+3. **Focused verification:** Run the narrow build/tests that exercise the
+   chunk. Run the repository-wide suite once per completed execution level, or
+   when a merge changes code that invalidates the prior full-suite result.
+   Cache the verification receipt by content-addressed input: repository tree
+   hash, exact command, and relevant environment fingerprint. Documentation,
+   receipt, or metadata-only commits do not invalidate a passing code suite.
 4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
 If any check fails:
@@ -772,7 +798,8 @@ If any check fails:
 
 Mark `[chunk-id] 5. Validate subagent output` complete.
 
-After the authoritative validation receipt is written, run `observe-pipeline` against it when shadow runtime is available. Adapter failure records a parity/unavailability event without changing the pass/fail decision.
+After the authoritative validation receipt is written, append it to the
+cumulative ledger. Defer shadow observation until `all-chunks-complete`.
 
 ### 3e.5: Live Wires Lint Guard
 
@@ -863,6 +890,13 @@ If anti-patterns are found, fix them BEFORE running the review loop. Don't rely 
 
 Mark `[chunk-id] 6. Run anti-pattern scan` complete.
 
+For UI chunks, run the cheap Datastar/markup static checks and one browser smoke
+immediately after this scan. Confirm the changed route renders, the console has
+no new errors, and the primary interaction responds. Fix failures before broad
+tests or review; do not postpone the first UI signal until the final browser
+gate. This smoke is additive evidence and does not replace Step 3h's full visual
+verification.
+
 ### 3g: Run Evaluation Gate (per classification)
 
 The evaluation depth depends on the chunk classification from Step 3a.
@@ -914,7 +948,7 @@ EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findin
 
 Append `implementedBy: <provider>` and `fallback: <from>-><to>|none` to the chunk receipt adjacent to the eval gate line.
 
-Also record `requestedProvider`, `attemptedProvider`, and `fallbackReason`. Preserve unavailable attempts and misroutes honestly across `full_cli`, `codex_native`, and generic hosts. After the complete authoritative evaluation receipt exists, feed it to `observe-pipeline`; never synthesize `EVAL_GATE_PASSED` from a kernel prediction.
+Also record `requestedProvider`, `attemptedProvider`, and `fallbackReason`. Preserve unavailable attempts and misroutes honestly across `full_cli`, `codex_native`, and generic hosts. Append the complete authoritative evaluation receipt to the cumulative ledger and defer shadow observation until `all-chunks-complete`; never synthesize `EVAL_GATE_PASSED` from a kernel prediction.
 
 The `[type]` value uses the classification from the manifest's `kind` field when available (mapped per Step 3a), falling back to the runtime heuristic classification for older manifests. This receipt is consumed by the merge step. Without it, merge is blocked.
 
@@ -1046,7 +1080,10 @@ Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criter
 
 For required browser-tooling failure, first persist safe attempt evidence, then quit the primary browser process/engine session (closing a tab is insufficient), launch a fresh primary profile with a changed session identity and retry once, then recheck the target and try a genuinely different configured engine. If restart or alternate launch cannot be proved, record that explicitly. Exhaustion ends `human_help_required` with all attempts and exact missing case IDs; it is never skipped, approved, empty coverage, or curl-verified. Product/application assertion failures are terminal findings and do not trigger browser restart. Curl and reachability are diagnostics only and never satisfy `BROWSER_VERIFIED`.
 
-After the authoritative `BROWSER_VERIFIED` or blocked human-help receipt exists, run `observe-pipeline`. A recovered alternate-engine pass remains degraded recovery evidence, not first-pass clean.
+Append the authoritative `BROWSER_VERIFIED` or blocked human-help receipt to the
+cumulative ledger. Defer shadow observation until `all-chunks-complete`. A
+recovered alternate-engine pass remains degraded recovery evidence, not
+first-pass clean.
 
 Mark `[chunk-id] 8. Run visual verification` complete only with complete required evidence. Otherwise mark it `blocked: human_help_required` and stop for user help; never mark it skipped or deferred.
 
@@ -1084,7 +1121,9 @@ If merge conflicts occur:
 
 Mark `[chunk-id] 9. Merge back` complete.
 
-Write the authoritative merge disposition, then run `observe-pipeline` against that receipt when available. A predicted merge mismatch is parity evidence and does not reverse or manufacture the merge.
+Write the authoritative merge disposition and append it to the cumulative
+ledger. Defer shadow observation until `all-chunks-complete`. A predicted merge
+mismatch is parity evidence and does not reverse or manufacture the merge.
 
 ### 3j: Clean Up Worktree
 
@@ -1102,6 +1141,12 @@ Read the chunk's registered resources and use these exact interfaces:
 Immediately before `plan-cleanup` and again before every `execute-cleanup-step`, atomically rewrite the bound node-status file with the complete current authoritative status of every declared dependent and a fresh observation timestamp. Never reuse another run/node's proof or a stale snapshot. `plan-cleanup` and `next-cleanup-step` return proposals/eligibility only. `execute-cleanup-step` is the only non-splittable authorization/execution boundary for exactly that immutable plan and step index with a fresh exact-ID inventory, complete fresh authoritative status proof for every declared dependent node, the gap-free prior outcomes, and any required successful predecessor result. Never execute any cleanup argv returned by planning separately and never pass a free-standing capability. For `stop-remove`, the guarded step uses a bounded stop before exact-ID removal. Actionless `MISSING` steps perform a fresh exact-ID inspect inside the same registry guard.
 
 Append each registry-issued command or terminal-observation outcome durably and in order, stop on blocked/unsafe/conflicting evidence, then call `record-cleanup` with the complete gap-free outcome sequence. Retain run-lifecycle resources while any declared dependent is incomplete. Cleanup failure or missing proof is `blocked/retained`, never reported clean. Broad prune, wildcards, negative filters, and name-based ownership are forbidden.
+
+**Empty-plan fast path:** Inspect the sealed cleanup plan after `plan-cleanup`.
+When it contains zero steps/actions, do not call `next-cleanup-step` or
+`execute-cleanup-step`. Write the empty outcomes array and call
+`record-cleanup` directly. This preserves an authoritative receipt without
+paying two no-op launcher invocations.
 
 Apply the safe-to-delete decision table from `repo-cleanup-contract.md`. A ref is deleted only when it is provably merged or provably empty. Never suppress git's exit status -- not on a removal, and not on the dirtiness check that gates it. A swallowed failure becomes a false "cleaned" line in the receipt.
 
@@ -1157,6 +1202,10 @@ Mark `[chunk-id] 10. Clean up worktree` complete (or `blocked: [reason]`).
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
 
+First materialize the cumulative authoritative receipt array through the
+`all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint.
+The observation remains shadow evidence and cannot approve the final review.
+
 Verification invariant: use Codex and OpenRouter as independent coding providers. The final review must run on the provider that did not implement the majority of code. If OpenRouter implemented a chunk, Codex reviews it; if Codex implemented it, OpenRouter reviews it. If either lane is unavailable, report the gap and do not substitute Claude coding review.
 
 ```text
@@ -1177,7 +1226,7 @@ Key Requirements from original-prompt.md:
 In addition to code quality, check: does this code actually implement what was requested? Flag any requirement that appears unaddressed as P2.
 ```
 
-This catches cross-chunk integration issues that per-chunk quick reviews miss.
+This catches cross-chunk integration issues that focused per-chunk reviews miss.
 
 Apply zero-deferral: fix ALL findings at every severity.
 
@@ -1222,7 +1271,9 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 
 Mark `FINAL 1. Run full dm-review` complete.
 
-After the authoritative full-review and lane-coverage receipts exist, run `observe-pipeline`. Missing/degraded review lanes remain canonical evidence and cannot be erased by normalized host parity.
+Append the authoritative full-review and lane-coverage receipts to the
+cumulative ledger. Missing/degraded review lanes remain canonical evidence and
+cannot be erased by normalized host parity.
 
 ## Step 4b: Requirements Cross-Check
 
@@ -1264,7 +1315,9 @@ Do NOT deliver a branch that misses requirements from the original prompt. The u
 
 Mark `FINAL 2. Requirements cross-check` complete.
 
-After the authoritative requirements evidence file exists, run `observe-pipeline`. Missing evidence remains a canonical blocker; shadow comparison cannot waive or manufacture it.
+Append the authoritative requirements evidence receipt to the cumulative
+ledger. Missing evidence remains a canonical blocker; shadow comparison cannot
+waive or manufacture it.
 
 ## Step 4c: Merge Policy Check
 
@@ -1384,6 +1437,12 @@ Only after that receipt exists, process the separately sealed stale-sweep artifa
 ```
 
 Before every guarded execute call, refresh the exact inventory input and atomically rewrite the bound node-status proof. The stale plan contains actions only when the fixed state directory supplies fresh trusted inactive-lease proof; missing/untrusted proof produces blocked dispositions and no actions. `next-cleanup-step` is proposal/eligibility only. For every proposed action or actionless missing observation, `execute-cleanup-step` is the sole guarded authorization-and-execution boundary. Never execute returned cleanup argv separately. Persist each plan's registry-issued outcomes only in its own gap-free outcomes array and `record-cleanup` receipt; never combine, reorder, or cross-use the two plan authorities.
+
+For either independently sealed reconciliation plan, use the same empty-plan
+fast path as Step 3j: if the plan contains zero steps/actions, skip
+`next-cleanup-step` and `execute-cleanup-step`, write its distinct empty outcomes
+array, and call `record-cleanup` directly. Process current-run before stale-sweep
+even when one or both plans are empty.
 
 Reconciliation covers registered resources missed by an interrupted chunk and eligible stale orphans with complete labels plus fresh inactive-lease proof. Retain run-shared resources while any dependent is incomplete. Never broad-prune Docker, infer ownership by name, remove in-use networks/volumes, or report blocked/uninspectable resources clean. Capture Docker before/after inventories and every `removed|missing|retained|blocked|unmanaged` disposition before constructing the receipt.
 
@@ -1617,7 +1676,7 @@ Present this report:
 Base may be any existing ref from `manifest.baseBranch`; `main` is only the absent-field default.
 
 ## Chunks Executed
-| Chunk | Status | dm-review-loop Result | Notes |
+| Chunk | Status | Evaluation Gate Result | Notes |
 |-------|--------|----------------------|-------|
 | chunk-id | clean/needs-attention | N iterations, M findings | |
 
@@ -1723,7 +1782,7 @@ Before reporting any pipeline-blocking failure, run the Step 5b repository clean
 
 - Never force-push
 - Never modify main directly
-- Never skip dm-review-loop -- this is the most commonly skipped step and the most important
+- Never skip the risk-tiered evaluation gate or final full dm-review
 - Always clean up worktrees, even on failure
 - Always run Step 5b artifact cleanup, even on failure (Tier 1 always, Tier 2 only on success)
 - Always run the repository cleanup phase, even after review failure or an explicit gate
