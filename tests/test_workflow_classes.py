@@ -333,14 +333,20 @@ class WorkflowClassTests(unittest.TestCase):
             },
         )
         self.assertEqual(anchor.get("non_executable_classes"), ["investigation"])
-        self.assertEqual(set(anchor["classes"]), {"hotfix", "security", "migration"})
+        executable = {"chore", "bug", "feature", "hotfix", "security", "migration"}
+        self.assertEqual(set(anchor["classes"]), executable)
         self.assertEqual(set(anchor["promotion"]), {"investigation"})
         expected = {
-            "hotfix": {"build", "focused_validation", "risk_gate", "review"},
+            "chore": {"verification_contract", "build", "deterministic_validation", "review"},
+            "bug": {"verification_contract", "build_fix", "regression_validation", "review"},
+            "feature": {"verification_contract", "build", "validation", "review",
+                        "requirements_evidence"},
+            "hotfix": {"verification_contract", "build", "focused_validation", "risk_gate", "review"},
             "security": {"threat_risk_evidence", "security_build", "validation",
-                         "security_review", "human_gate"},
+                         "security_review", "human_gate", "verification_contract"},
             "migration": {"preflight", "schema_data_change", "compatibility_validation",
-                          "rollback_evidence", "review", "human_gate"},
+                          "rollback_evidence", "review", "human_gate",
+                          "verification_contract"},
         }
         for name, stage_ids in expected.items():
             self.assertEqual(
@@ -352,7 +358,7 @@ class WorkflowClassTests(unittest.TestCase):
         )
         self.assertEqual(
             {stage["id"] for stage in anchor["promotion"]["investigation"]["stages"]},
-            {"promotion_gate", "promoted_build"},
+            {"promotion_gate", "verification_contract", "promoted_build"},
         )
         self.assertTrue(schema_matches(document, class_schema))
         self.assertTrue(schema_matches(policy, policy_schema))
@@ -551,7 +557,10 @@ class WorkflowClassTests(unittest.TestCase):
 
         removed = json.loads(json.dumps(base))
         hotfix = removed["classes"]["hotfix"]["nodes"]
-        hotfix[:] = [node for node in hotfix if node["id"] != "build"]
+        hotfix[:] = [
+            node for node in hotfix
+            if node["id"] not in {"build", "verification_contract"}
+        ]
         next(node for node in hotfix if node["id"] == "focused_validation")[
             "depends_on"
         ] = ["reproduce_impact"]
@@ -599,6 +608,103 @@ class WorkflowClassTests(unittest.TestCase):
                     raised.exception.details["reason_code"],
                     detail_digest("workflow_requirement_unsatisfied"),
                 )
+
+    def test_every_executable_path_has_exactly_one_contract_gate_ancestor(self):
+        templates = WorkflowTemplates()
+
+        def ancestors(node, by_id):
+            result = set()
+            pending = list(node.dependencies)
+            while pending:
+                current = pending.pop()
+                if current in result:
+                    continue
+                result.add(current)
+                pending.extend(by_id[current].dependencies)
+            return result
+
+        executable = set(WorkflowClass) - {WorkflowClass.INVESTIGATION}
+        for kind in executable:
+            nodes = templates.expand(kind, WorkflowContext())
+            by_id = {node.node_id: node for node in nodes}
+            contracts = [node for node in nodes if node.node_id == "verification_contract"]
+            with self.subTest(kind=kind.value):
+                self.assertEqual(len(contracts), 1)
+                self.assertEqual(contracts[0].gate_kind, "evidence")
+                self.assertEqual(
+                    contracts[0].required_evidence,
+                    ("verification_contract_bound",),
+                )
+                self.assertIsNone(contracts[0].executor)
+                for node in nodes:
+                    if node.executor is not None:
+                        self.assertIn("verification_contract", ancestors(node, by_id))
+
+        plain = templates.expand(WorkflowClass.INVESTIGATION, WorkflowContext())
+        self.assertFalse(any(node.executor is not None for node in plain))
+        self.assertNotIn("verification_contract", {node.node_id for node in plain})
+        promoted = templates.expand(
+            WorkflowClass.INVESTIGATION,
+            WorkflowContext(
+                investigation_promotion=True, promotion_approved=True,
+                evidence=("promotion_decision",),
+            ),
+        )
+        by_id = {node.node_id: node for node in promoted}
+        build = by_id["promoted_build"]
+        self.assertTrue(
+            {"promotion_gate", "verification_contract"}
+            <= ancestors(build, by_id)
+        )
+
+    def test_contract_gate_negative_graph_matrix_fails_closed(self):
+        source = KERNEL_REFERENCES / "workflow-classes.json"
+        base = json.loads(source.read_text(encoding="utf-8"))
+        mutations = []
+
+        removed = json.loads(json.dumps(base))
+        nodes = removed["classes"]["chore"]["nodes"]
+        nodes[:] = [node for node in nodes if node["id"] != "verification_contract"]
+        next(node for node in nodes if node["id"] == "build")["depends_on"] = ["assess"]
+        mutations.append(("removed", removed))
+
+        post_build = json.loads(json.dumps(base))
+        nodes = post_build["classes"]["bug"]["nodes"]
+        contract = next(node for node in nodes if node["id"] == "verification_contract")
+        build = next(node for node in nodes if node["id"] == "build_fix")
+        build["depends_on"] = ["reproduce"]
+        contract["depends_on"] = ["build_fix"]
+        nodes.remove(contract)
+        nodes.insert(nodes.index(build) + 1, contract)
+        next(node for node in nodes if node["id"] == "regression_validation")[
+            "depends_on"
+        ] = ["verification_contract"]
+        mutations.append(("post_build", post_build))
+
+        wrong_kind = json.loads(json.dumps(base))
+        next(node for node in wrong_kind["classes"]["feature"]["nodes"]
+             if node["id"] == "verification_contract")["gate_kind"] = "risk"
+        mutations.append(("wrong_kind", wrong_kind))
+
+        empty = json.loads(json.dumps(base))
+        next(node for node in empty["classes"]["security"]["nodes"]
+             if node["id"] == "verification_contract")["required_evidence"] = []
+        mutations.append(("empty_evidence", empty))
+
+        promoted = json.loads(json.dumps(base))
+        nodes = promoted["promotion"]["investigation"]["nodes"]
+        nodes[:] = [node for node in nodes if node["id"] != "verification_contract"]
+        next(node for node in nodes if node["id"] == "promoted_build")[
+            "depends_on"
+        ] = ["promotion_gate"]
+        mutations.append(("missing_promoted_gate", promoted))
+
+        for name, payload in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "classes.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError):
+                    WorkflowTemplates(path)
 
     def test_trusted_safety_anchor_rejects_unanchored_executable_work(self):
         source = KERNEL_REFERENCES / "workflow-classes.json"

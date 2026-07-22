@@ -9,6 +9,7 @@ refactor of one adapter cannot silently break the other.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -45,6 +46,10 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "fallback", "cleanup_policy", "cleanup_disposition", "resource_kind",
     "resource_name", "topology", "topology_node", "topology_edge",
     "workflow_class_defaulted",
+    "contract_id", "schema_version", "revision", "contract_digest",
+    "contract_ref", "previous_contract_digest", "reason_code",
+    "human_approval_evidence_ref", "verification_contract_bound",
+    "verification_contract_provenance",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -66,9 +71,35 @@ RECEIPT_FIELD_ALIASES = {
     # set (execution-orchestrator.md Step 1c): per-chunk-worktree or
     # sequential-on-branch.
     "isolationStrategy": "isolation_strategy",
+    "contractId": "contract_id",
+    "schemaVersion": "schema_version",
+    "contractRevision": "revision",
+    "contractDigest": "contract_digest",
+    "claimedContractDigest": "contract_digest",
+    "contractRef": "contract_ref",
+    "previousContractDigest": "previous_contract_digest",
+    "reasonCode": "reason_code",
+    "humanApprovalEvidenceRef": "human_approval_evidence_ref",
 }
 
 _MISSING = object()
+_CONTRACT_STAGES = frozenset({
+    "verification_contract_bound", "verification_contract_revised",
+})
+_CONTRACT_FIELDS = frozenset({
+    "contract_id", "schema_version", "revision", "contract_digest",
+    "contract_ref", "previous_contract_digest", "reason_code",
+    "human_approval_evidence_ref",
+})
+_RECEIPT_ENVELOPE_FIELDS = COMMON_RECEIPT_FIELDS | frozenset({
+    "run_id", "sequence", "occurred_at", "node_id", "authoritative_receipt",
+})
+_CONTRACT_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_CONTRACT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+_CONTRACT_REASON = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+_CREDENTIAL_LIKE = re.compile(
+    r"(?i)^(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)",
+)
 
 
 def required_text(value: object, field: str) -> str:
@@ -358,7 +389,80 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
         payload[output_key] = normalized["value"]
     payload["authoritative_receipt"] = reference
     payload["evidence"] = [reference]
+    if receipt.get("stage") == "verification_contract_bound":
+        payload["evidence"].append("verification_contract_bound")
+    elif receipt.get("stage") == "verification_contract_revised":
+        payload["evidence"].extend((
+            "verification_contract_bound", "verification_contract_revised",
+        ))
     return payload
+
+
+def _contract_reference(value: object, field: str, *, nullable: bool = False):
+    if value is None and nullable:
+        return None
+    try:
+        normalized = safe_reference(value)
+        if _CREDENTIAL_LIKE.match(normalized):
+            raise ValueError
+        return normalized
+    except ValueError:
+        raise ValueError("invalid verification contract receipt") from None
+
+
+def _validate_contract_receipt(receipt: dict, current: object):
+    if set(receipt) - _RECEIPT_ENVELOPE_FIELDS:
+        raise ValueError("invalid verification contract receipt")
+    if not _CONTRACT_FIELDS <= set(receipt):
+        raise ValueError("invalid verification contract receipt")
+    if receipt["schema_version"] != 1 or type(receipt["schema_version"]) is not int:
+        raise ValueError("invalid verification contract receipt")
+    contract_id = required_text(receipt["contract_id"], "contract id")
+    revision = receipt["revision"]
+    digest = receipt["contract_digest"]
+    previous = receipt["previous_contract_digest"]
+    if (
+        _CONTRACT_ID.fullmatch(contract_id) is None
+        or type(revision) is not int or revision < 1
+        or type(digest) is not str or _CONTRACT_DIGEST.fullmatch(digest) is None
+        or previous is not None and (
+            type(previous) is not str
+            or _CONTRACT_DIGEST.fullmatch(previous) is None
+        )
+    ):
+        raise ValueError("invalid verification contract receipt")
+    contract_ref = _contract_reference(receipt["contract_ref"], "contract ref")
+    expected_ref = (
+        "verification-contracts/sha256-"
+        + digest.removeprefix("sha256:") + ".json"
+    )
+    if contract_ref != expected_ref or any(
+        field in receipt
+        for field in (
+            "verification_contract_bound", "verification_contract_provenance",
+        )
+    ):
+        raise ValueError("invalid verification contract receipt")
+    reason = required_text(receipt["reason_code"], "contract reason code")
+    if _CONTRACT_REASON.fullmatch(reason) is None:
+        raise ValueError("invalid verification contract receipt")
+    _contract_reference(
+        receipt["human_approval_evidence_ref"], "contract approval",
+        nullable=True,
+    )
+    stage = receipt["stage"]
+    if stage == "verification_contract_bound":
+        if current is not None or revision != 1 or previous is not None:
+            raise ValueError("invalid verification contract continuity")
+    elif (
+        current is None
+        or contract_id != current[0]
+        or receipt["schema_version"] != current[1]
+        or revision != current[2] + 1
+        or previous != current[3]
+    ):
+        raise ValueError("invalid verification contract continuity")
+    return contract_id, receipt["schema_version"], revision, digest
 
 
 def translate_receipts(
@@ -371,16 +475,27 @@ def translate_receipts(
         values = tuple(receipts)
     except Exception:
         raise ValueError("invalid receipts") from None
+    normalized_values = []
+    for receipt in values:
+        if type(receipt) is not dict:
+            raise ValueError("receipt must be an object")
+        normalized_values.append(_normalized_receipt_fields(receipt))
+    has_contract_binding = any(
+        receipt.get("stage") in _CONTRACT_STAGES
+        for receipt in normalized_values
+    )
+    if not has_contract_binding and any(
+        _CONTRACT_FIELDS & set(receipt) for receipt in normalized_values
+    ):
+        raise ValueError("mixed legacy and verification contract receipts")
     events = []
     run_identity = None
     workflow_class = None
     execution_mode = None
     workflow_class_defaulted = None
     isolation_strategy = None
-    for position, receipt in enumerate(values):
-        if type(receipt) is not dict:
-            raise ValueError("receipt must be an object")
-        receipt = _normalized_receipt_fields(receipt)
+    current_contract = None
+    for position, receipt in enumerate(normalized_values):
         run_id = required_text(receipt.get("run_id"), "run id")
         sequence = receipt.get("sequence")
         if type(sequence) is not int or sequence != position:
@@ -444,6 +559,20 @@ def translate_receipts(
         if node_id is not None:
             node_id = required_text(node_id, "node id")
         reference = safe_reference(receipt.get("authoritative_receipt"))
+        if stage in _CONTRACT_STAGES:
+            current_contract = _validate_contract_receipt(
+                receipt, current_contract,
+            )
+        elif has_contract_binding:
+            claimed = receipt.get("contract_digest", _MISSING)
+            if current_contract is None:
+                if claimed is not _MISSING:
+                    raise ValueError("verification contract not yet bound")
+            elif (
+                type(claimed) is not str
+                or claimed != current_contract[3]
+            ):
+                raise ValueError("verification contract digest mismatch")
         normalized_receipt = dict(receipt)
         normalized_receipt["workflow_class"] = current_class
         normalized_receipt["workflow_class_defaulted"] = current_defaulted
@@ -452,6 +581,13 @@ def translate_receipts(
             normalized_receipt.pop("isolation_strategy", None)
         else:
             normalized_receipt["isolation_strategy"] = current_isolation
+        normalized_receipt["verification_contract_bound"] = (
+            current_contract is not None
+        )
+        normalized_receipt["verification_contract_provenance"] = (
+            "authoritative_receipt" if current_contract is not None else
+            "pre_binding" if has_contract_binding else "legacy_default_absent"
+        )
         events.append(WorkflowEvent(
             1, sequence, run_id, node_id, "evidence.recorded", occurred_at,
             _safe_receipt_payload(normalized_receipt, reference),

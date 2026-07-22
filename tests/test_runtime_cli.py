@@ -121,6 +121,93 @@ class RuntimeCliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_decide_validation_retry_matches_canonical_policy_without_writes(self):
+        from workflow_kernel.model import AttemptLedger, FailureReason
+        from workflow_kernel.policies import RetryPolicy
+
+        cases = (
+            (
+                "deterministic_validation_failure",
+                {"counts": {}, "signatures": {}}, None,
+                "retry_allowed",
+            ),
+            (
+                "deterministic_validation_failure",
+                {"counts": {"deterministic_validation_failure": 1},
+                 "signatures": {}}, None,
+                "retry_budget_exhausted",
+            ),
+            (
+                "reviewer_finding",
+                {"counts": {"reviewer_finding": 2},
+                 "signatures": {"reviewer_finding": ["same", "same"]}},
+                "same", "identical_failure_convergence",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index, (reason, ledger, signature, expected) in enumerate(cases):
+                path = root / f"ledger-{index}.json"
+                path.write_text(json.dumps(ledger))
+                before = path.read_bytes()
+                arguments = [
+                    "decide-validation-retry", "--reason", reason,
+                    "--attempt-ledger", path,
+                ]
+                if signature is not None:
+                    arguments.extend(("--signature", signature))
+                result = self.run_cli(*arguments)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                document = json.loads(result.stdout)
+                self.assertEqual(set(document), {
+                    "allowed", "reason_code", "budget", "attempt_count",
+                    "prior_signature",
+                })
+                self.assertEqual(document["reason_code"], expected)
+                direct = RetryPolicy().decide(
+                    FailureReason(reason),
+                    AttemptLedger(ledger["counts"], ledger["signatures"]),
+                    signature,
+                )
+                self.assertEqual(document, {
+                    "allowed": direct.allowed,
+                    "reason_code": direct.reason_code,
+                    "budget": direct.budget,
+                    "attempt_count": direct.attempt_count,
+                    "prior_signature": direct.prior_signature,
+                })
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_decide_validation_retry_rejects_hostile_ledgers_without_echo_or_writes(self):
+        secret = "sk-secret-ledger-value"
+        cases = (
+            {"counts": {}, "signatures": {}, "unknown": secret},
+            {"counts": {"unknown_reason": 1}, "signatures": {}},
+            {"counts": {"cleanup": True}, "signatures": {}},
+            {"counts": {"cleanup": 0}, "signatures": {"cleanup": [secret]}},
+            {"counts": {"cleanup": 1}, "signatures": {"cleanup": [secret]}},
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index, ledger in enumerate(cases):
+                path = root / f"hostile-{index}.json"
+                path.write_text(json.dumps(ledger))
+                before = path.read_bytes()
+                result = self.run_cli(
+                    "decide-validation-retry", "--reason", "cleanup",
+                    "--attempt-ledger", path, "--signature", secret,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn(secret, result.stdout + result.stderr)
+                self.assertEqual(path.read_bytes(), before)
+
+            reason = self.run_cli(
+                "decide-validation-retry", "--reason", secret,
+                "--attempt-ledger", root / "hostile-0.json",
+            )
+            self.assertNotEqual(reason.returncode, 0)
+            self.assertNotIn(secret, reason.stdout + reason.stderr)
+
     def append_contract_binding(self, run_dir, contract, stage):
         from workflow_kernel.behavioral_contract import contract_digest
 

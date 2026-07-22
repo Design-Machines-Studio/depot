@@ -4,7 +4,8 @@
     "chore": {
       "nodes": [
         {"id": "assess", "depends_on": [], "gate_kind": null, "required_evidence": [], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "build", "depends_on": ["assess"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
+        {"id": "verification_contract", "depends_on": ["assess"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "build", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
         {"id": "deterministic_validation", "depends_on": ["build"], "gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "review", "depends_on": ["deterministic_validation"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "cleanup", "depends_on": ["review"], "gate_kind": "cleanup", "required_evidence": [], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false}
@@ -13,7 +14,8 @@
     "bug": {
       "nodes": [
         {"id": "reproduce", "depends_on": [], "gate_kind": null, "required_evidence": [], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "build_fix", "depends_on": ["reproduce"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
+        {"id": "verification_contract", "depends_on": ["reproduce"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "build_fix", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
         {"id": "regression_validation", "depends_on": ["build_fix"], "gate_kind": "deterministic_validation", "required_evidence": ["regression_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "review", "depends_on": ["regression_validation"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "cleanup", "depends_on": ["review"], "gate_kind": "cleanup", "required_evidence": [], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false}
@@ -23,7 +25,8 @@
       "nodes": [
         {"id": "assess", "depends_on": [], "gate_kind": null, "required_evidence": [], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "research_plan", "depends_on": ["assess"], "gate_kind": "evidence", "required_evidence": ["research_plan"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "build", "depends_on": ["research_plan"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
+        {"id": "verification_contract", "depends_on": ["research_plan"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "build", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
         {"id": "validation", "depends_on": ["build"], "gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "review", "depends_on": ["validation"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "requirements_evidence", "depends_on": ["review"], "gate_kind": "evidence", "required_evidence": ["requirements_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
@@ -33,7 +36,8 @@
     "hotfix": {
       "nodes": [
         {"id": "reproduce_impact", "depends_on": [], "gate_kind": "evidence", "required_evidence": ["impact_assessment"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "build", "depends_on": ["reproduce_impact"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
+        {"id": "verification_contract", "depends_on": ["reproduce_impact"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "build", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
         {"id": "focused_validation", "depends_on": ["build"], "gate_kind": "deterministic_validation", "required_evidence": ["focused_validation_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "risk_gate", "depends_on": ["focused_validation"], "gate_kind": "risk", "required_evidence": ["risk_assessment"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "review", "depends_on": ["risk_gate"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
@@ -43,7 +47,8 @@
     "security": {
       "nodes": [
         {"id": "threat_risk_evidence", "depends_on": [], "gate_kind": "evidence", "required_evidence": ["threat_model", "risk_assessment"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "security_build", "depends_on": ["threat_risk_evidence"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "verification_contract", "depends_on": ["threat_risk_evidence"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "security_build", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "validation", "depends_on": ["security_build"], "gate_kind": "deterministic_validation", "required_evidence": ["validation_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "security_review", "depends_on": ["validation"], "gate_kind": "evidence", "required_evidence": ["security_review"], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "human_gate", "depends_on": ["security_review"], "gate_kind": "human_approval", "required_evidence": ["risk_assessment", "security_review"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
@@ -61,7 +66,8 @@
     "migration": {
       "nodes": [
         {"id": "preflight", "depends_on": [], "gate_kind": "evidence", "required_evidence": ["migration_preflight"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "schema_data_change", "depends_on": ["preflight"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
+        {"id": "verification_contract", "depends_on": ["preflight"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "schema_data_change", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true},
         {"id": "compatibility_validation", "depends_on": ["schema_data_change"], "gate_kind": "deterministic_validation", "required_evidence": ["compatibility_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "rollback_evidence", "depends_on": ["compatibility_validation"], "gate_kind": "evidence", "required_evidence": ["rollback_evidence"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
         {"id": "review", "depends_on": ["rollback_evidence"], "gate_kind": "evidence", "required_evidence": ["review_evidence"], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": false},
@@ -74,7 +80,8 @@
     "investigation": {
       "nodes": [
         {"id": "promotion_gate", "depends_on": ["evidence_gathering"], "gate_kind": "investigation_promotion", "required_evidence": ["promotion_decision"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
-        {"id": "promoted_build", "depends_on": ["promotion_gate"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true}
+        {"id": "verification_contract", "depends_on": ["promotion_gate"], "gate_kind": "evidence", "required_evidence": ["verification_contract_bound"], "executor": null, "required_capability": null, "required_dispatch_capability": null, "executor_overridable": false},
+        {"id": "promoted_build", "depends_on": ["verification_contract"], "gate_kind": null, "required_evidence": [], "executor": "codex", "required_capability": "codex_execution", "required_dispatch_capability": null, "executor_overridable": true}
       ]
     }
   }
