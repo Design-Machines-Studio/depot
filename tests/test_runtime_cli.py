@@ -923,6 +923,36 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertTrue(plan["managed"])
             self.assertIn("com.designmachines.depot.run-id", plan["labels"])
 
+    def test_release_matrix_executes_all_new_commands_through_real_launcher(self):
+        from tests.test_release_validator import VALIDATOR
+        launcher = KERNEL_REFERENCES / "workflow-kernel-launcher.sh"
+        new_commands = {
+            "verification-plan", "verification-run", "verification-result",
+            "evidence-match", "artifact-classify", "staging-allowlist",
+            "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "ci-evidence-normalize", "closeout-audit", "improvement-index",
+            "improvement-finalize", "improvement-render",
+        }
+        invoked = []
+        module_run = VALIDATOR.run
+
+        def through_launcher(command):
+            self.assertEqual(command[:3], [sys.executable, "-m", "workflow_kernel"])
+            if command[3] not in new_commands:
+                return module_run(command)
+            invoked.append(command[3])
+            return subprocess.run(
+                [str(launcher), *command[3:]], cwd=VALIDATOR.ROOT,
+                env=VALIDATOR.deterministic_env(), text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+            )
+
+        context = {}
+        with mock.patch.object(VALIDATOR, "run", side_effect=through_launcher):
+            VALIDATOR.check_cli(context, new_cli_only=True)
+        self.assertTrue(new_commands <= set(invoked))
+        self.assertTrue(all(context["cli_commands"][name] == 0 for name in new_commands))
+
     def test_runtime_resolver_ignores_cwd_and_rejects_symlink_escape(self):
         from workflow_kernel.cli import resolve_workflow_kernel_runtime
         with tempfile.TemporaryDirectory() as directory:

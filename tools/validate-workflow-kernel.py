@@ -115,6 +115,19 @@ BEHAVIORAL_CLI_CASES = {
     "improvement-render": ("--report", "<missing>", "--output", "<output>"),
 }
 SUCCESSFUL_CLI_COMMANDS = frozenset(BEHAVIORAL_CLI_CASES)
+BEHAVIORAL_CLI_EXITS = {
+    command: (0 if command in {
+        "init", "validate", "append", "replay", "status", "plan-cleanup",
+    } else 2)
+    for command in BEHAVIORAL_CLI_CASES
+}
+DETERMINISTIC_CLI_COMMANDS = frozenset({
+    "verification-plan", "verification-result", "evidence-match",
+    "artifact-classify", "staging-allowlist", "browser-scenario-validate",
+    "browser-bundle-record", "review-record", "ci-evidence-normalize",
+    "closeout-audit", "improvement-index", "improvement-finalize",
+    "improvement-render",
+})
 
 sys.path.insert(0, str(REFERENCES))
 sys.path.insert(0, str(ROOT))
@@ -391,7 +404,7 @@ def check_promotion(context):
     ]
 
 
-def check_cli(context):
+def check_cli(context, *, new_cli_only=False):
     from workflow_kernel import cli
     expected = {
         "init", "validate", "append", "replay", "status",
@@ -439,27 +452,32 @@ def check_cli(context):
                 for item in template
             ]
             completed = run([sys.executable, "-m", "workflow_kernel", command, *argv])
-            if command in {
-                "init", "validate", "append", "replay", "status",
-                "plan-cleanup",
-            }:
-                require(completed.returncode == 0, f"{command} behavioral execution failed")
-            else:
-                safe_outcomes = {
-                    cli.EXIT_INVALID, cli.EXIT_UNSAFE_PLAN,
-                    cli.EXIT_RUNTIME_UNAVAILABLE, cli.EXIT_PARITY_GAP,
-                    cli.EXIT_CONFLICT,
-                }
-                if command == "plan-reconcile":
-                    safe_outcomes.add(0)
-                require(completed.returncode in safe_outcomes,
-                        f"{command} did not produce a defined outcome")
+            require(
+                completed.returncode == BEHAVIORAL_CLI_EXITS[command],
+                f"{command} exit contract changed",
+            )
             outcomes[command] = completed.returncode
 
         def successful(command, *arguments):
-            completed = run([sys.executable, "-m", "workflow_kernel", command, *map(str, arguments)])
+            argv = [*map(str, arguments)]
+            completed = run([sys.executable, "-m", "workflow_kernel", command, *argv])
             require(completed.returncode == 0, f"{command} valid fixture execution failed")
             outcomes[command] = completed.returncode
+            if command in DETERMINISTIC_CLI_COMMANDS:
+                output_index = argv.index("--output") + 1
+                first_output = Path(argv[output_index])
+                repeated = root / f"{command}-repeated-output"
+                argv[output_index] = str(repeated)
+                second = run([sys.executable, "-m", "workflow_kernel", command, *argv])
+                require(second.returncode == 0, f"{command} repeat execution failed")
+                require(first_output.read_bytes() == repeated.read_bytes(),
+                        f"{command} output is nondeterministic")
+
+        def expect_exit(command, expected_exit, *arguments):
+            completed = run([sys.executable, "-m", "workflow_kernel", command,
+                             *map(str, arguments)])
+            require(completed.returncode == expected_exit,
+                    f"{command} negative exit contract changed")
 
         def write_fixture(name, value):
             path = root / name
@@ -483,6 +501,30 @@ def check_cli(context):
                    "--profile", verification_profile, "--repository", repository_state,
                    "--prerequisites", prerequisites, "--lane-id", "doctor",
                    "--repo-root", root, "--output", verification_result)
+        stale_repository = dict(repository()); stale_repository["commit_sha"] = "d" * 40
+        expect_exit("verification-run", cli.EXIT_UNSAFE_PLAN,
+                    "--plan", verification_plan, "--profile", verification_profile,
+                    "--repository", write_fixture("stale-repository.json", stale_repository),
+                    "--prerequisites", prerequisites, "--lane-id", "doctor",
+                    "--repo-root", root, "--output", root / "stale-result.json")
+
+        missing_tool_profile = profile()
+        missing_tool_profile["lanes"][0]["argv"] = ["workflow-kernel-missing-tool"]
+        missing_tool_profile["lanes"][0]["prerequisites"] = [{
+            "kind": "tool", "id": "workflow-kernel-missing-tool", "required": True,
+        }]
+        missing_profile = write_fixture("missing-tool-profile.json", missing_tool_profile)
+        missing_plan = root / "missing-tool-plan.json"
+        successful("verification-plan", "--profile", missing_profile,
+                   "--repository", repository_state, "--request", plan_request,
+                   "--output", missing_plan)
+        expect_exit("verification-run", cli.EXIT_RUNTIME_UNAVAILABLE,
+                    "--plan", missing_plan, "--profile", missing_profile,
+                    "--repository", repository_state,
+                    "--prerequisites", write_fixture("missing-tool-prerequisites.json", {
+                        "tool:workflow-kernel-missing-tool": "available",
+                    }), "--lane-id", "doctor", "--repo-root", root,
+                    "--output", root / "missing-tool-result.json")
         successful("verification-result", "--result", verification_result,
                    "--output", root / "validated-verification-result.json")
 
@@ -497,6 +539,16 @@ def check_cli(context):
         successful("artifact-classify", "--repo-root", root, "--path", safe_artifact.name,
                    "--lifecycle", "durable", "--provenance", "generated",
                    "--owner", "validator", "--output", classification)
+        secret_artifact = root / "secret-artifact.txt"
+        secret_artifact.write_text("Authorization: Bearer opaque-value", encoding="utf-8")
+        expect_exit("artifact-classify", cli.EXIT_UNSAFE_PLAN,
+                    "--repo-root", root, "--path", secret_artifact.name,
+                    "--lifecycle", "durable", "--provenance", "generated",
+                    "--owner", "validator", "--output", root / "blocked-artifact.json")
+        expect_exit("artifact-classify", cli.EXIT_UNSAFE_PLAN,
+                    "--repo-root", root, "--path", "../escape.txt",
+                    "--lifecycle", "durable", "--provenance", "generated",
+                    "--owner", "validator", "--output", root / "unsafe-path.json")
         classified = json.loads(classification.read_text(encoding="utf-8"))
         intended = write_fixture("intended-changes.json", [{
             "operation": "modify", "path": safe_artifact.name,
@@ -556,6 +608,9 @@ def check_cli(context):
                    "--output", improvement_report)
         successful("improvement-render", "--report", improvement_report,
                    "--output", root / "upstream-improvements.md")
+        if new_cli_only:
+            context["cli_commands"] = dict(outcomes)
+            return
 
         def initialize(run_id):
             directory = root / ".workflow-kernel" / "runs" / run_id

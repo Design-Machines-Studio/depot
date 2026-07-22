@@ -36,6 +36,25 @@ class ReleaseValidatorTests(unittest.TestCase):
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
+        self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_EXITS), expected)
+        self.assertEqual(
+            VALIDATOR.DETERMINISTIC_CLI_COMMANDS,
+            expected - {
+                "init", "validate", "append", "replay", "status",
+                "decide-validation-retry", "bind-prediction",
+                "bind-verification-contract", "revise-verification-contract",
+                "observe-pipeline", "observe-review", "compare", "metrics",
+                "plan-create", "plan-compose", "record-create", "plan-cleanup",
+                "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+                "plan-reconcile", "verification-run",
+            },
+        )
+        self.assertEqual(
+            {value for command, value in VALIDATOR.BEHAVIORAL_CLI_EXITS.items()
+             if command not in {"init", "validate", "append", "replay", "status",
+                                "plan-cleanup"}},
+            {2},
+        )
         self.assertTrue(all("--help" not in case for case in VALIDATOR.BEHAVIORAL_CLI_CASES.values()))
 
     def test_schema_inventory_is_exactly_the_twenty_two_released_documents(self):

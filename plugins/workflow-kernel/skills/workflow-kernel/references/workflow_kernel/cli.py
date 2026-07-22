@@ -30,6 +30,7 @@ from .state import RunLease, StateStore, _prepare_replay_state
 from .transitions import TransitionEngine
 from .artifacts import build_staging_allowlist, classify_artifact
 from .browser_bundle import BrowserEvidenceBundle, bind_browser_evidence_bundle
+from .browser_evidence import BrowserAttempt, BrowserLifecycleEvidence, BrowserRecoveryReceipt
 from .browser_scenario import BrowserScenario
 from .ci_evidence import build_ci_evidence
 from .closeout import evaluate_closeout
@@ -1925,6 +1926,8 @@ def command_verification_run(args):
         prerequisite_states=_load_json(args.prerequisites),
     )
     _write_json(args.output, result)
+    if result["parser_reason"] == "tool_unavailable":
+        return EXIT_RUNTIME_UNAVAILABLE
     return EXIT_UNSAFE_PLAN if result["status"] == "blocked" else 0
 
 
@@ -1941,13 +1944,16 @@ def command_evidence_match(args):
 
 
 def command_artifact_classify(args):
+    candidate = Path(args.path)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return EXIT_UNSAFE_PLAN
     metadata = _load_json(args.metadata) if args.metadata else None
     result = classify_artifact(
         args.repo_root, args.path, lifecycle=args.lifecycle,
         provenance=args.provenance, owner=args.owner, metadata=metadata,
     )
     _write_json(args.output, result)
-    return 0
+    return EXIT_UNSAFE_PLAN if result["classification"] == "blocked_sensitive" else 0
 
 
 def command_staging_allowlist(args):
@@ -1964,14 +1970,51 @@ def command_browser_scenario_validate(args):
     return 0
 
 
+def _browser_recovery_receipt(value):
+    if type(value) is not dict:
+        raise ValueError("invalid browser recovery receipt")
+    value = dict(value)
+    attempts = value.get("attempts")
+    lifecycle = value.get("lifecycle")
+    if type(attempts) is not list or type(lifecycle) is not list:
+        raise ValueError("invalid browser recovery receipt")
+    parsed_attempts = []
+    for item in attempts:
+        if type(item) is not dict:
+            raise ValueError("invalid browser attempt")
+        item = dict(item)
+        if type(item.get("configured_engines")) is not list:
+            raise ValueError("invalid browser attempt")
+        item["configured_engines"] = tuple(item["configured_engines"])
+        parsed_attempts.append(BrowserAttempt(**item))
+    parsed_lifecycle = []
+    for item in lifecycle:
+        if type(item) is not dict:
+            raise ValueError("invalid browser lifecycle evidence")
+        item = dict(item)
+        if type(item.get("readiness_checks")) is list:
+            item["readiness_checks"] = tuple(item["readiness_checks"])
+        parsed_lifecycle.append(BrowserLifecycleEvidence(**item))
+    value["attempts"] = tuple(parsed_attempts)
+    value["lifecycle"] = tuple(parsed_lifecycle)
+    if type(value.get("missing_case_ids")) is not list or type(value.get("configured_engines")) is not list:
+        raise ValueError("invalid browser recovery receipt")
+    value["missing_case_ids"] = tuple(value["missing_case_ids"])
+    value["configured_engines"] = tuple(value["configured_engines"])
+    return BrowserRecoveryReceipt(**value)
+
+
 def command_browser_bundle_record(args):
     scenario = BrowserScenario.from_dict(_load_json(args.scenario))
     bundle = BrowserEvidenceBundle.from_dict(_load_json(args.bundle))
-    recovery = _load_json(args.recovery_receipt) if args.recovery_receipt else None
-    sealed = bind_browser_evidence_bundle(
+    recovery = (
+        _browser_recovery_receipt(_load_json(args.recovery_receipt))
+        if args.recovery_receipt else None
+    )
+    bind_browser_evidence_bundle(
         scenario, bundle, recovery_receipt=recovery,
     )
-    _write_json(args.output, sealed.to_dict())
+    _write_json(args.output, bundle.to_dict())
     return 0
 
 
