@@ -8,6 +8,14 @@ argument-hint: "[optional: specific todo ID, priority like p1, or --allow-defer-
 
 Fix pending review findings tracked in `todos/` from a previous `/dm-review` run.
 
+## Explicit Mutation Authority
+
+Invoking this command is explicit authority to modify the selected finding's
+product files and its tracking projection. Apply only the approved structured
+finding records. This command owns simplification edits and todo/issue updates;
+plain `/dm-review` does not. Git commits and remote provider mutations still
+require their normal separate approval.
+
 ## Zero-Deferral Policy (default)
 
 This command fixes ALL pending findings -- P1, P2, AND P3. Do not mark the run complete while pending P3s remain.

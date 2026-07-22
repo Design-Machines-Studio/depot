@@ -79,6 +79,23 @@ Execute only its returned label-instrumented creation argv/override exactly once
 
 Write the exact declared dependent node IDs to the dependency JSON file, using `[]` when there are none. Register partial Compose resources. Existing project containers and unsupported/ambiguous instrumentation are unmanaged/retained, not guessed owned. No returned cleanup argv is ever executed separately.
 
+## Mechanical Read-only Boundary
+
+Plain review is inspection and reporting only. Its sole writable repository
+surface is the declared evidence root, `.claude/ux-review/` by default. Before
+Phase 1, capture the repository boundary with `capture_review_boundary`; after
+Phase 8, capture it again and require `compare_review_boundary(...).read_only`
+to be true. The check covers product/config files, Git index, HEAD, refs,
+todos/tracking files, and provider mutation receipts while excluding the owned
+evidence root.
+
+Plain review MUST NOT edit product, source, configuration, or tracking files;
+stage or commit changes; create/delete refs or stashes; reset/rewrite history;
+or mutate pull requests, issues, comments, labels, drafts, memory, or dashboard
+providers. A violation makes the review terminal result `REVIEW INCOMPLETE`.
+Only `/dm-review-fix` and `/dm-review-loop`, invoked with explicit mutation
+authority, may apply fixes, simplifications, and tracking changes.
+
 ## Fix Philosophy
 
 All review agents and fix workflows must follow these principles:
@@ -661,57 +678,38 @@ The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE"
 
 ---
 
-### Phase 5.5: Simplification Pass
+### Phase 5.5: Simplification Proposals
 
-After outputting the review report, perform a simplification pass on the changed files. This catches complexity, redundancy, and over-engineering that the code-simplicity-reviewer identified -- and applies fixes automatically rather than just reporting them.
+After outputting the review report, inspect changed files for simplification
+opportunities. Record each opportunity as a structured finding; do not edit the
+review target.
 
 **Execution:**
 
-1. Review each changed file for simplification opportunities: dead code removal, redundant abstractions, overly complex logic, unused imports/variables, unnecessary indirection, functions that can be inlined, and patterns that can be consolidated. Focus on the specific findings from the code-simplicity-reviewer agent, but also look for anything it missed.
-2. Apply simplification edits directly -- this is not a report, it's an active refactoring pass. Make the code simpler, clearer, and shorter while preserving behavior.
-3. After making changes, verify the build still passes:
-   - Go projects: `docker compose exec app templ generate && docker compose exec app go build ./cmd/api`
-   - CSS projects: `npm run build` (or equivalent)
-   - Craft projects: clear caches if needed
-4. If no simplification opportunities exist, note "Simplification pass: clean" and continue.
+1. Identify dead code, redundant abstractions, unnecessary indirection, and
+   consolidation opportunities.
+2. Emit the observed evidence and proposed simplification into an immutable
+   finding record immediately.
+3. Project those records into the report with the normal P1/P2/P3 policy.
+4. If none exist, report `Simplification proposals: none`.
 
-**Commit simplification changes separately** from the reviewed code:
-
-```bash
-git add -- [list only the specific files you modified during simplification]
-git commit -m "refactor: simplify per dm-review pass"
-```
-
-This phase mirrors Claude Code's built-in `/simplify` command. If `/simplify` is available, you can invoke it directly instead of performing the pass manually.
+Applying or committing a proposal belongs to `/dm-review-fix` or
+`/dm-review-loop`, never this phase.
 
 ---
 
-### Phase 6: Issue Tracking (Full mode only)
+### Phase 6: Tracking Proposals (Full mode only)
 
 **Skip this phase in Quick mode.**
 
-After outputting the report, determine tracking method automatically:
-
-**1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for all P1, P2, and P3 findings.
-
-**2. If `todos/` does not exist** -- ask the user:
-
-```
-No todos/ directory found. How should I track these findings?
-1. Create todos/ directory with text file tracking
-2. GitHub Issues
-3. Skip tracking
-```
+After outputting the report, generate deterministic todo-compatible rows with
+`project_todo_rows`. These are an editing view only: do not create, rename, or
+delete todo files and do not mutate an issue tracker.
 
 **Text file tracking:**
 
-Before creating new todo files, clean up stale completed files from previous sessions:
-
-```bash
-rm -- todos/*-done-*.md 2>/dev/null
-```
-
-Create `todos/` directory if it doesn't exist. For each P1, P2, and P3 finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
+For each retained P1, P2, and P3 finding, project a row following the template
+in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
 
 ```
 todos/{id}-pending-{priority}-{slug}.md
@@ -724,44 +722,26 @@ todos/002-pending-p2-missing-csrf-protection.md
 todos/003-pending-p3-heading-hierarchy-polish.md
 ```
 
-After creating all files, summarize what was created:
+Summarize the proposed rows:
 ```
-Created N todo files in todos/:
+Proposed N tracking rows:
 - 001-pending-p1-... (description)
 - 002-pending-p2-... (description)
 - 003-pending-p3-... (description)
 
-Resolve with: /dm-review-fix
+Apply after approval with: /dm-review-fix
 ```
 
 **GitHub Issues:**
 
-For each P1, P2, and P3 finding, create a GitHub Issue using `gh issue create`:
+For GitHub-backed projects, include a proposed issue title, body, and labels in
+the projection. Do not create issues, labels, comments, or draft state during
+plain review.
 
-```bash
-gh issue create --title "[P1] Finding title" \
-  --body "$(cat <<'EOF'
-## Problem
-Description from the review finding.
-
-## Location
-`path/to/file.ext:line`
-
-## Fix
-Remediation steps.
-
-## Reference
-OWASP/WCAG/pattern reference.
-
----
-*From dm-review ([Full] mode, DATE)*
-EOF
-)" --label "review,p1"
-```
-
-Use labels `review` + `p1`/`p2`/`p3` for severity. Create the labels first if they don't exist.
-
-**Airlift checkpoint (`dm-review-findings`):** After the pending todo files are written, fire a tier-1 airlift checkpoint so the `todos/*-pending-*.md` findings survive a usage cap, rate limit, or model switch. This is a guarded resolve-from-cache: it is tier-1 deterministic (pure local file + git work, NO model budget, no agent call, no network) and is skipped silently when airlift is absent (OPTIONAL dependency). On an early-warning trip (e.g. a budget threshold crossed mid-run), do not wait for the next phase boundary -- flush this checkpoint immediately so the pending findings are not lost.
+**Airlift checkpoint (`dm-review-findings`):** After immutable finding records
+and the editing projection are written beneath the evidence root, fire a tier-1
+airlift checkpoint so the evidence survives a usage cap, rate limit, or model
+switch. The checkpoint must not write outside the evidence root.
 
 ```bash
 ENGINE=""
@@ -791,50 +771,34 @@ Official and third-party Claude Code plugins that complement this skill:
 
 ---
 
-### Phase 7: Memory Capture (Full mode only)
+### Phase 7: External Capture Proposals (Full mode only)
 
 **Skip this phase in Quick mode.**
 
-After issue tracking (or if skipped), record the review in ai-memory:
+Do not write ai-memory, Notion, or any other external provider during plain
+review. Instead, include a compact proposed observation in the evidence report:
 
-1. Resolve the memory recorder path via the plugin cache and read its instructions:
-   ```bash
-   RECORDER_PATH=""
-   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-     RECORDER_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-memory-recorder.md 2>/dev/null | head -1)
-     [ -n "$RECORDER_PATH" ] && break
-   done
-   ```
-   Read from `$RECORDER_PATH`.
-2. Use the ai-memory MCP tools to:
-   - Search for the project entity
-   - Add a review summary observation (under 300 characters)
-   - Add P1 architectural observations if any
-3. Call `save` to persist
-
-If ai-memory tools are not available, skip silently.
+1. A review summary under 300 characters.
+2. Any P1 architectural observation.
+3. The intended destination and the approval needed to write it later.
 
 #### Phase 7b: Depot Agent Metrics
 
-After the project-level memory capture, record depot-level metrics. This tracks which agents fire across reviews, feeding back into marketplace analytics.
+Project a depot-level metric row; do not persist it:
 
-1. Search for `DepotMetrics` entity -- create if missing (type: System)
-2. Add ONE batched observation summarizing the agent dispatch:
+1. ONE batched observation summarizing the agent dispatch:
    `[YYYY-MM-DD] Review session: X/Y agents completed, Z skipped (<agent>: <reason>, ...)`
    - Example: `[2026-03-25] Review session: 9/11 agents completed, 1 unavailable (craft-reviewer: no .twig files), browser: human_help_required (dev server unavailable after recovery)`
-3. Search for `DepotPlugin:dm-review` entity -- create if missing (type: PluginMetrics)
-4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
-5. Call `save` to persist
+2. The review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
 
-If ai-memory tools are not available, skip silently. See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
+See `docs/plugin-memory-schema.md` for the projection vocabulary.
 
 #### Phase 7c: Ops Dashboard Write
 
-After ai-memory capture, write a structured row to the Agent Activity Log database in Notion. This surfaces review data in the Ops Dashboard for at-a-glance visibility.
+Project a structured Agent Activity Log row in the evidence report. Do not call
+Notion or update relations during plain review.
 
-1. Look up "Agent Activity Log DB" ID from the `DM Notion Workspace` ai-memory entity
-2. If the ID is not found, skip silently (database not yet created)
-3. Create a page in the Agent Activity Log database using `notion-create-pages`:
+Include:
    - **Entry:** "Review: [project-name] [branch-or-scope]"
    - **Type:** "Code Review"
    - **Status:** Map from merge recommendation -- CLEAN -> "Clean", APPROVE WITH FIXES -> "Needs Attention", BLOCKS MERGE -> "Blocked"
@@ -844,11 +808,9 @@ After ai-memory capture, write a structured row to the Agent Activity Log databa
    - **Agents:** Count of agents dispatched (completed + skipped)
    - **Merge Rec:** The merge recommendation string (CLEAN / APPROVE WITH FIXES / BLOCKS MERGE)
    - **Branch:** The reviewed branch name
-4. Update the created page with `notion-update-page` to set relations:
+And proposed relations:
    - **Project:** Link to the project's Notion page (from `memory/project-notion.md` if available)
    - **Sprint:** Link to the current "In progress" sprint (query Sprints DB)
-5. If any Notion MCP call fails, skip silently -- ai-memory is the primary record
-
 See `${CLAUDE_SKILL_DIR}/../../../project-manager/skills/planner/references/databases.md` for the Agent Activity Log schema.
 
 ---
@@ -857,12 +819,15 @@ See `${CLAUDE_SKILL_DIR}/../../../project-manager/skills/planner/references/data
 
 Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
 
-dm-review creates no worktrees. Its obligations are narrower than pipeline's:
+dm-review creates no worktrees. Plain review observes Git state; it never
+mutates Git metadata:
 
-1. **Prune stale registrations.** `git worktree prune`, then confirm `git worktree list --porcelain` reports no `prunable` entries.
-2. **Delete only branches this review created.** In practice that is the batch-cleanup branch from `references/issue-tracking.md`, and only once decision-table row 1 passes (`git merge-base --is-ancestor <branch> <target>` exits 0). Nothing else.
+1. **Report stale registrations.** Inspect the worktree list and report any
+   `prunable` entries without pruning them.
+2. **Do not create or delete branches.** Plain review has no branch ownership.
 3. **Leave foreign refs alone.** Orphan `.worktrees/pipeline/**` paths and `pipeline/**` branches from an interrupted pipeline run are **not** dm-review's to delete. Report them under "Remaining after cleanup" with a follow-up command and move on. Deleting a ref you did not create is how a review loses someone's work.
-4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
+4. **Assert the boundary.** The before/after mechanical check must pass; list
+   exact residue when it does not.
 5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
 
 dm-review may create Docker resources for a dev server or review harness. Clean only resources registered by this review after validation, consolidation, and browser evidence are authoritative. Atomically write the complete fresh authoritative dependent-node status proof before planning and again before every guarded execute. For node cleanup, invoke exactly:

@@ -187,6 +187,46 @@ class DmReviewAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_review_receipts([invalid_id])
 
+    def test_structured_record_receipts_preserve_bounded_refs_and_lane_gaps(self):
+        finding = {
+            "run_id": "review-records", "sequence": 0, "stage": "finding_record",
+            "status": "recorded", "occurred_at": "2026-07-14T01:00:00Z",
+            "authoritative_receipt": "receipts/finding-record.json",
+            "record_ref": "records/findings/sha256-a.json", "record_digest": "sha256:" + "a" * 64,
+            "source_finding_id": "security.finding-1",
+            "canonical_finding_id": "finding-v1:sha256:" + "b" * 64,
+            "rule_id": "authz.boundary", "category": "authorization",
+            "severity": "P1", "path": "internal/auth.go", "anchor": "HandleAdmin",
+            "source_agents": ["security-auditor"], "requested_provider": "openai",
+            "attempted_provider": "openai", "implemented_by": "codex",
+            "model": "gpt-5.6-sol", "attempt": 1,
+            "build_binding_ref": "bindings/build.json", "browser_bundle_refs": [],
+        }
+        lane = {
+            "run_id": "review-records", "sequence": 1, "stage": "lane_record",
+            "status": "recorded", "occurred_at": "2026-07-14T01:01:00Z",
+            "authoritative_receipt": "receipts/lane-record.json",
+            "record_ref": "records/lanes/sha256-c.json", "record_digest": "sha256:" + "c" * 64,
+            "lane_id": "visual", "state": "degraded", "expected_coverage": ["persona-admin"],
+            "missing_case_ids": ["persona-admin"], "partial_output": True,
+            "output_ref": "raw/visual-partial.md", "coverage_gap_reason": "browser unavailable",
+            "source_agents": ["visual-reviewer"], "requested_provider": "openai",
+            "attempted_provider": None, "implemented_by": None, "model": None, "attempt": 1,
+            "build_binding_ref": "bindings/build.json", "browser_bundle_refs": ["browser/recovery.json"],
+        }
+        events = translate_review_receipts([finding, lane])
+        self.assertEqual(events[0].payload["record_digest"], finding["record_digest"])
+        self.assertEqual(events[1].payload["missing_case_ids"], ("persona-admin",))
+        self.assertTrue(events[1].payload["partial_output"])
+        self.assertIn("browser/recovery.json", events[1].payload["evidence"])
+        conflict = copy.deepcopy(lane); conflict["record_digest"] = "sha256:" + "d" * 64
+        conflict["sequence"] = 2
+        with self.assertRaises(ValueError):
+            translate_review_receipts([finding, lane, conflict])
+        unsafe = copy.deepcopy(finding); unsafe["record_ref"] = "/private/finding.json"
+        with self.assertRaises(ValueError):
+            translate_review_receipts([unsafe])
+
 
 if __name__ == "__main__":
     unittest.main()

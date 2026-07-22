@@ -8,6 +8,13 @@ argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or pat
 
 Automates the cycle of reviewing code, fixing all findings, and re-reviewing until clean.
 
+## Explicit Mutation Authority
+
+Invoking this loop authorizes its fix phases to modify product files and update
+the approved finding-tracking projection. Review phases remain mechanically
+read-only. Simplification and tracking mutations occur only inside fix phases;
+Git commits and remote provider mutations retain their separate approval gates.
+
 ## Zero-Deferral Policy (default)
 
 All dm-review commands default to zero-deferral: P1, P2, AND P3 findings MUST be fixed. P3s fix band-aid solutions and tech debt -- deferring them is how debt compounds silently. The loop automates fix-until-clean; `/dm-review` and `/dm-review-fix` follow the same policy.

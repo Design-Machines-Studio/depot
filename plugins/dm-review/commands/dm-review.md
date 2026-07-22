@@ -8,6 +8,14 @@ argument-hint: "[optional: PR number, branch name, or file path]"
 
 Run a comprehensive code review using all applicable agents for the current project stack.
 
+## Read-only Promise
+
+This command inspects and reports. It writes only immutable evidence and
+derived projections beneath the declared review artifact root. It never edits
+the review target, mutates Git state, creates tracking items, or changes
+external provider state. Use `/dm-review-fix` or `/dm-review-loop` after
+explicit approval for any mutation.
+
 ## Zero-Deferral Policy (default)
 
 All dm-review commands default to zero-deferral: P1, P2, AND P3 findings MUST be fixed before the branch is considered ready to merge. P3s fix band-aid solutions and tech debt -- deferring them is how debt compounds silently. `/dm-review` surfaces findings; `/dm-review-fix` resolves them; `/dm-review-loop` automates fix-until-clean.
@@ -33,7 +41,9 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
 
 ## Synthesis and Contribution Contract
 
-Every raw reviewer finding keeps a durable `raw_ref`, source-scoped identity,
+Every raw reviewer finding is immediately persisted as a content-addressed
+finding record with a bounded EventStore reference, and keeps a durable
+`raw_ref`, source-scoped identity,
 agent, provider, model, evidence, and severity. Consolidation derives stable
 canonical finding IDs from the finding itself, never from display order or
 provider preference. Agreement merges contributor IDs; disagreement is retained

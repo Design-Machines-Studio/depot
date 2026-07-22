@@ -31,6 +31,18 @@ You are the review consolidator. After all review agents have completed, you syn
 
 ## Input
 
+Content-addressed finding and lane records are the authoritative input. Consume
+their bounded EventStore references first. Raw Markdown remains immutable
+evidence via `raw_ref`; it is not re-parsed as the primary database. Persist
+each complete finding record immediately, before waiting for its lane to
+finish, so a later lane crash cannot erase earlier findings. Preserve requested,
+completed, failed, degraded, and unavailable lane records including expected
+coverage, missing cases, partial output, build binding, and browser references.
+
+The unified Markdown report and todo-compatible rows are deterministic
+projections only. Editing either projection never changes a finding, lane,
+decision, or merge recommendation.
+
 You receive the raw output from every review agent that ran. Each agent's output follows this structure:
 
 ```markdown
