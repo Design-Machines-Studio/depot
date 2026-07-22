@@ -28,6 +28,22 @@ from .schema import (
 )
 from .state import RunLease, StateStore, _prepare_replay_state
 from .transitions import TransitionEngine
+from .artifacts import build_staging_allowlist, classify_artifact
+from .browser_bundle import BrowserEvidenceBundle, bind_browser_evidence_bundle
+from .browser_scenario import BrowserScenario
+from .ci_evidence import build_ci_evidence
+from .closeout import evaluate_closeout
+from .evidence_binding import match_evidence_binding
+from .improvements import (
+    build_improvement_report, build_input_index, render_upstream_prompt,
+    validate_improvement_report,
+)
+from .repository_verification import (
+    derive_verification_plan, validate_repository_profile,
+    validate_repository_state, validate_verification_result,
+)
+from .review_records import validate_finding_record, validate_lane_record
+from .verification_execution import execute_selected_lane
 
 
 EXIT_INVALID = 2
@@ -1854,6 +1870,126 @@ def command_record_cleanup(args):
     return _cleanup_receipt_status(receipt)
 
 
+def _exact_request(value, fields, name):
+    if type(value) is not dict or set(value) != set(fields):
+        raise ValueError(f"{name} fields mismatch")
+    return value
+
+
+def command_verification_plan(args):
+    request = _exact_request(_load_json(args.request), {
+        "changed_paths", "changed_packages", "risk_inputs", "required_lane_ids",
+        "generated_at",
+    }, "verification plan request")
+    result = derive_verification_plan(
+        validate_repository_profile(_load_json(args.profile)),
+        validate_repository_state(_load_json(args.repository)), **request,
+    )
+    _write_json(args.output, result)
+    return 0
+
+
+def command_verification_run(args):
+    result = execute_selected_lane(
+        _load_json(args.plan), _load_json(args.profile), lane_id=args.lane_id,
+        repo_root=args.repo_root,
+        current_repository=_load_json(args.repository),
+        prerequisite_states=_load_json(args.prerequisites),
+    )
+    _write_json(args.output, result)
+    return EXIT_UNSAFE_PLAN if result["status"] == "blocked" else 0
+
+
+def command_verification_result(args):
+    _write_json(args.output, validate_verification_result(_load_json(args.result)))
+    return 0
+
+
+def command_evidence_match(args):
+    _write_json(args.output, match_evidence_binding(
+        _load_json(args.expected), _load_json(args.current),
+    ))
+    return 0
+
+
+def command_artifact_classify(args):
+    metadata = _load_json(args.metadata) if args.metadata else None
+    result = classify_artifact(
+        args.repo_root, args.path, lifecycle=args.lifecycle,
+        provenance=args.provenance, owner=args.owner, metadata=metadata,
+    )
+    _write_json(args.output, result)
+    return 0
+
+
+def command_staging_allowlist(args):
+    _write_json(args.output, build_staging_allowlist(
+        _load_json(args.intended_changes), _load_json(args.records),
+        _load_json(args.observed_digests),
+    ))
+    return 0
+
+
+def command_browser_scenario_validate(args):
+    scenario = BrowserScenario.from_dict(_load_json(args.scenario))
+    _write_json(args.output, scenario.to_dict())
+    return 0
+
+
+def command_browser_bundle_record(args):
+    scenario = BrowserScenario.from_dict(_load_json(args.scenario))
+    bundle = BrowserEvidenceBundle.from_dict(_load_json(args.bundle))
+    recovery = _load_json(args.recovery_receipt) if args.recovery_receipt else None
+    sealed = bind_browser_evidence_bundle(
+        scenario, bundle, recovery_receipt=recovery,
+    )
+    _write_json(args.output, sealed.to_dict())
+    return 0
+
+
+def command_review_record(args):
+    value = _load_json(args.record)
+    validator = {"finding": validate_finding_record, "lane": validate_lane_record}
+    _write_json(args.output, validator[args.type](value))
+    return 0
+
+
+def command_ci_evidence_normalize(args):
+    mapping = _load_json(args.mapping) if args.mapping else None
+    _write_json(args.output, build_ci_evidence(_load_json(args.raw), mapping=mapping))
+    return 0
+
+
+def command_closeout_audit(args):
+    _write_json(args.output, evaluate_closeout(
+        _load_json(args.expected), _load_json(args.observed),
+    ))
+    return 0
+
+
+def command_improvement_index(args):
+    request = _exact_request(_load_json(args.request), {
+        "run_id", "feature_slug", "sealed_at", "inputs",
+    }, "improvement index request")
+    _write_json(args.output, build_input_index(**request))
+    return 0
+
+
+def command_improvement_finalize(args):
+    request = _exact_request(_load_json(args.request), {
+        "input_index", "finalized_at", "cleanup_outcomes", "shadow_outcome",
+        "metrics", "candidates",
+    }, "improvement finalize request")
+    _write_json(args.output, build_improvement_report(**request))
+    return 0
+
+
+def command_improvement_render(args):
+    prompt = render_upstream_prompt(validate_improvement_report(_load_json(args.report)))
+    _write_json(args.output, {"prompt": prompt})
+    return 0
+
+
 def parser():
     result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
     commands = result.add_subparsers(dest="command", required=True)
@@ -2007,6 +2143,84 @@ def parser():
     reconcile.add_argument("--node-statuses")
     reconcile.add_argument("--output", required=True)
     reconcile.set_defaults(handler=command_plan_reconcile)
+
+    verification_plan = commands.add_parser("verification-plan", help="derive a repository verification plan")
+    verification_plan.add_argument("--profile", required=True)
+    verification_plan.add_argument("--repository", required=True)
+    verification_plan.add_argument("--request", required=True)
+    verification_plan.add_argument("--output", required=True)
+    verification_plan.set_defaults(handler=command_verification_plan)
+
+    verification_run = commands.add_parser("verification-run", help="execute one selected current local verification lane")
+    verification_run.add_argument("--plan", required=True)
+    verification_run.add_argument("--profile", required=True)
+    verification_run.add_argument("--repository", required=True)
+    verification_run.add_argument("--prerequisites", required=True)
+    verification_run.add_argument("--lane-id", required=True)
+    verification_run.add_argument("--repo-root", required=True)
+    verification_run.add_argument("--output", required=True)
+    verification_run.set_defaults(handler=command_verification_run)
+
+    def input_output_command(name, input_name, handler, help_text):
+        command = commands.add_parser(name, help=help_text)
+        command.add_argument(f"--{input_name}", required=True)
+        command.add_argument("--output", required=True)
+        command.set_defaults(handler=handler)
+
+    input_output_command("verification-result", "result", command_verification_result, "validate one verification lane result")
+
+    evidence_match = commands.add_parser("evidence-match", help="compare expected and current evidence bindings")
+    evidence_match.add_argument("--expected", required=True)
+    evidence_match.add_argument("--current", required=True)
+    evidence_match.add_argument("--output", required=True)
+    evidence_match.set_defaults(handler=command_evidence_match)
+
+    artifact = commands.add_parser("artifact-classify", help="classify one exact intended artifact")
+    artifact.add_argument("--repo-root", required=True)
+    artifact.add_argument("--path", required=True)
+    artifact.add_argument("--lifecycle", choices=("durable", "run_scoped", "chunk_scoped"), required=True)
+    artifact.add_argument("--provenance", required=True)
+    artifact.add_argument("--owner", required=True)
+    artifact.add_argument("--metadata")
+    artifact.add_argument("--output", required=True)
+    artifact.set_defaults(handler=command_artifact_classify)
+
+    allowlist = commands.add_parser("staging-allowlist", help="derive exact committable path authority")
+    allowlist.add_argument("--intended-changes", required=True)
+    allowlist.add_argument("--records", required=True)
+    allowlist.add_argument("--observed-digests", required=True)
+    allowlist.add_argument("--output", required=True)
+    allowlist.set_defaults(handler=command_staging_allowlist)
+
+    input_output_command("browser-scenario-validate", "scenario", command_browser_scenario_validate, "validate a browser scenario")
+    browser_bundle = commands.add_parser("browser-bundle-record", help="validate and seal a browser evidence bundle")
+    browser_bundle.add_argument("--scenario", required=True)
+    browser_bundle.add_argument("--bundle", required=True)
+    browser_bundle.add_argument("--recovery-receipt")
+    browser_bundle.add_argument("--output", required=True)
+    browser_bundle.set_defaults(handler=command_browser_bundle_record)
+
+    review_record = commands.add_parser("review-record", help="validate one finding or lane record")
+    review_record.add_argument("--type", choices=("finding", "lane"), required=True)
+    review_record.add_argument("--record", required=True)
+    review_record.add_argument("--output", required=True)
+    review_record.set_defaults(handler=command_review_record)
+
+    ci_evidence = commands.add_parser("ci-evidence-normalize", help="normalize explicit provider CI evidence")
+    ci_evidence.add_argument("--raw", required=True)
+    ci_evidence.add_argument("--mapping")
+    ci_evidence.add_argument("--output", required=True)
+    ci_evidence.set_defaults(handler=command_ci_evidence_normalize)
+
+    closeout = commands.add_parser("closeout-audit", help="audit expected versus observed closeout state")
+    closeout.add_argument("--expected", required=True)
+    closeout.add_argument("--observed", required=True)
+    closeout.add_argument("--output", required=True)
+    closeout.set_defaults(handler=command_closeout_audit)
+
+    input_output_command("improvement-index", "request", command_improvement_index, "seal improvement input references")
+    input_output_command("improvement-finalize", "request", command_improvement_finalize, "finalize and deduplicate an improvement report")
+    input_output_command("improvement-render", "report", command_improvement_render, "render an upstream improvement prompt")
     return result
 
 

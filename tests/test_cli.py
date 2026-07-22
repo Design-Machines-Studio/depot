@@ -86,7 +86,14 @@ class CliTests(unittest.TestCase):
     def test_help_lists_commands(self):
         result = self.run_cli("--help")
         self.assertEqual(result.returncode, 0)
-        for command in ("init", "validate", "append", "replay", "status"):
+        for command in (
+            "init", "validate", "append", "replay", "status",
+            "verification-plan", "verification-run", "verification-result",
+            "evidence-match", "artifact-classify", "staging-allowlist",
+            "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "ci-evidence-normalize", "closeout-audit", "improvement-index",
+            "improvement-finalize", "improvement-render",
+        ):
             self.assertIn(command, result.stdout)
 
     def test_init_append_replay_status_and_safe_error(self):

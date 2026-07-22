@@ -902,7 +902,16 @@ class RuntimeCliTests(unittest.TestCase):
 
     def test_cleanup_command_surface_and_plan_create(self):
         help_result = self.run_cli("--help")
-        for command in ("bind-prediction", "bind-verification-contract", "revise-verification-contract", "plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
+        for command in (
+            "bind-prediction", "bind-verification-contract", "revise-verification-contract",
+            "plan-create", "plan-compose", "record-create", "plan-cleanup",
+            "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile",
+            "verification-plan", "verification-run", "verification-result",
+            "evidence-match", "artifact-classify", "staging-allowlist",
+            "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "ci-evidence-normalize", "closeout-audit", "improvement-index",
+            "improvement-finalize", "improvement-render",
+        ):
             self.assertIn(command, help_result.stdout)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); argv = root / "argv.json"; output = root / "plan.json"

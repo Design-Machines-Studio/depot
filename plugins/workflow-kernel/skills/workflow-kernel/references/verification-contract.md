@@ -1,5 +1,14 @@
 # Verification Contract
 
+Repository profiles select lanes; immutable plans bind the profile, repository
+state, change scope, and risk inputs; results report one selected lane. The
+planner never executes work. `verification-run` executes only a selected,
+current, runnable local lane from bound safe argv under a fixed minimal
+environment. Remote CI, browser sessions, and provider collection remain
+consumer-owned evidence. Changed bindings make prior results unavailable, never
+implicitly passed. Legacy consumers without a repository profile retain an
+explicit unavailable/default provenance rather than a low-risk inference.
+
 ## Behavioral contract lifecycle
 
 Before implementation dispatch, Pipeline materializes one closed behavioral

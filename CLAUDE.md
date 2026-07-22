@@ -119,6 +119,17 @@ Every skill, agent, and command is indexed in `docs/search-index.md` -- a genera
 
 ## Orchestration Patterns
 
+Workflow Kernel 0.4.0 owns neutral deterministic mechanics: repository-profile
+planning and bounded local lane execution, evidence invalidation, artifact
+classification and exact staging authority, structured review/browser/CI
+records, pure closeout audit, and the two-stage proposal-only Improvement Scout.
+Assembly supplies product defaults; Pipeline and dm-review remain the workflow
+authority and provider/browser collectors. Plain dm-review is read-only, while
+fix and loop are the only review mutation owners. Missing profiles, live
+providers, browser proof, or legacy artifact references remain explicitly
+unavailable rather than passed. Agent judgment still owns routing, severity,
+product interpretation, issue decisions, promotion, merge, and release.
+
 Plugins compose through five patterns documented in `docs/orchestration-patterns.md`:
 
 - **Companion Skill Loading** -- a command loads skills from other plugins at specific workflow phases (e.g. sprint-plan)

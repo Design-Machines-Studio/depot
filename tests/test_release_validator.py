@@ -28,19 +28,38 @@ class ReleaseValidatorTests(unittest.TestCase):
             "plan-create", "plan-compose", "record-create", "plan-cleanup",
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
             "plan-reconcile",
+            "verification-plan", "verification-run", "verification-result",
+            "evidence-match", "artifact-classify", "staging-allowlist",
+            "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "ci-evidence-normalize", "closeout-audit", "improvement-index",
+            "improvement-finalize", "improvement-render",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
         self.assertTrue(all("--help" not in case for case in VALIDATOR.BEHAVIORAL_CLI_CASES.values()))
 
-    def test_schema_inventory_is_exactly_the_eight_released_documents(self):
+    def test_schema_inventory_is_exactly_the_twenty_two_released_documents(self):
         expected = {
+            "artifact-classification-schema.json",
             "behavioral-verification-contract-schema.json",
+            "browser-evidence-bundle-schema.json",
             "browser-recovery-schema.json",
+            "browser-scenario-schema.json",
+            "ci-evidence-schema.json",
             "cleanup-plan-schema.json",
             "cleanup-receipt-schema.json",
+            "closeout-audit-schema.json",
+            "evidence-binding-schema.json",
+            "improvement-input-index-schema.json",
+            "improvement-report-schema.json",
+            "repository-verification-profile-schema.json",
             "resource-registry-schema.json",
+            "review-finding-record-schema.json",
+            "review-lane-record-schema.json",
+            "staging-allowlist-schema.json",
+            "verification-plan-schema.json",
             "verification-profile-schema.json",
+            "verification-result-schema.json",
             "workflow-classes-schema.json",
             "workflow-policy-schema.json",
         }

@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
-  "version": "1.32.0",
-  "description": "Autonomous feature development pipeline with approved decision-depth profiles, bound behavioral verification contracts, bounded validation feedback, browser recovery, risk-tiered review, and isolated worktree execution",
+  "version": "1.33.0",
+  "description": "Autonomous feature pipeline with repository-aware verification, bound evidence, artifact allowlists, browser recovery, read-only review gates, closeout audit, and proposal-only improvement scouting",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -163,13 +163,13 @@
     ]
   },
   "pluginDependencies": {
-    "dm-review": ">=1.45.0",
+    "dm-review": ">=1.46.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.3.0"
+    "workflow-kernel": ">=0.4.0"
   },
   "optionalPluginDependencies": {
     "design-machines": ">=1.3.0",
-    "assembly": ">=1.0.0",
+    "assembly": ">=3.9.0",
     "live-wires": ">=1.5.1",
     "craft-developer": ">=1.0.0",
     "accessibility-compliance": ">=1.2.0",
@@ -180,8 +180,8 @@
   },
   "interface": {
     "displayName": "Pipeline",
-    "shortDescription": "Autonomous feature development pipeline with approved decision-depth profiles, bound behavioral verification contracts, ",
-    "longDescription": "Autonomous feature development pipeline with approved decision-depth profiles, bound behavioral verification contracts, bounded validation feedback, browser recovery, risk-tiered review, and isolated worktree execution",
+    "shortDescription": "Autonomous feature pipeline with repository-aware verification, bound evidence, artifact allowlists, browser recovery, r",
+    "longDescription": "Autonomous feature pipeline with repository-aware verification, bound evidence, artifact allowlists, browser recovery, read-only review gates, closeout audit, and proposal-only improvement scouting",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [

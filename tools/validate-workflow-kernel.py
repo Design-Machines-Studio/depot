@@ -54,12 +54,26 @@ PROMOTION_CHECK_SOURCES = {
     "provider_security_boundaries_unchanged": ("scenario replay",),
 }
 SCHEMA_DOCUMENTS = frozenset({
+    "artifact-classification-schema.json",
     "behavioral-verification-contract-schema.json",
+    "browser-evidence-bundle-schema.json",
     "browser-recovery-schema.json",
+    "browser-scenario-schema.json",
+    "ci-evidence-schema.json",
     "cleanup-plan-schema.json",
     "cleanup-receipt-schema.json",
+    "closeout-audit-schema.json",
+    "evidence-binding-schema.json",
+    "improvement-input-index-schema.json",
+    "improvement-report-schema.json",
+    "repository-verification-profile-schema.json",
     "resource-registry-schema.json",
+    "review-finding-record-schema.json",
+    "review-lane-record-schema.json",
+    "staging-allowlist-schema.json",
+    "verification-plan-schema.json",
     "verification-profile-schema.json",
+    "verification-result-schema.json",
     "workflow-classes-schema.json",
     "workflow-policy-schema.json",
 })
@@ -85,6 +99,20 @@ BEHAVIORAL_CLI_CASES = {
     "execute-cleanup-step": ("--state-dir", "<state>", "--plan", "<missing>", "--step-index", "0", "--inventory", "<missing>", "--node-statuses", "<missing>", "--outcomes", "<missing>", "--output", "<output>"),
     "record-cleanup": ("--state-dir", "<state>", "--plan", "<missing>", "--outcomes", "<missing>"),
     "plan-reconcile": ("--state-dir", "<state>", "--run-id", "validator-cli", "--output", "<output>"),
+    "verification-plan": ("--profile", "<missing>", "--repository", "<missing>", "--request", "<missing>", "--output", "<output>"),
+    "verification-run": ("--plan", "<missing>", "--profile", "<missing>", "--repository", "<missing>", "--prerequisites", "<missing>", "--lane-id", "lane", "--repo-root", "<state>", "--output", "<output>"),
+    "verification-result": ("--result", "<missing>", "--output", "<output>"),
+    "evidence-match": ("--expected", "<missing>", "--current", "<missing>", "--output", "<output>"),
+    "artifact-classify": ("--repo-root", "<state>", "--path", "missing.txt", "--lifecycle", "durable", "--provenance", "generated", "--owner", "validator", "--output", "<output>"),
+    "staging-allowlist": ("--intended-changes", "<missing>", "--records", "<missing>", "--observed-digests", "<missing>", "--output", "<output>"),
+    "browser-scenario-validate": ("--scenario", "<missing>", "--output", "<output>"),
+    "browser-bundle-record": ("--scenario", "<missing>", "--bundle", "<missing>", "--output", "<output>"),
+    "review-record": ("--type", "finding", "--record", "<missing>", "--output", "<output>"),
+    "ci-evidence-normalize": ("--raw", "<missing>", "--output", "<output>"),
+    "closeout-audit": ("--expected", "<missing>", "--observed", "<missing>", "--output", "<output>"),
+    "improvement-index": ("--request", "<missing>", "--output", "<output>"),
+    "improvement-finalize": ("--request", "<missing>", "--output", "<output>"),
+    "improvement-render": ("--report", "<missing>", "--output", "<output>"),
 }
 SUCCESSFUL_CLI_COMMANDS = frozenset(BEHAVIORAL_CLI_CASES)
 
@@ -373,6 +401,11 @@ def check_cli(context):
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
+        "verification-plan", "verification-run", "verification-result",
+        "evidence-match", "artifact-classify", "staging-allowlist",
+        "browser-scenario-validate", "browser-bundle-record", "review-record",
+        "ci-evidence-normalize", "closeout-audit", "improvement-index",
+        "improvement-finalize", "improvement-render",
     }
     choices = next(
         action.choices for action in cli.parser()._actions

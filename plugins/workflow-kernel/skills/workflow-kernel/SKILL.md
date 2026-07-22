@@ -61,6 +61,18 @@ Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 `replay`, and `status` commands. Consume successful operational output and
 errors as stable JSON. Treat `--help` output as plain text.
 
+## Stable mechanical CLI surface
+
+Kernel 0.4.0 adds fourteen file-bound operations: `verification-plan`,
+`verification-run`, `verification-result`, `evidence-match`,
+`artifact-classify`, `staging-allowlist`, `browser-scenario-validate`,
+`browser-bundle-record`, `review-record`, `ci-evidence-normalize`,
+`closeout-audit`, `improvement-index`, `improvement-finalize`, and
+`improvement-render`. They accept explicit local JSON and safe arguments only;
+provider collection, credentials, routing judgment, issue mutation, and release
+authority remain with consumers. Stable exits are 0 success, 2 invalid input,
+3 blocked/unsafe, 4 unavailable/incompatible, 5 parity gap, and 6 conflict.
+
 ## Public API and Contracts
 
 - Construct exact, final, immutable `WorkflowEvent`, `NodeState`, and `RunState`
