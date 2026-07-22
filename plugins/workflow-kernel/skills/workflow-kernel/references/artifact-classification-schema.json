@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/artifact-classification-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "path", "state", "source_path", "digest", "byte_count", "classification", "sensitivity", "lifecycle", "redaction_state", "provenance", "owner", "committable", "rule_ids", "record_digest"],
+  "properties": {
+    "schema_version": {"const": 1}, "path": {"$ref": "#/$defs/path"},
+    "state": {"enum": ["present", "deleted"]}, "source_path": {"oneOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]},
+    "digest": {"$ref": "#/$defs/digest"}, "byte_count": {"type": "integer", "minimum": 0, "maximum": 4194304},
+    "classification": {"enum": ["committable", "private_receipt", "ephemeral", "blocked_sensitive", "unknown"]},
+    "sensitivity": {"enum": ["safe", "private", "blocked", "unknown"]},
+    "lifecycle": {"enum": ["durable", "run_scoped", "chunk_scoped"]},
+    "redaction_state": {"enum": ["not_required", "required", "redacted", "blocked"]},
+    "provenance": {"$ref": "#/$defs/id"}, "owner": {"$ref": "#/$defs/id"}, "committable": {"type": "boolean"},
+    "rule_ids": {"type": "array", "uniqueItems": true, "maxItems": 256, "items": {"$ref": "#/$defs/id"}}, "record_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000-\\u001f\\u007f*?\\[\\]{}\\\\]+$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

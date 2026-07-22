@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/staging-allowlist-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "record_digests", "authorized", "rejected", "allowlist_digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "record_digests": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/digest"}},
+    "authorized": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/intent"}},
+    "rejected": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/rejection"}},
+    "allowlist_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "path": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000-\\u001f\\u007f*?\\[\\]{}\\\\]+$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "nullable_digest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+    "nullable_path": {"oneOf": [{"$ref": "#/$defs/path"}, {"type": "null"}]},
+    "intent": {
+      "type": "object", "additionalProperties": false,
+      "required": ["operation", "path", "source_path", "expected_digest"],
+      "properties": {"operation": {"enum": ["add", "modify", "delete", "rename"]}, "path": {"$ref": "#/$defs/path"}, "source_path": {"$ref": "#/$defs/nullable_path"}, "expected_digest": {"$ref": "#/$defs/nullable_digest"}}
+    },
+    "rejection": {
+      "type": "object", "additionalProperties": false, "required": ["operation", "path", "reason"],
+      "properties": {"operation": {"enum": ["add", "modify", "delete", "rename"]}, "path": {"$ref": "#/$defs/path"}, "reason": {"enum": ["unclassified", "private", "ephemeral", "blocked_sensitive", "stale_digest", "missing", "unsafe_path"]}}
+    }
+  }
+}
