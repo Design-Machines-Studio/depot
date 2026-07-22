@@ -1,13 +1,13 @@
-import copy
 import json
 import unittest
-from dataclasses import replace
 
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.browser_bundle import (
     BrowserBundleEvidence, BrowserEvidenceBundle, BrowserStepResult, bind_browser_evidence_bundle,
+    browser_attempt_reference, browser_recovery_receipt_digest, browser_session_reference,
     match_browser_evidence_bundle, snapshot_browser_evidence_bundle,
 )
+from workflow_kernel.browser_evidence import BrowserAttempt, BrowserRecoveryReceipt, BrowserRequest
 from workflow_kernel.browser_scenario import (
     BrowserScenario, BrowserScenarioStep, snapshot_browser_scenario,
 )
@@ -67,20 +67,51 @@ def scenario(*, terminal="first_pass", status="passed", recovery=False):
     )
 
 
+def recovery_receipt():
+    request = BrowserRequest(
+        "case-sha256:" + "c" * 64, "http://127.0.0.1:8080/dashboard", "1440x900",
+        "chromium", "firefox", "profile-sha256:" + "d" * 64,
+        ("chromium", "firefox"), ORIGIN,
+    )
+    attempt = BrowserAttempt(
+        request.case_id, 1, "chromium", "chromium", "verify", "passed", None, None,
+        "browser/dashboard.png", None, None, "session-1", "browser", None,
+        request.verification_profile_id, request.configured_engines,
+        request.target_url_digest, request.target_origin_digest, request.target_route_digest,
+        request.viewport, request.declared_route_digest,
+    )
+    return BrowserRecoveryReceipt(
+        1, "clean", "browser_verified_first_pass", request.case_id, "chromium", "chromium",
+        None, (attempt,), (), (), request.verification_profile_id, request.configured_engines,
+        request.target_url_digest, request.target_route_digest, request.viewport,
+        request.target_origin_digest, request.declared_route_digest,
+    )
+
+
 def bundle(**changes):
+    declared = scenario()
+    receipt = recovery_receipt()
     evidence = BrowserBundleEvidence(
         "capture", "screenshot", "browser/dashboard.png", EVIDENCE_DIGEST,
     )
+    results = tuple(
+        BrowserStepResult(
+            item.step_id, "passed", None,
+            (EVIDENCE_DIGEST,) if item.step_id == "capture" else (),
+        )
+        for item in declared.steps
+    )
     values = dict(
-        schema_version=1, scenario_digest=scenario().scenario_digest,
+        schema_version=1, scenario_digest=declared.scenario_digest,
         profile_id="profile-sha256:" + "d" * 64, persona_id="member",
         repository_state_digest=DIGEST, evidence_binding_digest=DIGEST,
         login_state="authenticated", javascript_enabled=False,
         restart_state="none", engine="chromium", viewport="1440x900",
         origin_digest=ORIGIN, route_digest=digest_target_route("/dashboard"),
-        session_ref="session-1", attempt_refs=("attempt-1",),
-        recovery_receipt_digest=DIGEST,
-        results=(BrowserStepResult("capture", "passed", None, (EVIDENCE_DIGEST,)),),
+        session_ref=browser_session_reference(receipt.attempts[-1]),
+        attempt_refs=tuple(browser_attempt_reference(item) for item in receipt.attempts),
+        recovery_receipt_digest=browser_recovery_receipt_digest(receipt),
+        results=results,
         evidence=(evidence,), covered_case_ids=("case-sha256:" + "c" * 64,),
         missing_case_ids=(), terminal_reason="first_pass",
     )
@@ -115,6 +146,10 @@ class BrowserScenarioTests(unittest.TestCase):
     def test_hostile_steps_and_raw_state_are_rejected(self):
         hostile = (
             lambda: step("bad", "navigate", route="javascript:alert(1)"),
+            lambda: step("bad", "navigate", route="/account/password=opaque-value"),
+            lambda: step("bad", "navigate", route="/tokens/ghp_abcdefghijk"),
+            lambda: step("bad", "assertion", assertion="url", locator_kind="none",
+                         locator=None, expected="/account?token=opaque"),
             lambda: step("bad", "interact", locator_kind="selector", locator="xpath=//input",
                          action="click", value_ref=None),
             lambda: step("bad", "interact", locator_kind="label", locator="Email",
@@ -159,6 +194,10 @@ class BrowserScenarioTests(unittest.TestCase):
             self.assertEqual(dict(value.steps[-1].payload)["status"], status)
         pause = step("mfa-pause", "human_pause", pause_id="member-mfa", action="mfa")
         self.assertEqual(dict(pause.payload)["action"], "mfa")
+        with self.assertRaisesRegex(ValueError, "terminal status mismatch"):
+            scenario(terminal="human_help_required", status="passed")
+        with self.assertRaisesRegex(ValueError, "terminal status mismatch"):
+            scenario(terminal="first_pass", status="application_failure")
 
     def test_bundle_exact_reuse_schema_and_stale_reasons(self):
         value = bundle()
@@ -166,14 +205,49 @@ class BrowserScenarioTests(unittest.TestCase):
         self.assertTrue(schema_matches(value.to_dict(), schema))
         self.assertEqual(BrowserEvidenceBundle.from_dict(value.to_dict()), value)
         self.assertEqual(snapshot_browser_evidence_bundle(value), value)
-        self.assertEqual(match_browser_evidence_bundle(value, value), {"matches": True, "reasons": []})
-        self.assertEqual(bind_browser_evidence_bundle(scenario(), value), value)
+        receipt = recovery_receipt()
+        self.assertEqual(
+            match_browser_evidence_bundle(value, value),
+            {"matches": False, "reasons": ["binding_context_required"]},
+        )
+        self.assertEqual(
+            match_browser_evidence_bundle(
+                value, value, scenario=scenario(), recovery_receipt=receipt,
+            ),
+            {"matches": True, "reasons": []},
+        )
+        self.assertEqual(
+            bind_browser_evidence_bundle(scenario(), value, recovery_receipt=receipt), value,
+        )
         stale = bundle(repository_state_digest="sha256:" + "e" * 64,
                        session_ref="session-2")
         self.assertEqual(
-            match_browser_evidence_bundle(value, stale)["reasons"],
+            match_browser_evidence_bundle(
+                value, stale, scenario=scenario(), recovery_receipt=receipt,
+            )["reasons"],
             ["repository_state_changed", "session_changed"],
         )
+
+    def test_success_requires_complete_ordered_passing_results_case_and_recovery(self):
+        declared = scenario()
+        receipt = recovery_receipt()
+        value = bundle()
+        with self.assertRaisesRegex(ValueError, "scenario binding mismatch"):
+            bind_browser_evidence_bundle(
+                declared, bundle(results=value.results[:-1]),
+                recovery_receipt=receipt,
+            )
+        with self.assertRaisesRegex(ValueError, "current browser proof"):
+            bundle(results=value.results[:-1] + (
+                BrowserStepResult("terminal", "failed", "assertion_failed", ()),
+            ))
+        with self.assertRaisesRegex(ValueError, "current browser proof"):
+            bundle(covered_case_ids=())
+        with self.assertRaisesRegex(ValueError, "recovery binding mismatch"):
+            bind_browser_evidence_bundle(
+                declared, bundle(recovery_receipt_digest=DIGEST),
+                recovery_receipt=receipt,
+            )
 
     def test_missing_tampered_and_reachability_evidence_never_upgrade(self):
         raw = bundle().to_dict(); raw["evidence"][0]["evidence_digest"] = DIGEST
@@ -200,7 +274,7 @@ class BrowserScenarioTests(unittest.TestCase):
         value = bundle(
             results=(BrowserStepResult("validation", "application_failure", "product_assertion_failed", ()),),
             evidence=(), covered_case_ids=(), missing_case_ids=("case-sha256:" + "c" * 64,),
-            terminal_reason="application_failure", recovery_receipt_digest=None,
+            terminal_reason="application_failure", recovery_receipt_digest=DIGEST,
         )
         self.assertEqual(value.restart_state, "none")
 
@@ -218,7 +292,7 @@ class BrowserScenarioTests(unittest.TestCase):
         help_required = bundle(
             results=(BrowserStepResult("terminal", "human_help_required", "browser_unavailable", ()),),
             evidence=(), covered_case_ids=(), missing_case_ids=("case-sha256:" + "c" * 64,),
-            terminal_reason="human_help_required", recovery_receipt_digest=None,
+            terminal_reason="human_help_required", recovery_receipt_digest=DIGEST,
         )
         self.assertEqual((fresh.restart_state, alternate.engine, help_required.terminal_reason),
                          ("fresh_primary", "firefox", "human_help_required"))

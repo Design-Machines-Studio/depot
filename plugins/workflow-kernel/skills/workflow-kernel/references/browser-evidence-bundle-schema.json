@@ -11,7 +11,7 @@
     "javascript_enabled": {"type": "boolean"}, "restart_state": {"enum": ["none", "application_restarted", "fresh_primary", "alternate_engine"]},
     "engine": {"enum": ["chromium", "firefox", "webkit"]}, "viewport": {"$ref": "#/$defs/viewport"},
     "origin_digest": {"type": "string", "pattern": "^origin-sha256:[0-9a-f]{64}$"}, "route_digest": {"$ref": "#/$defs/digest"},
-    "session_ref": {"$ref": "#/$defs/id"}, "attempt_refs": {"type": "array", "uniqueItems": true, "maxItems": 3, "items": {"$ref": "#/$defs/id"}},
+    "session_ref": {"$ref": "#/$defs/id"}, "attempt_refs": {"type": "array", "uniqueItems": true, "minItems": 1, "maxItems": 3, "items": {"$ref": "#/$defs/id"}},
     "recovery_receipt_digest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
     "results": {"type": "array", "minItems": 1, "maxItems": 512, "items": {"$ref": "#/$defs/result"}},
     "evidence": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/evidence"}},
@@ -20,6 +20,13 @@
     "terminal_reason": {"enum": ["first_pass", "fresh_primary", "alternate_engine", "human_action_required", "human_help_required", "application_failure"]},
     "bundle_digest": {"$ref": "#/$defs/digest"}
   },
+  "allOf": [
+    {"if": {"properties": {"terminal_reason": {"const": "first_pass"}}}, "then": {"properties": {"restart_state": {"const": "none"}, "attempt_refs": {"minItems": 1, "maxItems": 1}, "recovery_receipt_digest": {"$ref": "#/$defs/digest"}, "covered_case_ids": {"minItems": 1}, "missing_case_ids": {"maxItems": 0}, "results": {"items": {"properties": {"status": {"const": "passed"}}}}}}},
+    {"if": {"properties": {"terminal_reason": {"const": "fresh_primary"}}}, "then": {"properties": {"restart_state": {"const": "fresh_primary"}, "attempt_refs": {"minItems": 2, "maxItems": 2}, "recovery_receipt_digest": {"$ref": "#/$defs/digest"}, "covered_case_ids": {"minItems": 1}, "missing_case_ids": {"maxItems": 0}, "results": {"items": {"properties": {"status": {"const": "passed"}}}}}}},
+    {"if": {"properties": {"terminal_reason": {"const": "alternate_engine"}}}, "then": {"properties": {"restart_state": {"const": "alternate_engine"}, "attempt_refs": {"minItems": 2, "maxItems": 3}, "recovery_receipt_digest": {"$ref": "#/$defs/digest"}, "covered_case_ids": {"minItems": 1}, "missing_case_ids": {"maxItems": 0}, "results": {"items": {"properties": {"status": {"const": "passed"}}}}}}},
+    {"if": {"properties": {"terminal_reason": {"const": "human_action_required"}}}, "then": {"properties": {"attempt_refs": {"minItems": 1, "maxItems": 1}, "recovery_receipt_digest": {"type": "null"}}}},
+    {"if": {"properties": {"terminal_reason": {"enum": ["human_help_required", "application_failure"]}}}, "then": {"properties": {"attempt_refs": {"minItems": 1, "maxItems": 3}, "recovery_receipt_digest": {"$ref": "#/$defs/digest"}}}}
+  ],
   "$defs": {
     "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._:-]*$"},
     "case_id": {"type": "string", "pattern": "^case-sha256:[0-9a-f]{64}$"},

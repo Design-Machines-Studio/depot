@@ -47,7 +47,13 @@
         "attempt": {"type": "integer", "minimum": 2, "maximum": 3}, "engine": {"$ref": "#/$defs/engine"},
         "status": {"enum": ["passed", "human_action_required", "human_help_required", "application_failure"]},
         "reason": {"enum": ["first_pass", "fresh_primary", "alternate_engine", "human_action_required", "human_help_required", "application_failure"]}
-      }
+      },
+      "allOf": [
+        {"if": {"required": ["reason"], "properties": {"reason": {"enum": ["first_pass", "fresh_primary", "alternate_engine"]}}}, "then": {"properties": {"status": {"const": "passed"}}}},
+        {"if": {"required": ["reason"], "properties": {"reason": {"const": "human_action_required"}}}, "then": {"properties": {"status": {"const": "human_action_required"}}}},
+        {"if": {"required": ["reason"], "properties": {"reason": {"const": "human_help_required"}}}, "then": {"properties": {"status": {"const": "human_help_required"}}}},
+        {"if": {"required": ["reason"], "properties": {"reason": {"const": "application_failure"}}}, "then": {"properties": {"status": {"const": "application_failure"}}}}
+      ]
     },
     "step": {
       "type": "object", "additionalProperties": false, "required": ["step_id", "kind", "payload"],

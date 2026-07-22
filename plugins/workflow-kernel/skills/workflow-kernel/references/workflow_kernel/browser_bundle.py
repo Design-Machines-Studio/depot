@@ -29,9 +29,45 @@ _RESULT_STATUSES = frozenset({
     "human_help_required", "application_failure",
 })
 
+_RECEIPT_REASON_BY_TERMINAL = {
+    "first_pass": "browser_verified_first_pass",
+    "fresh_primary": "primary_recovered_degraded",
+    "alternate_engine": "alternate_engine_recovered_degraded",
+    "human_help_required": "human_help_required",
+    "application_failure": "application_failure",
+}
+
 
 def _canonical_bytes(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+
+
+def _content_reference(prefix, value):
+    return prefix + "-sha256:" + hashlib.sha256(_canonical_bytes(value)).hexdigest()
+
+
+def browser_attempt_reference(attempt):
+    """Return an immutable, non-secret reference to one sealed recovery attempt."""
+    from .browser_evidence import snapshot_browser_attempt
+
+    attempt = snapshot_browser_attempt(attempt)
+    return _content_reference("attempt", attempt.to_dict())
+
+
+def browser_session_reference(attempt):
+    """Return an immutable, non-secret reference to an attempt's session identity."""
+    from .browser_evidence import snapshot_browser_attempt
+
+    attempt = snapshot_browser_attempt(attempt)
+    return _content_reference("session", {"session_id": attempt.session_id})
+
+
+def browser_recovery_receipt_digest(receipt):
+    """Digest a sealed legacy recovery receipt for durable bundle binding."""
+    from .browser_evidence import snapshot_browser_recovery_receipt
+
+    receipt = snapshot_browser_recovery_receipt(receipt)
+    return "sha256:" + hashlib.sha256(_canonical_bytes(receipt.to_dict())).hexdigest()
 
 
 def _id(value, name="identifier"):
@@ -235,12 +271,25 @@ class BrowserEvidenceBundle:
         }.get(self.terminal_reason)
         if expected_restart is not None and self.restart_state != expected_restart:
             raise ValueError("terminal recovery binding mismatch")
+        expected_attempt_count = {
+            "first_pass": {1}, "fresh_primary": {2}, "alternate_engine": {2, 3},
+            "human_action_required": {1}, "human_help_required": {1, 2, 3},
+            "application_failure": {1, 2, 3},
+        }[self.terminal_reason]
+        if len(attempts) not in expected_attempt_count:
+            raise ValueError("terminal attempt history mismatch")
+        if self.terminal_reason == "human_action_required":
+            if recovery is not None:
+                raise ValueError("human action cannot claim browser recovery")
+        elif recovery is None:
+            raise ValueError("browser recovery receipt is required")
         if passed_terminal:
             browser_digests = {item.evidence_digest for item in evidence if item.proof_kind == "browser"}
             passed_evidence = {
                 digest for item in results if item.status == "passed" for digest in item.evidence_digests
             }
-            if missing or not browser_digests or not passed_evidence <= browser_digests:
+            if (missing or not covered or any(item.status != "passed" for item in results)
+                    or not browser_digests or not passed_evidence <= browser_digests):
                 raise ValueError("browser terminal lacks current browser proof")
         elif self.terminal_reason == "application_failure" and any(
             item.status in {"human_action_required", "human_help_required"} for item in results
@@ -255,7 +304,7 @@ class BrowserEvidenceBundle:
             "human_help_required": "human_help_required",
             "application_failure": "application_failure",
         }.get(self.terminal_reason)
-        if terminal_status is not None and not any(item.status == terminal_status for item in results):
+        if terminal_status is not None and results[-1].status != terminal_status:
             raise ValueError("terminal result is missing")
         object.__setattr__(self, "attempt_refs", attempts)
         object.__setattr__(self, "recovery_receipt_digest", recovery)
@@ -350,24 +399,37 @@ _MATCH_FIELDS = (
 )
 
 
-def match_browser_evidence_bundle(expected, current):
+def match_browser_evidence_bundle(expected, current, *, scenario=None, recovery_receipt=None):
     """Allow reuse only when every evidence/build/runtime binding is exact."""
     expected = snapshot_browser_evidence_bundle(expected)
     current = snapshot_browser_evidence_bundle(current)
+    reusable = {"first_pass", "fresh_primary", "alternate_engine"}
+    if expected.terminal_reason not in reusable or current.terminal_reason not in reusable:
+        return {"matches": False, "reasons": ["terminal_not_reusable"]}
+    if scenario is None or recovery_receipt is None:
+        return {"matches": False, "reasons": ["binding_context_required"]}
     reasons = [reason for field, reason in _MATCH_FIELDS if getattr(expected, field) != getattr(current, field)]
-    return {"matches": not reasons, "reasons": reasons}
+    if reasons:
+        return {"matches": False, "reasons": reasons}
+    try:
+        bind_browser_evidence_bundle(scenario, expected, recovery_receipt=recovery_receipt)
+        bind_browser_evidence_bundle(scenario, current, recovery_receipt=recovery_receipt)
+    except ValueError:
+        return {"matches": False, "reasons": ["scenario_or_recovery_binding_invalid"]}
+    return {"matches": True, "reasons": []}
 
 
-def bind_browser_evidence_bundle(scenario, bundle):
-    """Validate scenario identity and preserve declared step/result order."""
+def bind_browser_evidence_bundle(scenario, bundle, *, recovery_receipt=None):
+    """Bind complete ordered results to a scenario and a sealed recovery receipt."""
     from .browser_scenario import snapshot_browser_scenario
+    from .browser_evidence import snapshot_browser_recovery_receipt
 
     scenario = snapshot_browser_scenario(scenario)
     bundle = snapshot_browser_evidence_bundle(bundle)
     ordered_steps = tuple(item.step_id for item in scenario.steps)
     ordered_results = tuple(item.step_id for item in bundle.results)
-    positions = [ordered_steps.index(item) for item in ordered_results if item in ordered_steps]
     terminal = dict(scenario.steps[-1].payload)
+    passed_terminal = bundle.terminal_reason in {"first_pass", "fresh_primary", "alternate_engine"}
     if (
         bundle.scenario_digest != scenario.scenario_digest
         or bundle.profile_id != scenario.profile_id
@@ -376,9 +438,40 @@ def bind_browser_evidence_bundle(scenario, bundle):
         or bundle.viewport != scenario.viewport
         or bundle.origin_digest != scenario.target_origin_digest
         or bundle.route_digest != digest_target_route(scenario.initial_route)
-        or len(positions) != len(ordered_results)
-        or positions != sorted(positions)
+        or ordered_results != ordered_steps
+        or terminal["status"] != bundle.results[-1].status
         or terminal["reason"] != bundle.terminal_reason
+        or (passed_terminal and bundle.covered_case_ids != (scenario.case_id,))
+        or (not passed_terminal and scenario.case_id not in bundle.missing_case_ids)
     ):
         raise ValueError("browser bundle scenario binding mismatch")
+    if bundle.terminal_reason == "human_action_required":
+        if recovery_receipt is not None:
+            raise ValueError("human action cannot bind browser recovery")
+        return bundle
+    if recovery_receipt is None:
+        raise ValueError("browser recovery receipt is required")
+    receipt = snapshot_browser_recovery_receipt(recovery_receipt)
+    expected_reason = _RECEIPT_REASON_BY_TERMINAL[bundle.terminal_reason]
+    attempt_refs = tuple(browser_attempt_reference(item) for item in receipt.attempts)
+    final_session_ref = browser_session_reference(receipt.attempts[-1])
+    if (
+        receipt.case_id != scenario.case_id
+        or receipt.verification_profile_id != scenario.profile_id
+        or receipt.requested_engine != scenario.primary_engine
+        or receipt.actual_engine != bundle.engine
+        or receipt.configured_engines != tuple(
+            item for item in (scenario.primary_engine, scenario.alternate_engine) if item is not None
+        )
+        or receipt.target_origin_digest != scenario.target_origin_digest
+        or receipt.target_route_digest != digest_target_route(scenario.initial_route)
+        or receipt.declared_route_digest != bundle.route_digest
+        or receipt.viewport != scenario.viewport
+        or receipt.reason_code != expected_reason
+        or receipt.missing_case_ids != bundle.missing_case_ids
+        or attempt_refs != bundle.attempt_refs
+        or final_session_ref != bundle.session_ref
+        or browser_recovery_receipt_digest(receipt) != bundle.recovery_receipt_digest
+    ):
+        raise ValueError("browser bundle recovery binding mismatch")
     return bundle

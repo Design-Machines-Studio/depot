@@ -112,6 +112,11 @@ def _validate_expected(value):
     return _safe_string(value, "assertion expected value", maximum=512)
 
 
+def _safe_route(value, name="route"):
+    """Validate durable route text before applying structural route policy."""
+    return _validate_route(_safe_string(value, name, maximum=2048))
+
+
 def _assertion_expected(kind, value):
     value = _validate_expected(value)
     if kind == "status" and (type(value) is not int or not 100 <= value <= 599):
@@ -121,7 +126,7 @@ def _assertion_expected(kind, value):
     if kind in {"visibility", "focus", "overflow"} and type(value) is not bool:
         raise ValueError("invalid boolean assertion")
     if kind == "url":
-        value = _validate_route(value)
+        value = _safe_route(value, "url assertion")
     return value
 
 
@@ -130,7 +135,7 @@ def _validate_payload(kind, payload):
         raise ValueError("scenario step fields mismatch")
     result = dict(payload)
     if kind == "navigate":
-        result["route"] = _validate_route(result["route"])
+        result["route"] = _safe_route(result["route"])
     elif kind == "interact":
         result["locator"] = _safe_locator(result["locator_kind"], result["locator"])
         if result["locator_kind"] == "none" or result["action"] not in {
@@ -208,7 +213,11 @@ def _validate_payload(kind, payload):
             "human_help_required", "application_failure",
         }:
             raise ValueError("invalid terminal status")
-        if result["status"] != "passed" and result["status"] != result["reason"]:
+        expected_status = (
+            "passed" if result["reason"] in {"first_pass", "fresh_primary", "alternate_engine"}
+            else result["reason"]
+        )
+        if result["status"] != expected_status:
             raise ValueError("terminal status mismatch")
     return tuple(sorted(result.items()))
 
@@ -286,7 +295,7 @@ class BrowserScenario:
             raise ValueError("invalid profile binding")
         if type(self.target_origin_digest) is not str or _ORIGIN.fullmatch(self.target_origin_digest) is None:
             raise ValueError("invalid origin binding")
-        _validate_route(self.initial_route); validate_viewport(self.viewport)
+        _safe_route(self.initial_route, "initial_route"); validate_viewport(self.viewport)
         if self.primary_engine not in _ENGINES or (
             self.alternate_engine is not None
             and (self.alternate_engine not in _ENGINES or self.alternate_engine == self.primary_engine)
