@@ -82,13 +82,17 @@ Write the exact declared dependent node IDs to the dependency JSON file, using `
 ## Mechanical Read-only Boundary
 
 Plain review is inspection and reporting only. Its sole writable repository
-surface is the declared evidence root physically beneath the EventStore-owned
-run root, `<event-store-root>/review-artifacts/` by default. Before
-Phase 1, capture the repository boundary with `capture_review_boundary`; after
-Phase 8, capture it again and require `compare_review_boundary(...).read_only`
-to be true. The check hashes product/source/config/tracking file contents as
+surface is the kernel-derived evidence root physically beneath the
+EventStore-owned run root. Before Phase 1, run
+`review-boundary-capture --state-dir <run-root> --repo-root <repo-root>` and
+retain its content-addressed `boundary_ref`. After Phase 8, run
+`review-boundary-compare --state-dir <run-root> --repo-root <repo-root>
+--before-ref <boundary_ref>` and require exit 0 with `read_only: true`.
+There is no caller-selected artifact/exclusion root. The check hashes
+product/source/config/tracking file contents as
 well as status, Git index, HEAD, refs, and the content/state of provider
-mutation receipts while excluding the physically bound owned evidence root.
+mutation receipts while excluding only the physically pinned EventStore run
+root.
 Provider state is authoritative only when each capture successfully derives the
 GitHub repository from `origin` and performs the fixed, bounded, paginated
 read-only `gh api` inventory of all issues, pull requests, issue/PR comments,

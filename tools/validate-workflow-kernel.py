@@ -108,6 +108,8 @@ BEHAVIORAL_CLI_CASES = {
     "browser-scenario-validate": ("--scenario", "<missing>", "--output", "<output>"),
     "browser-bundle-record": ("--scenario", "<missing>", "--bundle", "<missing>", "--output", "<output>"),
     "review-record": ("--record", "<missing>", "--state-dir", "<state>", "--artifact-root", "<state>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z", "--expected-sequence", "0", "--output", "<output>"),
+    "review-boundary-capture": ("--state-dir", "<state>", "--repo-root", "<state>", "--output", "<output>"),
+    "review-boundary-compare": ("--state-dir", "<state>", "--repo-root", "<state>", "--before-ref", "review-boundaries/sha256-0000000000000000000000000000000000000000000000000000000000000000.json", "--output", "<output>"),
     "ci-evidence-normalize": ("--raw", "<missing>", "--output", "<output>"),
     "closeout-audit": ("--expected", "<missing>", "--observed", "<missing>", "--output", "<output>"),
     "improvement-index": ("--request", "<missing>", "--output", "<output>"),
@@ -417,6 +419,7 @@ def check_cli(context, *, new_cli_only=False):
         "verification-plan", "verification-run", "verification-result",
         "evidence-match", "artifact-classify", "staging-allowlist",
         "browser-scenario-validate", "browser-bundle-record", "review-record",
+        "review-boundary-capture", "review-boundary-compare",
         "ci-evidence-normalize", "closeout-audit", "improvement-index",
         "improvement-finalize", "improvement-render",
     }
@@ -434,6 +437,11 @@ def check_cli(context, *, new_cli_only=False):
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
         )
         require(initialized.returncode == 0, "temporary git fixture initialization failed")
+        subprocess.run(("git", "config", "user.email", "validator@example.test"), cwd=root, check=True)
+        subprocess.run(("git", "config", "user.name", "Kernel Validator"), cwd=root, check=True)
+        (root / ".gitignore").write_text("*\n!.gitignore\n", encoding="utf-8")
+        subprocess.run(("git", "add", ".gitignore"), cwd=root, check=True)
+        subprocess.run(("git", "commit", "-qm", "validator baseline"), cwd=root, check=True)
         run_root = root / ".workflow-kernel" / "runs" / "validator-cli"
         state_dir = run_root
         replacements = {
@@ -484,9 +492,11 @@ def check_cli(context, *, new_cli_only=False):
             path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
             return path
 
-        from tests.test_repository_verification import profile, repository
+        from tests.test_repository_verification import profile
+        from workflow_kernel.repository_verification import capture_repository_state
         verification_profile = write_fixture("repository-profile.json", profile())
-        repository_state = write_fixture("repository-state.json", repository())
+        repository_state_value = capture_repository_state(root)
+        repository_state = write_fixture("repository-state.json", repository_state_value)
         plan_request = write_fixture("verification-plan-request.json", {
             "changed_paths": [], "changed_packages": [], "risk_inputs": [],
             "required_lane_ids": [], "generated_at": "2026-07-14T00:00:00Z",
@@ -501,7 +511,7 @@ def check_cli(context, *, new_cli_only=False):
                    "--profile", verification_profile, "--repository", repository_state,
                    "--prerequisites", prerequisites, "--lane-id", "doctor",
                    "--repo-root", root, "--output", verification_result)
-        stale_repository = dict(repository()); stale_repository["commit_sha"] = "d" * 40
+        stale_repository = dict(repository_state_value); stale_repository["commit_sha"] = "d" * 40
         expect_exit("verification-run", cli.EXIT_UNSAFE_PLAN,
                     "--plan", verification_plan, "--profile", verification_profile,
                     "--repository", write_fixture("stale-repository.json", stale_repository),
@@ -579,6 +589,21 @@ def check_cli(context, *, new_cli_only=False):
                    "--artifact-root", review_state / "artifacts", "--run-id", "review-1",
                    "--occurred-at", "2026-07-14T00:00:00Z", "--expected-sequence", "0",
                    "--output", root / "review-record-ref.json")
+        boundary_receipt = root / "review-boundary-capture.json"
+        successful(
+            "review-boundary-capture", "--state-dir", run_root,
+            "--repo-root", root, "--output", boundary_receipt,
+        )
+        boundary_ref = json.loads(boundary_receipt.read_text())["boundary_ref"]
+        boundary_compare = run([
+            sys.executable, "-m", "workflow_kernel", "review-boundary-compare",
+            "--state-dir", str(run_root), "--repo-root", str(root),
+            "--before-ref", boundary_ref,
+            "--output", str(root / "review-boundary-compare.json"),
+        ])
+        require(boundary_compare.returncode == cli.EXIT_UNSAFE_PLAN,
+                "review-boundary-compare unavailable-provider exit changed")
+        outcomes["review-boundary-compare"] = boundary_compare.returncode
 
         from tests.test_ci_evidence import raw
         successful("ci-evidence-normalize", "--raw", write_fixture("ci-raw.json", raw()),

@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
+import subprocess
 from datetime import datetime
+from pathlib import Path
 from pathlib import PurePosixPath
 
 from .argv import validate_safe_argv
@@ -265,6 +269,101 @@ def validate_repository_state(value):
     if state["worktree_state"] not in {"clean", "dirty", "detached"}:
         _fail("invalid worktree_state")
     return state
+
+
+def _git_bytes(root, *arguments):
+    try:
+        return subprocess.run(
+            ("git", *arguments), cwd=root, check=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as error:
+        _fail("repository state unavailable")
+
+
+def _sha256_bytes(value):
+    return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def _untracked_digest(root, raw_paths):
+    digest = hashlib.sha256()
+    for raw_path in sorted(item for item in raw_paths.split(b"\0") if item):
+        try:
+            relative = raw_path.decode("utf-8", "surrogateescape")
+            path = root / relative
+            before = os.lstat(path)
+            digest.update(len(raw_path).to_bytes(8, "big"))
+            digest.update(raw_path)
+            if stat.S_ISREG(before.st_mode):
+                digest.update(b"file\0")
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(65_536), b""):
+                        digest.update(chunk)
+            elif stat.S_ISLNK(before.st_mode):
+                digest.update(b"symlink\0")
+                digest.update(os.fsencode(os.readlink(path)))
+            else:
+                digest.update(b"special\0")
+                digest.update(str(before.st_mode).encode("ascii"))
+            after = os.lstat(path)
+        except OSError:
+            _fail("repository state changed during capture")
+        if (
+            before.st_dev, before.st_ino, before.st_mode, before.st_size,
+            before.st_mtime_ns,
+        ) != (
+            after.st_dev, after.st_ino, after.st_mode, after.st_size,
+            after.st_mtime_ns,
+        ):
+            _fail("repository state changed during capture")
+    return "sha256:" + digest.hexdigest()
+
+
+def capture_repository_state(repo_root):
+    """Capture authoritative live Git and physical repository scope state."""
+    from .repository_scope import repository_scope
+
+    requested = Path(repo_root).resolve(strict=True)
+    scope = repository_scope(requested)
+    if requested != scope.repo_root:
+        _fail("repository root does not match canonical scope")
+    head = _git_bytes(requested, "rev-parse", "--verify", "HEAD^{commit}").strip()
+    tree = _git_bytes(requested, "rev-parse", "--verify", "HEAD^{tree}").strip()
+    tracked = _git_bytes(
+        requested, "diff", "--binary", "--no-ext-diff", "HEAD", "--",
+    )
+    untracked_paths = _git_bytes(
+        requested, "ls-files", "--others", "--exclude-standard", "-z", "--",
+    )
+    untracked = _untracked_digest(requested, untracked_paths)
+    try:
+        branch = _git_bytes(requested, "symbolic-ref", "--quiet", "--short", "HEAD").strip()
+    except ValueError:
+        branch = b"HEAD"
+    final_scope = repository_scope(requested)
+    if scope != final_scope:
+        _fail("repository scope changed during capture")
+    try:
+        commit_sha = head.decode("ascii")
+        branch_name = branch.decode("utf-8")
+    except UnicodeError:
+        _fail("invalid repository identity")
+    empty = hashlib.sha256(b"").hexdigest()
+    detached = branch_name == "HEAD"
+    dirty = (
+        hashlib.sha256(tracked).hexdigest() != empty
+        or bool(untracked_paths.rstrip(b"\0"))
+    )
+    return validate_repository_state({
+        "scope_id": scope.scope_id,
+        "commit_sha": commit_sha,
+        "tree_digest": _sha256_bytes(tree),
+        "tracked_diff_digest": _sha256_bytes(tracked),
+        "untracked_digest": untracked,
+        "branch": branch_name,
+        "worktree_state": "detached" if detached else ("dirty" if dirty else "clean"),
+    })
 
 
 def _lane_selected(lane, changed_paths, changed_packages, risk_inputs, required):

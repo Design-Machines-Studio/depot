@@ -91,6 +91,7 @@ class CliTests(unittest.TestCase):
             "verification-plan", "verification-run", "verification-result",
             "evidence-match", "artifact-classify", "staging-allowlist",
             "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "review-boundary-capture", "review-boundary-compare",
             "ci-evidence-normalize", "closeout-audit", "improvement-index",
             "improvement-finalize", "improvement-render",
         ):

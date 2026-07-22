@@ -31,6 +31,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "verification-plan", "verification-run", "verification-result",
             "evidence-match", "artifact-classify", "staging-allowlist",
             "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "review-boundary-capture", "review-boundary-compare",
             "ci-evidence-normalize", "closeout-audit", "improvement-index",
             "improvement-finalize", "improvement-render",
         }
@@ -47,6 +48,7 @@ class ReleaseValidatorTests(unittest.TestCase):
                 "plan-create", "plan-compose", "record-create", "plan-cleanup",
                 "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
                 "plan-reconcile", "verification-run",
+                "review-boundary-capture", "review-boundary-compare",
             },
         )
         self.assertEqual(

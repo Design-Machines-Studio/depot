@@ -1,13 +1,17 @@
 import copy
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from tests import KERNEL_REFERENCES, schema_matches
-from workflow_kernel.repository_verification import derive_verification_plan
+from workflow_kernel.repository_scope import repository_scope
+from workflow_kernel.repository_verification import (
+    capture_repository_state, derive_verification_plan,
+)
 from workflow_kernel.verification_execution import (
     _bounded_run, execute_selected_lane, parse_go_test_json,
     repository_doctor_checks,
@@ -22,6 +26,17 @@ class VerificationExecutionTests(unittest.TestCase):
             changed_paths=["pkg/file.go"], changed_packages=["./pkg"], risk_inputs=[],
             generated_at="2026-07-22T00:00:00Z",
         )
+
+    def init_repository(self, root):
+        subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+        subprocess.run(("git", "config", "user.email", "verification@example.test"), cwd=root, check=True)
+        subprocess.run(("git", "config", "user.name", "Verification Test"), cwd=root, check=True)
+        (root / ".gitignore").write_text(".workflow-kernel/\n")
+        (root / "tracked.txt").write_text("base\n")
+        subprocess.run(("git", "add", ".gitignore", "tracked.txt"), cwd=root, check=True)
+        subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
+        repository_scope(root, create=True)
+        return capture_repository_state(root)
 
     def test_doctor_reports_each_binding_and_prerequisite(self):
         value = self.plan()
@@ -69,16 +84,17 @@ class VerificationExecutionTests(unittest.TestCase):
     def test_execution_uses_bound_lane_and_clean_environment(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); (root / "pkg").mkdir()
+            live_repository = self.init_repository(root)
             profile_value = profile()
             focused = next(item for item in profile_value["lanes"] if item["id"] == "focused")
             focused.update(
                 argv=[sys.executable, "-c", "import json; print(json.dumps({'Action':'pass','Package':'example/pkg','Elapsed':0.1}))"],
                 workdir=".", prerequisites=[],
             )
-            plan = self.plan(profile_value)
+            plan = self.plan(profile_value, live_repository)
             result = execute_selected_lane(
                 plan, profile_value, lane_id="focused", repo_root=root,
-                current_repository=repository(), prerequisite_states={"tool:git": "available"},
+                current_repository=live_repository, prerequisite_states={"tool:git": "available"},
             )
             self.assertEqual(result["status"], "passed")
             self.assertEqual(result["packages"][0]["package"], "example/pkg")
@@ -88,20 +104,22 @@ class VerificationExecutionTests(unittest.TestCase):
     def test_stale_profile_remote_lane_missing_tool_and_output_limit_block(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            value = self.plan()
+            live_repository = self.init_repository(root)
+            value = self.plan(repository_value=live_repository)
             changed_profile = profile(); changed_profile["profile_version"] = 2
             blocked = execute_selected_lane(value, changed_profile, lane_id="focused", repo_root=root,
-                                            current_repository=repository(), prerequisite_states={"tool:git": "available"})
+                                            current_repository=live_repository, prerequisite_states={"tool:git": "available"})
             self.assertEqual(blocked["status"], "blocked")
-            remote_plan = derive_verification_plan(profile(), repository(), changed_paths=[], changed_packages=[],
+            remote_plan = derive_verification_plan(profile(), live_repository, changed_paths=[], changed_packages=[],
                                                    risk_inputs=["concurrency"], generated_at="2026-07-22T00:00:00Z")
             remote = execute_selected_lane(remote_plan, profile(), lane_id="race", repo_root=root,
-                                           current_repository=repository(), prerequisite_states={"tool:git": "available"})
+                                           current_repository=live_repository, prerequisite_states={"tool:git": "available"})
             self.assertEqual(remote["parser_reason"], "lane_not_runnable")
 
     def test_output_limit_and_timeout_do_not_pass(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
+            live_repository = self.init_repository(root)
             for command, expected in (
                 ([sys.executable, "-c", "print('x' * 10000)"], "output_limit_exceeded"),
                 ([sys.executable, "-c", "import time; time.sleep(2)"], "timeout"),
@@ -110,9 +128,9 @@ class VerificationExecutionTests(unittest.TestCase):
                 focused = next(item for item in value["lanes"] if item["id"] == "focused")
                 focused.update(argv=command, parser="exit-code", prerequisites=[],
                                max_output_bytes=100, timeout_seconds=1)
-                plan = self.plan(value)
+                plan = self.plan(value, live_repository)
                 result = execute_selected_lane(plan, value, lane_id="focused", repo_root=root,
-                                               current_repository=repository(), prerequisite_states={"tool:git": "available"})
+                                               current_repository=live_repository, prerequisite_states={"tool:git": "available"})
                 self.assertEqual(result["status"], "failed")
                 self.assertEqual(result["parser_reason"], expected)
 
@@ -140,6 +158,39 @@ class VerificationExecutionTests(unittest.TestCase):
                 time.sleep(0.02)
             else:
                 self.fail("timed-out descendant process survived its execution session")
+
+    def test_live_repository_state_blocks_stale_and_different_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "first"; root.mkdir()
+            live = self.init_repository(root)
+            marker = root / "executed"
+            value = profile()
+            focused = next(item for item in value["lanes"] if item["id"] == "focused")
+            focused.update(
+                argv=[sys.executable, "-c", f"open({str(marker)!r}, 'w').write('ran')"],
+                parser="exit-code", prerequisites=[],
+            )
+            plan = self.plan(value, live)
+
+            (root / "tracked.txt").write_text("mutated\n")
+            stale = execute_selected_lane(
+                plan, value, lane_id="focused", repo_root=root,
+                current_repository=live, prerequisite_states={},
+            )
+            self.assertEqual((stale["status"], stale["parser_reason"]),
+                             ("blocked", "preflight_blocked"))
+            self.assertFalse(marker.exists())
+
+            other = Path(directory) / "other"
+            subprocess.run(("git", "clone", "-q", str(root), str(other)), check=True)
+            repository_scope(other, create=True)
+            different = execute_selected_lane(
+                plan, value, lane_id="focused", repo_root=other,
+                current_repository=live, prerequisite_states={},
+            )
+            self.assertEqual((different["status"], different["parser_reason"]),
+                             ("blocked", "preflight_blocked"))
+            self.assertFalse(marker.exists())
 
 
 if __name__ == "__main__":

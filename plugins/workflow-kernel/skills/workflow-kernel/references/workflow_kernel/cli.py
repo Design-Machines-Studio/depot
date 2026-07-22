@@ -43,7 +43,10 @@ from .repository_verification import (
     derive_verification_plan, validate_repository_profile,
     validate_repository_state, validate_verification_result,
 )
-from .review_records import persist_review_record
+from .review_records import (
+    compare_persisted_review_boundary, persist_review_boundary,
+    persist_review_record,
+)
 from .verification_execution import execute_selected_lane
 
 
@@ -2031,6 +2034,21 @@ def command_review_record(args):
     return 0
 
 
+def command_review_boundary_capture(args):
+    store = EventStore(Path(args.state_dir))
+    _write_json(args.output, persist_review_boundary(args.repo_root, store))
+    return 0
+
+
+def command_review_boundary_compare(args):
+    store = EventStore(Path(args.state_dir))
+    result = compare_persisted_review_boundary(
+        args.repo_root, store, args.before_ref,
+    )
+    _write_json(args.output, result)
+    return 0 if result["read_only"] else EXIT_UNSAFE_PLAN
+
+
 def command_ci_evidence_normalize(args):
     mapping = _load_json(args.mapping) if args.mapping else None
     _write_json(args.output, build_ci_evidence(_load_json(args.raw), mapping=mapping))
@@ -2286,6 +2304,25 @@ def parser():
     review_record.add_argument("--expected-sequence", type=int, required=True)
     review_record.add_argument("--output", required=True)
     review_record.set_defaults(handler=command_review_record)
+
+    review_boundary_capture = commands.add_parser(
+        "review-boundary-capture",
+        help="capture and pin a pre-review repository boundary",
+    )
+    review_boundary_capture.add_argument("--state-dir", required=True)
+    review_boundary_capture.add_argument("--repo-root", required=True)
+    review_boundary_capture.add_argument("--output", required=True)
+    review_boundary_capture.set_defaults(handler=command_review_boundary_capture)
+
+    review_boundary_compare = commands.add_parser(
+        "review-boundary-compare",
+        help="compare live state with a pinned pre-review boundary",
+    )
+    review_boundary_compare.add_argument("--state-dir", required=True)
+    review_boundary_compare.add_argument("--repo-root", required=True)
+    review_boundary_compare.add_argument("--before-ref", required=True)
+    review_boundary_compare.add_argument("--output", required=True)
+    review_boundary_compare.set_defaults(handler=command_review_boundary_compare)
 
     ci_evidence = commands.add_parser("ci-evidence-normalize", help="normalize explicit provider CI evidence")
     ci_evidence.add_argument("--raw", required=True)

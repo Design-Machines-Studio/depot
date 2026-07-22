@@ -12,12 +12,14 @@ from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.events import EventStore
 from workflow_kernel.review_records import (
     build_finding_record, build_lane_record, canonical_finding_id,
-    capture_review_boundary, compare_review_boundary, consolidate_findings,
+    capture_review_boundary, compare_persisted_review_boundary,
+    compare_review_boundary, consolidate_findings, persist_review_boundary,
     persist_review_record, project_review_markdown, project_todo_rows,
     source_scope_digest, validate_finding_record,
     validate_lane_record,
 )
 from workflow_kernel.state import RunLease
+from workflow_kernel.repository_scope import repository_scope
 
 
 class ReviewFindingTests(unittest.TestCase):
@@ -289,13 +291,18 @@ class ReviewFindingTests(unittest.TestCase):
             subprocess.run(("git", "config", "user.email", "review@example.test"), cwd=root, check=True)
             subprocess.run(("git", "config", "user.name", "Review Test"), cwd=root, check=True)
             product = root / "product.txt"; product.write_text("base\n")
-            subprocess.run(("git", "add", "product.txt"), cwd=root, check=True)
+            (root / ".gitignore").write_text(".workflow-kernel/\n")
+            subprocess.run(("git", "add", "product.txt", ".gitignore"), cwd=root, check=True)
             subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
             subprocess.run((
                 "git", "remote", "add", "origin",
                 "git@github.com:design-machines/review-test.git",
             ), cwd=root, check=True)
-            artifacts = root / ".claude" / "ux-review"
+            scope = repository_scope(root, create=True)
+            run_root = scope.lease_root / "runs" / "review-1"
+            run_root.mkdir(parents=True)
+            store = EventStore(run_root)
+            artifacts = store.root / "review-artifacts"
             inventories = {name: [[]] for name, _suffix in review_records._GITHUB_INVENTORIES}
             calls = []
             def observed_gh(argv, cwd, **bounds):
@@ -305,7 +312,7 @@ class ReviewFindingTests(unittest.TestCase):
                             if endpoint.endswith(suffix))
                 return json.dumps(inventories[name]).encode()
             def boundary():
-                return capture_review_boundary(root, artifacts)
+                return capture_review_boundary(root, store)
 
             with mock.patch(
                     "workflow_kernel.review_records._run_bounded",
@@ -364,7 +371,7 @@ class ReviewFindingTests(unittest.TestCase):
 
             with self.assertRaises(TypeError):
                 capture_review_boundary(
-                    root, artifacts, provider_snapshot_ref="self-attested.json",
+                    root, store, provider_snapshot_ref="self-attested.json",
                 )
 
             inventories["issues"] = [[{}], [{}]]
@@ -403,6 +410,51 @@ class ReviewFindingTests(unittest.TestCase):
             self.assertFalse(unavailable_result["read_only"])
             self.assertIn("provider_state_unavailable",
                           unavailable_result["provider_state_reasons"])
+
+    def test_persisted_boundary_rejects_caller_exclusion_and_hidden_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.email", "review@example.test"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.name", "Review Test"), cwd=root, check=True)
+            (root / ".gitignore").write_text(".workflow-kernel/\n")
+            hidden = root / "review-artifacts"; hidden.mkdir()
+            product = hidden / "product.txt"; product.write_text("base\n")
+            subprocess.run(("git", "add", ".gitignore", "review-artifacts/product.txt"), cwd=root, check=True)
+            subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
+            subprocess.run(("git", "remote", "add", "origin", "git@github.com:design-machines/review-test.git"), cwd=root, check=True)
+            scope = repository_scope(root, create=True)
+            run_root = scope.lease_root / "runs" / "review-1"; run_root.mkdir(parents=True)
+            store = EventStore(run_root)
+            inventories = {name: [[]] for name, _suffix in review_records._GITHUB_INVENTORIES}
+
+            def observed_gh(argv, cwd, **_bounds):
+                endpoint = argv[4]
+                name = next(name for name, suffix in review_records._GITHUB_INVENTORIES
+                            if endpoint.endswith(suffix))
+                return json.dumps(inventories[name]).encode()
+
+            with mock.patch("workflow_kernel.review_records._run_bounded", side_effect=observed_gh):
+                before = persist_review_boundary(root, store)
+                product.write_text("mutation hidden by the old caller exclusion\n")
+                changed = compare_persisted_review_boundary(
+                    root, store, before["boundary_ref"],
+                )
+                self.assertFalse(changed["read_only"])
+                self.assertIn("product_content_digest", changed["changed"])
+                with self.assertRaises((TypeError, ValueError)):
+                    capture_review_boundary(root, hidden)
+
+                product.write_text("base\n")
+                clean = persist_review_boundary(root, store)
+                evidence = store.root / "review-boundaries"
+                displaced = store.root / "displaced-review-boundaries"
+                evidence.rename(displaced)
+                evidence.mkdir()
+                with self.assertRaises((OSError, ValueError)):
+                    compare_persisted_review_boundary(
+                        root, store, clean["boundary_ref"],
+                    )
 
     def test_plain_review_prose_is_read_only_and_fix_paths_own_mutation(self):
         root = Path(__file__).parents[1]

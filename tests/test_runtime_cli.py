@@ -900,6 +900,40 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(list(victim.iterdir()), [])
             self.assertEqual(len((run_dir / "events.jsonl").read_text().splitlines()), 1)
 
+    def test_review_boundary_launcher_contract_rejects_caller_exclusion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "boundary-run")
+            subprocess.run(("git", "config", "user.email", "boundary@example.test"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.name", "Boundary Test"), cwd=root, check=True)
+            (root / ".gitignore").write_text(".workflow-kernel/\n")
+            product = root / "product.txt"; product.write_text("base\n")
+            subprocess.run(("git", "add", ".gitignore", "product.txt"), cwd=root, check=True)
+            subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
+            state = root / ".workflow-kernel" / "runs" / "boundary-run"
+            receipt_path = root / "boundary-receipt.json"
+            captured = self.run_cli(
+                "review-boundary-capture", "--state-dir", state,
+                "--repo-root", root, "--output", receipt_path,
+            )
+            self.assertEqual(captured.returncode, 0, captured.stderr)
+            receipt = json.loads(receipt_path.read_text())
+            compared = self.run_cli(
+                "review-boundary-compare", "--state-dir", state,
+                "--repo-root", root, "--before-ref", receipt["boundary_ref"],
+                "--output", root / "boundary-compare.json",
+            )
+            self.assertEqual(compared.returncode, 3, compared.stderr)
+            self.assertIn("provider_state_unavailable", json.loads(
+                (root / "boundary-compare.json").read_text(),
+            )["provider_state_reasons"])
+            caller_exclusion = self.run_cli(
+                "review-boundary-capture", "--state-dir", state,
+                "--repo-root", root, "--artifact-root", root / "product.txt",
+                "--output", root / "invalid-boundary.json",
+            )
+            self.assertEqual(caller_exclusion.returncode, 2)
+
     def test_cleanup_command_surface_and_plan_create(self):
         help_result = self.run_cli("--help")
         for command in (
@@ -909,6 +943,7 @@ class RuntimeCliTests(unittest.TestCase):
             "verification-plan", "verification-run", "verification-result",
             "evidence-match", "artifact-classify", "staging-allowlist",
             "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "review-boundary-capture", "review-boundary-compare",
             "ci-evidence-normalize", "closeout-audit", "improvement-index",
             "improvement-finalize", "improvement-render",
         ):
@@ -930,6 +965,7 @@ class RuntimeCliTests(unittest.TestCase):
             "verification-plan", "verification-run", "verification-result",
             "evidence-match", "artifact-classify", "staging-allowlist",
             "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "review-boundary-capture", "review-boundary-compare",
             "ci-evidence-normalize", "closeout-audit", "improvement-index",
             "improvement-finalize", "improvement-render",
         }
@@ -951,7 +987,10 @@ class RuntimeCliTests(unittest.TestCase):
         with mock.patch.object(VALIDATOR, "run", side_effect=through_launcher):
             VALIDATOR.check_cli(context, new_cli_only=True)
         self.assertTrue(new_commands <= set(invoked))
-        self.assertTrue(all(context["cli_commands"][name] == 0 for name in new_commands))
+        self.assertTrue(all(
+            context["cli_commands"][name] == (3 if name == "review-boundary-compare" else 0)
+            for name in new_commands
+        ))
 
     def test_runtime_resolver_ignores_cwd_and_rejects_symlink_escape(self):
         from workflow_kernel.cli import resolve_workflow_kernel_runtime

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .argv import validate_safe_argv
 from .repository_verification import (
-    canonical_digest, validate_repository_profile, validate_repository_state,
+    canonical_digest, capture_repository_state, validate_repository_profile, validate_repository_state,
     validate_verification_plan, validate_verification_result,
 )
 
@@ -233,15 +233,29 @@ def execute_selected_lane(plan, profile, *, lane_id, repo_root, current_reposito
         raise ValueError("unknown lane")
     if not lane["selected"] or not lane["runnable"] or lane["authority"] != "local":
         return _blocked_result(lane, plan, "lane_not_runnable", started)
-    checks = repository_doctor_checks(plan, profile, current_repository, prerequisite_states)
-    if any(item["status"] != "passed" for item in checks if item["id"] not in {"generator_drift", "diff_check"}):
-        return _blocked_result(lane, plan, "preflight_blocked", started)
     root = Path(repo_root).resolve(strict=True)
     cwd = (root / lane["workdir"]).resolve(strict=True)
     try:
         cwd.relative_to(root)
     except ValueError:
         return _blocked_result(lane, plan, "working_directory_escape", started)
+    expected_repository = validate_repository_state(current_repository)
+    try:
+        # Capture after every non-execution operation and immediately before
+        # process creation. The live checkout, not caller JSON, is authority.
+        live_repository = capture_repository_state(root)
+    except (OSError, ValueError):
+        return _blocked_result(lane, plan, "repository_state_unavailable", started)
+    checks = repository_doctor_checks(
+        plan, profile, live_repository, prerequisite_states,
+    )
+    if expected_repository != live_repository:
+        checks.append({
+            "id": "expected_repository_binding", "status": "blocked",
+            "reason": "expected_repository_state_changed",
+        })
+    if any(item["status"] != "passed" for item in checks if item["id"] not in {"generator_drift", "diff_check"}):
+        return _blocked_result(lane, plan, "preflight_blocked", started)
     command_digest = canonical_digest(lane["argv"])
     try:
         exit_code, output, terminal_reason = _bounded_run(

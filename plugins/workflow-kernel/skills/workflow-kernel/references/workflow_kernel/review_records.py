@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
 from .events import EventStore
+from .repository_scope import repository_scope
 from .redaction import (
     contains_high_confidence_secret, normalize_evidence_reference,
 )
@@ -40,6 +41,9 @@ _LANE_STATES = frozenset({
     "requested", "completed", "failed", "degraded", "unavailable",
     "missing", "unknown",
 })
+_BOUNDARY_DIRECTORY = "review-boundaries"
+_BOUNDARY_REF = re.compile(r"review-boundaries/sha256-[0-9a-f]{64}\.json\Z")
+_BOUNDARY_MAX_BYTES = 1024 * 1024
 _FINDING_FIELDS = frozenset({
     "schema_version", "record_kind", "run_id", "source_finding_id",
     "lane_id", "canonical_finding_id", "cross_id_links", "rule_id",
@@ -740,14 +744,36 @@ def _github_provider_state(root):
         return _canonical_bytes([["github", "incomplete"]]), "provider_state_incomplete"
 
 
-def capture_review_boundary(repository_root, artifact_root):
-    root = Path(repository_root).resolve()
-    artifact = Path(artifact_root).resolve()
-    if artifact != root and root not in artifact.parents:
-        _fail("artifact root outside repository")
-    relative = artifact.relative_to(root).as_posix()
+def _review_boundary_context(repository_root, event_store):
+    if type(event_store) is not EventStore:
+        _fail("review boundary requires exact EventStore")
+    root = Path(repository_root).resolve(strict=True)
+    scope = repository_scope(event_store.root)
+    run_root = Path(event_store.root).resolve(strict=True)
+    expected_parent = (scope.lease_root / "runs").resolve(strict=True)
+    if root != scope.repo_root or run_root.parent != expected_parent:
+        _fail("review boundary is outside canonical run scope")
+    try:
+        relative = run_root.relative_to(root).as_posix()
+    except ValueError:
+        _fail("review boundary run root outside repository")
+    root_entry = os.stat(root, follow_symlinks=False)
+    run_entry = os.stat(run_root, follow_symlinks=False)
+    if not stat.S_ISDIR(root_entry.st_mode) or not stat.S_ISDIR(run_entry.st_mode):
+        _fail("unsafe review boundary identity")
+    return root, run_root, scope, relative, root_entry, run_entry
+
+
+def _capture_review_boundary(context):
+    root, _run_root, scope, relative, root_entry, run_entry = context
     provider_state, provider_reason = _github_provider_state(root)
     return {
+        "repository_scope_id": scope.scope_id,
+        "repository_root_device": root_entry.st_dev,
+        "repository_root_inode": root_entry.st_ino,
+        "run_root_device": run_entry.st_dev,
+        "run_root_inode": run_entry.st_ino,
+        "excluded_run_root_ref": relative,
         "head": _git(root, "rev-parse", "HEAD").strip(),
         "index_digest": "sha256:" + hashlib.sha256(_git(root, "ls-files", "--stage").encode()).hexdigest(),
         "refs_digest": "sha256:" + hashlib.sha256(_git(root, "for-each-ref", "--format=%(refname) %(objectname)").encode()).hexdigest(),
@@ -760,8 +786,137 @@ def capture_review_boundary(repository_root, artifact_root):
     }
 
 
+def capture_review_boundary(repository_root, event_store):
+    """Capture a boundary excluding only the EventStore-owned canonical run root."""
+    context = _review_boundary_context(repository_root, event_store)
+    result = _capture_review_boundary(context)
+    # Re-derive after observation so repository/run-root displacement cannot be
+    # hidden behind otherwise identical Git and content digests.
+    refreshed = _review_boundary_context(repository_root, event_store)
+    if (
+        refreshed[:4] != context[:4]
+        or (refreshed[4].st_dev, refreshed[4].st_ino) != (context[4].st_dev, context[4].st_ino)
+        or (refreshed[5].st_dev, refreshed[5].st_ino) != (context[5].st_dev, context[5].st_ino)
+    ):
+        _fail("review boundary identity changed during capture")
+    return result
+
+
+def _boundary_digest(value):
+    return "sha256:" + hashlib.sha256(_canonical_bytes(value)).hexdigest()
+
+
+def _boundary_artifact_root(event_store):
+    return _ensure_owned_artifact_root(
+        Path(event_store.root) / _BOUNDARY_DIRECTORY, event_store,
+    )
+
+
+def persist_review_boundary(repository_root, event_store):
+    """Persist an immutable content-addressed pre-review boundary document."""
+    context = _review_boundary_context(repository_root, event_store)
+    boundary = _capture_review_boundary(context)
+    evidence_root = _boundary_artifact_root(event_store)
+    evidence_entry = os.stat(evidence_root, follow_symlinks=False)
+    body = {
+        "schema_version": 1,
+        "boundary": boundary,
+        "evidence_root_device": evidence_entry.st_dev,
+        "evidence_root_inode": evidence_entry.st_ino,
+    }
+    digest = _boundary_digest(body)
+    document = {**body, "record_digest": digest}
+    name = digest.replace(":", "-") + ".json"
+    path = evidence_root / name
+    encoded = _canonical_bytes(document) + b"\n"
+    binding = bind_durable_path(path)
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        if directory.regular_exists(name):
+            descriptor = owned.own(directory.open_regular(name, os.O_RDONLY))
+            if _read_descriptor(descriptor) != encoded:
+                _fail("review boundary content address conflict")
+        else:
+            descriptor = owned.own(directory.open_regular(
+                name, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600,
+            ))
+            pending = encoded
+            while pending:
+                pending = pending[os.write(descriptor, pending):]
+            os.fsync(descriptor)
+            directory.require_identity(descriptor, name)
+            directory.fsync()
+    return {
+        "boundary_ref": f"{_BOUNDARY_DIRECTORY}/{name}",
+        "boundary_digest": digest,
+        "repository_scope_id": context[2].scope_id,
+    }
+
+
+def _load_persisted_review_boundary(event_store, reference):
+    if type(reference) is not str or _BOUNDARY_REF.fullmatch(reference) is None:
+        _fail("invalid review boundary reference")
+    path = Path(event_store.root) / reference
+    binding = bind_durable_path(path)
+    event_root = Path(event_store.root).resolve(strict=True)
+    if binding.path.parent.parent != event_root:
+        _fail("review boundary reference escaped run root")
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        descriptor = owned.own(directory.open_regular(binding.path.name, os.O_RDONLY))
+        raw = _read_descriptor(descriptor)
+        directory.require_identity(descriptor, binding.path.name)
+        directory.revalidate()
+    if len(raw) > _BOUNDARY_MAX_BYTES:
+        _fail("review boundary artifact too large")
+    try:
+        value = json.loads(raw)
+    except (UnicodeError, json.JSONDecodeError, RecursionError):
+        _fail("invalid review boundary artifact")
+    fields = {
+        "schema_version", "boundary", "evidence_root_device",
+        "evidence_root_inode", "record_digest",
+    }
+    if type(value) is not dict or set(value) != fields or value["schema_version"] != 1:
+        _fail("invalid review boundary artifact")
+    body = dict(value); digest = body.pop("record_digest")
+    if (
+        type(digest) is not str or not _DIGEST.fullmatch(digest)
+        or _boundary_digest(body) != digest
+        or binding.path.name != digest.replace(":", "-") + ".json"
+    ):
+        _fail("review boundary artifact digest mismatch")
+    return value
+
+
+def compare_persisted_review_boundary(repository_root, event_store, before_ref):
+    """Compare a pinned pre-state with live state; any identity drift is unsafe."""
+    context = _review_boundary_context(repository_root, event_store)
+    before = _load_persisted_review_boundary(event_store, before_ref)
+    evidence_root = _boundary_artifact_root(event_store)
+    evidence_entry = os.stat(evidence_root, follow_symlinks=False)
+    identity_current = (
+        before["boundary"].get("repository_scope_id") == context[2].scope_id
+        and before["evidence_root_device"] == evidence_entry.st_dev
+        and before["evidence_root_inode"] == evidence_entry.st_ino
+    )
+    after = _capture_review_boundary(context)
+    result = compare_review_boundary(before["boundary"], after)
+    if not identity_current:
+        result["changed"] = sorted(set(result["changed"] + ["physical_identity"]))
+        result["read_only"] = False
+    result.update({
+        "before_ref": before_ref,
+        "before_digest": before["record_digest"],
+        "after_digest": _boundary_digest(after),
+    })
+    return result
+
+
 def compare_review_boundary(before, after):
-    keys = ("head", "index_digest", "refs_digest", "product_status_digest",
+    keys = ("repository_scope_id", "repository_root_device", "repository_root_inode",
+            "run_root_device", "run_root_inode", "excluded_run_root_ref",
+            "head", "index_digest", "refs_digest", "product_status_digest",
             "product_content_digest", "provider_receipts_digest")
     changed = [key for key in keys if before.get(key) != after.get(key)]
     reasons = sorted({reason for reason in (
