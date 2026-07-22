@@ -68,9 +68,15 @@ def project_exec_override(plugin_profile):
 
 def valid_task():
     return """---
+id: BP-MEMBERS-001
+title: Review members
+area: members
+feature: directory
+complexity: L1
 implementation_status: current
 route: /members
 requires_auth: true
+requires_role: member
 personas:
   - id: member
     expected: SUCCESS
@@ -272,9 +278,13 @@ class AssemblyVerificationProfileTests(unittest.TestCase):
         ))
         self.assertEqual(result["tasks"][0], {
             "path": "tests/ux/tasks/members.md", "implementation_status": "current",
-            "route": "/members", "requires_auth": True,
+            "id": "BP-MEMBERS-001", "title": "Review members", "area": "members",
+            "feature": "directory", "complexity": "L1", "route": "/members",
+            "requires_auth": "true", "requires_role": "member",
             "personas": [{"id": "member", "expected": "SUCCESS"}],
-            "viewport": "1440x900", "engine": "chromium",
+            "primary_viewports": ["1440x900"], "engine": "chromium",
+            "resolved_viewports": ["1440x900"], "resolved_engines": ["chromium"],
+            "viewport_source": "task_declaration", "browser_source": "task_declaration",
             "screenshot_points": ["members list"],
         })
 
@@ -287,9 +297,6 @@ class AssemblyVerificationProfileTests(unittest.TestCase):
             "personas": valid.replace("personas:\n  - id: member\n    expected: SUCCESS\n", ""),
             "persona_id": valid.replace("  - id: member\n", ""),
             "persona_expected": valid.replace("    expected: SUCCESS\n", ""),
-            "viewport": valid.replace("viewport: 1440x900\n", ""),
-            "engine": valid.replace("engine: chromium\n", ""),
-            "screenshot_points": valid.replace("screenshot_points:\n  - members list\n", ""),
         }
         for field, document in hostile.items():
             with self.subTest(field=field):
@@ -298,11 +305,90 @@ class AssemblyVerificationProfileTests(unittest.TestCase):
                 self.assertEqual((result["status"], result["reason"], result["path"]), (
                     "blocked", "invalid_task_declaration", "tests/ux/tasks/members.md",
                 ))
-                planned = self.plan()
+                planned = self.plan(required_lane_ids=["ux-task-index"])
                 self.assertEqual((planned["status"], planned["reason"]), (
                     "blocked", "invalid_ux_declaration",
                 ))
                 path.unlink()
+
+    def test_live_task_shape_binds_optional_browser_fields_from_policy(self):
+        task = valid_task().replace(
+            "requires_auth: true\n", "requires_auth: mixed\n",
+        ).replace(
+            "viewport: 1440x900\nengine: chromium\n",
+            'primary_viewports:\n  - "375x812"\n  - "768x1024"\n  - "1440x900"\n',
+        )
+        self.write_task(task, name="demo-reset.md")
+        result = discover_ux_tasks(self.repository_root)
+        self.assertEqual(result["status"], "declared")
+        declaration = result["tasks"][0]
+        self.assertEqual(declaration["requires_auth"], "mixed")
+        self.assertEqual(declaration["primary_viewports"], [
+            "375x812", "768x1024", "1440x900",
+        ])
+        self.assertEqual(declaration["resolved_engines"], ["chromium", "firefox"])
+        self.assertEqual(declaration["browser_source"], "workflow_policy_default")
+        planned = self.plan(required_lane_ids=["browser-scenarios"])
+        self.assertEqual((planned["status"], planned["reason"]), (
+            "unavailable", "selected_lane_unavailable",
+        ))
+        self.assertEqual(planned["ux"]["tasks"][0]["resolved_engines"], [
+            "chromium", "firefox",
+        ])
+
+    def test_selected_browser_lane_binds_missing_engine_and_viewports(self):
+        self.write_task(valid_task().replace(
+            "viewport: 1440x900\nengine: chromium\n", "",
+        ))
+        planned = self.plan(required_lane_ids=["browser-scenarios"])
+        self.assertEqual((planned["status"], planned["reason"]), (
+            "unavailable", "selected_lane_unavailable",
+        ))
+        declaration = planned["ux"]["tasks"][0]
+        self.assertIsNone(declaration["primary_viewports"])
+        self.assertIsNone(declaration["engine"])
+        self.assertEqual(declaration["resolved_viewports"], ["1440x900", "375x812"])
+        self.assertEqual(declaration["resolved_engines"], ["chromium", "firefox"])
+        self.assertEqual((declaration["viewport_source"], declaration["browser_source"]), (
+            "workflow_policy_default", "workflow_policy_default",
+        ))
+
+    def test_non_ux_plan_ignores_invalid_ux_but_selected_ux_blocks(self):
+        self.write_task(valid_task().replace("requires_auth: true", "requires_auth: sometimes"))
+        ordinary = self.plan(required_lane_ids=["full-test"])
+        self.assertEqual((ordinary["status"], ordinary["reason"]), (
+            "resolved", "verification_plan_resolved",
+        ))
+        self.assertEqual(ordinary["ux"]["status"], "not_evaluated")
+        selected = self.plan(required_lane_ids=["ux-task-index"])
+        self.assertEqual((selected["status"], selected["reason"]), (
+            "blocked", "invalid_ux_declaration",
+        ))
+
+    def test_selected_ux_rejects_present_invalid_optional_browser_fields(self):
+        for field, replacement in (
+            ("engine", "engine: safari"),
+            ("primary_viewports", "primary_viewports:\n  - giant"),
+        ):
+            with self.subTest(field=field):
+                document = valid_task().replace("viewport: 1440x900", replacement)
+                if field == "primary_viewports":
+                    document = document.replace("engine: chromium\n", "")
+                path = self.write_task(document)
+                result = self.plan(required_lane_ids=["ux-task-index"])
+                self.assertEqual((result["status"], result["reason"]), (
+                    "blocked", "invalid_ux_declaration",
+                ))
+                path.unlink()
+
+    def test_frontmatterless_legacy_docs_and_coverage_matrix_are_not_declarations(self):
+        directory = self.repository_root / "tests/ux/tasks"
+        directory.mkdir(parents=True)
+        (directory / "legacy-notes.md").write_text("# Legacy notes\n")
+        matrix = self.repository_root / "tests/ux/coverage-matrix.md"
+        matrix.write_text(valid_task())
+        result = discover_ux_tasks(self.repository_root)
+        self.assertEqual((result["status"], result["tasks"]), ("not_declared", []))
 
     def test_unsupported_or_incomplete_repository_is_unavailable(self):
         unsupported = Path(self.temporary.name) / "unsupported"

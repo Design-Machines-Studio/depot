@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from workflow_kernel.browser_target import _validate_route, validate_viewport
+from workflow_kernel.policies import load_policy
 from workflow_kernel.redaction import contains_high_confidence_secret, normalize_durable_string
 from workflow_kernel.repository_verification import (
     derive_verification_plan,
@@ -27,7 +28,16 @@ _KNOWN_STATUSES = _RUNNABLE_STATUSES | frozenset({
     "current-gap", "future-product", "future-fixture-ui",
 })
 _ENGINES = frozenset({"chromium", "firefox", "webkit"})
-_OUTCOMES = frozenset({"SUCCESS", "FRICTION", "BLOCKED"})
+_OUTCOMES = frozenset({"SUCCESS", "FRICTION", "BLOCKED", "PARTIAL"})
+_AUTH_MODES = frozenset({"true", "false", "mixed"})
+_UX_LANE_IDS = frozenset({
+    "ux-task-index", "browser-scenarios", "accessibility-scenarios",
+})
+_TASK_REQUIRED_FIELDS = frozenset({
+    "id", "title", "area", "feature", "complexity", "route",
+    "implementation_status", "requires_auth", "requires_role",
+})
+_TASK_SCALAR_FIELDS = _TASK_REQUIRED_FIELDS | frozenset({"viewport", "engine"})
 _SERVICE_FIELDS = frozenset({
     "status", "service", "profile_digest", "repository_scope_id",
     "compose_project", "state_generation", "commit_sha",
@@ -151,12 +161,6 @@ def plan_assembly_verification(
     )
     if resolved["status"] != "resolved":
         return {**resolved, "plan": None, "selected_argv": []}
-    ux = discover_ux_tasks(repository_root)
-    if ux["status"] == "blocked":
-        return _result(
-            "blocked", "invalid_ux_declaration", source=resolved["source"],
-            profile=resolved["profile"], plan=None, selected_argv=[], ux=ux,
-        )
     try:
         plan = derive_verification_plan(
             resolved["profile"], repository,
@@ -167,9 +171,24 @@ def plan_assembly_verification(
     except ValueError:
         return _result(
             "unavailable", "invalid_verification_inputs", source=resolved["source"],
-            profile=resolved["profile"], plan=None, selected_argv=[], ux=ux,
+            profile=resolved["profile"], plan=None, selected_argv=[],
         )
     selected = [item for item in plan["lanes"] if item["selected"]]
+    selected_ids = {item["id"] for item in selected}
+    if selected_ids & _UX_LANE_IDS:
+        ux = discover_ux_tasks(repository_root)
+        if ux["status"] == "blocked":
+            return _result(
+                "blocked", "invalid_ux_declaration", source=resolved["source"],
+                profile=resolved["profile"], plan=plan, selected_argv=[], ux=ux,
+            )
+    else:
+        tasks_root = Path(repository_root) / "tests/ux/tasks"
+        ux = (
+            _result("not_declared", "task_directory_absent", tasks=[])
+            if not tasks_root.exists()
+            else _result("not_evaluated", "ux_lane_not_selected", tasks=[])
+        )
     unavailable = [item["id"] for item in selected if not item["runnable"]]
     if unavailable:
         return _result(
@@ -218,12 +237,14 @@ def _yaml_scalar(value, name):
 def _frontmatter(text):
     lines = text.splitlines()
     if not lines or lines[0] != "---":
-        raise ValueError("missing task frontmatter")
+        return None
     try:
         end = lines.index("---", 1)
     except ValueError:
         raise ValueError("unterminated task frontmatter") from None
-    values, personas, screenshots = {}, [], []
+    values, personas, lists = {}, [], {
+        "primary_viewports": [], "screenshot_points": [],
+    }
     section = None
     current_persona = None
     for line in lines[1:end]:
@@ -232,10 +253,13 @@ def _frontmatter(text):
         top = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_-]*):(?:[ ](.*))?", line)
         if top:
             key, raw = top.groups()
-            if key in values:
+            if key in values and key in _TASK_SCALAR_FIELDS | set(lists):
                 raise ValueError("duplicate task field")
-            values[key] = None if raw is None else _yaml_scalar(raw, key)
-            section = key if raw is None else None
+            if key in _TASK_SCALAR_FIELDS:
+                values[key] = None if raw is None else _yaml_scalar(raw, key)
+            elif key in lists:
+                values[key] = None if raw is None else _yaml_scalar(raw, key)
+            section = key if raw is None and key in ({"personas"} | set(lists)) else None
             current_persona = None
             continue
         if section == "personas":
@@ -249,29 +273,51 @@ def _frontmatter(text):
                     raise ValueError("duplicate persona outcome")
                 current_persona["expected"] = _yaml_scalar(expected.group(1), "persona outcome")
             continue
-        if section == "screenshot_points":
+        if section in lists:
             item = re.fullmatch(r"  -[ ](.+)", line)
             if item:
-                screenshots.append(_yaml_scalar(item.group(1), "screenshot point"))
+                lists[section].append(_yaml_scalar(item.group(1), section))
             continue
     values["personas"] = personas
-    values["screenshot_points"] = screenshots
+    for key, items in lists.items():
+        if key in values:
+            values[key] = items
     return values
 
 
-def _validate_task(values):
+def _validate_task(values, defaults):
+    missing = _TASK_REQUIRED_FIELDS - set(values)
+    if missing:
+        raise ValueError("missing required task field")
+    task_identifier = values["id"]
+    if _ID.fullmatch(task_identifier) is None:
+        raise ValueError("invalid task id")
+    for field in ("title", "area", "feature", "complexity", "requires_role"):
+        _safe_text(values[field], field)
     status = values.get("implementation_status")
     if status not in _KNOWN_STATUSES:
         raise ValueError("invalid implementation status")
-    if status not in _RUNNABLE_STATUSES:
-        return None
     route = _validate_route(values.get("route"))
     auth = values.get("requires_auth")
-    if auth not in {"true", "false"}:
+    if auth not in _AUTH_MODES:
         raise ValueError("invalid authentication declaration")
-    viewport = validate_viewport(values.get("viewport"))
+    viewport = values.get("viewport")
+    primary_viewports = values.get("primary_viewports")
+    if viewport is not None and primary_viewports is not None:
+        raise ValueError("conflicting viewport declarations")
+    if viewport is not None:
+        declared_viewports = [validate_viewport(viewport)]
+    elif primary_viewports is not None:
+        if (
+            not primary_viewports
+            or len(primary_viewports) != len(set(primary_viewports))
+        ):
+            raise ValueError("invalid primary viewports")
+        declared_viewports = [validate_viewport(item) for item in primary_viewports]
+    else:
+        declared_viewports = None
     engine = values.get("engine")
-    if engine not in _ENGINES:
+    if engine is not None and engine not in _ENGINES:
         raise ValueError("invalid browser engine")
     personas = values.get("personas")
     if not personas or len(personas) > MAX_TASKS:
@@ -288,14 +334,67 @@ def _validate_task(values):
             raise ValueError("invalid persona outcome")
         ids.add(identifier)
         normalized_personas.append(dict(persona))
-    screenshots = values.get("screenshot_points")
-    if not screenshots or len(screenshots) > MAX_SCREENSHOTS:
-        raise ValueError("missing screenshot points")
+    screenshots = values.get("screenshot_points", [])
+    if len(screenshots) > MAX_SCREENSHOTS:
+        raise ValueError("too many screenshot points")
+    if status not in _RUNNABLE_STATUSES:
+        return None
     return {
+        "id": task_identifier, "title": values["title"], "area": values["area"],
+        "feature": values["feature"], "complexity": values["complexity"],
         "implementation_status": status, "route": route,
-        "requires_auth": auth == "true", "personas": normalized_personas,
-        "viewport": viewport, "engine": engine,
+        "requires_auth": auth, "requires_role": values["requires_role"],
+        "personas": normalized_personas,
+        "primary_viewports": declared_viewports,
+        "engine": engine,
+        "resolved_viewports": declared_viewports or list(defaults["viewports"]),
+        "resolved_engines": [engine] if engine else list(defaults["engines"]),
+        "viewport_source": (
+            "task_declaration" if declared_viewports else defaults["viewport_source"]
+        ),
+        "browser_source": (
+            "task_declaration" if engine else defaults["browser_source"]
+        ),
         "screenshot_points": list(screenshots),
+    }
+
+
+def _browser_defaults(root):
+    document = load_policy()
+    policy = document.verification_defaults
+    engines = list(policy["browser_engines"])
+    viewports = [policy["desktop_viewport"], policy["mobile_viewport"]]
+    browser_source = viewport_source = "workflow_policy_default"
+    config_path = root / "tests/ux/verification.json"
+    if config_path.exists():
+        config = _load_json(config_path)
+        allowed = {
+            "schema_version", "suite", "browser_engines", "viewports",
+            "include_statuses", "target_origin", "route_bindings",
+        }
+        if (
+            type(config) is not dict or set(config) - allowed
+            or config.get("schema_version") != 1
+        ):
+            raise ValueError("invalid browser profile")
+        if "browser_engines" in config:
+            engines = config["browser_engines"]
+            browser_source = "project_config"
+        if "viewports" in config:
+            viewports = config["viewports"]
+            viewport_source = "project_config"
+    if (
+        type(engines) is not list or not engines
+        or any(type(item) is not str or item not in _ENGINES for item in engines)
+        or len(engines) != len(set(engines))
+        or type(viewports) is not list or not viewports
+        or len(viewports) != len(set(viewports))
+    ):
+        raise ValueError("invalid browser profile")
+    normalized_viewports = [validate_viewport(item) for item in viewports]
+    return {
+        "engines": engines, "viewports": normalized_viewports,
+        "browser_source": browser_source, "viewport_source": viewport_source,
     }
 
 
@@ -312,20 +411,30 @@ def discover_ux_tasks(repository_root):
         return _result("not_declared", "task_declarations_absent", tasks=[])
     if len(paths) > MAX_TASKS:
         return _result("blocked", "too_many_task_declarations", tasks=[])
+    try:
+        defaults = _browser_defaults(root)
+    except (OSError, ValueError, InvalidSchemaError):
+        return _result("blocked", "invalid_browser_profile", tasks=[])
     tasks = []
+    declaration_count = 0
     for path in paths:
         relative = path.relative_to(root).as_posix()
         try:
             if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_DOCUMENT_BYTES:
                 raise ValueError("invalid task file")
             values = _frontmatter(path.read_text(encoding="utf-8"))
-            task = _validate_task(values)
+            if values is None:
+                continue
+            declaration_count += 1
+            task = _validate_task(values, defaults)
         except (OSError, UnicodeError, ValueError, InvalidSchemaError):
             return _result(
                 "blocked", "invalid_task_declaration", tasks=[], path=relative,
             )
         if task is not None:
             tasks.append({"path": relative, **task})
+    if not declaration_count:
+        return _result("not_declared", "task_declarations_absent", tasks=[])
     return _result(
         "declared", "task_frontmatter_authority", tasks=tasks,
     )
