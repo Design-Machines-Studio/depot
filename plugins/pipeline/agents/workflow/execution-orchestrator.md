@@ -252,7 +252,7 @@ authority.
 Validate and bind the initial contract exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" bind-verification-contract --state-dir plans/<feature-slug> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
 ```
 
 Reject a non-zero exit, malformed receipt, or a receipt not carrying the exact
@@ -652,7 +652,7 @@ A contract revision, when explicitly human-approved and bound through the
 kernel command below, invalidates older dispatch claims:
 
 ```text
-"$WORKFLOW_KERNEL" revise-verification-contract --state-dir plans/<feature-slug> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
+"$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
 ```
 
 Decision leverage does not revise the behavioral contract.
@@ -950,16 +950,20 @@ When continuity is unavailable/invalid but retry is allowed, dispatch an
 explicit replacement and record requested provider, attempted provider,
 implementedBy, boolean fallback and reason, prior attempt reference, and the stable
 reason resume was unavailable. If replacement cannot be safely dispatched,
-use `human_help_required`.
+use `human_help_required` and preserve the exact host-adapter outcome as
+`human_intervention_reason`: `replacement_adapter_dispatch_failed`,
+`replacement_invalid_session_handle`, or
+`replacement_session_handle_unavailable`. Never relabel an infrastructure or
+session failure as convergence or retry-budget exhaustion.
 
-When the kernel returns `identical_failure_convergence` or
-`retry_budget_exhausted`, write the closed feedback receipt above with
+When the kernel returns `identical_failure_convergence`,
+`retry_budget_exhausted`, or one of the exact replacement-dispatch failures
+above, write the closed feedback receipt above with
 `action: human_help_required`, plus a deterministic
 `human_intervention_id` derived from run ID, chunk ID, stage, contract digest,
 failure signature, and the stable dispatch attempt identity bound by
 `prior_attempt_ref` (never a timestamp or display-order ordinal), and
-`human_intervention_reason` exactly
-`identical_failure_convergence` or `retry_budget_exhausted`. Mark the chunk
+`human_intervention_reason` exactly matching that terminal reason. Mark the chunk
 failed, mark every transitive dependency blocked, and never translate the stop
 to skipped, passed, or successful.
 

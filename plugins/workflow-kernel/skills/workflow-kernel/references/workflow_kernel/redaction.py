@@ -21,7 +21,7 @@ MAX_PAYLOAD_ITEMS = 10_000
 MAX_STRING_LENGTH = 65_536
 MAX_TOTAL_STRING_BYTES = 4_194_304
 _SECRET_PARTS = (
-    "token", "key", "secret", "password", "authorization", "cookie", "dsn",
+    "token", "key", "secret", "password", "passphrase", "authorization", "cookie", "dsn",
     "environment_value", "environment-value", "env_value",
 )
 _CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
@@ -51,6 +51,98 @@ _SECRET_ENV_ASSIGNMENT = re.compile(
     r"(?i)(?:^|[^a-z0-9_])[a-z0-9_]*(?:" + _SECRET_VOCABULARY_PATTERN
     + r")[a-z0-9_]*="
 )
+_HIGH_CONFIDENCE_SECRET = re.compile(
+    r"(?i)(?:^|[^A-Za-z0-9])(?:"
+    r"(?:sk|pk)-[A-Za-z0-9_-]{8,}"
+    r"|(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{8,}"
+    r"|gh[pousr]_[A-Za-z0-9]{8,}"
+    r"|github_pat_[A-Za-z0-9_]{8,}"
+    r"|xox[baprs]?-[A-Za-z0-9_-]{8,}"
+    r"|(?:AKIA|ASIA)[A-Z0-9]{16}"
+    r")(?:$|[^A-Za-z0-9])"
+)
+_HIGH_CONFIDENCE_COMPOUND_ASSIGNMENT = re.compile(
+    r"(?i)(?:^|[^a-z0-9_])(?:[a-z0-9]+[_-])*(?:"
+    r"(?:access|api|auth|bearer|client|csrf|github|id|oauth2?|private|refresh|session)"
+    r"[_-]?token"
+    r"|(?:access|api|client|encryption|github|private|secret|signing)[_-]?key"
+    r"|aws[_-]secret[_-]access[_-]key"
+    r"|(?:api|client|github|jwt|oauth2?|signing|stripe|webhook)[_-]?secret"
+    r"|(?:admin|client|database|db|user)[_-]?(?:password|passwd)"
+    r"|(?:auth|session)[_-]?cookie"
+    r"|(?:database|db)[_-]?dsn"
+    r"|client[_-]?auth"
+    r"|(?!max[_-]token)[a-z0-9]+[_-]token"
+    r")\s*(?:=|:)\s*\S+"
+)
+_HIGH_CONFIDENCE_ASSIGNMENT = re.compile(
+    r"(?i)(?:^|[^a-z0-9_-])(?:" + _SECRET_VOCABULARY_PATTERN
+    + r")\s*(?:=|:)\s*\S+|(?:^|[^a-z0-9_-])bearer\s+\S+"
+)
+_NAMED_ASSIGNMENT = re.compile(
+    r"(?:^|[^A-Za-z0-9_.-])(?P<quote>[\"']?)"
+    r"(?P<name>[A-Za-z_][A-Za-z0-9_.-]{1,127})(?P=quote)"
+    r"\s*(?:=|:)\s*\S+"
+)
+_TOKEN_ASSIGNMENT_QUALIFIERS = frozenset({
+    "access", "api", "auth", "bearer", "client", "csrf", "github", "id",
+    "oauth", "oauth2", "private", "refresh", "session",
+})
+_KEY_ASSIGNMENT_QUALIFIERS = frozenset({
+    "access", "api", "client", "encryption", "github", "private", "secret",
+    "signing",
+})
+_SECRET_ASSIGNMENT_QUALIFIERS = frozenset({
+    "api", "client", "github", "jwt", "oauth", "oauth2", "signing", "stripe",
+    "webhook",
+})
+_COMPACT_CREDENTIAL_SUFFIXES = tuple(sorted(
+    {qualifier + "token" for qualifier in _TOKEN_ASSIGNMENT_QUALIFIERS}
+    | {qualifier + "key" for qualifier in _KEY_ASSIGNMENT_QUALIFIERS}
+    | {qualifier + "secret" for qualifier in _SECRET_ASSIGNMENT_QUALIFIERS}
+    | {
+        "adminpassword", "clientpassword", "databasepassword", "dbpassword",
+        "userpassword", "adminpasswd", "clientpasswd", "databasepasswd",
+        "dbpasswd", "userpasswd", "clientauth", "authcookie", "sessioncookie",
+        "databasedsn", "dbdsn", "credential", "credentials", "creds",
+    }
+))
+
+
+def _has_credential_assignment_name(value: str) -> bool:
+    """Classify assignment names after quote, case, and separator normalization."""
+    for match in _NAMED_ASSIGNMENT.finditer(value):
+        name = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", match.group("name"))
+        parts = tuple(part for part in re.split(r"[_.-]+", name.casefold()) if part)
+        if not parts:
+            continue
+        compact = "".join(parts)
+        if compact.endswith(_COMPACT_CREDENTIAL_SUFFIXES):
+            return True
+        if parts[-1] in {"credential", "credentials", "creds"}:
+            return True
+        if parts[-1] in {
+            "authorization", "cookie", "dsn", "passphrase", "password", "passwd",
+            "secret",
+        }:
+            return True
+        if parts[-1] == "token" and (len(parts) == 1 or parts[-2] != "max"):
+            return True
+        if parts[-1] == "key" and len(parts) > 1 and parts[-2] in _KEY_ASSIGNMENT_QUALIFIERS:
+            return True
+        if parts[-1] == "secret" and len(parts) > 1 and parts[-2] in _SECRET_ASSIGNMENT_QUALIFIERS:
+            return True
+        if parts[-1] in {"password", "passwd"} and (
+            len(parts) == 1 or parts[-2] in {"admin", "client", "database", "db", "user"}
+        ):
+            return True
+        if len(parts) > 1 and (
+            (parts[-1] == "cookie" and parts[-2] in {"auth", "session"})
+            or (parts[-1] == "dsn" and parts[-2] in {"database", "db"})
+            or (parts[-1] == "auth" and parts[-2] == "client")
+        ):
+            return True
+    return False
 
 
 class _NoOpWorkBudget:
@@ -398,6 +490,17 @@ def contains_secret_shape(value: str) -> bool:
     return type(value) is str and (
         _SECRET_ASSIGNMENT.search(value) is not None
         or _SECRET_ENV_ASSIGNMENT.search(value) is not None
+        or _HIGH_CONFIDENCE_SECRET.search(value) is not None
+    )
+
+
+def contains_high_confidence_secret(value: str) -> bool:
+    """Detect credential material without rejecting ordinary security prose."""
+    return type(value) is str and (
+        _HIGH_CONFIDENCE_ASSIGNMENT.search(value) is not None
+        or _HIGH_CONFIDENCE_COMPOUND_ASSIGNMENT.search(value) is not None
+        or _HIGH_CONFIDENCE_SECRET.search(value) is not None
+        or _has_credential_assignment_name(value)
     )
 
 

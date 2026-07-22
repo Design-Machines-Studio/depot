@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Tuple
+from typing import Iterable, Mapping, Tuple
 
 from .hosts import CANONICAL_HOST_IDS
 from .schema import RunState, WorkflowEvent
@@ -90,10 +90,20 @@ def _routing_fact(event: WorkflowEvent, *, normalize_host: bool = False) -> tupl
 def _semantic(event: WorkflowEvent, *, normalize_host: bool = False) -> tuple:
     payload = event.payload
     routing = _routing_fact(event, normalize_host=normalize_host)
+    decision_profile = payload.get("decision_profile")
+    decision_fact = (
+        decision_profile.get("uncertainty"),
+        decision_profile.get("consequence"),
+        decision_profile.get("rationale"),
+        payload.get("decision_profile_defaulted"),
+    ) if isinstance(decision_profile, Mapping) else (
+        None, None, None, payload.get("decision_profile_defaulted"),
+    )
     return (
         event.run_id, event.sequence, event.node_id, payload.get("stage"),
         payload.get("status"), payload.get("workflow_class"),
         payload.get("workflow_class_defaulted"),
+        decision_fact,
         ("host_execution" if normalize_host else payload.get("execution_mode")), routing,
         payload.get("model"),
         (_normalized_reference(payload.get("authoritative_receipt"))

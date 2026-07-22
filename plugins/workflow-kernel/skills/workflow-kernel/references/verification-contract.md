@@ -6,7 +6,9 @@ Before implementation dispatch, Pipeline materializes one closed behavioral
 verification contract from approved requirements and current-state regressions.
 It uses stable `REQ-*`, `REG-*`, and `CHK-*` identities; argv is always a JSON
 array and is validated but never executed while binding. Every automated check
-names the requirements it proves and its baseline expectation. Requirements
+declares both `proves_requirement_ids` and `proves_regression_ids`; either list
+may be empty, but their union may not be. Every prohibited regression has an
+executable proof, and every check records its baseline expectation. Requirements
 that cannot run automatically remain explicit manual requirements rather than
 disappearing from coverage.
 

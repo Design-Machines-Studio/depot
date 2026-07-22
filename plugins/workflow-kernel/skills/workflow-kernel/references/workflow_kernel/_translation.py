@@ -12,10 +12,13 @@ from __future__ import annotations
 import re
 import math
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Iterable, Mapping, Optional, Tuple
 
 from .model import GateDecision, HostCapability, NodeSpec, WorkflowClass
-from .redaction import normalize_evidence_reference, redact
+from .redaction import (
+    contains_high_confidence_secret, normalize_evidence_reference, redact,
+)
 from .schema import KernelError, WorkflowEvent
 
 
@@ -47,6 +50,7 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "fallback", "cleanup_policy", "cleanup_disposition", "resource_kind",
     "resource_name", "topology", "topology_node", "topology_edge",
     "workflow_class_defaulted",
+    "decision_profile", "decision_profile_defaulted",
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
     "human_approval_evidence_ref", "verification_contract_bound",
@@ -67,6 +71,8 @@ RECEIPT_FIELD_ALIASES = {
     "executionMode": "execution_mode",
     "workflowClass": "workflow_class",
     "workflowClassDefaulted": "workflow_class_defaulted",
+    "decisionProfile": "decision_profile",
+    "decisionProfileDefaulted": "decision_profile_defaulted",
     "requestedProvider": "requested_provider",
     "attemptedProvider": "attempted_provider",
     "implementedBy": "implemented_by",
@@ -116,6 +122,11 @@ RECEIPT_FIELD_ALIASES = {
 _MISSING = object()
 _CONTRACT_STAGES = frozenset({
     "verification_contract_bound", "verification_contract_revised",
+})
+_VALIDATION_INTERVENTION_REASONS = frozenset({
+    "identical_failure_convergence", "retry_budget_exhausted",
+    "replacement_adapter_dispatch_failed", "replacement_invalid_session_handle",
+    "replacement_session_handle_unavailable",
 })
 _PRE_CONTRACT_STAGES = frozenset({
     "progress", "manifest_validation", "dependency_ready",
@@ -221,11 +232,14 @@ class ChunkSpec:
         return {"id": self.node_id, "depends_on": list(self.dependencies)}
 
 
-_RUN_SPEC_FIELDS = frozenset({
+_LEGACY_RUN_SPEC_FIELDS = frozenset({
     "run_id", "workflow_class", "workflow_class_defaulted",
     "execution_mode", "host_name", "nodes", "chunks",
     "execution_levels", "execution_plan_disagreement",
     "required_lanes", "review_mode", "observation_only",
+})
+_RUN_SPEC_FIELDS = _LEGACY_RUN_SPEC_FIELDS | frozenset({
+    "decision_profile", "decision_profile_defaulted",
 })
 _NODE_FIELDS = frozenset({
     "id", "depends_on", "gate_kind", "required_evidence",
@@ -236,6 +250,27 @@ _NODE_FIELDS = frozenset({
 _GATE_FIELDS = frozenset({
     "allowed", "reason_code", "missing_evidence", "human_required",
 })
+_DECISION_LEVELS = frozenset({"low", "medium", "high"})
+
+
+def normalize_decision_profile(value: object) -> dict:
+    if type(value) is not dict or set(value) != {
+        "uncertainty", "consequence", "rationale",
+    }:
+        raise ValueError("invalid decision profile")
+    if (
+        value["uncertainty"] not in _DECISION_LEVELS
+        or value["consequence"] not in _DECISION_LEVELS
+    ):
+        raise ValueError("invalid decision profile")
+    rationale = required_text(value["rationale"], "decision profile rationale")
+    if contains_high_confidence_secret(rationale):
+        raise ValueError("invalid decision profile")
+    return {
+        "uncertainty": value["uncertainty"],
+        "consequence": value["consequence"],
+        "rationale": rationale,
+    }
 
 
 @dataclass(frozen=True)
@@ -253,6 +288,8 @@ class RunSpec:
     execution_plan_disagreement: bool = False
     required_lanes: Tuple[str, ...] = ()
     review_mode: Optional[str] = None
+    decision_profile: Optional[Mapping[str, str]] = None
+    decision_profile_defaulted: bool = True
 
     def __post_init__(self) -> None:
         """Single validation layer: the constructor owns every field rule."""
@@ -299,6 +336,18 @@ class RunSpec:
         object.__setattr__(self, "required_lanes", lanes)
         if self.review_mode is not None and type(self.review_mode) is not str:
             raise ValueError("invalid RunSpec review mode")
+        if type(self.decision_profile_defaulted) is not bool:
+            raise ValueError("invalid RunSpec decision profile provenance")
+        if self.decision_profile is None:
+            if not self.decision_profile_defaulted:
+                raise ValueError("invalid RunSpec decision profile provenance")
+        else:
+            profile = normalize_decision_profile(self.decision_profile)
+            if self.decision_profile_defaulted:
+                raise ValueError("invalid RunSpec decision profile provenance")
+            object.__setattr__(
+                self, "decision_profile", MappingProxyType(profile),
+            )
 
     @classmethod
     def from_dict(cls, value: object) -> "RunSpec":
@@ -311,7 +360,7 @@ class RunSpec:
         """
         if (
             type(value) is not dict
-            or set(value) != _RUN_SPEC_FIELDS
+            or set(value) not in {_LEGACY_RUN_SPEC_FIELDS, _RUN_SPEC_FIELDS}
             or value["observation_only"] is not True
         ):
             raise ValueError("invalid RunSpec")
@@ -354,6 +403,7 @@ class RunSpec:
                 raise ValueError("invalid RunSpec levels")
             if type(value["required_lanes"]) is not list:
                 raise ValueError("invalid RunSpec lanes")
+            legacy_profile = "decision_profile" not in value
             return cls(
                 value["run_id"],
                 WorkflowClass(value["workflow_class"]),
@@ -364,6 +414,8 @@ class RunSpec:
                 tuple(tuple(level) for level in value["execution_levels"]),
                 value["execution_plan_disagreement"],
                 tuple(value["required_lanes"]), value["review_mode"],
+                None if legacy_profile else value["decision_profile"],
+                True if legacy_profile else value["decision_profile_defaulted"],
             )
         except (KernelError, KeyError, TypeError, ValueError) as error:
             message = str(error) if type(error) is ValueError else "invalid RunSpec"
@@ -407,6 +459,11 @@ class RunSpec:
             "execution_plan_disagreement": self.execution_plan_disagreement,
             "required_lanes": list(self.required_lanes),
             "review_mode": self.review_mode,
+            "decision_profile": (
+                None if self.decision_profile is None
+                else dict(self.decision_profile)
+            ),
+            "decision_profile_defaulted": self.decision_profile_defaulted,
             "observation_only": True,
         }
 
@@ -433,14 +490,22 @@ def _normalized_receipt_fields(receipt: Mapping[str, object]) -> dict:
         candidate = normalized.pop(camel)
         if snake in normalized:
             existing = normalized[snake]
-            if (
-                type(candidate) not in {str, bool, int, float, type(None)}
-                or type(existing) is not type(candidate)
-                or existing != candidate
-            ):
+            if snake == "decision_profile":
+                candidate = normalize_decision_profile(candidate)
+                existing = normalize_decision_profile(existing)
+                conflicting = candidate != existing
+            else:
+                conflicting = (
+                    type(candidate) not in {str, bool, int, float, type(None)}
+                    or type(existing) is not type(candidate)
+                    or existing != candidate
+                )
+            if conflicting:
                 raise ValueError(
                     "conflicting receipt field " + snake + "/" + camel,
                 )
+            normalized[snake] = existing
+            continue
         normalized[snake] = candidate
     return normalized
 
@@ -458,6 +523,14 @@ def _nonnegative_number(value: object, field: str, *, integer: bool) -> object:
 def _validate_observation_receipt(receipt: dict) -> dict:
     """Validate optional telemetry without assigning it workflow authority."""
     receipt.pop("human_intervention", None)
+    if "decision_profile" in receipt:
+        receipt["decision_profile"] = normalize_decision_profile(
+            receipt["decision_profile"],
+        )
+    if "decision_profile_defaulted" in receipt and type(
+        receipt["decision_profile_defaulted"]
+    ) is not bool:
+        raise ValueError("invalid decision profile provenance")
     for field in _USAGE_COUNT_FIELDS:
         if field in receipt:
             _nonnegative_number(receipt[field], field, integer=True)
@@ -542,7 +615,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             receipt.get("human_intervention_reason"), "human intervention reason",
         )
         allowed_reasons = (
-            {"identical_failure_convergence", "retry_budget_exhausted"}
+            _VALIDATION_INTERVENTION_REASONS
             if validation_help else {"browser_evidence_unavailable"}
         )
         if reason not in allowed_reasons:
@@ -697,6 +770,8 @@ def translate_receipts(
     workflow_class = None
     execution_mode = None
     workflow_class_defaulted = None
+    decision_profile = None
+    decision_profile_defaulted = None
     isolation_strategy = None
     current_contract = None
     contribution_sources = set()
@@ -729,6 +804,21 @@ def translate_receipts(
                 not class_was_present if position == 0 else
                 workflow_class_defaulted if not class_was_present else False
             )
+        profile_was_present = "decision_profile" in receipt
+        current_profile = receipt.get("decision_profile", decision_profile)
+        if "decision_profile_defaulted" in receipt:
+            current_profile_defaulted = receipt["decision_profile_defaulted"]
+        else:
+            current_profile_defaulted = (
+                not profile_was_present if position == 0
+                else decision_profile_defaulted
+                if not profile_was_present else False
+            )
+        if (
+            current_profile is None and not current_profile_defaulted
+            or current_profile is not None and current_profile_defaulted
+        ):
+            raise ValueError("invalid decision profile provenance")
         current_mode = required_text(
             receipt.get("execution_mode", execution_mode or "generic"),
             "execution mode",
@@ -751,10 +841,15 @@ def translate_receipts(
         if position == 0:
             run_identity, workflow_class, execution_mode = run_id, current_class, current_mode
             workflow_class_defaulted = current_defaulted
+            decision_profile = current_profile
+            decision_profile_defaulted = current_profile_defaulted
             isolation_strategy = current_isolation
-        elif (run_id, current_class, current_mode, current_defaulted, current_isolation) != (
+        elif (
+            run_id, current_class, current_mode, current_defaulted,
+            current_profile, current_profile_defaulted, current_isolation,
+        ) != (
             run_identity, workflow_class, execution_mode, workflow_class_defaulted,
-            isolation_strategy,
+            decision_profile, decision_profile_defaulted, isolation_strategy,
         ):
             raise ValueError("receipt context discontinuity")
         stage = required_text(receipt.get("stage"), "stage")
@@ -795,6 +890,13 @@ def translate_receipts(
         normalized_receipt = dict(receipt)
         normalized_receipt["workflow_class"] = current_class
         normalized_receipt["workflow_class_defaulted"] = current_defaulted
+        if current_profile is None:
+            normalized_receipt.pop("decision_profile", None)
+        else:
+            normalized_receipt["decision_profile"] = current_profile
+        normalized_receipt["decision_profile_defaulted"] = (
+            current_profile_defaulted
+        )
         normalized_receipt["execution_mode"] = current_mode
         if current_isolation is None:
             normalized_receipt.pop("isolation_strategy", None)

@@ -58,6 +58,7 @@ def verification_contract(*, marker=None):
         "checks": [{
             "id": "CHK-001", "argv": argv,
             "proves_requirement_ids": ["REQ-001"],
+            "proves_regression_ids": ["REG-001"],
             "baseline_expectation": "must_fail",
         }],
         "persona_case_ids": [], "browser_case_ids": [],
@@ -65,7 +66,8 @@ def verification_contract(*, marker=None):
         "revision_justification": {
             "reason_code": "initial_binding", "summary": "Initial binding.",
             "added_obligation_ids": [
-                "PROOF:CHK-001:REQ-001", "REG-001", "REQ-001",
+                "PROOF:CHK-001:REQ-001", "PROOF:CHK-001:REG-001",
+                "REG-001", "REQ-001",
             ],
             "retained_obligation_ids": [], "removed_obligation_ids": [],
             "human_approval_evidence_ref": None,
@@ -270,6 +272,49 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(artifact["artifact_role"], "authoritative_observation")
             self.assertEqual(artifact["run_spec"]["workflow_class"], "feature")
             self.assertEqual(artifact["event_count"], 11)
+
+    def test_prediction_and_observation_reject_decision_profile_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root)
+            high_profile = {
+                "uncertainty": "high", "consequence": "high",
+                "rationale": "Use bounded synthesis and stronger verification.",
+            }
+            low_profile = {
+                "uncertainty": "low", "consequence": "low",
+                "rationale": "Use the standard path.",
+            }
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature": "pipeline-1", "workflowClass": "feature",
+                "decisionProfile": high_profile,
+                "executionMode": "codex_native", "chunks": [],
+            }))
+            source = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+            low = json.loads(json.dumps(source)); low[0]["decisionProfile"] = low_profile
+            low_path = root / "low.json"; low_path.write_text(json.dumps(low))
+            rejected = self.run_cli(
+                "bind-prediction", "--type", "pipeline", "--manifest", manifest,
+                "--prediction-receipts", low_path, "--state-dir", root,
+            )
+            self.assertEqual(rejected.returncode, 2)
+            self.assertFalse((root / "pipeline-shadow-prediction.json").exists())
+
+            high = json.loads(json.dumps(source)); high[0]["decisionProfile"] = high_profile
+            high_path = root / "high.json"; high_path.write_text(json.dumps(high))
+            bound = self.run_cli(
+                "bind-prediction", "--type", "pipeline", "--manifest", manifest,
+                "--prediction-receipts", high_path, "--state-dir", root,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.start_lifecycle(root)
+            observed = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", low_path, "--state-dir", root,
+            )
+            self.assertEqual(observed.returncode, 2)
+            self.assertFalse((root / "pipeline-shadow-observation.json").exists())
 
     def test_observe_accepts_identical_source_after_prestart_lifecycle_binding(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -632,11 +677,12 @@ class RuntimeCliTests(unittest.TestCase):
             revision_value["revision"] = 2
             revision_value["previous_contract_digest"] = contract_digest(initial_value)
             revision_value["prohibited_regressions"] = []
+            revision_value["checks"][0]["proves_regression_ids"] = []
             revision_value["revision_justification"] = {
                 "reason_code": "approved_scope_change", "summary": "Approved removal.",
                 "added_obligation_ids": [],
                 "retained_obligation_ids": ["PROOF:CHK-001:REQ-001", "REQ-001"],
-                "removed_obligation_ids": ["REG-001"],
+                "removed_obligation_ids": ["REG-001", "PROOF:CHK-001:REG-001"],
                 "human_approval_evidence_ref": "plans/contract/plan.html#approval",
             }
             revision = root / "contract-2.json"
@@ -660,7 +706,10 @@ class RuntimeCliTests(unittest.TestCase):
             )
             artifact = run_dir / event["payload"]["contract_ref"]
             revision_record = json.loads(artifact.read_text())["revision_justification"]
-            self.assertEqual(revision_record["removed_obligation_ids"], ["REG-001"])
+            self.assertEqual(
+                revision_record["removed_obligation_ids"],
+                ["PROOF:CHK-001:REG-001", "REG-001"],
+            )
             self.assertEqual(revision_record["summary"], "Approved removal.")
 
             stale = json.loads(json.dumps(revision_value))
@@ -723,11 +772,12 @@ class RuntimeCliTests(unittest.TestCase):
                 "previous_contract_digest": contract_digest(initial_value),
             })
             forged["prohibited_regressions"] = []
+            forged["checks"][0]["proves_regression_ids"] = []
             forged["revision_justification"] = {
                 "reason_code": "unapproved_removal", "summary": "Remove regression.",
                 "added_obligation_ids": [],
                 "retained_obligation_ids": ["PROOF:CHK-001:REQ-001", "REQ-001"],
-                "removed_obligation_ids": ["REG-001"],
+                "removed_obligation_ids": ["REG-001", "PROOF:CHK-001:REG-001"],
                 "human_approval_evidence_ref": None,
             }
             revision = root / "contract-2.json"
@@ -758,6 +808,69 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertNotIn("secret-value-that-must-not-leak", result.stderr)
             self.assertFalse((run_dir / "verification-contracts").exists())
             self.assertEqual(len((run_dir / "events.jsonl").read_text().splitlines()), 1)
+
+    def test_verification_contract_secret_argv_is_rejected_before_artifact_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "contract-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "contract-run"
+            value = verification_contract()
+            for index, argv in enumerate((
+                ["tool", "--api-key", "sk-live-credential"],
+                ["tool", "--api-key=opaque-credential-value"],
+                ["tool", "gho_abcdefghijk"],
+                ["tool", "AKIAIOSFODNN7EXAMPLE"],
+                ["tool", "sk_live_1234567890abcdef"],
+                ["tool", "--client-secret", "opaque-credential-value"],
+                ["tool", "--apikey", "opaque-credential-value"],
+                ["tool", "--clientauth=opaque-credential-value"],
+                ["tool", "--githubtoken", "opaque-credential-value"],
+                ["tool", "--oauth-token", "opaque-credential-value"],
+                ["tool", "--session-token=opaque-credential-value"],
+                ["tool.exe", "/password", "opaque-credential-value"],
+                ["tool.exe", "/api-key", "opaque-credential-value"],
+                ["tool.exe", "/client-secret=opaque-credential-value"],
+                ["tool", "--credentials", "opaque-credential-value"],
+                ["tool", "--creds=opaque-credential-value"],
+                ["tool", "--passphrase", "opaque-credential-value"],
+                ["tool", "--bearer", "opaque-credential-value"],
+                ["curl", "--oauth2-bearer", "opaque-credential-value"],
+                ["tool", "ASIAIOSFODNN7EXAMPLE"],
+                ["bash.exe", "-c", "echo should-not-run"],
+                ["bash", "--rcfile", "/dev/null", "-c", "echo should-not-run"],
+                ["pwsh", "-ep", "Bypass", "-c", "echo should-not-run"],
+                ["pwsh", "-o", "text", "-c", "echo should-not-run"],
+                ["pwsh", "-ec", "ZgBvAG8A"],
+                ["pwsh", "-cwa", "echo should-not-run"],
+                ["pwsh", "-ConfigurationFile", "config.ps1", "-c", "echo should-not-run"],
+                ["env.exe", "-S", "bash -c echo should-not-run"],
+                ["env.exe", "--split-string=bash -c echo should-not-run"],
+                ["env", "-uNAME", "bash", "-c", "echo should-not-run"],
+                ["env", "-C/tmp", "bash", "-c", "echo should-not-run"],
+                ["env", "-iS", "bash -c echo should-not-run"],
+                ["env", "-iu", "NAME", "bash", "-c", "echo should-not-run"],
+                ["env", "-", "bash", "-c", "echo should-not-run"],
+                ["mksh", "-c", "echo should-not-run"],
+                ["yash", "-c", "echo should-not-run"],
+                ["fish", "--init-command=echo should-not-run"],
+                ["fish", "--init-command", "echo should-not-run"],
+                ["fish", "-C", "echo should-not-run"],
+                ["cmd.exe", "/c", "echo should-not-run"],
+                ["cmd.exe", "/d", "/q", "/s", "/c", "echo should-not-run"],
+            )):
+                candidate = json.loads(json.dumps(value))
+                candidate["checks"][0]["argv"] = argv
+                contract = root / f"secret-contract-{index}.json"
+                contract.write_text(json.dumps(candidate))
+                result = self.run_cli(
+                    "bind-verification-contract", "--state-dir", run_dir,
+                    "--contract", contract,
+                )
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse((run_dir / "verification-contracts").exists())
+                self.assertEqual(
+                    len((run_dir / "events.jsonl").read_text().splitlines()), 1,
+                )
 
     def test_verification_contract_rejects_symlink_input_and_artifact_escape(self):
         with tempfile.TemporaryDirectory() as directory:

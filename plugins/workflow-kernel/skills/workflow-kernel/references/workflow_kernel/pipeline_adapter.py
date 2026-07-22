@@ -161,6 +161,10 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
     requested_executor = dual_key(
         manifest, "requested_executor", "requestedExecutor", default=None,
     )
+    decision_profile = dual_key(
+        manifest, "decision_profile", "decisionProfile", default=None,
+    )
+    decision_profile_defaulted = decision_profile is None
     context = WorkflowContext(
         changed_paths=tuple(changed_paths), requested_executor=requested_executor,
         risk=risk,
@@ -171,6 +175,8 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
     return RunSpec(
         run_id, workflow_class, defaulted, execution_mode, profile.host_name,
         nodes, chunks, levels, cached is not None and cached != levels,
+        decision_profile=decision_profile,
+        decision_profile_defaulted=decision_profile_defaulted,
     )
 
 

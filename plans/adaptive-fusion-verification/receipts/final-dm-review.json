@@ -1,0 +1,15 @@
+{
+  "stage": "final_dm_review",
+  "status": "clean",
+  "unresolved_findings": 0,
+  "deferred_findings": 0,
+  "lenses": [
+    {"name": "architecture-security", "provider": "codex", "status": "clean"},
+    {"name": "metrics-tests", "provider": "codex", "status": "clean"},
+    {"name": "contracts-docs", "provider": "codex", "status": "clean"}
+  ],
+  "openrouter_status": "declined-before-export",
+  "openrouter_reason": "tenant-policy-denied",
+  "repair_evidence": "68 final focused tests, 123 expanded focused tests, exact contract validators, and three clean re-reviews",
+  "external_boundary": "assembly-baseplate invalid_verification_declaration"
+}

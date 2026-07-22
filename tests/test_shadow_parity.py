@@ -119,6 +119,25 @@ class ShadowParityTests(unittest.TestCase):
         self.assertEqual(missing.reason, "missing_authoritative_evidence")
         self.assertEqual(extra.reason, "unexpected_authoritative_transition")
 
+    def test_decision_profile_mutation_is_semantic_parity_evidence(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        low = copy.deepcopy(original)
+        low[0]["decisionProfile"] = {
+            "uncertainty": "low", "consequence": "low",
+            "rationale": "Use the standard path.",
+        }
+        high = copy.deepcopy(original)
+        high[0]["decisionProfile"] = {
+            "uncertainty": "high", "consequence": "high",
+            "rationale": "Use bounded synthesis and stronger verification.",
+        }
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_pipeline_receipts(high)),
+            ReceiptSet.from_events(translate_pipeline_receipts(low)),
+        )
+        self.assertFalse(report.semantic_match)
+        self.assertEqual(report.reason, "kernel_prediction_gap")
+
     def test_generic_host_fixture_is_semantically_equivalent(self):
         generic = ReceiptSet.from_events(self.host_equivalent("pipeline-generic.json"))
         claude = ReceiptSet.from_events(self.host_equivalent("pipeline-claude.json"))

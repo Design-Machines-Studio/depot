@@ -6,6 +6,7 @@ from pathlib import Path
 from workflow_kernel.metrics import MetricsAggregator
 from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
 from workflow_kernel.dm_review_adapter import translate_review_receipts
+from workflow_kernel.schema import WorkflowEvent
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
@@ -34,6 +35,7 @@ class MetricsTests(unittest.TestCase):
         before = tuple(event.to_dict() for event in events)
         report = MetricsAggregator().aggregate(events)
         self.assertEqual(report.workflow_classes, {"feature": 11})
+        self.assertEqual(report.decision_profiles, {"legacy-defaulted": 11})
         self.assertEqual(report.hosts, {"claude-code": 11})
         self.assertEqual(report.validation_first_pass_rate, 1.0)
         self.assertEqual(report.persona_expected, 2)
@@ -134,6 +136,19 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(
             report.isolation_strategies,
             {"sequential-on-branch": len(receipts)},
+        )
+
+    def test_decision_profile_feeds_metrics_without_becoming_authority(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[0]["decisionProfile"] = {
+            "uncertainty": "high", "consequence": "high",
+            "rationale": "Bounded synthesis plus stronger verification.",
+        }
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts(receipts),
+        )
+        self.assertEqual(
+            report.decision_profiles, {"high/high": len(receipts)},
         )
 
     def test_replay_duplicate_gap_and_order_are_rejected(self):
@@ -303,6 +318,31 @@ class MetricsTests(unittest.TestCase):
         })
         self.assertIsNone(report.tokens)
 
+    def test_ambiguous_field_rows_cannot_manufacture_complete_field_totals(self):
+        assigned = [
+            self.usage_receipt(
+                0, 1, reviewer="security", lane="security",
+                usage_count=10, input_usage_count=6,
+            ),
+            self.usage_receipt(
+                1, 1, reviewer="architecture", lane="architecture",
+                usage_count=20, input_usage_count=12,
+            ),
+        ]
+        ambiguous = []
+        for sequence, value in ((2, 5), (3, 8)):
+            row = self.usage_receipt(sequence, 1, input_usage_count=value)
+            ambiguous.append(row)
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts(assigned + ambiguous),
+        )
+        self.assertEqual(report.tokens, 30)
+        self.assertIsNone(report.usage_totals["input_usage_count"])
+        self.assertIsNone(
+            report.usage_total_provenance["input_usage_count"],
+        )
+        self.assertEqual(report.usage_measurement_coverage["unassigned"], 2)
+
     def test_contributions_preserve_canonical_count_and_existing_yield(self):
         common = {
             "run_id": "review-economics", "stage": "finding_contribution",
@@ -357,6 +397,67 @@ class MetricsTests(unittest.TestCase):
         self.assertEqual(report.human_interventions_by_reason, {"retry_budget_exhausted": 1})
         self.assertEqual(report.human_intervention_attempts[0]["attempt"], 2)
         self.assertEqual(report.wait_seconds_by_category["human_gate"], 30)
+
+    def test_conflicting_human_intervention_id_reuse_is_rejected(self):
+        first = {
+            "run_id": "human-conflict", "sequence": 0,
+            "stage": "deterministic_validation", "status": "blocked",
+            "action": "human_help_required", "node_id": "chunk-a",
+            "attempt": 1, "human_intervention_id": "human-a",
+            "human_intervention_reason": "retry_budget_exhausted",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/human-first.json",
+        }
+        identical = {
+            **first, "sequence": 1,
+            "occurred_at": "2026-07-14T00:01:00Z",
+            "authoritative_receipt": "receipts/human-identical.json",
+        }
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts([first, identical]),
+        )
+        self.assertEqual(report.human_intervention_count, 1)
+
+        mutations = []
+        attempt = dict(identical); attempt["attempt"] = 2; mutations.append(attempt)
+        reason = dict(identical); reason["human_intervention_reason"] = "identical_failure_convergence"; mutations.append(reason)
+        node = dict(identical); node["node_id"] = "chunk-b"; mutations.append(node)
+        browser = {
+            "run_id": "human-conflict", "sequence": 1,
+            "stage": "browser_recovery", "status": "blocked",
+            "reason_code": "human_help_required", "node_id": "chunk-a",
+            "human_intervention_id": "human-a",
+            "human_intervention_reason": "browser_evidence_unavailable",
+            "missing_case_ids": ["browser-primary"],
+            "occurred_at": "2026-07-14T00:01:00Z",
+            "authoritative_receipt": "receipts/human-browser.json",
+        }
+        mutations.append(browser)
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                MetricsAggregator().aggregate(
+                    translate_pipeline_receipts([first, mutation]),
+                )
+
+        payload = {
+            "stage": "deterministic_validation", "status": "blocked",
+            "human_intervention": True, "human_intervention_id": "human-a",
+            "human_intervention_reason": "retry_budget_exhausted", "attempt": 1,
+            "contract_digest": "sha256:" + "a" * 64,
+        }
+        events = [
+            WorkflowEvent(
+                1, 0, "human-conflict", "chunk-a", "evidence.recorded",
+                "2026-07-14T00:00:00Z", payload,
+            ),
+            WorkflowEvent(
+                1, 1, "human-conflict", "chunk-a", "evidence.recorded",
+                "2026-07-14T00:01:00Z",
+                {**payload, "contract_digest": "sha256:" + "b" * 64},
+            ),
+        ]
+        with self.assertRaises(ValueError):
+            MetricsAggregator().aggregate(events)
 
 
 if __name__ == "__main__":

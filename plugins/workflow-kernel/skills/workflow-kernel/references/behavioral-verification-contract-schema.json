@@ -44,11 +44,16 @@
     "check": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "argv", "proves_requirement_ids", "baseline_expectation"],
+      "required": ["id", "argv", "proves_requirement_ids", "proves_regression_ids", "baseline_expectation"],
+      "anyOf": [
+        {"properties": {"proves_requirement_ids": {"minItems": 1}}},
+        {"properties": {"proves_regression_ids": {"minItems": 1}}}
+      ],
       "properties": {
         "id": {"type": "string", "pattern": "^CHK-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128},
         "argv": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000]+$"}},
-        "proves_requirement_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "maxItems": 1024, "items": {"type": "string", "pattern": "^REQ-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128}},
+        "proves_requirement_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"type": "string", "pattern": "^REQ-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128}},
+        "proves_regression_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"type": "string", "pattern": "^REG-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128}},
         "baseline_expectation": {"enum": ["must_fail", "may_pass", "not_runnable"]}
       }
     },

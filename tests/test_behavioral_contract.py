@@ -18,7 +18,7 @@ SCHEMA = json.loads((
 def contract_one():
     obligation_ids = [
         "BROWSER:browser-primary", "PERSONA:persona-editor", "REG-001",
-        "REQ-001", "PROOF:CHK-001:REQ-001",
+        "REQ-001", "PROOF:CHK-001:REQ-001", "PROOF:CHK-001:REG-001",
     ]
     return {
         "schema_version": 1,
@@ -37,6 +37,7 @@ def contract_one():
             "id": "CHK-001",
             "argv": ["python3.12", "-m", "unittest", "tests.test_example"],
             "proves_requirement_ids": ["REQ-001"],
+            "proves_regression_ids": ["REG-001"],
             "baseline_expectation": "must_fail",
         }],
         "persona_case_ids": ["persona-editor"],
@@ -73,6 +74,7 @@ class BehavioralContractTests(unittest.TestCase):
         contract["checks"].append({
             "id": "CHK-002", "argv": ["python3.12", "-m", "unittest", "tests.test_second"],
             "proves_requirement_ids": ["REQ-002", "REQ-001"],
+            "proves_regression_ids": [],
             "baseline_expectation": "may_pass",
         })
         contract["revision_justification"]["added_obligation_ids"].extend([
@@ -82,6 +84,7 @@ class BehavioralContractTests(unittest.TestCase):
         for name in ("requirements", "checks", "persona_case_ids", "browser_case_ids"):
             reordered[name].reverse()
         reordered["checks"][0]["proves_requirement_ids"].reverse()
+        reordered["checks"][0]["proves_regression_ids"].reverse()
         reordered["revision_justification"]["added_obligation_ids"].reverse()
         self.assertEqual(contract_digest(contract), contract_digest(reordered))
         self.assertEqual(canonical_bytes(contract), canonical_bytes(reordered))
@@ -96,16 +99,139 @@ class BehavioralContractTests(unittest.TestCase):
         argv_string = contract_one(); argv_string["checks"][0]["argv"] = "python test.py"; mutations.append(argv_string)
         empty_argv = contract_one(); empty_argv["checks"][0]["argv"] = []; mutations.append(empty_argv)
         nul_argv = contract_one(); nul_argv["checks"][0]["argv"] = ["python3.12", "bad\x00arg"]; mutations.append(nul_argv)
-        shell = contract_one(); shell["checks"][0]["argv"] = ["sh", "-c", "touch should-not-run"]; mutations.append(shell)
+        for argv in (
+            ["sh", "-c", "touch should-not-run"],
+            ["bash", "-lc", "touch should-not-run"],
+            ["zsh", "-fc", "touch should-not-run"],
+            ["bash.exe", "-c", "touch should-not-run"],
+            ["sh.exe", "-lc", "touch should-not-run"],
+            ["zsh.exe", "-fc", "touch should-not-run"],
+            ["mksh", "-c", "touch should-not-run"],
+            ["yash", "-c", "touch should-not-run"],
+            ["fish", "--command", "touch should-not-run"],
+            ["fish", "--init-command=touch should-not-run"],
+            ["fish", "--init-command", "touch should-not-run"],
+            ["fish", "-C", "touch should-not-run"],
+            ["/usr/bin/env", "bash", "-ec", "touch should-not-run"],
+            ["bash", "-O", "extglob", "-c", "touch should-not-run"],
+            ["bash", "--rcfile", "/dev/null", "-c", "touch should-not-run"],
+            ["bash", "--init-file=/dev/null", "-c", "touch should-not-run"],
+            ["/usr/bin/env", "-S", "bash -c touch should-not-run"],
+            ["/usr/bin/env", "--split-string=bash -c touch should-not-run"],
+            ["/usr/bin/env", "-uNAME", "bash", "-c", "touch should-not-run"],
+            ["/usr/bin/env", "-C/tmp", "bash", "-c", "touch should-not-run"],
+            ["/usr/bin/env", "-iS", "bash -c touch should-not-run"],
+            ["/usr/bin/env", "-iu", "NAME", "bash", "-c", "touch should-not-run"],
+            ["/usr/bin/env", "-", "bash", "-c", "touch should-not-run"],
+            ["env.exe", "-S", "bash -c touch should-not-run"],
+            ["env.exe", "--split-string=bash -c touch should-not-run"],
+            ["pwsh", "-Command", "Write-Output should-not-run"],
+            ["pwsh", "-ep", "Bypass", "-c", "Write-Output should-not-run"],
+            ["pwsh", "-o", "text", "-c", "Write-Output should-not-run"],
+            ["pwsh", "-ec", "ZgBvAG8A"],
+            ["pwsh", "-cwa", "Write-Output should-not-run"],
+            ["pwsh", "-ConfigurationFile", "config.ps1", "-c", "Write-Output should-not-run"],
+            ["powershell.exe", "-EncodedCommand", "ZgBvAG8A"],
+            ["pwsh.exe", "-e", "ZgBvAG8A"],
+            ["pwsh.exe", "-en", "ZgBvAG8A"],
+            ["cmd.exe", "/c", "echo should-not-run"],
+            ["cmd.exe", "/d", "/q", "/s", "/c", "echo should-not-run"],
+            ["cmd", "/K", "echo should-not-run"],
+        ):
+            shell = contract_one(); shell["checks"][0]["argv"] = argv; mutations.append(shell)
         unknown_proof = contract_one(); unknown_proof["checks"][0]["proves_requirement_ids"] = ["REQ-999"]; mutations.append(unknown_proof)
+        unknown_regression = contract_one(); unknown_regression["checks"][0]["proves_regression_ids"] = ["REG-999"]; mutations.append(unknown_regression)
+        unproved_regression = contract_one(); unproved_regression["checks"][0]["proves_regression_ids"] = []; mutations.append(unproved_regression)
+        no_proof = contract_one(); no_proof["checks"][0]["proves_requirement_ids"] = []; no_proof["checks"][0]["proves_regression_ids"] = []; mutations.append(no_proof)
+        for argv in (
+            ["tool", "--api-key", "sk-live-credential"],
+            ["tool", "--api-key=opaque-credential-value"],
+            ["tool", "--api_key=opaque-credential-value"],
+            ["tool", "--token", "opaque-credential"],
+            ["tool", "sk-live-credential"],
+            ["tool", "gho_abcdefghijk"],
+            ["tool", "AKIAIOSFODNN7EXAMPLE"],
+            ["tool", "sk_live_1234567890abcdef"],
+            ["tool", "--client-secret", "opaque-credential-value"],
+            ["tool", "--clientauth", "opaque-credential-value"],
+            ["tool", "--client-auth=opaque-credential-value"],
+            ["tool", "--github-token", "opaque-credential-value"],
+            ["tool", "--githubtoken=opaque-credential-value"],
+            ["tool", "--apikey", "opaque-credential-value"],
+            ["tool", "--apikey=opaque-credential-value"],
+            ["tool", "--oauth-token", "opaque-credential-value"],
+            ["tool", "--session-token=opaque-credential-value"],
+            ["tool.exe", "/password", "opaque-credential-value"],
+            ["tool.exe", "/api-key", "opaque-credential-value"],
+            ["tool.exe", "/client-secret=opaque-credential-value"],
+            ["tool", "--credentials", "opaque-credential-value"],
+            ["tool", "--creds=opaque-credential-value"],
+            ["tool", "--passphrase", "opaque-credential-value"],
+            ["tool", "--bearer", "opaque-credential-value"],
+            ["curl", "--oauth2-bearer", "opaque-credential-value"],
+            ["tool", "--private-key", "opaque-credential-value"],
+            ["tool", "ASIAIOSFODNN7EXAMPLE"],
+        ):
+            secret = contract_one(); secret["checks"][0]["argv"] = argv; mutations.append(secret)
         duplicate = contract_one(); duplicate["requirements"].append(duplicate["requirements"][0].copy()); mutations.append(duplicate)
         for index, mutation in enumerate(mutations):
             with self.subTest(index=index), self.assertRaises(ValueError):
                 validate_contract(mutation)
+        script = contract_one()
+        script["checks"][0]["argv"] = ["bash", "scripts/check-contract.sh"]
+        self.assertEqual(
+            validate_contract(script)["checks"][0]["argv"],
+            ["bash", "scripts/check-contract.sh"],
+        )
+        script_args = contract_one()
+        script_args["checks"][0]["argv"] = [
+            "bash", "scripts/check-contract.sh", "-c", "config.json",
+        ]
+        self.assertEqual(
+            validate_contract(script_args)["checks"][0]["argv"],
+            ["bash", "scripts/check-contract.sh", "-c", "config.json"],
+        )
+        powershell_file = contract_one()
+        powershell_file["checks"][0]["argv"] = [
+            "pwsh", "-ExecutionPolicy", "Bypass", "-File", "scripts/check.ps1",
+        ]
+        self.assertEqual(
+            validate_contract(powershell_file)["checks"][0]["argv"],
+            ["pwsh", "-ExecutionPolicy", "Bypass", "-File", "scripts/check.ps1"],
+        )
+        positional_shell_name = contract_one()
+        positional_shell_name["checks"][0]["argv"] = [
+            "tool", "bash", "-c", "config.json",
+        ]
+        self.assertEqual(
+            validate_contract(positional_shell_name)["checks"][0]["argv"],
+            ["tool", "bash", "-c", "config.json"],
+        )
+        wrapped_program_args = contract_one()
+        wrapped_program_args["checks"][0]["argv"] = [
+            "env", "tool", "-Sdata", "--split-string=value",
+        ]
+        self.assertEqual(
+            validate_contract(wrapped_program_args)["checks"][0]["argv"],
+            ["env", "tool", "-Sdata", "--split-string=value"],
+        )
+        attached_env_operand = contract_one()
+        attached_env_operand["checks"][0]["argv"] = [
+            "env", "-uSHELL", "bash", "scripts/check-contract.sh",
+        ]
+        self.assertEqual(
+            validate_contract(attached_env_operand)["checks"][0]["argv"],
+            ["env", "-uSHELL", "bash", "scripts/check-contract.sh"],
+        )
+        ordinary = contract_one()
+        ordinary["requirements"][0]["statement"] = (
+            "Use primary_key=account_id, cache-key: request-path, and max_token=4096."
+        )
+        self.assertEqual(validate_contract(ordinary)["requirements"][0]["id"], "REQ-001")
 
     def test_manual_and_not_runnable_requirements_remain_explicit(self):
         contract = contract_one()
-        contract["checks"] = []
+        contract["checks"][0]["proves_requirement_ids"] = []
         contract["manual_requirements"] = [{
             "requirement_id": "REQ-001", "reason_code": "human_judgment_required",
             "evidence_ref": None,
@@ -123,6 +249,7 @@ class BehavioralContractTests(unittest.TestCase):
         revision = json.loads(json.dumps(previous))
         revision.update({"revision": 2, "previous_contract_digest": previous_digest})
         revision["prohibited_regressions"] = []
+        revision["checks"][0]["proves_regression_ids"] = []
         revision["checks"][0]["baseline_expectation"] = "may_pass"
         revision["revision_justification"] = {
             "reason_code": "approved_scope_change", "summary": "Approved narrower baseline.",
@@ -131,7 +258,7 @@ class BehavioralContractTests(unittest.TestCase):
                 "BROWSER:browser-primary", "PERSONA:persona-editor", "REQ-001",
                 "PROOF:CHK-001:REQ-001",
             ],
-            "removed_obligation_ids": ["REG-001"],
+            "removed_obligation_ids": ["REG-001", "PROOF:CHK-001:REG-001"],
             "human_approval_evidence_ref": None,
         }
         with self.assertRaises(ValueError):

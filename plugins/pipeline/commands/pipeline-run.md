@@ -63,7 +63,7 @@ case IDs against authoritative project declarations and block unresolved IDs.
 Validate and bind the initial contract exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" bind-verification-contract --state-dir plans/<feature> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
 ```
 
 The binding receipt's `contract_digest` and `revision` are dispatch authority.

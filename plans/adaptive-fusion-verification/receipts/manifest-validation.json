@@ -1,0 +1,13 @@
+{
+  "run_id": "adaptive-fusion-verification",
+  "sequence": 0,
+  "stage": "manifest_validation",
+  "status": "succeeded",
+  "node_id": null,
+  "occurred_at": "2026-07-22T02:53:35Z",
+  "authoritative_receipt": "plans/adaptive-fusion-verification/receipts/manifest-validation.json",
+  "host": "codex",
+  "mechanism": "codex_companion",
+  "workflow_class": "feature",
+  "execution_mode": "codex_native"
+}

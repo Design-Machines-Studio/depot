@@ -349,12 +349,17 @@ def _require_spec_receipt_context(spec, events):
     expected = (
         spec.run_id, spec.workflow_class.value,
         spec.workflow_class_defaulted, spec.execution_mode,
+        None if spec.decision_profile is None else dict(spec.decision_profile),
+        spec.decision_profile_defaulted,
     )
     for event in events:
+        event_profile = event.payload.get("decision_profile")
         actual = (
             event.run_id, event.payload.get("workflow_class"),
             event.payload.get("workflow_class_defaulted"),
             event.payload.get("execution_mode"),
+            None if event_profile is None else dict(event_profile),
+            event.payload.get("decision_profile_defaulted"),
         )
         if actual != expected:
             raise ValueError("run spec receipt context mismatch")

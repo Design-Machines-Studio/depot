@@ -69,6 +69,118 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_manifest(self.manifest("unknown"), self.profile())
 
+    def test_decision_profile_is_closed_preserved_and_legacy_defaulted(self):
+        legacy = translate_manifest(self.manifest(), self.profile())
+        self.assertIsNone(legacy.decision_profile)
+        self.assertTrue(legacy.decision_profile_defaulted)
+        for uncertainty, consequence in (("low", "low"), ("high", "high")):
+            manifest = self.manifest()
+            manifest["decisionProfile"] = {
+                "uncertainty": uncertainty,
+                "consequence": consequence,
+                "rationale": "Approved bounded depth decision.",
+            }
+            spec = translate_manifest(manifest, self.profile())
+            self.assertEqual(spec.decision_profile["uncertainty"], uncertainty)
+            self.assertEqual(spec.decision_profile["consequence"], consequence)
+            self.assertFalse(spec.decision_profile_defaulted)
+            self.assertEqual(
+                spec.to_dict()["decision_profile"], manifest["decisionProfile"],
+            )
+            self.assertEqual(spec, type(spec).from_dict(spec.to_dict()))
+
+        prose = self.manifest()
+        prose["decisionProfile"] = {
+            "uncertainty": "medium", "consequence": "low",
+            "rationale": "Token budget is bounded for this planning pass.",
+        }
+        self.assertEqual(
+            translate_manifest(prose, self.profile()).decision_profile["uncertainty"],
+            "medium",
+        )
+        ordinary = self.manifest()
+        ordinary["decisionProfile"] = {
+            "uncertainty": "medium", "consequence": "low",
+            "rationale": "Use primary_key=account_id, cache-key: request-path, and max_token=4096.",
+        }
+        self.assertEqual(
+            translate_manifest(ordinary, self.profile()).decision_profile["consequence"],
+            "low",
+        )
+
+        invalid = []
+        for profile in (
+            {"uncertainty": "unknown", "consequence": "low", "rationale": "x"},
+            {"uncertainty": "low", "consequence": "low", "rationale": ""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "token=live-secret"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "api_key=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "client_secret=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "github_token=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "authtoken=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "bearertoken=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "idtoken=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "oauth2token=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "AWS_SECRET_ACCESS_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "OPENAI_API_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "STRIPE_SECRET_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "GITHUB_CLIENT_SECRET=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "NPM_TOKEN=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"OPENAI_API_KEY\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "'GITHUB_CLIENT_SECRET': 'opaque-credential-value'"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openaiApiKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"openAIApiKey\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAIAPIKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"openAIAPIToken\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAIJWTSecret=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAISigningKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAIEncryptionKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "NEXTAUTH_SECRET=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "MYSQL_ROOT_PASSWORD=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "SSH_PASSPHRASE=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "SENTRY_DSN=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "HTTP_COOKIE=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "HTTP_AUTHORIZATION=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "_OPENAI_API_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"_OPENAI_API_KEY\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"config.OPENAI_API_KEY\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "temporary id ASIAIOSFODNN7EXAMPLE"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "x", "extra": True},
+        ):
+            manifest = self.manifest(); manifest["decisionProfile"] = profile
+            invalid.append(manifest)
+        conflict = self.manifest()
+        conflict["decisionProfile"] = {
+            "uncertainty": "low", "consequence": "low", "rationale": "one",
+        }
+        conflict["decision_profile"] = {
+            "uncertainty": "high", "consequence": "high", "rationale": "two",
+        }
+        invalid.append(conflict)
+        for manifest in invalid:
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                translate_manifest(manifest, self.profile())
+
+    def test_decision_profile_receipt_context_is_preserved_and_continuous(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        profile = {
+            "uncertainty": "high", "consequence": "high",
+            "rationale": "Use bounded synthesis and stronger verification.",
+        }
+        receipts[0]["decisionProfile"] = profile
+        events = translate_pipeline_receipts(receipts)
+        self.assertTrue(all(event.payload["decision_profile"] == profile for event in events))
+        self.assertTrue(all(not event.payload["decision_profile_defaulted"] for event in events))
+        changed = copy.deepcopy(receipts)
+        changed[-1]["decisionProfile"] = {
+            **profile, "consequence": "low",
+        }
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(changed)
+        malformed = copy.deepcopy(receipts)
+        malformed[0]["decisionProfile"] = {"uncertainty": "high"}
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(malformed)
+
     def test_pipeline_receipts_map_named_stages_and_keep_authoritative_refs(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         events = translate_pipeline_receipts(receipts)
@@ -320,6 +432,19 @@ class PipelineAdapterTests(unittest.TestCase):
         }
         payload = translate_pipeline_receipts([exact])[0].payload
         self.assertTrue(payload["human_intervention"])
+        for reason in (
+            "replacement_adapter_dispatch_failed",
+            "replacement_invalid_session_handle",
+            "replacement_session_handle_unavailable",
+        ):
+            replacement = copy.deepcopy(exact)
+            replacement["humanInterventionReason"] = reason
+            self.assertEqual(
+                translate_pipeline_receipts([replacement])[0].payload[
+                    "human_intervention_reason"
+                ],
+                reason,
+            )
         wrong_reason = copy.deepcopy(exact)
         wrong_reason["human_intervention_reason"] = "browser_evidence_unavailable"
         with self.assertRaises(ValueError):

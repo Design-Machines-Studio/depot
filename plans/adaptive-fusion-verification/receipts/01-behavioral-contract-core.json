@@ -1,0 +1,15 @@
+{
+  "chunk_id": "01-behavioral-contract-core",
+  "status": "merged",
+  "classification": "logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "validation": "37 focused tests passed",
+  "evaluation": "EVAL_GATE_PASSED: 01-behavioral-contract-core | classification: logic | iterations: 2 | findings_remaining: 0 | deferred: 0",
+  "ambiguity_resolved": true,
+  "commit": "91fa6dda39ec35ebc0faad1000f1cc2f875ea61f",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

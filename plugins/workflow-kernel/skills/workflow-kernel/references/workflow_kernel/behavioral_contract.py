@@ -10,7 +10,9 @@ from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
 from .limits import bounded_json_int, parse_json_document
-from .redaction import MAX_STRING_LENGTH, normalize_durable_string
+from .redaction import (
+    MAX_STRING_LENGTH, contains_high_confidence_secret, normalize_durable_string,
+)
 
 
 SCHEMA_VERSION = 1
@@ -26,7 +28,8 @@ _ROOT_FIELDS = frozenset({
 })
 _STATEMENT_FIELDS = frozenset({"id", "source_ref", "statement"})
 _CHECK_FIELDS = frozenset({
-    "id", "argv", "proves_requirement_ids", "baseline_expectation",
+    "id", "argv", "proves_requirement_ids", "proves_regression_ids",
+    "baseline_expectation",
 })
 _MANUAL_FIELDS = frozenset({"requirement_id", "reason_code", "evidence_ref"})
 _JUSTIFICATION_FIELDS = frozenset({
@@ -42,12 +45,166 @@ _REGRESSION_ID = re.compile(r"REG-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _CHECK_ID = re.compile(r"CHK-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _BASELINE_EXPECTATIONS = frozenset({"must_fail", "may_pass", "not_runnable"})
 _SHELL_EXECUTABLES = frozenset({
-    "ash", "bash", "csh", "dash", "fish", "ksh", "sh", "tcsh", "zsh",
+    "ash", "bash", "csh", "dash", "fish", "ksh", "mksh", "powershell",
+    "cmd", "cmd.exe", "powershell.exe", "pwsh", "pwsh.exe", "sh", "tcsh",
+    "yash", "zsh",
 })
-_SECRET_MATERIAL = re.compile(
-    r"(?i)(?:token|secret|password|authorization|cookie|dsn)\s*=|bearer\s+\S+",
-)
 _ENVIRONMENT_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
+
+
+def _uses_shell_command_string(argv):
+    """Reject shell command-string modes, including combined short flags."""
+    initial_name = Path(argv[0]).name.casefold()
+    if initial_name.endswith(".exe"):
+        initial_name = initial_name[:-4]
+    shell_index = 0
+    if initial_name == "env":
+        shell_index = 1
+        while shell_index < len(argv):
+            option = argv[shell_index]
+            if option.startswith("-") and not option.startswith("--") and len(option) > 2:
+                cluster = option[1:]
+                for position, marker in enumerate(cluster):
+                    if marker == "S":
+                        return True
+                    if marker in {"u", "C"}:
+                        shell_index += 2 if position == len(cluster) - 1 else 1
+                        break
+                else:
+                    shell_index += 1
+                continue
+            if (
+                option == "-S" or option.startswith("-S")
+                or option == "--split-string" or option.startswith("--split-string=")
+            ):
+                return True
+            if _ENVIRONMENT_ASSIGNMENT.fullmatch(option):
+                shell_index += 1
+                continue
+            if option in {"-u", "--unset", "-C", "--chdir"}:
+                shell_index += 2
+                continue
+            if option.startswith(("--unset=", "--chdir=")) or option in {"-", "-i", "--ignore-environment"}:
+                shell_index += 1
+                continue
+            if (
+                (option.startswith("-u") and len(option) > 2)
+                or (option.startswith("-C") and len(option) > 2)
+            ):
+                shell_index += 1
+                continue
+            if option == "--":
+                shell_index += 1
+            break
+    if shell_index >= len(argv):
+        return False
+    shell_name = Path(argv[shell_index]).name.casefold()
+    if shell_name.endswith(".exe") and shell_name[:-4] in _SHELL_EXECUTABLES:
+        shell_name = shell_name[:-4]
+    if shell_name not in _SHELL_EXECUTABLES:
+        return False
+    options = argv[shell_index + 1:]
+    option_index = 0
+    powershell_value_parameters = {
+        "configurationfile", "configurationname", "custompipename", "executionpolicy",
+        "inputformat", "outputformat", "settingsfile", "version", "windowstyle",
+        "workingdirectory",
+    }
+    powershell_command_aliases = {"c", "cwa", "ec"}
+    powershell_value_aliases = {"config", "ep", "o", "of", "settings", "v", "w", "wd"}
+    while option_index < len(options):
+        option = options[option_index]
+        if option == "--":
+            break
+        folded = option.casefold()
+        if shell_name == "cmd":
+            if folded.startswith(("/c", "/k")):
+                return True
+            if option.startswith(("/", "-")):
+                option_index += 1
+                continue
+            break
+        if shell_name in {"powershell", "pwsh"}:
+            if not option.startswith("-"):
+                break
+            parameter = folded.lstrip("-")
+            if (
+                parameter in powershell_command_aliases
+                or (len(parameter) >= 2 and "command".startswith(parameter))
+                or "encodedcommand".startswith(parameter)
+                or parameter == "commandwithargs"
+            ):
+                return True
+            if parameter == "f" or (len(parameter) >= 2 and "file".startswith(parameter)):
+                break
+            matches = {
+                name for name in powershell_value_parameters
+                if len(parameter) >= 2 and name.startswith(parameter)
+            }
+            if parameter in powershell_value_aliases or len(matches) == 1:
+                option_index += 2
+            else:
+                option_index += 1
+            continue
+        if not option.startswith(("-", "+")):
+            break
+        if folded == "--command" or folded.startswith("--command="):
+            return True
+        if shell_name == "fish" and (
+            folded == "--init-command" or folded.startswith("--init-command=")
+            or (len(option) > 1 and option[0] in "-+" and "C" in option[1:])
+        ):
+            return True
+        if option in {"--rcfile", "--init-file"}:
+            option_index += 2
+            continue
+        if option.startswith(("--rcfile=", "--init-file=")):
+            option_index += 1
+            continue
+        if option.startswith("--"):
+            option_index += 1
+            continue
+        if len(option) > 1 and option[0] in "-+" and "c" in option[1:]:
+            return True
+        if option in {"-O", "-o"}:
+            option_index += 2
+        else:
+            option_index += 1
+    return False
+
+
+def _passes_secret_value(argv):
+    for index, argument in enumerate(argv):
+        flag, separator, _value = argument.partition("=")
+        if not flag.startswith(("-", "/")):
+            continue
+        compact_flag = re.sub(r"[^a-z0-9]", "", flag.casefold())
+        segments = {
+            segment for segment in flag.casefold().replace("_", "-").split("-")
+            if segment
+        }
+        secret_flag = compact_flag.endswith((
+            "apikey", "accesskey", "secretkey", "privatekey",
+            "clientsecret", "clientauth", "authorization", "password",
+            "passwd", "passphrase", "credential", "credentials", "creds", "cookie", "dsn",
+            "bearer", "token",
+        )) or bool(segments & {
+            "key", "secret", "password", "passwd", "authorization",
+            "passphrase", "credential", "credentials", "creds", "cookie", "dsn", "bearer",
+        }) or (
+            "token" in segments and (
+                len(segments) == 1
+                or bool(segments & {
+                    "access", "api", "auth", "bearer", "client", "github",
+                    "oauth", "private", "refresh", "session",
+                })
+            )
+        )
+        if not secret_flag:
+            continue
+        if separator or index + 1 < len(argv):
+            return True
+    return False
 
 
 def _fail(reason: str) -> None:
@@ -70,7 +227,7 @@ def _string(value, name, *, maximum=MAX_STRING_LENGTH, pattern=None, durable=Tru
     if (
         type(value) is not str or not value or len(value) > maximum
         or "\x00" in value or any(ord(character) < 0x20 for character in value)
-        or _SECRET_MATERIAL.search(value) is not None
+        or contains_high_confidence_secret(value)
         or (pattern is not None and pattern.fullmatch(value) is None)
     ):
         _fail(f"invalid {name}")
@@ -135,6 +292,7 @@ def _canonical_contract(value):
     for item in sorted(value["checks"], key=lambda item: item["id"]):
         candidate = dict(item)
         candidate["proves_requirement_ids"] = sorted(item["proves_requirement_ids"])
+        candidate["proves_regression_ids"] = sorted(item["proves_regression_ids"])
         checks.append(candidate)
     result["checks"] = checks
     result["persona_case_ids"] = sorted(value["persona_case_ids"])
@@ -175,7 +333,8 @@ def validate_contract(value):
 
     checks = []
     check_ids = set()
-    proved_ids = set()
+    proved_requirement_ids = set()
+    proved_regression_ids = set()
     for raw in _list(value["checks"], "checks"):
         item = _object(raw, _CHECK_FIELDS, "check")
         identifier = _string(
@@ -190,23 +349,35 @@ def validate_contract(value):
                 item["argv"], "argv", maximum=MAX_ARGV_ITEMS, nonempty=True,
             )
         ]
-        if Path(argv[0]).name in _SHELL_EXECUTABLES and "-c" in argv[1:]:
+        if _uses_shell_command_string(argv):
             _fail("shell command snippets are not executable checks")
         if any(_ENVIRONMENT_ASSIGNMENT.fullmatch(argument) for argument in argv):
             _fail("executable checks must not embed environment values")
+        if _passes_secret_value(argv):
+            _fail("executable checks must not embed secret values")
         proof_ids = _unique_strings(
             item["proves_requirement_ids"], "proof requirement id",
-            nonempty=True, pattern=_REQUIREMENT_ID,
+            pattern=_REQUIREMENT_ID,
         )
         if not set(proof_ids) <= requirement_ids:
             _fail("check proves unknown requirement id")
-        proved_ids.update(proof_ids)
+        regression_proof_ids = _unique_strings(
+            item["proves_regression_ids"], "proof regression id",
+            pattern=_REGRESSION_ID,
+        )
+        if not set(regression_proof_ids) <= regression_ids:
+            _fail("check proves unknown regression id")
+        if not proof_ids and not regression_proof_ids:
+            _fail("check proves no obligation")
+        proved_requirement_ids.update(proof_ids)
+        proved_regression_ids.update(regression_proof_ids)
         baseline = item["baseline_expectation"]
         if type(baseline) is not str or baseline not in _BASELINE_EXPECTATIONS:
             _fail("invalid baseline_expectation")
         checks.append({
             "id": identifier, "argv": argv,
             "proves_requirement_ids": proof_ids,
+            "proves_regression_ids": regression_proof_ids,
             "baseline_expectation": baseline,
         })
 
@@ -237,8 +408,10 @@ def validate_contract(value):
             ),
             "evidence_ref": _nullable_reference(item["evidence_ref"], "manual evidence_ref"),
         })
-    if requirement_ids - proved_ids - manual_ids:
+    if requirement_ids - proved_requirement_ids - manual_ids:
         _fail("requirement lacks executable or manual verification")
+    if regression_ids - proved_regression_ids:
+        _fail("prohibited regression lacks executable verification")
 
     raw_justification = _object(
         value["revision_justification"], _JUSTIFICATION_FIELDS,
@@ -287,6 +460,7 @@ def validate_contract(value):
     obligation_count = (
         len(requirements) + len(regressions) + len(persona_ids) + len(browser_ids)
         + sum(len(item["proves_requirement_ids"]) for item in checks)
+        + sum(len(item["proves_regression_ids"]) for item in checks)
     )
     if obligation_count > MAX_OBLIGATION_ITEMS:
         _fail("contract obligation limit exceeded")
@@ -316,6 +490,10 @@ def obligations(contract):
         result.update(
             f"PROOF:{check['id']}:{requirement_id}"
             for requirement_id in check["proves_requirement_ids"]
+        )
+        result.update(
+            f"PROOF:{check['id']}:{regression_id}"
+            for regression_id in check["proves_regression_ids"]
         )
     return frozenset(result)
 

@@ -1,0 +1,16 @@
+{
+  "chunk_id": "04-review-synthesis-provenance",
+  "status": "merged",
+  "classification": "config",
+  "requestedProvider": "openrouter",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": true,
+  "fallbackReason": "tenant-policy-denied",
+  "openrouter_attempt_status": "declined-before-export",
+  "validation": "dm-review synthesis validator and shellcheck passed",
+  "evaluation": "EVAL_GATE_PASSED: 04-review-synthesis-provenance | classification: config | iterations: 3 | findings_remaining: 0 | deferred: 0",
+  "ambiguity_resolved": true,
+  "commit": "b3106357501401218841429b02d9845cd6db98e0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}
