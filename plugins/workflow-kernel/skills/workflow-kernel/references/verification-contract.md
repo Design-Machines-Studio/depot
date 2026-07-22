@@ -1,5 +1,41 @@
 # Verification Contract
 
+## Behavioral contract lifecycle
+
+Before implementation dispatch, Pipeline materializes one closed behavioral
+verification contract from approved requirements and current-state regressions.
+It uses stable `REQ-*`, `REG-*`, and `CHK-*` identities; argv is always a JSON
+array and is validated but never executed while binding. Every automated check
+names the requirements it proves and its baseline expectation. Requirements
+that cannot run automatically remain explicit manual requirements rather than
+disappearing from coverage.
+
+`bind-verification-contract` validates revision 1, writes one content-addressed
+artifact beneath the bound repository/run scope, and appends its audit event
+before dispatch. Idempotent retry may reproduce only that exact binding.
+`revise-verification-contract` requires the current contract digest, the next
+revision, and exact added/retained/removed obligation sets. Any behavioral
+weakening—including removed requirements, regressions, proof links, persona or
+browser cases, weaker baseline expectations, changed argv, or reduced manual
+coverage—requires durable human approval evidence. Stale digests, unsupported
+schema versions, unsafe argv, unauthorized weakening, symlink escapes, and
+unsafe durable paths fail closed without partial artifacts or raw hostile data.
+
+The behavioral contract and declared persona/browser profile are one evidence
+boundary. Contract `persona_case_ids` and `browser_case_ids` must refer to the
+authoritative selected cases below; neither layer may fabricate, silently drop,
+or reinterpret required coverage. Contract evidence is established before any
+implementation dispatch, and later deterministic-validation feedback stays
+bound to its current digest and revision.
+
+Required browser evidence follows one primary recovery ladder: preserve the
+failed attempt, quit the primary process or engine session, launch and prove a
+fresh primary session, retry once, then try one genuinely different configured
+engine. If evidence still cannot complete, stop with blocked
+`human_help_required` and the exact missing case IDs. This ladder is part of the
+behavioral contract; it cannot be weakened into skipped, deferred, degraded,
+curl-verified, or an inferred persona/browser sample.
+
 ## Declared coverage
 
 The kernel implicitly discovers only `tests/ux/personas/_index.md`, persona

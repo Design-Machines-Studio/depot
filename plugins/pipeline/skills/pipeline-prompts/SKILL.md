@@ -41,12 +41,20 @@ If no plans found, ask: "Provide a path to your plan file, or run `/pipeline` fo
 1. Read the plan file (`plans/<feature-slug>/plan.html` carries a `#pipeline-data` island; read its structured `chunks` with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
 2. Check for an Assessment Brief (`plans/<feature-slug>/assessment.html`) and Research Brief (`plans/<feature-slug>/research.html`) in the same directory
 3. Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`
-4. Generate execution prompts with overlap analysis
-5. Save manifest and prompts to `plans/<feature-slug>/`
+4. Require the approved plan's exact closed `decisionProfile` and copy it unchanged into the manifest. It controls workflow depth only: low/low keeps the optimized ordinary path; high uncertainty adds one independent planning opinion plus bounded synthesis; high consequence strengthens the existing independent verification seam. It never selects a provider, weakens security, changes browser/persona coverage, or adds full review to every ordinary chunk.
+5. Prepare the canonical verification-contract inputs from only the approved requirements, prohibited regressions, checks, and declared persona/browser cases. Use stable IDs and argv arrays; never invent coverage or shell command strings. During execution, the orchestrator materializes and binds `verification-contract.json` before dispatch with `bind-verification-contract`; any later weakening requires an audited `revise-verification-contract` receipt with human approval evidence.
+6. Generate execution prompts with overlap analysis. Every prompt preserves the bounded deterministic-validation feedback protocol: one canonical `decide-validation-retry` decision per failure, same-builder resume only with proved continuity, otherwise an explicit replacement, and `human_help_required` on convergence or exhausted budget.
+7. Preserve the required browser ladder in UI/integration prompts: safe failed evidence, primary process/session quit, demonstrably fresh primary retry, genuinely different configured engine, then blocked `human_help_required` with exact case IDs. Curl remains diagnostic only.
+8. Save the manifest and prompts to `plans/<feature-slug>/`; execution materializes the behavioral verification contract only after `run.started`.
+
+The optimized ordinary path remains one focused Codex review with at most one
+repair/recheck pass. These contracts do not restore the old per-chunk review
+fanout or introduce a closeout-only chunk.
 
 ## After Generation
 
-Present the manifest summary, then ask:
+Present the manifest summary, approved `decisionProfile`, and verification
+contract coverage, then ask:
 
 "Generated prompts at `plans/<feature-slug>/prompts/`. Options:
 1. Review the prompts (I'll show each one)
