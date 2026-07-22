@@ -30,7 +30,7 @@
 | 04-read-only-review-and-findings | Logic | codex / complete | 62 focused tests passed | passed (6 iterations) | merged (`748f658`) | Docker 0/0; worktree and merged branch removed |
 | 05-ci-evidence-and-closeout | Logic | codex / complete | 36 focused tests passed | passed (3 iterations) | merged (`083e578`) | Docker 0/0; worktree and merged branch removed |
 | 06-assembly-repository-profile | Trivial | OpenRouter blocked pre-export; Codex fallback complete | 24 focused/planner tests + 58 live tasks | passed (3 iterations) | merged (`a7828cd`) | Docker 0/0; worktree and merged branch removed |
-| 07-pipeline-integration-and-scout | Integration | pending | pending | pending | pending | pending |
+| 07-pipeline-integration-and-scout | Integration | codex worktree ready | pending | pending | pending | pending |
 | 08-cross-plugin-release-integration | Integration | pending | pending | pending | pending | pending |
 
 ## Level 3 combined gate
