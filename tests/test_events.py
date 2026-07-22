@@ -31,6 +31,35 @@ def append_event(store, value, expected_sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def test_telemetry_payload_is_redacted_bounded_immutable_and_replay_safe(self):
+        raw = {
+            "stage": "attempt_usage", "usage_scope": "attempt", "attempt": 1,
+            "input_usage_count": 10, "cost_usd": 0.01,
+            "measurement_source": "https://telemetry.example/receipt",
+            "usage_estimated": False, "missing_case_ids": ["case-a"],
+            "api_token": "never-persist-this-secret",
+            "evidence": ["receipts/attempt.json"],
+        }
+        candidate = WorkflowEvent(
+            1, 0, "run-telemetry", "chunk-a", "evidence.recorded",
+            "2026-07-14T00:00:00Z", raw,
+        )
+        raw["input_usage_count"] = 999
+        raw["missing_case_ids"].append("case-b")
+        self.assertEqual(candidate.payload["input_usage_count"], 10)
+        self.assertEqual(candidate.payload["missing_case_ids"], ("case-a",))
+        with self.assertRaises(TypeError):
+            candidate.payload["attempt"] = 2
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            append_event(store, candidate, 0)
+            durable = store.path.read_text()
+            self.assertNotIn("never-persist-this-secret", durable)
+            self.assertNotIn("telemetry.example", durable)
+            replayed = store.replay()
+            self.assertEqual(replayed[0].payload["input_usage_count"], 10)
+            self.assertEqual(store.validate()[0], replayed)
+
     def test_require_absent_accepts_missing_and_classifies_existing_entries(self):
         with tempfile.TemporaryDirectory() as directory:
             EventStore(directory).require_absent()
