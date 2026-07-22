@@ -35,3 +35,6 @@ Before state: 5 registered worktrees, 16 local branches.
 - `pipeline/depot-mechanical-workflow-hardening/06-assembly-repository-profile`: merged at `a7828cd`; clean worktree removed and fully merged local branch deleted after ancestor proof.
 - `pipeline/depot-mechanical-workflow-hardening/07-pipeline-integration-and-scout`: merged at `f964118`; clean worktree removed and fully merged local branch deleted after ancestor proof.
 - `pipeline/depot-mechanical-workflow-hardening/08-cross-plugin-release-integration`: merged at `3d316c4`; clean worktree removed and fully merged local branch deleted after ancestor proof.
+- `codex/depot-mechanical-workflow-hardening`: kept; no merge proof against base, `main`, or `origin/main`, and `noMergeOnCompletion=true` forbids deletion.
+
+Terminal inventory: all eight chunk worktrees and all eight chunk branches were removed after ancestor proof. Final `git worktree prune` removed no additional registration. Five unrelated/current worktrees remain, including this protected feature worktree; none is in an owned chunk path.

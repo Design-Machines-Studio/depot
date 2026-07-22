@@ -43,13 +43,13 @@
 
 ## Final stages
 
-- [ ] First shadow observation
-- [ ] Final full dm-review
-- [ ] Requirements cross-check
-- [ ] noMergeOnCompletion enforced
-- [ ] Memory and Codify disposition
-- [ ] Run postmortem and metrics ledger
-- [ ] Upstream Improvement Scout
-- [ ] Docker reconciliation
-- [ ] Artifact and repository cleanup
-- [ ] Terminal receipt and final shadow comparison
+- [x] First shadow observation (49 events observed; prediction binding not proven, preserved as parity gap)
+- [x] Final full dm-review (2 P1s repaired; local exact closer approved after independent re-review was host-filtered)
+- [x] Requirements cross-check (15/15 owned requirements satisfied)
+- [x] noMergeOnCompletion enforced
+- [x] Memory and Codify disposition
+- [x] Run postmortem and metrics ledger
+- [x] Upstream Improvement Scout (6 sealed inputs; 2 eligible proposals; 2 completed controls deduplicated)
+- [x] Docker reconciliation (current-run and stale-sweep exact inventories empty)
+- [x] Artifact and repository cleanup (8 Tier 2 chunk prompts removed; no Tier 1 files; all chunk refs already removed)
+- [x] Terminal receipt and final shadow comparison (`unsafe_to_promote`; `semantic_transition_difference`; observation only)
