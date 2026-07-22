@@ -89,6 +89,10 @@ Phase 8, capture it again and require `compare_review_boundary(...).read_only`
 to be true. The check hashes product/source/config/tracking file contents as
 well as status, Git index, HEAD, refs, and the content/state of provider
 mutation receipts while excluding the physically bound owned evidence root.
+Provider state is authoritative only when each capture names a valid
+`complete-provider-snapshot` marker whose receipt inventory is hashed with the
+marker and receipt content/state. A missing, invalid, or caller-incomplete
+snapshot makes the comparison incomplete and not read-only.
 The evidence root must be beneath the EventStore-owned run root; symlink escapes
 or identity changes fail closed.
 

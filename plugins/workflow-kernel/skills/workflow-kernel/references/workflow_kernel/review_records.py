@@ -293,6 +293,7 @@ def _ensure_owned_artifact_root(artifact_root, event_store):
             entry = os.lstat(current)
         except FileNotFoundError:
             os.mkdir(current, 0o700)
+            _fsync_directory(current.parent)
             entry = os.lstat(current)
         if not stat.S_ISDIR(entry.st_mode) or stat.S_ISLNK(entry.st_mode):
             _fail("unsafe review record directory")
@@ -303,13 +304,25 @@ def _ensure_owned_artifact_root(artifact_root, event_store):
 
 
 def _ensure_directory(path):
+    created = False
     try:
         os.mkdir(path, 0o700)
+        created = True
     except FileExistsError:
         pass
     entry = os.lstat(path)
     if not stat.S_ISDIR(entry.st_mode) or stat.S_ISLNK(entry.st_mode):
         _fail("unsafe review record directory")
+    if created:
+        _fsync_directory(Path(path).parent)
+
+
+def _fsync_directory(path):
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def _read_regular(path):
@@ -458,15 +471,19 @@ def consolidate_findings(findings, lanes=()):
         items = sorted(by_id[canonical_id], key=lambda item: (
             source_scope_digest(item), item["record_digest"],
         ))
-        retained = [item for item in items if item["finding_disposition"] == "retained"]
-        selected = retained or items
-        severities = sorted({item["severity"] for item in items}, key=severity_rank.get)
-        scopes = {source_scope_digest(item) for item in items}
+        active = [item for item in items if item["finding_disposition"] != "discarded"]
+        retained = [item for item in active if item["finding_disposition"] == "retained"]
+        selected = retained or active
+        severities = sorted({item["severity"] for item in active}, key=severity_rank.get)
+        source_positions = {
+            (item["lane_id"], agent)
+            for item in active for agent in item["source_agents"]
+        }
         agreement = (
-            "disputed" if links[canonical_id] or any(item["agreement"] == "disputed" for item in items)
-            else "corroborated" if len(scopes) > 1 else "unique"
+            "disputed" if links[canonical_id] or any(item["agreement"] == "disputed" for item in active)
+            else "corroborated" if len(source_positions) > 1 else "unique"
         )
-        representative = min(selected, key=lambda item: (
+        representative = min(selected or items, key=lambda item: (
             severity_rank[item["severity"]], item["record_digest"],
         ))
         sources = []
@@ -487,7 +504,8 @@ def consolidate_findings(findings, lanes=()):
                 "lane_finding_refs": sorted(lane_refs.get(item["lane_id"], ())),
             })
         result.append({
-            "canonical_finding_id": canonical_id, "severity": severities[0],
+            "canonical_finding_id": canonical_id,
+            "severity": severities[0] if severities else None,
             "source_severities": severities, "severity_disputed": len(severities) > 1,
             "agreement": agreement, "cross_id_links": links[canonical_id],
             "rule_id": representative["rule_id"], "category": representative["category"],
@@ -507,7 +525,8 @@ def project_review_markdown(findings, lanes):
     if not canonical:
         lines.append("No findings recorded.")
     for item in canonical:
-        lines.extend((f"### [{item['severity']}] {item['category']}",
+        displayed_severity = item["severity"] or "DISCARDED"
+        lines.extend((f"### [{displayed_severity}] {item['category']}",
                       f"- ID: `{item['canonical_finding_id']}`",
                       f"- Rule: `{item['rule_id']}`",
                       f"- Where: `{item['path']}#{item['anchor']}`",
@@ -616,16 +635,19 @@ def _repository_content(root, artifact_relative):
     return _canonical_bytes(sorted(rows))
 
 
+def _provider_path(root, artifact, reference):
+    artifact_path = artifact / reference
+    try:
+        os.lstat(artifact_path)
+    except FileNotFoundError:
+        return root / reference
+    return artifact_path
+
+
 def _provider_state(root, artifact, references):
     rows = []
     for reference in references:
-        artifact_path = artifact / reference
-        try:
-            os.lstat(artifact_path)
-        except FileNotFoundError:
-            path = root / reference
-        else:
-            path = artifact_path
+        path = _provider_path(root, artifact, reference)
         try:
             path.relative_to(root)
         except ValueError:
@@ -644,13 +666,54 @@ def _provider_state(root, artifact, references):
     return _canonical_bytes(rows)
 
 
-def capture_review_boundary(repository_root, artifact_root, provider_receipts=()):
+def _provider_snapshot(root, artifact, reference, supplied_receipts):
+    if reference is None:
+        return _canonical_bytes([["provider-snapshot", "missing"]]), False
+    reference = _reference(reference, "provider snapshot reference")
+    path = _provider_path(root, artifact, reference)
+    try:
+        path.relative_to(root)
+    except ValueError:
+        _fail("provider snapshot outside repository")
+    try:
+        entry = os.lstat(path)
+    except FileNotFoundError:
+        return _canonical_bytes([[reference, "missing"]]), False
+    if not stat.S_ISREG(entry.st_mode):
+        state = "symlink" if stat.S_ISLNK(entry.st_mode) else "other"
+        return _canonical_bytes([[reference, state]]), False
+    marker_digest = _hash_regular(path)
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+        if (type(marker) is not dict or set(marker) != {
+                "schema_version", "authority", "provider_receipts"}
+                or marker.get("schema_version") != 1
+                or marker.get("authority") != "complete-provider-snapshot"):
+            raise ValueError("invalid provider snapshot marker")
+        receipts = _list(
+            marker.get("provider_receipts"), "provider mutation receipt", _reference,
+        )
+        supplied = _list(
+            supplied_receipts, "provider mutation receipt", _reference,
+        )
+        if supplied and supplied != receipts:
+            raise ValueError("provider receipt list disagrees with snapshot")
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
+        return _canonical_bytes([[reference, "invalid", marker_digest]]), False
+    state = json.loads(_provider_state(root, artifact, receipts))
+    return _canonical_bytes([[reference, "file", marker_digest], *state]), True
+
+
+def capture_review_boundary(repository_root, artifact_root, provider_receipts=(), *,
+                            provider_snapshot_ref=None):
     root = Path(repository_root).resolve()
     artifact = Path(artifact_root).resolve()
     if artifact != root and root not in artifact.parents:
         _fail("artifact root outside repository")
     relative = artifact.relative_to(root).as_posix()
-    providers = _list(provider_receipts, "provider mutation receipt", _reference)
+    provider_state, provider_complete = _provider_snapshot(
+        root, artifact, provider_snapshot_ref, provider_receipts,
+    )
     return {
         "head": _git(root, "rev-parse", "HEAD").strip(),
         "index_digest": "sha256:" + hashlib.sha256(_git(root, "ls-files", "--stage").encode()).hexdigest(),
@@ -658,8 +721,9 @@ def capture_review_boundary(repository_root, artifact_root, provider_receipts=()
         "product_status_digest": "sha256:" + hashlib.sha256(_product_status(root, relative)).hexdigest(),
         "product_content_digest": "sha256:" + hashlib.sha256(_repository_content(root, relative)).hexdigest(),
         "provider_receipts_digest": "sha256:" + hashlib.sha256(
-            _provider_state(root, artifact, providers),
+            provider_state,
         ).hexdigest(),
+        "provider_snapshot_complete": provider_complete,
     }
 
 
@@ -667,4 +731,9 @@ def compare_review_boundary(before, after):
     keys = ("head", "index_digest", "refs_digest", "product_status_digest",
             "product_content_digest", "provider_receipts_digest")
     changed = [key for key in keys if before.get(key) != after.get(key)]
-    return {"read_only": not changed, "changed": changed}
+    complete = (before.get("provider_snapshot_complete") is True
+                and after.get("provider_snapshot_complete") is True)
+    if not complete:
+        changed.append("provider_snapshot_incomplete")
+    return {"read_only": complete and not changed, "changed": changed,
+            "provider_snapshot_complete": complete}

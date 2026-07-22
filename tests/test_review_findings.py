@@ -170,6 +170,22 @@ class ReviewFindingTests(unittest.TestCase):
                                       run_id="review-1", occurred_at="2026-07-14T00:00:00Z")
             self.assertGreaterEqual(len(calls), 2)
 
+            nested = store.root / "nested" / "review-artifacts"
+            synced_parents = []
+            real_sync_directory = review_records._fsync_directory
+            def observed_directory_sync(path):
+                synced_parents.append(Path(path))
+                return real_sync_directory(path)
+            with mock.patch(
+                    "workflow_kernel.review_records._fsync_directory",
+                    side_effect=observed_directory_sync), RunLease(store.state_path) as lease:
+                persist_review_record(self.finding(attempt=2), nested, store, lease, 1,
+                                      run_id="review-1", occurred_at="2026-07-14T00:01:00Z")
+            self.assertEqual(synced_parents, [
+                store.root, store.root / "nested", nested,
+                nested / "records",
+            ])
+
     def test_lane_partial_output_and_deterministic_views_preserve_evidence(self):
         finding = self.finding()
         lane = self.lane(state="degraded", missing_case_ids=["persona-admin"],
@@ -227,6 +243,37 @@ class ReviewFindingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             consolidate_findings([first, conflicting_scope])
 
+    def test_canonical_authority_excludes_discarded_and_retry_pseudocorroboration(self):
+        retained = self.finding(severity="P2")
+        retry = self.finding(
+            severity="P2", attempt=2, attempted_provider="openrouter",
+            model="z-ai/glm-5.2", raw_ref="raw/security-retry.md#finding-1",
+            finding_disposition="merged",
+            decision_reason_code="exact-duplicate",
+        )
+        discarded = self.finding(
+            severity="P1", attempt=3, attempted_provider="deepseek",
+            model="deepseek/v4", finding_disposition="discarded",
+            decision_reason_code="not-reproducible", agreement="disputed",
+        )
+        canonical = consolidate_findings([discarded, retry, retained])[0]
+        self.assertEqual(canonical["severity"], "P2")
+        self.assertEqual(canonical["source_severities"], ["P2"])
+        self.assertFalse(canonical["severity_disputed"])
+        self.assertEqual(canonical["agreement"], "unique")
+        self.assertEqual(len(canonical["sources"]), 3)
+        self.assertIn("discarded", {
+            source["finding_disposition"] for source in canonical["sources"]
+        })
+        independent = self.finding(
+            severity="P3", lane_id="architecture",
+            raw_ref="raw/architecture.md#finding-1",
+            source_agents=["architecture-reviewer"],
+        )
+        corroborated = consolidate_findings([discarded, retry, retained, independent])[0]
+        self.assertEqual(corroborated["agreement"], "corroborated")
+        self.assertEqual(corroborated["source_severities"], ["P2", "P3"])
+
     def test_lane_missing_and_unknown_states_preserve_finding_references(self):
         for state in ("missing", "unknown"):
             lane = self.lane(state=state, partial_output=False, output_ref=None,
@@ -245,49 +292,79 @@ class ReviewFindingTests(unittest.TestCase):
             subprocess.run(("git", "add", "product.txt"), cwd=root, check=True)
             subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
             artifacts = root / ".claude" / "ux-review"
-            before = capture_review_boundary(root, artifacts)
-            artifacts.mkdir(parents=True); (artifacts / "report.md").write_text("evidence\n")
-            self.assertTrue(compare_review_boundary(before, capture_review_boundary(root, artifacts))["read_only"])
+            artifacts.mkdir(parents=True)
+            snapshot = artifacts / "provider-snapshot.json"
+            def set_snapshot(receipts=()):
+                snapshot.write_text(json.dumps({
+                    "schema_version": 1,
+                    "authority": "complete-provider-snapshot",
+                    "provider_receipts": list(receipts),
+                }))
+            def boundary(receipts=()):
+                return capture_review_boundary(
+                    root, artifacts, receipts,
+                    provider_snapshot_ref="provider-snapshot.json",
+                )
+            set_snapshot()
+            before = boundary()
+            (artifacts / "report.md").write_text("evidence\n")
+            self.assertTrue(compare_review_boundary(before, boundary())["read_only"])
 
             product.write_text("changed\n")
-            changed = compare_review_boundary(before, capture_review_boundary(root, artifacts))
+            changed = compare_review_boundary(before, boundary())
             self.assertIn("product_status_digest", changed["changed"])
             subprocess.run(("git", "add", "product.txt"), cwd=root, check=True)
-            staged = compare_review_boundary(before, capture_review_boundary(root, artifacts))
+            staged = compare_review_boundary(before, boundary())
             self.assertIn("index_digest", staged["changed"])
             subprocess.run(("git", "commit", "-qm", "mutation"), cwd=root, check=True)
-            committed = compare_review_boundary(before, capture_review_boundary(root, artifacts))
+            committed = compare_review_boundary(before, boundary())
             self.assertIn("head", committed["changed"])
-            clean = capture_review_boundary(root, artifacts)
+            clean = boundary()
             subprocess.run(("git", "branch", "review-mutated-ref"), cwd=root, check=True)
-            self.assertIn("refs_digest", compare_review_boundary(clean, capture_review_boundary(root, artifacts))["changed"])
-            provider_before = capture_review_boundary(root, artifacts, ["receipts/provider-before.json"])
-            provider_after = capture_review_boundary(root, artifacts, ["receipts/provider-after.json"])
+            self.assertIn("refs_digest", compare_review_boundary(clean, boundary())["changed"])
+            set_snapshot(["receipts/provider-before.json"]); provider_before = boundary(["receipts/provider-before.json"])
+            set_snapshot(["receipts/provider-after.json"]); provider_after = boundary(["receipts/provider-after.json"])
             self.assertIn("provider_receipts_digest", compare_review_boundary(provider_before, provider_after)["changed"])
             (root / "todos").mkdir(); (root / "todos" / "001-pending-p1.md").write_text("mutation\n")
-            self.assertIn("product_status_digest", compare_review_boundary(clean, capture_review_boundary(root, artifacts))["changed"])
+            self.assertIn("product_status_digest", compare_review_boundary(clean, boundary(["receipts/provider-after.json"]))["changed"])
 
             product.write_text("dirty-one\n")
-            dirty_before = capture_review_boundary(root, artifacts)
+            set_snapshot(); dirty_before = boundary()
             product.write_text("dirty-two\n")
-            dirty_change = compare_review_boundary(dirty_before, capture_review_boundary(root, artifacts))
+            dirty_change = compare_review_boundary(dirty_before, boundary())
             self.assertNotIn("product_status_digest", dirty_change["changed"])
             self.assertIn("product_content_digest", dirty_change["changed"])
             untracked = root / "untracked.txt"; untracked.write_text("one\n")
-            untracked_before = capture_review_boundary(root, artifacts)
+            untracked_before = boundary()
             untracked.write_text("two\n")
             self.assertIn("product_content_digest", compare_review_boundary(
-                untracked_before, capture_review_boundary(root, artifacts),
+                untracked_before, boundary(),
             )["changed"])
             provider_dir = artifacts / "receipts"; provider_dir.mkdir()
             provider = provider_dir / "provider.json"; provider.write_text("before\n")
-            provider_before = capture_review_boundary(root, artifacts, ["receipts/provider.json"])
+            set_snapshot(["receipts/provider.json"])
+            provider_before = boundary(["receipts/provider.json"])
             provider.write_text("after\n")
-            provider_change = compare_review_boundary(provider_before, capture_review_boundary(
-                root, artifacts, ["receipts/provider.json"],
-            ))
+            provider_change = compare_review_boundary(
+                provider_before, boundary(["receipts/provider.json"]),
+            )
             self.assertNotIn("product_content_digest", provider_change["changed"])
             self.assertIn("provider_receipts_digest", provider_change["changed"])
+
+            incomplete_before = capture_review_boundary(root, artifacts)
+            incomplete_after = capture_review_boundary(root, artifacts, [])
+            incomplete = compare_review_boundary(incomplete_before, incomplete_after)
+            self.assertFalse(incomplete["read_only"])
+            self.assertFalse(incomplete["provider_snapshot_complete"])
+            self.assertIn("provider_snapshot_incomplete", incomplete["changed"])
+            authoritative = boundary(["receipts/provider.json"])
+            mismatched = capture_review_boundary(
+                root, artifacts, ["receipts/omitted.json"],
+                provider_snapshot_ref="provider-snapshot.json",
+            )
+            mismatch = compare_review_boundary(authoritative, mismatched)
+            self.assertFalse(mismatch["read_only"])
+            self.assertIn("provider_snapshot_incomplete", mismatch["changed"])
 
     def test_plain_review_prose_is_read_only_and_fix_paths_own_mutation(self):
         root = Path(__file__).parents[1]
