@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from pathlib import Path
 import re
 
 from ._files import _OwnedResourceScope, bind_durable_path
