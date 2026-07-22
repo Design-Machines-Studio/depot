@@ -192,7 +192,8 @@ class MetricsTests(unittest.TestCase):
         self.assertIsNone(report.cost_usd)
         self.assertEqual(
             report.usage_measurement_coverage,
-            {"expected": 2, "measured": 1, "estimated": 0, "missing": 1, "overlap": 0},
+            {"expected": 2, "measured": 1, "estimated": 0, "missing": 1,
+             "overlap": 0, "unassigned": 0},
         )
 
     def test_usage_and_cost_coverage_are_independent_and_estimation_is_visible(self):
@@ -261,6 +262,46 @@ class MetricsTests(unittest.TestCase):
         ]))
         self.assertEqual(report.usage_measurement_coverage["expected"], 1)
         self.assertEqual(report.usage_measurement_coverage["missing"], 0)
+
+    def test_generic_measurement_is_unassigned_when_reviewer_expectations_are_ambiguous(self):
+        common = {
+            "run_id": "ambiguous-coverage", "stage": "finding_contribution",
+            "status": "recorded", "node_id": "review-convergence",
+            "chunk_id": "chunk-a", "attempt": 1,
+            "canonical_finding_id": "finding-a", "agreement": "corroborated",
+            "evidence_ref": "raw/reviewer-a.json",
+        }
+        receipts = [
+            {**common, "sequence": 0, "reviewer": "security", "lane": "security",
+             "source_finding_id": "source-a", "finding_disposition": "retained",
+             "decision_reason_code": "retained-corroborated",
+             "occurred_at": "2026-07-14T00:00:00Z",
+             "authoritative_receipt": "receipts/contribution-a.json"},
+            {**common, "sequence": 1, "reviewer": "architecture", "lane": "architecture",
+             "source_finding_id": "source-b", "finding_disposition": "merged",
+             "decision_reason_code": "exact-duplicate",
+             "evidence_ref": "raw/reviewer-b.json",
+             "occurred_at": "2026-07-14T00:01:00Z",
+             "authoritative_receipt": "receipts/contribution-b.json"},
+            {
+                "run_id": "ambiguous-coverage", "sequence": 2,
+                "stage": "attempt_usage", "status": "observed",
+                "node_id": "review-convergence", "chunk_id": "chunk-a", "attempt": 1,
+                "requested_provider": "openrouter", "attempted_provider": "openai",
+                "implemented_by": "codex", "provider": "openai",
+                "model": "gpt-5.6-sol", "host": "codex", "duration_seconds": 1.0,
+                "usage_scope": "attempt", "usage_count": 10,
+                "measurement_source": "provider_receipt", "usage_estimated": False,
+                "occurred_at": "2026-07-14T00:02:00Z",
+                "authoritative_receipt": "receipts/generic-usage.json",
+            },
+        ]
+        report = MetricsAggregator().aggregate(translate_review_receipts(receipts))
+        self.assertEqual(report.usage_measurement_coverage, {
+            "expected": 2, "measured": 0, "estimated": 0, "missing": 2,
+            "overlap": 0, "unassigned": 1,
+        })
+        self.assertIsNone(report.tokens)
 
     def test_contributions_preserve_canonical_count_and_existing_yield(self):
         common = {

@@ -188,9 +188,16 @@ def _coverage(expected, rows, predicate) -> dict:
         }
         return next(iter(candidates)) if len(candidates) == 1 else identity
 
-    measured_counts = Counter(
-        resolved(identity) for identity, payload in rows if predicate(payload)
-    )
+    measured_counts = Counter()
+    unassigned = 0
+    for identity, payload in rows:
+        if not predicate(payload):
+            continue
+        assigned = resolved(identity)
+        if assigned not in normalized_expected:
+            unassigned += 1
+            continue
+        measured_counts[assigned] += 1
     measured = set(measured_counts)
     return {
         "expected": len(normalized_expected),
@@ -202,6 +209,7 @@ def _coverage(expected, rows, predicate) -> dict:
         }),
         "missing": len(normalized_expected - measured),
         "overlap": sum(1 for count in measured_counts.values() if count > 1),
+        "unassigned": unassigned,
     }
 
 
