@@ -51,8 +51,9 @@ class ImprovementScoutTests(unittest.TestCase):
             "safety_boundary": "Proposal only; no source or release mutation.",
             "compatibility_notes": "Preserve Claude and Codex receipt semantics.",
             "benefit_basis": "qualitative",
-            "expected_benefit": "Reduce repeated manual command-selection friction.",
-            "benefit_evidence_refs": [],
+            "expected_benefit": "reduced_manual_friction",
+            "benefit_rationale": "Reduce repeated manual command-selection friction.",
+            "benefit_measurement": None,
         }
         value.update(changes)
         return build_candidate(**value)
@@ -155,8 +156,11 @@ class ImprovementScoutTests(unittest.TestCase):
         invalid = (
             {"evidence_refs": []}, {"status": "standing", "recurrence_count": 2},
             {"status": "one-off", "recurrence_count": 2},
-            {"benefit_basis": "measured", "benefit_evidence_refs": []},
-            {"benefit_basis": "qualitative", "benefit_evidence_refs": ["metrics.json"]},
+            {"benefit_basis": "measured", "benefit_measurement": None},
+            {"benefit_measurement": {
+                "metric": "review-time", "unit": "seconds", "baseline": 10,
+                "expected": 5, "evidence_refs": ["metrics.json"],
+            }},
             {"merge_release_authority": True},
         )
         for mutation in invalid:
@@ -181,8 +185,10 @@ class ImprovementScoutTests(unittest.TestCase):
                 self.report([self.candidate(**mutation)])
 
     def test_quantified_benefit_requires_available_measured_index_evidence(self):
-        with self.assertRaises(ValueError):
-            self.candidate(expected_benefit="Save 30 percent of review time.")
+        qualitative = self.candidate(
+            benefit_rationale="Support v2 workflows, halve friction, and avoid double review.",
+        )
+        self.assertIsNone(qualitative["benefit_measurement"])
         metric_input = self.input(
             evidence_id="metrics.duration.1",
             artifact_ref="plans/feature/metrics.json",
@@ -191,11 +197,19 @@ class ImprovementScoutTests(unittest.TestCase):
         )
         measured = self.candidate(
             benefit_basis="measured",
-            expected_benefit="Measured evidence shows 30 percent less review time.",
-            benefit_evidence_refs=["plans/feature/metrics.json"],
+            expected_benefit="reduced_cycle_time",
+            benefit_rationale="Measured duration evidence supports this outcome.",
+            benefit_measurement={
+                "metric": "review-duration", "unit": "seconds",
+                "baseline": 100, "expected": 70,
+                "evidence_refs": ["plans/feature/metrics.json"],
+            },
         )
         report = self.report([measured], [self.input(), metric_input])
         self.assertEqual(report["candidates"][0]["benefit_basis"], "measured")
+        prompt = render_upstream_prompt(report)
+        self.assertIn("Benefit basis: `measured`", prompt)
+        self.assertIn("review-duration 100 -> 70 seconds", prompt)
         unavailable = copy.deepcopy(metric_input)
         unavailable["availability"] = "unavailable"
         with self.assertRaises(ValueError):

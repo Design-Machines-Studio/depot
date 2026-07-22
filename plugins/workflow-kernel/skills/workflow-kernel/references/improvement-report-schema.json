@@ -59,7 +59,7 @@
     },
     "candidate": {
       "type": "object", "additionalProperties": false,
-      "required": ["candidate_id", "category", "observed_problem", "evidence_refs", "source_runs", "source_stages", "source_chunks", "recurrence_count", "status", "dedupe_key", "dedupe_reason", "existing_control_refs", "owner_plugin", "target_surfaces", "mechanical_work", "judgment_boundary", "acceptance_tests", "confidence", "safety_boundary", "compatibility_notes", "benefit_basis", "expected_benefit", "benefit_evidence_refs", "merge_release_authority"],
+      "required": ["candidate_id", "category", "observed_problem", "evidence_refs", "source_runs", "source_stages", "source_chunks", "recurrence_count", "status", "dedupe_key", "dedupe_reason", "existing_control_refs", "owner_plugin", "target_surfaces", "mechanical_work", "judgment_boundary", "acceptance_tests", "confidence", "safety_boundary", "compatibility_notes", "benefit_basis", "expected_benefit", "benefit_rationale", "benefit_measurement", "merge_release_authority"],
       "properties": {
         "candidate_id": {"type": "string", "pattern": "^improvement-v1:sha256:[0-9a-f]{64}$"},
         "category": {"enum": ["new_deterministic_check", "existing_check_repair", "plugin_contract", "telemetry_gap", "depot_architecture", "documentation_or_runbook"]},
@@ -73,8 +73,19 @@
         "judgment_boundary": {"$ref": "#/$defs/text"}, "acceptance_tests": {"$ref": "#/$defs/refs"},
         "confidence": {"enum": ["low", "medium", "high", "unavailable"]},
         "safety_boundary": {"$ref": "#/$defs/text"}, "compatibility_notes": {"$ref": "#/$defs/text"},
-        "benefit_basis": {"enum": ["qualitative", "measured"]}, "expected_benefit": {"$ref": "#/$defs/text"},
-        "benefit_evidence_refs": {"$ref": "#/$defs/refs"}, "merge_release_authority": {"const": false}
+        "benefit_basis": {"enum": ["qualitative", "measured"]},
+        "expected_benefit": {"enum": ["reduced_manual_friction", "reduced_cycle_time", "improved_correctness", "improved_observability", "improved_maintainability", "improved_compatibility"]},
+        "benefit_rationale": {"$ref": "#/$defs/text"},
+        "benefit_measurement": {"oneOf": [{"$ref": "#/$defs/benefit_measurement"}, {"type": "null"}]}, "merge_release_authority": {"const": false}
+      }
+    },
+    "benefit_measurement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric", "unit", "baseline", "expected", "evidence_refs"],
+      "properties": {
+        "metric": {"$ref": "#/$defs/id"}, "unit": {"$ref": "#/$defs/id"},
+        "baseline": {"type": "number"}, "expected": {"type": "number"},
+        "evidence_refs": {"$ref": "#/$defs/refs"}
       }
     }
   }

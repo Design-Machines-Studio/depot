@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 
 from .redaction import contains_high_confidence_secret, normalize_evidence_reference
@@ -20,11 +21,15 @@ _STATUSES = frozenset({
     "one-off", "recurring", "standing", "completed", "superseded", "rejected",
 })
 _PROMPT_STATUSES = frozenset({"one-off", "recurring", "standing"})
+_BENEFIT_OUTCOMES = frozenset({
+    "reduced_manual_friction", "reduced_cycle_time", "improved_correctness",
+    "improved_observability", "improved_maintainability",
+    "improved_compatibility",
+})
 _REQUIRED_METRICS = frozenset({
     "duration_seconds", "wait_seconds", "attempt_count",
     "provider_attempt_count", "finding_contribution_count", "usage_count",
 })
-_NUMERIC_CLAIM = re.compile(r"\d")
 
 
 def _fail(message):
@@ -96,8 +101,8 @@ _CANDIDATE_FIELDS = frozenset({
     "status", "dedupe_key", "dedupe_reason", "existing_control_refs",
     "owner_plugin", "target_surfaces", "mechanical_work",
     "judgment_boundary", "acceptance_tests", "confidence", "safety_boundary",
-    "compatibility_notes", "benefit_basis", "expected_benefit",
-    "benefit_evidence_refs", "merge_release_authority",
+    "compatibility_notes", "benefit_basis", "expected_benefit", "benefit_rationale",
+    "benefit_measurement", "merge_release_authority",
 })
 _REPORT_FIELDS = frozenset({
     "schema_version", "record_kind", "run_id", "feature_slug",
@@ -190,6 +195,31 @@ def build_input_index(*, run_id, feature_slug, sealed_at, inputs):
     return validate_input_index(body)
 
 
+def _benefit_measurement(value):
+    if type(value) is not dict or set(value) != {
+        "metric", "unit", "baseline", "expected", "evidence_refs",
+    }:
+        _fail("invalid benefit measurement")
+    baseline, expected = value["baseline"], value["expected"]
+    if any(
+        type(number) not in {int, float}
+        or type(number) is float and not math.isfinite(number)
+        for number in (baseline, expected)
+    ):
+        _fail("invalid benefit measurement value")
+    evidence = _list(
+        value["evidence_refs"], "benefit evidence reference", _reference,
+    )
+    if not evidence:
+        _fail("measured benefit lacks evidence")
+    return {
+        "metric": _identity(value["metric"], "benefit metric"),
+        "unit": _identity(value["unit"], "benefit unit"),
+        "baseline": baseline, "expected": expected,
+        "evidence_refs": evidence,
+    }
+
+
 def _candidate(value):
     if type(value) is not dict or set(value) != _CANDIDATE_FIELDS:
         _fail("invalid improvement candidate fields")
@@ -216,9 +246,11 @@ def _candidate(value):
         "safety_boundary": _text(value["safety_boundary"], "safety boundary"),
         "compatibility_notes": _text(value["compatibility_notes"], "compatibility notes"),
         "benefit_basis": value["benefit_basis"],
-        "expected_benefit": _text(value["expected_benefit"], "expected benefit"),
-        "benefit_evidence_refs": _list(
-            value["benefit_evidence_refs"], "benefit evidence reference", _reference,
+        "expected_benefit": value["expected_benefit"],
+        "benefit_rationale": _text(value["benefit_rationale"], "benefit rationale"),
+        "benefit_measurement": (
+            None if value["benefit_measurement"] is None
+            else _benefit_measurement(value["benefit_measurement"])
         ),
         "merge_release_authority": value["merge_release_authority"],
     }
@@ -239,13 +271,12 @@ def _candidate(value):
         _fail("invalid candidate confidence")
     if result["benefit_basis"] not in {"qualitative", "measured"}:
         _fail("invalid benefit basis")
-    if result["benefit_basis"] == "measured" and not result["benefit_evidence_refs"]:
+    if result["expected_benefit"] not in _BENEFIT_OUTCOMES:
+        _fail("invalid benefit outcome category")
+    if result["benefit_basis"] == "measured" and result["benefit_measurement"] is None:
         _fail("measured benefit lacks evidence")
-    if result["benefit_basis"] == "qualitative" and result["benefit_evidence_refs"]:
+    if result["benefit_basis"] == "qualitative" and result["benefit_measurement"] is not None:
         _fail("qualitative benefit claims measured evidence")
-    if (result["benefit_basis"] == "qualitative"
-            and _NUMERIC_CLAIM.search(result["expected_benefit"])):
-        _fail("qualitative benefit contains quantified claim")
     if result["merge_release_authority"] is not False:
         _fail("Scout candidate claims merge or release authority")
     expected_id = candidate_id(result["dedupe_key"])
@@ -344,8 +375,28 @@ def _dedupe(candidates):
         ))
         merged = dict(chosen)
         for field in ("evidence_refs", "source_runs", "source_stages", "source_chunks",
-                      "existing_control_refs", "benefit_evidence_refs"):
+                      "existing_control_refs"):
             merged[field] = sorted({entry for item in items for entry in item[field]})
+        measurements = [item["benefit_measurement"] for item in items]
+        if measurements[0] is not None:
+            identity = {
+                key: measurements[0][key]
+                for key in ("metric", "unit", "baseline", "expected")
+            }
+            if any(
+                measurement is None or any(
+                    measurement[key] != expected for key, expected in identity.items()
+                )
+                for measurement in measurements
+            ):
+                _fail("conflicting measured benefit claims")
+            merged["benefit_measurement"] = {
+                **identity,
+                "evidence_refs": sorted({
+                    reference for measurement in measurements
+                    for reference in measurement["evidence_refs"]
+                }),
+            }
         merged["recurrence_count"] = len(merged["source_runs"])
         if merged["status"] in {"one-off", "recurring", "standing"}:
             merged["status"] = (
@@ -381,7 +432,8 @@ def _bind_candidate_to_index(candidate, index_inputs):
             _fail("candidate provenance disagrees with sealed input index")
     if item["recurrence_count"] != len(expected["source_runs"]):
         _fail("candidate recurrence disagrees with distinct indexed runs")
-    for reference in item["benefit_evidence_refs"]:
+    measurement = item["benefit_measurement"]
+    for reference in (() if measurement is None else measurement["evidence_refs"]):
         records = by_reference.get(reference)
         if not records or not any(
             record["availability"] == "available" for record in records
@@ -473,6 +525,19 @@ def render_upstream_prompt(report):
     if not eligible:
         lines.append("No eligible upstream implementation candidates were produced.")
     for item in eligible:
+        measurement = item["benefit_measurement"]
+        benefit = (
+            f"- Benefit basis: `{item['benefit_basis']}`\n"
+            f"- Benefit outcome: `{item['expected_benefit']}`\n"
+            f"- Benefit rationale: {item['benefit_rationale']}"
+        )
+        if measurement is not None:
+            benefit += (
+                f"\n- Measured quantity: {measurement['metric']} "
+                f"{measurement['baseline']} -> {measurement['expected']} "
+                f"{measurement['unit']}. Evidence: "
+                + ", ".join(measurement["evidence_refs"])
+            )
         lines.extend((
             f"### {item['candidate_id']}", "",
             f"- Category: `{item['category']}`", f"- Status: `{item['status']}`",
@@ -485,6 +550,6 @@ def render_upstream_prompt(report):
             f"- Acceptance tests: {'; '.join(item['acceptance_tests'])}",
             f"- Safety boundary: {item['safety_boundary']}",
             f"- Compatibility: {item['compatibility_notes']}",
-            f"- Expected benefit ({item['benefit_basis']}): {item['expected_benefit']}", "",
+            benefit, "",
         ))
     return "\n".join(lines).rstrip() + "\n"
