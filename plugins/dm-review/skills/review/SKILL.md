@@ -598,14 +598,31 @@ done
 
 Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 
-1. **Collect** all findings from all agent outputs (post-guardrail)
-2. **Deduplicate** findings using the precision rules in `${CLAUDE_SKILL_DIR}/references/guardrails.md` (same-line merge, adjacent-line merge, severity-disagreement escalation)
-3. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
-4. **Determine merge recommendation** using the zero-deferral logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
+1. **Collect** all findings from all agent outputs, including entries excluded
+   from canonical counts by output guardrails, assigning each source finding
+   an addressable ID and recording its literal
+   lane/provider/model/agent, evidence, and `raw_ref`. Raw reviewer artifacts
+   remain untouched and are never replaced by the summary.
+2. **Assign stable identity** in the exact form
+   `finding-v1:sha256(<normalized-key>)`, where the normalized key is lowercase
+   POSIX path + smallest stable structural anchor (normalized line span only if
+   no anchor exists) + normalized issue category + whitespace-collapsed
+   root-cause invariant. Exclude reviewer/provider/model/severity/remediation/
+   discovery order. Input reorder preserves IDs and decisions; severity
+   disagreement changes the ledger, not identity.
+3. **Classify and decide** using `agreement: unique|corroborated|disputed`
+   independently from `finding_disposition: retained|merged|discarded`. Every
+   source finding gets a rationale and a closed reason code. Preserve
+   contradictions, source severities, selected severity, and evidence rationale;
+   exact duplicates do not inflate counts and distinct root causes stay separate.
+   Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context
+   evidence, standards-based reasoning, and reviewer consensus.
+4. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
+5. **Determine merge recommendation** using the zero-deferral logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
    - Any P1 -> "BLOCKS MERGE"
    - Any P2 OR any P3 -> "APPROVE WITH FIXES" (P3-only is NOT clean under zero-deferral; use `--allow-defer-p3` to explicitly opt out with justification)
    - Zero findings -> "CLEAN"
-5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
+6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
 
 Output the full report to the user.
 

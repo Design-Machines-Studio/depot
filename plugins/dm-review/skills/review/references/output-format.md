@@ -30,7 +30,9 @@ The canonical unified report format produced by the review-consolidator after al
 ### P1 -- Critical (Blocks Merge)
 
 #### [Finding Title]
+- **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
+- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Clear description of the problem
 - **Fix:** Specific remediation steps
@@ -43,7 +45,9 @@ The canonical unified report format produced by the review-consolidator after al
 ### P2 -- Important (Should Fix)
 
 #### [Finding Title]
+- **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
+- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Description
 - **Fix:** Remediation
@@ -55,12 +59,35 @@ The canonical unified report format produced by the review-consolidator after al
 ### P3 -- Fix Before Merge
 
 #### [Finding Title]
+- **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
+- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Description
 - **Fix:** Remediation
 
 [Repeat for each P3 finding -- same detail format as P1/P2]
+
+---
+
+### Synthesis Decisions
+
+| Finding ID | Agreement | Selected outcome | Source decisions | Evidence rationale |
+|------------|-----------|------------------|------------------|--------------------|
+| `finding-v1:sha256(...)` | disputed | retained as P1 | `source-id-a` (Codex/codex/model/agent): retained/retained-disagreement, P1, `raw_ref`; `source-id-b` (OpenRouter/openrouter/model/agent): discarded/superseded-by-stronger-evidence, P3, `raw_ref` | Reproducible runtime evidence supports source A; source B's contradictory position remains recorded. |
+
+One row per canonical finding, sorted by finding ID. Within a row, sort source
+decisions by source finding ID. Use `agreement: unique|corroborated|disputed`
+independently from `finding_disposition: retained|merged|discarded`. Each source
+decision names its literal lane, requested/attempted/implemented-by provider,
+model, agent, source evidence, source severity, disposition, closed
+`decision_reason_code`, raw artifact reference, and a compact rationale. For
+severity disagreement, show every source severity, the chosen severity, and why
+the selected evidence outranks the alternatives.
+Contradictions and discarded positions remain visible.
+
+If there are zero raw findings, emit `Synthesis Decisions: none -- no source
+findings required a decision.` The section is still required.
 
 ---
 
@@ -152,6 +179,12 @@ The consolidator preserves the original citation format from each agent.
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
 7. **Full agent reports** are always included in collapsible sections for reference
 8. **No sugar-coating** -- if the code has problems, say so directly
+9. **Stable identity is mandatory** -- every retained canonical finding uses
+   `finding-v1:sha256(<normalized-key>)`, derived without reviewer, provider,
+   model, severity, remediation, or discovery order
+10. **Synthesis decisions are complete** -- every source finding appears with
+    provenance, evidence, raw ref, agreement, disposition, closed reason code,
+    and rationale; raw reviewer reports remain verbatim below
 
 ## Merge Recommendation Logic (zero-deferral default)
 
