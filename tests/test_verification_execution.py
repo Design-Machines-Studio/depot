@@ -54,6 +54,7 @@ class VerificationExecutionTests(unittest.TestCase):
         self.assertEqual(truncated["parser_status"], "truncated")
         for invalid in (
             {"Action": "pass", "Package": "example/pkg", "Elapsed": 1e309},
+            {"Action": "pass", "Package": "example/pkg", "Elapsed": 10 ** 400},
             {"Action": "output", "Package": "example/pkg", "Output": "coverage: " + "9" * 400 + "%"},
         ):
             with self.subTest(invalid=invalid["Action"]):

@@ -194,8 +194,7 @@ def parse_go_test_json(raw, *, command_digest, exit_code, max_events=MAX_GO_EVEN
             elapsed = event.get("Elapsed", 0)
             if (
                 type(elapsed) not in {int, float}
-                or isinstance(elapsed, bool)
-                or not math.isfinite(elapsed)
+                or (type(elapsed) is float and not math.isfinite(elapsed))
                 or elapsed < 0
                 or elapsed > MAX_GO_ELAPSED_SECONDS
             ):
