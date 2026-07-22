@@ -115,6 +115,14 @@ validate_synthesis_fixture() {
       if (!valid_finding_id($2) || $2 == finding_id_value || linked_ids[$2]++) invalid=1
       next
     }
+    /^linked_source=/ {
+      linked_source_count++
+      if (split($2, linked_source, /\|/) != 2 || !valid_finding_id(linked_source[1]) || !nonblank(linked_source[2])) invalid=1
+      if (linked_source_ids[linked_source[2]]++) invalid=1
+      linked_source_finding[linked_source[2]]=linked_source[1]
+      linked_sources_by_finding[linked_source[1]]++
+      next
+    }
     /^identity_dimensions=/ { identity_count++; next }
     /^agreement=/ { agreement_count++; agreement=$2; next }
     /^dispute_scope=/ { dispute_scope_count++; dispute_scope=$2; next }
@@ -126,7 +134,17 @@ validate_synthesis_fixture() {
       if (pair[1] == finding_id_value || pair[2] == finding_id_value) primary_linked=1
       next
     }
-    /^contradiction=/ { contradiction_count++; contradiction=length($2) > 0; next }
+    /^contradiction=/ {
+      contradiction_count++; contradiction=nonblank($2)
+      if (split($2, positions, /\|/) < 2) invalid=1
+      for (position_index in positions) {
+        position=positions[position_index]
+        if (position !~ /:P[123]$/) invalid=1
+        contradiction_source=substr(position, 1, length(position) - 3)
+        if (!nonblank(contradiction_source) || contradiction_ids[contradiction_source]++) invalid=1
+      }
+      next
+    }
     /^chosen_severity=/ { chosen_severity_count++; chosen_severity=$2; next }
     /^severity_rationale=/ { severity_rationale_count++; severity_rationale=length($2) > 0; next }
     /^source_id=/ {
@@ -157,11 +175,23 @@ validate_synthesis_fixture() {
       if (!source_seen || !complete_source()) exit 1
       if (agreement == "unique" && source_count != 1) exit 1
       if (agreement == "corroborated" && source_count < 2) exit 1
+      if (agreement != "disputed" && (contradiction_count || chosen_severity_count || severity_rationale_count || dispute_scope_count || linked_id_count || linked_source_count || link_count)) exit 1
       if (agreement == "disputed" && (contradiction_count != 1 || !contradiction || chosen_severity_count != 1 || chosen_severity !~ /^P[123]$/ || severity_rationale_count != 1 || !severity_rationale)) exit 1
       if (agreement == "disputed" && dispute_scope_count != 1) exit 1
-      if (dispute_scope == "cross-id" && (source_count < 1 || linked_id_count < 1 || link_count < 2 || !primary_linked)) exit 1
-      if (dispute_scope == "within-id" && (source_count < 2 || link_count != 0)) exit 1
+      if (dispute_scope == "cross-id" && (source_count < 1 || linked_id_count < 1 || linked_source_count < 1 || link_count < 2 || !primary_linked)) exit 1
+      if (dispute_scope == "within-id" && (source_count < 2 || linked_id_count || linked_source_count || link_count)) exit 1
       if (agreement == "disputed" && dispute_scope !~ /^(cross-id|within-id)$/) exit 1
+      for (contradiction_source in contradiction_ids) {
+        if (!seen_source_ids[contradiction_source] && !linked_source_ids[contradiction_source]) exit 1
+      }
+      for (linked_source_id in linked_source_finding) {
+        linked_target=linked_source_finding[linked_source_id]
+        if (!linked_ids[linked_target] || seen_source_ids[linked_source_id] || !contradiction_ids[linked_source_id]) exit 1
+        if (!links[finding_id_value SUBSEP linked_target] || !links[linked_target SUBSEP finding_id_value]) exit 1
+      }
+      for (linked_id in linked_ids) {
+        if (!linked_sources_by_finding[linked_id]) exit 1
+      }
       for (link in links) {
         split(link, endpoints, SUBSEP)
         reverse=endpoints[2] SUBSEP endpoints[1]
@@ -301,9 +331,10 @@ identity_dimensions=path,anchor,category,root_cause
 agreement=disputed
 dispute_scope=cross-id
 linked_finding_id=$different_root_id
+linked_source=$different_root_id|source-linked
 cross_id_link=$base_id|$different_root_id
 cross_id_link=$different_root_id|$base_id
-contradiction=source-a:P1|source-b:P3
+contradiction=source-a:P1|source-linked:P3
 chosen_severity=P1
 severity_rationale=runtime evidence outranks consensus
 source_id=source-a
@@ -348,9 +379,9 @@ decision_rationale=runtime reproduction disproves the source position
 EOF
 
 if validate_synthesis_fixture "$fixture_dir/valid"; then
-  printf "  OK    complete synthesis fixture accepted\n"
+  printf "  OK    valid disputed reciprocal links accepted\n"
 else
-  printf "  FAIL  complete synthesis fixture accepted\n"
+  printf "  FAIL  valid disputed reciprocal links accepted\n"
   failures=1
 fi
 
@@ -372,7 +403,7 @@ awk 'BEGIN { skipped=0 } /^source_severity=/ && !skipped { skipped=1; next } { p
 expect_fixture_rejected "$fixture_dir/missing-source-severity" "missing source severity rejected"
 awk '
   /^agreement=/ { print "agreement=corroborated"; next }
-  /^dispute_scope=|^cross_id_link=|^contradiction=|^chosen_severity=|^severity_rationale=/ { next }
+  /^dispute_scope=|^linked_finding_id=|^linked_source=|^cross_id_link=|^contradiction=|^chosen_severity=|^severity_rationale=/ { next }
   /^decision_reason_code=retained-disagreement$/ { print "decision_reason_code=retained-corroborated"; next }
   /^source_id=source-b$/ { exit }
   { print }
@@ -380,11 +411,18 @@ awk '
 expect_fixture_rejected "$fixture_dir/one-source-corroborated" "one-source corroborated agreement rejected"
 awk '
   /^agreement=/ { print "agreement=unique"; next }
-  /^dispute_scope=|^cross_id_link=|^contradiction=|^chosen_severity=|^severity_rationale=/ { next }
+  /^dispute_scope=|^linked_finding_id=|^linked_source=|^cross_id_link=|^contradiction=|^chosen_severity=|^severity_rationale=/ { next }
   /^decision_reason_code=retained-disagreement$/ { print "decision_reason_code=retained-unique"; next }
   { print }
 ' "$fixture_dir/valid" >"$fixture_dir/multi-source-unique"
 expect_fixture_rejected "$fixture_dir/multi-source-unique" "multi-source unique agreement rejected"
+awk '
+  /^agreement=/ { print "agreement=unique"; next }
+  /^decision_reason_code=retained-disagreement$/ { print "decision_reason_code=retained-unique"; next }
+  /^source_id=source-b$/ { exit }
+  { print }
+' "$fixture_dir/valid" >"$fixture_dir/unique-with-contradiction"
+expect_fixture_rejected "$fixture_dir/unique-with-contradiction" "unique agreement with contradiction metadata rejected"
 awk 'BEGIN { inserted=0 } /^decision_reason_code=retained-disagreement$/ && !inserted { print "decision_reason_code=majority-wins"; inserted=1 } { print }' "$fixture_dir/valid" >"$fixture_dir/duplicate-unknown-reason"
 expect_fixture_rejected "$fixture_dir/duplicate-unknown-reason" "duplicate reason field with unknown value rejected"
 awk -v reverse="cross_id_link=$different_root_id|$base_id" '$0 != reverse { print }' "$fixture_dir/valid" >"$fixture_dir/one-way-cross-id"
@@ -393,6 +431,8 @@ sed '/^cross_id_link=/d' "$fixture_dir/valid" >"$fixture_dir/missing-cross-id"
 expect_fixture_rejected "$fixture_dir/missing-cross-id" "missing cross-ID dispute links rejected"
 sed '/^linked_finding_id=/d' "$fixture_dir/valid" >"$fixture_dir/dangling-cross-id"
 expect_fixture_rejected "$fixture_dir/dangling-cross-id" "cross-ID links to missing findings rejected"
+sed 's/source-linked:P3/source-missing:P3/' "$fixture_dir/valid" >"$fixture_dir/unresolved-contradiction-source"
+expect_fixture_rejected "$fixture_dir/unresolved-contradiction-source" "unresolved contradiction source IDs rejected"
 awk -v reverse="cross_id_link=$different_root_id|$base_id" -v self="cross_id_link=$base_id|$base_id" '$0 == reverse { print self; next } { print }' "$fixture_dir/valid" >"$fixture_dir/self-cross-id"
 expect_fixture_rejected "$fixture_dir/self-cross-id" "self-referential cross-ID dispute rejected"
 sed 's/^source_id=source-b$/source_id=source-a/' "$fixture_dir/valid" >"$fixture_dir/duplicate-source-id"
