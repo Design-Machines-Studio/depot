@@ -6,9 +6,9 @@ import hashlib
 import json
 import os
 import re
-from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
+from .argv import MAX_ARGV_ITEMS, validate_safe_argv
 from .limits import bounded_json_int, parse_json_document
 from .redaction import (
     MAX_STRING_LENGTH, contains_high_confidence_secret, normalize_durable_string,
@@ -18,7 +18,6 @@ from .redaction import (
 SCHEMA_VERSION = 1
 MAX_CONTRACT_BYTES = 1_048_576
 MAX_COLLECTION_ITEMS = 1_024
-MAX_ARGV_ITEMS = 256
 MAX_OBLIGATION_ITEMS = 4_096
 
 _ROOT_FIELDS = frozenset({
@@ -44,169 +43,6 @@ _REQUIREMENT_ID = re.compile(r"REQ-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _REGRESSION_ID = re.compile(r"REG-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _CHECK_ID = re.compile(r"CHK-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _BASELINE_EXPECTATIONS = frozenset({"must_fail", "may_pass", "not_runnable"})
-_SHELL_EXECUTABLES = frozenset({
-    "ash", "bash", "csh", "dash", "fish", "ksh", "mksh", "powershell",
-    "cmd", "cmd.exe", "powershell.exe", "pwsh", "pwsh.exe", "sh", "tcsh",
-    "yash", "zsh",
-})
-_ENVIRONMENT_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=.*")
-
-
-def _uses_shell_command_string(argv):
-    """Reject shell command-string modes, including combined short flags."""
-    initial_name = Path(argv[0]).name.casefold()
-    if initial_name.endswith(".exe"):
-        initial_name = initial_name[:-4]
-    shell_index = 0
-    if initial_name == "env":
-        shell_index = 1
-        while shell_index < len(argv):
-            option = argv[shell_index]
-            if option.startswith("-") and not option.startswith("--") and len(option) > 2:
-                cluster = option[1:]
-                for position, marker in enumerate(cluster):
-                    if marker == "S":
-                        return True
-                    if marker in {"u", "C"}:
-                        shell_index += 2 if position == len(cluster) - 1 else 1
-                        break
-                else:
-                    shell_index += 1
-                continue
-            if (
-                option == "-S" or option.startswith("-S")
-                or option == "--split-string" or option.startswith("--split-string=")
-            ):
-                return True
-            if _ENVIRONMENT_ASSIGNMENT.fullmatch(option):
-                shell_index += 1
-                continue
-            if option in {"-u", "--unset", "-C", "--chdir"}:
-                shell_index += 2
-                continue
-            if option.startswith(("--unset=", "--chdir=")) or option in {"-", "-i", "--ignore-environment"}:
-                shell_index += 1
-                continue
-            if (
-                (option.startswith("-u") and len(option) > 2)
-                or (option.startswith("-C") and len(option) > 2)
-            ):
-                shell_index += 1
-                continue
-            if option == "--":
-                shell_index += 1
-            break
-    if shell_index >= len(argv):
-        return False
-    shell_name = Path(argv[shell_index]).name.casefold()
-    if shell_name.endswith(".exe") and shell_name[:-4] in _SHELL_EXECUTABLES:
-        shell_name = shell_name[:-4]
-    if shell_name not in _SHELL_EXECUTABLES:
-        return False
-    options = argv[shell_index + 1:]
-    option_index = 0
-    powershell_value_parameters = {
-        "configurationfile", "configurationname", "custompipename", "executionpolicy",
-        "inputformat", "outputformat", "settingsfile", "version", "windowstyle",
-        "workingdirectory",
-    }
-    powershell_command_aliases = {"c", "cwa", "ec"}
-    powershell_value_aliases = {"config", "ep", "o", "of", "settings", "v", "w", "wd"}
-    while option_index < len(options):
-        option = options[option_index]
-        if option == "--":
-            break
-        folded = option.casefold()
-        if shell_name == "cmd":
-            if folded.startswith(("/c", "/k")):
-                return True
-            if option.startswith(("/", "-")):
-                option_index += 1
-                continue
-            break
-        if shell_name in {"powershell", "pwsh"}:
-            if not option.startswith("-"):
-                break
-            parameter = folded.lstrip("-")
-            if (
-                parameter in powershell_command_aliases
-                or (len(parameter) >= 2 and "command".startswith(parameter))
-                or "encodedcommand".startswith(parameter)
-                or parameter == "commandwithargs"
-            ):
-                return True
-            if parameter == "f" or (len(parameter) >= 2 and "file".startswith(parameter)):
-                break
-            matches = {
-                name for name in powershell_value_parameters
-                if len(parameter) >= 2 and name.startswith(parameter)
-            }
-            if parameter in powershell_value_aliases or len(matches) == 1:
-                option_index += 2
-            else:
-                option_index += 1
-            continue
-        if not option.startswith(("-", "+")):
-            break
-        if folded == "--command" or folded.startswith("--command="):
-            return True
-        if shell_name == "fish" and (
-            folded == "--init-command" or folded.startswith("--init-command=")
-            or (len(option) > 1 and option[0] in "-+" and "C" in option[1:])
-        ):
-            return True
-        if option in {"--rcfile", "--init-file"}:
-            option_index += 2
-            continue
-        if option.startswith(("--rcfile=", "--init-file=")):
-            option_index += 1
-            continue
-        if option.startswith("--"):
-            option_index += 1
-            continue
-        if len(option) > 1 and option[0] in "-+" and "c" in option[1:]:
-            return True
-        if option in {"-O", "-o"}:
-            option_index += 2
-        else:
-            option_index += 1
-    return False
-
-
-def _passes_secret_value(argv):
-    for index, argument in enumerate(argv):
-        flag, separator, _value = argument.partition("=")
-        if not flag.startswith(("-", "/")):
-            continue
-        compact_flag = re.sub(r"[^a-z0-9]", "", flag.casefold())
-        segments = {
-            segment for segment in flag.casefold().replace("_", "-").split("-")
-            if segment
-        }
-        secret_flag = compact_flag.endswith((
-            "apikey", "accesskey", "secretkey", "privatekey",
-            "clientsecret", "clientauth", "authorization", "password",
-            "passwd", "passphrase", "credential", "credentials", "creds", "cookie", "dsn",
-            "bearer", "token",
-        )) or bool(segments & {
-            "key", "secret", "password", "passwd", "authorization",
-            "passphrase", "credential", "credentials", "creds", "cookie", "dsn", "bearer",
-        }) or (
-            "token" in segments and (
-                len(segments) == 1
-                or bool(segments & {
-                    "access", "api", "auth", "bearer", "client", "github",
-                    "oauth", "private", "refresh", "session",
-                })
-            )
-        )
-        if not secret_flag:
-            continue
-        if separator or index + 1 < len(argv):
-            return True
-    return False
-
-
 def _fail(reason: str) -> None:
     raise ValueError(reason)
 
@@ -343,18 +179,7 @@ def validate_contract(value):
         if identifier in check_ids:
             _fail("duplicate check id")
         check_ids.add(identifier)
-        argv = [
-            _string(argument, "argv argument", maximum=4096)
-            for argument in _list(
-                item["argv"], "argv", maximum=MAX_ARGV_ITEMS, nonempty=True,
-            )
-        ]
-        if _uses_shell_command_string(argv):
-            _fail("shell command snippets are not executable checks")
-        if any(_ENVIRONMENT_ASSIGNMENT.fullmatch(argument) for argument in argv):
-            _fail("executable checks must not embed environment values")
-        if _passes_secret_value(argv):
-            _fail("executable checks must not embed secret values")
+        argv = list(validate_safe_argv(item["argv"]))
         proof_ids = _unique_strings(
             item["proves_requirement_ids"], "proof requirement id",
             pattern=_REQUIREMENT_ID,

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/repository-verification-profile-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "profile_version", "source", "declaration_digests", "lanes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"$ref": "#/$defs/id"},
+    "profile_version": {"type": "integer", "minimum": 1},
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "reference"],
+      "properties": {"kind": {"enum": ["project", "plugin"]}, "reference": {"$ref": "#/$defs/path"}}
+    },
+    "declaration_digests": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/digest"}},
+    "lanes": {"type": "array", "minItems": 1, "maxItems": 1024, "items": {"$ref": "#/$defs/lane"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "safe_string": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"},
+    "path": {"allOf": [{"$ref": "#/$defs/safe_string"}, {"pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"}]},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "argv": {"type": "array", "maxItems": 256, "items": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"}},
+    "prerequisite": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "id", "required"],
+      "properties": {"kind": {"enum": ["tool", "runtime", "service"]}, "id": {"$ref": "#/$defs/id"}, "required": {"type": "boolean"}}
+    },
+    "lane": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "tier", "argv", "workdir", "parser", "authority", "runnable", "timeout_seconds", "max_output_bytes", "selectors", "risk_escalators", "prerequisites", "doctor_check"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "tier": {"enum": ["doctor", "fast", "focused", "full", "race", "security", "container", "browser", "accessibility", "remote_pr", "push", "schedule", "merge_group", "post_merge"]},
+        "argv": {"$ref": "#/$defs/argv"}, "workdir": {"$ref": "#/$defs/path"},
+        "parser": {"enum": ["exit-code", "go-test-json", "doctor"]},
+        "authority": {"$ref": "#/$defs/id"}, "runnable": {"type": "boolean"},
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "max_output_bytes": {"type": "integer", "minimum": 1, "maximum": 16777216},
+        "selectors": {
+          "type": "object", "additionalProperties": false, "required": ["path_prefixes", "packages"],
+          "properties": {
+            "path_prefixes": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/path"}},
+            "packages": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/safe_string"}}
+          }
+        },
+        "risk_escalators": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/id"}},
+        "prerequisites": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/prerequisite"}},
+        "doctor_check": {"enum": ["generator_drift", "diff_check", "custom", null]}
+      }
+    }
+  }
+}

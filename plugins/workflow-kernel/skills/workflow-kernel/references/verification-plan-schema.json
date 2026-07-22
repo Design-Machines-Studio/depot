@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/verification-plan-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "profile_digest", "repository", "declaration_digests", "changed_paths", "changed_packages", "risk_inputs", "lanes", "execution_budget_seconds", "generated_at", "plan_digest"],
+  "properties": {
+    "schema_version": {"const": 1}, "profile_id": {"$ref": "#/$defs/id"}, "profile_digest": {"$ref": "#/$defs/digest"},
+    "repository": {"$ref": "#/$defs/repository"},
+    "declaration_digests": {"$ref": "#/$defs/digests"},
+    "changed_paths": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/path"}},
+    "changed_packages": {"$ref": "#/$defs/strings"}, "risk_inputs": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/id"}},
+    "lanes": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/lane"}},
+    "execution_budget_seconds": {"type": "integer", "minimum": 0}, "generated_at": {"$ref": "#/$defs/timestamp"}, "plan_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "string": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"},
+    "path": {"allOf": [{"$ref": "#/$defs/string"}, {"pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"}]},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "timestamp": {"type": "string", "format": "date-time"},
+    "strings": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/string"}},
+    "digests": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/digest"}},
+    "repository": {
+      "type": "object", "additionalProperties": false,
+      "required": ["scope_id", "commit_sha", "tree_digest", "tracked_diff_digest", "untracked_digest", "branch", "worktree_state"],
+      "properties": {
+        "scope_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "tree_digest": {"$ref": "#/$defs/digest"}, "tracked_diff_digest": {"$ref": "#/$defs/digest"}, "untracked_digest": {"$ref": "#/$defs/digest"},
+        "branch": {"$ref": "#/$defs/string"}, "worktree_state": {"enum": ["clean", "dirty", "detached"]}
+      }
+    },
+    "prerequisite": {"type": "object", "additionalProperties": false, "required": ["kind", "id", "required"], "properties": {"kind": {"enum": ["tool", "runtime", "service"]}, "id": {"$ref": "#/$defs/id"}, "required": {"type": "boolean"}}},
+    "lane": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "tier", "selected", "reason", "authority", "runnable", "argv", "workdir", "parser", "timeout_seconds", "max_output_bytes", "prerequisites", "doctor_check"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "tier": {"enum": ["doctor", "fast", "focused", "full", "race", "security", "container", "browser", "accessibility", "remote_pr", "push", "schedule", "merge_group", "post_merge"]},
+        "selected": {"type": "boolean"}, "reason": {"$ref": "#/$defs/id"}, "authority": {"$ref": "#/$defs/id"}, "runnable": {"type": "boolean"},
+        "argv": {"type": "array", "maxItems": 256, "items": {"type": "string", "minLength": 1, "maxLength": 4096}}, "workdir": {"$ref": "#/$defs/path"},
+        "parser": {"enum": ["exit-code", "go-test-json", "doctor"]}, "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "max_output_bytes": {"type": "integer", "minimum": 1, "maximum": 16777216}, "prerequisites": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/prerequisite"}},
+        "doctor_check": {"enum": ["generator_drift", "diff_check", "custom", null]}
+      }
+    }
+  }
+}
