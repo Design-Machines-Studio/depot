@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import selectors
+import signal
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -21,6 +23,7 @@ from .repository_verification import (
 MAX_GO_EVENTS = 100_000
 MAX_GO_PACKAGES = 4_096
 _COVERAGE = re.compile(r"coverage:\s+([0-9]+(?:\.[0-9]+)?)%")
+MAX_GO_ELAPSED_SECONDS = 86_400
 
 
 def _now():
@@ -82,6 +85,17 @@ def repository_doctor_checks(plan, profile, current_repository, prerequisite_sta
     return checks
 
 
+def _kill_process_session(process):
+    """Terminate the process and every descendant in its private session."""
+    try:
+        if os.name == "posix":
+            os.killpg(process.pid, signal.SIGKILL)
+        elif process.poll() is None:
+            process.kill()
+    except ProcessLookupError:
+        pass
+
+
 def _bounded_run(argv, *, cwd, timeout_seconds, max_output_bytes):
     process = subprocess.Popen(
         list(validate_safe_argv(argv)), cwd=cwd, shell=False,
@@ -103,7 +117,7 @@ def _bounded_run(argv, *, cwd, timeout_seconds, max_output_bytes):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 terminal_reason = "timeout"
-                process.kill()
+                _kill_process_session(process)
                 break
             events = selector.select(min(remaining, 0.1))
             for _key, _mask in events:
@@ -112,7 +126,7 @@ def _bounded_run(argv, *, cwd, timeout_seconds, max_output_bytes):
                     chunks.append(chunk); size += len(chunk)
                     if size > max_output_bytes:
                         terminal_reason = "output_limit_exceeded"
-                        process.kill()
+                        _kill_process_session(process)
                         break
             if terminal_reason:
                 break
@@ -131,8 +145,11 @@ def _bounded_run(argv, *, cwd, timeout_seconds, max_output_bytes):
         process.wait(timeout=2)
     finally:
         selector.close()
+        # A direct child may exit while one of its descendants still holds the
+        # output pipe. The dedicated session is the execution ownership unit.
+        _kill_process_session(process)
         if process.poll() is None:
-            process.kill(); process.wait(timeout=2)
+            process.wait(timeout=2)
         process.stdout.close()
     return process.returncode, b"".join(chunks)[:max_output_bytes], terminal_reason
 
@@ -175,14 +192,26 @@ def parse_go_test_json(raw, *, command_digest, exit_code, max_events=MAX_GO_EVEN
         if action in {"pass", "fail", "skip"} and "Test" not in event:
             record["status"] = {"pass": "passed", "fail": "failed", "skip": "skipped"}[action]
             elapsed = event.get("Elapsed", 0)
-            if type(elapsed) in {int, float} and not isinstance(elapsed, bool) and elapsed >= 0:
-                record["elapsed_milliseconds"] = round(elapsed * 1000)
+            if (
+                type(elapsed) not in {int, float}
+                or isinstance(elapsed, bool)
+                or not math.isfinite(elapsed)
+                or elapsed < 0
+                or elapsed > MAX_GO_ELAPSED_SECONDS
+            ):
+                parser_status, parser_reason = "malformed", "invalid_go_numeric"
+                break
+            record["elapsed_milliseconds"] = round(elapsed * 1000)
         if action == "fail" and type(event.get("Test")) is str:
             record["failures"].add(event["Test"])
         if action == "output" and type(event.get("Output")) is str:
             match = _COVERAGE.search(event["Output"])
             if match:
-                record["coverage_basis_points"] = round(float(match.group(1)) * 100)
+                coverage = float(match.group(1))
+                if not math.isfinite(coverage) or coverage < 0 or coverage > 100:
+                    parser_status, parser_reason = "malformed", "invalid_go_numeric"
+                    break
+                record["coverage_basis_points"] = round(coverage * 100)
     result = []
     for record in packages.values():
         record["failures"] = sorted(record["failures"])

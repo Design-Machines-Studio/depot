@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -8,7 +9,8 @@ from pathlib import Path
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.repository_verification import derive_verification_plan
 from workflow_kernel.verification_execution import (
-    execute_selected_lane, parse_go_test_json, repository_doctor_checks,
+    _bounded_run, execute_selected_lane, parse_go_test_json,
+    repository_doctor_checks,
 )
 from tests.test_repository_verification import DIGEST, lane, profile, repository
 
@@ -50,6 +52,18 @@ class VerificationExecutionTests(unittest.TestCase):
         self.assertEqual((malformed["parser_status"], malformed["parser_reason"]), ("malformed", "malformed_go_json"))
         truncated = parse_go_test_json(raw, command_digest=DIGEST, exit_code=1, max_events=1)
         self.assertEqual(truncated["parser_status"], "truncated")
+        for invalid in (
+            {"Action": "pass", "Package": "example/pkg", "Elapsed": 1e309},
+            {"Action": "output", "Package": "example/pkg", "Output": "coverage: " + "9" * 400 + "%"},
+        ):
+            with self.subTest(invalid=invalid["Action"]):
+                parsed = parse_go_test_json(
+                    json.dumps(invalid).encode(), command_digest=DIGEST, exit_code=1,
+                )
+                self.assertEqual(
+                    (parsed["parser_status"], parsed["parser_reason"]),
+                    ("malformed", "invalid_go_numeric"),
+                )
 
     def test_execution_uses_bound_lane_and_clean_environment(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -100,6 +114,31 @@ class VerificationExecutionTests(unittest.TestCase):
                                                current_repository=repository(), prerequisite_states={"tool:git": "available"})
                 self.assertEqual(result["status"], "failed")
                 self.assertEqual(result["parser_reason"], expected)
+
+    @unittest.skipUnless(os.name == "posix", "process-session assertion is POSIX-only")
+    def test_timeout_terminates_descendant_processes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pid_file = root / "child.pid"
+            script = (
+                "import pathlib,subprocess,sys,time; "
+                f"p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); "
+                f"pathlib.Path({str(pid_file)!r}).write_text(str(p.pid)); time.sleep(30)"
+            )
+            _exit, _output, reason = _bounded_run(
+                [sys.executable, "-c", script], cwd=root,
+                timeout_seconds=1, max_output_bytes=1024,
+            )
+            self.assertEqual(reason, "timeout")
+            child_pid = int(pid_file.read_text())
+            for _ in range(50):
+                try:
+                    os.kill(child_pid, 0)
+                except ProcessLookupError:
+                    break
+                time.sleep(0.02)
+            else:
+                self.fail("timed-out descendant process survived its execution session")
 
 
 if __name__ == "__main__":

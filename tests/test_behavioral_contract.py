@@ -387,6 +387,12 @@ class BehavioralContractTests(unittest.TestCase):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 parse_contract_bytes(raw)
 
+    def test_behavioral_contract_argv_remains_json_array_only(self):
+        value = contract_one()
+        value["checks"][0]["argv"] = tuple(value["checks"][0]["argv"])
+        with self.assertRaises(ValueError):
+            validate_contract(value)
+
 
 if __name__ == "__main__":
     unittest.main()

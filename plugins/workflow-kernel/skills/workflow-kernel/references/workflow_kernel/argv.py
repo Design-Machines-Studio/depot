@@ -155,7 +155,10 @@ def _passes_secret_value(argv: tuple[str, ...]) -> bool:
 
 def validate_safe_argv(value, *, name: str = "argv") -> tuple[str, ...]:
     """Return one immutable safe argv or raise a bounded ValueError."""
-    if type(value) not in {list, tuple} or not value or len(value) > MAX_ARGV_ITEMS:
+    # Public contract documents are JSON-shaped. Keep this list-only boundary
+    # identical to the pre-extraction behavioral-contract validator; callers
+    # that need immutability receive the tuple returned below.
+    if type(value) is not list or not value or len(value) > MAX_ARGV_ITEMS:
         raise ValueError(f"invalid {name}")
     argv = []
     for argument in value:
