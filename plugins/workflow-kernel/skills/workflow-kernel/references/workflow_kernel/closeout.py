@@ -66,6 +66,13 @@ def _paths(value, name):
     return paths
 
 
+def _safe_list(value, name, maximum=2048):
+    values = _list(value, name, maximum)
+    for item in values:
+        _text(item, name)
+    return values
+
+
 def _check(checks, check_id, passed, reason, *, unresolved=False):
     checks.append({"id": check_id, "status": "passed" if passed else ("unresolved" if unresolved else "failed"), "reason": reason})
 
@@ -89,9 +96,9 @@ def evaluate_closeout(expected, observed):
     _text(observed["actual_base_branch"], "actual_base_branch")
     claimed = set(_paths(expected["claimed_paths"], "claimed_paths"))
     changed = set(_paths(observed["changed_paths"], "changed_paths"))
-    required_artifacts = set(_list(expected["required_evidence_ids"], "required_evidence_ids"))
-    closing_ids = set(_list(expected["closing_issue_ids"], "closing_issue_ids", 512))
-    findings = _list(observed["unresolved_findings"], "unresolved_findings", 4096)
+    required_artifacts = set(_safe_list(expected["required_evidence_ids"], "required_evidence_ids"))
+    closing_ids = set(_safe_list(expected["closing_issue_ids"], "closing_issue_ids", 512))
+    findings = _safe_list(observed["unresolved_findings"], "unresolved_findings", 4096)
     checks = []
     identity_ok = len({expected["local_head_sha"], expected["reviewed_sha"], expected["delivered_sha"], expected["pr_head_sha"], observed["actual_pr_head_sha"]}) == 1
     _check(checks, "head_identity", identity_ok, "exact_heads_match" if identity_ok else "head_identity_mismatch")
@@ -199,7 +206,7 @@ def evaluate_closeout(expected, observed):
     _text(inventory["surface"], "inventory surface")
     if type(inventory["mapping_provenance"]) is not str or len(inventory["mapping_provenance"]) > 512:
         _fail("invalid inventory provenance")
-    inventory_ids = _list(inventory["issue_ids"], "inventory issue_ids", 4096)
+    inventory_ids = _safe_list(inventory["issue_ids"], "inventory issue_ids", 4096)
     if not inventory["available"]:
         remaining = []
         _check(checks, "affected_surface_inventory", False, "surface_inventory_unavailable", unresolved=True)

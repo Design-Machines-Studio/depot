@@ -27,7 +27,7 @@ def raw(**changes):
 
 def requirement(**changes):
     value = {
-        "provider": "github", "event_scope": "pull_request", "subject_kind": "pr_head",
+        "provider": "github", "mapping_version": "github-v1", "event_scope": "pull_request", "subject_kind": "pr_head",
         "subject_sha": SHA, "ref": "refs/pull/12/merge", "check_kind": "check_run",
         "context": "Test / unit", "app_identity": "github-actions",
         "allowed_conclusions": ["success"], "max_age_seconds": 600,
@@ -74,15 +74,17 @@ class CIEvidenceTests(unittest.TestCase):
         self.assertEqual("unresolved", evaluate_ci_gate([requirement()], [merge], now=NOW)["status"])
 
     def test_blueprint_requires_explicit_mapping_and_subject_capability(self):
-        blueprint = raw(provider="blueprint", mapping_version=None, raw_status="done", raw_conclusion="ok")
+        blueprint = raw(provider="blueprint", mapping_version="blueprint-v1", raw_status="done", raw_conclusion="ok")
         opaque = build_ci_evidence(blueprint)
         self.assertFalse(opaque["mapping_authoritative"])
-        req = requirement(provider="blueprint")
+        req = requirement(provider="blueprint", mapping_version="blueprint-v1")
         self.assertEqual("unresolved", evaluate_ci_gate([req], [opaque], now=NOW)["status"])
-        mapping = {"provider": "blueprint", "version": "1", "capabilities": ["subject_identity"],
+        mapping = {"provider": "blueprint", "version": "blueprint-v1", "capabilities": ["subject_identity"],
                    "statuses": {"done": "completed"}, "conclusions": {"ok": "success"}}
         mapped = build_ci_evidence(blueprint, mapping=mapping)
         self.assertEqual("passed", evaluate_ci_gate([req], [mapped], now=NOW)["status"])
+        with self.assertRaises(ValueError):
+            build_ci_evidence(dict(blueprint, mapping_version=None), mapping=mapping)
 
     def test_provider_merge_rule_fact_does_not_upgrade_failed_test(self):
         record = build_ci_evidence(raw(raw_conclusion="failure", satisfies_provider_merge_rule=True))

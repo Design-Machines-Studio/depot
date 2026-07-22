@@ -28,7 +28,7 @@ _FIELDS = frozenset({
     "satisfies_provider_merge_rule",
 })
 _REQUIREMENT_FIELDS = frozenset({
-    "provider", "event_scope", "subject_kind", "subject_sha", "ref", "check_kind",
+    "provider", "mapping_version", "event_scope", "subject_kind", "subject_sha", "ref", "check_kind",
     "context", "app_identity", "allowed_conclusions", "max_age_seconds", "requirement_source",
 })
 
@@ -101,6 +101,8 @@ def build_ci_evidence(raw, *, mapping=None):
     status = _text(raw["raw_status"], "raw_status", maximum=128)
     conclusion = _text(raw["raw_conclusion"], "raw_conclusion", nullable=True, maximum=128)
     lifecycle, normalized, mapped = _explicit_mapping(provider, status, conclusion, mapping)
+    if provider != "github" and mapping is not None and raw["mapping_version"] != mapping["version"]:
+        _fail("provider mapping version mismatch")
     if provider == "github":
         if status == "completed" and conclusion is None:
             _fail("completed github check requires conclusion")
@@ -204,14 +206,21 @@ def evaluate_ci_gate(requirements, observations, *, now):
             _fail("ci requirement fields mismatch")
         if requirement["event_scope"] not in _SCOPES or requirement["subject_kind"] not in _SUBJECTS:
             _fail("invalid requirement scope")
+        for field in ("provider", "mapping_version", "ref", "check_kind", "context", "requirement_source"):
+            _text(requirement[field], "requirement " + field)
+        _text(requirement["app_identity"], "requirement app_identity", nullable=True)
+        _sha(requirement["subject_sha"], "requirement subject_sha")
         allowed = requirement["allowed_conclusions"]
-        if type(allowed) is not list or not allowed or len(allowed) > 16 or not all(type(item) is str for item in allowed):
+        if (
+            type(allowed) is not list or not allowed or len(allowed) > 16
+            or not all(type(item) is str and item in _SUCCESS_CONCLUSIONS | {"failure", "cancelled", "timed_out", "action_required", "stale"} for item in allowed)
+        ):
             _fail("invalid allowed conclusions")
         max_age = requirement["max_age_seconds"]
         if type(max_age) is not int or max_age < 0 or max_age > 31_536_000:
             _fail("invalid max age")
         matches = [item for item in records if all(item[field] == requirement[field] for field in (
-            "provider", "event_scope", "subject_kind", "subject_sha", "ref", "check_kind", "context", "app_identity", "requirement_source"
+            "provider", "mapping_version", "event_scope", "subject_kind", "subject_sha", "ref", "check_kind", "context", "app_identity", "requirement_source"
         ))]
         if not matches:
             checks.append({"context": requirement["context"], "status": "unresolved", "reason": "required_lane_absent"})

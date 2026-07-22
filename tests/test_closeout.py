@@ -150,6 +150,8 @@ class CloseoutTests(unittest.TestCase):
             evaluate_closeout(expected(), observed(artifacts=items))
         with self.assertRaises(ValueError):
             evaluate_closeout(expected(affected_surface="token=super-secret-value"), observed())
+        with self.assertRaises(ValueError):
+            evaluate_closeout(expected(), observed(unresolved_findings=["password=never-persist-this"]))
 
 
 if __name__ == "__main__":
