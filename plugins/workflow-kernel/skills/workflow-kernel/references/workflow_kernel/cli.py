@@ -199,6 +199,43 @@ def command_status(args):
     return 0
 
 
+def command_decide_validation_retry(args):
+    """Project canonical retry policy without dispatching or mutating state."""
+    from .model import AttemptLedger, FailureReason
+    from .policies import RetryPolicy
+    from .redaction import contains_secret_shape
+
+    payload = _load_json(args.attempt_ledger)
+    if type(payload) is not dict or set(payload) != {"counts", "signatures"}:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_attempt_ledger",
+        })
+    ledger = AttemptLedger(payload["counts"], payload["signatures"])
+    signatures = tuple(
+        value for history in ledger.signatures.values() for value in history
+    ) + (() if args.signature is None else (args.signature,))
+    if any(
+        len(value) > 4096
+        or contains_secret_shape(value)
+        or re.match(r"(?i)^(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)", value)
+        for value in signatures
+    ):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_failure_signature",
+        })
+    decision = RetryPolicy().decide(
+        FailureReason(args.reason), ledger, args.signature,
+    )
+    _emit({
+        "allowed": decision.allowed,
+        "reason_code": decision.reason_code,
+        "budget": decision.budget,
+        "attempt_count": decision.attempt_count,
+        "prior_signature": decision.prior_signature,
+    })
+    return 0
+
+
 def _load_json(path):
     try:
         binding = bind_durable_path(Path(path))
@@ -1840,6 +1877,20 @@ def parser():
     status = commands.add_parser("status", help="print materialized state")
     status.add_argument("directory")
     status.set_defaults(handler=command_status)
+
+    retry = commands.add_parser(
+        "decide-validation-retry",
+        help="project the canonical validation retry decision",
+    )
+    retry.add_argument(
+        "--reason", choices=(
+            "provider_unavailable", "deterministic_validation_failure",
+            "reviewer_finding", "browser_recovery", "cleanup", "infrastructure",
+        ), required=True,
+    )
+    retry.add_argument("--attempt-ledger", required=True)
+    retry.add_argument("--signature")
+    retry.set_defaults(handler=command_decide_validation_retry)
 
     bind_prediction = commands.add_parser(
         "bind-prediction", help="seal one independent pre-action prediction",

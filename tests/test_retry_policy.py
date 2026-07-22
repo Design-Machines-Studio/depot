@@ -1202,6 +1202,18 @@ else:
         )
         stage["required_dispatch_capability"] = "wrapper_dispatch"
         mutations.append(impossible_tuple)
+        missing_class = json.loads(json.dumps(payload))
+        del missing_class["workflow_safety_anchor"]["classes"]["chore"]
+        mutations.append(missing_class)
+        additional_class = json.loads(json.dumps(payload))
+        additional_class["workflow_safety_anchor"]["classes"]["investigation"] = {
+            "stages": list(
+                additional_class["workflow_safety_anchor"]["classes"]["chore"][
+                    "stages"
+                ]
+            ),
+        }
+        mutations.append(additional_class)
         for mutation in mutations:
             self.assertFalse(schema_matches(mutation, schema))
             with tempfile.TemporaryDirectory() as directory:

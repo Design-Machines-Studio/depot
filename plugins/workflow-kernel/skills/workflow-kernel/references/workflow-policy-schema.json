@@ -139,8 +139,11 @@
         "classes": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["hotfix", "security", "migration"],
+          "required": ["chore", "bug", "feature", "hotfix", "security", "migration"],
           "properties": {
+            "chore": {"$ref": "#/$defs/stage_set"},
+            "bug": {"$ref": "#/$defs/stage_set"},
+            "feature": {"$ref": "#/$defs/stage_set"},
             "hotfix": {"$ref": "#/$defs/stage_set"},
             "security": {"$ref": "#/$defs/stage_set"},
             "migration": {"$ref": "#/$defs/stage_set"}
