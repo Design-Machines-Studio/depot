@@ -140,6 +140,7 @@
       "dependsOn": ["01-repository-verification-foundation", "03-browser-scenarios-and-bundles"],
       "filesToModify": [
         "plugins/assembly/skills/assembly-build/references/assembly-baseplate-verification-profile.json",
+        "plugins/assembly/skills/assembly-build/references/assembly_verification_adapter.py",
         "plugins/assembly/agents/workflow/go-test-runner.md",
         "plugins/assembly/commands/assembly-build.md",
         "plugins/assembly/skills/development/setup.md",

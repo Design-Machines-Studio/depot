@@ -21,6 +21,7 @@ does not match or supplies incomplete declarations.
 | File | Action | Notes |
 |------|--------|-------|
 | `plugins/assembly/skills/assembly-build/references/assembly-baseplate-verification-profile.json` | Create | Assembly-owned default profile consumed by Kernel planner |
+| `plugins/assembly/skills/assembly-build/references/assembly_verification_adapter.py` | Create | Approved review-remediation adapter that mechanically resolves profile, repository/runtime proof, planning, and UX declarations |
 | `plugins/assembly/agents/workflow/go-test-runner.md` | Modify | Select focused/full/race work through planner results |
 | `plugins/assembly/commands/assembly-build.md` | Modify | Canonical standalone command invokes planner and safe argv results |
 | `plugins/assembly/skills/development/setup.md` | Modify | Remove stale exec/app/api/untagged assumptions |
@@ -30,6 +31,15 @@ Do not edit `plugins/assembly/skills/assembly-build/SKILL.md` because it is a
 generated command-skill alias. Do not edit Assembly or other plugin manifests,
 versions, root marketplace data, Kernel CLI, Pipeline orchestration, or generated
 Codex manifests. Chunk 08 owns generation and dependency metadata.
+
+### Approved Scope Amendment
+
+The Phase 6 hostile review proved that repository/runtime/UX safety expressed
+only through Markdown and test-local helpers could not enforce the public
+Assembly workflow. The pipeline owner approved the narrow production adapter
+listed above as a zero-deferral remediation. This amendment does not authorize
+changes outside the Assembly build references, the original documentation, and
+the original focused test file; release and generated surfaces remain Chunk 08.
 
 ## Files to Read (for context)
 
