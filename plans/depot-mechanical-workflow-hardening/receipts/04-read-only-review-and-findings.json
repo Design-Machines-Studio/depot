@@ -1,0 +1,19 @@
+{
+  "chunk_id": "04-read-only-review-and-findings",
+  "status": "merged",
+  "classification": "Logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": ["f605ed5ae984b82ef9e651a2dc8abef0bc7e447b", "9ab297360fc572ff1cb23fdad6ba1fc3513e8fcc", "d5fc0a1b002352366da48ecad2984f5807f3e86e", "32149198", "a28dbd7"],
+  "merge_commit": "748f658",
+  "validation": "62 focused tests passed; production GitHub provider observer verified; git diff --check passed",
+  "review": {"iterations": 6, "owned_findings_fixed": 12, "findings_remaining": 0, "deferred": 0, "new_p1_p2": 0},
+  "ambiguity_resolved": false,
+  "evaluation": "EVAL_GATE_PASSED: 04-read-only-review-and-findings | classification: Logic | iterations: 6 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

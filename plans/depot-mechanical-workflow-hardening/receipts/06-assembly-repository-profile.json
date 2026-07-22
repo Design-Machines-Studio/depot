@@ -1,0 +1,22 @@
+{
+  "chunk_id": "06-assembly-repository-profile",
+  "status": "merged",
+  "classification": "Trivial",
+  "requestedProvider": "openrouter",
+  "attemptedProvider": "openrouter",
+  "implementedBy": "codex",
+  "fallback": true,
+  "fallbackReason": "Host security boundary rejected export of private repository prompt/workspace content before export; no content left the machine.",
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": ["abad34ae1131ec4876f05eb44dbbcd57e3fa266b", "131c7e9d2f99892c5f03a952bcfb232988945a9e", "ef4957b08272b057b3516855c8068ca8da97f551"],
+  "scope_amendment_commit": "a34c0c3",
+  "scope_amendment": "Pipeline owner approved the production Assembly adapter after hostile review proved test-local safety could not enforce the public workflow; manifest and prompt were amended before integration.",
+  "merge_commit": "a7828cd",
+  "validation": "24 focused/planner tests passed; 58 live Baseplate tasks parsed; git diff --check passed",
+  "review": {"iterations": 3, "owned_findings_fixed": 4, "findings_remaining": 0, "deferred": 0, "new_p1_p2": 0},
+  "ambiguity_resolved": true,
+  "ambiguity_summary": "Ephemeral Compose run remains the safe default; exec requires exact current service proof, and task-level viewport/engine values are optional when browser profile defaults bind them.",
+  "evaluation": "EVAL_GATE_PASSED: 06-assembly-repository-profile | classification: Trivial | iterations: 3 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}
