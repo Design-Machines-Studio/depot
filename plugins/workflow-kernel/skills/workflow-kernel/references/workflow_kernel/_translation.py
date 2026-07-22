@@ -62,6 +62,11 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "agreement", "decision_reason_code", "evidence_ref", "action",
     "human_intervention_id", "human_intervention_reason",
     "human_intervention", "missing_case_ids",
+    "record_kind", "record_ref", "record_digest", "rule_id", "category",
+    "path", "anchor", "source_agents", "build_binding_ref",
+    "browser_bundle_refs", "lane_id", "state", "expected_coverage",
+    "partial_output", "output_ref", "coverage_gap_reason",
+    "source_scope_digest", "finding_refs",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -114,6 +119,13 @@ RECEIPT_FIELD_ALIASES = {
     "humanInterventionId": "human_intervention_id",
     "humanInterventionReason": "human_intervention_reason",
     "missingCaseIds": "missing_case_ids",
+    "recordKind": "record_kind", "recordRef": "record_ref",
+    "recordDigest": "record_digest", "ruleId": "rule_id",
+    "sourceAgents": "source_agents", "buildBindingRef": "build_binding_ref",
+    "browserBundleRefs": "browser_bundle_refs", "laneId": "lane_id",
+    "expectedCoverage": "expected_coverage", "partialOutput": "partial_output",
+    "outputRef": "output_ref", "coverageGapReason": "coverage_gap_reason",
+    "sourceScopeDigest": "source_scope_digest", "findingRefs": "finding_refs",
     # Legacy producer vocabulary. The durable kernel name is deliberately
     # neutral because not every provider reports tokens.
     "tokens": "usage_count",
@@ -169,6 +181,12 @@ _CONTRIBUTION_REASON_DISPOSITION = {
 _IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}\Z")
 _MAX_MISSING_CASE_IDS = 256
 _MAX_MISSING_CASE_ID_BYTES = 16_384
+_REVIEW_RECORD_STAGES = frozenset({"finding_record", "lane_record"})
+_REVIEW_LANE_STATES = frozenset({
+    "requested", "completed", "failed", "degraded", "unavailable",
+    "missing", "unknown",
+})
+_REVIEW_FINDING_ID = re.compile(r"finding-v1:sha256:[0-9a-f]{64}\Z")
 
 
 def required_text(value: object, field: str) -> str:
@@ -552,6 +570,85 @@ def _validate_observation_receipt(receipt: dict) -> dict:
     if "wait_category" in receipt and receipt["wait_category"] not in _WAIT_CATEGORIES:
         raise ValueError("invalid wait category")
 
+    if receipt.get("stage") in _REVIEW_RECORD_STAGES:
+        stage = receipt["stage"]
+        receipt["record_ref"] = safe_reference(receipt.get("record_ref"))
+        digest = required_text(receipt.get("record_digest"), "record digest")
+        if _CONTRACT_DIGEST.fullmatch(digest) is None:
+            raise ValueError("invalid review record digest")
+        receipt["build_binding_ref"] = safe_reference(
+            receipt.get("build_binding_ref"),
+        )
+        browser_refs = receipt.get("browser_bundle_refs")
+        if type(browser_refs) is not list or len(browser_refs) > 256:
+            raise ValueError("invalid browser bundle references")
+        browser_refs = [safe_reference(value) for value in browser_refs]
+        if len(browser_refs) != len(set(browser_refs)):
+            raise ValueError("invalid browser bundle references")
+        receipt["browser_bundle_refs"] = browser_refs
+        agents = receipt.get("source_agents")
+        if type(agents) is not list or not agents or len(agents) > 64:
+            raise ValueError("invalid source agents")
+        agents = [_bounded_identity(value, "source agent") for value in agents]
+        if len(agents) != len(set(agents)):
+            raise ValueError("invalid source agents")
+        receipt["source_agents"] = agents
+        if stage == "finding_record":
+            for field in ("source_finding_id", "rule_id", "lane_id"):
+                receipt[field] = _bounded_identity(receipt.get(field), field)
+            scope_digest = required_text(
+                receipt.get("source_scope_digest"), "source scope digest",
+            )
+            if _CONTRACT_DIGEST.fullmatch(scope_digest) is None:
+                raise ValueError("invalid source scope digest")
+            canonical = required_text(
+                receipt.get("canonical_finding_id"), "canonical finding id",
+            )
+            if _REVIEW_FINDING_ID.fullmatch(canonical) is None:
+                raise ValueError("invalid canonical finding id")
+            if receipt.get("severity") not in {"P1", "P2", "P3"}:
+                raise ValueError("invalid severity")
+            for field in ("category", "path", "anchor"):
+                required_text(receipt.get(field), field)
+        else:
+            receipt["lane_id"] = _bounded_identity(receipt.get("lane_id"), "lane id")
+            if receipt.get("state") not in _REVIEW_LANE_STATES:
+                raise ValueError("invalid lane state")
+            expected = receipt.get("expected_coverage")
+            missing = receipt.get("missing_case_ids")
+            if type(expected) is not list or type(missing) is not list:
+                raise ValueError("invalid lane coverage")
+            receipt["expected_coverage"] = [
+                _bounded_identity(value, "expected coverage") for value in expected
+            ]
+            receipt["missing_case_ids"] = [
+                _bounded_identity(value, "missing case id") for value in missing
+            ]
+            if (len(expected) > 256 or len(missing) > 256
+                    or len(expected) != len(set(expected))
+                    or len(missing) != len(set(missing))):
+                raise ValueError("invalid lane coverage")
+            if type(receipt.get("partial_output")) is not bool:
+                raise ValueError("invalid partial output")
+            output_ref = receipt.get("output_ref")
+            if output_ref is not None:
+                receipt["output_ref"] = safe_reference(output_ref)
+            gap = receipt.get("coverage_gap_reason")
+            if receipt["state"] == "completed":
+                if missing or receipt["partial_output"] or gap is not None:
+                    raise ValueError("completed lane contains coverage gap")
+            elif not required_text(gap, "coverage gap reason"):
+                raise ValueError("incomplete lane lacks coverage gap reason")
+            if receipt["partial_output"] and output_ref is None:
+                raise ValueError("partial lane lacks output reference")
+            finding_refs = receipt.get("finding_refs")
+            if type(finding_refs) is not list or len(finding_refs) > 256:
+                raise ValueError("invalid lane finding references")
+            finding_refs = [safe_reference(value) for value in finding_refs]
+            if len(finding_refs) != len(set(finding_refs)):
+                raise ValueError("invalid lane finding references")
+            receipt["finding_refs"] = finding_refs
+
     scoped = "usage_scope" in receipt
     detailed = bool((_USAGE_COUNT_FIELDS - {"usage_count"}) & set(receipt))
     provenance = bool({"measurement_source", "usage_estimated"} & set(receipt))
@@ -653,6 +750,12 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
     for key in COMMON_RECEIPT_FIELDS:
         if key not in receipt:
             continue
+        # The canonical record identity contains a colon-delimited namespace,
+        # which the generic durable-string normalizer intentionally treats as
+        # URL-like. The content-addressed record is authoritative; its bounded
+        # record_ref carries the identity into events without duplicating it.
+        if receipt.get("stage") == "finding_record" and key == "canonical_finding_id":
+            continue
         # Redact each value under a neutral key. Field names such as `tokens`
         # and `fallback_path` are reliability facts, not credentials or local
         # filesystem evidence, and must retain their documented meaning.
@@ -670,6 +773,11 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
         ))
     if receipt.get("stage") == "finding_contribution":
         payload["evidence"].append(receipt["evidence_ref"])
+    elif receipt.get("stage") in _REVIEW_RECORD_STAGES:
+        payload["evidence"].append(receipt["record_ref"])
+        payload["evidence"].extend(receipt["browser_bundle_refs"])
+        if receipt.get("stage") == "lane_record":
+            payload["evidence"].extend(receipt["finding_refs"])
     return payload
 
 
@@ -776,6 +884,7 @@ def translate_receipts(
     current_contract = None
     contribution_sources = set()
     contribution_artifact_reviewers = {}
+    review_record_identities = {}
     for position, receipt in enumerate(normalized_values):
         run_id = required_text(receipt.get("run_id"), "run id")
         sequence = receipt.get("sequence")
@@ -865,6 +974,15 @@ def translate_receipts(
             )
             if prior_reviewer != receipt["reviewer"]:
                 raise ValueError("source artifact reviewer discontinuity")
+        elif stage in _REVIEW_RECORD_STAGES:
+            identity = (
+                receipt["source_scope_digest"] if stage == "finding_record"
+                else receipt["lane_id"]
+            )
+            content = (receipt["record_digest"], receipt["record_ref"])
+            prior = review_record_identities.setdefault((stage, identity), content)
+            if prior != content:
+                raise ValueError("conflicting review record identity")
         occurred_at = required_text(receipt.get("occurred_at"), "occurred_at")
         node_id = receipt.get("node_id")
         if node_id is not None:

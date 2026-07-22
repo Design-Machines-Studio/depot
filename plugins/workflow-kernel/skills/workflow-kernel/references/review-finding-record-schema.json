@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://design-machines.local/workflow-kernel/review-finding-record-v1.schema.json",
+  "title": "Review Finding Record v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "record_kind", "run_id", "source_finding_id", "lane_id", "canonical_finding_id", "cross_id_links", "rule_id", "category", "severity", "path", "anchor", "root_cause", "observed_evidence", "proposed_fix", "evidence_refs", "raw_ref", "source_agents", "requested_provider", "attempted_provider", "implemented_by", "model", "attempt", "agreement", "finding_disposition", "decision_reason_code", "build_binding_ref", "browser_bundle_refs", "record_digest"],
+  "properties": {
+    "schema_version": {"const": 1}, "record_kind": {"const": "finding"},
+    "run_id": {"$ref": "#/$defs/id"}, "source_finding_id": {"$ref": "#/$defs/id"}, "lane_id": {"$ref": "#/$defs/id"},
+    "canonical_finding_id": {"pattern": "^finding-v1:sha256:[0-9a-f]{64}$"},
+    "cross_id_links": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"type": "string", "pattern": "^finding-v1:sha256:[0-9a-f]{64}$"}},
+    "rule_id": {"$ref": "#/$defs/id"}, "category": {"$ref": "#/$defs/text"},
+    "severity": {"enum": ["P1", "P2", "P3"]}, "path": {"$ref": "#/$defs/text"},
+    "anchor": {"$ref": "#/$defs/text"}, "root_cause": {"$ref": "#/$defs/text"},
+    "observed_evidence": {"$ref": "#/$defs/text"}, "proposed_fix": {"$ref": "#/$defs/text"},
+    "evidence_refs": {"$ref": "#/$defs/refs"}, "raw_ref": {"$ref": "#/$defs/text"},
+    "source_agents": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "requested_provider": {"$ref": "#/$defs/nullableText"}, "attempted_provider": {"$ref": "#/$defs/nullableText"},
+    "implemented_by": {"$ref": "#/$defs/nullableText"}, "model": {"$ref": "#/$defs/nullableText"},
+    "attempt": {"type": "integer", "minimum": 1}, "agreement": {"enum": ["unique", "corroborated", "disputed"]},
+    "finding_disposition": {"enum": ["retained", "merged", "discarded"]},
+    "decision_reason_code": {"enum": ["retained-unique", "retained-corroborated", "retained-disagreement", "exact-duplicate", "same-root-cause-merge", "superseded-by-stronger-evidence", "out-of-scope", "not-reproducible", "agent-findings-cap"]},
+    "build_binding_ref": {"$ref": "#/$defs/text"}, "browser_bundle_refs": {"$ref": "#/$defs/refs"},
+    "record_digest": {"pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "nullableText": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+    "refs": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}}
+  }
+}

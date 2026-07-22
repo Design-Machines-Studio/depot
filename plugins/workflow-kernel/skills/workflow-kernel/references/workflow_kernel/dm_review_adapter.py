@@ -17,6 +17,7 @@ REVIEW_STAGES = frozenset({
     "convergence", "fix_attempt", "browser_verification",
     "repository_cleanup", "review_terminal",
     "finding_contribution", "attempt_usage", "browser_recovery",
+    "finding_record", "lane_record",
 })
 REVIEW_MODES = frozenset({"full", "quick", "visual", "loop"})
 
