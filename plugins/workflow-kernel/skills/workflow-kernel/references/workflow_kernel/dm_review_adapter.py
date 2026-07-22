@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -13,7 +14,7 @@ from ._translation import (
     translate_receipts,
 )
 from .model import HostCapabilities, NodeSpec, WorkflowClass
-from .redaction import contains_high_confidence_secret
+from .redaction import contains_high_confidence_secret, normalize_durable_string
 from .schema import WorkflowEvent
 
 
@@ -41,7 +42,9 @@ _RAW_FINDING_FIELDS = frozenset({
 _LANE_FIELDS = frozenset({
     "reviewer", "lane", "requested_provider", "attempted_provider",
     "implemented_by", "provider", "model", "evidence_refs",
+    "raw_output_ref", "raw_output_digest", "finding_count",
 })
+_RAW_LANE_OUTPUT_FIELDS = frozenset({"reviewer", "lane", "findings"})
 _DIGEST = "sha256:"
 
 
@@ -54,7 +57,11 @@ def _document_digest(value: object) -> str:
 
 def _require_secret_safe(value: object) -> None:
     if type(value) is str:
-        if contains_high_confidence_secret(value):
+        try:
+            normalized = normalize_durable_string(value)
+        except (TypeError, ValueError):
+            raise ValueError("unsafe contribution input") from None
+        if normalized != value or contains_high_confidence_secret(value):
             raise ValueError("unsafe contribution input")
         return
     if type(value) is list:
@@ -66,9 +73,17 @@ def _require_secret_safe(value: object) -> None:
             _require_secret_safe(key)
             _require_secret_safe(item)
         return
-    if value is None or type(value) in {bool, int, float}:
+    if value is None or type(value) in {bool, int}:
+        return
+    if type(value) is float and math.isfinite(value):
         return
     raise ValueError("unsafe contribution input")
+
+
+def require_secret_safe_contribution_inputs(*documents: object) -> None:
+    """Reject any durable secret or credential-bearing URI before hashing."""
+    for document in documents:
+        _require_secret_safe(document)
 
 
 @dataclass(frozen=True)
@@ -218,8 +233,10 @@ def export_finding_contributions(
     decisions_document: Mapping[str, object],
     raw_findings_document: Mapping[str, object],
     lane_receipts_document: Mapping[str, object],
+    raw_lane_outputs_document: Mapping[str, object],
     existing_receipts: Iterable[Mapping[str, object]],
     input_references: Mapping[str, str],
+    sealed_lane_outputs: Optional[Mapping[str, Mapping[str, object]]] = None,
 ) -> Tuple[dict, ...]:
     """Append one validated contribution receipt per raw source finding.
 
@@ -231,14 +248,18 @@ def export_finding_contributions(
         type(request) is not ReviewRequest or type(decisions_document) is not dict
         or type(raw_findings_document) is not dict
         or type(lane_receipts_document) is not dict
+        or type(raw_lane_outputs_document) is not dict
         or type(input_references) is not dict
-        or set(input_references) != {"decisions", "raw_findings", "lane_receipts"}
+        or set(input_references) != {
+            "decisions", "raw_findings", "lane_receipts", "raw_lane_outputs",
+        }
+        or (sealed_lane_outputs is not None and type(sealed_lane_outputs) is not dict)
     ):
         raise ValueError("invalid contribution export")
-    for document in (
+    require_secret_safe_contribution_inputs(*(
         decisions_document, raw_findings_document, lane_receipts_document,
-    ):
-        _require_secret_safe(document)
+        raw_lane_outputs_document,
+    ))
     references = {
         key: safe_reference(value) for key, value in input_references.items()
     }
@@ -246,11 +267,13 @@ def export_finding_contributions(
         "decisions": _document_digest(decisions_document),
         "raw_findings": _document_digest(raw_findings_document),
         "lane_receipts": _document_digest(lane_receipts_document),
+        "raw_lane_outputs": _document_digest(raw_lane_outputs_document),
     }
     reference_roles = {
         "decisions": "synthesis-decisions",
         "raw_findings": "raw-finding-inventory",
         "lane_receipts": "lane-receipts",
+        "raw_lane_outputs": "raw-lane-outputs",
     }
     for key, reference in references.items():
         expected_name = (
@@ -286,6 +309,15 @@ def export_finding_contributions(
         or type(lane_receipts_document["lanes"]) is not list
     ):
         raise ValueError("invalid review lane receipts")
+    if set(raw_lane_outputs_document) != {
+        "schema_version", "artifact_role", "run_id", "outputs",
+    } or (
+        raw_lane_outputs_document["schema_version"] != 1
+        or raw_lane_outputs_document["artifact_role"] != "review_lane_raw_outputs"
+        or raw_lane_outputs_document["run_id"] != request.run_id
+        or type(raw_lane_outputs_document["outputs"]) is not list
+    ):
+        raise ValueError("invalid raw lane outputs")
     expected = decisions_document["source_finding_count"]
     required_text(decisions_document["occurred_at"], "occurred at")
     decisions = decisions_document["decisions"]
@@ -295,12 +327,76 @@ def export_finding_contributions(
         or len(decisions) != expected or len(raw_findings) != expected
     ):
         raise ValueError("finding contribution cardinality mismatch")
+    parsed_outputs = {}
+    output_findings = {}
+    for output in raw_lane_outputs_document["outputs"]:
+        if type(output) is not dict or set(output) != _RAW_LANE_OUTPUT_FIELDS:
+            raise ValueError("invalid raw lane output")
+        required_text(output["reviewer"], "reviewer")
+        required_text(output["lane"], "lane")
+        if type(output["findings"]) is not list:
+            raise ValueError("invalid raw lane output")
+        output = {
+            "reviewer": output["reviewer"], "lane": output["lane"],
+            "findings": [dict(value) if type(value) is dict else value
+                         for value in output["findings"]],
+        }
+        key = (output["reviewer"], output["lane"])
+        if key in parsed_outputs or output["lane"] in {
+            value["lane"] for value in parsed_outputs.values()
+        }:
+            raise ValueError("duplicate raw lane output")
+        digest = _document_digest(output)
+        reference = (
+            "contribution-inputs/raw-lane-output-sha256-"
+            + digest.removeprefix("sha256:") + ".json"
+        )
+        if sealed_lane_outputs is not None:
+            sealed = sealed_lane_outputs.get(reference)
+            if type(sealed) is not dict or sealed != output:
+                raise ValueError("raw lane output seal mismatch")
+        parsed_outputs[key] = output
+        seen = set()
+        for finding in output["findings"]:
+            if type(finding) is not dict or set(finding) != _RAW_FINDING_FIELDS:
+                raise ValueError("invalid raw lane output finding")
+            for field in _RAW_FINDING_FIELDS:
+                required_text(finding[field], field.replace("_", " "))
+            finding["evidence_ref"] = safe_reference(finding["evidence_ref"])
+            if (
+                finding["reviewer"] != output["reviewer"]
+                or finding["lane"] != output["lane"]
+                or finding["source_finding_id"] in seen
+            ):
+                raise ValueError("invalid raw lane output finding")
+            seen.add(finding["source_finding_id"])
+            if finding["source_finding_id"] in output_findings:
+                raise ValueError("duplicate raw source finding")
+            output_findings[finding["source_finding_id"]] = finding
+        output["raw_output_digest"] = digest
+        output["raw_output_ref"] = reference
+
+    if sealed_lane_outputs is not None and set(sealed_lane_outputs) != {
+        output["raw_output_ref"] for output in parsed_outputs.values()
+    }:
+        raise ValueError("raw lane output seal mismatch")
+
     lanes = {}
+    seen_lane_names = set()
     for lane_receipt in lane_receipts_document["lanes"]:
         if type(lane_receipt) is not dict or set(lane_receipt) != _LANE_FIELDS:
             raise ValueError("invalid review lane receipt")
-        for field in _LANE_FIELDS - {"evidence_refs"}:
+        for field in _LANE_FIELDS - {
+            "evidence_refs", "finding_count", "raw_output_digest",
+        }:
             required_text(lane_receipt[field], field.replace("_", " "))
+        if (
+            type(lane_receipt["finding_count"]) is not int
+            or lane_receipt["finding_count"] < 0
+            or not isinstance(lane_receipt["raw_output_digest"], str)
+            or not lane_receipt["raw_output_digest"].startswith("sha256:")
+        ):
+            raise ValueError("invalid review lane receipt")
         evidence_refs = lane_receipt["evidence_refs"]
         if (
             type(evidence_refs) is not list or not evidence_refs
@@ -309,10 +405,23 @@ def export_finding_contributions(
             raise ValueError("invalid review lane receipt")
         normalized_refs = tuple(safe_reference(value) for value in evidence_refs)
         key = (lane_receipt["reviewer"], lane_receipt["lane"])
-        if key in lanes:
+        if key in lanes or lane_receipt["lane"] in seen_lane_names:
             raise ValueError("duplicate review lane receipt")
+        seen_lane_names.add(lane_receipt["lane"])
+        output = parsed_outputs.get(key)
+        if (
+            output is None
+            or lane_receipt["raw_output_ref"] != output["raw_output_ref"]
+            or lane_receipt["raw_output_digest"] != output["raw_output_digest"]
+            or lane_receipt["finding_count"] != len(output["findings"])
+        ):
+            raise ValueError("review lane raw output mismatch")
         lanes[key] = ({**lane_receipt, "evidence_refs": normalized_refs})
-    if {value["lane"] for value in lanes.values()} != set(request.required_lanes):
+    if (
+        len(lanes) != len(request.required_lanes)
+        or seen_lane_names != set(request.required_lanes)
+        or set(parsed_outputs) != set(lanes)
+    ):
         raise ValueError("review lane coverage mismatch")
     raw_by_source = {}
     for raw in raw_findings:
@@ -329,6 +438,8 @@ def export_finding_contributions(
         if lane is None or raw["evidence_ref"] not in lane["evidence_refs"]:
             raise ValueError("raw finding evidence is not lane-bound")
         raw_by_source[source] = raw
+    if raw_by_source != output_findings:
+        raise ValueError("raw lane output union mismatch")
     try:
         receipts = [dict(value) for value in existing_receipts]
     except Exception:
@@ -351,7 +462,10 @@ def export_finding_contributions(
             **raw,
             **{
                 field: lane[field] for field in _LANE_FIELDS
-                if field != "evidence_refs"
+                if field in {
+                    "reviewer", "lane", "requested_provider",
+                    "attempted_provider", "implemented_by", "provider", "model",
+                }
             },
         }
         actual_source = {
@@ -390,6 +504,7 @@ def export_finding_contributions(
         "synthesis_decisions_digest": document_digests["decisions"],
         "raw_finding_inventory_digest": document_digests["raw_findings"],
         "lane_receipts_digest": document_digests["lane_receipts"],
+        "raw_lane_outputs_digest": document_digests["raw_lane_outputs"],
     }
     coverage = {
         "run_id": request.run_id, "sequence": len(receipts),
@@ -405,6 +520,7 @@ def export_finding_contributions(
         "synthesis_decisions_ref": references["decisions"],
         "raw_finding_inventory_ref": references["raw_findings"],
         "lane_receipts_ref": references["lane_receipts"],
+        "raw_lane_outputs_ref": references["raw_lane_outputs"],
         **digests,
         "occurred_at": decisions_document["occurred_at"],
     }
@@ -474,7 +590,8 @@ def require_browser_recovery_profile_binding(
     if len(contract_cases) != len(set(contract_cases)):
         raise ValueError("invalid browser recovery contract binding")
     cases = {case.case_id: case for case in profile.cases}
-    if not set(contract_cases) <= set(cases):
+    required_cases = {case.case_id for case in profile.cases if case.required}
+    if set(contract_cases) != required_cases:
         raise ValueError("invalid browser recovery contract binding")
     for receipt in receipts:
         if type(receipt) is not dict or receipt.get("stage") != "browser_recovery":

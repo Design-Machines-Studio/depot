@@ -181,6 +181,33 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_pipeline_receipts(malformed)
 
+    def test_decision_profile_uses_one_durable_projection_at_boundaries(self):
+        cases = (
+            ("x" * 256, "x" * 256),
+            ("x" * 257, "value-sha256:"),
+            ("Review https://example.test/private?tokenized=1", "value-sha256:"),
+        )
+        for rationale, expected_fragment in cases:
+            with self.subTest(length=len(rationale), rationale=rationale[:16]):
+                manifest = self.manifest()
+                manifest["decisionProfile"] = {
+                    "uncertainty": "high", "consequence": "medium",
+                    "rationale": rationale,
+                }
+                spec = translate_manifest(manifest, self.profile())
+                canonical = dict(spec.decision_profile)
+                self.assertIn(expected_fragment, canonical["rationale"])
+                receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+                receipts[0]["decisionProfile"] = manifest["decisionProfile"]
+                events = translate_pipeline_receipts(receipts)
+                self.assertTrue(all(
+                    event.payload["decision_profile"] == canonical
+                    for event in events
+                ))
+                self.assertEqual(spec, type(spec).from_dict(spec.to_dict()))
+                if len(rationale) > 256 or "://" in rationale:
+                    self.assertNotIn(rationale, canonical["rationale"])
+
     def test_pipeline_receipts_map_named_stages_and_keep_authoritative_refs(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         events = translate_pipeline_receipts(receipts)
@@ -591,7 +618,10 @@ class PipelineAdapterTests(unittest.TestCase):
             "previous_contract_digest": first,
             "candidate_contract_digest": second,
             "approval_ref": approval_ref, "actor": "reviewer-1",
+            "authority": "design-machines-human-approval-v1",
             "decision": "approved", "nonce": "approval-nonce-1",
+            "issued_at": "2026-07-14T00:00:00Z",
+            "expires_at": "2026-07-14T00:05:00Z",
         })
         events = translate_pipeline_receipts(receipts)
         self.assertIn("verification_contract_bound", events[0].payload["evidence"])

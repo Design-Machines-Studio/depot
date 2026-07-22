@@ -81,7 +81,7 @@ only after canonical receipts exist, then compare:
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest manifest.json --prediction-receipts predicted.json --state-dir plans/feature
 "$WORKFLOW_KERNEL" bind-prediction --type review --request request.json --prediction-receipts predicted.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" observe-pipeline --manifest manifest.json --receipts authoritative.json --state-dir plans/feature
-"$WORKFLOW_KERNEL" export-review-contributions --request request.json --decisions synthesis-decisions.json --raw-findings raw-finding-inventory.json --lane-receipts review-lane-receipts.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel --output authoritative.json
+"$WORKFLOW_KERNEL" export-review-contributions --request request.json --decisions synthesis-decisions.json --raw-findings raw-finding-inventory.json --lane-receipts review-lane-receipts.json --raw-lane-outputs raw-lane-outputs.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel --output authoritative.json
 "$WORKFLOW_KERNEL" observe-review --request request.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" compare --state-dir plans/feature --authoritative-receipts authoritative.json --output shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events authoritative.json --output metrics.json
@@ -89,9 +89,11 @@ only after canonical receipts exist, then compare:
 
 For dm-review, contribution export is part of consolidation and must run before
 `observe-review`. It validates and content-addresses the exact synthesis, raw
-finding, and lane-receipt inputs before adding both the per-finding contribution
+finding, lane-receipt, and per-lane raw-output inputs before adding both the per-finding contribution
 events and a coverage receipt. The zero-finding case still emits coverage.
-Review observation reloads the sealed inputs and fails closed when coverage is
+Exactly one lane receipt/output pair is required for every requested lane, and
+the independently parsed output union must equal the inventory and decisions.
+Review observation descriptor-safely reloads the sealed inputs and fails closed when coverage is
 absent, incomplete, or no longer reconstructs the contribution segment.
 
 Shadow observation never selects a node, changes an executor, waives a finding,
@@ -114,7 +116,7 @@ the same immutable repository scope.
 
 ```sh
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/RUN --contract plans/feature/verification-contract.json --verification-profile plans/feature/verification-profile.json
-"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/RUN --approval plans/feature/verification-contract-approval.json
+"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/RUN --approval plans/feature/verification-contract-approval.json --host-capability /host/private/workflow-kernel-approval-capability.json
 "$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/RUN --contract plans/feature/verification-contract.json --verification-profile plans/feature/verification-profile.json
 "$WORKFLOW_KERNEL" decide-validation-retry --state-dir .workflow-kernel/runs/RUN --reason deterministic_validation_failure --signature FAILURE-SIGNATURE
 ```
@@ -124,6 +126,11 @@ stores a content-addressed artifact under the run, and appends a
 `verification_contract_bound` evidence event. Retrying the exact same binding
 is idempotent. A different initial contract, foreign repository scope, unsafe
 path, or invalid contract fails without replacing the current binding.
+Contract weakening is not autonomous workflow work. It stops at an explicit
+human gate; only a human-controlled host may sign the exact transition and pass
+an owner-only capability file held outside repository scope. The authorization
+command reads that key only to verify the allowlisted HMAC, validity window, and
+single-use nonce. It persists neither the key nor its path.
 
 `revise-verification-contract` validates the complete append-only chain, the
 previous digest, and the next revision before storing the new artifact and

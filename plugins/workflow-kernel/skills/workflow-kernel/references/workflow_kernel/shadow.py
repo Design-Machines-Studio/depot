@@ -163,6 +163,7 @@ def _semantic(
         payload.get("synthesis_decisions_digest"),
         payload.get("raw_finding_inventory_digest"),
         payload.get("lane_receipts_digest"),
+        payload.get("raw_lane_outputs_digest"),
     )
 
 

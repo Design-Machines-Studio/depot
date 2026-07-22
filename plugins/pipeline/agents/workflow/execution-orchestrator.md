@@ -302,8 +302,11 @@ Before any git operations, validate the manifest:
 5. **Decision profile:** New manifests require exactly one closed object with
    exactly `uncertainty`, `consequence`, and `rationale`. The first two values
    are `low|medium|high`; rationale is a non-empty string. Reject extra keys,
-   malformed/multiple values, or conflict with the approved plan. Copy the
-   approved profile unchanged and keep it separate from `workflowClass`, risk,
+   malformed/multiple values, or conflict with the approved plan. Project the
+   approved profile once through the kernel's durable receipt policy: rationale
+   text through 256 characters remains literal, while longer or URI/secret-shaped
+   text becomes its stable public digest. Use that same canonical projection in
+   RunSpec and every receipt, and keep it separate from `workflowClass`, risk,
    overlap risk, complexity, kind/executor, and routing overrides. A legacy
    manifest with no field follows the current standard path and records
    `decision_profile_defaulted=true`; absence is unknown provenance, not
@@ -657,20 +660,26 @@ current durable binding receipt and include its exact `contract_digest` and
 `revision` in the dispatch. A builder completion receipt MUST claim those exact
 current values. Missing, stale, malformed, or mismatched claims fail
 deterministic validation; do not reinterpret them as review feedback or success.
-A contract revision, when explicitly human-approved and bound through the
-kernel commands below, invalidates older dispatch claims. First materialize the
-closed approval receipt, including a fresh host-issued nonce, then record the
-coordinator-owned authorization event. Only after that event succeeds may the
-revision be appended:
+A contract revision invalidates older dispatch claims and is an explicit human
+gate. Autonomous workflow and builder execution cannot materialize, sign, or
+authorize its own approval. Stop with `human_help_required` when a revision
+weakens the contract or changes its verification profile. A human-controlled
+host must create the signed closed approval envelope, including its issued/expiry
+window and fresh nonce, and invoke the authorization command with an owner-only
+capability file held outside the repository and withheld from workflow
+execution. Only after that host action succeeds may the workflow append the
+revision:
 
 ```text
-"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/<run-id> --approval plans/<feature-slug>/verification-contract-approval.json > plans/<feature-slug>/verification-contract-authorization.json
+"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/<run-id> --approval plans/<feature-slug>/verification-contract-approval.json --host-capability /host/private/workflow-kernel-approval-capability.json > plans/<feature-slug>/verification-contract-authorization.json
 "$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json --verification-profile plans/<feature-slug>/verification-profile.json > plans/<feature-slug>/verification-contract-binding.json
 ```
 
 Passing `--approval` directly to `revise-verification-contract` never creates
 authority. It is accepted only on an idempotent retry to restore a missing
-artifact already named by the ordered authorization event.
+artifact already named by the ordered authorization event. Never place the host
+capability beneath the repository, pass it into a builder prompt or environment,
+or record its path/key in a receipt.
 
 Decision leverage does not revise the behavioral contract.
 

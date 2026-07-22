@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -19,6 +20,7 @@ from .redaction import (
 SCHEMA_VERSION = 1
 MAX_CONTRACT_BYTES = 1_048_576
 MAX_APPROVAL_BYTES = 65_536
+MAX_APPROVAL_CAPABILITY_BYTES = 8_192
 MAX_COLLECTION_ITEMS = 1_024
 MAX_ARGV_ITEMS = 256
 MAX_OBLIGATION_ITEMS = 4_096
@@ -50,8 +52,18 @@ _CHECK_ID = re.compile(r"CHK-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _BASELINE_EXPECTATIONS = frozenset({"must_fail", "may_pass", "not_runnable"})
 _BASELINE_STRENGTH = {"not_runnable": 0, "may_pass": 1, "must_fail": 2}
 _APPROVAL_FIELDS = frozenset({
-    "schema_version", "actor", "decision", "occurred_at", "run_id",
-    "nonce", "previous_contract_digest", "candidate_contract_digest",
+    "schema_version", "actor", "authority", "decision", "issued_at",
+    "expires_at", "run_id", "nonce", "previous_contract_digest",
+    "candidate_contract_digest", "signature",
+})
+_APPROVAL_SIGNED_FIELDS = _APPROVAL_FIELDS - frozenset({"signature"})
+_APPROVAL_CAPABILITY_FIELDS = frozenset({
+    "schema_version", "authority", "key_hex",
+})
+_APPROVAL_SIGNATURE = re.compile(r"hmac-sha256:[0-9a-f]{64}")
+_APPROVAL_KEY = re.compile(r"[0-9a-f]{64,256}")
+ALLOWED_APPROVAL_AUTHORITIES = frozenset({
+    "design-machines-human-approval-v1",
 })
 _SHELL_EXECUTABLES = frozenset({
     "ash", "bash", "csh", "dash", "fish", "ksh", "mksh", "powershell",
@@ -646,23 +658,35 @@ def validate_initial_binding(contract):
     return canonical
 
 
+def _approval_time(value, name):
+    text = _string(value, name, maximum=64)
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        _fail(f"invalid {name}")
+    if parsed.tzinfo is None or parsed.utcoffset() is None or not text.endswith("Z"):
+        _fail(f"{name} must be timezone-aware")
+    parsed = parsed.astimezone(timezone.utc)
+    return parsed, parsed.isoformat().replace("+00:00", "Z")
+
+
 def validate_approval_evidence(value, *, previous_digest, candidate_digest, run_id):
-    """Authenticate one closed approval receipt for an exact contract transition."""
+    """Validate one signed approval envelope for an exact transition."""
     item = _object(value, _APPROVAL_FIELDS, "approval evidence")
     if _strict_int(item["schema_version"], "approval schema_version", minimum=1) != 1:
         _fail("unsupported approval schema_version")
     actor = _string(item["actor"], "approval actor", pattern=_STABLE_ID, durable=False)
+    authority = _string(
+        item["authority"], "approval authority", pattern=_STABLE_ID, durable=False,
+    )
+    if authority not in ALLOWED_APPROVAL_AUTHORITIES:
+        _fail("approval authority is not allowlisted")
     if item["decision"] != "approved":
         _fail("approval decision is not approved")
-    occurred_at = _string(item["occurred_at"], "approval occurred_at", maximum=64)
-    try:
-        parsed = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
-    except ValueError:
-        _fail("invalid approval occurred_at")
-    if parsed.tzinfo is None or parsed.utcoffset() is None or not occurred_at.endswith("Z"):
-        _fail("approval occurred_at must be timezone-aware")
-    parsed = parsed.astimezone(timezone.utc)
-    occurred_at = parsed.isoformat().replace("+00:00", "Z")
+    issued, issued_at = _approval_time(item["issued_at"], "approval issued_at")
+    expires, expires_at = _approval_time(item["expires_at"], "approval expires_at")
+    if expires <= issued:
+        _fail("approval expiry must follow issuance")
     if _string(item["run_id"], "approval run_id", pattern=_STABLE_ID, durable=False) != run_id:
         _fail("approval run mismatch")
     nonce = _string(item["nonce"], "approval nonce", pattern=_STABLE_ID, durable=False)
@@ -670,12 +694,63 @@ def validate_approval_evidence(value, *, previous_digest, candidate_digest, run_
         _fail("approval prior contract digest mismatch")
     if item["candidate_contract_digest"] != candidate_digest:
         _fail("approval candidate contract digest mismatch")
+    signature = _string(
+        item["signature"], "approval signature", pattern=_APPROVAL_SIGNATURE,
+        durable=False,
+    )
     return {
-        "schema_version": 1, "actor": actor, "decision": "approved",
-        "occurred_at": occurred_at, "run_id": run_id, "nonce": nonce,
+        "schema_version": 1, "actor": actor, "authority": authority,
+        "decision": "approved", "issued_at": issued_at,
+        "expires_at": expires_at, "run_id": run_id, "nonce": nonce,
         "previous_contract_digest": previous_digest,
         "candidate_contract_digest": candidate_digest,
+        "signature": signature,
     }
+
+
+def approval_signing_bytes(value, *, previous_digest, candidate_digest, run_id):
+    """Return the one canonical payload covered by the host signature."""
+    canonical = validate_approval_evidence(
+        value, previous_digest=previous_digest,
+        candidate_digest=candidate_digest, run_id=run_id,
+    )
+    payload = {name: canonical[name] for name in _APPROVAL_SIGNED_FIELDS}
+    return json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def verify_approval_capability(value, capability, *, previous_digest,
+                               candidate_digest, run_id, now=None):
+    """Verify allowlisted host HMAC authority and the bounded validity window."""
+    canonical = validate_approval_evidence(
+        value, previous_digest=previous_digest,
+        candidate_digest=candidate_digest, run_id=run_id,
+    )
+    if (
+        type(capability) is not tuple or len(capability) != 2
+        or capability[0] != canonical["authority"]
+        or capability[0] not in ALLOWED_APPROVAL_AUTHORITIES
+        or type(capability[1]) is not bytes or len(capability[1]) < 32
+    ):
+        _fail("invalid host approval capability")
+    expected = hmac.new(
+        capability[1], approval_signing_bytes(
+            canonical, previous_digest=previous_digest,
+            candidate_digest=candidate_digest, run_id=run_id,
+        ), hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(canonical["signature"], "hmac-sha256:" + expected):
+        _fail("invalid approval capability signature")
+    current = datetime.now(timezone.utc) if now is None else now
+    if type(current) is not datetime or current.tzinfo is None or current.utcoffset() is None:
+        _fail("invalid approval verification time")
+    issued, _ = _approval_time(canonical["issued_at"], "approval issued_at")
+    expires, _ = _approval_time(canonical["expires_at"], "approval expires_at")
+    current = current.astimezone(timezone.utc)
+    if current < issued or current >= expires:
+        _fail("approval capability is not currently valid")
+    return canonical
 
 
 def approval_bytes(value, *, previous_digest, candidate_digest, run_id):
@@ -686,6 +761,58 @@ def approval_bytes(value, *, previous_digest, candidate_digest, run_id):
     return json.dumps(
         canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
+
+
+def load_host_approval_capability(path):
+    """Read one owner-only host key without retaining its path or bytes."""
+    binding = bind_durable_path(Path(path))
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        descriptor = owned.own(directory.open_regular(binding.path.name, os.O_RDONLY))
+        metadata = os.fstat(descriptor)
+        if (
+            metadata.st_mode & 0o077
+            or hasattr(os, "getuid") and metadata.st_uid != os.getuid()
+        ):
+            _fail("host approval capability permissions are unsafe")
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(
+                descriptor, min(4096, MAX_APPROVAL_CAPABILITY_BYTES + 1 - total),
+            )
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_APPROVAL_CAPABILITY_BYTES:
+                _fail("host approval capability exceeds size limit")
+        directory.require_identity(descriptor, binding.path.name)
+    try:
+        text = b"".join(chunks).decode("utf-8")
+        parse_json_document(text)
+        value = json.loads(
+            text, parse_int=bounded_json_int,
+            parse_constant=lambda _raw: _fail("non-finite JSON constant"),
+            object_pairs_hook=_duplicate_rejecting_object,
+        )
+    except (UnicodeError, json.JSONDecodeError, RecursionError):
+        _fail("invalid host approval capability")
+    item = _object(value, _APPROVAL_CAPABILITY_FIELDS, "host approval capability")
+    if item["schema_version"] != 1 or type(item["schema_version"]) is not int:
+        _fail("unsupported host approval capability schema_version")
+    authority = _string(
+        item["authority"], "approval authority", pattern=_STABLE_ID, durable=False,
+    )
+    if authority not in ALLOWED_APPROVAL_AUTHORITIES:
+        _fail("approval authority is not allowlisted")
+    key_hex = item["key_hex"]
+    if (
+        type(key_hex) is not str or len(key_hex) % 2
+        or _APPROVAL_KEY.fullmatch(key_hex) is None
+    ):
+        _fail("invalid host approval capability")
+    return authority, bytes.fromhex(key_hex)
 
 
 def approval_digest(value, *, previous_digest, candidate_digest, run_id):

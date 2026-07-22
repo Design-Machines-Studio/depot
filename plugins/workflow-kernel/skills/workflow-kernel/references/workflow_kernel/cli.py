@@ -371,6 +371,150 @@ def _write_json_once(path, value):
             raise
 
 
+@contextmanager
+def _contribution_artifact_directory(state_dir, *, create=False):
+    """Pin the contribution directory without following either directory name."""
+    root_path = Path(os.path.abspath(str(state_dir)))
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    root_descriptor = os.open(str(root_path), flags)
+    root = None
+    child = None
+    try:
+        opened = os.fstat(root_descriptor)
+        entry = os.lstat(str(root_path))
+        identity = (opened.st_dev, opened.st_ino)
+        if (
+            not stat.S_ISDIR(opened.st_mode) or not stat.S_ISDIR(entry.st_mode)
+            or identity != (entry.st_dev, entry.st_ino)
+        ):
+            raise OSError("unsafe contribution state directory")
+        root = PinnedDirectory(root_path, root_descriptor, identity)
+        root_descriptor = None
+        name = "contribution-inputs"
+        try:
+            child_entry = os.stat(name, dir_fd=root.descriptor, follow_symlinks=False)
+        except FileNotFoundError:
+            if not create:
+                raise
+            os.mkdir(name, mode=0o700, dir_fd=root.descriptor)
+            root.fsync()
+            child_entry = os.stat(name, dir_fd=root.descriptor, follow_symlinks=False)
+        if not stat.S_ISDIR(child_entry.st_mode):
+            raise OSError("unsafe contribution artifact directory")
+        child_descriptor = os.open(name, flags, dir_fd=root.descriptor)
+        opened_child = os.fstat(child_descriptor)
+        current_child = os.stat(name, dir_fd=root.descriptor, follow_symlinks=False)
+        child_identity = (opened_child.st_dev, opened_child.st_ino)
+        if (
+            not stat.S_ISDIR(opened_child.st_mode)
+            or child_identity != (current_child.st_dev, current_child.st_ino)
+            or child_identity != (child_entry.st_dev, child_entry.st_ino)
+        ):
+            os.close(child_descriptor)
+            raise OSError("unsafe contribution artifact directory")
+        child = PinnedDirectory(root_path / name, child_descriptor, child_identity)
+        root.revalidate()
+        try:
+            yield child
+        finally:
+            child.revalidate()
+            root.revalidate()
+    finally:
+        if child is not None:
+            child.close()
+        if root is not None:
+            root.close()
+        if root_descriptor is not None:
+            os.close(root_descriptor)
+
+
+def _contribution_artifact_name(reference):
+    prefix = "contribution-inputs/"
+    if (
+        type(reference) is not str or not reference.startswith(prefix)
+        or "/" in reference[len(prefix):] or not reference[len(prefix):]
+    ):
+        raise ValueError("invalid contribution artifact reference")
+    return reference[len(prefix):]
+
+
+def _read_contribution_artifact(directory, reference):
+    name = _contribution_artifact_name(reference)
+    descriptor = directory.open_regular(name, os.O_RDONLY)
+    try:
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(65_536, MAX_JSON_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_JSON_BYTES:
+                raise ValueError("json input too large")
+        directory.require_identity(descriptor, name)
+        return json.loads(b"".join(chunks).decode("utf-8"))
+    finally:
+        os.close(descriptor)
+
+
+def _load_contribution_artifacts(state_dir, references):
+    with _contribution_artifact_directory(state_dir) as directory:
+        return {
+            key: _read_contribution_artifact(directory, reference)
+            for key, reference in references.items()
+        }
+
+
+def _seal_contribution_artifacts(state_dir, artifacts):
+    """Create immutable contribution artifacts relative to one pinned directory."""
+    with _contribution_artifact_directory(state_dir, create=True) as directory:
+        pending = []
+        for reference, value in artifacts.items():
+            name = _contribution_artifact_name(reference)
+            if directory.regular_exists(name):
+                if _read_contribution_artifact(directory, reference) != value:
+                    raise ValueError("conflicting sealed contribution input")
+            else:
+                pending.append((name, value))
+        for name, value in pending:
+            encoded = (json.dumps(
+                value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            ) + "\n").encode("utf-8")
+            descriptor = directory.open_regular(
+                name, os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            )
+            try:
+                offset = 0
+                while offset < len(encoded):
+                    count = os.write(descriptor, encoded[offset:])
+                    if count <= 0:
+                        raise OSError("json write made no progress")
+                    offset += count
+                os.fsync(descriptor)
+                directory.require_identity(descriptor, name)
+            except BaseException:
+                try:
+                    directory.unlink(name)
+                    directory.fsync()
+                except OSError:
+                    pass
+                raise
+            finally:
+                os.close(descriptor)
+        directory.fsync()
+        try:
+            directory.revalidate()
+        except OSError:
+            for name, _value in pending:
+                try:
+                    directory.unlink(name)
+                except FileNotFoundError:
+                    pass
+            directory.fsync()
+            raise
+
+
 def _profile_from_receipts(receipts):
     from .model import HostCapabilities
 
@@ -433,7 +577,8 @@ _CONTRACT_STAGES = frozenset({
     "verification_contract_bound", "verification_contract_revised",
 })
 _CONTRACT_APPROVAL_FIELDS = frozenset({
-    "stage", "run_id", "actor", "decision", "occurred_at", "nonce",
+    "stage", "run_id", "actor", "authority", "decision", "issued_at",
+    "expires_at", "nonce",
     "previous_contract_digest", "candidate_contract_digest",
     "approval_ref", "evidence",
 })
@@ -827,7 +972,8 @@ def _contract_authorizations(replayed, run_root, run_id, *, load_artifacts=True)
                 candidate_digest=payload["candidate_contract_digest"], run_id=run_id,
             )
             if any(approval[name] != payload[name] for name in (
-                "actor", "decision", "occurred_at", "nonce", "run_id",
+                "actor", "authority", "decision", "issued_at", "expires_at",
+                "nonce", "run_id",
                 "previous_contract_digest", "candidate_contract_digest",
             )):
                 raise ValueError("contract approval authorization mismatch")
@@ -982,8 +1128,11 @@ def _validated_contract_binding_chain(run_root, bindings, *, run_id,
 
 
 def command_authorize_verification_contract_revision(args):
-    """Record one coordinator-owned approval before the exact revision."""
-    from .behavioral_contract import approval_digest, load_approval
+    """Verify one externally held host capability before authorization."""
+    from .behavioral_contract import (
+        approval_digest, load_approval, load_host_approval_capability,
+        verify_approval_capability,
+    )
 
     scope, run_id, run_root, events, states = _contract_run_context(args.state_dir)
     approval_scope = _repository_scope(args.approval)
@@ -999,6 +1148,18 @@ def command_authorize_verification_contract_revision(args):
         raise ValueError("invalid approval document") from None
     approval = load_approval(
         args.approval, previous_digest=previous_digest,
+        candidate_digest=candidate_digest, run_id=run_id,
+    )
+    capability_path = bind_durable_path(Path(args.host_capability)).path
+    try:
+        capability_path.relative_to(scope.repo_root.resolve(strict=True))
+    except ValueError:
+        pass
+    else:
+        raise ValueError("host approval capability must be outside repository scope")
+    capability = load_host_approval_capability(capability_path)
+    approval = verify_approval_capability(
+        approval, capability, previous_digest=previous_digest,
         candidate_digest=candidate_digest, run_id=run_id,
     )
     digest = approval_digest(
@@ -1036,8 +1197,10 @@ def command_authorize_verification_contract_revision(args):
         payload = {
             "stage": "verification_contract_revision_authorized",
             "run_id": run_id, "actor": approval["actor"],
+            "authority": approval["authority"],
             "decision": approval["decision"],
-            "occurred_at": approval["occurred_at"], "nonce": approval["nonce"],
+            "issued_at": approval["issued_at"],
+            "expires_at": approval["expires_at"], "nonce": approval["nonce"],
             "previous_contract_digest": previous_digest,
             "candidate_contract_digest": candidate_digest,
             "approval_ref": approval_ref, "evidence": [approval_ref],
@@ -1149,7 +1312,8 @@ def _command_verification_contract(args, *, revise):
                     candidate_digest=digest, run_id=run_id,
                 )
             if any(approval[name] != authorization[name] for name in (
-                "actor", "decision", "occurred_at", "nonce", "run_id",
+                "actor", "authority", "decision", "issued_at", "expires_at",
+                "nonce", "run_id",
                 "previous_contract_digest", "candidate_contract_digest",
             )):
                 raise ValueError("approval artifact does not match authorization")
@@ -1479,6 +1643,7 @@ def command_observe_review(args):
         export_finding_contributions,
         ReviewRequest, require_browser_recovery_profile_binding,
         require_complete_contribution_coverage,
+        require_secret_safe_contribution_inputs,
         translate_review, translate_review_receipts,
     )
 
@@ -1503,38 +1668,58 @@ def command_observe_review(args):
         "decisions": coverage["synthesis_decisions_ref"],
         "raw_findings": coverage["raw_finding_inventory_ref"],
         "lane_receipts": coverage["lane_receipts_ref"],
+        "raw_lane_outputs": coverage["raw_lane_outputs_ref"],
     }
-    sealed = {
-        key: _load_json(Path(args.state_dir) / reference)
-        for key, reference in references.items()
-    }
+    sealed = _load_contribution_artifacts(args.state_dir, references)
+    require_secret_safe_contribution_inputs(*sealed.values())
+    sealed_lane_outputs = {}
+    for output in sealed["raw_lane_outputs"].get("outputs", ()):
+        digest = _document_digest(output).removeprefix("sha256:")
+        reference = "contribution-inputs/raw-lane-output-sha256-" + digest + ".json"
+        sealed_lane_outputs[reference] = _load_contribution_artifacts(
+            args.state_dir, {"output": reference},
+        )["output"]
     expected_receipts = export_finding_contributions(
         request, sealed["decisions"], sealed["raw_findings"],
-        sealed["lane_receipts"], receipts[:first_contribution], references,
+        sealed["lane_receipts"], sealed["raw_lane_outputs"],
+        receipts[:first_contribution], references, sealed_lane_outputs,
     )
     if tuple(receipts[:coverage_index + 1]) != expected_receipts:
         raise ValueError("finding contribution coverage does not bind sealed inputs")
     spec = translate_review(request, _profile_from_receipts(receipts))
     _require_spec_receipt_context(spec, events)
     if any(receipt.get("stage") == "browser_recovery" for receipt in receipts):
-        contract_receipts = [
-            receipt for receipt in receipts
-            if receipt.get("stage") in {
+        contract_events = [
+            event for event in events
+            if event.payload.get("stage") in {
                 "verification_contract_bound", "verification_contract_revised",
             }
         ]
-        if not contract_receipts:
+        if not contract_events:
             raise ValueError("browser recovery lacks contract binding")
-        binding = contract_receipts[-1]
-        if binding.get("verification_profile_ref") is None:
+        claimed = contract_events[-1].payload
+        if claimed.get("verification_profile_ref") is None:
             raise ValueError("browser recovery lacks contract profile")
         scope = _repository_scope(args.state_dir)
         run_root = _prediction_lifecycle(scope, spec)
-        contract = _load_json(run_root / binding["contract_ref"])
-        from .verification import VerificationProfile
-        profile = VerificationProfile.from_dict(
-            _load_json(run_root / binding["verification_profile_ref"]),
+        replayed, _state = _load_prediction_lifecycle(scope, spec)
+        bindings = _contract_bindings(replayed)
+        if not bindings:
+            raise ValueError("browser recovery lacks lifecycle contract authority")
+        latest = bindings[-1]
+        binding_fields = _CONTRACT_BINDING_FIELDS - frozenset({"evidence"})
+        if any(claimed.get(field) != latest[field] for field in binding_fields):
+            raise ValueError("browser recovery contract receipt is not current")
+        contracts = _validated_contract_binding_chain(
+            run_root, bindings, run_id=spec.run_id,
         )
+        contract = contracts[-1]
+        profile_document = _load_bound_profile(
+            run_root, latest["verification_profile_ref"],
+            latest["verification_profile_digest"],
+        )
+        from .verification import VerificationProfile
+        profile = VerificationProfile.from_dict(profile_document)
         require_browser_recovery_profile_binding(receipts, contract, profile)
     _require_bound_prediction(args.state_dir, "review", spec)
     artifact = {
@@ -1558,39 +1743,61 @@ def command_observe_review(args):
 def command_export_review_contributions(args):
     from .dm_review_adapter import (
         ReviewRequest, export_finding_contributions,
+        require_secret_safe_contribution_inputs,
     )
 
     request = ReviewRequest.from_mapping(_load_json(args.request))
     decisions = _load_json(args.decisions)
     raw_findings = _load_json(args.raw_findings)
     lane_receipts = _load_json(args.lane_receipts)
+    raw_lane_outputs = _load_json(args.raw_lane_outputs)
     receipts = _load_json(args.receipts)
     if (
         type(decisions) is not dict or type(raw_findings) is not dict
-        or type(lane_receipts) is not dict or type(receipts) is not list
+        or type(lane_receipts) is not dict or type(raw_lane_outputs) is not dict
+        or type(receipts) is not list
     ):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    require_secret_safe_contribution_inputs(
+        decisions, raw_findings, lane_receipts, raw_lane_outputs,
+    )
     documents = {
         "decisions": ("synthesis-decisions", decisions),
         "raw_findings": ("raw-finding-inventory", raw_findings),
         "lane_receipts": ("lane-receipts", lane_receipts),
+        "raw_lane_outputs": ("raw-lane-outputs", raw_lane_outputs),
     }
     references = {}
-    sealed_paths = {}
     for key, (role, document) in documents.items():
         digest = _document_digest(document).removeprefix("sha256:")
         name = role + "-sha256-" + digest + ".json"
         references[key] = "contribution-inputs/" + name
-        sealed_paths[key] = Path(args.state_dir) / references[key]
     exported = export_finding_contributions(
-        request, decisions, raw_findings, lane_receipts, receipts, references,
+        request, decisions, raw_findings, lane_receipts, raw_lane_outputs,
+        receipts, references,
     )
-    for key, (_role, document) in documents.items():
-        try:
-            _write_json_once(sealed_paths[key], document)
-        except FileExistsError:
-            if _load_json(sealed_paths[key]) != document:
-                raise ValueError("conflicting sealed contribution input") from None
+    artifacts = {
+        references[key]: document
+        for key, (_role, document) in documents.items()
+    }
+    lane_output_references = {}
+    for output in raw_lane_outputs["outputs"]:
+        digest = _document_digest(output).removeprefix("sha256:")
+        reference = "contribution-inputs/raw-lane-output-sha256-" + digest + ".json"
+        artifacts[reference] = output
+        lane_output_references[reference] = output
+    _seal_contribution_artifacts(args.state_dir, artifacts)
+    loaded = _load_contribution_artifacts(args.state_dir, {
+        key: reference for key, reference in references.items()
+    })
+    loaded_lane_outputs = _load_contribution_artifacts(
+        args.state_dir, {reference: reference for reference in lane_output_references},
+    )
+    exported = export_finding_contributions(
+        request, loaded["decisions"], loaded["raw_findings"],
+        loaded["lane_receipts"], loaded["raw_lane_outputs"], receipts,
+        references, loaded_lane_outputs,
+    )
     _write_json(args.output, list(exported))
     _emit({
         "exported": len(exported) - len(receipts),
@@ -2550,6 +2757,7 @@ def parser():
     )
     authorize_contract.add_argument("--state-dir", required=True)
     authorize_contract.add_argument("--approval", required=True)
+    authorize_contract.add_argument("--host-capability", required=True)
     authorize_contract.set_defaults(
         handler=command_authorize_verification_contract_revision,
     )
@@ -2574,6 +2782,7 @@ def parser():
     export_contributions.add_argument("--decisions", required=True)
     export_contributions.add_argument("--raw-findings", required=True)
     export_contributions.add_argument("--lane-receipts", required=True)
+    export_contributions.add_argument("--raw-lane-outputs", required=True)
     export_contributions.add_argument("--receipts", required=True)
     export_contributions.add_argument("--state-dir", required=True)
     export_contributions.add_argument("--output", required=True)

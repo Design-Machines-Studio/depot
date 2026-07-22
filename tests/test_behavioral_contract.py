@@ -1,12 +1,17 @@
 import json
+import hashlib
+import hmac
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.behavioral_contract import (
-    MAX_CONTRACT_BYTES, approval_digest, canonical_bytes, contract_digest, obligations,
+    MAX_CONTRACT_BYTES, approval_digest, approval_signing_bytes, canonical_bytes,
+    contract_digest, obligations,
     parse_contract_bytes, validate_contract, validate_initial_binding,
     validate_profile_binding, validate_revision, verification_profile_digest,
+    verify_approval_capability,
 )
 from workflow_kernel.verification import PersonaCase, VerificationProfile
 
@@ -59,11 +64,14 @@ def contract_one():
 
 def approval_for(candidate, previous_digest, run_id="contract-run"):
     return {
-        "schema_version": 1, "actor": "reviewer-1", "decision": "approved",
-        "occurred_at": "2026-07-23T00:00:00Z", "run_id": run_id,
+        "schema_version": 1, "actor": "reviewer-1",
+        "authority": "design-machines-human-approval-v1",
+        "decision": "approved", "issued_at": "2026-07-23T00:00:00Z",
+        "expires_at": "2026-07-23T00:05:00Z", "run_id": run_id,
         "nonce": "approval-nonce-1",
         "previous_contract_digest": previous_digest,
         "candidate_contract_digest": contract_digest(candidate),
+        "signature": "hmac-sha256:" + "a" * 64,
     }
 
 
@@ -457,7 +465,7 @@ class BehavioralContractTests(unittest.TestCase):
         prior = "sha256:" + "a" * 64
         candidate_digest = contract_digest(candidate)
         canonical = approval_for(candidate, prior)
-        fractional = dict(canonical, occurred_at="2026-07-23T00:00:00.000Z")
+        fractional = dict(canonical, issued_at="2026-07-23T00:00:00.000Z")
         self.assertEqual(
             approval_digest(
                 canonical, previous_digest=prior,
@@ -468,6 +476,38 @@ class BehavioralContractTests(unittest.TestCase):
                 candidate_digest=candidate_digest, run_id="contract-run",
             ),
         )
+
+    def test_approval_capability_verifies_signature_authority_and_expiry(self):
+        candidate = contract_one()
+        prior = "sha256:" + "a" * 64
+        approval = approval_for(candidate, prior)
+        key = b"host-human-approval-key-material"
+        approval["signature"] = "hmac-sha256:" + hmac.new(
+            key, approval_signing_bytes(
+                approval, previous_digest=prior,
+                candidate_digest=contract_digest(candidate), run_id="contract-run",
+            ), hashlib.sha256,
+        ).hexdigest()
+        capability = ("design-machines-human-approval-v1", key)
+        verified = verify_approval_capability(
+            approval, capability, previous_digest=prior,
+            candidate_digest=contract_digest(candidate), run_id="contract-run",
+            now=datetime(2026, 7, 23, 0, 1, tzinfo=timezone.utc),
+        )
+        self.assertEqual(verified["nonce"], "approval-nonce-1")
+        with self.assertRaises(ValueError):
+            verify_approval_capability(
+                approval, capability, previous_digest=prior,
+                candidate_digest=contract_digest(candidate), run_id="contract-run",
+                now=datetime(2026, 7, 23, 0, 5, tzinfo=timezone.utc),
+            )
+        with self.assertRaises(ValueError):
+            verify_approval_capability(
+                approval, (capability[0], b"wrong-key-material-that-is-long-enough"),
+                previous_digest=prior, candidate_digest=contract_digest(candidate),
+                run_id="contract-run",
+                now=datetime(2026, 7, 23, 0, 1, tzinfo=timezone.utc),
+            )
 
     def test_parser_rejects_malformed_invalid_utf8_duplicate_depth_and_size(self):
         valid = canonical_bytes(contract_one())

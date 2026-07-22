@@ -59,7 +59,8 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "human_approval_evidence_ref", "verification_contract_bound",
     "verification_profile_id", "verification_profile_digest",
     "verification_profile_ref",
-    "actor", "decision", "nonce", "approval_ref",
+    "actor", "authority", "decision", "issued_at", "expires_at", "nonce",
+    "approval_ref",
     "candidate_contract_digest",
     "verification_contract_provenance",
     "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
@@ -73,7 +74,8 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "coverage_complete", "synthesis_decisions_ref",
     "synthesis_decisions_digest", "raw_finding_inventory_ref",
     "raw_finding_inventory_digest", "lane_receipts_ref",
-    "lane_receipts_digest",
+    "lane_receipts_digest", "raw_lane_outputs_ref",
+    "raw_lane_outputs_digest",
     "human_intervention_id", "human_intervention_reason",
     "human_intervention", "missing_case_ids", "recovery_receipt_digests",
 })
@@ -322,6 +324,13 @@ def normalize_decision_profile(value: object) -> dict:
         raise ValueError("invalid decision profile")
     rationale = required_text(value["rationale"], "decision profile rationale")
     if contains_high_confidence_secret(rationale):
+        raise ValueError("invalid decision profile")
+    # RunSpec and durable receipt payloads must carry one identical projection.
+    # The receipt boundary digests strings beyond 256 characters and normalizes
+    # URI-shaped text, so canonicalize the source profile through that same
+    # policy before either representation can diverge.
+    rationale = sanitize_durable_payload(rationale)
+    if type(rationale) is not str:
         raise ValueError("invalid decision profile")
     return {
         "uncertainty": value["uncertainty"],
@@ -689,12 +698,12 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             raise ValueError("incomplete finding contribution coverage")
         for field in (
             "synthesis_decisions_ref", "raw_finding_inventory_ref",
-            "lane_receipts_ref",
+            "lane_receipts_ref", "raw_lane_outputs_ref",
         ):
             receipt[field] = safe_reference(receipt.get(field))
         for field in (
             "synthesis_decisions_digest", "raw_finding_inventory_digest",
-            "lane_receipts_digest",
+            "lane_receipts_digest", "raw_lane_outputs_digest",
         ):
             value = receipt.get(field)
             if type(value) is not str or _CONTRACT_DIGEST.fullmatch(value) is None:
@@ -814,6 +823,7 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
             receipt["synthesis_decisions_ref"],
             receipt["raw_finding_inventory_ref"],
             receipt["lane_receipts_ref"],
+            receipt["raw_lane_outputs_ref"],
         ))
     return payload
 
@@ -842,8 +852,10 @@ def _validate_contract_authorization_receipt(receipt: dict, current: object):
         or type(candidate) is not str or _CONTRACT_DIGEST.fullmatch(candidate) is None
         or _APPROVAL_REF.fullmatch(approval_ref) is None
         or not required_text(receipt.get("actor"), "approval actor")
+        or receipt.get("authority") != "design-machines-human-approval-v1"
         or not required_text(receipt.get("nonce"), "approval nonce")
-        or not required_text(receipt.get("occurred_at"), "approval occurred_at")
+        or not required_text(receipt.get("issued_at"), "approval issued_at")
+        or not required_text(receipt.get("expires_at"), "approval expires_at")
     ):
         raise ValueError("invalid verification contract authorization receipt")
     return previous, candidate, approval_ref

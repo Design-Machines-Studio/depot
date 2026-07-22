@@ -259,6 +259,21 @@ class DmReviewAdapterTests(unittest.TestCase):
                 "finding_category", "finding_root_cause",
             }}],
         }
+        lane_output = {
+            "reviewer": "security", "lane": "security",
+            "findings": copy.deepcopy(raw_findings["findings"]),
+        }
+        lane_output_digest = hashlib.sha256(json.dumps(
+            lane_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        lane_output_ref = (
+            "contribution-inputs/raw-lane-output-sha256-"
+            + lane_output_digest + ".json"
+        )
+        raw_lane_outputs = {
+            "schema_version": 1, "artifact_role": "review_lane_raw_outputs",
+            "run_id": request.run_id, "outputs": [lane_output],
+        }
         lane_receipts = {
             "schema_version": 1, "artifact_role": "review_lane_receipts",
             "run_id": request.run_id, "lanes": [{
@@ -267,12 +282,16 @@ class DmReviewAdapterTests(unittest.TestCase):
                     "attempted_provider", "implemented_by", "provider", "model",
                 }},
                 "evidence_refs": [decision["evidence_ref"]],
+                "raw_output_ref": lane_output_ref,
+                "raw_output_digest": "sha256:" + lane_output_digest,
+                "finding_count": 1,
             }],
         }
         documents = {
             "decisions": ("synthesis-decisions", decisions),
             "raw_findings": ("raw-finding-inventory", raw_findings),
             "lane_receipts": ("lane-receipts", lane_receipts),
+            "raw_lane_outputs": ("raw-lane-outputs", raw_lane_outputs),
         }
         def make_references(values):
             references = {}
@@ -288,7 +307,8 @@ class DmReviewAdapterTests(unittest.TestCase):
 
         references = make_references(documents)
         exported = export_finding_contributions(
-            request, decisions, raw_findings, lane_receipts, (), references,
+            request, decisions, raw_findings, lane_receipts, raw_lane_outputs,
+            (), references,
         )
         self.assertEqual(exported[0]["sequence"], 0)
         self.assertEqual(exported[1]["stage"], "finding_contribution_coverage")
@@ -300,7 +320,7 @@ class DmReviewAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_finding_contributions(
                 request, {**decisions, "source_finding_count": 2},
-                raw_findings, lane_receipts, (), references,
+                raw_findings, lane_receipts, raw_lane_outputs, (), references,
             )
 
         hostile = copy.deepcopy(decisions)
@@ -310,8 +330,8 @@ class DmReviewAdapterTests(unittest.TestCase):
         })
         with self.assertRaises(ValueError):
             export_finding_contributions(
-                request, hostile, raw_findings, lane_receipts, (),
-                hostile_references,
+                request, hostile, raw_findings, lane_receipts,
+                raw_lane_outputs, (), hostile_references,
             )
 
         unsafe_decisions = copy.deepcopy(decisions)
@@ -322,25 +342,106 @@ class DmReviewAdapterTests(unittest.TestCase):
             "decisions": ("synthesis-decisions", unsafe_decisions),
             "raw_findings": ("raw-finding-inventory", raw_findings),
             "lane_receipts": ("lane-receipts", unsafe_lanes),
+            "raw_lane_outputs": ("raw-lane-outputs", raw_lane_outputs),
         }
         with self.assertRaisesRegex(ValueError, "unsafe contribution input"):
             export_finding_contributions(
-                request, unsafe_decisions, raw_findings, unsafe_lanes, (),
-                make_references(unsafe_documents),
+                request, unsafe_decisions, raw_findings, unsafe_lanes,
+                raw_lane_outputs, (), make_references(unsafe_documents),
+            )
+
+        for unsafe_value in (
+            "https://user:password@example.invalid/review",
+            "https://example.invalid/review?access_token=secret",
+            "api_token=compound-secret-value",
+            "Authorization: Bearer compound-secret-value",
+        ):
+            unsafe_decisions = copy.deepcopy(decisions)
+            unsafe_decisions["decisions"][0]["model"] = unsafe_value
+            unsafe_documents = {
+                **documents,
+                "decisions": ("synthesis-decisions", unsafe_decisions),
+            }
+            with self.subTest(unsafe_value=unsafe_value), self.assertRaisesRegex(
+                ValueError, "unsafe contribution input",
+            ):
+                export_finding_contributions(
+                    request, unsafe_decisions, raw_findings, lane_receipts,
+                    raw_lane_outputs, (), make_references(unsafe_documents),
+                )
+
+        duplicate_lanes = copy.deepcopy(lane_receipts)
+        duplicate_lanes["lanes"].append({
+            **duplicate_lanes["lanes"][0], "reviewer": "second-reviewer",
+        })
+        duplicate_documents = {
+            **documents, "lane_receipts": ("lane-receipts", duplicate_lanes),
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate review lane receipt"):
+            export_finding_contributions(
+                request, decisions, raw_findings, duplicate_lanes,
+                raw_lane_outputs, (), make_references(duplicate_documents),
+            )
+
+        omitted_output = {**lane_output, "findings": []}
+        omitted_digest = hashlib.sha256(json.dumps(
+            omitted_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        omitted_outputs = {**raw_lane_outputs, "outputs": [omitted_output]}
+        omitted_lanes = copy.deepcopy(lane_receipts)
+        omitted_lanes["lanes"][0].update({
+            "raw_output_ref": (
+                "contribution-inputs/raw-lane-output-sha256-"
+                + omitted_digest + ".json"
+            ),
+            "raw_output_digest": "sha256:" + omitted_digest,
+            "finding_count": 0,
+        })
+        omitted_documents = {
+            **documents,
+            "lane_receipts": ("lane-receipts", omitted_lanes),
+            "raw_lane_outputs": ("raw-lane-outputs", omitted_outputs),
+        }
+        with self.assertRaisesRegex(ValueError, "raw lane output union mismatch"):
+            export_finding_contributions(
+                request, decisions, raw_findings, omitted_lanes,
+                omitted_outputs, (), make_references(omitted_documents),
+            )
+
+        with self.assertRaisesRegex(ValueError, "raw lane output seal mismatch"):
+            export_finding_contributions(
+                request, decisions, raw_findings, lane_receipts,
+                raw_lane_outputs, (), references,
+                {lane_output_ref: {**lane_output, "findings": []}},
             )
 
         zero_decisions = {
             **decisions, "source_finding_count": 0, "decisions": [],
         }
         zero_raw = {**raw_findings, "findings": []}
+        zero_output = {**lane_output, "findings": []}
+        zero_output_digest = hashlib.sha256(json.dumps(
+            zero_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        zero_lane_outputs = {**raw_lane_outputs, "outputs": [zero_output]}
+        zero_lanes = copy.deepcopy(lane_receipts)
+        zero_lanes["lanes"][0].update({
+            "raw_output_ref": (
+                "contribution-inputs/raw-lane-output-sha256-"
+                + zero_output_digest + ".json"
+            ),
+            "raw_output_digest": "sha256:" + zero_output_digest,
+            "finding_count": 0,
+        })
         zero_documents = {
             "decisions": ("synthesis-decisions", zero_decisions),
             "raw_findings": ("raw-finding-inventory", zero_raw),
-            "lane_receipts": ("lane-receipts", lane_receipts),
+            "lane_receipts": ("lane-receipts", zero_lanes),
+            "raw_lane_outputs": ("raw-lane-outputs", zero_lane_outputs),
         }
         zero = export_finding_contributions(
-            request, zero_decisions, zero_raw, lane_receipts, (),
-            make_references(zero_documents),
+            request, zero_decisions, zero_raw, zero_lanes, zero_lane_outputs,
+            (), make_references(zero_documents),
         )
         self.assertEqual([value["stage"] for value in zero], [
             "finding_contribution_coverage",

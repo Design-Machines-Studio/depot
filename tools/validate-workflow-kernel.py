@@ -71,13 +71,16 @@ BEHAVIORAL_CLI_CASES = {
     "replay": ("<run>",),
     "status": ("<run>",),
     "decide-validation-retry": ("--state-dir", "<state>", "--reason", "deterministic_validation_failure"),
-    "authorize-verification-contract-revision": ("--state-dir", "<state>", "--approval", "<missing>"),
+    "authorize-verification-contract-revision": (
+        "--state-dir", "<state>", "--approval", "<missing>",
+        "--host-capability", "<missing>",
+    ),
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
     "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "revise-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
-    "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
+    "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
@@ -541,6 +544,31 @@ def check_cli(context):
                 "finding_root_cause": "missing boundary check",
             }],
         }), encoding="utf-8")
+        raw_value = json.loads(raw_findings.read_text(encoding="utf-8"))
+        lane_outputs = [
+            {"reviewer": "security", "lane": "security",
+             "findings": raw_value["findings"]},
+            {"reviewer": "architecture", "lane": "architecture", "findings": []},
+            {"reviewer": "visual", "lane": "visual", "findings": []},
+        ]
+        lane_output_bindings = {}
+        for output in lane_outputs:
+            digest = hashlib.sha256(json.dumps(
+                output, sort_keys=True, separators=(",", ":"),
+            ).encode()).hexdigest()
+            lane_output_bindings[output["lane"]] = {
+                "raw_output_ref": (
+                    "contribution-inputs/raw-lane-output-sha256-"
+                    + digest + ".json"
+                ),
+                "raw_output_digest": "sha256:" + digest,
+                "finding_count": len(output["findings"]),
+            }
+        raw_lane_outputs = root / "raw-lane-outputs.json"
+        raw_lane_outputs.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "review_lane_raw_outputs",
+            "run_id": "review-1", "outputs": lane_outputs,
+        }), encoding="utf-8")
         lane_receipts = root / "review-lane-receipts.json"
         lane_receipts.write_text(json.dumps({
             "schema_version": 1, "artifact_role": "review_lane_receipts",
@@ -551,6 +579,7 @@ def check_cli(context):
                     "implemented_by": "codex", "provider": "codex",
                     "model": "not_reported",
                     "evidence_refs": ["receipts/review/security-finding.json"],
+                    **lane_output_bindings["security"],
                 },
                 {
                     "reviewer": "architecture", "lane": "architecture",
@@ -558,6 +587,7 @@ def check_cli(context):
                     "implemented_by": "codex", "provider": "codex",
                     "model": "not_reported",
                     "evidence_refs": ["receipts/review/architecture.json"],
+                    **lane_output_bindings["architecture"],
                 },
                 {
                     "reviewer": "visual", "lane": "visual",
@@ -565,6 +595,7 @@ def check_cli(context):
                     "implemented_by": "codex", "provider": "codex",
                     "model": "not_reported",
                     "evidence_refs": ["receipts/review/visual-unavailable.json"],
+                    **lane_output_bindings["visual"],
                 },
             ],
         }), encoding="utf-8")
@@ -572,7 +603,8 @@ def check_cli(context):
         successful(
             "export-review-contributions", "--request", request,
             "--decisions", decisions, "--raw-findings", raw_findings,
-            "--lane-receipts", lane_receipts, "--receipts", review_prefix,
+            "--lane-receipts", lane_receipts,
+            "--raw-lane-outputs", raw_lane_outputs, "--receipts", review_prefix,
             "--state-dir", root, "--output", contributed,
         )
         contributed_receipts = json.loads(contributed.read_text(encoding="utf-8"))

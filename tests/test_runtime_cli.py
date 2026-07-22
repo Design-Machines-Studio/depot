@@ -1,5 +1,6 @@
 import json
 import hashlib
+import hmac
 import os
 import subprocess
 import sys
@@ -15,6 +16,33 @@ from tests import KERNEL_REFERENCES
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 SCOPE_ID = "a" * 64
+
+
+def signed_contract_approval(previous_digest, candidate_digest, *,
+                             run_id="contract-run", nonce="approval-nonce-1",
+                             key=b"k" * 32):
+    from workflow_kernel.behavioral_contract import approval_signing_bytes
+
+    now = datetime.now(timezone.utc)
+    value = {
+        "schema_version": 1, "actor": "reviewer-1",
+        "authority": "design-machines-human-approval-v1",
+        "decision": "approved",
+        "issued_at": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
+        "expires_at": (now + timedelta(minutes=4)).isoformat().replace("+00:00", "Z"),
+        "run_id": run_id, "nonce": nonce,
+        "previous_contract_digest": previous_digest,
+        "candidate_contract_digest": candidate_digest,
+        "signature": "hmac-sha256:" + "0" * 64,
+    }
+    signature = hmac.new(
+        key, approval_signing_bytes(
+            value, previous_digest=previous_digest,
+            candidate_digest=candidate_digest, run_id=run_id,
+        ), hashlib.sha256,
+    ).hexdigest()
+    value["signature"] = "hmac-sha256:" + signature
+    return value
 
 
 def shadow_artifact(role, run_spec, events=None):
@@ -110,6 +138,7 @@ class RuntimeCliTests(unittest.TestCase):
             decisions = root / "decisions.json"
             raw_findings = root / "raw-findings.json"
             lane_receipts = root / "lane-receipts.json"
+            raw_lane_outputs = root / "raw-lane-outputs.json"
             receipts = root / "receipts.json"
             output = root / "output.json"
             state_dir = root / "state"
@@ -150,6 +179,19 @@ class RuntimeCliTests(unittest.TestCase):
                     "finding_root_cause": "caller supplied identity",
                 }],
             }), encoding="utf-8")
+            raw_value = json.loads(raw_findings.read_text(encoding="utf-8"))
+            lane_output = {
+                "reviewer": "security", "lane": "security",
+                "findings": raw_value["findings"],
+            }
+            lane_output_digest = hashlib.sha256(json.dumps(
+                lane_output, sort_keys=True, separators=(",", ":"),
+            ).encode()).hexdigest()
+            raw_lane_outputs.write_text(json.dumps({
+                "schema_version": 1,
+                "artifact_role": "review_lane_raw_outputs",
+                "run_id": "review-export", "outputs": [lane_output],
+            }), encoding="utf-8")
             lane_receipts.write_text(json.dumps({
                 "schema_version": 1, "artifact_role": "review_lane_receipts",
                 "run_id": "review-export", "lanes": [{
@@ -157,13 +199,20 @@ class RuntimeCliTests(unittest.TestCase):
                     "requested_provider": "openai", "attempted_provider": "openai",
                     "implemented_by": "codex", "provider": "openai",
                     "model": "gpt-5.6-sol", "evidence_refs": ["raw/security.md"],
+                    "raw_output_ref": (
+                        "contribution-inputs/raw-lane-output-sha256-"
+                        + lane_output_digest + ".json"
+                    ),
+                    "raw_output_digest": "sha256:" + lane_output_digest,
+                    "finding_count": 1,
                 }],
             }), encoding="utf-8")
             receipts.write_text("[]\n", encoding="utf-8")
             result = self.run_cli(
                 "export-review-contributions", "--request", request,
                 "--decisions", decisions, "--raw-findings", raw_findings,
-                "--lane-receipts", lane_receipts, "--receipts", receipts,
+                "--lane-receipts", lane_receipts,
+                "--raw-lane-outputs", raw_lane_outputs, "--receipts", receipts,
                 "--state-dir", state_dir, "--output", output,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -175,8 +224,60 @@ class RuntimeCliTests(unittest.TestCase):
             )
             self.assertEqual(exported[1]["stage"], "finding_contribution_coverage")
             self.assertEqual(
-                len(list((state_dir / "contribution-inputs").glob("*.json"))), 3,
+                len(list((state_dir / "contribution-inputs").glob("*.json"))), 5,
             )
+
+            unsafe_state = root / "unsafe-state"
+            unsafe_state.mkdir()
+            unsafe_decisions = json.loads(decisions.read_text(encoding="utf-8"))
+            unsafe_decisions["decisions"][0]["model"] = (
+                "https://user:password@example.invalid/review?token=secret"
+            )
+            decisions.write_text(json.dumps(unsafe_decisions), encoding="utf-8")
+            rejected = self.run_cli(
+                "export-review-contributions", "--request", request,
+                "--decisions", decisions, "--raw-findings", raw_findings,
+                "--lane-receipts", lane_receipts,
+                "--raw-lane-outputs", raw_lane_outputs, "--receipts", receipts,
+                "--state-dir", unsafe_state, "--output", root / "unsafe.json",
+            )
+            self.assertEqual(rejected.returncode, 2)
+            self.assertFalse((unsafe_state / "contribution-inputs").exists())
+            self.assertFalse((root / "unsafe.json").exists())
+
+    def test_contribution_artifact_store_rejects_symlink_and_directory_swap(self):
+        from workflow_kernel.cli import _seal_contribution_artifacts
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            state = root / "state"
+            state.mkdir()
+            victim = root / "victim"
+            victim.mkdir()
+            (state / "contribution-inputs").symlink_to(victim, target_is_directory=True)
+            reference = "contribution-inputs/synthesis-decisions-sha256-" + "a" * 64 + ".json"
+            with self.assertRaises(OSError):
+                _seal_contribution_artifacts(state, {reference: {"safe": True}})
+            self.assertEqual(list(victim.iterdir()), [])
+
+            (state / "contribution-inputs").unlink()
+            real_write = os.write
+            swapped = False
+
+            def swap_directory(descriptor, value):
+                nonlocal swapped
+                count = real_write(descriptor, value)
+                if not swapped:
+                    swapped = True
+                    (state / "contribution-inputs").rename(state / "stale-inputs")
+                    (state / "contribution-inputs").mkdir()
+                return count
+
+            with mock.patch("workflow_kernel.cli.os.write", side_effect=swap_directory):
+                with self.assertRaises(OSError):
+                    _seal_contribution_artifacts(state, {reference: {"safe": True}})
+            self.assertEqual(list((state / "contribution-inputs").iterdir()), [])
+            self.assertEqual(list((state / "stale-inputs").iterdir()), [])
 
     def init_lifecycle(self, root, run_id="pipeline-1"):
         self.init_repository_scope(root)
@@ -724,13 +825,23 @@ class RuntimeCliTests(unittest.TestCase):
             revision = root / "contract-2.json"
             revision.write_text(json.dumps(revision_value))
             approval = root / "approval.json"
-            approval.write_text(json.dumps({
-                "schema_version": 1, "actor": "reviewer-1",
-                "decision": "approved", "occurred_at": "2026-07-23T00:00:00Z",
-                "run_id": "contract-run", "nonce": "approval-nonce-1",
-                "previous_contract_digest": contract_digest(initial_value),
-                "candidate_contract_digest": contract_digest(revision_value),
+            capability_key = b"k" * 32
+            approval.write_text(json.dumps(signed_contract_approval(
+                contract_digest(initial_value), contract_digest(revision_value),
+                key=capability_key,
+            )))
+            capability_descriptor, capability_name = tempfile.mkstemp(
+                prefix="workflow-kernel-host-approval-", suffix=".json",
+            )
+            os.close(capability_descriptor)
+            capability = Path(capability_name)
+            self.addCleanup(capability.unlink, missing_ok=True)
+            capability.write_text(json.dumps({
+                "schema_version": 1,
+                "authority": "design-machines-human-approval-v1",
+                "key_hex": capability_key.hex(),
             }))
+            capability.chmod(0o600)
             forged_approval = root / "forged-approval.json"
             forged_approval.write_text(json.dumps({
                 **json.loads(approval.read_text()),
@@ -749,9 +860,36 @@ class RuntimeCliTests(unittest.TestCase):
             )
             self.assertEqual(self_authored.returncode, 2)
             self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
+            no_host_key = self.run_cli(
+                "authorize-verification-contract-revision",
+                "--state-dir", run_dir, "--approval", approval,
+            )
+            self.assertEqual(no_host_key.returncode, 2)
+            bad_signature = root / "bad-signature.json"
+            bad_signature.write_text(json.dumps({
+                **json.loads(approval.read_text()),
+                "signature": "hmac-sha256:" + "f" * 64,
+            }))
+            rejected_signature = self.run_cli(
+                "authorize-verification-contract-revision",
+                "--state-dir", run_dir, "--approval", bad_signature,
+                "--host-capability", capability,
+            )
+            self.assertEqual(rejected_signature.returncode, 2)
+            repository_capability = root / "workflow-owned-capability.json"
+            repository_capability.write_text(capability.read_text())
+            repository_capability.chmod(0o600)
+            rejected_repository_key = self.run_cli(
+                "authorize-verification-contract-revision",
+                "--state-dir", run_dir, "--approval", approval,
+                "--host-capability", repository_capability,
+            )
+            self.assertEqual(rejected_repository_key.returncode, 2)
+            self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
             authorized = self.run_cli(
                 "authorize-verification-contract-revision",
                 "--state-dir", run_dir, "--approval", approval,
+                "--host-capability", capability,
             )
             self.assertEqual(authorized.returncode, 0, authorized.stderr)
             authorization_receipt = json.loads(authorized.stdout)
@@ -759,6 +897,8 @@ class RuntimeCliTests(unittest.TestCase):
                 authorization_receipt["stage"],
                 "verification_contract_revision_authorized",
             )
+            self.assertNotIn("host_capability", authorization_receipt)
+            self.assertNotIn(capability_key.hex(), (run_dir / "events.jsonl").read_text())
             revised = self.run_cli(
                 "revise-verification-contract", "--state-dir", run_dir,
                 "--contract", revision,

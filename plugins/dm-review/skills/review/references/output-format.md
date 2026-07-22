@@ -116,10 +116,19 @@ an exact object with `schema_version: 1`,
 `artifact_role: "review_lane_receipts"`, the same `run_id`, and one `lanes`
 entry for every required lane. Each entry has `reviewer`, `lane`,
 `requested_provider`, `attempted_provider`, `implemented_by`, `provider`,
-`model`, and nonempty `evidence_refs`. Every raw finding's `reviewer`/`lane`
-and `evidence_ref` must resolve to that literal lane entry. These three inputs
-must contain no credential-shaped value; the exporter validates them before
-creating any sealed artifact.
+`model`, nonempty `evidence_refs`, nonnegative integer `finding_count`, and the
+content-addressed `raw_output_ref` and `raw_output_digest`. Lane names and
+reviewer/lane identities must be unique. The raw-output companion is an exact
+object with `schema_version: 1`,
+`artifact_role: "review_lane_raw_outputs"`, the same `run_id`, and one
+`outputs` entry per requested lane. Each output contains only `reviewer`,
+`lane`, and `findings`; `findings` uses the raw inventory finding shape and may
+be empty. Every raw finding's `reviewer`/`lane` and `evidence_ref` must resolve
+to that literal lane entry, and the independently parsed union of all raw lane
+outputs must equal the raw inventory and decisions exactly. All four inputs
+must contain no credential-shaped value, URL userinfo, credential query,
+authorization string, or compound credential assignment; the exporter
+validates them before hashing or creating any sealed artifact.
 
 ---
 

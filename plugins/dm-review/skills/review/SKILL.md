@@ -628,8 +628,8 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 
 Materialize the decisions, sealed raw-finding inventory, and literal lane
 receipts described by `references/output-format.md` as
-`synthesis-decisions.json`, `raw-finding-inventory.json`, and
-`review-lane-receipts.json`. Then invoke the trusted launcher; this is the sole
+`synthesis-decisions.json`, `raw-finding-inventory.json`,
+`review-lane-receipts.json`, and `raw-lane-outputs.json`. Then invoke the trusted launcher; this is the sole
 producer of canonical contribution IDs, receipt sequences, and the durable
 coverage receipt:
 
@@ -639,15 +639,19 @@ coverage receipt:
   --decisions .claude/ux-review/workflow-kernel/synthesis-decisions.json \
   --raw-findings .claude/ux-review/workflow-kernel/raw-finding-inventory.json \
   --lane-receipts .claude/ux-review/workflow-kernel/review-lane-receipts.json \
+  --raw-lane-outputs .claude/ux-review/workflow-kernel/raw-lane-outputs.json \
   --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
   --state-dir .claude/ux-review/workflow-kernel \
   --output .claude/ux-review/workflow-kernel/authoritative-receipts.json
 ```
 
-The command rejects credential-shaped content before it persists anything,
-content-addresses all three canonical inputs under `contribution-inputs/`, and
+The command rejects credential-shaped content and credential-bearing URIs
+before hashing or persistence, content-addresses all four canonical inputs and
+every raw lane output under `contribution-inputs/`, and
 fails closed unless the raw inventory, synthesis decisions, literal lane
-provenance, and lane evidence references agree exactly. Never hand-author
+provenance, finding counts, raw lane-output union, and lane evidence references
+agree exactly. Exactly one receipt and raw output is required per requested
+lane, including lanes with zero findings. Never hand-author
 `canonical_finding_id`, `sequence`, `finding_contribution`, or contribution
 coverage receipts. A zero-finding synthesis still runs the command with count
 zero and all required lane receipts so missing producer coverage is observable.

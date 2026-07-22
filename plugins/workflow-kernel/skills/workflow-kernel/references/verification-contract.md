@@ -20,13 +20,19 @@ revision, and exact added/retained/removed obligation sets. Any behavioral
 weakening—including removed requirements, regressions, proof links, persona or
 browser cases, every downward transition in the closed
 `must_fail > may_pass > not_runnable` order, changed argv, or reduced manual
-coverage—requires a content-addressed approval receipt bound to its actor,
-approved decision, normalized UTC timestamp, fresh host-issued nonce, run ID,
-and exact prior/candidate contract digests. The coordinator must record the
-reserved `verification_contract_revision_authorized` lifecycle event before
-revision; a self-authored receipt file is not authority. Stale digests, unsupported
-schema versions, unsafe argv, unauthorized weakening, symlink escapes, and
-unsafe durable paths fail closed without partial artifacts or raw hostile data.
+coverage—requires a content-addressed approval receipt with an allowlisted
+authority's HMAC-SHA256 over the canonical actor, authority, approved decision,
+UTC issuance and expiry, fresh nonce, run ID, and exact prior/candidate contract
+digests. Its owner-only host capability file must live outside repository scope,
+is read only by `authorize-verification-contract-revision`, and its path and key
+are never persisted. The coordinator must record the reserved
+`verification_contract_revision_authorized` lifecycle event before revision; a
+self-authored receipt, command invocation, or repository-held key is not
+authority. The signature unforgeably binds the nonce and the ledger consumes it
+once. Stale digests, expired windows, invalid signatures, non-allowlisted
+authorities, nonce reuse, unsupported schema versions, unsafe argv, unauthorized
+weakening, symlink escapes, and unsafe durable paths fail closed without partial
+artifacts or raw hostile data.
 
 The behavioral contract and declared persona/browser profile are one evidence
 boundary. The contract records the authoritative profile ID and full-document
