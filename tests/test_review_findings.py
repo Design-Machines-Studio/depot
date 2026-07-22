@@ -456,6 +456,37 @@ class ReviewFindingTests(unittest.TestCase):
                         root, store, clean["boundary_ref"],
                     )
 
+    def test_persisted_boundary_rejects_run_root_swap_during_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.email", "review@example.test"), cwd=root, check=True)
+            subprocess.run(("git", "config", "user.name", "Review Test"), cwd=root, check=True)
+            (root / ".gitignore").write_text(".workflow-kernel/\n")
+            (root / "product.txt").write_text("base\n")
+            subprocess.run(("git", "add", ".gitignore", "product.txt"), cwd=root, check=True)
+            subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
+            scope = repository_scope(root, create=True)
+            run_root = scope.lease_root / "runs" / "review-swap"; run_root.mkdir(parents=True)
+            store = EventStore(run_root)
+            displaced = scope.lease_root / "runs" / "review-swap-displaced"
+            swapped = False
+
+            def swap_during_provider(_root):
+                nonlocal swapped
+                if not swapped:
+                    swapped = True
+                    run_root.rename(displaced)
+                    run_root.mkdir()
+                return b"[]", None
+
+            with mock.patch(
+                "workflow_kernel.review_records._github_provider_state",
+                side_effect=swap_during_provider,
+            ), self.assertRaisesRegex(ValueError, "identity changed"):
+                persist_review_boundary(root, store)
+            self.assertFalse((run_root / "review-boundaries").exists())
+
     def test_plain_review_prose_is_read_only_and_fix_paths_own_mutation(self):
         root = Path(__file__).parents[1]
         review = (root / "plugins/dm-review/skills/review/SKILL.md").read_text()

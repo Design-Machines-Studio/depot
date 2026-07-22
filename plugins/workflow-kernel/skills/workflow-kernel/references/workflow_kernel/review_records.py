@@ -786,20 +786,28 @@ def _capture_review_boundary(context):
     }
 
 
-def capture_review_boundary(repository_root, event_store):
-    """Capture a boundary excluding only the EventStore-owned canonical run root."""
+def _same_review_boundary_context(left, right):
+    return (
+        left[:4] == right[:4]
+        and (left[4].st_dev, left[4].st_ino) == (right[4].st_dev, right[4].st_ino)
+        and (left[5].st_dev, left[5].st_ino) == (right[5].st_dev, right[5].st_ino)
+    )
+
+
+def _checked_review_boundary_capture(repository_root, event_store):
     context = _review_boundary_context(repository_root, event_store)
     result = _capture_review_boundary(context)
     # Re-derive after observation so repository/run-root displacement cannot be
     # hidden behind otherwise identical Git and content digests.
     refreshed = _review_boundary_context(repository_root, event_store)
-    if (
-        refreshed[:4] != context[:4]
-        or (refreshed[4].st_dev, refreshed[4].st_ino) != (context[4].st_dev, context[4].st_ino)
-        or (refreshed[5].st_dev, refreshed[5].st_ino) != (context[5].st_dev, context[5].st_ino)
-    ):
+    if not _same_review_boundary_context(refreshed, context):
         _fail("review boundary identity changed during capture")
-    return result
+    return result, context
+
+
+def capture_review_boundary(repository_root, event_store):
+    """Capture a boundary excluding only the EventStore-owned canonical run root."""
+    return _checked_review_boundary_capture(repository_root, event_store)[0]
 
 
 def _boundary_digest(value):
@@ -814,8 +822,7 @@ def _boundary_artifact_root(event_store):
 
 def persist_review_boundary(repository_root, event_store):
     """Persist an immutable content-addressed pre-review boundary document."""
-    context = _review_boundary_context(repository_root, event_store)
-    boundary = _capture_review_boundary(context)
+    boundary, context = _checked_review_boundary_capture(repository_root, event_store)
     evidence_root = _boundary_artifact_root(event_store)
     evidence_entry = os.stat(evidence_root, follow_symlinks=False)
     body = {
@@ -900,7 +907,9 @@ def compare_persisted_review_boundary(repository_root, event_store, before_ref):
         and before["evidence_root_device"] == evidence_entry.st_dev
         and before["evidence_root_inode"] == evidence_entry.st_ino
     )
-    after = _capture_review_boundary(context)
+    after, refreshed = _checked_review_boundary_capture(repository_root, event_store)
+    if not _same_review_boundary_context(refreshed, context):
+        identity_current = False
     result = compare_review_boundary(before["boundary"], after)
     if not identity_current:
         result["changed"] = sorted(set(result["changed"] + ["physical_identity"]))
