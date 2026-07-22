@@ -52,16 +52,32 @@ Build uses lightningcss for CSS bundling/minification and esbuild for JS.
 
 ## Backend Development
 
-All Go commands run inside Docker -- never on the host:
+All Go commands run inside Docker -- never on the host. Manual verification is
+planned through Workflow Kernel using
+`plugins/assembly/skills/assembly-build/references/assembly-baseplate-verification-profile.json`.
+Use `/assembly-build generate`, `/assembly-build build`, `/assembly-build
+focused`, `/assembly-build test`, or `/assembly-build race`; execute only the
+safe argv selected by the repository verification plan.
 
-```bash
-docker compose exec app templ generate              # Regenerate Templ files
-docker compose exec app go build -o assembly ./cmd/api  # Build binary
-docker compose exec app go test ./...               # Run tests
-docker compose restart app                          # Restart to pick up changes
-```
+The Baseplate profile defaults to an ephemeral Compose `run --rm --no-deps`
+container, `go tool templ generate`, `-tags=dev`, fresh `-count=1` tests, and the
+`./cmd/assembly` package. A project profile can override those defaults, but an
+`exec app` command requires current matching service-state proof. A missing,
+stopped, stale, or mismatched service uses a declared ephemeral lane or returns
+`unavailable`; ambient Docker state is not proof.
 
-Air handles this automatically on file save. Manual commands are for troubleshooting.
+Project configuration outranks the Assembly profile, and the Assembly profile
+outranks heuristics. If Workflow Kernel, a valid matching profile, or required
+declarations cannot be resolved, stop with actionable `unavailable` evidence
+instead of guessing a generic command. Air still handles rebuilds on file save;
+the planner path is for fresh verification and troubleshooting.
+
+Focused changed-package tests do not automatically force full race. Full,
+race, security, container, browser, accessibility, PR, push, schedule,
+merge-group, and post-merge evidence remain separate. UX task frontmatter is
+authoritative; browser recovery remains primary browser quit, fresh primary
+retry, a different configured engine, then `human_help_required`, with curl as
+diagnostic only.
 
 ## Configuration
 
