@@ -12,7 +12,7 @@
     "lifecycle": {"enum": ["durable", "run_scoped", "chunk_scoped"]},
     "redaction_state": {"enum": ["not_required", "required", "redacted", "blocked"]},
     "provenance": {"$ref": "#/$defs/id"}, "owner": {"$ref": "#/$defs/id"}, "committable": {"type": "boolean"},
-    "rule_ids": {"type": "array", "uniqueItems": true, "maxItems": 256, "items": {"$ref": "#/$defs/id"}}, "record_digest": {"$ref": "#/$defs/digest"}
+    "rule_ids": {"type": "array", "uniqueItems": true, "maxItems": 256, "items": {"enum": ["high_confidence_secret", "cookie_or_authorization", "password_or_token", "mfa_qr_authenticator", "environment_value", "opaque_binary", "sensitive_filename", "private_url", "real_email", "explicit_deletion", "classification_unavailable"]}}, "record_digest": {"$ref": "#/$defs/digest"}
   },
   "$defs": {
     "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},

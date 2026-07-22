@@ -8,7 +8,7 @@ from unittest import mock
 
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.artifacts import (
-    MAX_ARTIFACT_BYTES, build_staging_allowlist, classify_artifact,
+    MAX_ARTIFACT_BYTES, _record_digest, build_staging_allowlist, classify_artifact,
     deleted_artifact_record, validate_artifact_record,
 )
 
@@ -88,6 +88,53 @@ class ArtifactSafetyTests(unittest.TestCase):
         named = self.classify("logs/password-export.txt")
         self.assertIn("sensitive_filename", named["rule_ids"])
 
+    def test_utf8_decodable_control_data_and_binary_suffixes_fail_closed(self):
+        self.write("evidence/control.bin", b"header\x00payload\x01")
+        control = self.classify("evidence/control.bin")
+        self.assertEqual(control["classification"], "blocked_sensitive")
+        self.assertIn("opaque_binary", control["rule_ids"])
+        self.write("evidence/fake.png", b"otherwise valid utf-8")
+        image = self.classify("evidence/fake.png")
+        self.assertEqual(image["classification"], "blocked_sensitive")
+
+    def test_blocking_rules_and_redaction_cannot_be_downgraded(self):
+        self.write("safe.txt"); record = self.classify("safe.txt")
+        for changes in (
+            {"rule_ids": ["password_or_token"]},
+            {"redaction_state": "blocked"},
+            {"rule_ids": ["invented_rule"]},
+        ):
+            forged = copy.deepcopy(record); forged.update(changes)
+            body = dict(forged); body.pop("record_digest")
+            forged["record_digest"] = _record_digest(body)
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                validate_artifact_record(forged)
+        forged = copy.deepcopy(record); forged["rule_ids"] = ["password_or_token"]
+        body = dict(forged); body.pop("record_digest"); forged["record_digest"] = _record_digest(body)
+        with self.assertRaises(ValueError):
+            build_staging_allowlist(
+                [self.intent("modify", "safe.txt", record["digest"])],
+                [forged], {"safe.txt": record["digest"]},
+            )
+
+    def test_sensitive_filename_material_is_only_persisted_as_correlation(self):
+        cases = (
+            "evidence/person@real-domain.org.txt",
+            "evidence/ghp_abcdefghijk.txt",
+        )
+        for path in cases:
+            self.write(path)
+            with self.subTest(path=path):
+                record = self.classify(path)
+                rendered = json.dumps(record)
+                self.assertTrue(record["path"].startswith("unsafe-path-sha256-"))
+                self.assertNotIn(path, rendered)
+                self.assertFalse(record["committable"])
+        missing = "evidence/person@real-domain.org-missing.txt"
+        with self.assertRaises(ValueError) as raised:
+            self.classify(missing)
+        self.assertNotIn(missing, str(raised.exception))
+
     def test_fixture_email_exception_is_explicit_and_does_not_bypass_secrets(self):
         self.write("fixtures/account.example", b"member@example.test")
         ordinary = self.classify("fixtures/account.example")
@@ -97,6 +144,14 @@ class ArtifactSafetyTests(unittest.TestCase):
         self.write("fixtures/mixed.example", b"member@example.test\npassword=opaque")
         mixed = self.classify("fixtures/mixed.example", provenance="test_fixture")
         self.assertEqual(mixed["classification"], "blocked_sensitive")
+        self.write("fixtures/member@example.test")
+        named_fixture = self.classify(
+            "fixtures/member@example.test", provenance="test_fixture",
+        )
+        self.assertEqual(named_fixture["classification"], "committable")
+        self.assertEqual(named_fixture["path"], "fixtures/member@example.test")
+        named_ordinary = self.classify("fixtures/member@example.test")
+        self.assertEqual(named_ordinary["classification"], "private_receipt")
 
     def test_traversal_links_special_and_oversized_files_fail_closed(self):
         outside = self.root.parent / "outside-artifact.txt"; outside.write_text("safe")
@@ -160,6 +215,39 @@ class ArtifactSafetyTests(unittest.TestCase):
         self.assertTrue(schema_matches(result, schema))
         reversed_result = build_staging_allowlist(list(reversed(intents)), list(reversed([private, safe, stale, ephemeral])), observed)
         self.assertEqual(result, reversed_result)
+
+    def test_noncanonical_aliases_and_contradictory_intents_are_rejected(self):
+        self.write("safe.txt"); safe = self.classify("safe.txt")
+        for alias in ("./safe.txt", "folder/../safe.txt", "safe.txt/"):
+            with self.subTest(alias=alias), self.assertRaises(ValueError):
+                self.classify(alias)
+        intents = [
+            self.intent("add", "safe.txt", safe["digest"]),
+            self.intent("modify", "safe.txt", safe["digest"]),
+        ]
+        result = build_staging_allowlist(intents, [safe], {"safe.txt": safe["digest"]})
+        self.assertEqual(result["authorized"], [])
+        self.assertEqual(
+            {(item["operation"], item["reason"]) for item in result["rejected"]},
+            {("add", "conflicting_intent"), ("modify", "conflicting_intent")},
+        )
+        old_digest = "sha256:" + "a" * 64
+        deleted = deleted_artifact_record(
+            "old.txt", old_digest, provenance="git_diff", owner="chunk-02",
+        )
+        self.write("new-a.txt"); self.write("new-b.txt")
+        first = self.classify("new-a.txt", source_path="old.txt")
+        second = self.classify("new-b.txt", source_path="old.txt")
+        renames = build_staging_allowlist(
+            [self.intent("rename", "new-a.txt", first["digest"], "old.txt"),
+             self.intent("rename", "new-b.txt", second["digest"], "old.txt")],
+            [deleted, first, second],
+            {"old.txt": None, "new-a.txt": first["digest"], "new-b.txt": second["digest"]},
+        )
+        self.assertEqual(renames["authorized"], [])
+        self.assertEqual(
+            {item["reason"] for item in renames["rejected"]}, {"conflicting_intent"},
+        )
 
     def test_present_classification_with_absent_file_is_missing_and_blocked_is_distinct(self):
         self.write("safe.txt"); safe = self.classify("safe.txt")

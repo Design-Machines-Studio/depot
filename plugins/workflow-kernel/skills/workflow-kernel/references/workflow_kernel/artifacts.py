@@ -27,6 +27,16 @@ _MFA = re.compile(r"(?i)(?:mfa|otp|totp|authenticator|qr[_-]?(?:code|secret))\s*
 _ENV = re.compile(r"(?m)^[A-Z][A-Z0-9_]{1,127}=\S+")
 _PRIVATE_URL = re.compile(r"(?i)https?://(?:localhost|127(?:\.[0-9]{1,3}){3}|10(?:\.[0-9]{1,3}){3}|192\.168(?:\.[0-9]{1,3}){2}|172\.(?:1[6-9]|2[0-9]|3[01])(?:\.[0-9]{1,3}){2}|[^/\s.]+\.(?:internal|local))(?:[:/]|$)")
 _SENSITIVE_FILENAME = re.compile(r"(?i)(?:cookie|credential|password|passwd|private[_-]?key|authenticator|qr[_-]?secret|\.env(?:\.|$))")
+_BLOCKING_RULES = frozenset({
+    "high_confidence_secret", "cookie_or_authorization", "password_or_token",
+    "mfa_qr_authenticator", "environment_value", "opaque_binary",
+})
+_PRIVATE_RULES = frozenset({"sensitive_filename", "private_url", "real_email"})
+_CONTROL_BYTES = frozenset(range(0x20)) - {0x09, 0x0A, 0x0D}
+_BINARY_SUFFIXES = frozenset({
+    ".7z", ".avif", ".bmp", ".dmp", ".gif", ".gz", ".ico", ".jpeg", ".jpg",
+    ".pdf", ".png", ".tar", ".tiff", ".trace", ".webp", ".zip",
+})
 _RECORD_FIELDS = frozenset({
     "schema_version", "path", "state", "source_path", "digest", "byte_count",
     "classification", "sensitivity", "lifecycle", "redaction_state", "provenance", "owner",
@@ -57,15 +67,47 @@ def _string(value, name, *, pattern=None, maximum=2048, nullable=False):
     return value
 
 
-def _path(value, name="artifact path", *, nullable=False):
-    value = _string(value, name, maximum=1024, nullable=nullable)
+def _path_shape(value, name="artifact path", *, nullable=False):
+    if nullable and value is None:
+        return None
+    if (
+        type(value) is not str or not value or len(value) > 1024
+        or any(ord(char) < 0x20 or ord(char) == 0x7f for char in value)
+    ):
+        _fail(f"invalid {name}")
+    try:
+        if normalize_durable_string(value) != value:
+            _fail(f"unsafe {name}")
+    except ValueError:
+        _fail(f"unsafe {name}")
     if value is None:
         return None
     path = PurePosixPath(value)
     if (
         path.is_absolute() or value in {"", "."} or ".." in path.parts
         or "\\" in value or any(char in value for char in "*?[]{}")
+        or path.as_posix() != value
     ):
+        _fail(f"unsafe {name}")
+    return value
+
+
+def _fictional_email(match):
+    domain = match.group(1).casefold()
+    return domain.endswith((".test", ".example")) or domain in {"test", "example"}
+
+
+def _path_is_sensitive(value):
+    return bool(
+        contains_high_confidence_secret(value)
+        or any(not _fictional_email(match) for match in _EMAIL.finditer(value))
+        or _AUTH.search(value) or _PASSWORD.search(value) or _MFA.search(value)
+    )
+
+
+def _path(value, name="artifact path", *, nullable=False):
+    value = _path_shape(value, name, nullable=nullable)
+    if value is not None and _path_is_sensitive(value):
         _fail(f"unsafe {name}")
     return value
 
@@ -125,12 +167,34 @@ def _sensitive_rules(value, path, *, fixture_provenance):
     if _ENV.search(value):
         rules.append("environment_value")
     for match in _EMAIL.finditer(value):
-        domain = match.group(1).casefold()
-        fictional = domain.endswith((".test", ".example")) or domain in {"test", "example"}
-        if not fictional or not fixture_provenance:
+        if not _fictional_email(match) or not fixture_provenance:
             rules.append("real_email")
             break
     return sorted(set(rules))
+
+
+def _derived_sensitivity(rules):
+    identities = set(rules)
+    allowed = _BLOCKING_RULES | _PRIVATE_RULES | {
+        "explicit_deletion", "classification_unavailable",
+    }
+    if not identities <= allowed:
+        _fail("unknown artifact rule")
+    if "explicit_deletion" in identities and identities != {"explicit_deletion"}:
+        _fail("deletion rule contradicts artifact rules")
+    if identities & _BLOCKING_RULES:
+        return "blocked"
+    if identities & _PRIVATE_RULES:
+        return "private"
+    if "classification_unavailable" in identities:
+        return "unknown"
+    return "safe"
+
+
+def _looks_binary(raw, path):
+    if PurePosixPath(path).suffix.casefold() in _BINARY_SUFFIXES:
+        return True
+    return any(byte in _CONTROL_BYTES for byte in raw)
 
 
 def _validate_record(value):
@@ -173,6 +237,15 @@ def _validate_record(value):
         "owner": _string(value["owner"], "owner", pattern=_ID, maximum=128),
         "committable": value["committable"], "rule_ids": rules,
     }
+    derived_sensitivity = _derived_sensitivity(rules)
+    if sensitivity != derived_sensitivity:
+        _fail("sensitivity contradicts artifact rules")
+    allowed_redaction = {
+        "safe": {"not_required"}, "private": {"required", "redacted"},
+        "blocked": {"blocked"}, "unknown": {"required", "blocked"},
+    }
+    if redaction not in allowed_redaction[sensitivity]:
+        _fail("redaction contradicts sensitivity")
     expected_classification = (
         "blocked_sensitive" if sensitivity == "blocked" else
         "private_receipt" if sensitivity == "private" else
@@ -220,13 +293,29 @@ def _make_record(*, path, state, source_path, digest, byte_count, sensitivity,
 def classify_artifact(repo_root, relative_path, *, lifecycle, provenance, owner,
                       metadata=None, source_path=None):
     """Classify one exact regular artifact without scanning its surroundings."""
-    relative_path = _path(relative_path)
-    source_path = _path(source_path, "source path", nullable=True)
+    physical_path = _path_shape(relative_path)
+    physical_source_path = _path_shape(source_path, "source path", nullable=True)
+    path_rules = _sensitive_rules(
+        physical_path, physical_path, fixture_provenance=provenance == "test_fixture",
+    )
+    source_rules = [] if physical_source_path is None else _sensitive_rules(
+        physical_source_path, physical_source_path,
+        fixture_provenance=provenance == "test_fixture",
+    )
+    relative_path = (
+        _unsafe_path_reference(physical_path) if _path_is_sensitive(physical_path)
+        else physical_path
+    )
+    source_path = (
+        None if physical_source_path is None else
+        _unsafe_path_reference(physical_source_path)
+        if _path_is_sensitive(physical_source_path) else physical_source_path
+    )
     provenance = _string(provenance, "provenance", pattern=_ID, maximum=128)
     owner = _string(owner, "owner", pattern=_ID, maximum=128)
     fixture = provenance == "test_fixture"
     root = Path(repo_root).resolve(strict=True)
-    target = root / relative_path
+    target = root / physical_path
     try:
         target.relative_to(root)
     except ValueError:
@@ -255,20 +344,24 @@ def classify_artifact(repo_root, relative_path, *, lifecycle, provenance, owner,
     raw = b"".join(chunks)
     digest = _content_digest(raw)
     metadata_text = _metadata_text(metadata)
-    try:
-        text = raw.decode("utf-8")
-        opaque = False
-    except UnicodeDecodeError:
+    opaque = _looks_binary(raw, physical_path)
+    if opaque:
         text = ""
-        opaque = True
-    rules = _sensitive_rules("\n".join((relative_path, text, metadata_text)), relative_path, fixture_provenance=fixture)
+    else:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            text = ""
+            opaque = True
+    rules = sorted(set(
+        path_rules + source_rules
+        + _sensitive_rules(text + "\n" + metadata_text, physical_path, fixture_provenance=fixture)
+    ))
     if opaque:
         rules.append("opaque_binary")
+        rules = sorted(set(rules))
     if rules:
-        sensitivity = "blocked" if any(rule in rules for rule in {
-            "high_confidence_secret", "cookie_or_authorization", "password_or_token",
-            "mfa_qr_authenticator", "environment_value", "opaque_binary",
-        }) else "private"
+        sensitivity = _derived_sensitivity(rules)
         redaction = "blocked" if sensitivity == "blocked" else "required"
     else:
         sensitivity, redaction = "safe", "not_required"
@@ -329,7 +422,9 @@ def build_staging_allowlist(intended_changes, records, observed_digests):
         by_path[record["path"]] = record
     observed = {}
     for raw_path, raw_digest in observed_digests.items():
-        observed[_path(raw_path)] = _digest(raw_digest, "observed digest", nullable=True)
+        physical = _path_shape(raw_path)
+        path = _unsafe_path_reference(physical) if _path_is_sensitive(physical) else physical
+        observed[path] = _digest(raw_digest, "observed digest", nullable=True)
     intents = []
     unsafe_rejections = []
     for raw in intended_changes:
@@ -347,32 +442,41 @@ def build_staging_allowlist(intended_changes, records, observed_digests):
                 "path": _unsafe_path_reference(raw.get("path")),
                 "reason": "unsafe_path",
             })
-    identities = {(item["operation"], item["path"], item["source_path"]) for item in intents}
-    if len(identities) != len(intents):
-        _fail("duplicate intended change")
+    target_counts = {}
+    source_counts = {}
+    for item in intents:
+        target_counts[item["path"]] = target_counts.get(item["path"], 0) + 1
+        if item["operation"] == "rename":
+            source_counts[item["source_path"]] = source_counts.get(item["source_path"], 0) + 1
+    conflicting_targets = {path for path, count in target_counts.items() if count > 1}
+    conflicting_sources = {path for path, count in source_counts.items() if count > 1}
     authorized = []
     rejected = sorted(unsafe_rejections, key=lambda item: (item["path"], item["operation"]))
     for intent in sorted(intents, key=lambda item: (item["path"], item["operation"], item["source_path"] or "")):
         record = by_path.get(intent["path"])
-        reason = None
-        if record is None:
+        reason = (
+            "conflicting_intent" if intent["path"] in conflicting_targets
+            or intent["operation"] == "rename" and intent["source_path"] in conflicting_sources
+            else None
+        )
+        if reason is None and record is None:
             reason = "unclassified"
-        elif record["classification"] == "private_receipt":
+        elif reason is None and record["classification"] == "private_receipt":
             reason = "private"
-        elif record["classification"] == "blocked_sensitive":
+        elif reason is None and record["classification"] == "blocked_sensitive":
             reason = "blocked_sensitive"
-        elif record["classification"] == "unknown":
+        elif reason is None and record["classification"] == "unknown":
             reason = "unclassified"
-        elif record["classification"] == "ephemeral":
+        elif reason is None and record["classification"] == "ephemeral":
             reason = "ephemeral"
-        elif not record["committable"]:
+        elif reason is None and not record["committable"]:
             reason = "unclassified"
-        elif intent["operation"] == "delete":
+        elif reason is None and intent["operation"] == "delete":
             if intent["expected_digest"] is not None and intent["expected_digest"] != record["digest"]:
                 reason = "stale_digest"
             elif record["state"] != "deleted" or observed.get(intent["path"]) is not None:
                 reason = "stale_digest" if record["state"] == "deleted" else "missing"
-        else:
+        elif reason is None:
             actual = observed.get(intent["path"])
             if actual is None:
                 reason = "missing"
@@ -391,7 +495,10 @@ def build_staging_allowlist(intended_changes, records, observed_digests):
         else:
             rejected.append({"operation": intent["operation"], "path": intent["path"], "reason": reason})
     record_digests = sorted(item["record_digest"] for item in normalized_records)
-    rejected.sort(key=lambda item: (item["path"], item["operation"]))
+    rejected = sorted(
+        {(item["operation"], item["path"], item["reason"]): item for item in rejected}.values(),
+        key=lambda item: (item["path"], item["operation"]),
+    )
     body = {
         "schema_version": SCHEMA_VERSION, "record_digests": record_digests,
         "authorized": authorized, "rejected": rejected,

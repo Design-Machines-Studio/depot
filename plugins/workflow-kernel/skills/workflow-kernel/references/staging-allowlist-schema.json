@@ -22,7 +22,7 @@
     },
     "rejection": {
       "type": "object", "additionalProperties": false, "required": ["operation", "path", "reason"],
-      "properties": {"operation": {"enum": ["add", "modify", "delete", "rename"]}, "path": {"$ref": "#/$defs/path"}, "reason": {"enum": ["unclassified", "private", "ephemeral", "blocked_sensitive", "stale_digest", "missing", "unsafe_path"]}}
+      "properties": {"operation": {"enum": ["add", "modify", "delete", "rename"]}, "path": {"$ref": "#/$defs/path"}, "reason": {"enum": ["unclassified", "private", "ephemeral", "blocked_sensitive", "stale_digest", "missing", "unsafe_path", "conflicting_intent"]}}
     }
   }
 }
