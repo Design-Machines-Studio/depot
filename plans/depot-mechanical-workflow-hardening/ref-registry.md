@@ -31,3 +31,4 @@ Before state: 5 registered worktrees, 16 local branches.
 - `pipeline/depot-mechanical-workflow-hardening/05-ci-evidence-and-closeout`: merged at `083e578`; clean worktree removed and fully merged local branch deleted after ancestor proof.
 - `pipeline/depot-mechanical-workflow-hardening/04-read-only-review-and-findings`: merged at `748f658`; clean worktree removed and fully merged local branch deleted after ancestor proof.
 - `pipeline/depot-mechanical-workflow-hardening/06-assembly-repository-profile`: merged at `a7828cd`; clean worktree removed and fully merged local branch deleted after ancestor proof.
+- `pipeline/depot-mechanical-workflow-hardening/07-pipeline-integration-and-scout`: merged at `f964118`; clean worktree removed and fully merged local branch deleted after ancestor proof.

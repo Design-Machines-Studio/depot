@@ -274,5 +274,41 @@
     "node_id": "06-assembly-repository-profile", "occurred_at": "2026-07-22T15:20:12Z",
     "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/06-assembly-repository-profile-cleanup-receipt.json",
     "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 37, "stage": "dependency_ready", "status": "ready",
+    "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:01Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/07-pipeline-integration-and-scout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 38, "stage": "dispatch", "status": "succeeded",
+    "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:02Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/07-pipeline-integration-and-scout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "provider": "codex", "attempt": 1
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 39, "stage": "deterministic_validation", "status": "passed",
+    "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:03Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/07-pipeline-integration-and-scout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "first_pass": false
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 40, "stage": "evaluation_gate", "status": "passed",
+    "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:04Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/07-pipeline-integration-and-scout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 41, "stage": "merge_disposition", "status": "merged",
+    "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:05Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/07-pipeline-integration-and-scout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 42, "stage": "chunk_cleanup", "status": "clean",
+    "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:06Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/07-pipeline-integration-and-scout-cleanup-receipt.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
   }
 ]

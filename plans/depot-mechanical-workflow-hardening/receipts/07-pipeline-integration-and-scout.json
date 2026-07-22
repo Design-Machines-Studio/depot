@@ -1,0 +1,19 @@
+{
+  "chunk_id": "07-pipeline-integration-and-scout",
+  "status": "merged",
+  "classification": "Integration",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": ["878d9d2ee190b161b2d4d21306a07e407f6b4724", "0c700ec2db54db5a86757d7fbd784ddf377c4510", "29f8681effa22c0c8b9cbffb3a4851dbadf7289f", "20be96fa7289f45df74cca55b35eea1663db094f"],
+  "merge_commit": "f964118c85bebdd23bd8d2dc42ae75c1cd35db7d",
+  "validation": "87 focused improvement/adapter/parity/metrics tests passed; git diff --check passed",
+  "review": {"iterations": 4, "owned_findings_fixed": 7, "findings_remaining": 0, "deferred": 0, "new_p1_p2": 0},
+  "ambiguity_resolved": false,
+  "evaluation": "EVAL_GATE_PASSED: 07-pipeline-integration-and-scout | classification: Integration | iterations: 4 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}
