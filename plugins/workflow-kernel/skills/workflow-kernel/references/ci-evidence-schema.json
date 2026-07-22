@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/ci-evidence-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provider", "adapter_version", "mapping_version", "event_scope", "ref", "base_sha", "pr_head_sha", "test_merge_sha", "subject_sha", "subject_kind", "run_id", "check_id", "job_id", "attempt", "check_kind", "context", "app_identity", "raw_status", "raw_conclusion", "normalized_lifecycle", "normalized_conclusion", "started_at", "completed_at", "observed_at", "evidence_ref", "requirement_source", "satisfies_provider_merge_rule", "mapping_authoritative"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "provider": {"type": "string", "minLength": 1, "maxLength": 64},
+    "adapter_version": {"type": "string", "minLength": 1, "maxLength": 512},
+    "mapping_version": {"type": ["string", "null"], "maxLength": 64},
+    "event_scope": {"enum": ["pull_request", "push", "schedule", "merge_group", "default_branch", "post_merge"]},
+    "ref": {"type": "string", "minLength": 1, "maxLength": 512},
+    "base_sha": {"$ref": "#/$defs/nullable_sha"},
+    "pr_head_sha": {"$ref": "#/$defs/nullable_sha"},
+    "test_merge_sha": {"$ref": "#/$defs/nullable_sha"},
+    "subject_sha": {"$ref": "#/$defs/sha"},
+    "subject_kind": {"enum": ["pr_head", "test_merge", "commit", "merge_group", "default_branch"]},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 512},
+    "check_id": {"type": ["string", "null"], "maxLength": 512},
+    "job_id": {"type": ["string", "null"], "maxLength": 512},
+    "attempt": {"type": "integer", "minimum": 1},
+    "check_kind": {"type": "string", "minLength": 1, "maxLength": 512},
+    "context": {"type": "string", "minLength": 1, "maxLength": 512},
+    "app_identity": {"type": ["string", "null"], "maxLength": 512},
+    "raw_status": {"type": "string", "minLength": 1, "maxLength": 128},
+    "raw_conclusion": {"type": ["string", "null"], "maxLength": 128},
+    "normalized_lifecycle": {"enum": ["pending", "running", "completed", "unknown"]},
+    "normalized_conclusion": {"enum": ["success", "skipped", "neutral", "failure", "cancelled", "timed_out", "action_required", "stale", "unknown", null]},
+    "started_at": {"$ref": "#/$defs/nullable_timestamp"},
+    "completed_at": {"$ref": "#/$defs/nullable_timestamp"},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "evidence_ref": {"type": "string", "minLength": 1, "maxLength": 65536},
+    "requirement_source": {"type": "string", "minLength": 1, "maxLength": 512},
+    "satisfies_provider_merge_rule": {"type": "boolean"},
+    "mapping_authoritative": {"type": "boolean"}
+  },
+  "$defs": {
+    "sha": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "nullable_sha": {"oneOf": [{"$ref": "#/$defs/sha"}, {"type": "null"}]},
+    "nullable_timestamp": {"oneOf": [{"type": "string", "format": "date-time"}, {"type": "null"}]}
+  }
+}

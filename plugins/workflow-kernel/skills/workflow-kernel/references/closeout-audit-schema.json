@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/closeout-audit-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "checks", "unresolved_findings", "remaining_open_issues", "disposition", "audit_digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["passed", "failed", "unresolved"]},
+    "checks": {"type": "array", "maxItems": 4096, "items": {"$ref": "#/$defs/check"}},
+    "unresolved_findings": {"type": "array", "maxItems": 4096, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+    "remaining_open_issues": {"type": "array", "maxItems": 4096, "items": {"type": "string", "minLength": 1, "maxLength": 512}},
+    "disposition": {"enum": ["closing", "non_closing", "blocked"]},
+    "audit_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "reason"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 512},
+        "status": {"enum": ["passed", "failed", "unresolved"]},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 512}
+      }
+    }
+  }
+}

@@ -174,6 +174,26 @@ Conventions for a batch cleanup PR:
 
 Before claiming any finding closed -- in a review report, a session summary, or a cleanup PR -- reconcile every artifact that carries review state. On Assembly Baseplate, formal GitHub PR review threads are mostly empty; the durable review signal lives in **PR bodies, issue state, and `review-finding` issues**. A PR review thread with no comments tells you nothing about whether findings were addressed -- never treat it as the source of truth.
 
+When Workflow Kernel closeout snapshots are available, use the structured audit
+as the mechanical evidence for these distinctions. The caller or provider adapter
+collects current network facts; Kernel only compares them and does not edit PRs,
+issues, labels, or branches. Preserve each fact separately:
+
+- textual mention, parsed closing intent, provider-resolved entity kind,
+  provider closing linkage, and actual issue state;
+- local, reviewed, delivered, and actual PR-head SHAs (never substitute a test
+  merge or merge-commit SHA for the PR head);
+- provider policy acceptance versus the normalized CI conclusion;
+- receipt existence, digest, safety classification, and current build binding;
+- affected-surface open-issue inventory versus issues merely referenced by the PR.
+
+An unavailable provider mapping, repository auto-close policy, affected-surface
+inventory, or exact subject binding is `unresolved`, not closed. A plain mention
+is non-closing. A closing keyword only establishes closing intent; provider
+linkage, default-branch policy, and actual issue state remain separate facts.
+These rules strengthen the zero-deferral policy and do not authorize a read-only
+review to create, close, label, or otherwise mutate issues.
+
 Reconcile all eight before declaring closure:
 
 1. **PR body `Closes #X` references** -- the claim of closure.
