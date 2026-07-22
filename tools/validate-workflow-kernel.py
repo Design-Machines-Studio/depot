@@ -107,7 +107,7 @@ BEHAVIORAL_CLI_CASES = {
     "staging-allowlist": ("--intended-changes", "<missing>", "--records", "<missing>", "--observed-digests", "<missing>", "--output", "<output>"),
     "browser-scenario-validate": ("--scenario", "<missing>", "--output", "<output>"),
     "browser-bundle-record": ("--scenario", "<missing>", "--bundle", "<missing>", "--output", "<output>"),
-    "review-record": ("--type", "finding", "--record", "<missing>", "--output", "<output>"),
+    "review-record": ("--record", "<missing>", "--state-dir", "<state>", "--artifact-root", "<state>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z", "--expected-sequence", "0", "--output", "<output>"),
     "ci-evidence-normalize": ("--raw", "<missing>", "--output", "<output>"),
     "closeout-audit": ("--expected", "<missing>", "--observed", "<missing>", "--output", "<output>"),
     "improvement-index": ("--request", "<missing>", "--output", "<output>"),
@@ -460,6 +460,102 @@ def check_cli(context):
             completed = run([sys.executable, "-m", "workflow_kernel", command, *map(str, arguments)])
             require(completed.returncode == 0, f"{command} valid fixture execution failed")
             outcomes[command] = completed.returncode
+
+        def write_fixture(name, value):
+            path = root / name
+            path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+            return path
+
+        from tests.test_repository_verification import profile, repository
+        verification_profile = write_fixture("repository-profile.json", profile())
+        repository_state = write_fixture("repository-state.json", repository())
+        plan_request = write_fixture("verification-plan-request.json", {
+            "changed_paths": [], "changed_packages": [], "risk_inputs": [],
+            "required_lane_ids": [], "generated_at": "2026-07-14T00:00:00Z",
+        })
+        verification_plan = root / "verification-plan.json"
+        successful("verification-plan", "--profile", verification_profile,
+                   "--repository", repository_state, "--request", plan_request,
+                   "--output", verification_plan)
+        prerequisites = write_fixture("prerequisites.json", {"tool:git": "available"})
+        verification_result = root / "verification-result.json"
+        successful("verification-run", "--plan", verification_plan,
+                   "--profile", verification_profile, "--repository", repository_state,
+                   "--prerequisites", prerequisites, "--lane-id", "doctor",
+                   "--repo-root", root, "--output", verification_result)
+        successful("verification-result", "--result", verification_result,
+                   "--output", root / "validated-verification-result.json")
+
+        from tests.test_evidence_binding import binding
+        evidence_binding = write_fixture("evidence-binding.json", binding())
+        successful("evidence-match", "--expected", evidence_binding,
+                   "--current", evidence_binding, "--output", root / "evidence-match.json")
+
+        safe_artifact = root / "safe-artifact.txt"
+        safe_artifact.write_text("safe fixture\n", encoding="utf-8")
+        classification = root / "artifact-classification.json"
+        successful("artifact-classify", "--repo-root", root, "--path", safe_artifact.name,
+                   "--lifecycle", "durable", "--provenance", "generated",
+                   "--owner", "validator", "--output", classification)
+        classified = json.loads(classification.read_text(encoding="utf-8"))
+        intended = write_fixture("intended-changes.json", [{
+            "operation": "modify", "path": safe_artifact.name,
+            "source_path": None, "expected_digest": classified["digest"],
+        }])
+        records = write_fixture("artifact-records.json", [classified])
+        observed_digests = write_fixture("observed-digests.json", {
+            safe_artifact.name: classified["digest"],
+        })
+        successful("staging-allowlist", "--intended-changes", intended,
+                   "--records", records, "--observed-digests", observed_digests,
+                   "--output", root / "staging-allowlist.json")
+
+        from tests.test_browser_scenarios import bundle, recovery_receipt, scenario
+        browser_scenario = write_fixture("browser-scenario.json", scenario().to_dict())
+        browser_bundle = write_fixture("browser-bundle.json", bundle().to_dict())
+        browser_recovery = write_fixture("browser-recovery.json", recovery_receipt().to_dict())
+        successful("browser-scenario-validate", "--scenario", browser_scenario,
+                   "--output", root / "validated-browser-scenario.json")
+        successful("browser-bundle-record", "--scenario", browser_scenario,
+                   "--bundle", browser_bundle, "--recovery-receipt", browser_recovery,
+                   "--output", root / "sealed-browser-bundle.json")
+
+        from tests.test_review_findings import ReviewFindingTests
+        finding = write_fixture("review-finding.json", ReviewFindingTests().finding())
+        review_state = root / "review-state"
+        successful("review-record", "--record", finding, "--state-dir", review_state,
+                   "--artifact-root", review_state / "artifacts", "--run-id", "review-1",
+                   "--occurred-at", "2026-07-14T00:00:00Z", "--expected-sequence", "0",
+                   "--output", root / "review-record-ref.json")
+
+        from tests.test_ci_evidence import raw
+        successful("ci-evidence-normalize", "--raw", write_fixture("ci-raw.json", raw()),
+                   "--output", root / "ci-evidence.json")
+        from tests.test_closeout import expected as closeout_expected, observed as closeout_observed
+        successful("closeout-audit", "--expected", write_fixture("closeout-expected.json", closeout_expected()),
+                   "--observed", write_fixture("closeout-observed.json", closeout_observed()),
+                   "--output", root / "closeout-audit.json")
+
+        from tests.test_improvements import ImprovementScoutTests
+        improvement = ImprovementScoutTests()
+        index_request = write_fixture("improvement-index-request.json", {
+            "run_id": "feature-run-1", "feature_slug": "feature-run",
+            "sealed_at": "2026-07-14T01:00:00Z", "inputs": [improvement.input()],
+        })
+        improvement_index = root / "improvement-index.json"
+        successful("improvement-index", "--request", index_request, "--output", improvement_index)
+        cleanup, shadow, metrics = improvement.outcomes()
+        finalize_request = write_fixture("improvement-finalize-request.json", {
+            "input_index": json.loads(improvement_index.read_text(encoding="utf-8")),
+            "finalized_at": "2026-07-14T02:00:00Z", "cleanup_outcomes": cleanup,
+            "shadow_outcome": shadow, "metrics": metrics,
+            "candidates": [improvement.candidate()],
+        })
+        improvement_report = root / "improvement-report.json"
+        successful("improvement-finalize", "--request", finalize_request,
+                   "--output", improvement_report)
+        successful("improvement-render", "--report", improvement_report,
+                   "--output", root / "upstream-improvements.md")
 
         def initialize(run_id):
             directory = root / ".workflow-kernel" / "runs" / run_id

@@ -42,7 +42,7 @@ from .repository_verification import (
     derive_verification_plan, validate_repository_profile,
     validate_repository_state, validate_verification_result,
 )
-from .review_records import validate_finding_record, validate_lane_record
+from .review_records import persist_review_record
 from .verification_execution import execute_selected_lane
 
 
@@ -295,6 +295,34 @@ def _write_json(path, value):
             count = os.write(descriptor, pending)
             if count <= 0:
                 raise OSError("json write made no progress")
+            pending = pending[count:]
+        os.fsync(descriptor)
+        directory.require_identity(descriptor, temporary)
+        directory.replace(temporary, binding.path.name)
+        owned.disown_temporary()
+        directory.fsync()
+
+
+def _write_text(path, value):
+    if type(value) is not str:
+        raise ValueError("invalid text output")
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = value.encode("utf-8")
+    binding = bind_durable_path(destination)
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        directory.revalidate()
+        directory.regular_exists(binding.path.name)
+        descriptor, temporary = directory.create_temporary(
+            binding.path.name + ".tmp-", ".txt",
+        )
+        owned.own_temporary(descriptor, temporary)
+        pending = encoded
+        while pending:
+            count = os.write(descriptor, pending)
+            if count <= 0:
+                raise OSError("text write made no progress")
             pending = pending[count:]
         os.fsync(descriptor)
         directory.require_identity(descriptor, temporary)
@@ -1949,8 +1977,14 @@ def command_browser_bundle_record(args):
 
 def command_review_record(args):
     value = _load_json(args.record)
-    validator = {"finding": validate_finding_record, "lane": validate_lane_record}
-    _write_json(args.output, validator[args.type](value))
+    store = EventStore(Path(args.state_dir))
+    with RunLease(store.state_path) as lease:
+        result = persist_review_record(
+            value, Path(args.artifact_root).resolve(strict=False), store, lease,
+            args.expected_sequence,
+            run_id=args.run_id, occurred_at=args.occurred_at,
+        )
+    _write_json(args.output, result)
     return 0
 
 
@@ -1986,7 +2020,7 @@ def command_improvement_finalize(args):
 
 def command_improvement_render(args):
     prompt = render_upstream_prompt(validate_improvement_report(_load_json(args.report)))
-    _write_json(args.output, {"prompt": prompt})
+    _write_text(args.output, prompt)
     return 0
 
 
@@ -2201,8 +2235,12 @@ def parser():
     browser_bundle.set_defaults(handler=command_browser_bundle_record)
 
     review_record = commands.add_parser("review-record", help="validate one finding or lane record")
-    review_record.add_argument("--type", choices=("finding", "lane"), required=True)
     review_record.add_argument("--record", required=True)
+    review_record.add_argument("--state-dir", required=True)
+    review_record.add_argument("--artifact-root", required=True)
+    review_record.add_argument("--run-id", required=True)
+    review_record.add_argument("--occurred-at", required=True)
+    review_record.add_argument("--expected-sequence", type=int, required=True)
     review_record.add_argument("--output", required=True)
     review_record.set_defaults(handler=command_review_record)
 
