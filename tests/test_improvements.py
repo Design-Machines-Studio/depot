@@ -1,6 +1,7 @@
 import copy
 import json
 import unittest
+from pathlib import Path
 
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.improvements import (
@@ -77,10 +78,10 @@ class ImprovementScoutTests(unittest.TestCase):
         )]
         return cleanup, shadow, metrics
 
-    def report(self, candidates):
+    def report(self, candidates, inputs=None):
         cleanup, shadow, metrics = self.outcomes()
         return build_improvement_report(
-            input_index=self.index(), finalized_at="2026-07-14T02:00:00Z",
+            input_index=self.index(inputs), finalized_at="2026-07-14T02:00:00Z",
             cleanup_outcomes=cleanup, shadow_outcome=shadow, metrics=metrics,
             candidates=candidates,
         )
@@ -117,7 +118,13 @@ class ImprovementScoutTests(unittest.TestCase):
             evidence_refs=["plans/feature/evidence/validator-2.json"],
             source_runs=["feature-run-2"], source_chunks=["chunk-2"],
         )
-        report = self.report([repeated, first])
+        second_input = self.input(
+            evidence_id="validator.failure.2",
+            artifact_ref="plans/feature/evidence/validator-2.json",
+            artifact_digest="sha256:" + "2" * 64,
+            source_run="feature-run-2", source_chunk="chunk-2",
+        )
+        report = self.report([repeated, first], [self.input(), second_input])
         self.assertEqual(report["deduped_candidate_count"], 1)
         self.assertEqual(report["candidates"][0]["recurrence_count"], 2)
         self.assertEqual(report["candidates"][0]["status"], "recurring")
@@ -159,6 +166,56 @@ class ImprovementScoutTests(unittest.TestCase):
         extra = copy.deepcopy(report); extra["authority"] = "merge"
         with self.assertRaises(ValueError):
             validate_improvement_report(extra)
+
+    def test_report_binds_candidate_refs_provenance_and_recurrence_to_index(self):
+        hostile = (
+            {"evidence_refs": ["plans/feature/evidence/unsealed.json"]},
+            {"source_runs": ["other-run"]},
+            {"source_stages": ["other-stage"]},
+            {"source_chunks": ["other-chunk"]},
+            {"status": "standing", "recurrence_count": 3,
+             "source_runs": ["feature-run-1", "run-2", "run-3"]},
+        )
+        for mutation in hostile:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                self.report([self.candidate(**mutation)])
+
+    def test_quantified_benefit_requires_available_measured_index_evidence(self):
+        with self.assertRaises(ValueError):
+            self.candidate(expected_benefit="Save 30 percent of review time.")
+        metric_input = self.input(
+            evidence_id="metrics.duration.1",
+            artifact_ref="plans/feature/metrics.json",
+            artifact_digest="sha256:" + "3" * 64,
+            observation_category="measured_metric",
+        )
+        measured = self.candidate(
+            benefit_basis="measured",
+            expected_benefit="Measured evidence shows 30 percent less review time.",
+            benefit_evidence_refs=["plans/feature/metrics.json"],
+        )
+        report = self.report([measured], [self.input(), metric_input])
+        self.assertEqual(report["candidates"][0]["benefit_basis"], "measured")
+        unavailable = copy.deepcopy(metric_input)
+        unavailable["availability"] = "unavailable"
+        with self.assertRaises(ValueError):
+            self.report([measured], [self.input(), unavailable])
+
+    def test_full_cli_and_codex_native_prose_encode_two_stage_order(self):
+        root = Path(__file__).resolve().parents[1]
+        marker = (
+            "stage_a_seal", "docker_artifact_git_cleanup",
+            "authoritative_terminal_receipt", "shadow_compare_metrics",
+            "stage_b_finalize",
+        )
+        for relative in (
+            "plugins/pipeline/commands/pipeline.md",
+            "plugins/pipeline/commands/pipeline-run.md",
+        ):
+            document = (root / relative).read_text()
+            positions = [document.index(value) for value in marker]
+            with self.subTest(document=relative):
+                self.assertEqual(positions, sorted(positions))
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ _REQUIRED_METRICS = frozenset({
     "duration_seconds", "wait_seconds", "attempt_count",
     "provider_attempt_count", "finding_contribution_count", "usage_count",
 })
+_NUMERIC_CLAIM = re.compile(r"\d")
 
 
 def _fail(message):
@@ -242,6 +243,9 @@ def _candidate(value):
         _fail("measured benefit lacks evidence")
     if result["benefit_basis"] == "qualitative" and result["benefit_evidence_refs"]:
         _fail("qualitative benefit claims measured evidence")
+    if (result["benefit_basis"] == "qualitative"
+            and _NUMERIC_CLAIM.search(result["expected_benefit"])):
+        _fail("qualitative benefit contains quantified claim")
     if result["merge_release_authority"] is not False:
         _fail("Scout candidate claims merge or release authority")
     expected_id = candidate_id(result["dedupe_key"])
@@ -342,9 +346,7 @@ def _dedupe(candidates):
         for field in ("evidence_refs", "source_runs", "source_stages", "source_chunks",
                       "existing_control_refs", "benefit_evidence_refs"):
             merged[field] = sorted({entry for item in items for entry in item[field]})
-        merged["recurrence_count"] = max(
-            max(item["recurrence_count"] for item in items), len(merged["source_runs"]),
-        )
+        merged["recurrence_count"] = len(merged["source_runs"])
         if merged["status"] in {"one-off", "recurring", "standing"}:
             merged["status"] = (
                 "standing" if merged["recurrence_count"] >= 3
@@ -352,6 +354,40 @@ def _dedupe(candidates):
             )
         result.append(_candidate(merged))
     return result, sum(len(items) - 1 for items in groups.values())
+
+
+def _bind_candidate_to_index(candidate, index_inputs):
+    """Reject claimed provenance that the sealed Stage A index cannot prove."""
+    item = _candidate(dict(candidate))
+    by_reference = {}
+    for record in index_inputs:
+        by_reference.setdefault(record["artifact_ref"], []).append(record)
+    if any(reference not in by_reference for reference in item["evidence_refs"]):
+        _fail("candidate evidence is absent from sealed input index")
+    records = [
+        record for reference in item["evidence_refs"]
+        for record in by_reference[reference]
+    ]
+    expected = {
+        "source_runs": sorted({record["source_run"] for record in records}),
+        "source_stages": sorted({record["source_stage"] for record in records}),
+        "source_chunks": sorted({
+            record["source_chunk"] for record in records
+            if record["source_chunk"] is not None
+        }),
+    }
+    for field, values in expected.items():
+        if sorted(item[field]) != values:
+            _fail("candidate provenance disagrees with sealed input index")
+    if item["recurrence_count"] != len(expected["source_runs"]):
+        _fail("candidate recurrence disagrees with distinct indexed runs")
+    for reference in item["benefit_evidence_refs"]:
+        records = by_reference.get(reference)
+        if not records or not any(
+            record["availability"] == "available" for record in records
+        ):
+            _fail("measured benefit evidence is absent or unavailable")
+    return item
 
 
 def validate_improvement_report(value):
@@ -397,7 +433,11 @@ def validate_improvement_report(value):
 def build_improvement_report(*, input_index, finalized_at, cleanup_outcomes,
                              shadow_outcome, metrics, candidates):
     index = validate_input_index(input_index)
-    consolidated, deduped_count = _dedupe(candidates)
+    bound = [
+        _bind_candidate_to_index(candidate, index["inputs"])
+        for candidate in candidates
+    ]
+    consolidated, deduped_count = _dedupe(bound)
     body = {
         "schema_version": 1, "record_kind": "improvement-report",
         "run_id": index["run_id"], "feature_slug": index["feature_slug"],

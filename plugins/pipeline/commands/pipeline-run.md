@@ -153,6 +153,8 @@ cleanup, the authoritative terminal receipt, and shadow comparison/metrics.
 Run it on clean runs. Empty output is valid. Scout code observes and proposes;
 it cannot schedule, mutate, route, release, or approve anything.
 
+`SCOUT_ORDER: stage_a_seal -> docker_artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_compare_metrics -> stage_b_finalize`
+
 ## Process
 
 1. Read the manifest

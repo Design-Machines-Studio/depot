@@ -584,7 +584,10 @@ Before presenting this gate, confirm the orchestrator's Step 5b ran its reposito
          plans/<slug>/assessment.html \
          plans/<slug>/research.html \
          plans/<slug>/plan.html \
-         plans/<slug>/final-requirements-crosscheck.md
+         plans/<slug>/final-requirements-crosscheck.md \
+         plans/<slug>/improvement-input-index.json \
+         plans/<slug>/upstream-improvements.json \
+         plans/<slug>/upstream-improvement-prompt.md
    ```
    Every filename carries the `plans/<slug>/` prefix. Without it the `rm` silently matches nothing and the artifacts accumulate.
 4. Only `receipt.md` remains in `plans/<feature-slug>/`.
@@ -602,6 +605,8 @@ receipt, and shadow comparison/metrics, require it to finalize
 this exact order. Empty output is valid. The Scout is proposal-only and cannot
 modify current findings, sources, routing, PR/issues, releases, marketplaces,
 installed caches, or merge state.
+
+`SCOUT_ORDER: stage_a_seal -> docker_artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_compare_metrics -> stage_b_finalize`
 
 ## Self-Audit
 
