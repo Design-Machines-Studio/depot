@@ -15,6 +15,7 @@ _LAZY_EXPORTS = {
     "HostAdapter": (".host", "HostAdapter"),
     "capabilities_from_harness_profile": (".host", "capabilities_from_harness_profile"),
     "IsolationSelector": (".isolation", "IsolationSelector"),
+    "BrowserScenarioAdapter": (".browser", "BrowserScenarioAdapter"),
 }
 
 
@@ -32,6 +33,6 @@ def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_EXPORTS))
 
 __all__ = [
-    "BuilderSessionManager", "HostAdapter", "IsolationSelector",
+    "BrowserScenarioAdapter", "BuilderSessionManager", "HostAdapter", "IsolationSelector",
     "capabilities_from_harness_profile",
 ]

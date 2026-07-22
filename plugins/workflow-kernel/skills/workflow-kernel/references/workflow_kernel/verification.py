@@ -500,3 +500,26 @@ class VerificationGate:
         if not required:
             return CoverageDecision(True, "optional_persona_cases_only")
         return CoverageDecision(True, "required_persona_coverage_complete")
+
+
+def bind_browser_scenario(profile, scenario):
+    """Bind one strict scenario to an existing declared persona case."""
+    from .browser_scenario import snapshot_browser_scenario
+
+    profile = _snapshot_verification_profile(profile)
+    scenario = snapshot_browser_scenario(scenario)
+    case = next((item for item in profile.cases if item.case_id == scenario.case_id), None)
+    if (
+        case is None or scenario.profile_id != profile.profile_id
+        or scenario.persona_id != case.persona_id
+        or scenario.scenario_id != case.scenario_id
+        or scenario.initial_route != case.route
+        or scenario.primary_engine != case.browser_engine
+        or scenario.viewport != case.viewport
+        or scenario.target_origin_digest != profile.target_origin_digest
+        or scenario.primary_engine not in profile.configured_engines
+        or scenario.alternate_engine is not None
+        and scenario.alternate_engine not in profile.configured_engines
+    ):
+        _invalid("invalid_browser_scenario_binding")
+    return scenario
