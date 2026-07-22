@@ -86,9 +86,9 @@ class EventStoreTests(unittest.TestCase):
             translate_pipeline_receipts([overlong])
         self.assertNotIn(sentinel, str(raised.exception))
 
-        def case_id(index):
-            prefix = f"case-{index:03d}-"
-            return prefix + "x" * (256 - len(prefix))
+        from tests.test_browser_recovery import BrowserRecoveryTests
+        helper = BrowserRecoveryTests(); helper.setUp()
+        recovery = helper.blocked_with_unavailable_readiness()
 
         browser = {
             "run_id": "run-browser", "sequence": 0, "stage": "browser_recovery",
@@ -96,16 +96,14 @@ class EventStoreTests(unittest.TestCase):
             "node_id": "review-browser",
             "human_intervention_id": "human-browser-boundary",
             "human_intervention_reason": "browser_evidence_unavailable",
-            "missing_case_ids": [case_id(index) for index in range(64)],
+            "missing_case_ids": ["case-1"],
+            "recovery_receipts": [recovery.to_dict()],
             "occurred_at": "2026-07-14T00:00:00Z",
             "authoritative_receipt": "receipts/browser-boundary.json",
         }
         event = translate_review_receipts([browser])[0]
-        self.assertEqual(len(event.payload["missing_case_ids"]), 64)
-        over_document = dict(browser)
-        over_document["missing_case_ids"] = [case_id(index) for index in range(65)]
-        with self.assertRaises(ValueError):
-            translate_review_receipts([over_document])
+        self.assertEqual(event.payload["missing_case_ids"], ("case-1",))
+        self.assertEqual(len(event.payload["recovery_receipt_digests"]), 1)
         over_count = dict(browser)
         over_count["missing_case_ids"] = [f"case-{index}" for index in range(257)]
         with self.assertRaises(ValueError):

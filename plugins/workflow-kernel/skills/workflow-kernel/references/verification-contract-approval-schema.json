@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/verification-contract-approval-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "actor", "decision", "occurred_at", "run_id", "nonce", "previous_contract_digest", "candidate_contract_digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "actor": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "decision": {"const": "approved"},
+    "occurred_at": {"type": "string", "format": "date-time", "pattern": "Z$"},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "nonce": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "previous_contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

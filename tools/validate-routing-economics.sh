@@ -234,7 +234,7 @@ require_text "$orchestrator" "providerSplit:" "orchestrator summary records prov
 require_text "$orchestrator" "eligibleProviderSplit:" "orchestrator records eligible provider usage"
 require_text "$orchestrator" "deficit-round-robin" "orchestrator applies routing pressure during dispatch"
 require_text "$orchestrator" "routingOverride" "orchestrator rejects silent executor overrides"
-require_text "$orchestrator" 'decide-validation-retry --reason deterministic_validation_failure' "orchestrator delegates retry policy to the kernel CLI"
+require_text "$orchestrator" 'decide-validation-retry --state-dir .workflow-kernel/runs/<run-id> --reason deterministic_validation_failure' "orchestrator delegates retry policy to authoritative kernel run state"
 require_text "$orchestrator" 'reason_code: deterministic_validation_failure' "orchestrator projects the exact ValidationFeedback reason"
 require_text "$orchestrator" 'builder_session_continuity' "orchestrator records strict builder continuity"
 require_text "$orchestrator" 'replacement_adapter_dispatch_failed' "orchestrator preserves replacement-dispatch failure reasons"

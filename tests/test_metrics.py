@@ -7,9 +7,31 @@ from workflow_kernel.metrics import MetricsAggregator
 from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
 from workflow_kernel.dm_review_adapter import translate_review_receipts
 from workflow_kernel.schema import WorkflowEvent
+from workflow_kernel._translation import canonical_finding_identity
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
+
+
+def contribution_identity():
+    values = {
+        "finding_path": "internal/review.py",
+        "finding_anchor": "review.finding",
+        "finding_category": "trust boundary",
+        "finding_root_cause": "unbound source contribution",
+    }
+    values["canonical_finding_id"] = canonical_finding_identity(
+        values["finding_path"], values["finding_anchor"],
+        values["finding_category"], values["finding_root_cause"],
+    )[0]
+    return values
+
+
+CONTRIBUTION_PROVENANCE = {
+    "lane": "security", "requested_provider": "openrouter",
+    "attempted_provider": "openai", "implemented_by": "codex",
+    "provider": "openai", "model": "gpt-5.6-sol", "source_severity": "P2",
+}
 
 
 class MetricsTests(unittest.TestCase):
@@ -264,11 +286,12 @@ class MetricsTests(unittest.TestCase):
             "stage": "finding_contribution", "status": "recorded",
             "node_id": "chunk-a", "chunk_id": "chunk-a", "attempt": 1,
             "reviewer": "security", "lane": "security",
-            "source_finding_id": "source-a", "canonical_finding_id": "finding-a",
+            "source_finding_id": "source-a", **contribution_identity(),
             "finding_disposition": "retained", "agreement": "unique",
             "decision_reason_code": "retained-unique",
             "provider": "openrouter", "model": "review-model",
             "evidence_ref": "raw/security.json",
+            **CONTRIBUTION_PROVENANCE,
             "occurred_at": "2026-07-14T00:00:00Z",
             "authoritative_receipt": "receipts/contribution.json",
         }
@@ -283,8 +306,9 @@ class MetricsTests(unittest.TestCase):
             "run_id": "ambiguous-coverage", "stage": "finding_contribution",
             "status": "recorded", "node_id": "review-convergence",
             "chunk_id": "chunk-a", "attempt": 1,
-            "canonical_finding_id": "finding-a", "agreement": "corroborated",
+            **contribution_identity(), "agreement": "corroborated",
             "evidence_ref": "raw/reviewer-a.json",
+            **CONTRIBUTION_PROVENANCE,
         }
         receipts = [
             {**common, "sequence": 0, "reviewer": "security", "lane": "security",
@@ -347,9 +371,10 @@ class MetricsTests(unittest.TestCase):
         common = {
             "run_id": "review-economics", "stage": "finding_contribution",
             "status": "recorded", "node_id": "review-convergence",
-            "canonical_finding_id": "finding-a",
+            **contribution_identity(),
             "agreement": "corroborated", "attempt": 1,
             "evidence_ref": "raw/findings.json",
+            **CONTRIBUTION_PROVENANCE,
         }
         receipts = [
             {**common, "sequence": 0, "occurred_at": "2026-07-14T00:00:00Z",

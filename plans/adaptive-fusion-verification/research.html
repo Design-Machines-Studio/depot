@@ -8,25 +8,31 @@
   <meta name="pipeline-artifact" content="research">
   <title>Research Brief: Adaptive Fusion and Verification</title>
   <style>
-    :root { color-scheme: light dark; --measure: 70rem; }
+    :root { color-scheme: light dark; --measure: 65ch; --reel-max: 80rem; --space-1: 0.375rem; --space-2: 0.75rem; --space-3: 1rem; --space-4: 1.5rem; --space-5: 2rem; --surface: Canvas; --text: CanvasText; --muted: GrayText; --rule: GrayText; --link: LinkText; --control: ButtonFace; --control-text: ButtonText; --control-hover: Highlight; --control-hover-text: HighlightText; --control-active: SelectedItem; --control-active-text: SelectedItemText; --focus: Highlight; --font-body: system-ui, -apple-system, "Segoe UI", sans-serif; --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
     * { box-sizing: border-box; }
-    body { margin: 0; font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; background: Canvas; color: CanvasText; }
-    h1, h2, h3 { line-height: 1.2; }
+    body { margin: 0; font: 1rem/1.6 var(--font-body); background: var(--surface); color: var(--text); }
+    h1, h2, h3 { line-height: 1.2; text-wrap: balance; }
     h1 { font-size: 1.875rem; }
-    h2 { font-size: 1.375rem; margin-top: 2rem; }
+    h2 { font-size: 1.375rem; margin-top: var(--space-5); }
     h3 { font-size: 1.125rem; }
-    a { color: LinkText; }
-    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    pre { overflow-x: auto; padding: 0.75rem; border: 1px solid GrayText; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid GrayText; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
-    .skip-link { position: absolute; left: -9999px; top: 0; }
-    .skip-link:focus { left: 0; padding: 0.5rem 1rem; z-index: 10; }
-    .artifact-main, .artifact-header { max-width: var(--measure); margin-inline: auto; padding: 1rem; }
-    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: 0.75rem; list-style: none; padding: 0; }
-    .artifact-meta, small { color: GrayText; }
-    .stack > * + * { margin-block-start: 1.5rem; }
-    @media print { nav { display: none; } .artifact-main { max-width: none; } }
+    a { color: var(--link); }
+    a:hover { text-decoration-thickness: 0.15em; }
+    a:focus-visible, .reel:focus-visible { outline: 0.2rem solid var(--focus); outline-offset: 0.2rem; }
+    code, pre { font-family: var(--font-mono); }
+    pre { overflow-x: auto; padding: var(--space-2); border: 1px solid var(--rule); }
+    table { border-collapse: collapse; min-width: 42rem; width: 100%; }
+    caption { font-weight: 700; padding-block-end: var(--space-2); text-align: left; }
+    th, td { border: 1px solid var(--rule); padding: var(--space-1) var(--space-2); text-align: left; vertical-align: top; }
+    th { font-weight: 650; }
+    .skip-link { position: absolute; left: -9999px; top: var(--space-2); background: var(--surface); color: var(--text); }
+    .skip-link:focus { left: var(--space-2); padding: var(--space-2) var(--space-3); z-index: 10; }
+    .scheme-subtle { background: var(--surface); color: var(--text); }
+    .center, .artifact-main, .artifact-header, .artifact-footer { max-width: var(--measure); margin-inline: auto; padding: var(--space-3); }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; padding: 0; }
+    .artifact-meta, small { color: var(--muted); }
+    .stack > * + * { margin-block-start: var(--space-4); }
+    .reel { width: min(var(--reel-max), calc(100vw - 2rem)); max-width: none; overflow-x: auto; overscroll-behavior-inline: contain; position: relative; left: 50%; transform: translateX(-50%); }
+    @media print { nav { display: none; } .artifact-main { max-width: none; } .reel { left: auto; transform: none; width: 100%; overflow: visible; } }
   </style>
 </head>
 <body class="scheme-subtle">
@@ -99,18 +105,19 @@
 
     <section aria-labelledby="codebase-patterns">
       <h2 id="codebase-patterns">Codebase Patterns</h2>
-      <table>
-        <thead><tr><th>Need</th><th>Existing pattern to reuse</th><th>Extension</th></tr></thead>
+      <div class="reel" role="region" aria-label="Codebase patterns table" tabindex="0"><table>
+        <caption>Existing codebase patterns and proposed extensions</caption>
+        <thead><tr><th scope="col">Need</th><th scope="col">Existing pattern to reuse</th><th scope="col">Extension</th></tr></thead>
         <tbody>
-          <tr><td>Content-addressed contract</td><td><code>VerificationProfile.profile_id</code>, document digests, prediction binding</td><td>New separate <code>behavioral_contract.py</code> and schema version 1</td></tr>
-          <tr><td>Pre-build gate</td><td>Existing evidence gate and workflow safety anchor</td><td>Add <code>verification_contract</code> node before executable build nodes</td></tr>
-          <tr><td>Contract binding</td><td><code>evidence.recorded</code> and once-only prediction artifacts</td><td>Bind after <code>run.started</code> and before dispatch; revalidate before accepting builder output</td></tr>
-          <tr><td>Validation recovery</td><td><code>RetryPolicy.decide</code>, <code>AttemptLedger</code>, <code>ValidationFeedback</code>, <code>BuilderSessionManager.resume_or_replace</code></td><td>Make host follow-up/replacement authoritative and receipt-backed</td></tr>
-          <tr><td>Synthesis</td><td>dm-review consolidator, guardrails, output format, lane receipts</td><td>Add synthesis decisions and <code>finding_contribution</code> events without changing existing finding semantics</td></tr>
-          <tr><td>Selective depth</td><td>Approved plan fields, routing policy, focused/full review tiers</td><td>Add <code>decisionProfile</code>; derive extra opinion/verification independently</td></tr>
-          <tr><td>Economics</td><td>ReliabilityReport totals, active compute, typed waits, postmortem quality ledger</td><td>Add ordered attempt economics, contribution dimensions, and measurement coverage</td></tr>
+          <tr><th scope="row">Content-addressed contract</th><td><code>VerificationProfile.profile_id</code>, document digests, prediction binding</td><td>New separate <code>behavioral_contract.py</code> and schema version 1</td></tr>
+          <tr><th scope="row">Pre-build gate</th><td>Existing evidence gate and workflow safety anchor</td><td>Add <code>verification_contract</code> node before executable build nodes</td></tr>
+          <tr><th scope="row">Contract binding</th><td><code>evidence.recorded</code> and once-only prediction artifacts</td><td>Bind after <code>run.started</code> and before dispatch; revalidate before accepting builder output</td></tr>
+          <tr><th scope="row">Validation recovery</th><td><code>RetryPolicy.decide</code>, <code>AttemptLedger</code>, <code>ValidationFeedback</code>, <code>BuilderSessionManager.resume_or_replace</code></td><td>Make host follow-up/replacement authoritative and receipt-backed</td></tr>
+          <tr><th scope="row">Synthesis</th><td>dm-review consolidator, guardrails, output format, lane receipts</td><td>Add synthesis decisions and <code>finding_contribution</code> events without changing existing finding semantics</td></tr>
+          <tr><th scope="row">Selective depth</th><td>Approved plan fields, routing policy, focused/full review tiers</td><td>Add <code>decisionProfile</code>; derive extra opinion/verification independently</td></tr>
+          <tr><th scope="row">Economics</th><td>ReliabilityReport totals, active compute, typed waits, postmortem quality ledger</td><td>Add ordered attempt economics, contribution dimensions, and measurement coverage</td></tr>
         </tbody>
-      </table>
+      </table></div>
       <p>Canonical edits belong in Claude command/manifests and shared skill/agent/reference files. Regenerate Codex command aliases after command edits and Codex manifests after canonical manifest/version edits; never hand-edit generated surfaces.</p>
     </section>
 

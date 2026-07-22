@@ -18,17 +18,28 @@ before dispatch. Idempotent retry may reproduce only that exact binding.
 `revise-verification-contract` requires the current contract digest, the next
 revision, and exact added/retained/removed obligation sets. Any behavioral
 weakening—including removed requirements, regressions, proof links, persona or
-browser cases, weaker baseline expectations, changed argv, or reduced manual
-coverage—requires durable human approval evidence. Stale digests, unsupported
+browser cases, every downward transition in the closed
+`must_fail > may_pass > not_runnable` order, changed argv, or reduced manual
+coverage—requires a content-addressed approval receipt bound to its actor,
+approved decision, normalized UTC timestamp, fresh host-issued nonce, run ID,
+and exact prior/candidate contract digests. The coordinator must record the
+reserved `verification_contract_revision_authorized` lifecycle event before
+revision; a self-authored receipt file is not authority. Stale digests, unsupported
 schema versions, unsafe argv, unauthorized weakening, symlink escapes, and
 unsafe durable paths fail closed without partial artifacts or raw hostile data.
 
 The behavioral contract and declared persona/browser profile are one evidence
-boundary. Contract `persona_case_ids` and `browser_case_ids` must refer to the
-authoritative selected cases below; neither layer may fabricate, silently drop,
+boundary. The contract records the authoritative profile ID and full-document
+digest. Contract `persona_case_ids` and `browser_case_ids` must each exactly
+equal the required selected case IDs below; neither layer may fabricate, silently drop,
 or reinterpret required coverage. Contract evidence is established before any
 implementation dispatch, and later deterministic-validation feedback stays
 bound to its current digest and revision.
+
+Pipeline materializes the authoritative profile before the contract. Discovery
+status `not_declared` is still an authoritative non-null profile and binds empty
+persona/browser case arrays. A null profile ID/digest pair means legacy/no-profile
+input only; both arrays must then be empty and no profile artifact flag is passed.
 
 Required browser evidence follows one primary recovery ladder: preserve the
 failed attempt, quit the primary process or engine session, launch and prove a

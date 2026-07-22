@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
@@ -17,6 +18,7 @@ from .redaction import (
 
 SCHEMA_VERSION = 1
 MAX_CONTRACT_BYTES = 1_048_576
+MAX_APPROVAL_BYTES = 65_536
 MAX_COLLECTION_ITEMS = 1_024
 MAX_ARGV_ITEMS = 256
 MAX_OBLIGATION_ITEMS = 4_096
@@ -24,7 +26,8 @@ MAX_OBLIGATION_ITEMS = 4_096
 _ROOT_FIELDS = frozenset({
     "schema_version", "contract_id", "revision", "previous_contract_digest",
     "requirements", "prohibited_regressions", "checks", "persona_case_ids",
-    "browser_case_ids", "manual_requirements", "revision_justification",
+    "browser_case_ids", "verification_profile_id", "verification_profile_digest",
+    "manual_requirements", "revision_justification",
 })
 _STATEMENT_FIELDS = frozenset({"id", "source_ref", "statement"})
 _CHECK_FIELDS = frozenset({
@@ -38,12 +41,18 @@ _JUSTIFICATION_FIELDS = frozenset({
     "human_approval_evidence_ref",
 })
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+_PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}")
 _STABLE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 _CONTRACT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
 _REQUIREMENT_ID = re.compile(r"REQ-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _REGRESSION_ID = re.compile(r"REG-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _CHECK_ID = re.compile(r"CHK-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _BASELINE_EXPECTATIONS = frozenset({"must_fail", "may_pass", "not_runnable"})
+_BASELINE_STRENGTH = {"not_runnable": 0, "may_pass": 1, "must_fail": 2}
+_APPROVAL_FIELDS = frozenset({
+    "schema_version", "actor", "decision", "occurred_at", "run_id",
+    "nonce", "previous_contract_digest", "candidate_contract_digest",
+})
 _SHELL_EXECUTABLES = frozenset({
     "ash", "bash", "csh", "dash", "fish", "ksh", "mksh", "powershell",
     "cmd", "cmd.exe", "powershell.exe", "pwsh", "pwsh.exe", "sh", "tcsh",
@@ -321,6 +330,15 @@ def validate_contract(value):
     previous = value["previous_contract_digest"]
     if previous is not None and (type(previous) is not str or _DIGEST.fullmatch(previous) is None):
         _fail("invalid previous_contract_digest")
+    profile_id = value["verification_profile_id"]
+    profile_digest = value["verification_profile_digest"]
+    if (profile_id is None) != (profile_digest is None):
+        _fail("verification profile identity is incomplete")
+    if profile_id is not None and (
+        type(profile_id) is not str or _PROFILE_ID.fullmatch(profile_id) is None
+        or type(profile_digest) is not str or _DIGEST.fullmatch(profile_digest) is None
+    ):
+        _fail("invalid verification profile identity")
 
     requirements, requirement_ids = _validate_statement_records(
         value["requirements"], "requirement", _REQUIREMENT_ID,
@@ -387,6 +405,8 @@ def validate_contract(value):
     browser_ids = _unique_strings(
         value["browser_case_ids"], "browser case id", pattern=_STABLE_ID,
     )
+    if (persona_ids or browser_ids) and profile_id is None:
+        _fail("selected cases require verification profile identity")
     manual = []
     manual_ids = set()
     for raw in _list(value["manual_requirements"], "manual_requirements"):
@@ -454,7 +474,10 @@ def validate_contract(value):
         "revision": revision, "previous_contract_digest": previous,
         "requirements": requirements, "prohibited_regressions": regressions,
         "checks": checks, "persona_case_ids": persona_ids,
-        "browser_case_ids": browser_ids, "manual_requirements": manual,
+        "browser_case_ids": browser_ids,
+        "verification_profile_id": profile_id,
+        "verification_profile_digest": profile_digest,
+        "manual_requirements": manual,
         "revision_justification": justification,
     }
     obligation_count = (
@@ -498,6 +521,72 @@ def obligations(contract):
     return frozenset(result)
 
 
+def verification_profile_digest(profile):
+    from .verification import VerificationProfile
+
+    canonical = VerificationProfile.from_dict(profile).to_dict()
+    encoded = json.dumps(
+        canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def parse_profile_bytes(raw):
+    from .verification import VerificationProfile
+
+    if type(raw) is not bytes or len(raw) > MAX_CONTRACT_BYTES:
+        _fail("verification profile document exceeds size limit")
+    try:
+        text = raw.decode("utf-8")
+        parse_json_document(text)
+        value = json.loads(
+            text, parse_int=bounded_json_int,
+            parse_constant=lambda _raw: _fail("non-finite JSON constant"),
+            object_pairs_hook=_duplicate_rejecting_object,
+        )
+    except (UnicodeError, json.JSONDecodeError, RecursionError):
+        _fail("invalid verification profile JSON")
+    return VerificationProfile.from_dict(value).to_dict()
+
+
+def load_profile(path):
+    binding = bind_durable_path(Path(path))
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        descriptor = owned.own(directory.open_regular(binding.path.name, os.O_RDONLY))
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(65_536, MAX_CONTRACT_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_CONTRACT_BYTES:
+                _fail("verification profile document exceeds size limit")
+        directory.require_identity(descriptor, binding.path.name)
+        return parse_profile_bytes(b"".join(chunks))
+
+
+def validate_profile_binding(contract, profile):
+    """Bind selected persona/browser cases to one authoritative profile."""
+    from .verification import VerificationProfile
+
+    canonical = validate_contract(contract)
+    authoritative = VerificationProfile.from_dict(profile)
+    digest = verification_profile_digest(authoritative.to_dict())
+    if (canonical["verification_profile_id"] != authoritative.profile_id
+            or canonical["verification_profile_digest"] != digest):
+        _fail("verification profile identity mismatch")
+    required_ids = {
+        case.case_id for case in authoritative.cases if case.required
+    }
+    if (set(canonical["persona_case_ids"]) != required_ids
+            or set(canonical["browser_case_ids"]) != required_ids):
+        _fail("contract selected cases do not match authoritative profile")
+    return canonical
+
+
 def _potential_weakening(previous, candidate):
     previous_requirements = {item["id"]: item for item in previous["requirements"]}
     candidate_requirements = {item["id"]: item for item in candidate["requirements"]}
@@ -519,10 +608,8 @@ def _potential_weakening(previous, candidate):
             continue
         if old["argv"] != new["argv"]:
             return True
-        if (
-            old["baseline_expectation"] == "must_fail"
-            and new["baseline_expectation"] != "must_fail"
-        ):
+        if (_BASELINE_STRENGTH[new["baseline_expectation"]]
+                < _BASELINE_STRENGTH[old["baseline_expectation"]]):
             return True
     previous_manual = {
         item["requirement_id"]: item for item in previous["manual_requirements"]
@@ -532,6 +619,12 @@ def _potential_weakening(previous, candidate):
     }
     if any(candidate_manual.get(identifier) != item
            for identifier, item in previous_manual.items()):
+        return True
+    if (
+        previous["verification_profile_id"] != candidate["verification_profile_id"]
+        or previous["verification_profile_digest"]
+        != candidate["verification_profile_digest"]
+    ):
         return True
     return False
 
@@ -553,7 +646,57 @@ def validate_initial_binding(contract):
     return canonical
 
 
-def validate_revision(previous, candidate, previous_digest):
+def validate_approval_evidence(value, *, previous_digest, candidate_digest, run_id):
+    """Authenticate one closed approval receipt for an exact contract transition."""
+    item = _object(value, _APPROVAL_FIELDS, "approval evidence")
+    if _strict_int(item["schema_version"], "approval schema_version", minimum=1) != 1:
+        _fail("unsupported approval schema_version")
+    actor = _string(item["actor"], "approval actor", pattern=_STABLE_ID, durable=False)
+    if item["decision"] != "approved":
+        _fail("approval decision is not approved")
+    occurred_at = _string(item["occurred_at"], "approval occurred_at", maximum=64)
+    try:
+        parsed = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+    except ValueError:
+        _fail("invalid approval occurred_at")
+    if parsed.tzinfo is None or parsed.utcoffset() is None or not occurred_at.endswith("Z"):
+        _fail("approval occurred_at must be timezone-aware")
+    parsed = parsed.astimezone(timezone.utc)
+    occurred_at = parsed.isoformat().replace("+00:00", "Z")
+    if _string(item["run_id"], "approval run_id", pattern=_STABLE_ID, durable=False) != run_id:
+        _fail("approval run mismatch")
+    nonce = _string(item["nonce"], "approval nonce", pattern=_STABLE_ID, durable=False)
+    if item["previous_contract_digest"] != previous_digest:
+        _fail("approval prior contract digest mismatch")
+    if item["candidate_contract_digest"] != candidate_digest:
+        _fail("approval candidate contract digest mismatch")
+    return {
+        "schema_version": 1, "actor": actor, "decision": "approved",
+        "occurred_at": occurred_at, "run_id": run_id, "nonce": nonce,
+        "previous_contract_digest": previous_digest,
+        "candidate_contract_digest": candidate_digest,
+    }
+
+
+def approval_bytes(value, *, previous_digest, candidate_digest, run_id):
+    canonical = validate_approval_evidence(
+        value, previous_digest=previous_digest,
+        candidate_digest=candidate_digest, run_id=run_id,
+    )
+    return json.dumps(
+        canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def approval_digest(value, *, previous_digest, candidate_digest, run_id):
+    return "sha256:" + hashlib.sha256(approval_bytes(
+        value, previous_digest=previous_digest,
+        candidate_digest=candidate_digest, run_id=run_id,
+    )).hexdigest()
+
+
+def validate_revision(previous, candidate, previous_digest, *,
+                      approval_evidence=None, run_id=None):
     previous = validate_contract(previous)
     candidate = validate_contract(candidate)
     if (
@@ -574,8 +717,18 @@ def validate_revision(previous, candidate, previous_digest):
     if any(justification[name] != values for name, values in expected.items()):
         _fail("revision obligation deltas do not match contracts")
     weakening = bool(old - new) or _potential_weakening(previous, candidate)
-    if weakening and justification["human_approval_evidence_ref"] is None:
-        _fail("weakening requires human approval evidence")
+    if weakening:
+        if justification["human_approval_evidence_ref"] is None:
+            _fail("weakening requires human approval evidence")
+        if approval_evidence is None or run_id is None:
+            _fail("weakening requires authenticated approval evidence")
+        validate_approval_evidence(
+            approval_evidence, previous_digest=previous_digest,
+            candidate_digest=contract_digest(candidate), run_id=run_id,
+        )
+    elif (approval_evidence is not None
+          or justification["human_approval_evidence_ref"] is not None):
+        _fail("approval evidence supplied for non-weakening revision")
     return candidate
 
 
@@ -604,6 +757,25 @@ def parse_contract_bytes(raw):
     return validate_contract(value)
 
 
+def parse_approval_bytes(raw, *, previous_digest, candidate_digest, run_id):
+    if type(raw) is not bytes or len(raw) > MAX_APPROVAL_BYTES:
+        _fail("approval document exceeds size limit")
+    try:
+        text = raw.decode("utf-8")
+        parse_json_document(text)
+        value = json.loads(
+            text, parse_int=bounded_json_int,
+            parse_constant=lambda _raw: _fail("non-finite JSON constant"),
+            object_pairs_hook=_duplicate_rejecting_object,
+        )
+    except (UnicodeError, json.JSONDecodeError, RecursionError):
+        _fail("invalid approval JSON")
+    return validate_approval_evidence(
+        value, previous_digest=previous_digest,
+        candidate_digest=candidate_digest, run_id=run_id,
+    )
+
+
 def load_contract(path):
     """Read one symlink-safe bounded contract document."""
     binding = bind_durable_path(Path(path))
@@ -622,3 +794,26 @@ def load_contract(path):
                 _fail("contract document exceeds size limit")
         directory.require_identity(descriptor, binding.path.name)
         return parse_contract_bytes(b"".join(chunks))
+
+
+def load_approval(path, *, previous_digest, candidate_digest, run_id):
+    """Read one symlink-safe bounded approval receipt."""
+    binding = bind_durable_path(Path(path))
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        descriptor = owned.own(directory.open_regular(binding.path.name, os.O_RDONLY))
+        chunks = []
+        total = 0
+        while True:
+            chunk = os.read(descriptor, min(8192, MAX_APPROVAL_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_APPROVAL_BYTES:
+                _fail("approval document exceeds size limit")
+        directory.require_identity(descriptor, binding.path.name)
+        return parse_approval_bytes(
+            b"".join(chunks), previous_digest=previous_digest,
+            candidate_digest=candidate_digest, run_id=run_id,
+        )

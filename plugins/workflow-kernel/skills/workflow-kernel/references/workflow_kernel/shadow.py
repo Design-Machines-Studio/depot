@@ -87,7 +87,10 @@ def _routing_fact(event: WorkflowEvent, *, normalize_host: bool = False) -> tupl
     return host, mechanism, provider
 
 
-def _semantic(event: WorkflowEvent, *, normalize_host: bool = False) -> tuple:
+def _semantic(
+    event: WorkflowEvent, *, normalize_host: bool = False,
+    ignore_economics: bool = False,
+) -> tuple:
     payload = event.payload
     routing = _routing_fact(event, normalize_host=normalize_host)
     decision_profile = payload.get("decision_profile")
@@ -134,25 +137,32 @@ def _semantic(event: WorkflowEvent, *, normalize_host: bool = False) -> tuple:
         payload.get("finding_count"), payload.get("prior_findings_signature"),
         payload.get("convergence_signature"),
         payload.get("chunk_id"),
-        (None if normalize_host else payload.get("usage_scope")),
-        (None if normalize_host else payload.get("usage_count")),
-        (None if normalize_host else payload.get("input_usage_count")),
-        (None if normalize_host else payload.get("output_usage_count")),
-        (None if normalize_host else payload.get("cache_read_usage_count")),
-        (None if normalize_host else payload.get("cache_write_usage_count")),
-        (None if normalize_host else payload.get("reasoning_usage_count")),
-        (None if normalize_host else payload.get("cost_usd")),
-        (None if normalize_host else payload.get("duration_seconds")),
-        (None if normalize_host else payload.get("wait_category")),
-        (None if normalize_host else payload.get("measurement_source")),
-        (None if normalize_host else payload.get("usage_estimated")),
+        (None if ignore_economics else payload.get("usage_scope")),
+        (None if ignore_economics else payload.get("usage_count")),
+        (None if ignore_economics else payload.get("input_usage_count")),
+        (None if ignore_economics else payload.get("output_usage_count")),
+        (None if ignore_economics else payload.get("cache_read_usage_count")),
+        (None if ignore_economics else payload.get("cache_write_usage_count")),
+        (None if ignore_economics else payload.get("reasoning_usage_count")),
+        (None if ignore_economics else payload.get("cost_usd")),
+        (None if ignore_economics else payload.get("duration_seconds")),
+        (None if ignore_economics else payload.get("wait_category")),
+        (None if ignore_economics else payload.get("measurement_source")),
+        (None if ignore_economics else payload.get("usage_estimated")),
         payload.get("source_finding_id"),
         payload.get("canonical_finding_id"), payload.get("finding_disposition"),
         payload.get("agreement"), payload.get("decision_reason_code"),
+        payload.get("source_severity"),
         payload.get("evidence_ref"), payload.get("action"),
         payload.get("human_intervention"), payload.get("human_intervention_id"),
         payload.get("human_intervention_reason"), payload.get("reason_code"),
         payload.get("missing_case_ids"),
+        payload.get("recovery_receipt_digests"),
+        payload.get("raw_finding_count"), payload.get("decision_count"),
+        payload.get("contribution_count"), payload.get("coverage_complete"),
+        payload.get("synthesis_decisions_digest"),
+        payload.get("raw_finding_inventory_digest"),
+        payload.get("lane_receipts_digest"),
     )
 
 
@@ -203,6 +213,19 @@ class ShadowComparator:
         normalized_left = tuple(_semantic(event, normalize_host=True) for event in predicted.events)
         normalized_right = tuple(_semantic(event, normalize_host=True) for event in authoritative.events)
         if normalized_left != normalized_right:
+            host_only_left = tuple(
+                _semantic(event, normalize_host=True, ignore_economics=True)
+                for event in predicted.events
+            )
+            host_only_right = tuple(
+                _semantic(event, normalize_host=True, ignore_economics=True)
+                for event in authoritative.events
+            )
+            if host_only_left == host_only_right:
+                return ParityReport(
+                    "explained_host_economics_difference", False, False,
+                    ("coherent_named_host_profile", "economics_difference"),
+                )
             return ParityReport("kernel_prediction_gap", False, False, ("semantic_transition_difference",))
         return ParityReport("explained_host_difference", True, False, ("coherent_named_host_profile",))
 

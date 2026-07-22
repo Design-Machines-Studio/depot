@@ -24,9 +24,9 @@ _SECRET_PARTS = (
     "token", "key", "secret", "password", "passphrase", "authorization", "cookie", "dsn",
     "environment_value", "environment-value", "env_value",
 )
-_CONTENT_ID = re.compile(r"(?:sha256|url-sha256):[0-9a-f]{64}\Z")
+_CONTENT_ID = re.compile(r"(?:sha256|url-sha256|profile-sha256):[0-9a-f]{64}\Z")
 _DURABLE_DIGEST = re.compile(
-    r"(?:sha256|url-sha256|value-sha256|key-sha256):[0-9a-f]{64}\Z"
+    r"(?:sha256|url-sha256|profile-sha256|value-sha256|key-sha256):[0-9a-f]{64}\Z"
 )
 _ARTIFACT_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*\Z")
 _WHOLE_URI = re.compile(r"[A-Za-z][A-Za-z0-9+.-]*:\S*\Z")
@@ -310,6 +310,10 @@ def _normalize_uri_tokens(value: str) -> str:
 def normalize_durable_string(value: str) -> str:
     """Digest supported URIs and reject unsupported ones in durable strings."""
     if _ISO_TIMESTAMP.fullmatch(value):
+        return value
+    if re.fullmatch(r"finding-v1:sha256\([0-9a-f]{64}\)", value):
+        # Public content identity, not a network URI. Its exact grammar is
+        # recomputed by the dm-review adapter before durable serialization.
         return value
     stripped = value.strip()
     if stripped != value and (_DURABLE_DIGEST.fullmatch(stripped) or _WHOLE_URI.fullmatch(stripped)

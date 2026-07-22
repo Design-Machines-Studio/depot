@@ -240,6 +240,15 @@ Produce the independent prediction before corresponding authoritative actions, t
 
 The next canonical transition is `run.started`. After that transition and before
 the first builder dispatch, Pipeline generates
+`plans/<feature-slug>/verification-profile.json` by running the complete
+project-declaration discovery and selection contract in `verification-contract.md`.
+Materialize that canonical profile before generating the behavioral contract;
+the contract copies its exact `profile_id`, full-document digest, and required
+case IDs. An absent declaration tree still produces and materializes the
+authoritative `not_declared` profile with empty case arrays. Null profile fields
+are legacy/no-profile input only and Pipeline MUST NOT emit them for a fresh run.
+Do not invoke `bind-verification-contract` until the profile artifact exists and
+has been reloaded successfully. Pipeline then generates
 `plans/<feature-slug>/verification-contract.json` from only the approved Key
 Requirements and final chunk acceptance criteria. Use the strict
 `behavioral-verification-contract-schema.json` shape with stable `REQ-*`,
@@ -252,7 +261,7 @@ authority.
 Validate and bind the initial contract exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json --verification-profile plans/<feature-slug>/verification-profile.json > plans/<feature-slug>/verification-contract-binding.json
 ```
 
 Reject a non-zero exit, malformed receipt, or a receipt not carrying the exact
@@ -649,11 +658,19 @@ current durable binding receipt and include its exact `contract_digest` and
 current values. Missing, stale, malformed, or mismatched claims fail
 deterministic validation; do not reinterpret them as review feedback or success.
 A contract revision, when explicitly human-approved and bound through the
-kernel command below, invalidates older dispatch claims:
+kernel commands below, invalidates older dispatch claims. First materialize the
+closed approval receipt, including a fresh host-issued nonce, then record the
+coordinator-owned authorization event. Only after that event succeeds may the
+revision be appended:
 
 ```text
-"$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
+"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/<run-id> --approval plans/<feature-slug>/verification-contract-approval.json > plans/<feature-slug>/verification-contract-authorization.json
+"$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json --verification-profile plans/<feature-slug>/verification-profile.json > plans/<feature-slug>/verification-contract-binding.json
 ```
+
+Passing `--approval` directly to `revise-verification-contract` never creates
+authority. It is accepted only on an idempotent retry to restore a missing
+artifact already named by the ordered authorization event.
 
 Decision leverage does not revise the behavioral contract.
 
@@ -915,7 +932,7 @@ kernel decision below, never locally authored limits.
 Invoke the policy exactly once for that failure:
 
 ```text
-$WORKFLOW_KERNEL decide-validation-retry --reason deterministic_validation_failure --attempt-ledger <artifact> --signature <stable-signature>
+$WORKFLOW_KERNEL decide-validation-retry --state-dir .workflow-kernel/runs/<run-id> --reason deterministic_validation_failure --signature <stable-signature>
 ```
 
 Reject non-zero output, extra/missing fields, wrong types, or a document whose

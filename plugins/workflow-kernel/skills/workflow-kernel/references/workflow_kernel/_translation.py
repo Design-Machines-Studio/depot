@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import re
 import math
+import hashlib
+import json
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Iterable, Mapping, Optional, Tuple
@@ -18,6 +20,7 @@ from typing import Iterable, Mapping, Optional, Tuple
 from .model import GateDecision, HostCapability, NodeSpec, WorkflowClass
 from .redaction import (
     contains_high_confidence_secret, normalize_evidence_reference, redact,
+    sanitize_durable_payload,
 )
 from .schema import KernelError, WorkflowEvent
 
@@ -54,14 +57,25 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
     "human_approval_evidence_ref", "verification_contract_bound",
+    "verification_profile_id", "verification_profile_digest",
+    "verification_profile_ref",
+    "actor", "decision", "nonce", "approval_ref",
+    "candidate_contract_digest",
     "verification_contract_provenance",
     "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
     "input_usage_count", "output_usage_count", "cache_read_usage_count",
     "cache_write_usage_count", "reasoning_usage_count",
     "source_finding_id", "canonical_finding_id", "finding_disposition",
-    "agreement", "decision_reason_code", "evidence_ref", "action",
+    "agreement", "decision_reason_code", "source_severity", "evidence_ref",
+    "action",
+    "finding_path", "finding_anchor", "finding_category", "finding_root_cause",
+    "raw_finding_count", "decision_count", "contribution_count",
+    "coverage_complete", "synthesis_decisions_ref",
+    "synthesis_decisions_digest", "raw_finding_inventory_ref",
+    "raw_finding_inventory_digest", "lane_receipts_ref",
+    "lane_receipts_digest",
     "human_intervention_id", "human_intervention_reason",
-    "human_intervention", "missing_case_ids",
+    "human_intervention", "missing_case_ids", "recovery_receipt_digests",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -110,10 +124,16 @@ RECEIPT_FIELD_ALIASES = {
     "canonicalFindingId": "canonical_finding_id",
     "findingDisposition": "finding_disposition",
     "decisionReasonCode": "decision_reason_code",
+    "sourceSeverity": "source_severity",
     "evidenceRef": "evidence_ref",
+    "findingPath": "finding_path",
+    "findingAnchor": "finding_anchor",
+    "findingCategory": "finding_category",
+    "findingRootCause": "finding_root_cause",
     "humanInterventionId": "human_intervention_id",
     "humanInterventionReason": "human_intervention_reason",
     "missingCaseIds": "missing_case_ids",
+    "recoveryReceipts": "recovery_receipts",
     # Legacy producer vocabulary. The durable kernel name is deliberately
     # neutral because not every provider reports tokens.
     "tokens": "usage_count",
@@ -134,7 +154,8 @@ _PRE_CONTRACT_STAGES = frozenset({
 _CONTRACT_FIELDS = frozenset({
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
-    "human_approval_evidence_ref",
+    "human_approval_evidence_ref", "verification_profile_id",
+    "verification_profile_digest", "verification_profile_ref",
 })
 _CONTRACT_BINDING_MARKERS = _CONTRACT_FIELDS - frozenset({"reason_code"})
 _RECEIPT_ENVELOPE_FIELDS = COMMON_RECEIPT_FIELDS | frozenset({
@@ -143,6 +164,10 @@ _RECEIPT_ENVELOPE_FIELDS = COMMON_RECEIPT_FIELDS | frozenset({
 _CONTRACT_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _CONTRACT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _CONTRACT_REASON = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
+_PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
+_APPROVAL_REF = re.compile(
+    r"verification-approvals/sha256-[0-9a-f]{64}\.json\Z"
+)
 _CREDENTIAL_LIKE = re.compile(
     r"(?i)^(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)",
 )
@@ -167,6 +192,8 @@ _CONTRIBUTION_REASON_DISPOSITION = {
     "agent-findings-cap": "discarded",
 }
 _IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}\Z")
+_CANONICAL_FINDING_ID = re.compile(r"finding-v1:sha256\(([0-9a-f]{64})\)\Z")
+_LINE_ANCHOR = re.compile(r"lines=([1-9][0-9]*)-([1-9][0-9]*)\Z")
 _MAX_MISSING_CASE_IDS = 256
 _MAX_MISSING_CASE_ID_BYTES = 16_384
 
@@ -175,6 +202,36 @@ def required_text(value: object, field: str) -> str:
     if type(value) is not str or not value or len(value) > 4096:
         raise ValueError("invalid " + field)
     return value
+
+
+def canonical_finding_identity(
+    path: object, anchor: object, category: object, root_cause: object,
+) -> tuple[str, dict[str, str]]:
+    """Normalize and hash the public dm-review finding identity contract."""
+    values = {
+        "path": required_text(path, "finding path").replace("\\", "/").lower(),
+        "anchor": " ".join(required_text(anchor, "finding anchor").lower().split()),
+        "category": " ".join(required_text(category, "finding category").lower().split()),
+        "root_cause": " ".join(
+            required_text(root_cause, "finding root cause").lower().split()
+        ),
+    }
+    path_parts = values["path"].split("/")
+    if (
+        values["path"].startswith("/") or values["path"].endswith("/")
+        or "" in path_parts or any(part in {".", ".."} for part in path_parts)
+    ):
+        raise ValueError("invalid finding path")
+    line_match = _LINE_ANCHOR.fullmatch(values["anchor"])
+    if values["anchor"].startswith("lines=") and (
+        line_match is None or int(line_match.group(1)) > int(line_match.group(2))
+    ):
+        raise ValueError("invalid finding anchor")
+    normalized_key = "\n".join(f"{key}={values[key]}" for key in (
+        "path", "anchor", "category", "root_cause",
+    ))
+    digest = hashlib.sha256(normalized_key.encode("utf-8")).hexdigest()
+    return f"finding-v1:sha256({digest})", values
 
 
 def _bounded_identity(value: object, field: str) -> str:
@@ -584,9 +641,24 @@ def _validate_observation_receipt(receipt: dict) -> dict:
     if receipt.get("stage") == "finding_contribution":
         for field in (
             "source_finding_id", "canonical_finding_id", "reviewer",
-            "decision_reason_code",
+            "decision_reason_code", "lane", "requested_provider",
+            "attempted_provider", "implemented_by", "provider", "model",
+            "finding_path", "finding_anchor", "finding_category",
+            "finding_root_cause", "source_severity",
         ):
             required_text(receipt.get(field), field.replace("_", " "))
+        canonical_id, normalized_identity = canonical_finding_identity(
+            receipt["finding_path"], receipt["finding_anchor"],
+            receipt["finding_category"], receipt["finding_root_cause"],
+        )
+        if (
+            _CANONICAL_FINDING_ID.fullmatch(receipt["canonical_finding_id"]) is None
+            or receipt["canonical_finding_id"] != canonical_id
+        ):
+            raise ValueError("invalid canonical finding identity")
+        receipt.update({
+            "finding_" + key: value for key, value in normalized_identity.items()
+        })
         if receipt.get("finding_disposition") not in _CONTRIBUTION_DISPOSITIONS:
             raise ValueError("invalid finding disposition")
         if receipt.get("agreement") not in _CONTRIBUTION_AGREEMENTS:
@@ -599,6 +671,54 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         ):
             raise ValueError("finding contribution lacks stable identity")
         receipt["evidence_ref"] = safe_reference(receipt.get("evidence_ref"))
+
+    if receipt.get("stage") == "finding_contribution_coverage":
+        if (
+            receipt.get("status") != "complete"
+            or receipt.get("coverage_complete") is not True
+        ):
+            raise ValueError("incomplete finding contribution coverage")
+        for field in (
+            "raw_finding_count", "decision_count", "contribution_count",
+        ):
+            _nonnegative_number(receipt.get(field), field, integer=True)
+        if not (
+            receipt["raw_finding_count"] == receipt["decision_count"]
+            == receipt["contribution_count"]
+        ):
+            raise ValueError("incomplete finding contribution coverage")
+        for field in (
+            "synthesis_decisions_ref", "raw_finding_inventory_ref",
+            "lane_receipts_ref",
+        ):
+            receipt[field] = safe_reference(receipt.get(field))
+        for field in (
+            "synthesis_decisions_digest", "raw_finding_inventory_digest",
+            "lane_receipts_digest",
+        ):
+            value = receipt.get(field)
+            if type(value) is not str or _CONTRACT_DIGEST.fullmatch(value) is None:
+                raise ValueError("invalid contribution coverage digest")
+
+    browser_recoveries = ()
+    if receipt.get("stage") == "browser_recovery":
+        recovery_values = receipt.get("recovery_receipts")
+        if type(recovery_values) is not list or not recovery_values:
+            raise ValueError("browser recovery lacks canonical proof")
+        try:
+            from .browser_evidence import BrowserRecoveryReceipt
+            browser_recoveries = tuple(
+                BrowserRecoveryReceipt.from_dict(value)
+                for value in recovery_values
+            )
+        except (TypeError, ValueError):
+            raise ValueError("browser recovery lacks canonical proof") from None
+        receipt["recovery_receipt_digests"] = [
+            "sha256:" + hashlib.sha256(json.dumps(
+                value.to_dict(), sort_keys=True, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+            for value in browser_recoveries
+        ]
 
     validation_help = (
         receipt.get("stage") == "deterministic_validation"
@@ -644,6 +764,18 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             ):
                 raise ValueError("browser intervention lacks case identity")
             receipt["missing_case_ids"] = cases
+            if len(browser_recoveries) != len(cases):
+                raise ValueError("browser intervention lacks recovery proof")
+            if (
+                tuple(value.case_id for value in browser_recoveries) != tuple(cases)
+                or any(
+                    value.status != "blocked"
+                    or value.reason_code != "human_help_required"
+                    or value.missing_case_ids != (value.case_id,)
+                    for value in browser_recoveries
+                )
+            ):
+                raise ValueError("browser intervention lacks recovery proof")
         receipt["human_intervention"] = True
     return receipt
 
@@ -653,13 +785,20 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
     for key in COMMON_RECEIPT_FIELDS:
         if key not in receipt:
             continue
-        # Redact each value under a neutral key. Field names such as `tokens`
-        # and `fallback_path` are reliability facts, not credentials or local
-        # filesystem evidence, and must retain their documented meaning.
-        normalized = redact({"value": receipt[key]})
-        if not isinstance(normalized, dict) or "value" not in normalized:
+        # Preserve field identity while sanitizing. The redaction policy uses
+        # both key and value shape; wrapping everything under a neutral key
+        # allowed credential-shaped telemetry to survive durable translation.
+        if key == "canonical_finding_id":
+            # This colon-bearing public identifier has already been recomputed
+            # and exact-format validated. Generic evidence-reference handling
+            # would otherwise misclassify it as an unsupported URL scheme.
+            payload[key] = receipt[key]
+            continue
+        normalized = redact({key: sanitize_durable_payload(receipt[key])})
+        if not isinstance(normalized, dict):
             raise ValueError("unsafe receipt payload")
-        payload[key] = normalized["value"]
+        if key in normalized:
+            payload[key] = normalized[key]
     payload["authoritative_receipt"] = reference
     payload["evidence"] = [reference]
     if receipt.get("stage") == "verification_contract_bound":
@@ -670,6 +809,12 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
         ))
     if receipt.get("stage") == "finding_contribution":
         payload["evidence"].append(receipt["evidence_ref"])
+    elif receipt.get("stage") == "finding_contribution_coverage":
+        payload["evidence"].extend((
+            receipt["synthesis_decisions_ref"],
+            receipt["raw_finding_inventory_ref"],
+            receipt["lane_receipts_ref"],
+        ))
     return payload
 
 
@@ -685,7 +830,27 @@ def _contract_reference(value: object, field: str, *, nullable: bool = False):
         raise ValueError("invalid verification contract receipt") from None
 
 
-def _validate_contract_receipt(receipt: dict, current: object):
+def _validate_contract_authorization_receipt(receipt: dict, current: object):
+    if current is None:
+        raise ValueError("contract approval precedes initial binding")
+    previous = receipt.get("previous_contract_digest")
+    candidate = receipt.get("candidate_contract_digest")
+    approval_ref = _contract_reference(receipt.get("approval_ref"), "approval ref")
+    if (
+        receipt.get("decision") != "approved"
+        or previous != current[3]
+        or type(candidate) is not str or _CONTRACT_DIGEST.fullmatch(candidate) is None
+        or _APPROVAL_REF.fullmatch(approval_ref) is None
+        or not required_text(receipt.get("actor"), "approval actor")
+        or not required_text(receipt.get("nonce"), "approval nonce")
+        or not required_text(receipt.get("occurred_at"), "approval occurred_at")
+    ):
+        raise ValueError("invalid verification contract authorization receipt")
+    return previous, candidate, approval_ref
+
+
+def _validate_contract_receipt(receipt: dict, current: object,
+                               pending_approval: object):
     if set(receipt) - _RECEIPT_ENVELOPE_FIELDS:
         raise ValueError("invalid verification contract receipt")
     if not _CONTRACT_FIELDS <= set(receipt):
@@ -721,13 +886,32 @@ def _validate_contract_receipt(receipt: dict, current: object):
     reason = required_text(receipt["reason_code"], "contract reason code")
     if _CONTRACT_REASON.fullmatch(reason) is None:
         raise ValueError("invalid verification contract receipt")
-    _contract_reference(
+    approval_ref = _contract_reference(
         receipt["human_approval_evidence_ref"], "contract approval",
         nullable=True,
     )
+    profile_id = receipt["verification_profile_id"]
+    profile_digest = receipt["verification_profile_digest"]
+    profile_ref = _contract_reference(
+        receipt["verification_profile_ref"], "verification profile ref",
+        nullable=True,
+    )
+    if (profile_id is None) != (profile_digest is None) or (
+        profile_id is not None and (
+            type(profile_id) is not str or _PROFILE_ID.fullmatch(profile_id) is None
+            or type(profile_digest) is not str
+            or _CONTRACT_DIGEST.fullmatch(profile_digest) is None
+            or profile_ref != "verification-profiles/sha256-"
+            + profile_digest.removeprefix("sha256:") + ".json"
+        )
+    ) or (profile_id is None and profile_ref is not None):
+        raise ValueError("invalid verification profile binding receipt")
     stage = receipt["stage"]
     if stage == "verification_contract_bound":
-        if current is not None or revision != 1 or previous is not None:
+        if (
+            current is not None or revision != 1 or previous is not None
+            or approval_ref is not None or pending_approval is not None
+        ):
             raise ValueError("invalid verification contract continuity")
     elif (
         current is None
@@ -737,7 +921,19 @@ def _validate_contract_receipt(receipt: dict, current: object):
         or previous != current[3]
     ):
         raise ValueError("invalid verification contract continuity")
-    return contract_id, receipt["schema_version"], revision, digest
+    if stage == "verification_contract_revised":
+        profile_changed = (
+            profile_id, profile_digest, profile_ref
+        ) != current[4:7]
+        if approval_ref is not None:
+            if pending_approval != (previous, digest, approval_ref):
+                raise ValueError("revision lacks matching approval continuity")
+        elif pending_approval is not None or profile_changed:
+            raise ValueError("revision dropped required approval continuity")
+    return (
+        contract_id, receipt["schema_version"], revision, digest,
+        profile_id, profile_digest, profile_ref,
+    )
 
 
 def translate_receipts(
@@ -774,6 +970,7 @@ def translate_receipts(
     decision_profile_defaulted = None
     isolation_strategy = None
     current_contract = None
+    pending_contract_approval = None
     contribution_sources = set()
     contribution_artifact_reviewers = {}
     for position, receipt in enumerate(normalized_values):
@@ -870,10 +1067,17 @@ def translate_receipts(
         if node_id is not None:
             node_id = required_text(node_id, "node id")
         reference = safe_reference(receipt.get("authoritative_receipt"))
-        if stage in _CONTRACT_STAGES:
-            current_contract = _validate_contract_receipt(
+        if stage == "verification_contract_revision_authorized":
+            if pending_contract_approval is not None:
+                raise ValueError("multiple pending contract approvals")
+            pending_contract_approval = _validate_contract_authorization_receipt(
                 receipt, current_contract,
             )
+        elif stage in _CONTRACT_STAGES:
+            current_contract = _validate_contract_receipt(
+                receipt, current_contract, pending_contract_approval,
+            )
+            pending_contract_approval = None
         elif has_contract_binding:
             claimed = receipt.get("contract_digest", _MISSING)
             if current_contract is None:

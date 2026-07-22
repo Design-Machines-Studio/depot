@@ -92,6 +92,35 @@ Contradictions and discarded positions remain visible.
 If there are zero raw findings, emit `Synthesis Decisions: none -- no source
 findings required a decision.` The section is still required.
 
+The machine-readable synthesis companion is an exact JSON object with
+`schema_version: 1`, `artifact_role: "synthesis_decisions"`, the review
+`run_id`, integer `source_finding_count`, normalized UTC `occurred_at`, and
+`decisions`. There is
+exactly one decision per raw source finding. Each decision contains:
+`source_finding_id`, `finding_path`, `finding_anchor`, `finding_category`,
+`finding_root_cause`, `finding_disposition`, `agreement`,
+`decision_reason_code`, `reviewer`, `lane`, `requested_provider`,
+`attempted_provider`, `implemented_by`, `provider`, `model`, `source_severity`,
+`evidence_ref`, positive integer `attempt`, and `occurred_at`. Use literal provider/model values
+from the lane receipt; use `not_reported` when that receipt does not name one.
+The kernel normalizes the four identity inputs, recomputes the exact
+`finding-v1:sha256(<64 lowercase hex>)` identifier, checks cardinality, and
+appends the ordered contribution receipts.
+
+The raw companion is an exact object with `schema_version: 1`,
+`artifact_role: "raw_finding_inventory"`, the same `run_id`, and `findings`.
+Every finding has `source_finding_id`, `reviewer`, `lane`, `source_severity`,
+`evidence_ref`, and the four `finding_path`/`finding_anchor`/
+`finding_category`/`finding_root_cause` identity inputs. The lane companion is
+an exact object with `schema_version: 1`,
+`artifact_role: "review_lane_receipts"`, the same `run_id`, and one `lanes`
+entry for every required lane. Each entry has `reviewer`, `lane`,
+`requested_provider`, `attempted_provider`, `implemented_by`, `provider`,
+`model`, and nonempty `evidence_refs`. Every raw finding's `reviewer`/`lane`
+and `evidence_ref` must resolve to that literal lane entry. These three inputs
+must contain no credential-shaped value; the exporter validates them before
+creating any sealed artifact.
+
 ---
 
 ### Agent Summary

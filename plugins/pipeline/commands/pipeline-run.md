@@ -118,7 +118,7 @@ On eligible deterministic validation failure, the adapter follows the
 orchestrator's canonical feedback receipt and invokes exactly:
 
 ```text
-$WORKFLOW_KERNEL decide-validation-retry --reason deterministic_validation_failure --attempt-ledger <artifact> --signature <stable-signature>
+$WORKFLOW_KERNEL decide-validation-retry --state-dir .workflow-kernel/runs/<run-id> --reason deterministic_validation_failure --signature <stable-signature>
 ```
 
 Reject non-zero or malformed output and consume exactly `allowed`,

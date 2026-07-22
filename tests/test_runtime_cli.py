@@ -62,6 +62,7 @@ def verification_contract(*, marker=None):
             "baseline_expectation": "must_fail",
         }],
         "persona_case_ids": [], "browser_case_ids": [],
+        "verification_profile_id": None, "verification_profile_digest": None,
         "manual_requirements": [],
         "revision_justification": {
             "reason_code": "initial_binding", "summary": "Initial binding.",
@@ -102,6 +103,81 @@ class RuntimeCliTests(unittest.TestCase):
         }))
         return lease_root
 
+    def test_export_review_contributions_is_launcher_owned_and_cardinality_checked(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            request = root / "request.json"
+            decisions = root / "decisions.json"
+            raw_findings = root / "raw-findings.json"
+            lane_receipts = root / "lane-receipts.json"
+            receipts = root / "receipts.json"
+            output = root / "output.json"
+            state_dir = root / "state"
+            state_dir.mkdir()
+            request.write_text(json.dumps({
+                "run_id": "review-export", "requested_lanes": ["security"],
+                "mode": "full", "execution_mode": "generic",
+            }), encoding="utf-8")
+            decisions.write_text(json.dumps({
+                "schema_version": 1, "artifact_role": "synthesis_decisions",
+                "run_id": "review-export", "source_finding_count": 1,
+                "occurred_at": "2026-07-14T00:01:00Z",
+                "decisions": [{
+                    "source_finding_id": "source-1",
+                    "finding_path": "internal/review.py",
+                    "finding_anchor": "review.finding",
+                    "finding_category": "trust boundary",
+                    "finding_root_cause": "caller supplied identity",
+                    "finding_disposition": "retained", "agreement": "unique",
+                    "decision_reason_code": "retained-unique",
+                    "reviewer": "security", "lane": "security",
+                    "source_severity": "P2",
+                    "requested_provider": "openai", "attempted_provider": "openai",
+                    "implemented_by": "codex", "provider": "openai",
+                    "model": "gpt-5.6-sol", "evidence_ref": "raw/security.md",
+                    "attempt": 1, "occurred_at": "2026-07-14T00:00:00Z",
+                }],
+            }), encoding="utf-8")
+            raw_findings.write_text(json.dumps({
+                "schema_version": 1, "artifact_role": "raw_finding_inventory",
+                "run_id": "review-export", "findings": [{
+                    "source_finding_id": "source-1", "reviewer": "security",
+                    "lane": "security", "source_severity": "P2",
+                    "evidence_ref": "raw/security.md",
+                    "finding_path": "internal/review.py",
+                    "finding_anchor": "review.finding",
+                    "finding_category": "trust boundary",
+                    "finding_root_cause": "caller supplied identity",
+                }],
+            }), encoding="utf-8")
+            lane_receipts.write_text(json.dumps({
+                "schema_version": 1, "artifact_role": "review_lane_receipts",
+                "run_id": "review-export", "lanes": [{
+                    "reviewer": "security", "lane": "security",
+                    "requested_provider": "openai", "attempted_provider": "openai",
+                    "implemented_by": "codex", "provider": "openai",
+                    "model": "gpt-5.6-sol", "evidence_refs": ["raw/security.md"],
+                }],
+            }), encoding="utf-8")
+            receipts.write_text("[]\n", encoding="utf-8")
+            result = self.run_cli(
+                "export-review-contributions", "--request", request,
+                "--decisions", decisions, "--raw-findings", raw_findings,
+                "--lane-receipts", lane_receipts, "--receipts", receipts,
+                "--state-dir", state_dir, "--output", output,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            exported = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(len(exported), 2)
+            self.assertRegex(
+                exported[0]["canonical_finding_id"],
+                r"^finding-v1:sha256\([0-9a-f]{64}\)$",
+            )
+            self.assertEqual(exported[1]["stage"], "finding_contribution_coverage")
+            self.assertEqual(
+                len(list((state_dir / "contribution-inputs").glob("*.json"))), 3,
+            )
+
     def init_lifecycle(self, root, run_id="pipeline-1"):
         self.init_repository_scope(root)
         result = self.run_cli(
@@ -123,92 +199,47 @@ class RuntimeCliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_decide_validation_retry_matches_canonical_policy_without_writes(self):
-        from workflow_kernel.model import AttemptLedger, FailureReason
-        from workflow_kernel.policies import RetryPolicy
-
-        cases = (
-            (
-                "deterministic_validation_failure",
-                {"counts": {}, "signatures": {}}, None,
-                "retry_allowed",
-            ),
-            (
-                "deterministic_validation_failure",
-                {"counts": {"deterministic_validation_failure": 1},
-                 "signatures": {}}, None,
-                "retry_budget_exhausted",
-            ),
-            (
-                "reviewer_finding",
-                {"counts": {"reviewer_finding": 2},
-                 "signatures": {"reviewer_finding": ["same", "same"]}},
-                "same", "identical_failure_convergence",
-            ),
-        )
+    def test_decide_validation_retry_uses_and_updates_authoritative_run_state(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for index, (reason, ledger, signature, expected) in enumerate(cases):
-                path = root / f"ledger-{index}.json"
-                path.write_text(json.dumps(ledger))
-                before = path.read_bytes()
-                arguments = [
-                    "decide-validation-retry", "--reason", reason,
-                    "--attempt-ledger", path,
-                ]
-                if signature is not None:
-                    arguments.extend(("--signature", signature))
-                result = self.run_cli(*arguments)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                document = json.loads(result.stdout)
-                self.assertEqual(set(document), {
-                    "allowed", "reason_code", "budget", "attempt_count",
-                    "prior_signature",
-                })
-                self.assertEqual(document["reason_code"], expected)
-                direct = RetryPolicy().decide(
-                    FailureReason(reason),
-                    AttemptLedger(ledger["counts"], ledger["signatures"]),
-                    signature,
-                )
-                self.assertEqual(document, {
-                    "allowed": direct.allowed,
-                    "reason_code": direct.reason_code,
-                    "budget": direct.budget,
-                    "attempt_count": direct.attempt_count,
-                    "prior_signature": direct.prior_signature,
-                })
-                self.assertEqual(path.read_bytes(), before)
-
-    def test_decide_validation_retry_rejects_hostile_ledgers_without_echo_or_writes(self):
-        secret = "sk-secret-ledger-value"
-        cases = (
-            {"counts": {}, "signatures": {}, "unknown": secret},
-            {"counts": {"unknown_reason": 1}, "signatures": {}},
-            {"counts": {"cleanup": True}, "signatures": {}},
-            {"counts": {"cleanup": 0}, "signatures": {"cleanup": [secret]}},
-            {"counts": {"cleanup": 1}, "signatures": {"cleanup": [secret]}},
-        )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for index, ledger in enumerate(cases):
-                path = root / f"hostile-{index}.json"
-                path.write_text(json.dumps(ledger))
-                before = path.read_bytes()
-                result = self.run_cli(
-                    "decide-validation-retry", "--reason", "cleanup",
-                    "--attempt-ledger", path, "--signature", secret,
-                )
-                self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn(secret, result.stdout + result.stderr)
-                self.assertEqual(path.read_bytes(), before)
-
-            reason = self.run_cli(
-                "decide-validation-retry", "--reason", secret,
-                "--attempt-ledger", root / "hostile-0.json",
+            self.init_lifecycle(root, "retry-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "retry-run"
+            first = self.run_cli(
+                "decide-validation-retry", "--state-dir", run_dir,
+                "--reason", "deterministic_validation_failure",
+                "--signature", "failure-a",
             )
-            self.assertNotEqual(reason.returncode, 0)
-            self.assertNotIn(secret, reason.stdout + reason.stderr)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            self.assertEqual(json.loads(first.stdout)["reason_code"], "retry_allowed")
+            second = self.run_cli(
+                "decide-validation-retry", "--state-dir", run_dir,
+                "--reason", "deterministic_validation_failure",
+                "--signature", "failure-b",
+            )
+            self.assertEqual(second.returncode, 0, second.stderr)
+            self.assertEqual(
+                json.loads(second.stdout)["reason_code"], "retry_budget_exhausted",
+            )
+            events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines()]
+            self.assertEqual(
+                [event["payload"]["stage"] for event in events[1:]],
+                ["validation_retry_decided", "validation_retry_decided"],
+            )
+
+    def test_decide_validation_retry_rejects_hostile_signature_without_write(self):
+        secret = "sk-secret-ledger-value"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "retry-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "retry-run"
+            before = (run_dir / "events.jsonl").read_bytes()
+            result = self.run_cli(
+                "decide-validation-retry", "--state-dir", run_dir,
+                "--reason", "cleanup", "--signature", secret,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertNotIn(secret, result.stdout + result.stderr)
+            self.assertEqual((run_dir / "events.jsonl").read_bytes(), before)
 
     def append_contract_binding(self, run_dir, contract, stage):
         from workflow_kernel.behavioral_contract import contract_digest
@@ -237,6 +268,9 @@ class RuntimeCliTests(unittest.TestCase):
                 "human_approval_evidence_ref": justification[
                     "human_approval_evidence_ref"
                 ],
+                "verification_profile_id": contract["verification_profile_id"],
+                "verification_profile_digest": contract["verification_profile_digest"],
+                "verification_profile_ref": None,
                 "evidence": [reference],
             },
         })
@@ -632,6 +666,8 @@ class RuntimeCliTests(unittest.TestCase):
                 "stage", "contract_id", "schema_version", "revision",
                 "contract_digest", "contract_ref", "previous_contract_digest",
                 "reason_code", "human_approval_evidence_ref",
+                "verification_profile_id", "verification_profile_digest",
+                "verification_profile_ref",
             })
             self.assertEqual(receipt["stage"], "verification_contract_bound")
             self.assertEqual(receipt["revision"], 1)
@@ -687,6 +723,42 @@ class RuntimeCliTests(unittest.TestCase):
             }
             revision = root / "contract-2.json"
             revision.write_text(json.dumps(revision_value))
+            approval = root / "approval.json"
+            approval.write_text(json.dumps({
+                "schema_version": 1, "actor": "reviewer-1",
+                "decision": "approved", "occurred_at": "2026-07-23T00:00:00Z",
+                "run_id": "contract-run", "nonce": "approval-nonce-1",
+                "previous_contract_digest": contract_digest(initial_value),
+                "candidate_contract_digest": contract_digest(revision_value),
+            }))
+            forged_approval = root / "forged-approval.json"
+            forged_approval.write_text(json.dumps({
+                **json.loads(approval.read_text()),
+                "candidate_contract_digest": "sha256:" + "0" * 64,
+            }))
+            events_before = (run_dir / "events.jsonl").read_bytes()
+            rejected_approval = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision, "--approval", forged_approval,
+            )
+            self.assertEqual(rejected_approval.returncode, 2)
+            self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
+            self_authored = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision, "--approval", approval,
+            )
+            self.assertEqual(self_authored.returncode, 2)
+            self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
+            authorized = self.run_cli(
+                "authorize-verification-contract-revision",
+                "--state-dir", run_dir, "--approval", approval,
+            )
+            self.assertEqual(authorized.returncode, 0, authorized.stderr)
+            authorization_receipt = json.loads(authorized.stdout)
+            self.assertEqual(
+                authorization_receipt["stage"],
+                "verification_contract_revision_authorized",
+            )
             revised = self.run_cli(
                 "revise-verification-contract", "--state-dir", run_dir,
                 "--contract", revision,
@@ -700,10 +772,47 @@ class RuntimeCliTests(unittest.TestCase):
                 json.loads(bound.stdout)["contract_digest"],
             )
             event = json.loads((run_dir / "events.jsonl").read_text().splitlines()[-1])
-            self.assertEqual(
+            self.assertNotEqual(
                 event["payload"]["human_approval_evidence_ref"],
                 "plans/contract/plan.html#approval",
             )
+            self.assertRegex(
+                event["payload"]["human_approval_evidence_ref"],
+                r"^verification-approvals/sha256-[0-9a-f]{64}\.json$",
+            )
+            self.assertTrue(
+                (run_dir / event["payload"]["human_approval_evidence_ref"]).is_file()
+            )
+
+            idempotent = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision,
+            )
+            self.assertEqual(idempotent.returncode, 0, idempotent.stderr)
+            self.assertEqual(json.loads(idempotent.stdout), receipt)
+
+            approval_artifact = run_dir / receipt["human_approval_evidence_ref"]
+            approval_artifact.unlink()
+            missing = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision,
+            )
+            self.assertEqual(missing.returncode, 2)
+            restored = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision, "--approval", approval,
+            )
+            self.assertEqual(restored.returncode, 0, restored.stderr)
+            self.assertTrue(approval_artifact.is_file())
+
+            forged_approval.write_text(json.dumps({
+                **json.loads(approval.read_text()), "actor": "forged-reviewer",
+            }))
+            prefers_stored = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision, "--approval", forged_approval,
+            )
+            self.assertEqual(prefers_stored.returncode, 0, prefers_stored.stderr)
             artifact = run_dir / event["payload"]["contract_ref"]
             revision_record = json.loads(artifact.read_text())["revision_justification"]
             self.assertEqual(
@@ -730,6 +839,88 @@ class RuntimeCliTests(unittest.TestCase):
             )
             self.assertEqual(rejected.returncode, 2)
             self.assertNotIn("0000000000", rejected.stderr)
+
+    def test_generic_append_cannot_forge_contract_approval_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "approval-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "approval-run"
+            event = {
+                "schema_version": 1, "sequence": 1, "run_id": "approval-run",
+                "node_id": None, "kind": "evidence.recorded",
+                "occurred_at": "2026-07-23T00:00:01Z",
+                "payload": {
+                    "stage": "verification_contract_revision_authorized",
+                    "run_id": "approval-run", "actor": "forged",
+                    "decision": "approved", "occurred_at": "2026-07-23T00:00:00Z",
+                    "nonce": "forged-nonce",
+                    "previous_contract_digest": "sha256:" + "a" * 64,
+                    "candidate_contract_digest": "sha256:" + "b" * 64,
+                    "approval_ref": "verification-approvals/sha256-" + "c" * 64 + ".json",
+                    "evidence": ["verification-approvals/sha256-" + "c" * 64 + ".json"],
+                },
+            }
+            before = (run_dir / "events.jsonl").read_bytes()
+            result = self.run_cli("append", run_dir, "--event", json.dumps(event))
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual((run_dir / "events.jsonl").read_bytes(), before)
+
+    def test_verification_contract_binding_seals_exact_authoritative_profile_cases(self):
+        from workflow_kernel.behavioral_contract import obligations, verification_profile_digest
+        from workflow_kernel.verification import PersonaCase, VerificationProfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "profile-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "profile-run"
+            case = PersonaCase(
+                "editor", "edit", "member", "/edit", "chromium", "1280x720", True,
+            )
+            profile_value = VerificationProfile(
+                1, "project_declaration", (case,), (),
+                configured_engines=("chromium",),
+            ).to_dict()
+            profile = root / "verification-profile.json"
+            profile.write_text(json.dumps(profile_value))
+            value = verification_contract()
+            value["persona_case_ids"] = [case.case_id]
+            value["browser_case_ids"] = [case.case_id]
+            value["verification_profile_id"] = profile_value["profile_id"]
+            value["verification_profile_digest"] = verification_profile_digest(profile_value)
+            value["revision_justification"]["added_obligation_ids"] = sorted(
+                obligations(value)
+            )
+            contract = root / "contract.json"
+            contract.write_text(json.dumps(value))
+            bound = self.run_cli(
+                "bind-verification-contract", "--state-dir", run_dir,
+                "--contract", contract, "--verification-profile", profile,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            receipt = json.loads(bound.stdout)
+            self.assertEqual(receipt["verification_profile_id"], profile_value["profile_id"])
+            self.assertTrue((run_dir / receipt["verification_profile_ref"]).is_file())
+
+            invented = json.loads(json.dumps(value))
+            invented["revision"] = 2
+            invented["previous_contract_digest"] = receipt["contract_digest"]
+            invented["persona_case_ids"] = ["case-sha256:" + "f" * 64]
+            old = obligations(value)
+            new = obligations(invented)
+            invented["revision_justification"] = {
+                "reason_code": "invented_case", "summary": "Invalid case.",
+                "added_obligation_ids": sorted(new - old),
+                "retained_obligation_ids": sorted(new & old),
+                "removed_obligation_ids": sorted(old - new),
+                "human_approval_evidence_ref": None,
+            }
+            invented_path = root / "invented.json"
+            invented_path.write_text(json.dumps(invented))
+            rejected = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", invented_path, "--verification-profile", profile,
+            )
+            self.assertEqual(rejected.returncode, 2)
 
     def test_forged_initial_binding_cannot_be_materialized_by_idempotent_retry(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -902,7 +1093,7 @@ class RuntimeCliTests(unittest.TestCase):
 
     def test_cleanup_command_surface_and_plan_create(self):
         help_result = self.run_cli("--help")
-        for command in ("bind-prediction", "bind-verification-contract", "revise-verification-contract", "plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
+        for command in ("bind-prediction", "bind-verification-contract", "revise-verification-contract", "authorize-verification-contract-revision", "plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
             self.assertIn(command, help_result.stdout)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); argv = root / "argv.json"; output = root / "plan.json"
@@ -920,7 +1111,7 @@ class RuntimeCliTests(unittest.TestCase):
             root = Path(directory); depot = root / "depot"; pipeline = depot / "plugins" / "pipeline"
             runtime = depot / "plugins" / "workflow-kernel"; refs = runtime / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
             refs.mkdir(parents=True); pipeline.mkdir(parents=True)
-            (runtime / ".claude-plugin").mkdir(); (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":"0.1.0"}))
+            (runtime / ".claude-plugin").mkdir(); (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":"0.3.0"}))
             (refs / "__main__.py").write_text("")
             forged = root / "target" / "workflow_kernel"; forged.mkdir(parents=True); (forged / "__main__.py").write_text("")
             self.assertEqual(resolve_workflow_kernel_runtime(pipeline, home=root / "home"), refs.parent.resolve())
@@ -933,7 +1124,7 @@ class RuntimeCliTests(unittest.TestCase):
             root = Path(directory); pipeline = root / "depot" / "plugins" / "pipeline"
             pipeline.mkdir(parents=True)
             cache = root / "home" / ".claude" / "plugins" / "cache" / "depot" / "workflow-kernel"
-            for version in ("0.1.9", "0.1.10", "1.0.0"):
+            for version in ("0.3.9", "0.3.10", "1.0.0"):
                 runtime = cache / version
                 refs = runtime / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
                 refs.mkdir(parents=True)
@@ -941,7 +1132,7 @@ class RuntimeCliTests(unittest.TestCase):
                 (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":version}))
                 (refs / "__main__.py").write_text("")
             resolved = resolve_workflow_kernel_runtime(pipeline, home=root / "home")
-            self.assertEqual(resolved, (cache / "0.1.10" / "skills" / "workflow-kernel" / "references").resolve())
+            self.assertEqual(resolved, (cache / "0.3.10" / "skills" / "workflow-kernel" / "references").resolve())
 
     def test_security_artifact_codecs_require_exact_versioned_shapes(self):
         from workflow_kernel.cli import _command_result, _creation_plan

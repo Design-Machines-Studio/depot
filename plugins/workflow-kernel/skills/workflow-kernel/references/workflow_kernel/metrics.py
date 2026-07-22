@@ -318,6 +318,7 @@ class MetricsAggregator:
         wait_seconds = Counter()
         expected_attempts = set()
         attempt_rows = []
+        economics = []
         run_rows = []
         legacy_rows = []
         contributions = []
@@ -379,6 +380,12 @@ class MetricsAggregator:
                 totals[name] += _number(payload, name, int)
             if payload.get("usage_scope") == "attempt" and identity is not None:
                 attempt_rows.append((identity, payload))
+                row = {"run_id": event.run_id, "node_id": event.node_id}
+                row.update({
+                    field: payload[field]
+                    for field in ATTEMPT_ROW_FIELDS if field in payload
+                })
+                economics.append(row)
             elif payload.get("usage_scope") == "run":
                 run_rows.append(payload)
             elif any(field in payload for field in (*USAGE_FIELDS, "cost_usd")):
@@ -395,7 +402,10 @@ class MetricsAggregator:
                     "producer_stage": payload.get("stage"),
                     "run_id": event.run_id, "node_id": event.node_id,
                 }
-                for field in ("chunk_id", "attempt", "missing_case_ids"):
+                for field in (
+                    "chunk_id", "attempt", "missing_case_ids",
+                    "recovery_receipt_digests",
+                ):
                     if field in payload:
                         row[field] = payload[field]
                 if "contract_digest" in payload:
@@ -405,6 +415,7 @@ class MetricsAggregator:
                     row.get("chunk_id"), row.get("attempt"),
                     row["human_intervention_reason"],
                     tuple(row.get("missing_case_ids", ())),
+                    tuple(row.get("recovery_receipt_digests", ())),
                     row.get("contract_digest"),
                 )
                 prior = seen_interventions.setdefault(intervention_id, identity)
@@ -419,15 +430,6 @@ class MetricsAggregator:
                 terminals += 1
                 completed += int(payload.get("status") in ("succeeded", "clean", "findings"))
 
-        economics = []
-        for _, payload in attempt_rows:
-            row = {"run_id": values[0].run_id if values else None}
-            node_id = next(
-                (event.node_id for event in values if event.payload is payload), None,
-            )
-            row["node_id"] = node_id
-            row.update({field: payload[field] for field in ATTEMPT_ROW_FIELDS if field in payload})
-            economics.append(row)
         usage_coverage = _coverage(
             expected_attempts, attempt_rows,
             lambda payload: any(field in payload for field in USAGE_FIELDS),

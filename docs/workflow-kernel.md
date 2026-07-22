@@ -6,19 +6,25 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.1.0 ships observation-only shadow mode. It does not make the Python
-runtime authoritative.
+Version 0.3.0 retains observation-only shadow comparison and adds bounded
+authoritative mechanics for behavioral-contract binding and revision,
+validation-retry decisions, canonical review-contribution export, and guarded
+owned-resource cleanup. Those commands are authoritative only where the
+calling Markdown workflow explicitly delegates the mechanic; the kernel does
+not choose providers, findings, merge disposition, or cleanup policy.
 
 ## Runtime and state layout
 
 Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
 `references/` directory). The launcher resolves the runtime from the canonical
-Depot checkout or a compatible same-major `>=0.1.0` entry under the Claude
-cache, then the Codex cache, ordered by parsed semver (never mtime), verifies
-Python 3.12+, sets the module path, and execs the CLI. Never discover the
-runtime from the downstream project, `PATH`, or a symlink escape. The full
-consumer-facing contract is `references/runtime-resolution.md`; in the
-templates below, `"$WORKFLOW_KERNEL"` is the resolved launcher path.
+Depot checkout or a compatible same-major `>=0.3.0` entry under the Claude
+cache, then the Codex cache, ordered by parsed semver (never mtime). Version
+0.3.0 is the minimum because authoritative consumers require the behavioral
+contract, validation-retry, and review-contribution command surface. The
+launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
+discover the runtime from the downstream project, `PATH`, or a symlink escape.
+The full consumer-facing contract is `references/runtime-resolution.md`; in
+the templates below, `"$WORKFLOW_KERNEL"` is the resolved launcher path.
 
 Each repository owns a random, durable `.workflow-kernel/repository-scope.json`.
 Each run uses `.workflow-kernel/runs/<run-id>/` and includes:
@@ -75,10 +81,18 @@ only after canonical receipts exist, then compare:
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest manifest.json --prediction-receipts predicted.json --state-dir plans/feature
 "$WORKFLOW_KERNEL" bind-prediction --type review --request request.json --prediction-receipts predicted.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" observe-pipeline --manifest manifest.json --receipts authoritative.json --state-dir plans/feature
+"$WORKFLOW_KERNEL" export-review-contributions --request request.json --decisions synthesis-decisions.json --raw-findings raw-finding-inventory.json --lane-receipts review-lane-receipts.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel --output authoritative.json
 "$WORKFLOW_KERNEL" observe-review --request request.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" compare --state-dir plans/feature --authoritative-receipts authoritative.json --output shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events authoritative.json --output metrics.json
 ```
+
+For dm-review, contribution export is part of consolidation and must run before
+`observe-review`. It validates and content-addresses the exact synthesis, raw
+finding, and lane-receipt inputs before adding both the per-finding contribution
+events and a coverage receipt. The zero-finding case still emits coverage.
+Review observation reloads the sealed inputs and fails closed when coverage is
+absent, incomplete, or no longer reconstructs the contribution segment.
 
 Shadow observation never selects a node, changes an executor, waives a finding,
 blocks or approves a merge, or invokes cleanup. Disable it by omitting the
@@ -90,6 +104,73 @@ Comparison distinguishes semantic match, explained host difference, missing
 authoritative evidence, unexpected transition, prediction gap, and unsafe to
 promote. Metrics aggregate observed reliability and produce proposal-only
 routing recommendations; they never mutate routing policy.
+
+### Behavioral contracts and validation retry
+
+Pipeline binds the approved behavioral contract after `run.started` and before
+the first implementation dispatch. The state directory is the canonical
+`.workflow-kernel/runs/<run-id>` directory; the contract input must belong to
+the same immutable repository scope.
+
+```sh
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/RUN --contract plans/feature/verification-contract.json --verification-profile plans/feature/verification-profile.json
+"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/RUN --approval plans/feature/verification-contract-approval.json
+"$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/RUN --contract plans/feature/verification-contract.json --verification-profile plans/feature/verification-profile.json
+"$WORKFLOW_KERNEL" decide-validation-retry --state-dir .workflow-kernel/runs/RUN --reason deterministic_validation_failure --signature FAILURE-SIGNATURE
+```
+
+`bind-verification-contract` accepts only an initial revision, validates it,
+stores a content-addressed artifact under the run, and appends a
+`verification_contract_bound` evidence event. Retrying the exact same binding
+is idempotent. A different initial contract, foreign repository scope, unsafe
+path, or invalid contract fails without replacing the current binding.
+
+`revise-verification-contract` validates the complete append-only chain, the
+previous digest, and the next revision before storing the new artifact and
+appending `verification_contract_revised`. Obligation weakening also requires
+validated, content-addressed human-approval evidence bound to the actor,
+decision, normalized UTC timestamp, fresh host-issued nonce, run ID, and exact
+prior/candidate contract digests. The dedicated authorization command records
+that coordinator-owned event before revision; self-authored JSON passed only to
+the revision command has no authority.
+Selected persona/browser case IDs must exactly match the required cases in the
+bound authoritative verification profile. A failed revision leaves the prior contract
+authoritative. Downstream validation feedback and accepted builder output must
+name the latest bound digest and revision.
+
+Fresh Pipeline runs always materialize and bind the authoritative profile before
+the contract. A missing declaration tree is represented by a non-null
+`not_declared` profile with empty case arrays. Null profile ID/digest and omitted
+`--verification-profile` remain valid only for legacy/no-profile contracts; if
+the profile is null, both selected-case arrays must be empty.
+
+`decide-validation-retry` reconstructs counts and signatures from the
+authoritative lifecycle ledger, decides under the run lease, and atomically
+appends and publishes the decision. It never trusts a caller-owned attempt
+ledger and does not dispatch a builder. Pipeline resumes the same builder
+only with proven session continuity, otherwise records an explicit replacement,
+and stops with `human_help_required` when the budget is exhausted or an
+identical signature has converged.
+
+### Exit status and output
+
+Successful commands return `0` and write their JSON result to standard output.
+Failures write one redacted, machine-readable kernel error to standard error.
+Callers must branch on the exit status and must not infer success from a partial
+or previously existing output file.
+
+| Status | Meaning | Caller action |
+|---:|---|---|
+| `0` | The command completed and its output is authoritative for that invocation. | Validate and retain the emitted receipt or artifact. |
+| `2` | Invalid arguments, schema, state, path, or other fail-closed input/operation error. | Preserve evidence and correct the input; do not retry unchanged. |
+| `3` | A creation or cleanup plan/result is unsafe or unmanaged. | Retain the resource and follow the reported guarded recovery path. |
+| `4` | The compatible kernel runtime is unavailable. | Record `shadow unavailable` where permitted; never bypass an authoritative gate. |
+| `5` | Shadow comparison found a parity or evidence gap. | Keep authoritative workflow results unchanged and investigate the report. |
+| `6` | Sequence, revision, lease, registration, or guarded-authority conflict. | Re-read fresh state and reconcile ownership before retrying. |
+
+The contract and retry commands return `0` or a fail-closed `2`/`6` result;
+they never use a nonzero status as a policy decision. In particular, a valid
+retry decision such as `stop` is successful JSON output with status `0`.
 
 ### Docker creation and cleanup
 
@@ -197,8 +278,11 @@ Promotion is an evidence decision, not a mode flag.
 - `native_available -> native_default` is forbidden in this epic and returns
   `separate_human_approval_required`.
 
-Fixture evidence cannot masquerade as real-run evidence. The 0.1.0 release
-keeps `shadow` as the default and exposes no native authority.
+Fixture evidence cannot masquerade as real-run evidence. Version 0.3.0 keeps
+`shadow` as the `init` default while exposing only the bounded authoritative
+commands named above. A caller must explicitly select an approved mode and
+delegate each mechanic; no release promotion makes the kernel an autonomous
+workflow orchestrator.
 
 ## Troubleshooting
 

@@ -3,7 +3,7 @@
   "$id": "https://designmachines.ca/schemas/behavioral-verification-contract-schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "contract_id", "revision", "previous_contract_digest", "requirements", "prohibited_regressions", "checks", "persona_case_ids", "browser_case_ids", "manual_requirements", "revision_justification"],
+  "required": ["schema_version", "contract_id", "revision", "previous_contract_digest", "requirements", "prohibited_regressions", "checks", "persona_case_ids", "browser_case_ids", "verification_profile_id", "verification_profile_digest", "manual_requirements", "revision_justification"],
   "properties": {
     "schema_version": {"const": 1},
     "contract_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
@@ -14,9 +14,23 @@
     "checks": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/check"}},
     "persona_case_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/stable_id"}},
     "browser_case_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/stable_id"}},
+    "verification_profile_id": {"type": ["string", "null"], "pattern": "^profile-sha256:[0-9a-f]{64}$"},
+    "verification_profile_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
     "manual_requirements": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/manual_requirement"}},
     "revision_justification": {"$ref": "#/$defs/revision_justification"}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"verification_profile_id": {"type": "null"}}},
+      "then": {"properties": {"verification_profile_digest": {"type": "null"}, "persona_case_ids": {"maxItems": 0}, "browser_case_ids": {"maxItems": 0}}},
+      "else": {"properties": {"verification_profile_digest": {"type": "string"}}}
+    },
+    {
+      "if": {"properties": {"verification_profile_digest": {"type": "null"}}},
+      "then": {"properties": {"verification_profile_id": {"type": "null"}}},
+      "else": {"properties": {"verification_profile_id": {"type": "string"}}}
+    }
+  ],
   "$defs": {
     "stable_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
     "nonempty_string": {"type": "string", "minLength": 1, "maxLength": 4096},

@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: This skill should be used when the user asks to "validate workflow state", "replay workflow events", "inspect a workflow ledger", or "use the workflow kernel" for shared pipeline and review mechanics.
-version: 0.1.0
+version: 0.3.0
 ---
 
 # Workflow Kernel
@@ -23,7 +23,7 @@ first, then versioned cache directories under `~/.claude` and `~/.codex`
 ordered by parsed semver -- never `ls -td` mtime, so re-pulling an older
 version cannot shadow a newer one), verifies Python 3.12+, sets the module
 path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
-or above the declared `>=0.1.0` floor. The complete consumer-facing
+or above the declared `>=0.3.0` capability floor. The complete consumer-facing
 resolution and fail-closed contract, including the launcher discovery
 snippet, is `references/runtime-resolution.md`; consuming plugins link there
 instead of restating it.
@@ -34,8 +34,13 @@ checkout or invoke the module with
 
 ## Operating Contract
 
-Initialize every run in shadow mode unless the caller explicitly selects
-`enforce` or `native`. Append only validated events with the next exact sequence.
+Initialize every run in shadow mode by default. Version 0.3.0 permits a canonical caller
+may explicitly select an approved `enforce` or `native` mode and delegate the
+bounded authoritative mechanics for behavioral-contract binding/revision,
+validation-retry decisions, review-contribution export, and guarded
+owned-resource cleanup. The kernel never selects providers, review findings,
+merge disposition, or cleanup policy. Append only validated events with the
+next exact sequence.
 Acquire the run lease before publishing materialized state. Supply the expected
 revision on every state write. Reconstruct state from the ledger after an
 interruption rather than trusting a potentially stale materialization.
@@ -57,9 +62,12 @@ conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
 evidence attachment and one cleanup reconciliation.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
---help` in a repository checkout) for the `init`, `validate`, `append`,
-`replay`, and `status` commands. Consume successful operational output and
-errors as stable JSON. Treat `--help` output as plain text.
+--help` in a repository checkout) for the complete command inventory. The
+0.3.0 surface includes state/replay commands, contract bind/revise and retry
+decisions, prediction/observation/comparison, canonical review-contribution
+export, metrics, and guarded resource planning/execution/reconciliation.
+Consume successful operational output and errors as stable JSON. Treat
+`--help` output as plain text.
 
 ## Public API and Contracts
 

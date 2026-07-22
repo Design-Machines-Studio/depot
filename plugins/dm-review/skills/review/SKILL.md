@@ -626,13 +626,39 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
    - Zero findings -> "CLEAN"
 6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
 
+Materialize the decisions, sealed raw-finding inventory, and literal lane
+receipts described by `references/output-format.md` as
+`synthesis-decisions.json`, `raw-finding-inventory.json`, and
+`review-lane-receipts.json`. Then invoke the trusted launcher; this is the sole
+producer of canonical contribution IDs, receipt sequences, and the durable
+coverage receipt:
+
+```bash
+"$WORKFLOW_KERNEL" export-review-contributions \
+  --request .claude/ux-review/workflow-kernel/request.json \
+  --decisions .claude/ux-review/workflow-kernel/synthesis-decisions.json \
+  --raw-findings .claude/ux-review/workflow-kernel/raw-finding-inventory.json \
+  --lane-receipts .claude/ux-review/workflow-kernel/review-lane-receipts.json \
+  --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
+  --state-dir .claude/ux-review/workflow-kernel \
+  --output .claude/ux-review/workflow-kernel/authoritative-receipts.json
+```
+
+The command rejects credential-shaped content before it persists anything,
+content-addresses all three canonical inputs under `contribution-inputs/`, and
+fails closed unless the raw inventory, synthesis decisions, literal lane
+provenance, and lane evidence references agree exactly. Never hand-author
+`canonical_finding_id`, `sequence`, `finding_contribution`, or contribution
+coverage receipts. A zero-finding synthesis still runs the command with count
+zero and all required lane receipts so missing producer coverage is observable.
+
 Output the full report to the user.
 
 #### Coverage receipt and shadow observation
 
 Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case. Each row names requested/attempted/implemented-by provider, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
 
-Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` command atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation and direct comparison reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. Observation requires the matching artifact and never creates or changes it. The source input and bound artifact remain until comparison; only an exact semantic match permits their post-match deletion. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity match alone never deletes terminal run state: retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; internal diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` appear only in `differences`.
+Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` command atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation and direct comparison reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. Observation requires the matching artifact and never creates or changes it. The source input and bound artifact remain until comparison; only an exact semantic match permits their post-match deletion. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity match alone never deletes terminal run state: retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `explained_host_economics_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; economics differences are explicit non-matches and internal diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` appear only in `differences`.
 
 #### Verify-before-close gate
 

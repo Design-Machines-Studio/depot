@@ -55,6 +55,7 @@ PROMOTION_CHECK_SOURCES = {
 }
 SCHEMA_DOCUMENTS = frozenset({
     "behavioral-verification-contract-schema.json",
+    "verification-contract-approval-schema.json",
     "browser-recovery-schema.json",
     "cleanup-plan-schema.json",
     "cleanup-receipt-schema.json",
@@ -69,12 +70,14 @@ BEHAVIORAL_CLI_CASES = {
     "append": ("<run>", "--event", "<event>"),
     "replay": ("<run>",),
     "status": ("<run>",),
-    "decide-validation-retry": ("--reason", "deterministic_validation_failure", "--attempt-ledger", "<missing>"),
+    "decide-validation-retry": ("--state-dir", "<state>", "--reason", "deterministic_validation_failure"),
+    "authorize-verification-contract-revision": ("--state-dir", "<state>", "--approval", "<missing>"),
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
     "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "revise-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
+    "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
@@ -167,7 +170,23 @@ def check_documents(context):
         visit(document)
     load_policy(REFERENCES / "workflow-policy.json")
     WorkflowTemplates(REFERENCES / "workflow-classes.json")
+    from workflow_kernel.pipeline_adapter import PIPELINE_STAGES, translate_pipeline_receipts
+    from workflow_kernel.dm_review_adapter import REVIEW_STAGES, translate_review_receipts
+    replayed_ledgers = []
+    for path in sorted(ROOT.glob("plans/**/authoritative-receipts.json")):
+        receipts = json.loads(path.read_text(encoding="utf-8"))
+        require(type(receipts) is list, f"{path} is not a receipt array")
+        stages = {item.get("stage") for item in receipts if type(item) is dict}
+        if stages <= PIPELINE_STAGES:
+            translate_pipeline_receipts(receipts)
+        elif stages <= REVIEW_STAGES:
+            translate_review_receipts(receipts)
+        else:
+            raise ValidationFailure(f"{path} uses non-canonical receipt stages")
+        replayed_ledgers.append(str(path.relative_to(ROOT)))
+    require(replayed_ledgers, "checked-in authoritative receipt ledger missing")
     context["schema_documents"] = [path.name for path in schemas]
+    context["authoritative_receipt_ledgers"] = replayed_ledgers
 
 
 def check_unittests(context):
@@ -302,7 +321,15 @@ def check_hosts(context):
     results = {}
     for host in ("codex", "generic"):
         report = ShadowComparator().compare_receipt_sets(sets[host], sets["claude-code"])
-        require(report.semantic_match and not report.safe_to_promote, f"{host} compatibility mismatch")
+        require(
+            not report.safe_to_promote and (
+                report.semantic_match and report.reason == "explained_host_difference"
+                or not report.semantic_match
+                and report.reason == "explained_host_economics_difference"
+                and "economics_difference" in report.differences
+            ),
+            f"{host} compatibility mismatch",
+        )
         results[host] = report.reason
     context["host_compatibility"] = {"claude-code": "reference", **results}
     require(set(context["host_compatibility"]) == CANONICAL_HOSTS, "host compatibility IDs drifted")
@@ -368,8 +395,10 @@ def check_cli(context):
     expected = {
         "init", "validate", "append", "replay", "status",
         "decide-validation-retry", "bind-prediction",
+        "authorize-verification-contract-revision",
         "bind-verification-contract", "revise-verification-contract",
-        "observe-pipeline", "observe-review", "compare", "metrics",
+        "observe-pipeline", "observe-review", "export-review-contributions",
+        "compare", "metrics",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
@@ -477,9 +506,85 @@ def check_cli(context):
             "mode": "full", "workflow_class": "bug", "executionMode": "generic",
         }), encoding="utf-8")
         review_receipts = json.loads((RECEIPTS / "dm-review.json").read_text(encoding="utf-8"))
+        review_prefix = root / "review-prefix.json"
+        review_prefix.write_text(json.dumps(review_receipts[:-1]), encoding="utf-8")
+        decisions = root / "synthesis-decisions.json"
+        decisions.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "synthesis_decisions",
+            "run_id": "review-1", "source_finding_count": 1,
+            "occurred_at": "2026-07-14T01:04:30Z",
+            "decisions": [{
+                "source_finding_id": "security-P1-auth-boundary",
+                "finding_path": "internal/auth.py", "finding_anchor": "authorize",
+                "finding_category": "authorization",
+                "finding_root_cause": "missing boundary check",
+                "finding_disposition": "retained", "agreement": "unique",
+                "decision_reason_code": "retained-unique",
+                "reviewer": "security", "lane": "security",
+                "requested_provider": "claude", "attempted_provider": "claude",
+                "implemented_by": "codex", "provider": "codex",
+                "model": "not_reported", "source_severity": "P1",
+                "evidence_ref": "receipts/review/security-finding.json",
+                "attempt": 2, "occurred_at": "2026-07-14T01:02:00Z",
+            }],
+        }), encoding="utf-8")
+        raw_findings = root / "raw-finding-inventory.json"
+        raw_findings.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "raw_finding_inventory",
+            "run_id": "review-1", "findings": [{
+                "source_finding_id": "security-P1-auth-boundary",
+                "reviewer": "security", "lane": "security",
+                "source_severity": "P1",
+                "evidence_ref": "receipts/review/security-finding.json",
+                "finding_path": "internal/auth.py", "finding_anchor": "authorize",
+                "finding_category": "authorization",
+                "finding_root_cause": "missing boundary check",
+            }],
+        }), encoding="utf-8")
+        lane_receipts = root / "review-lane-receipts.json"
+        lane_receipts.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "review_lane_receipts",
+            "run_id": "review-1", "lanes": [
+                {
+                    "reviewer": "security", "lane": "security",
+                    "requested_provider": "claude", "attempted_provider": "claude",
+                    "implemented_by": "codex", "provider": "codex",
+                    "model": "not_reported",
+                    "evidence_refs": ["receipts/review/security-finding.json"],
+                },
+                {
+                    "reviewer": "architecture", "lane": "architecture",
+                    "requested_provider": "codex", "attempted_provider": "codex",
+                    "implemented_by": "codex", "provider": "codex",
+                    "model": "not_reported",
+                    "evidence_refs": ["receipts/review/architecture.json"],
+                },
+                {
+                    "reviewer": "visual", "lane": "visual",
+                    "requested_provider": "codex", "attempted_provider": "codex",
+                    "implemented_by": "codex", "provider": "codex",
+                    "model": "not_reported",
+                    "evidence_refs": ["receipts/review/visual-unavailable.json"],
+                },
+            ],
+        }), encoding="utf-8")
+        contributed = root / "review-contributed.json"
+        successful(
+            "export-review-contributions", "--request", request,
+            "--decisions", decisions, "--raw-findings", raw_findings,
+            "--lane-receipts", lane_receipts, "--receipts", review_prefix,
+            "--state-dir", root, "--output", contributed,
+        )
+        contributed_receipts = json.loads(contributed.read_text(encoding="utf-8"))
+        terminal = {**review_receipts[-1], "sequence": len(contributed_receipts)}
+        authoritative_review = root / "review-authoritative.json"
+        authoritative_review.write_text(
+            json.dumps([*contributed_receipts, terminal]), encoding="utf-8",
+        )
         review_prediction = root / "review-prediction.json"
         review_prediction.write_text(json.dumps([
-            {**item, "prediction_basis": "pre-action"} for item in review_receipts
+            {**item, "prediction_basis": "pre-action"}
+            for item in [*contributed_receipts, terminal]
         ]), encoding="utf-8")
         successful(
             "bind-prediction", "--type", "review", "--request", request,
@@ -488,7 +593,7 @@ def check_cli(context):
         start(review_run, "review-1")
         successful(
             "observe-review", "--request", request,
-            "--receipts", RECEIPTS / "dm-review.json", "--state-dir", root,
+            "--receipts", authoritative_review, "--state-dir", root,
         )
         successful(
             "metrics", "--events", RECEIPTS / "pipeline-codex.json",
@@ -527,14 +632,9 @@ def check_cli(context):
             "revise-verification-contract", "--state-dir", contract_run,
             "--contract", revision_path,
         )
-        attempt_ledger = root / "attempt-ledger.json"
-        attempt_ledger.write_text(json.dumps({
-            "counts": {}, "signatures": {},
-        }), encoding="utf-8")
         successful(
-            "decide-validation-retry", "--reason",
-            "deterministic_validation_failure", "--attempt-ledger",
-            attempt_ledger,
+            "decide-validation-retry", "--state-dir", contract_run,
+            "--reason", "deterministic_validation_failure",
         )
 
         argv = root / "create-argv.json"

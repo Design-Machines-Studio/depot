@@ -55,12 +55,17 @@ provider preference. Agreement merges contributor IDs; disagreement is retained
 in the synthesis decision ledger and changes the decision, not the finding's
 identity. A summary never substitutes for missing raw evidence.
 
-After consolidation, emit contribution receipts that attribute retained,
+After consolidation, materialize `synthesis-decisions.json`, the sealed raw
+finding inventory, and literal required-lane receipts using the review skill's
+exact structured contracts. Then use only the trusted launcher command
+`export-review-contributions` to append contribution receipts that attribute retained,
 superseded, duplicate, resolved, and disagreement outcomes to the contributing
 attempts. These receipts are observation-only economics evidence: they cannot
 select a provider, change routing, invent a finding, waive coverage, or alter
 the zero-deferral recommendation. Missing raw evidence or any required lane or
 browser case remains a reported coverage gap, never an implicit clean result.
+The exporter rejects credential-shaped content before persistence and emits a
+durable coverage receipt even when the raw inventory is empty.
 
 ## Shadow Workflow Kernel Lifecycle
 

@@ -7,6 +7,7 @@ from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
 from workflow_kernel.dm_review_adapter import translate_review_receipts
 from workflow_kernel.schema import RunState
 from workflow_kernel.shadow import ReceiptSet, ShadowComparator
+from workflow_kernel._translation import canonical_finding_identity
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
@@ -254,21 +255,32 @@ class ShadowParityTests(unittest.TestCase):
         self.assertFalse(report.semantic_match)
 
     def test_contribution_mutations_are_semantic_and_map_key_order_is_not(self):
+        identity = {
+            "finding_path": "internal/review.py",
+            "finding_anchor": "review.finding",
+            "finding_category": "trust boundary",
+            "finding_root_cause": "unbound contribution",
+        }
+        canonical_id, _ = canonical_finding_identity(*identity.values())
         base = {
             "run_id": "review-parity", "sequence": 0,
             "stage": "finding_contribution", "status": "recorded",
             "node_id": "review-convergence", "attempt": 1,
             "occurred_at": "2026-07-14T00:00:00Z",
             "authoritative_receipt": "receipts/contribution.json",
-            "source_finding_id": "source-a", "canonical_finding_id": "finding-a",
+            "source_finding_id": "source-a", "canonical_finding_id": canonical_id,
+            **identity,
             "finding_disposition": "retained", "agreement": "unique",
             "decision_reason_code": "retained-unique", "reviewer": "security",
+            "source_severity": "P2",
+            "lane": "security", "requested_provider": "openrouter",
+            "attempted_provider": "openai", "implemented_by": "codex",
             "provider": "openai", "model": "gpt-5.6-sol",
             "evidence_ref": "raw/finding.json",
         }
         authoritative = ReceiptSet.from_events(translate_review_receipts([base]))
         mutations = (
-            {"source_finding_id": "source-b"}, {"canonical_finding_id": "finding-b"},
+            {"source_finding_id": "source-b"},
             {"finding_disposition": "merged", "decision_reason_code": "exact-duplicate"},
             {"agreement": "disputed", "decision_reason_code": "retained-disagreement"},
             {"provider": "anthropic"}, {"model": "claude-opus"}, {"attempt": 2},
@@ -283,6 +295,18 @@ class ShadowParityTests(unittest.TestCase):
             )
             with self.subTest(mutation=mutation):
                 self.assertFalse(report.semantic_match)
+        changed_identity = copy.deepcopy(base)
+        changed_identity["finding_root_cause"] = "different root cause"
+        changed_identity["canonical_finding_id"] = canonical_finding_identity(
+            changed_identity["finding_path"], changed_identity["finding_anchor"],
+            changed_identity["finding_category"],
+            changed_identity["finding_root_cause"],
+        )[0]
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_review_receipts([changed_identity])),
+            authoritative,
+        )
+        self.assertFalse(report.semantic_match)
         reordered = dict(reversed(tuple(base.items())))
         report = ShadowComparator().compare_receipt_sets(
             ReceiptSet.from_events(translate_review_receipts([reordered])), authoritative,

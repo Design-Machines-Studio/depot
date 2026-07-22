@@ -53,7 +53,9 @@ variables, and hop-bounds its own symlink path (a cycle exits `4`).
   `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then
   `~/.codex/plugins/cache/depot/`.
 - Version compatibility is semantic: same-major versions at or above the
-  declared `>=0.1.0` floor. Candidates are ordered by their parsed semver
+  declared `>=0.3.0` floor. This floor is the capability boundary for
+  authoritative retry decisions and behavioral-contract bind/revise commands.
+  Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,
   and incompatible plugin name/version metadata.

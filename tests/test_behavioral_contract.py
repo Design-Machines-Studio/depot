@@ -4,10 +4,11 @@ from pathlib import Path
 
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.behavioral_contract import (
-    MAX_CONTRACT_BYTES, canonical_bytes, contract_digest, obligations,
+    MAX_CONTRACT_BYTES, approval_digest, canonical_bytes, contract_digest, obligations,
     parse_contract_bytes, validate_contract, validate_initial_binding,
-    validate_revision,
+    validate_profile_binding, validate_revision, verification_profile_digest,
 )
+from workflow_kernel.verification import PersonaCase, VerificationProfile
 
 
 SCHEMA = json.loads((
@@ -42,6 +43,8 @@ def contract_one():
         }],
         "persona_case_ids": ["persona-editor"],
         "browser_case_ids": ["browser-primary"],
+        "verification_profile_id": "profile-sha256:" + "1" * 64,
+        "verification_profile_digest": "sha256:" + "2" * 64,
         "manual_requirements": [],
         "revision_justification": {
             "reason_code": "initial_binding",
@@ -51,6 +54,16 @@ def contract_one():
             "removed_obligation_ids": [],
             "human_approval_evidence_ref": None,
         },
+    }
+
+
+def approval_for(candidate, previous_digest, run_id="contract-run"):
+    return {
+        "schema_version": 1, "actor": "reviewer-1", "decision": "approved",
+        "occurred_at": "2026-07-23T00:00:00Z", "run_id": run_id,
+        "nonce": "approval-nonce-1",
+        "previous_contract_digest": previous_digest,
+        "candidate_contract_digest": contract_digest(candidate),
     }
 
 
@@ -266,7 +279,11 @@ class BehavioralContractTests(unittest.TestCase):
         revision["revision_justification"]["human_approval_evidence_ref"] = (
             "plans/adaptive/plan.html#approval"
         )
-        self.assertEqual(validate_revision(previous, revision, previous_digest)["revision"], 2)
+        self.assertEqual(validate_revision(
+            previous, revision, previous_digest,
+            approval_evidence=approval_for(revision, previous_digest),
+            run_id="contract-run",
+        )["revision"], 2)
         revision["previous_contract_digest"] = "sha256:" + "0" * 64
         with self.assertRaises(ValueError):
             validate_revision(previous, revision, previous_digest)
@@ -357,8 +374,100 @@ class BehavioralContractTests(unittest.TestCase):
             )
             with self.subTest(name=name, assertion="approved"):
                 self.assertEqual(
-                    validate_revision(previous, revision, previous_digest)["revision"], 2,
+                    validate_revision(
+                        previous, revision, previous_digest,
+                        approval_evidence=approval_for(revision, previous_digest),
+                        run_id="contract-run",
+                    )["revision"], 2,
                 )
+
+    def test_may_pass_to_not_runnable_requires_authenticated_approval(self):
+        previous = contract_one()
+        previous["checks"][0]["baseline_expectation"] = "may_pass"
+        previous = validate_initial_binding(previous)
+        digest = contract_digest(previous)
+        revision = json.loads(json.dumps(previous))
+        revision.update({"revision": 2, "previous_contract_digest": digest})
+        revision["checks"][0]["baseline_expectation"] = "not_runnable"
+        revision["revision_justification"] = {
+            "reason_code": "approved_baseline_change", "summary": "Cannot run now.",
+            "added_obligation_ids": [],
+            "retained_obligation_ids": sorted(obligations(previous)),
+            "removed_obligation_ids": [],
+            "human_approval_evidence_ref": "approvals/baseline.json",
+        }
+        with self.assertRaises(ValueError):
+            validate_revision(previous, revision, digest)
+        validate_revision(
+            previous, revision, digest,
+            approval_evidence=approval_for(revision, digest), run_id="contract-run",
+        )
+
+    def test_contract_cases_are_exactly_bound_to_authoritative_profile(self):
+        case = PersonaCase(
+            "editor", "edit", "member", "/edit", "chromium", "1280x720", True,
+        )
+        profile = VerificationProfile(
+            1, "project_declaration", (case,), (), configured_engines=("chromium",),
+        ).to_dict()
+        contract = contract_one()
+        contract["persona_case_ids"] = [case.case_id]
+        contract["browser_case_ids"] = [case.case_id]
+        contract["verification_profile_id"] = profile["profile_id"]
+        contract["verification_profile_digest"] = verification_profile_digest(profile)
+        contract["revision_justification"]["added_obligation_ids"] = sorted(
+            obligations(contract)
+        )
+        self.assertEqual(validate_profile_binding(contract, profile)["revision"], 1)
+        invented = json.loads(json.dumps(contract))
+        invented["browser_case_ids"] = ["case-sha256:" + "f" * 64]
+        with self.assertRaises(ValueError):
+            validate_profile_binding(invented, profile)
+        missing = json.loads(json.dumps(contract))
+        missing["persona_case_ids"] = []
+        with self.assertRaises(ValueError):
+            validate_profile_binding(missing, profile)
+
+    def test_profile_identity_transition_is_always_approval_gated(self):
+        previous = validate_initial_binding(contract_one())
+        digest = contract_digest(previous)
+        revision = json.loads(json.dumps(previous))
+        revision.update({"revision": 2, "previous_contract_digest": digest})
+        revision["verification_profile_id"] = "profile-sha256:" + "3" * 64
+        revision["verification_profile_digest"] = "sha256:" + "4" * 64
+        revision["revision_justification"] = {
+            "reason_code": "profile_transition", "summary": "Change profile.",
+            "added_obligation_ids": [],
+            "retained_obligation_ids": sorted(obligations(previous)),
+            "removed_obligation_ids": [],
+            "human_approval_evidence_ref": None,
+        }
+        with self.assertRaises(ValueError):
+            validate_revision(previous, revision, digest)
+
+    def test_profile_schema_nullability_matches_runtime_and_approval_time_normalizes(self):
+        invalid = contract_one()
+        invalid["verification_profile_id"] = None
+        invalid["verification_profile_digest"] = None
+        self.assertFalse(schema_matches(invalid, SCHEMA))
+        with self.assertRaises(ValueError):
+            validate_contract(invalid)
+
+        candidate = contract_one()
+        prior = "sha256:" + "a" * 64
+        candidate_digest = contract_digest(candidate)
+        canonical = approval_for(candidate, prior)
+        fractional = dict(canonical, occurred_at="2026-07-23T00:00:00.000Z")
+        self.assertEqual(
+            approval_digest(
+                canonical, previous_digest=prior,
+                candidate_digest=candidate_digest, run_id="contract-run",
+            ),
+            approval_digest(
+                fractional, previous_digest=prior,
+                candidate_digest=candidate_digest, run_id="contract-run",
+            ),
+        )
 
     def test_parser_rejects_malformed_invalid_utf8_duplicate_depth_and_size(self):
         valid = canonical_bytes(contract_one())
