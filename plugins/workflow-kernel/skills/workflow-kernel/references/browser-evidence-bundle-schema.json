@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/browser-evidence-bundle-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "scenario_digest", "profile_id", "persona_id", "repository_state_digest", "evidence_binding_digest", "login_state", "javascript_enabled", "restart_state", "engine", "viewport", "origin_digest", "route_digest", "session_ref", "attempt_refs", "recovery_receipt_digest", "results", "evidence", "covered_case_ids", "missing_case_ids", "terminal_reason", "bundle_digest"],
+  "properties": {
+    "schema_version": {"const": 1}, "scenario_digest": {"$ref": "#/$defs/digest"},
+    "profile_id": {"type": "string", "pattern": "^profile-sha256:[0-9a-f]{64}$"}, "persona_id": {"$ref": "#/$defs/id"},
+    "repository_state_digest": {"$ref": "#/$defs/digest"}, "evidence_binding_digest": {"$ref": "#/$defs/digest"},
+    "login_state": {"enum": ["anonymous", "authenticated", "expected_rejection", "human_action_required"]},
+    "javascript_enabled": {"type": "boolean"}, "restart_state": {"enum": ["none", "application_restarted", "fresh_primary", "alternate_engine"]},
+    "engine": {"enum": ["chromium", "firefox", "webkit"]}, "viewport": {"$ref": "#/$defs/viewport"},
+    "origin_digest": {"type": "string", "pattern": "^origin-sha256:[0-9a-f]{64}$"}, "route_digest": {"$ref": "#/$defs/digest"},
+    "session_ref": {"$ref": "#/$defs/id"}, "attempt_refs": {"type": "array", "uniqueItems": true, "maxItems": 3, "items": {"$ref": "#/$defs/id"}},
+    "recovery_receipt_digest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+    "results": {"type": "array", "minItems": 1, "maxItems": 512, "items": {"$ref": "#/$defs/result"}},
+    "evidence": {"type": "array", "maxItems": 1024, "items": {"$ref": "#/$defs/evidence"}},
+    "covered_case_ids": {"type": "array", "uniqueItems": true, "maxItems": 512, "items": {"$ref": "#/$defs/case_id"}},
+    "missing_case_ids": {"type": "array", "uniqueItems": true, "maxItems": 512, "items": {"$ref": "#/$defs/case_id"}},
+    "terminal_reason": {"enum": ["first_pass", "fresh_primary", "alternate_engine", "human_action_required", "human_help_required", "application_failure"]},
+    "bundle_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9._:-]*$"},
+    "case_id": {"type": "string", "pattern": "^case-sha256:[0-9a-f]{64}$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "viewport": {"type": "string", "pattern": "^(?:[1-9][0-9]{1,3}|1[0-5][0-9]{3}|16[0-2][0-9]{2}|163[0-7][0-9]|1638[0-4])x(?:[1-9][0-9]{1,3}|1[0-5][0-9]{3}|16[0-2][0-9]{2}|163[0-7][0-9]|1638[0-4])$"},
+    "reference": {"type": "string", "minLength": 1, "maxLength": 65536, "pattern": "^[^\\u0000-\\u001f\\u007f?#]+$"},
+    "result": {"type": "object", "additionalProperties": false, "required": ["step_id", "status", "reason_code", "evidence_digests"], "properties": {
+      "step_id": {"$ref": "#/$defs/id"}, "status": {"enum": ["passed", "failed", "skipped", "human_action_required", "human_help_required", "application_failure"]},
+      "reason_code": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]},
+      "evidence_digests": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/digest"}}
+    }},
+    "evidence": {"type": "object", "additionalProperties": false, "required": ["step_id", "capture_kind", "reference", "evidence_digest", "proof_kind"], "properties": {
+      "step_id": {"$ref": "#/$defs/id"}, "capture_kind": {"enum": ["screenshot", "trace", "console", "network", "a11y"]},
+      "reference": {"$ref": "#/$defs/reference"}, "evidence_digest": {"$ref": "#/$defs/digest"}, "proof_kind": {"enum": ["browser", "curl", "reachability"]}
+    }}
+  }
+}

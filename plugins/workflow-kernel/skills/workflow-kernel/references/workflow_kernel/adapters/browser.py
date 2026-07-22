@@ -29,6 +29,8 @@ from ..browser_evidence import (  # noqa: F401 -- re-exported evidence model
     snapshot_browser_recovery_receipt,
     snapshot_browser_request,
 )
+from ..browser_bundle import BrowserStepResult
+from ..browser_scenario import BrowserScenario, BrowserScenarioStep
 
 class BrowserAdapter(Protocol):
     def attempt(self, request: BrowserRequest, engine: str) -> BrowserAttempt: ...
@@ -37,6 +39,20 @@ class BrowserAdapter(Protocol):
     def recheck_readiness(
         self, request: BrowserRequest, previous_session_id: str,
     ) -> BrowserReadinessEvidence: ...
+
+
+class BrowserScenarioAdapter(Protocol):
+    """Separate I/O seam for executing declared scenario steps.
+
+    Implementations return structured results only. They never widen the
+    recovery adapter or place credentials, cookies, DOM, or raw artifacts in
+    durable records.
+    """
+
+    def execute_step(
+        self, scenario: BrowserScenario, step: BrowserScenarioStep, *,
+        engine: str, session_ref: str,
+    ) -> BrowserStepResult: ...
 
 
 class BrowserRecovery:

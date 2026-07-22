@@ -795,3 +795,12 @@ def snapshot_browser_recovery_receipt(value):
         return BrowserRecoveryReceipt(*captured)
     except Exception:
         raise ValueError("invalid browser recovery receipt") from None
+
+
+# Immutable multi-reviewer bundle contracts are core evidence policy. Keep the
+# legacy recovery model above unchanged and expose the bundle beside it.
+from .browser_bundle import (  # noqa: E402,F401
+    BrowserBundleEvidence, BrowserEvidenceBundle, BrowserStepResult,
+    bind_browser_evidence_bundle, match_browser_evidence_bundle,
+    snapshot_browser_evidence_bundle,
+)
