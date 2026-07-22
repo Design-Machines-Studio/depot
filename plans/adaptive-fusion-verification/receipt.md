@@ -1,6 +1,6 @@
 # Pipeline Receipt: adaptive-fusion-verification
 
-- Date: 2026-07-22
+- Date: 2026-07-23
 - Branch: `codex/adaptive-fusion-verification`
 - Base: `main`
 - Merge: CLEAN; publish as a draft PR because the external Assembly declaration lane remains non-green
@@ -21,7 +21,7 @@
 | 3 | Provenance-preserving dm-review synthesis | Guardrails, consolidator contracts, adapter tests, and final three-lens review are clean. |
 | 4 | Adaptive depth without provider/security authority drift | Closed decision profile, routing validator, and ordinary-path validator pass. |
 | 5 | Attempt/model economics without double counting | Metrics, identity, ambiguity, intervention, and parity tests pass. |
-| 6 | Release and existing safety compatibility | Release inventory is 8 schemas/21 CLI commands; generated, dependency, dual-compat, routing, dm-review, and workflow validators pass. Full 786-test discovery has one pre-existing live `assembly-baseplate` declaration error and no Depot-owned failure. |
+| 6 | Release and existing safety compatibility | Release inventory is 9 schemas/23 CLI commands; generated, dependency, dual-compat, routing, dm-review, and workflow validators pass. Full 801-test discovery has 1 skipped test, exactly 1 pre-existing live `assembly-baseplate` declaration error, and no Depot-owned failure. |
 
 ## Cleanup
 
@@ -63,4 +63,4 @@
 
 - Worktrees before: 12   after: 4   pruned: 8
 - Branches deleted: 6   blocked: 0
-- git status --porcelain: owned final review changes and force-added plan artifacts pending commit
+- git status --porcelain: clean at terminal review HEAD `42a3682`

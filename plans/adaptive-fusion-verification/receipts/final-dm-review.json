@@ -4,12 +4,12 @@
   "unresolved_findings": 0,
   "deferred_findings": 0,
   "lenses": [
-    {"name": "architecture-security", "provider": "codex", "status": "clean"},
-    {"name": "metrics-tests", "provider": "codex", "status": "clean"},
-    {"name": "contracts-docs", "provider": "codex", "status": "clean"}
+    {"name": "terminal-security", "provider": "codex", "status": "clean"},
+    {"name": "terminal-correctness", "provider": "codex", "status": "clean"},
+    {"name": "contracts-artifacts", "provider": "codex", "status": "clean"}
   ],
   "openrouter_status": "declined-before-export",
   "openrouter_reason": "tenant-policy-denied",
-  "repair_evidence": "68 final focused tests, 123 expanded focused tests, exact contract validators, and three clean re-reviews",
+  "repair_evidence": "801-test discovery with 1 skipped test, exactly 1 external assembly-baseplate error, no Depot-owned failure, exact release validators, and independent closure of all terminal security and correctness repros at 42a3682",
   "external_boundary": "assembly-baseplate invalid_verification_declaration"
 }

@@ -1,6 +1,6 @@
 # Run Post-Mortem: adaptive-fusion-verification
 
-Date: 2026-07-22
+Date: 2026-07-23
 
 ## providerSplit
 
@@ -56,8 +56,8 @@ None. Claude executed no coding task. OpenRouter-requested lanes have explicit u
 ## qualityLedger
 
 - Codex implemented all six chunks and all bounded review/fix iterations.
-- Final full review used three Codex lenses because OpenRouter export was unavailable. The lenses found and resolved contract-path drift, regression-proof gaps, decision-profile continuity loss, ambiguous metric aggregation, intervention identity conflicts, shell-command parsing bypasses/false positives, and durable credential-detection gaps.
-- Final state: three clean re-reviews, zero unresolved or deferred P1/P2 findings.
+- Final full review used independent Codex security and correctness lenses plus the retained contracts/artifacts lane because OpenRouter export was unavailable. The loop found and resolved approval-authority forgery, artifact digest and browser-profile drift, raw-lane omission, durable URI credentials, symlink escapes, duplicate lanes, and decision-profile canonicalization gaps.
+- Final state: every terminal repro independently closed at exact HEAD `42a3682`; zero unresolved or deferred P1/P2/P3 findings.
 - Evaluation iterations by chunk: `01:2`, `02:2`, `03:2`, `04:3`, `05:3`, `06:1`.
 - Cap descents: none recorded. Human intervention: none recorded. Regressions shipped by a cheaper model: none; OpenRouter did not execute.
 
@@ -85,7 +85,7 @@ None. Claude executed no coding task. OpenRouter-requested lanes have explicit u
 - Concrete edit: retain fail-closed sibling declaration validation in a separately named integration lane while keeping Depot-owned deterministic release results independently visible.
 - Expected token/cost delta: no expected quality reduction; faster root-cause isolation.
 - Confidence: medium
-- Evidence: final 786-test run and `final-requirements-crosscheck.md`
+- Evidence: final 801-test run (1 skipped, exactly 1 external `assembly-baseplate` error) and `final-requirements-crosscheck.md`
 
 ## standingRecommendations
 
@@ -117,7 +117,7 @@ None. No recommendation in the rolling ledger has reached the default three-run 
 | `04-review-synthesis-provenance` | openrouter | codex | codex | true | tenant-policy-denied |
 | `05-attempt-economics-and-contribution` | codex | codex | codex | false | none |
 | `06-cross-plugin-release-integration` | openrouter | codex | codex | true | tenant-policy-denied |
-| final full review | openrouter + codex | codex | codex | true | OpenRouter tenant-policy-denied; three Codex lenses ran |
+| final full review | openrouter + codex | codex | codex | true | OpenRouter tenant-policy-denied; independent security/correctness reviews plus contracts/artifacts evidence ran |
 
 ## wallClockSeconds
 
