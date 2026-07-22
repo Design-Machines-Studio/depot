@@ -370,6 +370,22 @@ def _dedupe(candidates):
     }
     for key in sorted(groups):
         items = groups[key]
+        benefit_bases = {item["benefit_basis"] for item in items}
+        if len(benefit_bases) != 1:
+            _fail("conflicting benefit basis for dedupe key")
+        measurements = [item["benefit_measurement"] for item in items]
+        if benefit_bases == {"measured"}:
+            identities = {
+                _canonical_bytes({
+                    field: measurement[field]
+                    for field in ("metric", "unit", "baseline", "expected")
+                })
+                for measurement in measurements
+            }
+            if len(identities) != 1:
+                _fail("conflicting measured benefit claims")
+        elif any(measurement is not None for measurement in measurements):
+            _fail("qualitative benefit contains measured quantity")
         chosen = min(items, key=lambda item: (
             terminal_rank[item["status"]], _canonical_bytes(item),
         ))
@@ -377,19 +393,11 @@ def _dedupe(candidates):
         for field in ("evidence_refs", "source_runs", "source_stages", "source_chunks",
                       "existing_control_refs"):
             merged[field] = sorted({entry for item in items for entry in item[field]})
-        measurements = [item["benefit_measurement"] for item in items]
-        if measurements[0] is not None:
+        if benefit_bases == {"measured"}:
             identity = {
                 key: measurements[0][key]
                 for key in ("metric", "unit", "baseline", "expected")
             }
-            if any(
-                measurement is None or any(
-                    measurement[key] != expected for key, expected in identity.items()
-                )
-                for measurement in measurements
-            ):
-                _fail("conflicting measured benefit claims")
             merged["benefit_measurement"] = {
                 **identity,
                 "evidence_refs": sorted({

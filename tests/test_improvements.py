@@ -215,6 +215,33 @@ class ImprovementScoutTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.report([measured], [self.input(), unavailable])
 
+    def test_mixed_benefit_dedupe_rejects_identically_in_both_orders(self):
+        qualitative = self.candidate()
+        measured = self.candidate(
+            benefit_basis="measured", expected_benefit="reduced_cycle_time",
+            benefit_rationale="A measured duration supports the proposal.",
+            benefit_measurement={
+                "metric": "review-duration", "unit": "seconds",
+                "baseline": 100, "expected": 70,
+                "evidence_refs": ["plans/feature/metrics.json"],
+            },
+        )
+        metric_input = self.input(
+            evidence_id="metrics.duration.1",
+            artifact_ref="plans/feature/metrics.json",
+            artifact_digest="sha256:" + "3" * 64,
+            observation_category="measured_metric",
+        )
+        messages = []
+        for candidates in ([qualitative, measured], [measured, qualitative]):
+            with self.assertRaises(ValueError) as raised:
+                self.report(candidates, [self.input(), metric_input])
+            messages.append(str(raised.exception))
+        self.assertEqual(messages, [
+            "conflicting benefit basis for dedupe key",
+            "conflicting benefit basis for dedupe key",
+        ])
+
     def test_full_cli_and_codex_native_prose_encode_two_stage_order(self):
         root = Path(__file__).resolve().parents[1]
         marker = (
