@@ -20,6 +20,8 @@ Initialized: `2026-07-22T12:21:40Z`
 | `pipeline/depot-mechanical-workflow-hardening/06-assembly-repository-profile` | chunk-branch | 3b | `codex/depot-mechanical-workflow-hardening@c7b43d6` |
 | `/Users/trav/Websites/design-machines/depot/.worktrees/pipeline/depot-mechanical-workflow-hardening/07-pipeline-integration-and-scout` | worktree | 3b | `codex/depot-mechanical-workflow-hardening@e23cfc0` |
 | `pipeline/depot-mechanical-workflow-hardening/07-pipeline-integration-and-scout` | chunk-branch | 3b | `codex/depot-mechanical-workflow-hardening@e23cfc0` |
+| `/Users/trav/Websites/design-machines/depot/.worktrees/pipeline/depot-mechanical-workflow-hardening/08-cross-plugin-release-integration` | worktree | 3b | `codex/depot-mechanical-workflow-hardening@cc535aa` |
+| `pipeline/depot-mechanical-workflow-hardening/08-cross-plugin-release-integration` | chunk-branch | 3b | `codex/depot-mechanical-workflow-hardening@cc535aa` |
 
 Before state: 5 registered worktrees, 16 local branches.
 
