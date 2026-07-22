@@ -171,6 +171,9 @@ changes the ledger, not the finding ID.
 ### Contradicting findings
 Contradictions never disappear. Keep both source positions, evidence, raw refs,
 and severities visible in `Synthesis Decisions`; use `agreement: disputed`.
+When competing root-cause positions have different canonical IDs, emit sorted
+reciprocal `cross_id_link=<finding-id>|<finding-id>` entries and mark both rows
+disputed. Distinct identity is not evidence of uniqueness.
 Unresolved positions are `retained` with `retained-disagreement`. A position
 may be `discarded` with `superseded-by-stronger-evidence` only when the
 deterministic evidence priority resolves it, and the discarded position still
@@ -180,13 +183,24 @@ remains visible in the ledger.
 
 `agreement: unique|corroborated|disputed` is independent of
 `finding_disposition: retained|merged|discarded`. Every source finding must
-have a non-empty rationale, evidence, `raw_ref`, and one closed reason code:
+have exactly one non-empty source ID, lane, requested provider, attempted
+provider, implemented-by provider, model, agent, source severity, evidence,
+`raw_ref`, disposition, reason code, and rationale. Source severities are
+`P1|P2|P3`. Every source ID is unique within the canonical decision. `unique`
+requires exactly one source; `corroborated` requires at least two independent
+sources. A within-ID `disputed` decision requires at least two local source
+positions; a cross-ID `disputed` decision requires at least one local source
+plus reciprocal links to the competing finding rows and their source positions.
+
+Each source uses exactly one closed reason code:
 `retained-unique`, `retained-corroborated`, `retained-disagreement`,
 `exact-duplicate`, `same-root-cause-merge`,
 `superseded-by-stronger-evidence`, `out-of-scope`, `not-reproducible`, or
 `agent-findings-cap`.
-Reject missing or free-form reason codes, flattened contradictions,
-severity-derived IDs, missing raw refs, and reports missing the
+Reject missing, duplicate, or free-form reason codes; empty or duplicate source
+IDs; missing source severities; agreement/source-count mismatches; one-way,
+self-referential, malformed, or missing cross-ID dispute links; flattened
+contradictions; severity-derived IDs; missing raw refs; and reports missing the
 `Synthesis Decisions` section.
 
 Raw outputs are immutable: reference them, never rewrite or delete them. A

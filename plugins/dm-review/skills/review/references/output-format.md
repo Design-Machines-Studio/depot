@@ -72,12 +72,15 @@ The canonical unified report format produced by the review-consolidator after al
 
 ### Synthesis Decisions
 
-| Finding ID | Agreement | Selected outcome | Source decisions | Evidence rationale |
-|------------|-----------|------------------|------------------|--------------------|
-| `finding-v1:sha256(...)` | disputed | retained as P1 | `source-id-a` (Codex/codex/model/agent): retained/retained-disagreement, P1, `raw_ref`; `source-id-b` (OpenRouter/openrouter/model/agent): discarded/superseded-by-stronger-evidence, P3, `raw_ref` | Reproducible runtime evidence supports source A; source B's contradictory position remains recorded. |
+| Finding ID | Agreement | Disputed with | Selected outcome | Source decisions | Evidence rationale |
+|------------|-----------|---------------|------------------|------------------|--------------------|
+| `finding-v1:sha256(aaaa...)` | disputed | `finding-v1:sha256(bbbb...)` via reciprocal `cross_id_link` | retained as P1 | `source-id-a`: lane=`openrouter-fallback`, requested=`OpenRouter`, attempted=`OpenRouter`, implemented-by=`Codex`, model=`gpt-5`, agent=`security-auditor`, severity=`P1`, evidence=`runtime test reproduces unsafe write`, disposition/reason=`retained/retained-disagreement`, raw_ref=`raw/security.md#finding-1`, rationale=`runtime evidence establishes this root cause` | Reproducible runtime evidence supports source A and outranks the linked static hypothesis. |
+| `finding-v1:sha256(bbbb...)` | disputed | `finding-v1:sha256(aaaa...)` via reciprocal `cross_id_link` | discarded in favor of stronger evidence | `source-id-b`: lane=`openrouter`, requested=`OpenRouter`, attempted=`OpenRouter`, implemented-by=`OpenRouter`, model=`z-ai/glm-5.2`, agent=`pattern-recognition-specialist`, severity=`P3`, evidence=`static inspection attributes the write to a different root cause`, disposition/reason=`discarded/superseded-by-stronger-evidence`, raw_ref=`raw/patterns.md#finding-2`, rationale=`runtime reproduction contradicts this root-cause position` | The contradictory source position and its evidence remain visible despite the discarded outcome. |
 
 One row per canonical finding, sorted by finding ID. Within a row, sort source
-decisions by source finding ID. Use `agreement: unique|corroborated|disputed`
+decisions by source finding ID. Sort cross-ID links by ordered ID pair and emit
+them reciprocally on every linked row. Use
+`agreement: unique|corroborated|disputed`
 independently from `finding_disposition: retained|merged|discarded`. Each source
 decision names its literal lane, requested/attempted/implemented-by provider,
 model, agent, source evidence, source severity, disposition, closed

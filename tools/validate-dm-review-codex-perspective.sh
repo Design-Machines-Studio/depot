@@ -84,38 +84,91 @@ validate_synthesis_fixture() {
   grep -Eq '^agreement=(unique|corroborated|disputed)$' "$fixture" || return 1
 
   awk -F= '
+    function nonblank(value) {
+      return value ~ /[^[:space:]]/
+    }
+    function valid_finding_id(value) {
+      return length(value) == 83 && value ~ /^finding-v1:sha256\([0-9a-f][0-9a-f]*\)$/
+    }
     function complete_source() {
       if (!source_seen) return 1
-      if (!lane || !requested_provider || !attempted_provider || !implemented_by || !model || !agent || !evidence || !raw_ref || !disposition || !reason || !rationale) return 0
+      if (source_id_count != 1 || !nonblank(source_id_value)) return 0
+      if (lane_count != 1 || !lane || requested_provider_count != 1 || !requested_provider) return 0
+      if (attempted_provider_count != 1 || !attempted_provider || implemented_by_count != 1 || !implemented_by) return 0
+      if (model_count != 1 || !model || agent_count != 1 || !agent) return 0
+      if (severity_count != 1 || severity !~ /^P[123]$/) return 0
+      if (evidence_count != 1 || !evidence || raw_ref_count != 1 || !raw_ref) return 0
+      if (disposition_count != 1 || !disposition || reason_count != 1 || !reason) return 0
+      if (rationale_count != 1 || !rationale) return 0
       if (disposition !~ /^(retained|merged|discarded)$/) return 0
       if (disposition == "retained" && reason !~ /^retained-(unique|corroborated|disagreement)$/) return 0
+      if (disposition == "retained" && agreement == "unique" && reason != "retained-unique") return 0
+      if (disposition == "retained" && agreement == "corroborated" && reason != "retained-corroborated") return 0
+      if (disposition == "retained" && agreement == "disputed" && reason != "retained-disagreement") return 0
       if (disposition == "merged" && reason !~ /^(exact-duplicate|same-root-cause-merge)$/) return 0
       if (disposition == "discarded" && reason !~ /^(superseded-by-stronger-evidence|out-of-scope|not-reproducible|agent-findings-cap)$/) return 0
       return 1
     }
-    /^agreement=disputed$/ { disputed=1 }
-    /^contradiction=/ { contradiction=1 }
-    /^chosen_severity=/ { chosen_severity=1 }
-    /^severity_rationale=/ { severity_rationale=1 }
-    /^source_id=/ {
-      if (source_seen && !complete_source()) exit 1
-      source_seen=1; lane=0; requested_provider=0; attempted_provider=0; implemented_by=0; model=0; agent=0; evidence=0; raw_ref=0; disposition=""; reason=""; rationale=0
+    /^finding_id=/ { finding_id_count++; finding_id_value=$2; next }
+    /^linked_finding_id=/ {
+      linked_id_count++
+      if (!valid_finding_id($2) || $2 == finding_id_value || linked_ids[$2]++) invalid=1
       next
     }
-    /^lane=/ { lane=length($2) > 0; next }
-    /^requested_provider=/ { requested_provider=length($2) > 0; next }
-    /^attempted_provider=/ { attempted_provider=length($2) > 0; next }
-    /^implemented_by=/ { implemented_by=length($2) > 0; next }
-    /^model=/ { model=length($2) > 0; next }
-    /^agent=/ { agent=length($2) > 0; next }
-    /^evidence=/ { evidence=length($2) > 0; next }
-    /^raw_ref=/ { raw_ref=length($2) > 0; next }
-    /^finding_disposition=/ { disposition=$2; next }
-    /^decision_reason_code=/ { reason=$2; next }
-    /^decision_rationale=/ { rationale=length($2) > 0; next }
+    /^identity_dimensions=/ { identity_count++; next }
+    /^agreement=/ { agreement_count++; agreement=$2; next }
+    /^dispute_scope=/ { dispute_scope_count++; dispute_scope=$2; next }
+    /^cross_id_link=/ {
+      link_count++
+      if (split($2, pair, /\|/) != 2 || !valid_finding_id(pair[1]) || !valid_finding_id(pair[2]) || pair[1] == pair[2]) invalid=1
+      key=pair[1] SUBSEP pair[2]
+      if (links[key]++) invalid=1
+      if (pair[1] == finding_id_value || pair[2] == finding_id_value) primary_linked=1
+      next
+    }
+    /^contradiction=/ { contradiction_count++; contradiction=length($2) > 0; next }
+    /^chosen_severity=/ { chosen_severity_count++; chosen_severity=$2; next }
+    /^severity_rationale=/ { severity_rationale_count++; severity_rationale=length($2) > 0; next }
+    /^source_id=/ {
+      if (source_seen && !complete_source()) exit 1
+      source_seen=1; source_count++; source_id_count=1; source_id_value=$2
+      if (!nonblank(source_id_value) || seen_source_ids[source_id_value]++) invalid=1
+      lane_count=0; lane=0; requested_provider_count=0; requested_provider=0
+      attempted_provider_count=0; attempted_provider=0; implemented_by_count=0; implemented_by=0
+      model_count=0; model=0; agent_count=0; agent=0; severity_count=0; severity=""
+      evidence_count=0; evidence=0; raw_ref_count=0; raw_ref=0
+      disposition_count=0; disposition=""; reason_count=0; reason=""; rationale_count=0; rationale=0
+      next
+    }
+    /^lane=/ { lane_count++; lane=length($2) > 0; next }
+    /^requested_provider=/ { requested_provider_count++; requested_provider=length($2) > 0; next }
+    /^attempted_provider=/ { attempted_provider_count++; attempted_provider=length($2) > 0; next }
+    /^implemented_by=/ { implemented_by_count++; implemented_by=length($2) > 0; next }
+    /^model=/ { model_count++; model=length($2) > 0; next }
+    /^agent=/ { agent_count++; agent=length($2) > 0; next }
+    /^source_severity=/ { severity_count++; severity=$2; next }
+    /^evidence=/ { evidence_count++; evidence=length($2) > 0; next }
+    /^raw_ref=/ { raw_ref_count++; raw_ref=length($2) > 0; next }
+    /^finding_disposition=/ { disposition_count++; disposition=$2; next }
+    /^decision_reason_code=/ { reason_count++; reason=$2; next }
+    /^decision_rationale=/ { rationale_count++; rationale=length($2) > 0; next }
     END {
+      if (invalid || finding_id_count != 1 || !valid_finding_id(finding_id_value) || identity_count != 1 || agreement_count != 1) exit 1
       if (!source_seen || !complete_source()) exit 1
-      if (disputed && (!contradiction || !chosen_severity || !severity_rationale)) exit 1
+      if (agreement == "unique" && source_count != 1) exit 1
+      if (agreement == "corroborated" && source_count < 2) exit 1
+      if (agreement == "disputed" && (contradiction_count != 1 || !contradiction || chosen_severity_count != 1 || chosen_severity !~ /^P[123]$/ || severity_rationale_count != 1 || !severity_rationale)) exit 1
+      if (agreement == "disputed" && dispute_scope_count != 1) exit 1
+      if (dispute_scope == "cross-id" && (source_count < 1 || linked_id_count < 1 || link_count < 2 || !primary_linked)) exit 1
+      if (dispute_scope == "within-id" && (source_count < 2 || link_count != 0)) exit 1
+      if (agreement == "disputed" && dispute_scope !~ /^(cross-id|within-id)$/) exit 1
+      for (link in links) {
+        split(link, endpoints, SUBSEP)
+        reverse=endpoints[2] SUBSEP endpoints[1]
+        if (!links[reverse]) exit 1
+        if (endpoints[1] != finding_id_value && !linked_ids[endpoints[1]]) exit 1
+        if (endpoints[2] != finding_id_value && !linked_ids[endpoints[2]]) exit 1
+      }
     }
   ' "$fixture"
 }
@@ -165,13 +218,18 @@ require_text "$consolidator" 'not-reproducible' "consolidator closes non-reprodu
 require_text "$consolidator" 'agent-findings-cap' "consolidator closes findings-cap reason"
 require_text "$consolidator" 'retained-disagreement' "consolidator retains unresolved disagreement"
 require_text "$consolidator" "Contradictions never disappear" "consolidator preserves contradictions"
+require_text "$consolidator" 'cross_id_link=<finding-id>|<finding-id>' "consolidator links cross-ID disputes"
+require_text "$consolidator" "Emit each unordered dispute pair in both directions" "cross-ID dispute links are reciprocal"
 require_text "$consolidator" "severity disagreement changes the decision ledger, not identity" "severity disagreement does not change identity"
 require_text "$consolidator" "test/runtime evidence" "deterministic evidence outranks consensus"
 require_text "$consolidator" 'raw_ref' "consolidator requires raw artifact references"
 require_text "$output_format" '### Synthesis Decisions' "report contains compact synthesis section"
+require_text "$output_format" "implemented-by=\`Codex\`" "disputed example exposes fallback implementer"
+require_text "$output_format" "evidence=\`runtime test reproduces unsafe write\`" "disputed example exposes source evidence"
+require_text "$output_format" "rationale=\`runtime evidence establishes this root cause\`" "disputed example exposes per-source rationale"
 require_text "$output_format" "\`decision_reason_code\`" "report exposes closed decision reasons"
-require_text "$guardrails" "Reject missing or free-form reason codes" "guardrails reject invalid reason codes"
-require_text "$guardrails" "flattened contradictions" "guardrails reject flattened contradictions"
+require_text "$guardrails" "free-form reason codes" "guardrails reject invalid reason codes"
+require_text "$guardrails" "cross-ID dispute links; flattened" "guardrails reject flattened contradictions"
 require_text "$guardrails" "severity-derived IDs" "guardrails reject severity-derived IDs"
 require_text "$guardrails" "missing raw refs" "guardrails reject missing raw references"
 require_text "$guardrails" 'Synthesis Decisions' "guardrails reject missing synthesis section"
@@ -241,6 +299,10 @@ cat >"$fixture_dir/valid" <<EOF
 finding_id=$base_id
 identity_dimensions=path,anchor,category,root_cause
 agreement=disputed
+dispute_scope=cross-id
+linked_finding_id=$different_root_id
+cross_id_link=$base_id|$different_root_id
+cross_id_link=$different_root_id|$base_id
 contradiction=source-a:P1|source-b:P3
 chosen_severity=P1
 severity_rationale=runtime evidence outranks consensus
@@ -251,6 +313,7 @@ attempted_provider=Codex
 implemented_by=Codex
 model=gpt-5
 agent=agent-a
+source_severity=P1
 evidence=reproducible runtime failure
 raw_ref=raw/agent-a.md#finding-1
 finding_disposition=retained
@@ -263,6 +326,7 @@ attempted_provider=OpenRouter
 implemented_by=OpenRouter
 model=z-ai/glm-5.2
 agent=agent-b
+source_severity=P1
 evidence=matching direct source inspection
 raw_ref=raw/agent-b.md#finding-4
 finding_disposition=merged
@@ -275,6 +339,7 @@ attempted_provider=OpenRouter
 implemented_by=Codex
 model=gpt-5
 agent=agent-c
+source_severity=P3
 evidence=non-reproducing static hypothesis
 raw_ref=raw/agent-c.md#finding-2
 finding_disposition=discarded
@@ -301,6 +366,37 @@ sed '/^### Synthesis Decisions$/d' "$fixture_dir/valid" >"$fixture_dir/missing-s
 expect_fixture_rejected "$fixture_dir/missing-section" "missing synthesis section rejected"
 awk 'BEGIN { changed=0 } /^decision_reason_code=retained-disagreement$/ && !changed { print "decision_reason_code=majority-wins"; changed=1; next } { print }' "$fixture_dir/valid" >"$fixture_dir/free-form-reason"
 expect_fixture_rejected "$fixture_dir/free-form-reason" "free-form reason codes rejected"
+awk 'BEGIN { changed=0 } /^source_id=source-a$/ && !changed { print "source_id="; changed=1; next } { print }' "$fixture_dir/valid" >"$fixture_dir/empty-source-id"
+expect_fixture_rejected "$fixture_dir/empty-source-id" "empty source IDs rejected"
+awk 'BEGIN { skipped=0 } /^source_severity=/ && !skipped { skipped=1; next } { print }' "$fixture_dir/valid" >"$fixture_dir/missing-source-severity"
+expect_fixture_rejected "$fixture_dir/missing-source-severity" "missing source severity rejected"
+awk '
+  /^agreement=/ { print "agreement=corroborated"; next }
+  /^dispute_scope=|^cross_id_link=|^contradiction=|^chosen_severity=|^severity_rationale=/ { next }
+  /^decision_reason_code=retained-disagreement$/ { print "decision_reason_code=retained-corroborated"; next }
+  /^source_id=source-b$/ { exit }
+  { print }
+' "$fixture_dir/valid" >"$fixture_dir/one-source-corroborated"
+expect_fixture_rejected "$fixture_dir/one-source-corroborated" "one-source corroborated agreement rejected"
+awk '
+  /^agreement=/ { print "agreement=unique"; next }
+  /^dispute_scope=|^cross_id_link=|^contradiction=|^chosen_severity=|^severity_rationale=/ { next }
+  /^decision_reason_code=retained-disagreement$/ { print "decision_reason_code=retained-unique"; next }
+  { print }
+' "$fixture_dir/valid" >"$fixture_dir/multi-source-unique"
+expect_fixture_rejected "$fixture_dir/multi-source-unique" "multi-source unique agreement rejected"
+awk 'BEGIN { inserted=0 } /^decision_reason_code=retained-disagreement$/ && !inserted { print "decision_reason_code=majority-wins"; inserted=1 } { print }' "$fixture_dir/valid" >"$fixture_dir/duplicate-unknown-reason"
+expect_fixture_rejected "$fixture_dir/duplicate-unknown-reason" "duplicate reason field with unknown value rejected"
+awk -v reverse="cross_id_link=$different_root_id|$base_id" '$0 != reverse { print }' "$fixture_dir/valid" >"$fixture_dir/one-way-cross-id"
+expect_fixture_rejected "$fixture_dir/one-way-cross-id" "one-way cross-ID dispute rejected"
+sed '/^cross_id_link=/d' "$fixture_dir/valid" >"$fixture_dir/missing-cross-id"
+expect_fixture_rejected "$fixture_dir/missing-cross-id" "missing cross-ID dispute links rejected"
+sed '/^linked_finding_id=/d' "$fixture_dir/valid" >"$fixture_dir/dangling-cross-id"
+expect_fixture_rejected "$fixture_dir/dangling-cross-id" "cross-ID links to missing findings rejected"
+awk -v reverse="cross_id_link=$different_root_id|$base_id" -v self="cross_id_link=$base_id|$base_id" '$0 == reverse { print self; next } { print }' "$fixture_dir/valid" >"$fixture_dir/self-cross-id"
+expect_fixture_rejected "$fixture_dir/self-cross-id" "self-referential cross-ID dispute rejected"
+sed 's/^source_id=source-b$/source_id=source-a/' "$fixture_dir/valid" >"$fixture_dir/duplicate-source-id"
+expect_fixture_rejected "$fixture_dir/duplicate-source-id" "duplicate source IDs rejected"
 
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore dm-review perspective and synthesis provenance contracts\n"

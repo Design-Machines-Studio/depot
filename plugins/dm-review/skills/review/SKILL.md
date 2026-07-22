@@ -614,7 +614,9 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
    independently from `finding_disposition: retained|merged|discarded`. Every
    source finding gets a rationale and a closed reason code. Preserve
    contradictions, source severities, selected severity, and evidence rationale;
-   exact duplicates do not inflate counts and distinct root causes stay separate.
+   exact duplicates do not inflate counts and distinct root causes stay separate
+   but receive sorted reciprocal cross-ID dispute links when their positions
+   contradict. A linked root-cause position is disputed, never unique.
    Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context
    evidence, standards-based reasoning, and reviewer consensus.
 4. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`

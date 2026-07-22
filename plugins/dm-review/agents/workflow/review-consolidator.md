@@ -109,12 +109,19 @@ root-cause invariants remain distinct even at the same file and line.
 
 ### Step 2.5: Classify and Decide
 
-Group only matching canonical identities, then set two independent fields:
+First group matching canonical identities. Then run a second dispute-link pass
+across distinct identities that share normalized path, structural anchor, and
+issue category. When their root-cause positions contradict, keep both IDs and
+emit sorted reciprocal `cross_id_link=<finding-id>|<finding-id>` entries in
+`Synthesis Decisions`. Never merge the IDs merely to express the dispute.
+
+After grouping and cross-ID linking, set two independent fields:
 
 - `agreement: unique` -- one independent source position supports the finding.
 - `agreement: corroborated` -- two or more independent source positions agree.
 - `agreement: disputed` -- sources contradict existence, scope, root cause,
-  severity, or outcome. A majority does not erase the minority position.
+  severity, or outcome, including positions linked across canonical IDs. A
+  majority does not erase the minority position.
 - `finding_disposition: retained|merged|discarded` -- the treatment of each
   source finding, independent of `agreement`.
 
@@ -148,7 +155,9 @@ Contradictions never disappear: preserve both source positions, severities,
 evidence, and raw refs in the decision trail. Unresolved disagreement uses
 `retained-disagreement`. When deterministic evidence resolves a position, it
 may use `superseded-by-stronger-evidence`, but the rejected position remains
-visible in `Synthesis Decisions`.
+visible in `Synthesis Decisions`. A cross-ID dispute sets `agreement: disputed`
+on every linked row and records the reciprocal finding IDs; it must not leave
+either competing root-cause position labeled `unique`.
 
 Evidence priority is deterministic: reproducible test/runtime evidence,
 direct evidence at HEAD, diff/context evidence, standards-based reasoning,
@@ -157,8 +166,10 @@ runtime evidence. For severity disagreement, preserve every source severity,
 select a canonical severity using this evidence priority (higher severity when
 evidence is otherwise tied), and record the selected severity plus rationale.
 
-Sort canonical findings by finding ID and source decisions by source finding ID
-before emitting the ledger. This makes input reordering a no-op.
+Sort canonical findings by finding ID, source decisions by source finding ID,
+and cross-ID dispute links by the ordered ID pair before emitting the ledger.
+Emit each unordered dispute pair in both directions. This makes input reordering
+a no-op and keeps either finding independently navigable.
 
 Example: Both `security-auditor` and `a11y-html-reviewer` flag the same XSS
 root cause under the same structural anchor -> keep one canonical finding with
