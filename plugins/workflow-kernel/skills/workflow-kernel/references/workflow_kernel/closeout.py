@@ -6,6 +6,11 @@ import hashlib
 import json
 import re
 
+from .redaction import (
+    contains_high_confidence_secret, normalize_durable_string,
+    normalize_evidence_reference,
+)
+
 
 SCHEMA_VERSION = 1
 _SHA = re.compile(r"[0-9a-f]{40,64}\Z")
@@ -13,7 +18,7 @@ _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _EXPECTED = frozenset({
     "local_head_sha", "reviewed_sha", "delivered_sha", "pr_head_sha", "base_branch",
     "default_branch", "draft", "claimed_paths", "required_evidence_ids", "closing_issue_ids",
-    "affected_surface",
+    "affected_surface", "affected_surface_mapping_provenance",
 })
 _OBSERVED = frozenset({
     "actual_pr_head_sha", "merge_commit_sha", "actual_base_branch", "actual_draft",
@@ -40,6 +45,13 @@ def _text(value, name, *, nullable=False):
         return None
     if type(value) is not str or not value or len(value) > 512 or any(ord(char) < 0x20 for char in value):
         _fail("invalid " + name)
+    if contains_high_confidence_secret(value):
+        _fail("unsafe " + name)
+    try:
+        if normalize_durable_string(value) != value:
+            _fail("unsafe " + name)
+    except ValueError:
+        _fail("unsafe " + name)
     return value
 
 
@@ -72,7 +84,7 @@ def evaluate_closeout(expected, observed):
         _fail("invalid merge_commit_sha")
     if type(expected["draft"]) is not bool or type(observed["actual_draft"]) is not bool:
         _fail("invalid draft state")
-    for field in ("base_branch", "default_branch", "affected_surface"):
+    for field in ("base_branch", "default_branch", "affected_surface", "affected_surface_mapping_provenance"):
         _text(expected[field], field)
     _text(observed["actual_base_branch"], "actual_base_branch")
     claimed = set(_paths(expected["claimed_paths"], "claimed_paths"))
@@ -92,7 +104,17 @@ def evaluate_closeout(expected, observed):
     scope_ok = claimed == changed
     _check(checks, "changed_scope", scope_ok, "scope_matches" if scope_ok else "claimed_changed_scope_mismatch")
     ci = observed["ci_gate"]
-    ci_status = ci.get("status") if type(ci) is dict else None
+    ci_status = None
+    if type(ci) is dict and set(ci) == {"schema_version", "status", "checks"} and ci.get("schema_version") == 1 and type(ci.get("checks")) is list and ci["checks"]:
+        check_statuses = []
+        for item in ci["checks"]:
+            if type(item) is not dict or set(item) != {"context", "status", "reason"} or item.get("status") not in {"passed", "failed", "unresolved"}:
+                check_statuses = []
+                break
+            check_statuses.append(item["status"])
+        derived = "failed" if "failed" in check_statuses else "unresolved" if "unresolved" in check_statuses else "passed" if check_statuses else None
+        if ci.get("status") == derived:
+            ci_status = derived
     _check(checks, "required_ci", ci_status == "passed", "ci_passed" if ci_status == "passed" else "ci_not_authoritatively_passed", unresolved=ci_status in {None, "unresolved", "unavailable"})
     _check(checks, "unresolved_findings", not findings, "no_unresolved_findings" if not findings else "unresolved_findings_remain")
 
@@ -104,7 +126,11 @@ def evaluate_closeout(expected, observed):
         required = {"id", "path", "expected_digest", "observed_digest", "exists", "classification", "binding_valid"}
         if type(item) is not dict or set(item) != required:
             _fail("invalid artifact snapshot")
-        _text(item["id"], "artifact id"); _text(item["path"], "artifact path")
+        _text(item["id"], "artifact id")
+        try:
+            item["path"] = normalize_evidence_reference(item["path"])
+        except ValueError:
+            _fail("invalid artifact path")
         if item["id"] in by_id or type(item["exists"]) is not bool or type(item["binding_valid"]) is not bool:
             _fail("invalid artifact snapshot")
         if type(item["expected_digest"]) is not str or _DIGEST.fullmatch(item["expected_digest"]) is None:
@@ -153,14 +179,16 @@ def evaluate_closeout(expected, observed):
             _check(checks, "issue:" + issue_id, False, "issue_reference_missing", unresolved=True)
         elif item["resolved_entity_kind"] != "issue":
             _check(checks, "issue:" + issue_id, False, "reference_not_resolved_issue")
-        elif item["actual_state"] == "closed":
-            _check(checks, "issue:" + issue_id, True, "issue_observed_closed")
+        elif not item["mention"]:
+            _check(checks, "issue:" + issue_id, False, "issue_not_textually_referenced")
         elif not item["closing_intent"]:
             _check(checks, "issue:" + issue_id, False, "plain_mention_is_not_closure")
         elif expected["base_branch"] != expected["default_branch"]:
             _check(checks, "issue:" + issue_id, False, "non_default_base_cannot_guarantee_closure")
         elif item["auto_close_policy"] != "enabled" or not item["provider_closing_link"]:
             _check(checks, "issue:" + issue_id, False, "provider_closure_not_guaranteed", unresolved=item["auto_close_policy"] == "unknown")
+        elif item["actual_state"] == "closed":
+            _check(checks, "issue:" + issue_id, True, "issue_observed_closed")
         else:
             _check(checks, "issue:" + issue_id, False, "issue_closure_pending")
 
@@ -175,7 +203,10 @@ def evaluate_closeout(expected, observed):
     if not inventory["available"]:
         remaining = []
         _check(checks, "affected_surface_inventory", False, "surface_inventory_unavailable", unresolved=True)
-    elif inventory["surface"] != expected["affected_surface"] or not inventory["mapping_provenance"]:
+    elif (
+        inventory["surface"] != expected["affected_surface"]
+        or inventory["mapping_provenance"] != expected["affected_surface_mapping_provenance"]
+    ):
         remaining = list(inventory_ids)
         _check(checks, "affected_surface_inventory", False, "surface_inventory_scope_mismatch")
     else:

@@ -2,7 +2,7 @@ import json
 import unittest
 
 from tests import KERNEL_REFERENCES, schema_matches
-from workflow_kernel.ci_evidence import build_ci_evidence, evaluate_ci_gate
+from workflow_kernel.ci_evidence import build_ci_evidence, evaluate_ci_gate, validate_ci_evidence
 
 
 SHA = "a" * 40
@@ -87,6 +87,26 @@ class CIEvidenceTests(unittest.TestCase):
     def test_provider_merge_rule_fact_does_not_upgrade_failed_test(self):
         record = build_ci_evidence(raw(raw_conclusion="failure", satisfies_provider_merge_rule=True))
         self.assertEqual("failed", evaluate_ci_gate([requirement()], [record], now=NOW)["status"])
+
+    def test_policy_cannot_admit_terminal_failure_as_success(self):
+        record = build_ci_evidence(raw(raw_conclusion="failure", satisfies_provider_merge_rule=True))
+        gate = evaluate_ci_gate([requirement(allowed_conclusions=["failure"])], [record], now=NOW)
+        self.assertEqual("failed", gate["status"])
+        self.assertEqual("terminal_conclusion_is_not_success", gate["checks"][0]["reason"])
+
+    def test_subject_and_lifecycle_bindings_reject_contradictory_records(self):
+        with self.assertRaises(ValueError):
+            build_ci_evidence(raw(subject_sha="d" * 40))
+        record = build_ci_evidence(raw())
+        record["completed_at"] = None
+        with self.assertRaises(ValueError):
+            validate_ci_evidence(record)
+
+    def test_latest_observation_uses_instant_not_timestamp_lexicography(self):
+        older = build_ci_evidence(raw(observed_at="2026-07-22T14:00:00+02:00", raw_conclusion="failure"))
+        newer = build_ci_evidence(raw(observed_at="2026-07-22T12:30:00Z", raw_conclusion="success", check_id="new"))
+        gate = evaluate_ci_gate([requirement()], [older, newer], now="2026-07-22T12:31:00Z")
+        self.assertEqual("passed", gate["status"])
 
 
 if __name__ == "__main__":

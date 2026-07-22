@@ -15,6 +15,7 @@ def expected(**changes):
         "base_branch": "main", "default_branch": "main", "draft": False,
         "claimed_paths": ["pkg/a.go"], "required_evidence_ids": ["receipt", "screenshot"],
         "closing_issue_ids": ["12"], "affected_surface": "install",
+        "affected_surface_mapping_provenance": "github-label-query-v1",
     }
     value.update(changes)
     return value
@@ -29,7 +30,9 @@ def observed(**changes):
     value = {
         "actual_pr_head_sha": SHA, "merge_commit_sha": "c" * 40, "actual_base_branch": "main",
         "actual_draft": False, "changed_paths": ["pkg/a.go"],
-        "ci_gate": {"status": "passed"}, "unresolved_findings": [],
+        "ci_gate": {"schema_version": 1, "status": "passed", "checks": [
+            {"context": "Test / unit", "status": "passed", "reason": "declared_policy_satisfied"}
+        ]}, "unresolved_findings": [],
         "issue_references": [{"issue_id": "12", "mention": True, "closing_intent": True,
                               "resolved_entity_kind": "issue", "provider_closing_link": True,
                               "actual_state": "closed", "auto_close_policy": "enabled"}],
@@ -58,7 +61,9 @@ class CloseoutTests(unittest.TestCase):
     def test_head_draft_scope_ci_and_findings_are_independent_checks(self):
         audit = evaluate_closeout(expected(), observed(
             actual_pr_head_sha="d" * 40, actual_draft=True, changed_paths=["pkg/other.go"],
-            ci_gate={"status": "unresolved"}, unresolved_findings=["P2: remaining"],
+            ci_gate={"schema_version": 1, "status": "unresolved", "checks": [
+                {"context": "Test / unit", "status": "unresolved", "reason": "required_lane_absent"}
+            ]}, unresolved_findings=["P2: remaining"],
         ))
         self.assertEqual("failed", audit["status"])
         self.assertEqual("head_identity_mismatch", reason(audit, "head_identity"))
@@ -113,6 +118,38 @@ class CloseoutTests(unittest.TestCase):
             "available": True, "surface": "install", "mapping_provenance": "github-label-query-v1", "issue_ids": ["99"]}))
         self.assertEqual(["99"], populated["remaining_open_issues"])
         self.assertEqual("surface_open_issues_remain", reason(populated, "affected_surface_inventory"))
+
+    def test_contradictory_ci_summary_cannot_claim_passed(self):
+        audit = evaluate_closeout(expected(), observed(ci_gate={
+            "schema_version": 1, "status": "passed", "checks": [
+                {"context": "Test / unit", "status": "failed", "reason": "failure"}
+            ]}))
+        self.assertEqual("ci_not_authoritatively_passed", reason(audit, "required_ci"))
+
+    def test_closed_issue_still_requires_reference_intent_and_provider_link(self):
+        item = observed()["issue_references"][0]
+        for change, expected_reason in (
+            ({"mention": False}, "issue_not_textually_referenced"),
+            ({"closing_intent": False}, "plain_mention_is_not_closure"),
+            ({"provider_closing_link": False}, "provider_closure_not_guaranteed"),
+        ):
+            candidate = dict(item); candidate.update(change)
+            with self.subTest(expected_reason=expected_reason):
+                audit = evaluate_closeout(expected(), observed(issue_references=[candidate]))
+                self.assertEqual(expected_reason, reason(audit, "issue:12"))
+
+    def test_surface_inventory_mapping_provenance_is_exactly_bound(self):
+        audit = evaluate_closeout(expected(), observed(open_issue_inventory={
+            "available": True, "surface": "install", "mapping_provenance": "other-query", "issue_ids": []}))
+        self.assertEqual("surface_inventory_scope_mismatch", reason(audit, "affected_surface_inventory"))
+
+    def test_unsafe_artifact_paths_and_secret_shaped_strings_are_rejected(self):
+        items = observed()["artifacts"]
+        items[0]["path"] = "../outside.json"
+        with self.assertRaises(ValueError):
+            evaluate_closeout(expected(), observed(artifacts=items))
+        with self.assertRaises(ValueError):
+            evaluate_closeout(expected(affected_surface="token=super-secret-value"), observed())
 
 
 if __name__ == "__main__":

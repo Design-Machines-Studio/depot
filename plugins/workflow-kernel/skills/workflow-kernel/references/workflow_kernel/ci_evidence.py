@@ -18,6 +18,7 @@ _GITHUB_CONCLUSION = {
     "failure": "failure", "cancelled": "cancelled", "timed_out": "timed_out",
     "action_required": "action_required", "stale": "stale",
 }
+_SUCCESS_CONCLUSIONS = frozenset({"success", "skipped", "neutral"})
 _FIELDS = frozenset({
     "schema_version", "provider", "adapter_version", "mapping_version", "event_scope",
     "ref", "base_sha", "pr_head_sha", "test_merge_sha", "subject_sha", "subject_kind",
@@ -172,6 +173,20 @@ def validate_ci_evidence(value):
             _fail("github normalization mismatch")
         if result["mapping_authoritative"] != (lifecycle != "unknown" and (conclusion is None or conclusion != "unknown")):
             _fail("github mapping authority mismatch")
+        if result["raw_status"] == "completed" and result["raw_conclusion"] is None:
+            _fail("completed github check requires conclusion")
+        if result["raw_status"] != "completed" and result["raw_conclusion"] is not None:
+            _fail("incomplete github check cannot have conclusion")
+    if result["normalized_lifecycle"] == "completed" and result["completed_at"] is None:
+        _fail("completed check requires completed_at")
+    if result["normalized_lifecycle"] in {"pending", "running"} and result["completed_at"] is not None:
+        _fail("incomplete check cannot have completed_at")
+    bound_sha = {
+        "pr_head": result["pr_head_sha"],
+        "test_merge": result["test_merge_sha"],
+    }.get(result["subject_kind"])
+    if result["subject_kind"] in {"pr_head", "test_merge"} and result["subject_sha"] != bound_sha:
+        _fail("subject identity mismatch")
     return result
 
 
@@ -201,7 +216,10 @@ def evaluate_ci_gate(requirements, observations, *, now):
         if not matches:
             checks.append({"context": requirement["context"], "status": "unresolved", "reason": "required_lane_absent"})
             continue
-        item = max(matches, key=lambda entry: entry["observed_at"])
+        item = max(
+            matches,
+            key=lambda entry: datetime.fromisoformat(entry["observed_at"].replace("Z", "+00:00")),
+        )
         age = (current - datetime.fromisoformat(item["observed_at"].replace("Z", "+00:00"))).total_seconds()
         if age < 0 or age > max_age:
             status, reason = "unresolved", "observation_stale"
@@ -209,6 +227,8 @@ def evaluate_ci_gate(requirements, observations, *, now):
             status, reason = "unresolved", "provider_mapping_unavailable"
         elif item["normalized_lifecycle"] != "completed":
             status, reason = "unresolved", "check_not_completed"
+        elif item["normalized_conclusion"] not in _SUCCESS_CONCLUSIONS:
+            status, reason = "failed", "terminal_conclusion_is_not_success"
         elif item["normalized_conclusion"] in allowed:
             status, reason = "passed", "declared_policy_satisfied"
         else:
