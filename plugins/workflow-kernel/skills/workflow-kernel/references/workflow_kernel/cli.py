@@ -8,13 +8,14 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ._files import _OwnedResourceScope, bind_durable_path
+from ._files import PinnedDirectory, _OwnedResourceScope, bind_durable_path
 from .events import EventStore
 from .repository_scope import repository_scope as _repository_scope
 from .runtime_resolution import (
@@ -327,6 +328,347 @@ def _document_digest(value):
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
     ).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+_CONTRACT_BINDING_FIELDS = frozenset({
+    "stage", "contract_id", "schema_version", "revision", "contract_digest",
+    "contract_ref", "previous_contract_digest", "reason_code",
+    "human_approval_evidence_ref", "evidence",
+})
+_CONTRACT_STAGES = frozenset({
+    "verification_contract_bound", "verification_contract_revised",
+})
+
+
+def _contract_run_context(state_dir):
+    scope = _repository_scope(state_dir)
+    requested = Path(os.path.abspath(str(state_dir)))
+    run_id = requested.name
+    expected = scope.lease_root / "runs" / run_id
+    if requested.resolve(strict=True) != expected.resolve(strict=True):
+        raise ValueError("state directory is not a canonical run directory")
+    root, events, states = _paths(requested)
+    if root != expected.resolve(strict=True):
+        raise ValueError("run directory scope mismatch")
+    return scope, run_id, root, events, states
+
+
+@contextmanager
+def _contract_artifact_directory(run_root):
+    name = "verification-contracts"
+    with PinnedDirectory.open(Path(run_root)) as run_directory:
+        try:
+            entry = os.stat(
+                name, dir_fd=run_directory.descriptor, follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            os.mkdir(name, mode=0o700, dir_fd=run_directory.descriptor)
+            run_directory.fsync()
+            entry = os.stat(
+                name, dir_fd=run_directory.descriptor, follow_symlinks=False,
+            )
+        if not stat.S_ISDIR(entry.st_mode) or stat.S_ISLNK(entry.st_mode):
+            raise ValueError("verification contract directory is unsafe")
+        run_directory.revalidate()
+        directory = PinnedDirectory.open(Path(run_root) / name)
+        try:
+            yield directory
+        finally:
+            directory.close()
+
+
+def _contract_artifact_name(digest):
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None:
+        raise ValueError("invalid contract digest")
+    return "sha256-" + digest.removeprefix("sha256:") + ".json"
+
+
+def _contract_artifact_ref(digest):
+    return "verification-contracts/" + _contract_artifact_name(digest)
+
+
+def _store_contract_once(run_root, contract, digest):
+    from .behavioral_contract import canonical_bytes, parse_contract_bytes
+
+    name = _contract_artifact_name(digest)
+    encoded = canonical_bytes(contract) + b"\n"
+    with _contract_artifact_directory(run_root) as directory:
+        if directory.regular_exists(name):
+            descriptor = directory.open_regular(name, os.O_RDONLY)
+            try:
+                existing = os.read(descriptor, len(encoded) + 1)
+                if os.read(descriptor, 1) or existing != encoded:
+                    raise ValueError("bound contract artifact mismatch")
+                if parse_contract_bytes(existing) != contract:
+                    raise ValueError("bound contract artifact invalid")
+                directory.require_identity(descriptor, name)
+            finally:
+                os.close(descriptor)
+            return False
+        descriptor, temporary = directory.create_temporary(
+            name + ".tmp-", ".json",
+        )
+        try:
+            pending = encoded
+            while pending:
+                count = os.write(descriptor, pending)
+                if count <= 0:
+                    raise OSError("contract write made no progress")
+                pending = pending[count:]
+            os.fsync(descriptor)
+            directory.require_identity(descriptor, temporary)
+            os.link(
+                temporary, name,
+                src_dir_fd=directory.descriptor,
+                dst_dir_fd=directory.descriptor,
+                follow_symlinks=False,
+            )
+            directory.unlink(temporary)
+            temporary = None
+            directory.require_identity(descriptor, name)
+            directory.fsync()
+        except BaseException:
+            if temporary is not None:
+                try:
+                    directory.unlink(temporary)
+                    directory.fsync()
+                except OSError:
+                    pass
+            raise
+        finally:
+            os.close(descriptor)
+    return True
+
+
+def _load_bound_contract(run_root, binding):
+    from .behavioral_contract import contract_digest, parse_contract_bytes
+
+    expected_ref = _contract_artifact_ref(binding["contract_digest"])
+    if binding["contract_ref"] != expected_ref:
+        raise ValueError("contract binding reference mismatch")
+    with _contract_artifact_directory(run_root) as directory:
+        descriptor = directory.open_regular(
+            _contract_artifact_name(binding["contract_digest"]), os.O_RDONLY,
+        )
+        try:
+            chunks = []
+            total = 0
+            while True:
+                chunk = os.read(descriptor, min(65_536, MAX_JSON_BYTES + 1 - total))
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                total += len(chunk)
+                if total > MAX_JSON_BYTES:
+                    raise ValueError("bound contract artifact too large")
+            directory.require_identity(descriptor, Path(expected_ref).name)
+        finally:
+            os.close(descriptor)
+    contract = parse_contract_bytes(b"".join(chunks))
+    if (
+        contract_digest(contract) != binding["contract_digest"]
+        or contract["contract_id"] != binding["contract_id"]
+        or contract["schema_version"] != binding["schema_version"]
+        or contract["revision"] != binding["revision"]
+        or contract["previous_contract_digest"] != binding["previous_contract_digest"]
+    ):
+        raise ValueError("bound contract artifact does not match ledger")
+    return contract
+
+
+def _contract_bindings(replayed):
+    bindings = []
+    for event in replayed:
+        if event.kind != "evidence.recorded":
+            continue
+        payload = event.to_dict()["payload"]
+        if payload.get("stage") not in _CONTRACT_STAGES:
+            continue
+        if type(payload) is not dict or set(payload) != _CONTRACT_BINDING_FIELDS:
+            raise ValueError("invalid verification contract binding event")
+        revision = payload["revision"]
+        expected_revision = len(bindings) + 1
+        expected_previous = None if not bindings else bindings[-1]["contract_digest"]
+        expected_stage = (
+            "verification_contract_bound" if revision == 1
+            else "verification_contract_revised"
+        )
+        approval = payload["human_approval_evidence_ref"]
+        if (
+            type(revision) is not int or revision != expected_revision
+            or type(payload["schema_version"]) is not int
+            or payload["schema_version"] != 1
+            or type(payload["contract_id"]) is not str
+            or re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+                payload["contract_id"],
+            ) is None
+            or type(payload["reason_code"]) is not str
+            or re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
+                payload["reason_code"],
+            ) is None
+            or (approval is not None and type(approval) is not str)
+            or payload["previous_contract_digest"] != expected_previous
+            or payload["stage"] != expected_stage
+            or payload["contract_ref"] != _contract_artifact_ref(payload["contract_digest"])
+            or payload["evidence"] != [payload["contract_ref"]]
+            or (bindings and payload["contract_id"] != bindings[-1]["contract_id"])
+        ):
+            raise ValueError("verification contract binding chain mismatch")
+        bindings.append(payload)
+    return tuple(bindings)
+
+
+def _contract_receipt(binding):
+    return {
+        name: binding[name] for name in (
+            "stage", "contract_id", "schema_version", "revision",
+            "contract_digest", "contract_ref", "previous_contract_digest",
+            "reason_code", "human_approval_evidence_ref",
+        )
+    }
+
+
+def _contract_binding_payload(contract, digest, stage):
+    justification = contract["revision_justification"]
+    reference = _contract_artifact_ref(digest)
+    return {
+        "stage": stage, "contract_id": contract["contract_id"],
+        "schema_version": contract["schema_version"],
+        "revision": contract["revision"], "contract_digest": digest,
+        "contract_ref": reference,
+        "previous_contract_digest": contract["previous_contract_digest"],
+        "reason_code": justification["reason_code"],
+        "human_approval_evidence_ref": justification["human_approval_evidence_ref"],
+        "evidence": [reference],
+    }
+
+
+def _validated_contract_binding_chain(run_root, bindings, *, missing_latest=None):
+    from .behavioral_contract import (
+        contract_digest, validate_initial_binding, validate_revision,
+    )
+
+    contracts = []
+    previous_digest = None
+    for index, binding in enumerate(bindings):
+        try:
+            contract = _load_bound_contract(run_root, binding)
+        except FileNotFoundError:
+            if (
+                index != len(bindings) - 1
+                or binding["revision"] == 1
+                or missing_latest is None
+            ):
+                raise ValueError("verification contract artifact is missing") from None
+            contract = missing_latest
+        digest = contract_digest(contract)
+        expected = _contract_binding_payload(contract, digest, binding["stage"])
+        if binding != expected:
+            raise ValueError("verification contract binding does not match artifact")
+        if not contracts:
+            contract = validate_initial_binding(contract)
+        else:
+            contract = validate_revision(
+                contracts[-1], contract, previous_digest,
+            )
+        contracts.append(contract)
+        previous_digest = digest
+    return tuple(contracts)
+
+
+def _command_verification_contract(args, *, revise):
+    from .behavioral_contract import (
+        contract_digest, load_contract, validate_initial_binding, validate_revision,
+    )
+
+    scope, run_id, run_root, events, states = _contract_run_context(args.state_dir)
+    contract_scope = _repository_scope(args.contract)
+    if contract_scope.scope_id != scope.scope_id:
+        raise ValueError("contract input belongs to a foreign repository scope")
+    candidate = load_contract(args.contract)
+    digest = contract_digest(candidate)
+    engine = TransitionEngine()
+    with _coordinated_run(states) as lease:
+        replayed, _notes = events.validate(recovery=False)
+        if not replayed:
+            raise InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED)
+        reconstructed = engine.reconstruct(replayed)
+        if reconstructed.run_id != run_id:
+            raise ValueError("run directory identity mismatch")
+        materialized = _load_optional_state(states)
+        bindings = _contract_bindings(replayed)
+        latest = bindings[-1] if bindings else None
+        requested_stage = (
+            "verification_contract_revised" if revise
+            else "verification_contract_bound"
+        )
+        payload = _contract_binding_payload(candidate, digest, requested_stage)
+        idempotent = (
+            latest is not None
+            and _contract_receipt(latest) == _contract_receipt(payload)
+            and latest["stage"] == requested_stage
+        )
+        _validated_contract_binding_chain(
+            run_root, bindings,
+            missing_latest=candidate if idempotent and revise else None,
+        )
+
+        if idempotent:
+            _store_contract_once(run_root, candidate, digest)
+            if materialized != reconstructed:
+                expected_revision = materialized.revision if materialized is not None else -1
+                states.publish(
+                    _prepare_replay_state(states, reconstructed, expected_revision),
+                    expected_revision, lease=lease,
+                )
+            receipt = _contract_receipt(latest)
+        else:
+            _require_materialized_matches_ledger(materialized, reconstructed)
+            if revise:
+                if latest is None:
+                    raise ValueError("verification contract has no prior binding")
+                previous = _load_bound_contract(run_root, latest)
+                candidate = validate_revision(
+                    previous, candidate, latest["contract_digest"],
+                )
+            else:
+                if latest is not None:
+                    raise ValueError("verification contract already bound")
+                candidate = validate_initial_binding(candidate)
+            digest = contract_digest(candidate)
+            payload = _contract_binding_payload(candidate, digest, requested_stage)
+            _store_contract_once(run_root, candidate, digest)
+            current = datetime.now(timezone.utc)
+            prior = datetime.fromisoformat(
+                reconstructed.updated_at.replace("Z", "+00:00"),
+            )
+            occurred_at = max(
+                current, prior + timedelta(microseconds=1),
+            ).isoformat().replace("+00:00", "Z")
+            event = WorkflowEvent(
+                1, len(replayed), run_id, None, "evidence.recorded", occurred_at,
+                payload,
+            )
+            next_state = engine.apply(reconstructed, event)
+            expected_revision = materialized.revision if materialized is not None else -1
+            _append_and_publish(
+                events, states, event, next_state,
+                expected_sequence=len(replayed), expected_revision=expected_revision,
+                lease=lease, authoritative_initialization=materialized is None,
+            )
+            receipt = _contract_receipt(payload)
+    _emit(receipt)
+    return 0
+
+
+def command_bind_verification_contract(args):
+    return _command_verification_contract(args, revise=False)
+
+
+def command_revise_verification_contract(args):
+    return _command_verification_contract(args, revise=True)
 
 
 def _prediction_binding_payload(scope, observation_type, spec, event_digest, source_digest):
@@ -1508,6 +1850,22 @@ def parser():
     bind_prediction.add_argument("--prediction-receipts", required=True)
     bind_prediction.add_argument("--state-dir", required=True)
     bind_prediction.set_defaults(handler=command_bind_prediction)
+
+    bind_contract = commands.add_parser(
+        "bind-verification-contract",
+        help="validate and bind one initial behavioral verification contract",
+    )
+    bind_contract.add_argument("--state-dir", required=True)
+    bind_contract.add_argument("--contract", required=True)
+    bind_contract.set_defaults(handler=command_bind_verification_contract)
+
+    revise_contract = commands.add_parser(
+        "revise-verification-contract",
+        help="validate and append one behavioral verification contract revision",
+    )
+    revise_contract.add_argument("--state-dir", required=True)
+    revise_contract.add_argument("--contract", required=True)
+    revise_contract.set_defaults(handler=command_revise_verification_contract)
 
     observe_pipeline = commands.add_parser("observe-pipeline", help="observe authoritative pipeline receipts")
     observe_pipeline.add_argument("--manifest", required=True)
