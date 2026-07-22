@@ -31,6 +31,22 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
    - File path: review that specific file or directory
 3. Output the unified review report with merge recommendation (per the zero-deferral policy above)
 
+## Synthesis and Contribution Contract
+
+Every raw reviewer finding keeps a durable `raw_ref`, source-scoped identity,
+agent, provider, model, evidence, and severity. Consolidation derives stable
+canonical finding IDs from the finding itself, never from display order or
+provider preference. Agreement merges contributor IDs; disagreement is retained
+in the synthesis decision ledger and changes the decision, not the finding's
+identity. A summary never substitutes for missing raw evidence.
+
+After consolidation, emit contribution receipts that attribute retained,
+superseded, duplicate, resolved, and disagreement outcomes to the contributing
+attempts. These receipts are observation-only economics evidence: they cannot
+select a provider, change routing, invent a finding, waive coverage, or alter
+the zero-deferral recommendation. Missing raw evidence or any required lane or
+browser case remains a reported coverage gap, never an implicit clean result.
+
 ## Shadow Workflow Kernel Lifecycle
 
 The review skill, selected lanes, findings, coverage receipt, merge recommendation, and repository-cleanup report remain authoritative. Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, and symlink/scope fail-closed rules all live there; do not restate them here).

@@ -21,14 +21,30 @@ class ReleaseValidatorTests(unittest.TestCase):
 
     def test_cli_behavior_cases_cover_every_command_without_help_only_probes(self):
         expected = {
-            "init", "validate", "append", "replay", "status", "bind-prediction",
-            "observe-pipeline", "observe-review", "compare", "metrics", "plan-create",
-            "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step",
-            "execute-cleanup-step", "record-cleanup", "plan-reconcile",
+            "init", "validate", "append", "replay", "status",
+            "decide-validation-retry", "bind-prediction",
+            "bind-verification-contract", "revise-verification-contract",
+            "observe-pipeline", "observe-review", "compare", "metrics",
+            "plan-create", "plan-compose", "record-create", "plan-cleanup",
+            "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+            "plan-reconcile",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
         self.assertTrue(all("--help" not in case for case in VALIDATOR.BEHAVIORAL_CLI_CASES.values()))
+
+    def test_schema_inventory_is_exactly_the_eight_released_documents(self):
+        expected = {
+            "behavioral-verification-contract-schema.json",
+            "browser-recovery-schema.json",
+            "cleanup-plan-schema.json",
+            "cleanup-receipt-schema.json",
+            "resource-registry-schema.json",
+            "verification-profile-schema.json",
+            "workflow-classes-schema.json",
+            "workflow-policy-schema.json",
+        }
+        self.assertEqual(VALIDATOR.SCHEMA_DOCUMENTS, expected)
 
     def test_promotion_evidence_is_derived_from_completed_checks(self):
         complete = {

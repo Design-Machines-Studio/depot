@@ -53,13 +53,26 @@ PROMOTION_CHECK_SOURCES = {
     "browser_recovery_scenarios_passed": ("scenario replay",),
     "provider_security_boundaries_unchanged": ("scenario replay",),
 }
+SCHEMA_DOCUMENTS = frozenset({
+    "behavioral-verification-contract-schema.json",
+    "browser-recovery-schema.json",
+    "cleanup-plan-schema.json",
+    "cleanup-receipt-schema.json",
+    "resource-registry-schema.json",
+    "verification-profile-schema.json",
+    "workflow-classes-schema.json",
+    "workflow-policy-schema.json",
+})
 BEHAVIORAL_CLI_CASES = {
     "init": ("<run>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z"),
     "validate": ("<run>",),
     "append": ("<run>", "--event", "<event>"),
     "replay": ("<run>",),
     "status": ("<run>",),
+    "decide-validation-retry": ("--reason", "deterministic_validation_failure", "--attempt-ledger", "<missing>"),
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
+    "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
+    "revise-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
@@ -132,7 +145,10 @@ def check_documents(context):
     from workflow_kernel.policies import load_policy
     from workflow_kernel.workflows import WorkflowTemplates
     schemas = sorted(REFERENCES.glob("*-schema.json"))
-    require(len(schemas) == 7, "unexpected schema document count")
+    require(
+        {path.name for path in schemas} == SCHEMA_DOCUMENTS,
+        "schema document set changed",
+    )
     for path in schemas:
         document = json.loads(path.read_text(encoding="utf-8"))
         require(type(document) is dict, f"{path.name} is not an object")
@@ -350,10 +366,13 @@ def check_promotion(context):
 def check_cli(context):
     from workflow_kernel import cli
     expected = {
-        "init", "validate", "append", "replay", "status", "bind-prediction",
-        "observe-pipeline", "observe-review", "compare", "metrics", "plan-create",
-        "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step",
-        "execute-cleanup-step", "record-cleanup", "plan-reconcile",
+        "init", "validate", "append", "replay", "status",
+        "decide-validation-retry", "bind-prediction",
+        "bind-verification-contract", "revise-verification-contract",
+        "observe-pipeline", "observe-review", "compare", "metrics",
+        "plan-create", "plan-compose", "record-create", "plan-cleanup",
+        "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+        "plan-reconcile",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
@@ -476,6 +495,48 @@ def check_cli(context):
             "--output", root / "metrics.json",
         )
 
+        from tests.test_runtime_cli import verification_contract
+        from workflow_kernel.behavioral_contract import contract_digest
+
+        contract_run = initialize("contract-1")
+        contract_value = verification_contract()
+        contract_path = root / "verification-contract-1.json"
+        contract_path.write_text(json.dumps(contract_value), encoding="utf-8")
+        successful(
+            "bind-verification-contract", "--state-dir", contract_run,
+            "--contract", contract_path,
+        )
+        revision_value = json.loads(json.dumps(contract_value))
+        revision_value.update({
+            "revision": 2,
+            "previous_contract_digest": contract_digest(contract_value),
+        })
+        revision_value["revision_justification"] = {
+            "reason_code": "metadata_update",
+            "summary": "Retain the approved behavioral obligations.",
+            "added_obligation_ids": [],
+            "retained_obligation_ids": [
+                "PROOF:CHK-001:REQ-001", "REG-001", "REQ-001",
+            ],
+            "removed_obligation_ids": [],
+            "human_approval_evidence_ref": None,
+        }
+        revision_path = root / "verification-contract-2.json"
+        revision_path.write_text(json.dumps(revision_value), encoding="utf-8")
+        successful(
+            "revise-verification-contract", "--state-dir", contract_run,
+            "--contract", revision_path,
+        )
+        attempt_ledger = root / "attempt-ledger.json"
+        attempt_ledger.write_text(json.dumps({
+            "counts": {}, "signatures": {},
+        }), encoding="utf-8")
+        successful(
+            "decide-validation-retry", "--reason",
+            "deterministic_validation_failure", "--attempt-ledger",
+            attempt_ledger,
+        )
+
         argv = root / "create-argv.json"
         argv.write_text(json.dumps(["docker", "run", "--name", "validator-box", "busybox:latest"]), encoding="utf-8")
         create_plan = root / "create-plan.json"
@@ -537,6 +598,7 @@ def check_cli(context):
             "--outcomes", outcomes_path,
         )
 
+        from tests.test_behavioral_contract import BehavioralContractTests
         from tests.test_runtime_cli import RuntimeCliTests
         for command, method in (
             ("execute-cleanup-step", "test_stale_cli_action_executes_under_old_run_guard_without_current_run_node_witness"),
@@ -546,6 +608,42 @@ def check_cli(context):
             RuntimeCliTests(method).run(result)
             require(result.wasSuccessful(), f"{command} valid fixture execution failed")
             outcomes[command] = 0
+        hostile_cases = (
+            (
+                BehavioralContractTests,
+                "test_documented_shape_matches_schema_and_bool_numeric_values_do_not",
+                "unsupported schema",
+            ),
+            (
+                BehavioralContractTests,
+                "test_strict_closed_validation_and_safe_argv_links",
+                "unsafe argv",
+            ),
+            (
+                BehavioralContractTests,
+                "test_revision_recomputes_deltas_and_requires_approval_for_weakening",
+                "unauthorized weakening",
+            ),
+            (
+                RuntimeCliTests,
+                "test_verification_contract_revision_uses_replay_and_rejects_stale_digest",
+                "stale digest",
+            ),
+            (
+                RuntimeCliTests,
+                "test_verification_contract_rejects_symlink_input_and_artifact_escape",
+                "unsafe durable path",
+            ),
+            (
+                RuntimeCliTests,
+                "test_decide_validation_retry_rejects_hostile_ledgers_without_echo_or_writes",
+                "hostile retry ledger",
+            ),
+        )
+        for case, method, label in hostile_cases:
+            result = unittest.TestResult()
+            case(method).run(result)
+            require(result.wasSuccessful(), f"CLI hostile case failed: {label}")
         require(set(outcomes) == SUCCESSFUL_CLI_COMMANDS, "successful CLI coverage incomplete")
     invalid = run([sys.executable, "-m", "workflow_kernel", "not-a-command"])
     require(invalid.returncode == cli.EXIT_INVALID, "invalid CLI exit code changed")
@@ -560,6 +658,7 @@ def check_cli(context):
     require(blocked == cli.EXIT_UNSAFE_PLAN, "blocked CLI exit code changed")
     context["cli_commands"] = sorted(expected)
     context["cli_execution"] = outcomes
+    context["cli_hostile_cases"] = [label for _case, _method, label in hostile_cases]
 
 
 def check_workflow_classes(context):

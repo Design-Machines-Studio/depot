@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "version": "0.2.0",
-  "description": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics for Design Machines workflows.",
+  "version": "0.3.0",
+  "description": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -19,7 +19,7 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow-kernel run state and event ledgers when explicitly requested.",
+        "description": "Inspect, validate, replay, and recover deterministic workflow-kernel state, behavioral verification contracts, event ledgers, contribution receipts, and attempt economics when explicitly requested.",
         "triggers": [
           "validate a workflow-kernel run",
           "replay workflow events",
@@ -43,8 +43,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Workflow Kernel",
-    "shortDescription": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics ",
-    "longDescription": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics for Design Machines workflows.",
+    "shortDescription": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow obse",
+    "longDescription": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
     "developerName": "Design Machines",
     "category": "Productivity",
     "capabilities": [

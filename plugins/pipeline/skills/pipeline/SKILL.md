@@ -336,6 +336,35 @@ Create the implementation plan. Two options:
 
 **Authoritative workflow class:** The approved plan MUST carry one explicit `workflowClass` value in its data island: `chore|bug|feature|hotfix|security|investigation|migration`. Capture it from an explicit user decision or an already-approved upstream design/spec decision. If the class is absent or more than one class is defensible, STOP and use AskUserQuestion to have the user choose before the Phase 3 gate can pass. Planning MUST NOT infer it from changed paths, chunk kinds, risk, or keywords. The `feature` default exists only for legacy manifest consumers; it is forbidden while creating a new plan or manifest.
 
+**Authoritative decision profile:** The approved plan MUST also carry exactly one
+closed `decisionProfile` object:
+
+```json
+{"uncertainty":"low|medium|high","consequence":"low|medium|high","rationale":"non-empty string"}
+```
+
+Copy an explicit approved profile unchanged. Reject extra keys, malformed
+levels, an empty rationale, multiple candidates, or conflict with an approved
+upstream profile; return to this user gate rather than choosing silently. Keep
+`decisionProfile` separate from `workflowClass`, `risk`, `overlapRisk`,
+`estimatedComplexity`, chunk `kind`/`executor`, and `routingOverride`.
+
+Read `decisionLeverage` from `plugins/pipeline/references/routing-policy.json`
+and apply it to depth only:
+
+- low/low: optimized current path; this is not permission to infer a cheaper rail;
+- high uncertainty: obtain exactly one independent planning opinion, then do one bounded synthesis into the plan before presenting it;
+- high consequence: strengthen the existing independent verification seam;
+- high/high: apply both bounded additions;
+- all other profiles: current standard depth.
+
+Do not turn high uncertainty into debate or a full review per chunk. Decision
+leverage never selects a provider/model/executor, creates a routing override,
+relaxes security, alters `workflowClass`, overrides browser/persona coverage,
+changes cleanup, or changes economics. The existing quick/focused review,
+sensitive-path, final-review, zero-deferral, run-size, and exact-owned Docker
+rules remain unchanged.
+
 **Plan self-review (before presenting):** Re-read your own plan and check:
 
 1. **Internal contradictions:** Do any two design decisions conflict? (e.g., "follow existing convention" in one section and "use a different approach" in another)
@@ -363,7 +392,12 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
-The manifest MUST copy the approved plan island's explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration` unchanged. Never infer or independently reselect it from chunk kind, file paths, prompt prose, or risk. If the approved plan lacks the field, return to the Phase 3 user gate. A legacy missing field defaults only at consumption to `feature` with `workflow_class_defaulted=true`; pass the resulting value unchanged through RunSpec, receipts, and metrics. Security keeps all existing provider and approval overrides.
+The manifest MUST copy the approved plan island's explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration` and exact closed `decisionProfile` unchanged. Never infer or independently reselect either from chunk kind, file paths, prompt prose, risk, or one another. If the approved plan lacks either field, contains malformed/multiple candidates, or conflicts with an upstream approval, return to the Phase 3 user gate. A legacy missing workflow class defaults only at consumption to `feature` with `workflow_class_defaulted=true`. A legacy missing decision profile follows the current standard path with `decision_profile_defaulted=true`; this is unknown provenance, not low/low evidence. Pass both validated values and their default provenance unchanged through execution receipts and metrics. Security keeps all existing provider and approval overrides.
+
+**Bootstrap limitation:** This adaptive-fusion bootstrap may derive a profile
+from its approved plan for the current run's explanation, but MUST NOT retrofit
+unsupported `decisionProfile` into the current already-generated manifest. The
+legacy/default receipt above is authoritative until a new manifest is generated.
 
 **Verification:** Run `ls plans/<feature-slug>/manifest.json plans/<feature-slug>/prompts/` to confirm all files exist on disk.
 
@@ -418,7 +452,7 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 **Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
-Pass `workflowClass` unchanged into Phase 6. Every provider receipt must name requested provider, attempted provider, actual implementer, fallback, and reason. Missing lanes and misroutes remain explicit evidence; provider substitution never changes the required validation, review, browser, requirements, or cleanup gates.
+Pass `workflowClass` and the exact approved/defaulted `decisionProfile` provenance unchanged into Phase 6. Every provider receipt must name requested provider, attempted provider, actual implementer, fallback, and reason. Missing lanes and misroutes remain explicit evidence; provider substitution never changes the required validation, review, browser, requirements, or cleanup gates. For high consequence, the stronger existing independent verification seam must complete without degraded lane coverage or stop `human_help_required`; this does not add full review to every ordinary chunk. High uncertainty was already consumed by the single planning opinion and bounded synthesis and adds no execution debate.
 
 Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with:
 

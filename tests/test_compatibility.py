@@ -29,6 +29,26 @@ class CompatibilityTests(unittest.TestCase):
             self.assertEqual(report.reason, "explained_host_difference")
             self.assertFalse(report.safe_to_promote)
 
+    def test_host_normalization_ignores_economics_without_weakening_same_host_parity(self):
+        claude_document = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        codex_document = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+        claude = ReceiptSet.from_events(translate_pipeline_receipts(claude_document))
+        codex = ReceiptSet.from_events(translate_pipeline_receipts(codex_document))
+
+        cross_host = ShadowComparator().compare_receipt_sets(codex, claude)
+        self.assertTrue(cross_host.semantic_match)
+        self.assertEqual(cross_host.reason, "explained_host_difference")
+        self.assertFalse(cross_host.safe_to_promote)
+
+        mutated = json.loads(json.dumps(claude_document))
+        mutated[-1]["tokens"] += 1
+        same_host = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_pipeline_receipts(mutated)), claude,
+        )
+        self.assertFalse(same_host.semantic_match)
+        self.assertEqual(same_host.reason, "kernel_prediction_gap")
+        self.assertFalse(same_host.safe_to_promote)
+
     def test_every_workflow_class_expands_for_every_supported_host(self):
         for host in ("claude", "codex", "generic"):
             profile = HostCapabilities(host, frozenset())

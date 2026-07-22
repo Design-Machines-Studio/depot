@@ -36,6 +36,23 @@ require_absent() {
   fi
 }
 
+require_before() {
+  local file="$1"
+  local first="$2"
+  local second="$3"
+  local label="$4"
+  local first_line second_line
+
+  first_line="$(grep -nF -m1 -- "$first" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  second_line="$(grep -nF -m1 -- "$second" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  if [ -n "$first_line" ] && [ -n "$second_line" ] && [ "$first_line" -lt "$second_line" ]; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  fi
+}
+
 decision_leverage_valid() {
   local source="$1"
   jq -e '
@@ -126,6 +143,8 @@ runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 delegation_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 dm_review="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+dm_review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
+kernel_metrics="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/metrics.py"
 assess="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
 research="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
@@ -218,6 +237,7 @@ require_absent "$orchestrator" '"ordered_failing_check_ids":' "orchestrator reje
 require_text "$orchestrator" '"fallback": true' "orchestrator feedback fallback is boolean"
 require_absent "$orchestrator" '"fallback": "openrouter->codex"' "orchestrator feedback never encodes fallback as a transition string"
 require_text "$orchestrator" 'stage: browser_recovery' "browser recovery remains a separate blocked receipt"
+require_before "$orchestrator" 'bind-verification-contract --state-dir' '### 3d: Dispatch Implementation Subagent' "contract evidence precedes implementation dispatch"
 require_text "$orchestrator" "final review must run on the provider that did not implement" "orchestrator enforces cross-provider final review"
 require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-mortem step"
 require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JSONL delta"
@@ -259,6 +279,9 @@ require_text "$dm_review" '**A0. If the agent is `openrouter-bulk-analyst`:**' "
 require_text "$dm_review" "Never launch this coding-review lane through a Claude" "dm-review keeps bulk review off Claude execution"
 require_text "$dm_review" 'a Claude `Agent` call is not a valid Branch A launcher' "dm-review keeps generic OpenRouter review off Claude execution"
 require_text "$dm_review" '--mode mechanical-review' "dm-review delegates the safe remainder of mixed diffs"
+require_text "$dm_review_cmd" "contribution receipts" "dm-review exposes finding contribution receipts"
+require_text "$dm_review_cmd" "observation-only economics evidence" "contributions cannot become routing authority"
+require_text "$kernel_metrics" '"observation_only": True' "kernel economics output is observation-only"
 require_text "$agent_runner" 'set(canon) | set(configured)' "OpenRouter runner cannot weaken the minimum path denylist"
 require_text "$agent_runner" "RUNNER DECLINED -- SENSITIVE CONTENT" "OpenRouter runner declines high-confidence secrets in added lines"
 require_text "$agent_runner" 'neverRouteToOpenRouter' "OpenRouter runner reads the Codex-return security boundary"
