@@ -545,6 +545,39 @@ def _contract_binding_payload(contract, digest, stage):
     }
 
 
+def _validated_contract_binding_chain(run_root, bindings, *, missing_latest=None):
+    from .behavioral_contract import (
+        contract_digest, validate_initial_binding, validate_revision,
+    )
+
+    contracts = []
+    previous_digest = None
+    for index, binding in enumerate(bindings):
+        try:
+            contract = _load_bound_contract(run_root, binding)
+        except FileNotFoundError:
+            if (
+                index != len(bindings) - 1
+                or binding["revision"] == 1
+                or missing_latest is None
+            ):
+                raise ValueError("verification contract artifact is missing") from None
+            contract = missing_latest
+        digest = contract_digest(contract)
+        expected = _contract_binding_payload(contract, digest, binding["stage"])
+        if binding != expected:
+            raise ValueError("verification contract binding does not match artifact")
+        if not contracts:
+            contract = validate_initial_binding(contract)
+        else:
+            contract = validate_revision(
+                contracts[-1], contract, previous_digest,
+            )
+        contracts.append(contract)
+        previous_digest = digest
+    return tuple(contracts)
+
+
 def _command_verification_contract(args, *, revise):
     from .behavioral_contract import (
         contract_digest, load_contract, validate_initial_binding, validate_revision,
@@ -572,10 +605,17 @@ def _command_verification_contract(args, *, revise):
             else "verification_contract_bound"
         )
         payload = _contract_binding_payload(candidate, digest, requested_stage)
+        idempotent = (
+            latest is not None
+            and _contract_receipt(latest) == _contract_receipt(payload)
+            and latest["stage"] == requested_stage
+        )
+        _validated_contract_binding_chain(
+            run_root, bindings,
+            missing_latest=candidate if idempotent and revise else None,
+        )
 
-        if latest is not None and _contract_receipt(latest) == _contract_receipt(payload):
-            if latest["stage"] != requested_stage:
-                raise ValueError("verification contract command does not match binding")
+        if idempotent:
             _store_contract_once(run_root, candidate, digest)
             if materialized != reconstructed:
                 expected_revision = materialized.revision if materialized is not None else -1

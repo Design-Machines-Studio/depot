@@ -346,6 +346,15 @@ def _potential_weakening(previous, candidate):
             and new["baseline_expectation"] != "must_fail"
         ):
             return True
+    previous_manual = {
+        item["requirement_id"]: item for item in previous["manual_requirements"]
+    }
+    candidate_manual = {
+        item["requirement_id"]: item for item in candidate["manual_requirements"]
+    }
+    if any(candidate_manual.get(identifier) != item
+           for identifier, item in previous_manual.items()):
+        return True
     return False
 
 

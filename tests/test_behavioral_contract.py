@@ -144,6 +144,95 @@ class BehavioralContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_revision(previous, revision, previous_digest)
 
+    def test_behavior_mutation_digest_and_weakening_matrix(self):
+        base = contract_one()
+        base["requirements"].append({
+            "id": "REQ-002", "source_ref": "original-prompt.md#manual",
+            "statement": "Human review confirms the qualitative behavior.",
+        })
+        base["checks"][0]["proves_requirement_ids"].append("REQ-002")
+        base["manual_requirements"] = [
+            {"requirement_id": "REQ-001", "reason_code": "human_judgment_required",
+             "evidence_ref": "plans/adaptive/plan.html#req-1"},
+            {"requirement_id": "REQ-002", "reason_code": "human_judgment_required",
+             "evidence_ref": "plans/adaptive/plan.html#req-2"},
+        ]
+        base["revision_justification"]["added_obligation_ids"].extend([
+            "REQ-002", "PROOF:CHK-001:REQ-002",
+        ])
+        previous = validate_initial_binding(base)
+        previous_digest = contract_digest(previous)
+
+        def change_requirement(value):
+            value["requirements"][0]["statement"] += " More specifically."
+
+        def change_regression(value):
+            value["prohibited_regressions"][0]["statement"] += " On every route."
+
+        def remove_proof_link(value):
+            value["checks"][0]["proves_requirement_ids"].remove("REQ-002")
+
+        def remove_persona(value):
+            value["persona_case_ids"].remove("persona-editor")
+
+        def remove_browser(value):
+            value["browser_case_ids"].remove("browser-primary")
+
+        def baseline_may_pass(value):
+            value["checks"][0]["baseline_expectation"] = "may_pass"
+
+        def baseline_not_runnable(value):
+            value["checks"][0]["baseline_expectation"] = "not_runnable"
+
+        def change_argv(value):
+            value["checks"][0]["argv"][-1] = "tests.test_changed"
+
+        def change_manual(value):
+            value["manual_requirements"][0]["reason_code"] = "accessibility_review"
+
+        def remove_manual(value):
+            value["manual_requirements"].pop(0)
+
+        mutations = {
+            "requirement": change_requirement,
+            "regression": change_regression,
+            "proof_link": remove_proof_link,
+            "persona": remove_persona,
+            "browser": remove_browser,
+            "must_fail_to_may_pass": baseline_may_pass,
+            "must_fail_to_not_runnable": baseline_not_runnable,
+            "argv": change_argv,
+            "manual_mutation": change_manual,
+            "manual_removal": remove_manual,
+        }
+        for name, mutate in mutations.items():
+            behavior = json.loads(json.dumps(previous))
+            mutate(behavior)
+            with self.subTest(name=name, assertion="digest"):
+                self.assertNotEqual(contract_digest(behavior), previous_digest)
+
+            revision = json.loads(json.dumps(previous))
+            mutate(revision)
+            revision.update({"revision": 2, "previous_contract_digest": previous_digest})
+            old_obligations = obligations(previous)
+            new_obligations = obligations(revision)
+            revision["revision_justification"] = {
+                "reason_code": "behavior_revision", "summary": f"Revise {name}.",
+                "added_obligation_ids": sorted(new_obligations - old_obligations),
+                "retained_obligation_ids": sorted(new_obligations & old_obligations),
+                "removed_obligation_ids": sorted(old_obligations - new_obligations),
+                "human_approval_evidence_ref": None,
+            }
+            with self.subTest(name=name, assertion="approval"), self.assertRaises(ValueError):
+                validate_revision(previous, revision, previous_digest)
+            revision["revision_justification"]["human_approval_evidence_ref"] = (
+                "plans/adaptive/plan.html#approval"
+            )
+            with self.subTest(name=name, assertion="approved"):
+                self.assertEqual(
+                    validate_revision(previous, revision, previous_digest)["revision"], 2,
+                )
+
     def test_parser_rejects_malformed_invalid_utf8_duplicate_depth_and_size(self):
         valid = canonical_bytes(contract_one())
         bad = {

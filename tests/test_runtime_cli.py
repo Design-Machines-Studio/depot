@@ -121,6 +121,40 @@ class RuntimeCliTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def append_contract_binding(self, run_dir, contract, stage):
+        from workflow_kernel.behavioral_contract import contract_digest
+
+        digest = contract_digest(contract)
+        reference = (
+            "verification-contracts/sha256-"
+            + digest.removeprefix("sha256:") + ".json"
+        )
+        justification = contract["revision_justification"]
+        sequence = len((run_dir / "events.jsonl").read_text().splitlines())
+        occurred_at = (
+            datetime.now(timezone.utc) + timedelta(seconds=1)
+        ).isoformat().replace("+00:00", "Z")
+        event = json.dumps({
+            "schema_version": 1, "sequence": sequence,
+            "run_id": run_dir.name, "node_id": None,
+            "kind": "evidence.recorded", "occurred_at": occurred_at,
+            "payload": {
+                "stage": stage, "contract_id": contract["contract_id"],
+                "schema_version": contract["schema_version"],
+                "revision": contract["revision"], "contract_digest": digest,
+                "contract_ref": reference,
+                "previous_contract_digest": contract["previous_contract_digest"],
+                "reason_code": justification["reason_code"],
+                "human_approval_evidence_ref": justification[
+                    "human_approval_evidence_ref"
+                ],
+                "evidence": [reference],
+            },
+        })
+        result = self.run_cli("append", run_dir, "--event", event)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return digest, reference
+
     def test_observe_pipeline_writes_shadow_artifact_only(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -560,6 +594,67 @@ class RuntimeCliTests(unittest.TestCase):
             )
             self.assertEqual(rejected.returncode, 2)
             self.assertNotIn("0000000000", rejected.stderr)
+
+    def test_forged_initial_binding_cannot_be_materialized_by_idempotent_retry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "contract-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "contract-run"
+            candidate = verification_contract()
+            contract = root / "contract.json"
+            contract.write_text(json.dumps(candidate))
+            _digest, reference = self.append_contract_binding(
+                run_dir, candidate, "verification_contract_bound",
+            )
+
+            result = self.run_cli(
+                "bind-verification-contract", "--state-dir", run_dir,
+                "--contract", contract,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse((run_dir / reference).exists())
+
+    def test_forged_unapproved_revision_cannot_reconcile_missing_artifact(self):
+        from workflow_kernel.behavioral_contract import contract_digest
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "contract-run")
+            run_dir = root / ".workflow-kernel" / "runs" / "contract-run"
+            initial_value = verification_contract()
+            initial = root / "contract-1.json"
+            initial.write_text(json.dumps(initial_value))
+            bound = self.run_cli(
+                "bind-verification-contract", "--state-dir", run_dir,
+                "--contract", initial,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+
+            forged = json.loads(json.dumps(initial_value))
+            forged.update({
+                "revision": 2,
+                "previous_contract_digest": contract_digest(initial_value),
+            })
+            forged["prohibited_regressions"] = []
+            forged["revision_justification"] = {
+                "reason_code": "unapproved_removal", "summary": "Remove regression.",
+                "added_obligation_ids": [],
+                "retained_obligation_ids": ["PROOF:CHK-001:REQ-001", "REQ-001"],
+                "removed_obligation_ids": ["REG-001"],
+                "human_approval_evidence_ref": None,
+            }
+            revision = root / "contract-2.json"
+            revision.write_text(json.dumps(forged))
+            _digest, reference = self.append_contract_binding(
+                run_dir, forged, "verification_contract_revised",
+            )
+
+            result = self.run_cli(
+                "revise-verification-contract", "--state-dir", run_dir,
+                "--contract", revision,
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertFalse((run_dir / reference).exists())
 
     def test_verification_contract_malformed_input_is_redacted_and_has_no_partial_file(self):
         with tempfile.TemporaryDirectory() as directory:
