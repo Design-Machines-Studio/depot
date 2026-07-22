@@ -374,3 +374,8 @@ Pipeline failure analysis documents live in `docs/post-mortems/`:
 - `2026-04-10-pipeline-visual-testing-postmortem.md` -- 7 failure modes from Assembly pipeline bypass and visual testing gaps
 
 These postmortems inform the Known Pipeline Failure Modes section above and the hardening measures in the pipeline plugin.
+
+<!-- airlift:start -->
+An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 5, 2026-07-22T11:20:02Z).
+Read it before continuing.
+<!-- airlift:end -->
