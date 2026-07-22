@@ -18,6 +18,7 @@ REVIEW_STAGES = frozenset({
     "repository_cleanup", "review_terminal",
     "finding_contribution", "attempt_usage", "browser_recovery",
     "finding_record", "lane_record",
+    "browser_bundle", "ci_snapshot", "read_only_boundary",
 })
 REVIEW_MODES = frozenset({"full", "quick", "visual", "loop"})
 

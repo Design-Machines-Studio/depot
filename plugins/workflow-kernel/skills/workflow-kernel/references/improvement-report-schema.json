@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://design-machines.local/workflow-kernel/improvement-report-v1.schema.json",
+  "title": "Improvement Report v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "record_kind", "run_id", "feature_slug", "input_index_digest", "finalized_at", "cleanup_outcomes", "shadow_outcome", "metrics", "candidates", "inspected_input_count", "deduped_candidate_count", "empty_reason", "report_digest"],
+  "properties": {
+    "schema_version": {"const": 1}, "record_kind": {"const": "improvement-report"},
+    "run_id": {"$ref": "#/$defs/id"}, "feature_slug": {"$ref": "#/$defs/id"},
+    "input_index_digest": {"$ref": "#/$defs/digest"}, "finalized_at": {"$ref": "#/$defs/timestamp"},
+    "cleanup_outcomes": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/cleanup"}},
+    "shadow_outcome": {"$ref": "#/$defs/shadow"},
+    "metrics": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/metric"}},
+    "candidates": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/candidate"}},
+    "inspected_input_count": {"type": "integer", "minimum": 0},
+    "deduped_candidate_count": {"type": "integer", "minimum": 0},
+    "empty_reason": {"oneOf": [{"const": "no_evidence_backed_improvement"}, {"type": "null"}]},
+    "report_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$"},
+    "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"},
+    "refs": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}},
+    "ids": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "cleanup": {
+      "type": "object", "additionalProperties": false,
+      "required": ["domain", "disposition", "count", "tier", "sensitivity", "evidence_ref"],
+      "properties": {
+        "domain": {"enum": ["docker", "artifact", "git"]},
+        "disposition": {"enum": ["created", "removed", "missing", "retained", "blocked", "uninspectable"]},
+        "count": {"type": "integer", "minimum": 0},
+        "tier": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "sensitivity": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "evidence_ref": {"$ref": "#/$defs/text"}
+      }
+    },
+    "shadow": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "category", "reasons", "missing_authority", "evidence_refs"],
+      "properties": {
+        "availability": {"enum": ["available", "unavailable"]},
+        "category": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "reasons": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}},
+        "missing_authority": {"type": "array", "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/text"}},
+        "evidence_refs": {"$ref": "#/$defs/refs"}
+      }
+    },
+    "metric": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "availability", "value", "unit", "evidence_ref"],
+      "properties": {
+        "name": {"$ref": "#/$defs/id"}, "availability": {"enum": ["measured", "unavailable"]},
+        "value": {"oneOf": [{"type": "number"}, {"type": "null"}]},
+        "unit": {"oneOf": [{"$ref": "#/$defs/text"}, {"type": "null"}]},
+        "evidence_ref": {"$ref": "#/$defs/text"}
+      }
+    },
+    "candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidate_id", "category", "observed_problem", "evidence_refs", "source_runs", "source_stages", "source_chunks", "recurrence_count", "status", "dedupe_key", "dedupe_reason", "existing_control_refs", "owner_plugin", "target_surfaces", "mechanical_work", "judgment_boundary", "acceptance_tests", "confidence", "safety_boundary", "compatibility_notes", "benefit_basis", "expected_benefit", "benefit_rationale", "benefit_measurement", "merge_release_authority"],
+      "properties": {
+        "candidate_id": {"type": "string", "pattern": "^improvement-v1:sha256:[0-9a-f]{64}$"},
+        "category": {"enum": ["new_deterministic_check", "existing_check_repair", "plugin_contract", "telemetry_gap", "depot_architecture", "documentation_or_runbook"]},
+        "observed_problem": {"$ref": "#/$defs/text"}, "evidence_refs": {"$ref": "#/$defs/refs"},
+        "source_runs": {"$ref": "#/$defs/ids"}, "source_stages": {"$ref": "#/$defs/ids"}, "source_chunks": {"$ref": "#/$defs/ids"},
+        "recurrence_count": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["one-off", "recurring", "standing", "completed", "superseded", "rejected"]},
+        "dedupe_key": {"$ref": "#/$defs/text"}, "dedupe_reason": {"$ref": "#/$defs/text"},
+        "existing_control_refs": {"$ref": "#/$defs/refs"}, "owner_plugin": {"$ref": "#/$defs/id"},
+        "target_surfaces": {"$ref": "#/$defs/refs"}, "mechanical_work": {"$ref": "#/$defs/text"},
+        "judgment_boundary": {"$ref": "#/$defs/text"}, "acceptance_tests": {"$ref": "#/$defs/refs"},
+        "confidence": {"enum": ["low", "medium", "high", "unavailable"]},
+        "safety_boundary": {"$ref": "#/$defs/text"}, "compatibility_notes": {"$ref": "#/$defs/text"},
+        "benefit_basis": {"enum": ["qualitative", "measured"]},
+        "expected_benefit": {"enum": ["reduced_manual_friction", "reduced_cycle_time", "improved_correctness", "improved_observability", "improved_maintainability", "improved_compatibility"]},
+        "benefit_rationale": {"$ref": "#/$defs/text"},
+        "benefit_measurement": {"oneOf": [{"$ref": "#/$defs/benefit_measurement"}, {"type": "null"}]}, "merge_release_authority": {"const": false}
+      }
+    },
+    "benefit_measurement": {
+      "type": "object", "additionalProperties": false,
+      "required": ["metric", "unit", "baseline", "expected", "evidence_refs"],
+      "properties": {
+        "metric": {"$ref": "#/$defs/id"}, "unit": {"$ref": "#/$defs/id"},
+        "baseline": {"type": "number"}, "expected": {"type": "number"},
+        "evidence_refs": {"$ref": "#/$defs/refs"}
+      }
+    }
+  }
+}

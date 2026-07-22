@@ -145,6 +145,16 @@ Do not report "Skill tool unavailable" in Codex when this adapter can run. That 
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.
 
+The Codex adapter also uses the same two-stage Upstream Improvement Scout order
+as full CLI: seal the classifier-approved redaction-safe input index after final
+review/Codify/post-mortem evidence and before Step 5b cleanup; finalize the
+structured report and deterministic prompt only after exact Docker/artifact/Git
+cleanup, the authoritative terminal receipt, and shadow comparison/metrics.
+Run it on clean runs. Empty output is valid. Scout code observes and proposes;
+it cannot schedule, mutate, route, release, or approve anything.
+
+`SCOUT_ORDER: stage_a_seal -> docker_artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_compare_metrics -> stage_b_finalize`
+
 ## Process
 
 1. Read the manifest

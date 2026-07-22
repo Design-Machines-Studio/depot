@@ -229,6 +229,34 @@ class DmReviewAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_review_receipts([unsafe])
 
+    def test_terminal_review_evidence_carries_browser_ci_and_read_only_refs(self):
+        receipts = []
+        for sequence, stage in enumerate((
+                "browser_bundle", "ci_snapshot", "read_only_boundary", "review_terminal")):
+            receipts.append({
+                "run_id": "review-terminal-refs", "sequence": sequence,
+                "stage": stage, "status": "observed",
+                "occurred_at": f"2026-07-14T02:00:0{sequence}Z",
+                "authoritative_receipt": f"receipts/{stage}.json",
+                "browserBundleRef": "browser/exact-bundle.json",
+                "ciEvidenceRef": "ci/current-subject.json",
+                "readOnlyBoundaryRef": "review/read-only-boundary.json",
+            })
+        events = translate_review_receipts(receipts)
+        for event in events:
+            self.assertEqual(event.payload["mechanical_refs_provenance"],
+                             "authoritative_receipt")
+            for reference in (
+                "browser/exact-bundle.json", "ci/current-subject.json",
+                "review/read-only-boundary.json",
+            ):
+                self.assertIn(reference, event.payload["evidence"])
+        legacy = json.loads((FIXTURES / "dm-review.json").read_text())
+        self.assertTrue(all(
+            event.payload["mechanical_refs_provenance"] == "legacy_default_absent"
+            for event in translate_review_receipts(legacy)
+        ))
+
 
 if __name__ == "__main__":
     unittest.main()

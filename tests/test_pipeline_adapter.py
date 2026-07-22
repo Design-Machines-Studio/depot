@@ -189,6 +189,44 @@ class PipelineAdapterTests(unittest.TestCase):
         self.assertTrue(all(event.kind == "evidence.recorded" for event in events))
         self.assertTrue(all(event.payload["authoritative_receipt"] in event.payload["evidence"] for event in events))
 
+    def test_mechanical_observation_stages_preserve_refs_without_scheduling_authority(self):
+        stages = (
+            "repository_verification_plan", "artifact_classification",
+            "staging_allowlist", "browser_bundle", "ci_snapshot", "closeout_audit",
+            "improvement_input_index", "improvement_report", "improvement_prompt",
+        )
+        receipts = []
+        for sequence, stage in enumerate(stages):
+            receipts.append({
+                "run_id": "scout-1", "sequence": sequence, "stage": stage,
+                "status": "observed", "occurred_at": f"2026-07-14T00:00:{sequence:02d}Z",
+                "authoritative_receipt": f"receipts/{stage}.json",
+                "workflow_class": "feature", "execution_mode": "codex_native",
+                "improvementInputIndexRef": "plans/feature/improvement-input-index.json",
+            })
+        events = translate_pipeline_receipts(receipts)
+        self.assertEqual([event.payload["stage"] for event in events], list(stages))
+        self.assertTrue(all(
+            event.payload["mechanical_refs_provenance"] == "authoritative_receipt"
+            for event in events
+        ))
+        self.assertTrue(all(
+            "plans/feature/improvement-input-index.json" in event.payload["evidence"]
+            for event in events
+        ))
+        self.assertTrue(all(event.kind == "evidence.recorded" for event in events))
+
+        legacy = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        legacy_events = translate_pipeline_receipts(legacy)
+        self.assertTrue(all(
+            event.payload["mechanical_refs_provenance"] == "legacy_default_absent"
+            for event in legacy_events
+        ))
+        invalid = copy.deepcopy(receipts)
+        invalid[0]["mechanicalRefsProvenance"] = "legacy_default_absent"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(invalid)
+
     def test_receipt_without_authoritative_reference_is_rejected(self):
         with self.assertRaises(ValueError):
             translate_pipeline_receipts(({"run_id": "r", "sequence": 0, "stage": "run_summary", "status": "succeeded", "occurred_at": "2026-07-14T00:00:00Z"},))
