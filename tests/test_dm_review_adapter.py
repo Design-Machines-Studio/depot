@@ -103,13 +103,14 @@ class DmReviewAdapterTests(unittest.TestCase):
                 1, "source-b", finding_disposition="merged",
                 agreement="corroborated", decision_reason_code="exact-duplicate",
                 reviewer="architecture", provider=None, model=None,
+                evidence_ref="raw/architecture.json",
             ),
         ]
         events = translate_review_receipts(receipts)
         self.assertEqual([event.payload["source_finding_id"] for event in events], ["source-a", "source-b"])
         self.assertEqual(events[1].payload["canonical_finding_id"], receipts[1]["canonical_finding_id"])
         self.assertEqual(events[1].payload["finding_disposition"], "merged")
-        self.assertIn("raw/security.json", events[1].payload["evidence"])
+        self.assertIn("raw/architecture.json", events[1].payload["evidence"])
         self.assertIsNone(events[1].payload["provider"])
         self.assertIsNone(events[1].payload["model"])
 
@@ -146,6 +147,21 @@ class DmReviewAdapterTests(unittest.TestCase):
             with self.subTest(mutation=mutation), self.assertRaises(ValueError):
                 translate_review_receipts([candidate])
 
+    def test_local_source_ids_are_scoped_to_artifact_with_reviewer_consistency(self):
+        first = self.contribution(0, "finding-1", evidence_ref="raw/security-a.json")
+        second = self.contribution(
+            1, "finding-1", evidence_ref="raw/security-b.json",
+            canonical_finding_id="finding-b",
+        )
+        events = translate_review_receipts([first, second])
+        self.assertEqual(len(events), 2)
+        inconsistent = self.contribution(
+            1, "finding-2", evidence_ref="raw/security-a.json",
+            reviewer="architecture",
+        )
+        with self.assertRaises(ValueError):
+            translate_review_receipts([first, inconsistent])
+
     def test_browser_help_requires_blocked_shape_and_stable_case_identity(self):
         receipt = {
             "run_id": "review-help", "sequence": 0, "stage": "browser_recovery",
@@ -162,6 +178,14 @@ class DmReviewAdapterTests(unittest.TestCase):
         invalid["missing_case_ids"] = []
         with self.assertRaises(ValueError):
             translate_review_receipts([invalid])
+        wrong_reason = copy.deepcopy(receipt)
+        wrong_reason["human_intervention_reason"] = "retry_budget_exhausted"
+        with self.assertRaises(ValueError):
+            translate_review_receipts([wrong_reason])
+        invalid_id = copy.deepcopy(receipt)
+        invalid_id["missing_case_ids"] = ["case/unsafe"]
+        with self.assertRaises(ValueError):
+            translate_review_receipts([invalid_id])
 
 
 if __name__ == "__main__":

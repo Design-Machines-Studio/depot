@@ -155,14 +155,20 @@ _CONTRIBUTION_REASON_DISPOSITION = {
     "not-reproducible": "discarded",
     "agent-findings-cap": "discarded",
 }
-_HUMAN_INTERVENTION_REASONS = frozenset({
-    "identical_failure_convergence", "retry_budget_exhausted",
-    "browser_evidence_unavailable",
-})
+_IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}\Z")
+_MAX_MISSING_CASE_IDS = 256
+_MAX_MISSING_CASE_ID_BYTES = 16_384
 
 
 def required_text(value: object, field: str) -> str:
     if type(value) is not str or not value or len(value) > 4096:
+        raise ValueError("invalid " + field)
+    return value
+
+
+def _bounded_identity(value: object, field: str) -> str:
+    value = required_text(value, field)
+    if _IDENTITY.fullmatch(value) is None:
         raise ValueError("invalid " + field)
     return value
 
@@ -535,7 +541,11 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         reason = required_text(
             receipt.get("human_intervention_reason"), "human intervention reason",
         )
-        if reason not in _HUMAN_INTERVENTION_REASONS:
+        allowed_reasons = (
+            {"identical_failure_convergence", "retry_budget_exhausted"}
+            if validation_help else {"browser_evidence_unavailable"}
+        )
+        if reason not in allowed_reasons:
             raise ValueError("invalid human intervention reason")
         if not (receipt.get("node_id") or receipt.get("chunk_id")):
             raise ValueError("human intervention lacks stable identity")
@@ -543,10 +553,24 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             raise ValueError("validation intervention lacks attempt identity")
         if browser_help:
             cases = receipt.get("missing_case_ids")
-            if type(cases) is not list or not cases or any(
-                type(item) is not str or not item for item in cases
-            ) or len(cases) != len(set(cases)):
+            if (
+                type(cases) is not list or not cases
+                or len(cases) > _MAX_MISSING_CASE_IDS
+            ):
                 raise ValueError("browser intervention lacks case identity")
+            try:
+                cases = [
+                    _bounded_identity(item, "missing case id") for item in cases
+                ]
+            except ValueError:
+                raise ValueError("browser intervention lacks case identity") from None
+            if (
+                len(cases) != len(set(cases))
+                or sum(len(item.encode("utf-8")) for item in cases)
+                > _MAX_MISSING_CASE_ID_BYTES
+            ):
+                raise ValueError("browser intervention lacks case identity")
+            receipt["missing_case_ids"] = cases
         receipt["human_intervention"] = True
     return receipt
 
@@ -676,6 +700,7 @@ def translate_receipts(
     isolation_strategy = None
     current_contract = None
     contribution_sources = set()
+    contribution_artifact_reviewers = {}
     for position, receipt in enumerate(normalized_values):
         run_id = required_text(receipt.get("run_id"), "run id")
         sequence = receipt.get("sequence")
@@ -736,10 +761,15 @@ def translate_receipts(
         if stage not in allowed_stages:
             raise ValueError("unknown receipt stage")
         if stage == "finding_contribution":
-            source = receipt["source_finding_id"]
+            source = (receipt["evidence_ref"], receipt["source_finding_id"])
             if source in contribution_sources:
                 raise ValueError("source finding has multiple decisions")
             contribution_sources.add(source)
+            prior_reviewer = contribution_artifact_reviewers.setdefault(
+                receipt["evidence_ref"], receipt["reviewer"],
+            )
+            if prior_reviewer != receipt["reviewer"]:
+                raise ValueError("source artifact reviewer discontinuity")
         occurred_at = required_text(receipt.get("occurred_at"), "occurred_at")
         node_id = receipt.get("node_id")
         if node_id is not None:

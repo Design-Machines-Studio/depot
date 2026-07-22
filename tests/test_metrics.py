@@ -220,6 +220,48 @@ class MetricsTests(unittest.TestCase):
         self.assertIsNone(report.cost_usd)
         self.assertEqual(report.usage_measurement_coverage["overlap"], 1)
 
+    def test_coverage_identity_coalesces_dispatch_or_contribution_with_usage(self):
+        usage = self.usage_receipt(
+            1, 1, usage_count=10, reviewer="security", lane="security",
+        )
+        dispatch = {
+            **{key: value for key, value in usage.items() if key not in {
+                "usage_scope", "usage_count", "measurement_source",
+                "usage_estimated", "duration_seconds",
+            }},
+            "sequence": 0, "stage": "dispatch",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/dispatch.json",
+            "provider": "openrouter", "model": "requested-model",
+        }
+        for field in ("chunk_id", "reviewer", "lane"):
+            dispatch.pop(field)
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts([dispatch, usage]),
+        )
+        self.assertEqual(report.usage_measurement_coverage["expected"], 1)
+        self.assertEqual(report.usage_measurement_coverage["measured"], 1)
+        self.assertEqual(report.tokens, 10)
+
+        contribution = {
+            "run_id": "economics-1", "sequence": 0,
+            "stage": "finding_contribution", "status": "recorded",
+            "node_id": "chunk-a", "chunk_id": "chunk-a", "attempt": 1,
+            "reviewer": "security", "lane": "security",
+            "source_finding_id": "source-a", "canonical_finding_id": "finding-a",
+            "finding_disposition": "retained", "agreement": "unique",
+            "decision_reason_code": "retained-unique",
+            "provider": "openrouter", "model": "review-model",
+            "evidence_ref": "raw/security.json",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/contribution.json",
+        }
+        report = MetricsAggregator().aggregate(translate_review_receipts([
+            contribution, usage,
+        ]))
+        self.assertEqual(report.usage_measurement_coverage["expected"], 1)
+        self.assertEqual(report.usage_measurement_coverage["missing"], 0)
+
     def test_contributions_preserve_canonical_count_and_existing_yield(self):
         common = {
             "run_id": "review-economics", "stage": "finding_contribution",
@@ -232,11 +274,13 @@ class MetricsTests(unittest.TestCase):
             {**common, "sequence": 0, "occurred_at": "2026-07-14T00:00:00Z",
              "authoritative_receipt": "receipts/source-a.json", "source_finding_id": "source-a",
              "finding_disposition": "retained", "decision_reason_code": "retained-corroborated",
-             "reviewer": "security", "provider": "openai", "model": "gpt-5.6-sol"},
+             "reviewer": "security", "provider": "openai", "model": "gpt-5.6-sol",
+             "evidence_ref": "raw/security.json"},
             {**common, "sequence": 1, "occurred_at": "2026-07-14T00:01:00Z",
              "authoritative_receipt": "receipts/source-b.json", "source_finding_id": "source-b",
              "finding_disposition": "merged", "decision_reason_code": "exact-duplicate",
-             "reviewer": "architecture", "provider": "anthropic", "model": "claude-opus"},
+             "reviewer": "architecture", "provider": "anthropic", "model": "claude-opus",
+             "evidence_ref": "raw/architecture.json"},
         ]
         report = MetricsAggregator().aggregate(translate_review_receipts(receipts))
         self.assertEqual(report.canonical_finding_count, 1)

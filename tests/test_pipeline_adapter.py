@@ -320,6 +320,10 @@ class PipelineAdapterTests(unittest.TestCase):
         }
         payload = translate_pipeline_receipts([exact])[0].payload
         self.assertTrue(payload["human_intervention"])
+        wrong_reason = copy.deepcopy(exact)
+        wrong_reason["human_intervention_reason"] = "browser_evidence_unavailable"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([wrong_reason])
         unrelated = copy.deepcopy(exact)
         unrelated.update({"stage": "progress", "action": "not_help"})
         payload = translate_pipeline_receipts([unrelated])[0].payload

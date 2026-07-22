@@ -153,35 +153,54 @@ def _number(payload, key, kind):
 
 
 def _attempt_identity(event: WorkflowEvent) -> Optional[tuple]:
+    """Coverage identity; provider/model remain row dimensions, not attempts."""
     payload = event.payload
     attempt = payload.get("attempt")
     if type(attempt) is not int or attempt < 1:
         return None
-    node = event.node_id or payload.get("chunk_id")
-    if type(node) is not str or not node:
+    node_or_chunk = payload.get("chunk_id") or event.node_id
+    if type(node_or_chunk) is not str or not node_or_chunk:
         return None
     return (
-        event.run_id, node, payload.get("chunk_id"), attempt,
+        event.run_id, node_or_chunk, attempt,
         payload.get("reviewer"), payload.get("lane"),
-        payload.get("requested_provider"), payload.get("attempted_provider"),
-        payload.get("implemented_by"), payload.get("provider"), payload.get("model"),
     )
 
 
 def _coverage(expected, rows, predicate) -> dict:
+    grouped = defaultdict(set)
+    for identity in expected:
+        grouped[identity[:3]].add(identity)
+    normalized_expected = set()
+    for identities in grouped.values():
+        detailed = {
+            identity for identity in identities
+            if identity[3] is not None or identity[4] is not None
+        }
+        normalized_expected.update(detailed or identities)
+
+    def resolved(identity):
+        if identity[3] is not None or identity[4] is not None:
+            return identity
+        candidates = {
+            candidate for candidate in normalized_expected
+            if candidate[:3] == identity[:3]
+        }
+        return next(iter(candidates)) if len(candidates) == 1 else identity
+
     measured_counts = Counter(
-        identity for identity, payload in rows if predicate(payload)
+        resolved(identity) for identity, payload in rows if predicate(payload)
     )
     measured = set(measured_counts)
     return {
-        "expected": len(expected),
+        "expected": len(normalized_expected),
         "measured": len(measured),
         "estimated": len({
-            identity for identity, payload in rows
-            if identity in measured and predicate(payload)
+            resolved(identity) for identity, payload in rows
+            if resolved(identity) in measured and predicate(payload)
             and payload.get("usage_estimated") is True
         }),
-        "missing": len(expected - measured),
+        "missing": len(normalized_expected - measured),
         "overlap": sum(1 for count in measured_counts.values() if count > 1),
     }
 

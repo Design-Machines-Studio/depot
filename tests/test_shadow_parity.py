@@ -186,19 +186,30 @@ class ShadowParityTests(unittest.TestCase):
         original[2].update({
             "chunk_id": "chunk-a", "usage_scope": "attempt", "usage_count": 10,
             "input_usage_count": 6, "output_usage_count": 4,
+            "cache_read_usage_count": 3, "cache_write_usage_count": 2,
+            "reasoning_usage_count": 1, "cost_usd": 0.01,
             "duration_seconds": 1.0,
             "measurement_source": "provider_receipt", "usage_estimated": False,
             "model": "claude-opus", "requested_provider": "anthropic",
             "attempted_provider": "anthropic", "implemented_by": "anthropic",
+            "reviewer": "builder", "lane": "implementation",
+            "wait_category": "capacity",
         })
         original[-1].pop("tokens")
         original[-1].pop("cost_usd")
         authoritative = ReceiptSet.from_events(translate_pipeline_receipts(original))
         for key, value in (
             ("usage_count", 11), ("input_usage_count", 7),
+            ("output_usage_count", 5), ("cache_read_usage_count", 4),
+            ("cache_write_usage_count", 3), ("reasoning_usage_count", 2),
+            ("cost_usd", 0.02), ("duration_seconds", 2.0),
+            ("wait_category", "ci"),
             ("measurement_source", "local_estimate"), ("usage_estimated", True),
             ("attempt", 2), ("chunk_id", "chunk-b"), ("model", "claude-sonnet"),
-            ("requested_provider", "openrouter"),
+            ("requested_provider", "openrouter"), ("attempted_provider", "openrouter"),
+            ("implemented_by", "codex"), ("provider", "openai"),
+            ("host", "codex"), ("reviewer", "reviewer-b"),
+            ("lane", "fallback"), ("node_id", "chunk-b"),
         ):
             mutated = copy.deepcopy(original)
             mutated[2][key] = value
@@ -208,6 +219,20 @@ class ShadowParityTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertFalse(report.semantic_match)
                 self.assertFalse(report.safe_to_promote)
+        attempt_receipt = copy.deepcopy(original[2])
+        attempt_receipt["sequence"] = 0
+        authoritative = ReceiptSet.from_events(
+            translate_pipeline_receipts([attempt_receipt]),
+        )
+        run_receipt = copy.deepcopy(attempt_receipt)
+        run_receipt["usage_scope"] = "run"
+        for key in ("attempt", "chunk_id", "reviewer", "lane"):
+            run_receipt.pop(key)
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_pipeline_receipts([run_receipt])),
+            authoritative,
+        )
+        self.assertFalse(report.semantic_match)
 
     def test_contribution_mutations_are_semantic_and_map_key_order_is_not(self):
         base = {
@@ -228,6 +253,8 @@ class ShadowParityTests(unittest.TestCase):
             {"finding_disposition": "merged", "decision_reason_code": "exact-duplicate"},
             {"agreement": "disputed", "decision_reason_code": "retained-disagreement"},
             {"provider": "anthropic"}, {"model": "claude-opus"}, {"attempt": 2},
+            {"reviewer": "architecture"}, {"evidence_ref": "raw/other.json"},
+            {"node_id": "review-lane-security"},
         )
         for mutation in mutations:
             candidate = copy.deepcopy(base)
