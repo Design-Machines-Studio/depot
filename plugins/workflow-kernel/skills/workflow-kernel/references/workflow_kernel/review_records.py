@@ -666,9 +666,15 @@ def _provider_state(root, artifact, references):
     return _canonical_bytes(rows)
 
 
-def _provider_snapshot(root, artifact, reference, supplied_receipts):
-    if reference is None:
-        return _canonical_bytes([["provider-snapshot", "missing"]]), False
+def _provider_snapshot(root, artifact, reference, expected_inventory_digest):
+    unavailable = (_canonical_bytes([["provider-observation", "unavailable"]]),
+                   None, None, "provider_state_unavailable")
+    if reference is None or expected_inventory_digest is None:
+        return unavailable
+    if type(expected_inventory_digest) is not str or _DIGEST.fullmatch(
+            expected_inventory_digest) is None:
+        return (_canonical_bytes([["provider-observation", "invalid-expected-inventory"]]),
+                None, None, "provider_state_incomplete")
     reference = _reference(reference, "provider snapshot reference")
     path = _provider_path(root, artifact, reference)
     try:
@@ -678,41 +684,80 @@ def _provider_snapshot(root, artifact, reference, supplied_receipts):
     try:
         entry = os.lstat(path)
     except FileNotFoundError:
-        return _canonical_bytes([[reference, "missing"]]), False
+        return unavailable
     if not stat.S_ISREG(entry.st_mode):
         state = "symlink" if stat.S_ISLNK(entry.st_mode) else "other"
-        return _canonical_bytes([[reference, state]]), False
+        return (_canonical_bytes([[reference, state]]), None, None,
+                "provider_state_incomplete")
     marker_digest = _hash_regular(path)
     try:
         marker = json.loads(path.read_text(encoding="utf-8"))
         if (type(marker) is not dict or set(marker) != {
-                "schema_version", "authority", "provider_receipts"}
+                "schema_version", "authority", "observation_state",
+                "observer_identity", "observer_source", "observed_at",
+                "inventory_digest", "receipt_refs", "observation_ref"}
                 or marker.get("schema_version") != 1
-                or marker.get("authority") != "complete-provider-snapshot"):
+                or marker.get("authority") != "independent-provider-observation"):
             raise ValueError("invalid provider snapshot marker")
+        observation_state = marker.get("observation_state")
+        if observation_state == "unavailable":
+            return (_canonical_bytes([[reference, "unavailable", marker_digest]]),
+                    None, None, "provider_state_unavailable")
+        if observation_state != "complete":
+            raise ValueError("provider snapshot is incomplete")
+        _identity(marker.get("observer_identity"), "provider observer identity")
+        observer_source = _text(marker.get("observer_source"), "provider observer source")
+        if not (observer_source.startswith("provider-api:")
+                or observer_source.startswith("connector:")):
+            raise ValueError("provider observer is not independent")
+        observed_at = _text(marker.get("observed_at"), "provider observed at")
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", observed_at) is None:
+            raise ValueError("invalid provider observation time")
         receipts = _list(
-            marker.get("provider_receipts"), "provider mutation receipt", _reference,
+            marker.get("receipt_refs"), "provider mutation receipt", _reference,
         )
-        supplied = _list(
-            supplied_receipts, "provider mutation receipt", _reference,
+        if not receipts:
+            raise ValueError("provider observation inventory is empty")
+        inventory_digest = _digest(sorted(receipts))
+        if (marker.get("inventory_digest") != inventory_digest
+                or inventory_digest != expected_inventory_digest):
+            raise ValueError("provider inventory does not match sealed expectation")
+        observation_ref = _reference(
+            marker.get("observation_ref"), "provider observation reference",
         )
-        if supplied and supplied != receipts:
-            raise ValueError("provider receipt list disagrees with snapshot")
+        observation_path = _provider_path(root, artifact, observation_ref)
+        try:
+            observation_path.relative_to(root)
+        except ValueError:
+            raise ValueError("provider observation outside repository")
+        observation_entry = os.lstat(observation_path)
+        if not stat.S_ISREG(observation_entry.st_mode) or observation_entry.st_size < 1:
+            raise ValueError("provider observation evidence is unavailable")
+        observation_digest = _hash_regular(observation_path)
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
-        return _canonical_bytes([[reference, "invalid", marker_digest]]), False
+        return (_canonical_bytes([[reference, "invalid", marker_digest]]), None, None,
+                "provider_state_incomplete")
     state = json.loads(_provider_state(root, artifact, receipts))
-    return _canonical_bytes([[reference, "file", marker_digest], *state]), True
+    observation = _digest({
+        "marker_digest": marker_digest,
+        "observation_digest": observation_digest,
+        "observer_identity": marker["observer_identity"],
+        "observer_source": marker["observer_source"],
+        "observed_at": observed_at,
+    })
+    return _canonical_bytes(state), observation, observed_at, None
 
 
-def capture_review_boundary(repository_root, artifact_root, provider_receipts=(), *,
-                            provider_snapshot_ref=None):
+def capture_review_boundary(repository_root, artifact_root, *,
+                            provider_snapshot_ref=None,
+                            provider_expected_inventory_digest=None):
     root = Path(repository_root).resolve()
     artifact = Path(artifact_root).resolve()
     if artifact != root and root not in artifact.parents:
         _fail("artifact root outside repository")
     relative = artifact.relative_to(root).as_posix()
-    provider_state, provider_complete = _provider_snapshot(
-        root, artifact, provider_snapshot_ref, provider_receipts,
+    provider_state, observation_digest, provider_observed_at, provider_reason = _provider_snapshot(
+        root, artifact, provider_snapshot_ref, provider_expected_inventory_digest,
     )
     return {
         "head": _git(root, "rev-parse", "HEAD").strip(),
@@ -723,17 +768,34 @@ def capture_review_boundary(repository_root, artifact_root, provider_receipts=()
         "provider_receipts_digest": "sha256:" + hashlib.sha256(
             provider_state,
         ).hexdigest(),
-        "provider_snapshot_complete": provider_complete,
+        "provider_observation_digest": observation_digest,
+        "provider_observed_at": provider_observed_at,
+        "provider_expected_inventory_digest": provider_expected_inventory_digest,
+        "provider_state_reason": provider_reason,
     }
 
 
 def compare_review_boundary(before, after):
     keys = ("head", "index_digest", "refs_digest", "product_status_digest",
-            "product_content_digest", "provider_receipts_digest")
+            "product_content_digest", "provider_receipts_digest",
+            "provider_expected_inventory_digest")
     changed = [key for key in keys if before.get(key) != after.get(key)]
-    complete = (before.get("provider_snapshot_complete") is True
-                and after.get("provider_snapshot_complete") is True)
-    if not complete:
-        changed.append("provider_snapshot_incomplete")
-    return {"read_only": complete and not changed, "changed": changed,
-            "provider_snapshot_complete": complete}
+    reasons = sorted({reason for reason in (
+        before.get("provider_state_reason"), after.get("provider_state_reason"),
+    ) if reason is not None})
+    ordered_observations = (before.get("provider_observed_at") is not None
+                            and after.get("provider_observed_at") is not None
+                            and before["provider_observed_at"] < after["provider_observed_at"])
+    if not ordered_observations and "provider_state_incomplete" not in reasons:
+        reasons.append("provider_state_incomplete")
+        reasons.sort()
+    authoritative = (not reasons
+                     and before.get("provider_observation_digest") is not None
+                     and after.get("provider_observation_digest") is not None
+                     and before.get("provider_expected_inventory_digest") is not None
+                     and before.get("provider_expected_inventory_digest")
+                     == after.get("provider_expected_inventory_digest")
+                     and ordered_observations)
+    return {"read_only": authoritative and not changed, "changed": changed,
+            "provider_state_authoritative": authoritative,
+            "provider_state_reasons": reasons}

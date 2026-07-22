@@ -293,22 +293,46 @@ class ReviewFindingTests(unittest.TestCase):
             subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
             artifacts = root / ".claude" / "ux-review"
             artifacts.mkdir(parents=True)
+            provider_dir = artifacts / "receipts"; provider_dir.mkdir()
+            inventory_receipt = provider_dir / "provider-inventory.json"
+            inventory_receipt.write_text('{"resources":[]}\n')
+            baseline_receipts = ("receipts/provider-inventory.json",)
             snapshot = artifacts / "provider-snapshot.json"
-            def set_snapshot(receipts=()):
+            observation = artifacts / "provider-api-observation.json"
+            def inventory_digest(receipts=()):
+                return review_records._digest(sorted(receipts))
+            def set_snapshot(receipts=baseline_receipts, *, state="complete",
+                             observed_at="2026-07-14T00:00:00Z"):
+                observation.write_text(json.dumps({
+                    "provider": "github", "resources": list(receipts),
+                    "observed_at": observed_at,
+                }))
                 snapshot.write_text(json.dumps({
                     "schema_version": 1,
-                    "authority": "complete-provider-snapshot",
-                    "provider_receipts": list(receipts),
+                    "authority": "independent-provider-observation",
+                    "observation_state": state,
+                    "observer_identity": "github-provider-observer",
+                    "observer_source": "provider-api:github",
+                    "observed_at": observed_at,
+                    "inventory_digest": inventory_digest(receipts),
+                    "receipt_refs": list(receipts),
+                    "observation_ref": "provider-api-observation.json",
                 }))
-            def boundary(receipts=()):
+            def boundary(receipts=baseline_receipts, *, expected_receipts=None):
                 return capture_review_boundary(
-                    root, artifacts, receipts,
+                    root, artifacts,
                     provider_snapshot_ref="provider-snapshot.json",
+                    provider_expected_inventory_digest=inventory_digest(
+                        receipts if expected_receipts is None else expected_receipts
+                    ),
                 )
             set_snapshot()
             before = boundary()
             (artifacts / "report.md").write_text("evidence\n")
-            self.assertTrue(compare_review_boundary(before, boundary())["read_only"])
+            set_snapshot(observed_at="2026-07-14T00:01:00Z")
+            unchanged = compare_review_boundary(before, boundary())
+            self.assertTrue(unchanged["read_only"])
+            self.assertTrue(unchanged["provider_state_authoritative"])
 
             product.write_text("changed\n")
             changed = compare_review_boundary(before, boundary())
@@ -340,7 +364,6 @@ class ReviewFindingTests(unittest.TestCase):
             self.assertIn("product_content_digest", compare_review_boundary(
                 untracked_before, boundary(),
             )["changed"])
-            provider_dir = artifacts / "receipts"; provider_dir.mkdir()
             provider = provider_dir / "provider.json"; provider.write_text("before\n")
             set_snapshot(["receipts/provider.json"])
             provider_before = boundary(["receipts/provider.json"])
@@ -351,20 +374,49 @@ class ReviewFindingTests(unittest.TestCase):
             self.assertNotIn("product_content_digest", provider_change["changed"])
             self.assertIn("provider_receipts_digest", provider_change["changed"])
 
-            incomplete_before = capture_review_boundary(root, artifacts)
-            incomplete_after = capture_review_boundary(root, artifacts, [])
-            incomplete = compare_review_boundary(incomplete_before, incomplete_after)
-            self.assertFalse(incomplete["read_only"])
-            self.assertFalse(incomplete["provider_snapshot_complete"])
-            self.assertIn("provider_snapshot_incomplete", incomplete["changed"])
-            authoritative = boundary(["receipts/provider.json"])
-            mismatched = capture_review_boundary(
-                root, artifacts, ["receipts/omitted.json"],
-                provider_snapshot_ref="provider-snapshot.json",
+            omitted = capture_review_boundary(root, artifacts)
+            omitted_result = compare_review_boundary(omitted, omitted)
+            self.assertFalse(omitted_result["read_only"])
+            self.assertIn("provider_state_unavailable",
+                          omitted_result["provider_state_reasons"])
+
+            snapshot.write_text(json.dumps({
+                "schema_version": 1, "authority": "complete-provider-snapshot",
+                "provider_receipts": [],
+            }))
+            self_attested = boundary()
+            self_attested_result = compare_review_boundary(self_attested, self_attested)
+            self.assertFalse(self_attested_result["read_only"])
+            self.assertIn("provider_state_incomplete",
+                          self_attested_result["provider_state_reasons"])
+
+            set_snapshot([])
+            empty_attestation = boundary([], expected_receipts=[])
+            empty_result = compare_review_boundary(
+                empty_attestation, empty_attestation,
             )
-            mismatch = compare_review_boundary(authoritative, mismatched)
-            self.assertFalse(mismatch["read_only"])
-            self.assertIn("provider_snapshot_incomplete", mismatch["changed"])
+            self.assertFalse(empty_result["read_only"])
+            self.assertIn("provider_state_incomplete",
+                          empty_result["provider_state_reasons"])
+
+            set_snapshot(["receipts/provider.json"])
+            incomplete_inventory = boundary(
+                ["receipts/provider.json"],
+                expected_receipts=["receipts/provider.json", "receipts/omitted.json"],
+            )
+            inventory_result = compare_review_boundary(
+                provider_before, incomplete_inventory,
+            )
+            self.assertFalse(inventory_result["read_only"])
+            self.assertIn("provider_state_incomplete",
+                          inventory_result["provider_state_reasons"])
+
+            set_snapshot(["receipts/provider.json"], state="unavailable")
+            unavailable = boundary(["receipts/provider.json"])
+            unavailable_result = compare_review_boundary(provider_before, unavailable)
+            self.assertFalse(unavailable_result["read_only"])
+            self.assertIn("provider_state_unavailable",
+                          unavailable_result["provider_state_reasons"])
 
     def test_plain_review_prose_is_read_only_and_fix_paths_own_mutation(self):
         root = Path(__file__).parents[1]
