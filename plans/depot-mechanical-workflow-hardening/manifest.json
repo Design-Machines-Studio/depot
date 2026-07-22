@@ -1,0 +1,284 @@
+{
+  "feature": "depot-mechanical-workflow-hardening",
+  "description": "Add deterministic repository verification, artifact safety, browser evidence, read-only review records, CI and closeout contracts, Assembly profile consumption, Pipeline integration, and proposal-only upstream improvement scouting across Workflow Kernel consumers.",
+  "workflowClass": "feature",
+  "executionMode": "codex_native",
+  "baseBranch": "codex/adaptive-fusion-verification",
+  "featureBranch": "codex/depot-mechanical-workflow-hardening",
+  "generatedAt": "2026-07-22T19:17:20+08:00",
+  "overlapRisk": "high",
+  "noMergeOnCompletion": true,
+  "campaignSlug": null,
+  "chunks": [
+    {
+      "id": "01-repository-verification-foundation",
+      "title": "Repository Verification Foundation",
+      "prompt": "prompts/01-repository-verification-foundation.md",
+      "level": 0,
+      "parallelGroup": null,
+      "dependsOn": [],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/argv.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/repository_verification.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/verification_execution.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/evidence_binding.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/repository-verification-profile-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/verification-plan-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/verification-result-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/evidence-binding-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/behavioral_contract.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/repository_scope.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/git.py",
+        "tests/test_repository_verification.py",
+        "tests/test_verification_execution.py",
+        "tests/test_evidence_binding.py",
+        "tests/test_behavioral_contract.py",
+        "tests/test_repository_scope.py"
+      ],
+      "companionSkills": [],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "02-artifact-safety-and-staging",
+      "title": "Artifact Safety and Staging",
+      "prompt": "prompts/02-artifact-safety-and-staging.md",
+      "level": 1,
+      "parallelGroup": "A",
+      "dependsOn": ["01-repository-verification-foundation"],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/artifacts.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/artifact-classification-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/staging-allowlist-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/redaction.py",
+        "tests/test_artifact_safety.py"
+      ],
+      "companionSkills": [],
+      "estimatedComplexity": "medium",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "03-browser-scenarios-and-bundles",
+      "title": "Browser Scenarios and Evidence Bundles",
+      "prompt": "prompts/03-browser-scenarios-and-bundles.md",
+      "level": 1,
+      "parallelGroup": "A",
+      "dependsOn": ["01-repository-verification-foundation"],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/browser_scenario.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/browser_bundle.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/browser-scenario-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/browser-evidence-bundle-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/verification.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/browser_evidence.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/browser.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/adapters/__init__.py",
+        "tests/test_browser_scenarios.py",
+        "tests/test_browser_recovery.py",
+        "tests/test_verification_profile.py"
+      ],
+      "companionSkills": [],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "04-read-only-review-and-findings",
+      "title": "Read-Only Review and Incremental Findings",
+      "prompt": "prompts/04-read-only-review-and-findings.md",
+      "level": 2,
+      "parallelGroup": "B",
+      "dependsOn": ["01-repository-verification-foundation", "03-browser-scenarios-and-bundles"],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/review_records.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/review-finding-record-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/review-lane-record-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/dm_review_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py",
+        "tests/test_review_findings.py",
+        "tests/test_dm_review_adapter.py",
+        "plugins/dm-review/skills/review/SKILL.md",
+        "plugins/dm-review/commands/dm-review.md",
+        "plugins/dm-review/commands/dm-review-fix.md",
+        "plugins/dm-review/commands/dm-review-loop.md",
+        "plugins/dm-review/agents/workflow/review-consolidator.md"
+      ],
+      "companionSkills": ["dm-review:review"],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "05-ci-evidence-and-closeout",
+      "title": "CI Evidence and Deterministic Closeout",
+      "prompt": "prompts/05-ci-evidence-and-closeout.md",
+      "level": 1,
+      "parallelGroup": "A",
+      "dependsOn": ["01-repository-verification-foundation"],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/ci_evidence.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/closeout.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/ci-evidence-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/closeout-audit-schema.json",
+        "tests/test_ci_evidence.py",
+        "tests/test_closeout.py",
+        "plugins/dm-review/skills/review/references/issue-tracking.md"
+      ],
+      "companionSkills": [],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "06-assembly-repository-profile",
+      "title": "Assembly Repository Profile",
+      "prompt": "prompts/06-assembly-repository-profile.md",
+      "level": 2,
+      "parallelGroup": "B",
+      "dependsOn": ["01-repository-verification-foundation", "03-browser-scenarios-and-bundles"],
+      "filesToModify": [
+        "plugins/assembly/skills/assembly-build/references/assembly-baseplate-verification-profile.json",
+        "plugins/assembly/agents/workflow/go-test-runner.md",
+        "plugins/assembly/commands/assembly-build.md",
+        "plugins/assembly/skills/development/setup.md",
+        "tests/test_assembly_verification_profile.py"
+      ],
+      "companionSkills": ["assembly:assembly-build"],
+      "estimatedComplexity": "medium",
+      "kind": "config",
+      "executor": "openrouter"
+    },
+    {
+      "id": "07-pipeline-integration-and-scout",
+      "title": "Pipeline Integration and Upstream Improvement Scout",
+      "prompt": "prompts/07-pipeline-integration-and-scout.md",
+      "level": 3,
+      "parallelGroup": null,
+      "dependsOn": [
+        "01-repository-verification-foundation",
+        "02-artifact-safety-and-staging",
+        "03-browser-scenarios-and-bundles",
+        "04-read-only-review-and-findings",
+        "05-ci-evidence-and-closeout",
+        "06-assembly-repository-profile"
+      ],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/improvements.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/improvement-input-index-schema.json",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/improvement-report-schema.json",
+        "tests/test_improvements.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/pipeline_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/dm_review_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py",
+        "tests/test_pipeline_adapter.py",
+        "tests/test_dm_review_adapter.py",
+        "plugins/pipeline/agents/workflow/execution-orchestrator.md",
+        "plugins/pipeline/commands/pipeline.md",
+        "plugins/pipeline/commands/pipeline-run.md",
+        "plugins/pipeline/references/artifact-lifecycle.md",
+        "plugins/pipeline/references/run-postmortem-schema.md"
+      ],
+      "companionSkills": ["pipeline:pipeline", "dm-review:dm-review"],
+      "estimatedComplexity": "large",
+      "kind": "integration",
+      "executor": "codex"
+    },
+    {
+      "id": "08-cross-plugin-release-integration",
+      "title": "Cross-Plugin Release Integration",
+      "prompt": "prompts/08-cross-plugin-release-integration.md",
+      "level": 4,
+      "parallelGroup": null,
+      "dependsOn": ["07-pipeline-integration-and-scout"],
+      "filesToModify": [
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/__init__.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/__main__.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/pipeline_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/dm_review_adapter.py",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py",
+        "tests/test_cli.py",
+        "tests/test_runtime_cli.py",
+        "tests/test_release_validator.py",
+        "tests/test_schema.py",
+        "tests/test_compatibility.py",
+        "tests/test_pipeline_adapter.py",
+        "tests/test_dm_review_adapter.py",
+        "tools/validate-workflow-kernel.py",
+        "tools/validate-workflow-contracts.sh",
+        "tools/check-dependencies.sh",
+        "tools/validate-dual-compat.sh",
+        "plugins/workflow-kernel/.claude-plugin/plugin.json",
+        "plugins/assembly/.claude-plugin/plugin.json",
+        "plugins/dm-review/.claude-plugin/plugin.json",
+        "plugins/pipeline/.claude-plugin/plugin.json",
+        ".claude-plugin/marketplace.json",
+        "CLAUDE.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/SKILL.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md",
+        "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md",
+        ".agents/plugins/marketplace.json",
+        "plugins/workflow-kernel/.codex-plugin/plugin.json",
+        "plugins/assembly/.codex-plugin/plugin.json",
+        "plugins/dm-review/.codex-plugin/plugin.json",
+        "plugins/pipeline/.codex-plugin/plugin.json",
+        "plugins/assembly/skills/assembly-build/SKILL.md",
+        "plugins/dm-review/skills/dm-review/SKILL.md",
+        "plugins/dm-review/skills/dm-review-fix/SKILL.md",
+        "plugins/dm-review/skills/dm-review-loop/SKILL.md",
+        "plugins/pipeline/skills/pipeline/SKILL.md",
+        "plugins/pipeline/skills/pipeline-run/SKILL.md"
+      ],
+      "companionSkills": [],
+      "estimatedComplexity": "large",
+      "kind": "integration",
+      "executor": "codex"
+    }
+  ],
+  "executionPlan": {
+    "levels": [
+      {
+        "level": 0,
+        "strategy": "sequential",
+        "chunks": ["01-repository-verification-foundation"]
+      },
+      {
+        "level": 1,
+        "strategy": "parallel",
+        "groups": {
+          "A": [
+            "02-artifact-safety-and-staging",
+            "03-browser-scenarios-and-bundles",
+            "05-ci-evidence-and-closeout"
+          ]
+        }
+      },
+      {
+        "level": 2,
+        "strategy": "parallel",
+        "groups": {
+          "B": [
+            "04-read-only-review-and-findings",
+            "06-assembly-repository-profile"
+          ]
+        }
+      },
+      {
+        "level": 3,
+        "strategy": "sequential",
+        "chunks": ["07-pipeline-integration-and-scout"]
+      },
+      {
+        "level": 4,
+        "strategy": "sequential",
+        "chunks": ["08-cross-plugin-release-integration"]
+      }
+    ],
+    "totalChunks": 8,
+    "parallelChunks": 5,
+    "sequentialChunks": 3,
+    "maxConcurrency": 3
+  }
+}

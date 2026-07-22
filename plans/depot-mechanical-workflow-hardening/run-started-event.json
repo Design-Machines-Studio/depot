@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "sequence": 2,
+  "run_id": "depot-mechanical-workflow-hardening",
+  "node_id": null,
+  "kind": "run.started",
+  "occurred_at": "2026-07-22T12:27:55Z",
+  "payload": {}
+}

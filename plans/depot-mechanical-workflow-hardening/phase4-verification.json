@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-07-22T19:17:20+08:00",
+  "workflowClass": "feature",
+  "manifest": "manifest.json",
+  "result": "passed",
+  "adversarialRevisionRound": 1,
+  "checks": {
+    "promptFilesPresent": true,
+    "promptCount": 8,
+    "manifestChunkCount": 8,
+    "largeChunkCount": 6,
+    "largeChunkLimit": 6,
+    "dependencyGraphAcyclic": true,
+    "parallelFileOwnershipDisjoint": true,
+    "parallelSiblingCrossReferencesAbsent": true,
+    "crossLevelOverlapRisk": "high",
+    "qualityFloorsMet": true,
+    "requirementsCovered": 15,
+    "requirementsTotal": 15
+  },
+  "promptQuality": [
+    {"id":"01-repository-verification-foundation","kind":"logic","complexity":"large","lines":210,"acceptanceCriteria":18,"minimumLines":160,"minimumAcceptanceCriteria":8,"passed":true},
+    {"id":"02-artifact-safety-and-staging","kind":"logic","complexity":"medium","lines":132,"acceptanceCriteria":15,"minimumLines":100,"minimumAcceptanceCriteria":5,"passed":true},
+    {"id":"03-browser-scenarios-and-bundles","kind":"logic","complexity":"large","lines":174,"acceptanceCriteria":19,"minimumLines":160,"minimumAcceptanceCriteria":8,"passed":true},
+    {"id":"04-read-only-review-and-findings","kind":"logic","complexity":"large","lines":161,"acceptanceCriteria":17,"minimumLines":160,"minimumAcceptanceCriteria":8,"passed":true},
+    {"id":"05-ci-evidence-and-closeout","kind":"logic","complexity":"large","lines":174,"acceptanceCriteria":18,"minimumLines":160,"minimumAcceptanceCriteria":8,"passed":true},
+    {"id":"06-assembly-repository-profile","kind":"config","complexity":"medium","lines":154,"acceptanceCriteria":16,"minimumLines":40,"minimumAcceptanceCriteria":3,"passed":true},
+    {"id":"07-pipeline-integration-and-scout","kind":"integration","complexity":"large","lines":320,"acceptanceCriteria":24,"minimumLines":280,"minimumAcceptanceCriteria":14,"passed":true},
+    {"id":"08-cross-plugin-release-integration","kind":"integration","complexity":"large","lines":384,"acceptanceCriteria":31,"minimumLines":280,"minimumAcceptanceCriteria":14,"passed":true}
+  ],
+  "requirementsCoverage": [
+    {"id":"R01","promptCriteria":["08#27","08#30"],"requirement":"Preserve isolated stacked branch and deliver an unmerged draft without release/cache publication."},
+    {"id":"R02","promptCriteria":["01#1","01#2","01#3","01#4","01#8","01#9","01#10","01#11","01#15","06#1","08#1","08#2"],"requirement":"Deterministic configurable verification planner with safe argv, executable selected lanes, repository doctor, structured Go results, comparable-only coverage, and no generic app paths."},
+    {"id":"R03","promptCriteria":["01#5","01#6","01#9","05#4","05#5","06#6","06#7"],"requirement":"Tiered risk/scope verification ladder preserving stronger local and remote authority."},
+    {"id":"R04","promptCriteria":["04#8","04#10","04#11","07#3"],"requirement":"Plain dm-review/review read-only; mutation only in approved fix/loop flows."},
+    {"id":"R05","promptCriteria":["01#12","01#13","03#11","03#12","07#2"],"requirement":"Exact Git/build/profile binding with stale evidence invalidation."},
+    {"id":"R06","promptCriteria":["04#1","04#2","04#4","04#5","04#6","07#3"],"requirement":"Versioned incremental structured findings preserving partial results and provenance."},
+    {"id":"R07","promptCriteria":["03#2","03#5","03#6","03#8","03#10","03#11","03#12","03#16","07#4"],"requirement":"Executable browser scenarios with isolated state, fixtures/login, JavaScript-off and restart/session checks, required assertions/recovery, and one immutable shared evidence bundle."},
+    {"id":"R08","promptCriteria":["02#1","02#2","02#3","02#4","02#5","02#8","02#9","02#10","02#11","07#5","07#6"],"requirement":"Explicit sensitive-class/lifecycle artifact classification, safe redaction, fixture boundaries, and exact staging allowlists."},
+    {"id":"R09","promptCriteria":["05#2","05#3","05#4","05#5","05#7","07#7","07#8"],"requirement":"Provider-neutral CI evidence without authority collapse across events/providers."},
+    {"id":"R10","promptCriteria":["05#8","05#9","05#10","05#11","05#12","05#13","05#14","05#16","07#9"],"requirement":"Deterministic PR/issue closeout audit for identity, draft, artifact existence/digest, affected-surface open issues, evidence, scope, and issue disposition."},
+    {"id":"R11","promptCriteria":["01#15","04#8","05#14","06#8","07#1","07#16","08#9"],"requirement":"Neutral Kernel mechanics, repository defaults in Assembly, consumer adapters, shadow parity, and human judgment boundaries."},
+    {"id":"R12","promptCriteria":["01#17","02#13","03#17","04#14","05#16","06#13","07#21","08#2","08#22","08#23","08#24","08#25","08#26"],"requirement":"Hostile-input/schema/CLI/contract/integration tests and canonical validators."},
+    {"id":"R13","promptCriteria":["07#18","07#19","08#27"],"requirement":"Evidence-only before/after metrics; unavailable telemetry never becomes invented savings."},
+    {"id":"R14","promptCriteria":["08#30","08#31"],"requirement":"Final requirements crosscheck and fresh independent dm-review prompt while leaving draft PR."},
+    {"id":"R15","promptCriteria":["07#10","07#11","07#12","07#13","07#14","07#15","07#16","08#20"],"requirement":"Every-run proposal-only Upstream Improvement Scout with structured candidates, reusable prompt, and valid empty result."}
+  ]
+}

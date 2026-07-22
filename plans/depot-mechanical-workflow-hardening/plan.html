@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="plan">
+  <title>Plan: Depot Mechanical Workflow Hardening</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 70rem; --pad: 1rem; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: Canvas; color: CanvasText; }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { font-size: 1.875rem; }
+    h2 { font-size: 1.375rem; margin-top: 2rem; }
+    h3 { font-size: 1.125rem; }
+    a { color: LinkText; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { overflow-x: auto; padding: 0.75rem; border: 1px solid GrayText; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid GrayText; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
+    section { margin-block: 1.5rem; }
+    small, .artifact-meta { color: GrayText; }
+    button { font: inherit; padding: 0.375rem 0.75rem; cursor: pointer; }
+    .artifact-meta { font-size: 0.875rem; }
+    .skip-link { position: absolute; left: -9999px; top: 0; }
+    .skip-link:focus { left: 0; padding: 0.5rem 1rem; z-index: 10; }
+    .artifact-main { max-width: 70rem; margin-inline: auto; padding: 1rem; }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: 0.75rem; list-style: none; padding: 0 1rem; }
+    .center { max-inline-size: var(--measure, 70rem); margin-inline: auto; }
+    .stack > * + * { margin-block-start: 1.5rem; }
+    .widget--edit td[contenteditable]:focus { outline: 2px solid Highlight; }
+    .widget__copy { margin: 0.5rem 0; }
+    .status-pass { color: #087f23; font-weight: 700; }
+    .status-open { color: #a44b00; font-weight: 700; }
+    @media (prefers-color-scheme: dark) { html:not([data-theme]) { background: #14161a; color: #e6e7e9; } }
+    @media print { nav, .widget__copy { display: none; } .artifact-main { max-width: none; } }
+  </style>
+</head>
+<body class="scheme-subtle">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="artifact-header">
+    <nav aria-label="Pipeline artifacts">
+      <ul>
+        <li><a href="original-prompt.md">Original prompt</a></li>
+        <li><a href="assessment.html">Assessment</a></li>
+        <li><a href="research.html">Research</a></li>
+        <li aria-current="page">Plan</li>
+        <li><a href="prompts/">Prompts</a></li>
+      </ul>
+    </nav>
+    <p class="artifact-meta" style="padding-inline:1rem"><span class="artifact-kind">plan</span> &middot; generated 2026-07-22</p>
+  </header>
+
+  <main id="content" class="artifact-main center stack">
+    <h1>Plan: Depot Mechanical Workflow Hardening</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">Overview</h2>
+      <p>This is a full-mode, eight-chunk feature run. It extends Workflow Kernel with bounded, independently versioned mechanical contracts; migrates Assembly, dm-review, and Pipeline onto those contracts; then closes the release surface through canonical manifests, generated Codex adapters, documentation, and validators. The implementation remains stacked on <code>origin/codex/adaptive-fusion-verification</code> at PR #12 head <code>8faeb6ddf00979451c8fd25d7f0bd97f37ae86a8</code>.</p>
+      <p>The plan deliberately separates repository policy, derived plans, observed results, evidence identity, reviewer records, browser bundles, artifact safety, CI state, closeout state, and improvement candidates. Structured state establishes facts; Pipeline and reviewer agents retain semantic judgment. Shadow comparison and conservative legacy defaults precede any enforcement.</p>
+      <dl>
+        <dt><strong>Workflow class</strong></dt><dd><code>feature</code>, explicitly approved by the user.</dd>
+        <dt><strong>Feature branch</strong></dt><dd><code>codex/depot-mechanical-workflow-hardening</code>.</dd>
+        <dt><strong>Stacked base</strong></dt><dd><code>origin/codex/adaptive-fusion-verification</code>.</dd>
+        <dt><strong>Delivery</strong></dt><dd>Unmerged draft PR; no tags, releases, marketplace publication, cache refresh, or merge.</dd>
+      </dl>
+    </section>
+
+    <section aria-labelledby="execution-shape">
+      <h2 id="execution-shape">Execution Shape</h2>
+      <ol>
+        <li>Build the shared repository-verification and evidence-binding foundation.</li>
+        <li>In parallel, implement artifact safety, browser scenarios, and CI/closeout contracts against that foundation; then add incremental review records against the completed browser contract.</li>
+        <li>Migrate Assembly and Pipeline/dm-review consumers after their required contracts exist.</li>
+        <li>Wire all stable CLI surfaces, version/dependency changes, generated adapters, documentation, and release validators last.</li>
+      </ol>
+      <p><strong>Planned parallelism:</strong> after Chunk 01, Chunks 02, 03, and 05 own disjoint implementation/test files and may run concurrently. After Chunk 03, Chunks 04 and 06 may run concurrently. Chunk 07 waits for 01–06. Chunk 08 is the integration/release gate.</p>
+    </section>
+
+    <section aria-labelledby="chunks" class="widget--edit" data-island-key="chunks">
+      <h2 id="chunks">Chunk Decomposition</h2>
+      <p>Each row becomes <code>prompts/NN-&lt;slug&gt;.md</code>. Edit cells inline, then Copy to round-trip into the data island.</p>
+      <table>
+        <thead><tr><th data-field="n">NN</th><th data-field="slug">Slug</th><th data-field="scope">Scope</th><th data-field="acceptance">Acceptance</th><th data-field="deps" data-list="true">Depends on</th></tr></thead>
+        <tbody>
+          <tr><td contenteditable="true">01</td><td contenteditable="true">repository-verification-foundation</td><td contenteditable="true">Add safe argv sharing, repository profiles, derived plans/results, bounded selected-lane execution, structured Go result parsing, repository doctor, and exact Git/build/evidence binding as strict Kernel contracts.</td><td contenteditable="true">Deterministic profile/plan/result/binding digests; conservative profile precedence; explicit selected and omitted lanes; safe shell-free execution; doctor checks; bounded go test JSON parsing; comparable-only coverage; stale-state detection; hostile input and dirty/untracked tests; no generic app paths.</td><td contenteditable="true"></td></tr>
+          <tr><td contenteditable="true">02</td><td contenteditable="true">artifact-safety-and-staging</td><td contenteditable="true">Add sensitivity/lifecycle classification, redaction-safe artifact records, and generated exact staging allowlists.</td><td contenteditable="true">Committable/private/ephemeral/blocked classes; symlink, size, hostile-name, credential, and test-fixture cases; allowlist is the intersection of intended paths and safe outputs; no broad staging authority.</td><td contenteditable="true">01</td></tr>
+          <tr><td contenteditable="true">03</td><td contenteditable="true">browser-scenarios-and-bundles</td><td contenteditable="true">Extend existing persona/profile/recovery mechanics with executable scenarios and immutable shared evidence bundles.</td><td contenteditable="true">Closed action/assertion union; exact scenario/build/session binding; screenshot/trace/console digests; primary quit and fresh retry before alternate engine; human action distinct from human help and application failure; bundle reuse invalidates when binding changes.</td><td contenteditable="true">01</td></tr>
+          <tr><td contenteditable="true">04</td><td contenteditable="true">read-only-review-and-findings</td><td contenteditable="true">Persist immutable finding/lane records through the existing EventStore and make dm-review/review product-state read-only.</td><td contenteditable="true">Each completed finding survives lane failure; stable IDs, provenance, routing, disagreement, coverage gaps, and partial results remain; Markdown is generated; review writes only declared evidence; edits/commits/issues move to fix/loop flows; before/after repository boundary is tested.</td><td contenteditable="true">01, 03</td></tr>
+          <tr><td contenteditable="true">05</td><td contenteditable="true">ci-evidence-and-closeout</td><td contenteditable="true">Add provider-neutral CI evidence and pure PR/issue closeout evaluation with provider collection kept in adapters.</td><td contenteditable="true">Raw status/conclusion retained; merge acceptance separately derived; exact SHA/event/ref/app/requirement authority; PR/push/schedule/merge-group separation; Blueprint unresolved without mapping; exact PR head/draft/scope/evidence; parsed references distinguished from provider links and actual closure.</td><td contenteditable="true">01</td></tr>
+          <tr><td contenteditable="true">06</td><td contenteditable="true">assembly-repository-profile</td><td contenteditable="true">Make Assembly consume the planner through a Baseplate profile and replace stale hardcoded build/test/browser assumptions.</td><td contenteditable="true">Docker run/exec choice, -tags=dev, ./cmd/assembly, focused/full/race tiers, CI authority, and tests/ux declarations come from the profile; standalone assembly-build uses Kernel; missing/incomplete project declarations fail conservatively; canonical command sources updated.</td><td contenteditable="true">01, 03</td></tr>
+          <tr><td contenteditable="true">07</td><td contenteditable="true">pipeline-integration-and-scout</td><td contenteditable="true">Integrate planner, bindings, artifact allowlists, browser bundles, findings, CI/closeout evidence, and the two-stage Upstream Improvement Scout into Pipeline/dm-review orchestration.</td><td contenteditable="true">Shadow-first behavior; stale evidence invalidation; no authority collapse; safe evidence index sealed before cleanup; exact Docker/artifact cleanup outcomes included after cleanup; structured candidates dedupe completed/standing work; valid empty report; generated prompt is a view; no invented economics.</td><td contenteditable="true">01, 02, 03, 04, 05, 06</td></tr>
+          <tr><td contenteditable="true">08</td><td contenteditable="true">cross-plugin-release-integration</td><td contenteditable="true">Wire stable CLI commands, schemas, adapter stages, versions/dependencies, canonical docs, generated Codex surfaces, fixtures, inventories, and Depot release validation.</td><td contenteditable="true">All new schema/CLI inventories exact; legacy compatibility explicit; canonical Claude sources and generated Codex outputs agree; Kernel 0.4.0 and coordinated Assembly/dm-review/Pipeline minor floors; all canonical validators pass or sibling-only failures are separately evidenced; branch remains draft/unpublished and supports the final independent dm-review handoff.</td><td contenteditable="true">01, 02, 03, 04, 05, 06, 07</td></tr>
+        </tbody>
+      </table>
+      <button type="button" class="widget__copy" data-copy-island>Copy table as JSON</button>
+    </section>
+
+    <section aria-labelledby="chunk-details">
+      <h2 id="chunk-details">Chunk Details and File Ownership</h2>
+
+      <h3>01 — Repository verification foundation</h3>
+      <p><strong>Primary files:</strong> new <code>workflow_kernel/argv.py</code>, <code>repository_verification.py</code>, <code>verification_execution.py</code>, and <code>evidence_binding.py</code>; new versioned repository-profile, verification-plan, verification-result, and evidence-binding schemas; <code>behavioral_contract.py</code>, <code>repository_scope.py</code>, and <code>adapters/git.py</code> only where sharing existing safe argument/Git capture is required; focused <code>test_repository_verification.py</code>, <code>test_verification_execution.py</code>, and <code>test_evidence_binding.py</code>.</p>
+      <ul>
+        <li>Keep the existing persona/browser <code>VerificationProfile</code> concept separate from repository verification policy.</li>
+        <li>Profile precedence is explicit project config, then plugin profile, then conservative unavailable; discovery may suggest but never silently override.</li>
+        <li>A plan binds exact profile digest, repository state, changed scope, declared risk inputs, selected/omitted lanes, reasons, expected authority, and budget.</li>
+        <li>A build binding represents clean or dirty work honestly and exposes a pure <code>binding_matches</code>-style gate.</li>
+      </ul>
+
+      <h3>02 — Artifact safety and staging</h3>
+      <p><strong>Primary files:</strong> new <code>workflow_kernel/artifacts.py</code>, artifact-classification and staging-allowlist schemas, <code>redaction.py</code> only for shared safe primitives, and <code>tests/test_artifact_safety.py</code>.</p>
+      <ul>
+        <li>Lifecycle and sensitivity remain orthogonal fields.</li>
+        <li>Receipts record rule IDs and content digests, never the matched secret.</li>
+        <li>Test fixtures such as <code>.example</code> and deliberate secret-shape tests require explicit rules, not blanket exceptions.</li>
+        <li>Symlinks, hard links, traversal, oversized files, hostile filenames, and unclassified output fail closed.</li>
+      </ul>
+
+      <h3>03 — Browser scenarios and bundles</h3>
+      <p><strong>Primary files:</strong> new <code>workflow_kernel/browser_scenario.py</code> and <code>browser_bundle.py</code>, new scenario/bundle schemas, targeted extensions to <code>verification.py</code>, <code>browser_evidence.py</code>, and browser adapters, plus <code>tests/test_browser_scenarios.py</code>.</p>
+      <ul>
+        <li>Add a new scenario adapter rather than widen and break the existing <code>BrowserAdapter</code> protocol.</li>
+        <li>Represent navigation, interaction, assertion, screenshot, accessibility, console, restart, alternate-engine, and human-action steps as a closed union.</li>
+        <li>Reuse current immutable recovery receipts and distinguish <code>human_action_required</code>, <code>human_help_required</code>, and <code>application_failure</code>.</li>
+        <li>One bundle is shared across independent interpretation lanes only while the exact build/profile/scenario binding remains current.</li>
+      </ul>
+
+      <h3>04 — Read-only review and incremental findings</h3>
+      <p><strong>Primary files:</strong> new Kernel review-record module and finding/lane schemas; <code>dm_review_adapter.py</code> and receipt translation; <code>tests/test_review_findings.py</code> and adapter tests; <code>plugins/dm-review/skills/review/SKILL.md</code>, <code>commands/dm-review.md</code>, <code>commands/dm-review-fix.md</code>, <code>commands/dm-review-loop.md</code>, and <code>agents/workflow/review-consolidator.md</code>.</p>
+      <ul>
+        <li>Write immutable content-addressed records and immediately append their references through the existing crash-safe <code>EventStore</code>; do not invent a second locking protocol.</li>
+        <li>Allow review-owned evidence only under a declared artifact root while forbidding product edits, index/history mutation, PR/issue mutation, and repository tracking artifacts.</li>
+        <li>Move automatic simplification and tracking mutations into explicitly approved fix/loop workflows without losing zero-deferral reporting.</li>
+        <li>Generate Markdown findings and todo-compatible projections from structured authority.</li>
+      </ul>
+
+      <h3>05 — CI evidence and closeout</h3>
+      <p><strong>Primary files:</strong> new <code>workflow_kernel/ci_evidence.py</code> and <code>closeout.py</code>, provider-neutral schemas and declared adapter fixtures, <code>tests/test_ci_evidence.py</code>, <code>tests/test_closeout.py</code>, and <code>plugins/dm-review/skills/review/references/issue-tracking.md</code>.</p>
+      <ul>
+        <li>Preserve provider-native status/conclusion, subject kind/SHA/ref, check kind, app identity, run/job IDs, attempt, timestamps, URLs, and raw opaque fields.</li>
+        <li>Derive <code>satisfiesProviderMergeRule</code> separately from raw state and only from current repository requirements.</li>
+        <li>Use exact PR head rather than synthetic merge SHA; compare local, reviewed, and delivered state.</li>
+        <li>Separate textual mentions, parsed closing intent, provider-resolved entities, provider closing links, and actual closure; evaluation remains pure and non-mutating.</li>
+      </ul>
+
+      <h3>06 — Assembly repository profile</h3>
+      <p><strong>Primary files:</strong> a new Baseplate repository profile under <code>plugins/assembly/skills/assembly-build/references/</code>; <code>agents/workflow/go-test-runner.md</code>, <code>commands/assembly-build.md</code>, and <code>skills/development/setup.md</code>; Assembly plugin dependency metadata; targeted contract fixtures/tests.</p>
+      <ul>
+        <li>Encode the live Baseplate Make/Docker contract: Compose <code>run --rm --no-deps app</code> for isolated Go work, <code>-tags=dev</code>, <code>./cmd/assembly</code>, focused package closure, and declared broader/race/security lanes.</li>
+        <li>Import <code>tests/ux/</code> task status, personas, routes, viewports, expected outcomes, and screenshot points as scenario declarations rather than prose suggestions.</li>
+        <li>Preserve the browser recovery ladder and keep curl diagnostic-only.</li>
+        <li>Make standalone Assembly build/test invocation use the same planner, requiring a hard Workflow Kernel dependency with a conservative unavailable path.</li>
+      </ul>
+
+      <h3>07 — Pipeline integration and Upstream Improvement Scout</h3>
+      <p><strong>Primary files:</strong> new Kernel <code>improvements.py</code> plus schemas/tests; <code>pipeline_adapter.py</code>, <code>dm_review_adapter.py</code>, and translation stages as needed; <code>plugins/pipeline/agents/workflow/execution-orchestrator.md</code>, <code>commands/pipeline.md</code>, <code>commands/pipeline-run.md</code>, <code>references/artifact-lifecycle.md</code>, and <code>references/run-postmortem-schema.md</code>.</p>
+      <ul>
+        <li>Use planner and build bindings at dispatch, verification, review, browser, CI, and closeout boundaries; invalidate only affected evidence.</li>
+        <li>Use generated staging allowlists instead of broad directory staging while preserving exact deletion/rename handling.</li>
+        <li>Seal a redaction-safe improvement input index before cleanup; finalize after Docker/artifact/Git cleanup and terminal metrics are available.</li>
+        <li>Candidate authority is structured JSON with stable identity, evidence refs, recurrence, dedupe/completion state, target ownership, acceptance tests, confidence, and safety boundary. The reusable prompt is deterministic generated output.</li>
+        <li>The Scout is proposal-only, runs every time including clean runs, accepts an empty result, and never mutates upstream plugins, routing, findings, releases, or merge authority.</li>
+      </ul>
+
+      <h3>08 — Cross-plugin release integration</h3>
+      <p><strong>Primary files:</strong> Kernel <code>cli.py</code> and package exports; all new public schema and CLI inventory tests; <code>tools/validate-workflow-kernel.py</code>, <code>tools/validate-workflow-contracts.sh</code>, <code>tools/check-dependencies.sh</code>, relevant compatibility/runtime tests; canonical Claude plugin manifests and root marketplace; generated Codex manifests/command aliases; <code>CLAUDE.md</code> and plugin reference documentation.</p>
+      <ul>
+        <li>Expose stable schema-validating CLI commands with documented exit codes; command execution remains safe argv and provider/network collection stays outside neutral core.</li>
+        <li>Use a coordinated unpublished release set: Workflow Kernel <code>0.4.0</code>, Assembly <code>3.9.0</code>, dm-review <code>1.46.0</code>, and Pipeline <code>1.33.0</code>, with dependency floors updated together.</li>
+        <li>Regenerate, never hand-edit, <code>.codex-plugin</code> manifests and generated command-skill aliases.</li>
+        <li>Run focused unit suites, Kernel release validation, workflow contracts, generators in check mode, dependency resolution, dual compatibility, full composition, and <code>git diff --check</code>.</li>
+        <li>Separate Depot-owned validation from live sibling integration declarations and preserve exact evidence for any external failure.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="decisions" class="widget--edit" data-island-key="decisions">
+      <h2 id="decisions">Decisions &amp; Tradeoffs</h2>
+      <table>
+        <thead><tr><th data-field="id">ID</th><th data-field="decision">Decision</th><th data-field="rationale">Rationale</th><th data-field="alternatives" data-list="true">Alternatives</th></tr></thead>
+        <tbody>
+          <tr><td contenteditable="true">D1</td><td contenteditable="true">Use bounded independently versioned contracts.</td><td contenteditable="true">Profiles, plans, results, evidence, findings, CI, closeout, and improvements have different authority and compatibility lifecycles.</td><td contenteditable="true">One universal receipt, separate harness</td></tr>
+          <tr><td contenteditable="true">D2</td><td contenteditable="true">Project config outranks plugin profile; discovery never silently overrides.</td><td contenteditable="true">Repository-specific commands and UX declarations are safer than generic stack inference.</td><td contenteditable="true">Convention-only inference, plugin-only hardcoding</td></tr>
+          <tr><td contenteditable="true">D3</td><td contenteditable="true">Classify the run as feature.</td><td contenteditable="true">The user explicitly approved a new executable cross-plugin capability classification.</td><td contenteditable="true">Chore, security</td></tr>
+          <tr><td contenteditable="true">D4</td><td contenteditable="true">Reuse EventStore for incremental finding references.</td><td contenteditable="true">The existing crash-safe append/replay authority avoids a second JSONL locking protocol.</td><td contenteditable="true">Standalone finding ledger, final-only Markdown</td></tr>
+          <tr><td contenteditable="true">D5</td><td contenteditable="true">Review is read-only for product and provider state but may write declared immutable evidence.</td><td contenteditable="true">Review requires durable receipts without silently editing the code, Git history, PR, or issues.</td><td contenteditable="true">Absolutely no filesystem writes, automatic simplification commits</td></tr>
+          <tr><td contenteditable="true">D6</td><td contenteditable="true">Capture browser runtime evidence once per exact binding and fan out interpretation.</td><td contenteditable="true">Avoids repeated setup while preserving independent accessibility, visual, UX, and domain judgment.</td><td contenteditable="true">Every reviewer drives a browser, one reviewer supplies all judgments</td></tr>
+          <tr><td contenteditable="true">D7</td><td contenteditable="true">Preserve raw CI state and derive policy acceptance separately.</td><td contenteditable="true">Skipped and neutral can satisfy some GitHub policies without becoming passed evidence.</td><td contenteditable="true">Boolean pass/fail normalization</td></tr>
+          <tr><td contenteditable="true">D8</td><td contenteditable="true">Treat Blueprint semantics as unresolved until an explicit adapter mapping exists.</td><td contenteditable="true">No authoritative public specification or local payload fixture was found.</td><td contenteditable="true">Assume GitHub compatibility</td></tr>
+          <tr><td contenteditable="true">D9</td><td contenteditable="true">Seal Scout inputs before cleanup and finalize after cleanup.</td><td contenteditable="true">This preserves ephemeral evidence while including Docker, artifact, Git, parity, and metric outcomes.</td><td contenteditable="true">Scout only before cleanup, Scout only after cleanup</td></tr>
+          <tr><td contenteditable="true">D10</td><td contenteditable="true">Keep semantic judgment agent- and human-owned.</td><td contenteditable="true">Code can establish identity, coverage, policy, and evidence facts but cannot replace threat, UX, architectural, prioritization, or merge judgment.</td><td contenteditable="true">Fully mechanical approval</td></tr>
+          <tr><td contenteditable="true">D11</td><td contenteditable="true">Deliver as a stacked unmerged draft PR.</td><td contenteditable="true">Preserves PR #12 as the approved foundation and the user's fresh independent review boundary.</td><td contenteditable="true">Target main directly, merge in this run</td></tr>
+          <tr><td contenteditable="true">D12</td><td contenteditable="true">Use coordinated minor plugin bumps and Kernel 0.4.0 without publishing.</td><td contenteditable="true">The public contract and dependency surface changes materially, while delivery explicitly forbids release/cache mutation.</td><td contenteditable="true">Patch bumps, publish immediately</td></tr>
+        </tbody>
+      </table>
+      <button type="button" class="widget__copy" data-copy-island>Copy table as JSON</button>
+    </section>
+
+    <section aria-labelledby="agent-boundary">
+      <h2 id="agent-boundary">Intentional Agent and Human Boundary</h2>
+      <p>Code will own safe command construction, deterministic selection, identity, schema validation, evidence matching, lifecycle/sensitivity facts, provider-state normalization, exact closeout facts, deduplication, and generated views. Agents and humans continue to own ambiguous risk classification inputs, security threat interpretation, architecture and code-quality judgment, UX and visual evaluation, disagreement disposition, improvement prioritization, issue wording, merge recommendation, and release approval.</p>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">Verification Strategy</h2>
+      <ol>
+        <li>Each chunk runs focused unit and contract tests for its new strict schemas, hostile inputs, legacy defaults, deterministic output, and invalidation behavior.</li>
+        <li>Consumer chunks prove shadow parity and explicit unavailable behavior before enforcement.</li>
+        <li>Chunk 08 runs <code>./tools/validate-workflow-kernel.py</code>, <code>./tools/validate-workflow-contracts.sh</code>, both generator <code>--check</code> commands, <code>./tools/check-dependencies.sh</code>, <code>./tools/validate-dual-compat.sh</code>, <code>./tools/validate-composition.sh --all</code>, and <code>git diff --check</code>.</li>
+        <li>No product UI is changed in Depot. Browser verification here is contract/fixture verification; a live Assembly browser run is required only if integration changes Assembly runtime behavior during downstream validation.</li>
+        <li>No measured savings will be claimed unless the run emits direct before/after usage, duration, wait, setup, or cleanup evidence.</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="coverage">
+      <h2 id="coverage">Requirements Coverage</h2>
+      <p>Maps each cached Key Requirement from <a href="assessment.html">assessment.html</a> to implementation chunks or the mandatory Pipeline terminal stage.</p>
+      <table>
+        <thead><tr><th>#</th><th>Requirement</th><th>Coverage</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Preserve work, stacked branch, draft delivery, no publishing.</td><td>08 + Pipeline Phase 7</td></tr>
+          <tr><td>2</td><td>Project-configurable deterministic verification planner and runner with safe argv, repository doctor, structured Go results, and comparable-only coverage claims.</td><td>01, 06, 07, 08</td></tr>
+          <tr><td>3</td><td>Tiered verification preserving higher-authority lanes.</td><td>01, 05, 06, 07</td></tr>
+          <tr><td>4</td><td>Strict read-only dm-review/review; mutation only in fix/loop.</td><td>04, 07</td></tr>
+          <tr><td>5</td><td>Exact Git/build/profile binding and stale evidence invalidation.</td><td>01, 03, 04, 05, 07</td></tr>
+          <tr><td>6</td><td>Incremental versioned structured findings with provenance and partial survival.</td><td>04, 07, 08</td></tr>
+          <tr><td>7</td><td>Executable browser scenarios and shared immutable evidence bundle.</td><td>03, 04, 06, 07</td></tr>
+          <tr><td>8</td><td>Artifact sensitivity/lifecycle, redaction, and staging allowlists.</td><td>02, 07, 08</td></tr>
+          <tr><td>9</td><td>Provider-neutral CI without authority collapse.</td><td>05, 07, 08</td></tr>
+          <tr><td>10</td><td>Deterministic PR/issue closeout audit.</td><td>05, 07, 08</td></tr>
+          <tr><td>11</td><td>Neutral Kernel, Assembly defaults, consumer plugins, shadow/parity, human judgment.</td><td>01–08</td></tr>
+          <tr><td>12</td><td>Hostile-input, schema, CLI, contract, generator, integration tests and validators.</td><td>01–08, especially 08</td></tr>
+          <tr><td>13</td><td>Measure only available before/after evidence; no invented savings.</td><td>07, 08 + Pipeline postmortem</td></tr>
+          <tr><td>14</td><td>Final evidence crosscheck and exact independent dm-review prompt; draft PR.</td><td>08 + Pipeline Phase 7</td></tr>
+          <tr><td>15</td><td>Every-run proposal-only Upstream Improvement Scout and reusable prompt, including empty result.</td><td>07, 08</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="artifact-footer" style="padding:1rem">
+    <p>Pipeline planning artifact. Edit decision tables inline, then use the Copy button to round-trip changes back into the data island.</p>
+  </footer>
+
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "plan",
+    "slug": "depot-mechanical-workflow-hardening",
+    "workflowClass": "feature",
+    "baseBranch": "codex/adaptive-fusion-verification",
+    "featureBranch": "codex/depot-mechanical-workflow-hardening",
+    "noMergeOnCompletion": true,
+    "chunks": [
+      {"n":"01","slug":"repository-verification-foundation","scope":"Add safe argv sharing, repository profiles, derived plans/results, bounded selected-lane execution, structured Go result parsing, repository doctor, and exact Git/build/evidence binding as strict Kernel contracts.","acceptance":"Deterministic profile/plan/result/binding digests; conservative profile precedence; explicit selected and omitted lanes; safe shell-free execution; doctor checks; bounded go test JSON parsing; comparable-only coverage; stale-state detection; hostile input and dirty/untracked tests; no generic app paths.","deps":[]},
+      {"n":"02","slug":"artifact-safety-and-staging","scope":"Add sensitivity/lifecycle classification, redaction-safe artifact records, and generated exact staging allowlists.","acceptance":"Committable/private/ephemeral/blocked classes; symlink, size, hostile-name, credential, and test-fixture cases; allowlist is the intersection of intended paths and safe outputs; no broad staging authority.","deps":["01"]},
+      {"n":"03","slug":"browser-scenarios-and-bundles","scope":"Extend existing persona/profile/recovery mechanics with executable scenarios and immutable shared evidence bundles.","acceptance":"Closed action/assertion union; exact scenario/build/session binding; screenshot/trace/console digests; primary quit and fresh retry before alternate engine; human action distinct from human help and application failure; bundle reuse invalidates when binding changes.","deps":["01"]},
+      {"n":"04","slug":"read-only-review-and-findings","scope":"Persist immutable finding/lane records through the existing EventStore and make dm-review/review product-state read-only.","acceptance":"Each completed finding survives lane failure; stable IDs, provenance, routing, disagreement, coverage gaps, and partial results remain; Markdown is generated; review writes only declared evidence; edits/commits/issues move to fix/loop flows; before/after repository boundary is tested.","deps":["01","03"]},
+      {"n":"05","slug":"ci-evidence-and-closeout","scope":"Add provider-neutral CI evidence and pure PR/issue closeout evaluation with provider collection kept in adapters.","acceptance":"Raw status/conclusion retained; merge acceptance separately derived; exact SHA/event/ref/app/requirement authority; PR/push/schedule/merge-group separation; Blueprint unresolved without mapping; exact PR head/draft/scope/evidence; parsed references distinguished from provider links and actual closure.","deps":["01"]},
+      {"n":"06","slug":"assembly-repository-profile","scope":"Make Assembly consume the planner through a Baseplate profile and replace stale hardcoded build/test/browser assumptions.","acceptance":"Docker run/exec choice, -tags=dev, ./cmd/assembly, focused/full/race tiers, CI authority, and tests/ux declarations come from the profile; standalone assembly-build uses Kernel; missing/incomplete project declarations fail conservatively; canonical command sources updated.","deps":["01","03"]},
+      {"n":"07","slug":"pipeline-integration-and-scout","scope":"Integrate planner, bindings, artifact allowlists, browser bundles, findings, CI/closeout evidence, and the two-stage Upstream Improvement Scout into Pipeline/dm-review orchestration.","acceptance":"Shadow-first behavior; stale evidence invalidation; no authority collapse; safe evidence index sealed before cleanup; exact Docker/artifact cleanup outcomes included after cleanup; structured candidates dedupe completed/standing work; valid empty report; generated prompt is a view; no invented economics.","deps":["01","02","03","04","05","06"]},
+      {"n":"08","slug":"cross-plugin-release-integration","scope":"Wire stable CLI commands, schemas, adapter stages, versions/dependencies, canonical docs, generated Codex surfaces, fixtures, inventories, and Depot release validation.","acceptance":"All new schema/CLI inventories exact; legacy compatibility explicit; canonical Claude sources and generated Codex outputs agree; Kernel 0.4.0 and coordinated Assembly/dm-review/Pipeline minor floors; all canonical validators pass or sibling-only failures are separately evidenced; branch remains draft/unpublished and supports the final independent dm-review handoff.","deps":["01","02","03","04","05","06","07"]}
+    ],
+    "decisions": [
+      {"id":"D1","decision":"Use bounded independently versioned contracts.","rationale":"Profiles, plans, results, evidence, findings, CI, closeout, and improvements have different authority and compatibility lifecycles.","alternatives":["One universal receipt","Separate harness"]},
+      {"id":"D2","decision":"Project config outranks plugin profile; discovery never silently overrides.","rationale":"Repository-specific commands and UX declarations are safer than generic stack inference.","alternatives":["Convention-only inference","Plugin-only hardcoding"]},
+      {"id":"D3","decision":"Classify the run as feature.","rationale":"The user explicitly approved a new executable cross-plugin capability classification.","alternatives":["Chore","Security"]},
+      {"id":"D4","decision":"Reuse EventStore for incremental finding references.","rationale":"The existing crash-safe append/replay authority avoids a second JSONL locking protocol.","alternatives":["Standalone finding ledger","Final-only Markdown"]},
+      {"id":"D5","decision":"Review is read-only for product and provider state but may write declared immutable evidence.","rationale":"Review requires durable receipts without silently editing code, Git history, PRs, or issues.","alternatives":["Absolutely no filesystem writes","Automatic simplification commits"]},
+      {"id":"D6","decision":"Capture browser runtime evidence once per exact binding and fan out interpretation.","rationale":"Avoids repeated setup while preserving independent accessibility, visual, UX, and domain judgment.","alternatives":["Every reviewer drives a browser","One reviewer supplies all judgments"]},
+      {"id":"D7","decision":"Preserve raw CI state and derive policy acceptance separately.","rationale":"Skipped and neutral can satisfy some GitHub policies without becoming passed evidence.","alternatives":["Boolean pass/fail normalization"]},
+      {"id":"D8","decision":"Treat Blueprint semantics as unresolved until an explicit adapter mapping exists.","rationale":"No authoritative public specification or local payload fixture was found.","alternatives":["Assume GitHub compatibility"]},
+      {"id":"D9","decision":"Seal Scout inputs before cleanup and finalize after cleanup.","rationale":"This preserves ephemeral evidence while including Docker, artifact, Git, parity, and metric outcomes.","alternatives":["Scout only before cleanup","Scout only after cleanup"]},
+      {"id":"D10","decision":"Keep semantic judgment agent- and human-owned.","rationale":"Code establishes identity, coverage, policy, and evidence facts without replacing threat, UX, architecture, prioritization, or merge judgment.","alternatives":["Fully mechanical approval"]},
+      {"id":"D11","decision":"Deliver as a stacked unmerged draft PR.","rationale":"Preserves PR #12 as the approved foundation and the fresh independent review boundary.","alternatives":["Target main directly","Merge in this run"]},
+      {"id":"D12","decision":"Use coordinated minor plugin bumps and Kernel 0.4.0 without publishing.","rationale":"The public contract and dependency surface changes materially while delivery forbids release/cache mutation.","alternatives":["Patch bumps","Publish immediately"]}
+    ],
+    "requirementsCoverage": [
+      {"requirement":"Preserve current work, use the approved isolated branch stacked on PR #12, and keep delivery as an unmerged draft PR without publishing releases or caches.","chunk":"08 + Pipeline Phase 7"},
+      {"requirement":"Add a deterministic, project-configurable verification planner and bounded selected-lane runner with safe argument arrays, repository doctor, structured Go results, comparable-only coverage claims, repository profiles, and no generic hardcoded application paths.","chunk":"01, 06, 07, 08"},
+      {"requirement":"Encode an explicit tiered verification ladder that preserves race, security, browser, accessibility, remote, and post-merge authority while selecting local work by risk and changed scope.","chunk":"01, 05, 06, 07"},
+      {"requirement":"Make dm-review and review strictly read-only; reserve mutation for explicitly approved dm-review-fix and dm-review-loop flows.","chunk":"04, 07"},
+      {"requirement":"Bind reviews and verification to exact Git/build/profile state and invalidate stale evidence after relevant state changes.","chunk":"01, 03, 04, 05, 07"},
+      {"requirement":"Persist versioned structured reviewer findings incrementally, preserving partial results, provenance, coverage gaps, provider routing, and stable identity.","chunk":"04, 07, 08"},
+      {"requirement":"Extend Workflow Kernel's existing browser verification and recovery model into executable scenarios and a single immutable evidence bundle shared by independent reviewers.","chunk":"03, 04, 06, 07"},
+      {"requirement":"Classify artifacts by sensitivity and lifecycle, redact private evidence safely, and generate explicit staging allowlists rather than relying on broad staging.","chunk":"02, 07, 08"},
+      {"requirement":"Normalize provider-neutral CI evidence without confusing PR, push, scheduled, skipped, and post-merge authority across GitHub, Blueprint, or other providers.","chunk":"05, 07, 08"},
+      {"requirement":"Add deterministic PR and issue closeout auditing for exact heads, draft/ready state, required evidence, issue references/state, claimed scope, and closing versus non-closing dispositions.","chunk":"05, 07, 08"},
+      {"requirement":"Keep neutral mechanics in Workflow Kernel, Assembly-specific defaults in Assembly, and Pipeline/dm-review as consumers; use shadow/parity before enforcement and preserve human judgment boundaries.","chunk":"01-08"},
+      {"requirement":"Add comprehensive hostile-input, schema, CLI, contract, generator-parity, and integration tests and run Depot's canonical validators.","chunk":"01-08, especially 08"},
+      {"requirement":"Measure only available before/after evidence for agent lanes, repeated setup, deterministic ownership, durations, waits, and manual steps; never invent savings.","chunk":"07, 08 + Pipeline postmortem"},
+      {"requirement":"Produce a final evidence-backed requirements crosscheck and an exact fresh independent dm-review prompt while leaving the resulting PR draft.","chunk":"08 + Pipeline Phase 7"},
+      {"requirement":"Add an every-run, proposal-only Upstream Improvement Scout that emits structured candidates and a generated reusable upstream Pipeline prompt, including a valid empty result when no evidence-backed improvement exists.","chunk":"07, 08"}
+    ]
+  }
+  </script>
+
+  <script defer>
+  (function () {
+    "use strict";
+    function serializeTable(table) {
+      var headers = [].slice.call(table.querySelectorAll("thead th"));
+      var fields = headers.map(function (th) { return { key: th.getAttribute("data-field") || th.textContent.trim(), list: th.getAttribute("data-list") === "true" }; });
+      var rows = [].slice.call(table.querySelectorAll("tbody tr"));
+      return rows.map(function (tr) {
+        var cells = [].slice.call(tr.querySelectorAll("td"));
+        var obj = {};
+        fields.forEach(function (f, i) {
+          var raw = cells[i] ? cells[i].textContent.trim() : "";
+          obj[f.key] = f.list ? raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean) : raw;
+        });
+        return obj;
+      });
+    }
+    function fallbackCopy(value, done, button) {
+      var area = document.createElement("textarea");
+      area.value = value; area.setAttribute("readonly", ""); area.style.position = "absolute"; area.style.left = "-9999px";
+      document.body.appendChild(area); area.select();
+      try { document.execCommand("copy"); done(); } catch (error) { button.textContent = "Copy failed"; }
+      document.body.removeChild(area);
+    }
+    function copy(value, button) {
+      var done = function () { var prior = button.textContent; button.textContent = "Copied ✓"; setTimeout(function () { button.textContent = prior; }, 1500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(value).then(done, function () { fallbackCopy(value, done, button); }); }
+      else { fallbackCopy(value, done, button); }
+    }
+    document.addEventListener("click", function (event) {
+      var button = event.target.closest("[data-copy-island]"); if (!button) return;
+      var section = button.closest(".widget--edit"); var table = section && section.querySelector("table"); if (!table) return;
+      var payload = {}; payload[section.getAttribute("data-island-key") || "rows"] = serializeTable(table);
+      copy(JSON.stringify(payload, null, 2), button);
+    });
+  }());
+  </script>
+</body>
+</html>

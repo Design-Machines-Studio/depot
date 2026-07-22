@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "run_id": "depot-mechanical-workflow-hardening-20260722",
+  "receipts": [
+    {
+      "sequence": 1,
+      "stage": "phase_1_gate",
+      "status": "succeeded",
+      "node_id": "phase-1-gate",
+      "occurred_at": "2026-07-22T18:08:32+08:00",
+      "wait_category": "human_gate",
+      "duration_seconds": 5273,
+      "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/gate-timing.json",
+      "host": "codex",
+      "mechanism": "pipeline",
+      "attempt": 1
+    },
+    {
+      "sequence": 2,
+      "stage": "phase_2_gate",
+      "status": "succeeded",
+      "node_id": "phase-2-gate",
+      "occurred_at": "2026-07-22T18:31:00+08:00",
+      "wait_category": "human_gate",
+      "duration_seconds": 741,
+      "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/gate-timing.json",
+      "host": "codex",
+      "mechanism": "pipeline",
+      "attempt": 1
+    },
+    {
+      "sequence": 3,
+      "stage": "phase_3_gate",
+      "status": "succeeded",
+      "node_id": "phase-3-gate",
+      "occurred_at": "2026-07-22T18:48:58+08:00",
+      "wait_category": "human_gate",
+      "duration_seconds": 114,
+      "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/gate-timing.json",
+      "host": "codex",
+      "mechanism": "pipeline",
+      "attempt": 1
+    },
+    {
+      "sequence": 4,
+      "stage": "phase_4_prompt_generation",
+      "status": "succeeded",
+      "node_id": "phase-4-prompts",
+      "occurred_at": "2026-07-22T19:17:20+08:00",
+      "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/phase4-verification.json",
+      "host": "codex",
+      "mechanism": "promptcraft",
+      "attempt": 1
+    },
+    {
+      "sequence": 5,
+      "stage": "phase_5_adversarial_review",
+      "status": "succeeded",
+      "node_id": "phase-5-review",
+      "occurred_at": "2026-07-22T19:19:19+08:00",
+      "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/adversarial-review-round-3.md",
+      "host": "codex",
+      "mechanism": "pipeline",
+      "attempt": 3,
+      "provider_perspectives": {
+        "codex": "approved",
+        "openrouter": "unavailable_host_privacy_boundary"
+      }
+    },
+    {
+      "sequence": 6,
+      "stage": "phase_5_gate",
+      "status": "succeeded",
+      "node_id": "phase-5-gate",
+      "occurred_at": "2026-07-22T20:18:08+08:00",
+      "wait_category": "human_gate",
+      "duration_seconds": 3529,
+      "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/gate-timing.json",
+      "host": "codex",
+      "mechanism": "pipeline",
+      "attempt": 1
+    }
+  ]
+}

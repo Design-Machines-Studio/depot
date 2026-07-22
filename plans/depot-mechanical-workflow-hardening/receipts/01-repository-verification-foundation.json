@@ -1,0 +1,39 @@
+{
+  "chunk_id": "01-repository-verification-foundation",
+  "status": "merged",
+  "classification": "Logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": [
+    "2afb6dc5347fed4011aa2cc279208d9276ac5863",
+    "d741fd844b8f1a857b487854d891dad5024caf72",
+    "682f63d54dad04458c5c4d01a3bd3cd81450c3d2"
+  ],
+  "merge_commit": "23787b7faff71d7f0d441cb60159991a28914980",
+  "validation": {
+    "focused_tests": "31 passed after the first review repair; 23 passed after the final exact regression repair",
+    "diff_check": "passed",
+    "worktree": "clean",
+    "full_release_validator": "planned integration boundary: exact public schema inventory is owned by Chunk 08",
+    "external_baseline": "the live sibling Assembly Baseplate persona declaration test reports an unchanged frontmatter error outside this chunk's repository scope"
+  },
+  "review": {
+    "iterations": 2,
+    "owned_findings_fixed": [
+      "timeout terminates the entire owned process session including descendants",
+      "safe argv validation preserves list-only JSON parity",
+      "non-finite and oversized Go numeric values fail deterministically without crashing"
+    ],
+    "findings_remaining": 0,
+    "deferred": 0,
+    "new_p1_p2": 0
+  },
+  "ambiguity_resolved": true,
+  "evaluation": "EVAL_GATE_PASSED: 01-repository-verification-foundation | classification: Logic | iterations: 2 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

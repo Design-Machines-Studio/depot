@@ -1,0 +1,19 @@
+{
+  "run_id": "depot-mechanical-workflow-hardening",
+  "stage": "manifest_validation",
+  "status": "succeeded",
+  "node_id": null,
+  "occurred_at": "2026-07-22T12:21:40Z",
+  "workflow_class": "feature",
+  "workflow_class_defaulted": false,
+  "decision_profile_defaulted": true,
+  "execution_mode": "codex_native",
+  "isolation_strategy": "per-chunk-worktree",
+  "manifest_path": "plans/depot-mechanical-workflow-hardening/manifest.json",
+  "chunk_count": 8,
+  "parallel_chunk_count": 5,
+  "browser_evidence": "not_declared",
+  "module_loader": "not_applicable",
+  "gitignore_entries_added": 0
+}
+

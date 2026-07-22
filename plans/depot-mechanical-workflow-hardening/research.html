@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="research">
+  <title>Research: Depot Mechanical Workflow Hardening</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 70rem; --pad: 1rem; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: Canvas; color: CanvasText; }
+    h1, h2, h3 { line-height: 1.2; }
+    h1 { font-size: 1.875rem; }
+    h2 { font-size: 1.375rem; margin-top: 2rem; }
+    h3 { font-size: 1.125rem; }
+    a { color: LinkText; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    pre { overflow-x: auto; padding: 0.75rem; border: 1px solid GrayText; border-radius: 4px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid GrayText; padding: 0.375rem 0.5rem; text-align: left; vertical-align: top; }
+    section { margin-block: 1.5rem; }
+    small, .artifact-meta { color: GrayText; }
+    .artifact-meta { font-size: 0.875rem; }
+    .skip-link { position: absolute; left: -9999px; top: 0; }
+    .skip-link:focus { left: 0; padding: 0.5rem 1rem; z-index: 10; }
+    .artifact-main { max-width: 70rem; margin-inline: auto; padding: 1rem; }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: 0.75rem; list-style: none; padding: 0 1rem; }
+    .center { max-inline-size: var(--measure, 70rem); margin-inline: auto; }
+    .stack > * + * { margin-block-start: 1.5rem; }
+    .status-pass { color: #087f23; font-weight: 700; }
+    .status-open { color: #a44b00; font-weight: 700; }
+    @media (prefers-color-scheme: dark) { html:not([data-theme]) { background: #14161a; color: #e6e7e9; } }
+    @media print { nav { display: none; } .artifact-main { max-width: none; } }
+  </style>
+</head>
+<body class="scheme-subtle">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="artifact-header">
+    <nav aria-label="Pipeline artifacts">
+      <ul>
+        <li><a href="original-prompt.md">Original prompt</a></li>
+        <li><a href="assessment.html">Assessment</a></li>
+        <li aria-current="page">Research</li>
+      </ul>
+    </nav>
+    <p class="artifact-meta" style="padding-inline:1rem"><span class="artifact-kind">research</span> &middot; generated 2026-07-22</p>
+  </header>
+  <main id="content" class="artifact-main center stack">
+    <h1>Research Brief: Depot Mechanical Workflow Hardening</h1>
+
+    <section aria-labelledby="summary">
+      <h2 id="summary">Summary</h2>
+      <p>The requested hardening is well aligned with Depot's current direction, but it should extend the existing Workflow Kernel rather than introduce a second harness. PR #12 already supplies content-addressed behavioral contracts, deterministic feedback, stable finding identity, browser recovery, typed cleanup ownership, and attempt economics. The missing layer is deterministic repository-aware verification selection and a set of independently versioned evidence contracts that Pipeline and dm-review can consume.</p>
+      <p>The recommended architecture is a small contract family: repository verification profile, derived verification plan, lane result, build/evidence binding, append-only finding events, browser scenario and immutable evidence bundle, artifact classification and staging allowlist, CI evidence, closeout audit, and improvement candidates. Workflow Kernel owns neutral validation and transformation; Assembly owns its project defaults; Pipeline and dm-review own orchestration and judgment. New contracts should begin in shadow/compare mode, retain prose fallbacks during migration, and never reinterpret missing legacy fields as a pass.</p>
+      <p>The Upstream Improvement Scout should run in two deterministic stages. Before cleanup it seals a safe index of candidate evidence and provenance; after cleanup it adds exact cleanup outcomes, deduplicates completed and standing recommendations, emits structured proposal-only candidates, and generates a reusable upstream Pipeline prompt. This preserves evidence that cleanup may delete while still capturing Docker and other cleanup friction. An empty candidate set is a successful, valid result.</p>
+    </section>
+
+    <section aria-labelledby="project-context">
+      <h2 id="project-context">Project Context</h2>
+      <ul>
+        <li><strong>Runtime boundary:</strong> Workflow Kernel is the sanctioned Python 3.12 standard-library runtime. The rest of Depot remains Markdown and JSON consumed by plugin hosts.</li>
+        <li><strong>Platform boundary:</strong> Claude manifests and commands are canonical. Codex manifests and command-skill aliases are generated and must not be edited directly.</li>
+        <li><strong>Current integration seam:</strong> Pipeline and dm-review already call Kernel adapters, compare shadow output, register exact-owned cleanup resources, and consume behavioral verification contracts.</li>
+        <li><strong>Delivery boundary:</strong> this run is stacked on PR #12 head <code>8faeb6ddf00979451c8fd25d7f0bd97f37ae86a8</code>; it must remain an unmerged draft PR and must not publish plugin releases or refresh installed caches.</li>
+        <li><strong>Baseline boundary:</strong> Depot workflow contracts pass. The Kernel validator's live sibling-Assembly declaration failure must remain distinguished from Depot-owned release failures.</li>
+      </ul>
+
+      <h3>Assembly Baseplate as the first repository profile</h3>
+      <p>The live sibling repository confirms that project policy cannot be inferred safely from generic Go conventions. Its canonical Make targets use <code>docker compose run --rm --no-deps app</code>, <code>-tags=dev</code>, <code>./cmd/assembly</code>, focused permission packages, and separate UX index/suite validation. Its CI intentionally excludes <code>test-race</code> and <code>container-scan</code> from pull requests, while scheduled and push lanes carry different authority. These facts directly contradict the stale Assembly plugin prose that assumes <code>docker compose exec app</code>, <code>./cmd/api</code>, untagged tests, and full race testing for every Go change.</p>
+      <p>Baseplate also has a markdown-first UX framework with executable task indexing, persona/status declarations, explicit viewports, routes, screenshot points, expected authorization outcomes, and ignored per-run evidence directories. The planner should discover and validate these project declarations rather than invent browser coverage. A profile may reference executable project commands and declaration paths, but commands must be stored as argument arrays and executed without shell interpolation.</p>
+    </section>
+
+    <section aria-labelledby="domain-knowledge">
+      <h2 id="domain-knowledge">Domain Knowledge</h2>
+      <h3>Verification planning</h3>
+      <p>A repository profile is policy; a derived verification plan is a decision for one exact change; a lane result is observed evidence. Keeping them separate prevents stale plans from becoming project truth and makes invalidation precise. The profile should declare supported tools, safe command arrays, tag/build/package conventions, change classifiers, risk escalators, required evidence by event scope, UX/persona declaration sources, and ownership. The plan should bind profile digest, repository state, changed paths, risk inputs, selected and omitted lanes, reasons, expected authority, and budget. Results should bind the plan and retain raw exit state, timestamps, artifact references, and unavailable/skipped distinctions.</p>
+      <p>The tier ladder should be explicit and additive: local static/schema checks; focused package tests; broader project tests; race/security/container work; browser/accessibility/persona scenarios; remote PR checks; and push, schedule, merge-queue, or post-merge proof. A lower tier can reduce repeated local work but cannot substitute for a higher-authority event lane. Sensitive paths and final review retain full fanout.</p>
+
+      <h3>Review findings and read-only behavior</h3>
+      <p>dm-review already has stable canonical/source finding IDs, raw references, disagreement preservation, provenance, coverage gaps, and a consolidator. The next safe step is content-addressed immutable finding and lane records referenced immediately through Workflow Kernel's existing crash-safe <code>EventStore</code>, with Markdown generated as a view. This reuses the established append/replay protocol instead of creating a second JSONL authority. Partial agent failure should leave valid earlier findings and an explicit coverage gap. Final disposition may supersede prior state but must not rewrite history.</p>
+      <p>The public <code>dm-review</code> and underlying <code>review</code> workflow should be inspection-only. Automatic simplification edits, staging, commits, todo creation, and issue creation belong only in explicitly approved <code>dm-review-fix</code> or <code>dm-review-loop</code> flows. Read-only enforcement should be mechanically checked through before/after repository state and emitted as a review boundary result.</p>
+
+      <h3>Build and evidence identity</h3>
+      <p>Evidence becomes stale when relevant source, generated output, command/profile policy, build artifact, image, or environment identity changes. A reusable binding envelope should include exact commit, tracked diff digest, relevant untracked set or explicit exclusion, profile and plan digests, command identity, build/image digest when available, execution timestamps, exit state, and evidence digest. Dirty state is not inherently invalid, but it must be represented rather than hidden. Review receipts should point to the binding instead of restating it.</p>
+
+      <h3>Artifacts and cleanup</h3>
+      <p>Lifecycle and sensitivity are independent. An artifact can be durable but private, or ephemeral and safe. Classification should record content class, retention class, redaction state, provenance, owner, and whether the path is eligible for staging. The staging allowlist must be generated from approved classified artifacts and exact source paths; broad <code>git add</code> patterns are not an authority. Cleanup should remain exact-owned and guarded, including Docker containers, networks, and volumes created for testing or review.</p>
+
+      <h3>Improvement Scout</h3>
+      <p>The Scout should code the mechanical half of upstream learning while preserving human judgment. Inputs can include validator failures, retry/recovery events, coverage gaps, repeated setup commands, provider fallback receipts, browser recovery, cleanup outcomes, missing telemetry, existing postmortem recommendations, and known completed controls. Candidate fields should include stable identity, category, proposed upstream owner, evidence refs, recurrence count, confidence, expected benefit, implementation boundary, safety risk, status, and superseded/completed links. The prompt is generated from approved structured candidates; it is never the authority.</p>
+      <p>Current evidence supports candidates for canonical verification launch commands, Depot-owned versus sibling release boundaries, token/cost and typed-wait telemetry, and a diagnostic for high review iteration counts. It does not support claims of measured token, cost, time, or Docker-cleanup savings. Provider attempt receipts and prior browser recovery controls are already implemented and should be deduplicated rather than re-proposed.</p>
+    </section>
+
+    <section aria-labelledby="design-references">
+      <h2 id="design-references">Design References</h2>
+      <p>No product interface is in scope, so no visual design system or screenshot baseline applies. The relevant information-design rule is: code establishes facts; agents interpret facts. Structured artifacts should expose raw state, derivation, authority, provenance, and absence explicitly, while human-facing Markdown and HTML summarize those facts without becoming a competing editable source.</p>
+      <p>Baseplate's UX task declarations are nevertheless a first-class verification input. The Kernel should preserve persona, route, viewport, expected outcome, steps, assertions, screenshot points, authentication boundary, engine, and human-action pauses. One immutable evidence bundle can then be shared by independent reviewer lanes, avoiding repeated browser setup while keeping accessibility, visual, interaction, and domain interpretations separate.</p>
+    </section>
+
+    <section aria-labelledby="technical-references">
+      <h2 id="technical-references">Technical References</h2>
+      <h3>GitHub CI authority</h3>
+      <ul>
+        <li>GitHub check <em>status</em> and <em>conclusion</em> are separate. <code>neutral</code> and <code>skipped</code> can satisfy dependent jobs or protected-branch rules, but they remain distinct raw conclusions and must not be normalized to <code>passed</code>.</li>
+        <li>Whole workflows skipped by path, branch, or commit filters can leave a required check pending, while a conditionally skipped job reports success. The normalized record must retain check kind, raw provider state, required-policy source, and a separately derived merge-rule result.</li>
+        <li>Pull-request workflows normally run against a test-merge SHA; the actual head is <code>github.event.pull_request.head.sha</code>. Push, schedule, and merge-group events have different subject commits and authority. PR success cannot prove push, scheduled, or post-merge health.</li>
+        <li>Required-check authority may bind a context to an expected GitHub App and strict update policy. A green-looking check from an unapproved source is not authoritative.</li>
+      </ul>
+
+      <h3>Closeout semantics</h3>
+      <ul>
+        <li>Compare local, reviewed, and delivered commits against the PR's actual <code>head.sha</code>/<code>headRefOid</code>, not <code>merge_commit_sha</code>, which can represent a synthetic test merge.</li>
+        <li>Closing keywords in a PR body only create a closing link when the PR targets the repository's default branch. Plain mentions are references, not closing intent; auto-close can also be disabled by repository policy.</li>
+        <li>Keep parsed references, provider-resolved entities, closing intent, provider closing links, and actual closed state separate. Verify referenced entities and preserve unresolved provider authority rather than guessing.</li>
+      </ul>
+
+      <h3>Provider boundary</h3>
+      <p>No authoritative public Blueprint CI status/API specification was identified, and no Blueprint payload fixture exists in the inspected repository. The implementation must not assume GitHub-compatible semantics. Define a provider adapter contract with opaque raw fields, explicit mapping tables, capability flags, subject identity, stable run/job IDs and URLs, and <code>unavailable</code>/<code>unresolved</code> outcomes when authority cannot be established.</p>
+
+      <h3>Official references</h3>
+      <ul>
+        <li><a href="https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks">About GitHub status checks</a></li>
+        <li><a href="https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks">Troubleshooting required status checks</a></li>
+        <li><a href="https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows">Events that trigger workflows</a></li>
+        <li><a href="https://docs.github.com/en/rest/actions/workflow-runs">Workflow runs REST API</a></li>
+        <li><a href="https://docs.github.com/en/rest/branches/branch-protection">Branch protection REST API</a></li>
+        <li><a href="https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue">Linking pull requests to issues</a></li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="codebase-patterns">
+      <h2 id="codebase-patterns">Codebase Patterns</h2>
+      <table>
+        <thead><tr><th>Contract</th><th>Kernel responsibility</th><th>Consumer responsibility</th><th>Likely seam</th></tr></thead>
+        <tbody>
+          <tr><td>Repository profile</td><td>Schema, canonical digest, validation, safe argument arrays</td><td>Assembly supplies Baseplate defaults; projects may override explicitly</td><td><code>workflow_kernel/repository_verification.py</code> plus versioned profile/plan/result schemas; factor the safe-argv helper from <code>behavioral_contract.py</code></td></tr>
+          <tr><td>Verification plan/result</td><td>Deterministic selection, reasons, invalidation, result validation</td><td>Pipeline invokes selected work and agents interpret failures</td><td>Planner CLI plus Pipeline adapter</td></tr>
+          <tr><td>Build/evidence binding</td><td>Canonical repository/build/profile/evidence identity and a pure match gate</td><td>Builders and reviewers attach receipts</td><td><code>workflow_kernel/evidence_binding.py</code>; reuse Git capture helpers without turning cleanup-specific <code>GitProof</code> into public build identity</td></tr>
+          <tr><td>Finding events</td><td>Immutable records, stable IDs, existing EventStore append/replay, projection</td><td>Reviewer lanes record each completed finding; consolidator judges disposition</td><td>Finding/lane record module plus deterministic Markdown projection</td></tr>
+          <tr><td>Browser scenario/bundle</td><td>Ordered action/assertion schema, immutable attempt bundle, recovery integration</td><td>Project UX declarations select scenarios; reviewers interpret shared evidence</td><td>New <code>browser_scenario.py</code> and <code>browser_bundle.py</code>; add an adapter instead of widening the existing browser protocol</td></tr>
+          <tr><td>Artifact manifest</td><td>Classification, redaction validation, exact staging allowlist</td><td>Pipeline assigns intended lifecycle and approves promotion</td><td>Extend redaction/lifecycle mechanics without broad staging</td></tr>
+          <tr><td>CI evidence</td><td>Neutral envelope and adapter validation; preserve raw provider data</td><td>Provider adapters map GitHub or Blueprint; agents assess gaps</td><td><code>workflow_kernel/ci_evidence.py</code> and provider fixtures; authority derives from repository requirements</td></tr>
+          <tr><td>Closeout audit</td><td>Exact-head, draft-state, evidence, issue-link, scope reconciliation</td><td>Pipeline supplies expected delivery contract and decides remediation</td><td>Pure <code>workflow_kernel/closeout.py</code> evaluator plus separate network/provider collection adapter</td></tr>
+          <tr><td>Improvement Scout</td><td>Safe input index, candidate validation/dedupe, prompt projection</td><td>Pipeline selects proposal scope; human chooses upstream work</td><td><code>workflow_kernel/improvements.py</code> with two-stage Pipeline orchestration</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Migration pattern</h3>
+      <ol>
+        <li>Add independently versioned schemas, stdlib-only modules, CLI commands, hostile-input tests, and stable inventory assertions.</li>
+        <li>Add repository profile discovery and Assembly Baseplate defaults without changing current prose authority.</li>
+        <li>Emit new structured artifacts in shadow mode and compare their selected work, evidence coverage, and generated views with current behavior.</li>
+        <li>Promote deterministic facts to authority only after parity; keep semantic risk, UX quality, threat interpretation, and merge recommendations agent/human-owned.</li>
+        <li>Regenerate Codex command aliases and manifests from canonical Claude sources; run Kernel, workflow-contract, dual-compatibility, dependency, and full composition validators.</li>
+      </ol>
+    </section>
+
+    <section aria-labelledby="constraints-risks">
+      <h2 id="constraints-risks">Constraints and Risks</h2>
+      <ul>
+        <li><strong>Universal-schema risk:</strong> combining profiles, plans, evidence, findings, CI, and closeout into one receipt would couple unrelated lifecycles and make compatibility unsafe.</li>
+        <li><strong>Legacy ambiguity:</strong> missing legacy fields must produce explicit default provenance or <code>unavailable</code>, never low risk, passing, or authoritative.</li>
+        <li><strong>Authority collapse:</strong> local, PR, push, schedule, merge-group, and post-merge evidence are non-interchangeable. Raw provider conclusions and derived policy acceptance must both survive normalization.</li>
+        <li><strong>Stale evidence:</strong> source, generated code, dirty state, profile, selected command, artifact/image, or reviewed commit changes can invalidate different evidence subsets. Invalidation must be dependency-aware.</li>
+        <li><strong>Read-only regression:</strong> moving mutations out of review can expose workflows that silently depended on simplification commits or automatic issue creation; contract tests must prove the new boundary.</li>
+        <li><strong>Evidence privacy:</strong> browser bundles and logs may contain credentials, private member data, cookies, filesystem paths, or tokens. Redaction must occur before durable promotion and before the Scout indexes evidence.</li>
+        <li><strong>Cleanup ordering:</strong> running the Scout only after cleanup can lose raw evidence; running it only before cleanup misses Docker and artifact cleanup outcomes. The two-stage seal/finalize design is required.</li>
+        <li><strong>Provider uncertainty:</strong> Blueprint semantics are unknown. A provider-neutral schema must preserve opaque fields and fail unresolved rather than fabricate mappings.</li>
+        <li><strong>Measurement limits:</strong> current runs lack durable Codex token/cost counters and typed wait receipts. Only directly observed counts and durations may be reported.</li>
+        <li><strong>Release surface drift:</strong> new public schemas and CLI commands require updating exact inventory tests, manifests, generated aliases, documentation, and version numbers together.</li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="key-decisions">
+      <h2 id="key-decisions">Key Decisions Needed</h2>
+      <ol>
+        <li><strong>Contract granularity:</strong> approve the bounded contract family above rather than a universal receipt. Recommended: yes.</li>
+        <li><strong>Profile precedence:</strong> project-owned explicit config should override plugin defaults; detected conventions may suggest but must not silently override either. Recommended precedence: project config, plugin profile, conservative unavailable.</li>
+        <li><strong>Finding storage:</strong> use immutable finding/lane records and append their references through the existing crash-safe EventStore, plus a deterministic projected snapshot/Markdown view. Recommended: event history and referenced records are authority; views are replaceable.</li>
+        <li><strong>Browser reuse:</strong> capture one immutable runtime bundle per exact scenario/build and fan it out to independent interpretation lanes; re-run only when an assertion requires live interaction or the binding is stale. Recommended: yes.</li>
+        <li><strong>CI acceptance:</strong> preserve provider state and compute policy acceptance separately from live repository rules. Recommended: yes; unknown authority remains unresolved.</li>
+        <li><strong>Scout placement:</strong> seal safe evidence before cleanup and finalize after exact-owned cleanup, including Docker outcomes. Recommended: yes.</li>
+        <li><strong>Rollout order:</strong> build the neutral profile/planner/binding foundation first, then artifact safety, browser bundles, structured findings/read-only review, CI/closeout, Scout integration, and cross-plugin release validation.</li>
+      </ol>
+    </section>
+  </main>
+  <footer class="artifact-footer" style="padding:1rem">
+    <p>Pipeline research artifact. Structured findings and references are embedded below for planning.</p>
+  </footer>
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "research",
+    "slug": "depot-mechanical-workflow-hardening",
+    "findings": [
+      "Extend Workflow Kernel with small independently versioned contracts rather than create a second harness or one universal receipt.",
+      "Separate repository policy, derived verification plans, observed lane results, and exact build/evidence bindings so each has precise authority and invalidation.",
+      "Use explicit safe argument arrays and project-owned profile precedence; do not infer Assembly commands from generic Go conventions.",
+      "Encode a tiered verification ladder without allowing local or PR evidence to substitute for race, security, push, schedule, merge-group, or post-merge authority.",
+      "Make dm-review and review mechanically read-only; reserve all edits, staging, commits, todo creation, and issue creation for approved fix or loop workflows.",
+      "Persist each completed reviewer finding as an immutable structured record referenced through the existing crash-safe EventStore, and generate Markdown as a deterministic view.",
+      "Extend existing browser profile and recovery contracts into ordered scenarios and a shared immutable evidence bundle bound to exact build state.",
+      "Treat artifact sensitivity and lifecycle separately, redact before durable promotion, and generate exact staging allowlists from classified artifacts.",
+      "Preserve raw CI provider state and compute policy acceptance separately; PR, push, schedule, merge-group, and post-merge evidence are non-interchangeable.",
+      "Do not invent Blueprint CI semantics; require an explicit adapter mapping or report provider authority as unresolved.",
+      "Audit closeout against actual PR head, draft state, exact reviewed evidence, resolved issue entities, provider closing links, and expected scope.",
+      "Run the Upstream Improvement Scout in two stages: seal a safe evidence index before cleanup, then finalize candidates and the generated prompt after cleanup.",
+      "Treat an empty improvement candidate set as a valid success and deduplicate completed, superseded, one-run, and standing recommendations.",
+      "Current evidence supports no claimed token, cost, time, or Docker-cleanup savings because the required telemetry is unavailable or absent.",
+      "Assembly Baseplate's live Makefile, CI event matrix, and UX declarations should become the first explicit repository profile and scenario source.",
+      "Roll out via shadow comparison, preserve conservative legacy defaults, update exact schema and CLI inventories, regenerate Codex surfaces, and run all canonical validators."
+    ],
+    "references": [
+      {"title":"Assessment brief","path":"plans/depot-mechanical-workflow-hardening/assessment.html","source":"codebase assessment"},
+      {"title":"Adaptive fusion verification research","path":"plans/adaptive-fusion-verification/research.html","source":"prior Pipeline run"},
+      {"title":"Adaptive fusion verification postmortem","path":"plans/adaptive-fusion-verification/run-postmortem.md","source":"prior Pipeline run"},
+      {"title":"Pipeline visual testing postmortem","path":"docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md","source":"repository history"},
+      {"title":"Pipeline ambiguity and surgical discipline postmortem","path":"docs/post-mortems/2026-04-24-pipeline-ambiguity-and-surgical-discipline.md","source":"repository history"},
+      {"title":"Pipeline UI refinement postmortem","path":"docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md","source":"repository history"},
+      {"title":"Pipeline metrics ledger","path":"docs/pipeline-metrics/ledger.md","source":"repository metrics"},
+      {"title":"Pipeline execution orchestrator","path":"plugins/pipeline/agents/workflow/execution-orchestrator.md","source":"repository"},
+      {"title":"dm-review review skill","path":"plugins/dm-review/skills/review/SKILL.md","source":"repository"},
+      {"title":"dm-review issue tracking contract","path":"plugins/dm-review/skills/review/references/issue-tracking.md","source":"repository"},
+      {"title":"Workflow Kernel runtime","path":"plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/","source":"repository"},
+      {"title":"Assembly Baseplate Makefile","path":"/Users/trav/Websites/design-machines/assembly-baseplate/Makefile","source":"sibling repository"},
+      {"title":"Assembly Baseplate CI workflow","path":"/Users/trav/Websites/design-machines/assembly-baseplate/.github/workflows/test.yml","source":"sibling repository"},
+      {"title":"Assembly Baseplate UX framework","path":"/Users/trav/Websites/design-machines/assembly-baseplate/tests/ux/README.md","source":"sibling repository"},
+      {"title":"GitHub status checks","url":"https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/about-status-checks","source":"official documentation"},
+      {"title":"GitHub troubleshooting required checks","url":"https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks","source":"official documentation"},
+      {"title":"GitHub Actions events","url":"https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows","source":"official documentation"},
+      {"title":"GitHub workflow runs API","url":"https://docs.github.com/en/rest/actions/workflow-runs","source":"official documentation"},
+      {"title":"GitHub branch protection API","url":"https://docs.github.com/en/rest/branches/branch-protection","source":"official documentation"},
+      {"title":"GitHub pull requests API","url":"https://docs.github.com/en/rest/pulls/pulls","source":"official documentation"},
+      {"title":"GitHub GraphQL PullRequest","url":"https://docs.github.com/en/graphql/reference/objects#pullrequest","source":"official documentation"},
+      {"title":"GitHub linking pull requests to issues","url":"https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue","source":"official documentation"},
+      {"title":"GitHub auto-closing issues","url":"https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/managing-auto-closing-issues","source":"official documentation"}
+    ]
+  }
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_id": "depot-mechanical-workflow-hardening",
+  "contract_ref": "verification-contracts/sha256-6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284.json",
+  "human_approval_evidence_ref": null,
+  "previous_contract_digest": null,
+  "reason_code": "initial_binding",
+  "revision": 1,
+  "schema_version": 1,
+  "stage": "verification_contract_bound"
+}
