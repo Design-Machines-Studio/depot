@@ -11,6 +11,7 @@ plans/*/screenshots/
 plans/*/prompts/
 plans/*/manifest.json
 plans/*/brainstorm.md
+.workflow-kernel/
 .worktrees/
 .claude/ux-review/
 todos/
