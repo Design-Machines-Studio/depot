@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
+from workflow_kernel.dm_review_adapter import translate_review_receipts
 from workflow_kernel.schema import RunState
 from workflow_kernel.shadow import ReceiptSet, ShadowComparator
 
@@ -22,6 +23,12 @@ def state(evidence):
 class ShadowParityTests(unittest.TestCase):
     def load(self, name):
         return translate_pipeline_receipts(json.loads((FIXTURES / name).read_text()))
+
+    def host_equivalent(self, name):
+        receipts = json.loads((FIXTURES / name).read_text())
+        receipts[-1]["tokens"] = 1200
+        receipts[-1]["cost_usd"] = 0.24
+        return translate_pipeline_receipts(receipts)
 
     def test_known_host_profiles_use_the_canonical_harness_profile_host_ids(self):
         from tests import canonical_harness_profile
@@ -43,7 +50,7 @@ class ShadowParityTests(unittest.TestCase):
         )
 
     def test_real_claude_code_host_receipts_classify_as_known_host_difference(self):
-        codex = ReceiptSet.from_events(self.load("pipeline-codex.json"))
+        codex = ReceiptSet.from_events(self.host_equivalent("pipeline-codex.json"))
         claude = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         self.assertTrue(all(item["host"] == "claude-code" for item in claude))
         report = ShadowComparator().compare_receipt_sets(
@@ -52,8 +59,8 @@ class ShadowParityTests(unittest.TestCase):
         self.assertEqual(report.reason, "explained_host_difference")
 
     def test_known_claude_codex_mechanisms_are_explained_when_semantics_match(self):
-        claude = ReceiptSet.from_events(self.load("pipeline-claude.json"))
-        codex = ReceiptSet.from_events(self.load("pipeline-codex.json"))
+        claude = ReceiptSet.from_events(self.host_equivalent("pipeline-claude.json"))
+        codex = ReceiptSet.from_events(self.host_equivalent("pipeline-codex.json"))
         report = ShadowComparator().compare_receipt_sets(codex, claude)
         self.assertEqual(report.reason, "explained_host_difference")
         self.assertTrue(report.semantic_match)
@@ -113,8 +120,8 @@ class ShadowParityTests(unittest.TestCase):
         self.assertEqual(extra.reason, "unexpected_authoritative_transition")
 
     def test_generic_host_fixture_is_semantically_equivalent(self):
-        generic = ReceiptSet.from_events(self.load("pipeline-generic.json"))
-        claude = ReceiptSet.from_events(self.load("pipeline-claude.json"))
+        generic = ReceiptSet.from_events(self.host_equivalent("pipeline-generic.json"))
+        claude = ReceiptSet.from_events(self.host_equivalent("pipeline-claude.json"))
         report = ShadowComparator().compare_receipt_sets(generic, claude)
         self.assertEqual(report.reason, "explained_host_difference")
         self.assertTrue(report.semantic_match)
@@ -173,6 +180,95 @@ class ShadowParityTests(unittest.TestCase):
             ReceiptSet.from_events(translate_pipeline_receipts(mutated)), authoritative,
         )
         self.assertFalse(report.semantic_match)
+
+    def test_usage_attempt_provider_and_provenance_mutations_are_semantic(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        original[2].update({
+            "chunk_id": "chunk-a", "usage_scope": "attempt", "usage_count": 10,
+            "input_usage_count": 6, "output_usage_count": 4,
+            "cache_read_usage_count": 3, "cache_write_usage_count": 2,
+            "reasoning_usage_count": 1, "cost_usd": 0.01,
+            "duration_seconds": 1.0,
+            "measurement_source": "provider_receipt", "usage_estimated": False,
+            "model": "claude-opus", "requested_provider": "anthropic",
+            "attempted_provider": "anthropic", "implemented_by": "anthropic",
+            "reviewer": "builder", "lane": "implementation",
+            "wait_category": "capacity",
+        })
+        original[-1].pop("tokens")
+        original[-1].pop("cost_usd")
+        authoritative = ReceiptSet.from_events(translate_pipeline_receipts(original))
+        for key, value in (
+            ("usage_count", 11), ("input_usage_count", 7),
+            ("output_usage_count", 5), ("cache_read_usage_count", 4),
+            ("cache_write_usage_count", 3), ("reasoning_usage_count", 2),
+            ("cost_usd", 0.02), ("duration_seconds", 2.0),
+            ("wait_category", "ci"),
+            ("measurement_source", "local_estimate"), ("usage_estimated", True),
+            ("attempt", 2), ("chunk_id", "chunk-b"), ("model", "claude-sonnet"),
+            ("requested_provider", "openrouter"), ("attempted_provider", "openrouter"),
+            ("implemented_by", "codex"), ("provider", "openai"),
+            ("host", "codex"), ("reviewer", "reviewer-b"),
+            ("lane", "fallback"), ("node_id", "chunk-b"),
+        ):
+            mutated = copy.deepcopy(original)
+            mutated[2][key] = value
+            report = ShadowComparator().compare_receipt_sets(
+                ReceiptSet.from_events(translate_pipeline_receipts(mutated)), authoritative,
+            )
+            with self.subTest(key=key):
+                self.assertFalse(report.semantic_match)
+                self.assertFalse(report.safe_to_promote)
+        attempt_receipt = copy.deepcopy(original[2])
+        attempt_receipt["sequence"] = 0
+        authoritative = ReceiptSet.from_events(
+            translate_pipeline_receipts([attempt_receipt]),
+        )
+        run_receipt = copy.deepcopy(attempt_receipt)
+        run_receipt["usage_scope"] = "run"
+        for key in ("attempt", "chunk_id", "reviewer", "lane"):
+            run_receipt.pop(key)
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_pipeline_receipts([run_receipt])),
+            authoritative,
+        )
+        self.assertFalse(report.semantic_match)
+
+    def test_contribution_mutations_are_semantic_and_map_key_order_is_not(self):
+        base = {
+            "run_id": "review-parity", "sequence": 0,
+            "stage": "finding_contribution", "status": "recorded",
+            "node_id": "review-convergence", "attempt": 1,
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/contribution.json",
+            "source_finding_id": "source-a", "canonical_finding_id": "finding-a",
+            "finding_disposition": "retained", "agreement": "unique",
+            "decision_reason_code": "retained-unique", "reviewer": "security",
+            "provider": "openai", "model": "gpt-5.6-sol",
+            "evidence_ref": "raw/finding.json",
+        }
+        authoritative = ReceiptSet.from_events(translate_review_receipts([base]))
+        mutations = (
+            {"source_finding_id": "source-b"}, {"canonical_finding_id": "finding-b"},
+            {"finding_disposition": "merged", "decision_reason_code": "exact-duplicate"},
+            {"agreement": "disputed", "decision_reason_code": "retained-disagreement"},
+            {"provider": "anthropic"}, {"model": "claude-opus"}, {"attempt": 2},
+            {"reviewer": "architecture"}, {"evidence_ref": "raw/other.json"},
+            {"node_id": "review-lane-security"},
+        )
+        for mutation in mutations:
+            candidate = copy.deepcopy(base)
+            candidate.update(mutation)
+            report = ShadowComparator().compare_receipt_sets(
+                ReceiptSet.from_events(translate_review_receipts([candidate])), authoritative,
+            )
+            with self.subTest(mutation=mutation):
+                self.assertFalse(report.semantic_match)
+        reordered = dict(reversed(tuple(base.items())))
+        report = ShadowComparator().compare_receipt_sets(
+            ReceiptSet.from_events(translate_review_receipts([reordered])), authoritative,
+        )
+        self.assertTrue(report.semantic_match)
 
 
 if __name__ == "__main__":

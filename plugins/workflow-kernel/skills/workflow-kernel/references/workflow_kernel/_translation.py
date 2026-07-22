@@ -10,6 +10,7 @@ refactor of one adapter cannot silently break the other.
 from __future__ import annotations
 
 import re
+import math
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -34,7 +35,7 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "retry_reason", "isolation_mode", "isolation_strategy",
     "persona_expected", "persona_passed",
     "persona_recovered", "persona_missing", "cleanup_removed",
-    "cleanup_retained", "cleanup_blocked", "cleanup_foreign", "tokens",
+    "cleanup_retained", "cleanup_blocked", "cleanup_foreign", "usage_count",
     "cost_usd", "time_to_clean_seconds", "requested_executor",
     "attempted_executor", "implemented_by", "fallback_path", "finding_id",
     "severity", "reviewer", "requested_lanes", "expected_lanes",
@@ -50,6 +51,13 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "contract_ref", "previous_contract_digest", "reason_code",
     "human_approval_evidence_ref", "verification_contract_bound",
     "verification_contract_provenance",
+    "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
+    "input_usage_count", "output_usage_count", "cache_read_usage_count",
+    "cache_write_usage_count", "reasoning_usage_count",
+    "source_finding_id", "canonical_finding_id", "finding_disposition",
+    "agreement", "decision_reason_code", "evidence_ref", "action",
+    "human_intervention_id", "human_intervention_reason",
+    "human_intervention", "missing_case_ids",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -80,6 +88,29 @@ RECEIPT_FIELD_ALIASES = {
     "previousContractDigest": "previous_contract_digest",
     "reasonCode": "reason_code",
     "humanApprovalEvidenceRef": "human_approval_evidence_ref",
+    "chunkId": "chunk_id",
+    "usageScope": "usage_scope",
+    "measurementSource": "measurement_source",
+    "usageEstimated": "usage_estimated",
+    "inputUsageCount": "input_usage_count",
+    "outputUsageCount": "output_usage_count",
+    "cacheReadUsageCount": "cache_read_usage_count",
+    "cacheWriteUsageCount": "cache_write_usage_count",
+    "reasoningUsageCount": "reasoning_usage_count",
+    "costUsd": "cost_usd",
+    "durationSeconds": "duration_seconds",
+    "waitCategory": "wait_category",
+    "sourceFindingId": "source_finding_id",
+    "canonicalFindingId": "canonical_finding_id",
+    "findingDisposition": "finding_disposition",
+    "decisionReasonCode": "decision_reason_code",
+    "evidenceRef": "evidence_ref",
+    "humanInterventionId": "human_intervention_id",
+    "humanInterventionReason": "human_intervention_reason",
+    "missingCaseIds": "missing_case_ids",
+    # Legacy producer vocabulary. The durable kernel name is deliberately
+    # neutral because not every provider reports tokens.
+    "tokens": "usage_count",
 }
 
 _MISSING = object()
@@ -94,6 +125,7 @@ _CONTRACT_FIELDS = frozenset({
     "contract_ref", "previous_contract_digest", "reason_code",
     "human_approval_evidence_ref",
 })
+_CONTRACT_BINDING_MARKERS = _CONTRACT_FIELDS - frozenset({"reason_code"})
 _RECEIPT_ENVELOPE_FIELDS = COMMON_RECEIPT_FIELDS | frozenset({
     "run_id", "sequence", "occurred_at", "node_id", "authoritative_receipt",
 })
@@ -103,10 +135,40 @@ _CONTRACT_REASON = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _CREDENTIAL_LIKE = re.compile(
     r"(?i)^(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)",
 )
+_USAGE_SCOPES = frozenset({"attempt", "run"})
+_WAIT_CATEGORIES = frozenset({"human_gate", "external_dependency", "capacity", "ci"})
+_USAGE_COUNT_FIELDS = frozenset({
+    "usage_count", "input_usage_count", "output_usage_count",
+    "cache_read_usage_count", "cache_write_usage_count",
+    "reasoning_usage_count",
+})
+_CONTRIBUTION_DISPOSITIONS = frozenset({"retained", "merged", "discarded"})
+_CONTRIBUTION_AGREEMENTS = frozenset({"unique", "corroborated", "disputed"})
+_CONTRIBUTION_REASON_DISPOSITION = {
+    "retained-unique": "retained",
+    "retained-corroborated": "retained",
+    "retained-disagreement": "retained",
+    "exact-duplicate": "merged",
+    "same-root-cause-merge": "merged",
+    "superseded-by-stronger-evidence": "discarded",
+    "out-of-scope": "discarded",
+    "not-reproducible": "discarded",
+    "agent-findings-cap": "discarded",
+}
+_IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}\Z")
+_MAX_MISSING_CASE_IDS = 256
+_MAX_MISSING_CASE_ID_BYTES = 16_384
 
 
 def required_text(value: object, field: str) -> str:
     if type(value) is not str or not value or len(value) > 4096:
+        raise ValueError("invalid " + field)
+    return value
+
+
+def _bounded_identity(value: object, field: str) -> str:
+    value = required_text(value, field)
+    if _IDENTITY.fullmatch(value) is None:
         raise ValueError("invalid " + field)
     return value
 
@@ -383,6 +445,136 @@ def _normalized_receipt_fields(receipt: Mapping[str, object]) -> dict:
     return normalized
 
 
+def _nonnegative_number(value: object, field: str, *, integer: bool) -> object:
+    valid_type = type(value) is int if integer else type(value) in {int, float}
+    if (
+        not valid_type or value < 0
+        or type(value) is float and not math.isfinite(value)
+    ):
+        raise ValueError("invalid receipt numeric field " + field)
+    return value
+
+
+def _validate_observation_receipt(receipt: dict) -> dict:
+    """Validate optional telemetry without assigning it workflow authority."""
+    receipt.pop("human_intervention", None)
+    for field in _USAGE_COUNT_FIELDS:
+        if field in receipt:
+            _nonnegative_number(receipt[field], field, integer=True)
+    for field in ("cost_usd", "duration_seconds"):
+        if field in receipt:
+            _nonnegative_number(receipt[field], field, integer=False)
+    if "attempt" in receipt and (
+        type(receipt["attempt"]) is not int or receipt["attempt"] < 1
+    ):
+        raise ValueError("invalid receipt attempt")
+    for field in (
+        "chunk_id", "reviewer", "lane", "requested_provider",
+        "attempted_provider", "implemented_by", "provider", "model", "host",
+        "source_finding_id", "canonical_finding_id", "human_intervention_id",
+        "human_intervention_reason",
+    ):
+        if field in receipt and receipt[field] is not None:
+            required_text(receipt[field], field.replace("_", " "))
+    if "wait_category" in receipt and receipt["wait_category"] not in _WAIT_CATEGORIES:
+        raise ValueError("invalid wait category")
+
+    scoped = "usage_scope" in receipt
+    detailed = bool((_USAGE_COUNT_FIELDS - {"usage_count"}) & set(receipt))
+    provenance = bool({"measurement_source", "usage_estimated"} & set(receipt))
+    if detailed or provenance:
+        scoped = True
+    if scoped:
+        if receipt.get("usage_scope") not in _USAGE_SCOPES:
+            raise ValueError("invalid usage scope")
+        required_text(receipt.get("measurement_source"), "measurement source")
+        if type(receipt.get("usage_estimated")) is not bool:
+            raise ValueError("invalid usage estimated flag")
+        if not ((_USAGE_COUNT_FIELDS & set(receipt)) or "cost_usd" in receipt):
+            raise ValueError("scoped usage row has no measurement")
+        if receipt["usage_scope"] == "attempt":
+            if (
+                "attempt" not in receipt or not receipt.get("node_id")
+                or not receipt.get("chunk_id") or "duration_seconds" not in receipt
+            ):
+                raise ValueError("attempt usage lacks stable identity")
+            for field in (
+                "requested_provider", "attempted_provider", "implemented_by",
+                "model", "host",
+            ):
+                required_text(receipt.get(field), field.replace("_", " "))
+        elif any(field in receipt for field in (
+            "attempt", "chunk_id", "reviewer", "lane",
+        )):
+            raise ValueError("run usage carries attempt identity")
+
+    if receipt.get("stage") == "finding_contribution":
+        for field in (
+            "source_finding_id", "canonical_finding_id", "reviewer",
+            "decision_reason_code",
+        ):
+            required_text(receipt.get(field), field.replace("_", " "))
+        if receipt.get("finding_disposition") not in _CONTRIBUTION_DISPOSITIONS:
+            raise ValueError("invalid finding disposition")
+        if receipt.get("agreement") not in _CONTRIBUTION_AGREEMENTS:
+            raise ValueError("invalid finding agreement")
+        reason = receipt["decision_reason_code"]
+        if _CONTRIBUTION_REASON_DISPOSITION.get(reason) != receipt["finding_disposition"]:
+            raise ValueError("invalid finding decision reason")
+        if "attempt" not in receipt or not (
+            receipt.get("node_id") or receipt.get("chunk_id")
+        ):
+            raise ValueError("finding contribution lacks stable identity")
+        receipt["evidence_ref"] = safe_reference(receipt.get("evidence_ref"))
+
+    validation_help = (
+        receipt.get("stage") == "deterministic_validation"
+        and receipt.get("action") == "human_help_required"
+    )
+    browser_help = (
+        receipt.get("stage") == "browser_recovery"
+        and receipt.get("status") == "blocked"
+        and receipt.get("reason_code") == "human_help_required"
+    )
+    if validation_help or browser_help:
+        required_text(receipt.get("human_intervention_id"), "human intervention id")
+        reason = required_text(
+            receipt.get("human_intervention_reason"), "human intervention reason",
+        )
+        allowed_reasons = (
+            {"identical_failure_convergence", "retry_budget_exhausted"}
+            if validation_help else {"browser_evidence_unavailable"}
+        )
+        if reason not in allowed_reasons:
+            raise ValueError("invalid human intervention reason")
+        if not (receipt.get("node_id") or receipt.get("chunk_id")):
+            raise ValueError("human intervention lacks stable identity")
+        if validation_help and "attempt" not in receipt:
+            raise ValueError("validation intervention lacks attempt identity")
+        if browser_help:
+            cases = receipt.get("missing_case_ids")
+            if (
+                type(cases) is not list or not cases
+                or len(cases) > _MAX_MISSING_CASE_IDS
+            ):
+                raise ValueError("browser intervention lacks case identity")
+            try:
+                cases = [
+                    _bounded_identity(item, "missing case id") for item in cases
+                ]
+            except ValueError:
+                raise ValueError("browser intervention lacks case identity") from None
+            if (
+                len(cases) != len(set(cases))
+                or sum(len(item.encode("utf-8")) for item in cases)
+                > _MAX_MISSING_CASE_ID_BYTES
+            ):
+                raise ValueError("browser intervention lacks case identity")
+            receipt["missing_case_ids"] = cases
+        receipt["human_intervention"] = True
+    return receipt
+
+
 def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict:
     payload = {}
     for key in COMMON_RECEIPT_FIELDS:
@@ -394,10 +586,7 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
         normalized = redact({"value": receipt[key]})
         if not isinstance(normalized, dict) or "value" not in normalized:
             raise ValueError("unsafe receipt payload")
-        # Keys containing `token` are credential-like in the durable schema;
-        # use a neutral usage counter so aggregate counts survive redaction.
-        output_key = "usage_count" if key == "tokens" else key
-        payload[output_key] = normalized["value"]
+        payload[key] = normalized["value"]
     payload["authoritative_receipt"] = reference
     payload["evidence"] = [reference]
     if receipt.get("stage") == "verification_contract_bound":
@@ -406,6 +595,8 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
         payload["evidence"].extend((
             "verification_contract_bound", "verification_contract_revised",
         ))
+    if receipt.get("stage") == "finding_contribution":
+        payload["evidence"].append(receipt["evidence_ref"])
     return payload
 
 
@@ -490,13 +681,15 @@ def translate_receipts(
     for receipt in values:
         if type(receipt) is not dict:
             raise ValueError("receipt must be an object")
-        normalized_values.append(_normalized_receipt_fields(receipt))
+        normalized_values.append(_validate_observation_receipt(
+            _normalized_receipt_fields(receipt),
+        ))
     has_contract_binding = any(
         receipt.get("stage") in _CONTRACT_STAGES
         for receipt in normalized_values
     )
     if not has_contract_binding and any(
-        _CONTRACT_FIELDS & set(receipt) for receipt in normalized_values
+        _CONTRACT_BINDING_MARKERS & set(receipt) for receipt in normalized_values
     ):
         raise ValueError("mixed legacy and verification contract receipts")
     events = []
@@ -506,6 +699,8 @@ def translate_receipts(
     workflow_class_defaulted = None
     isolation_strategy = None
     current_contract = None
+    contribution_sources = set()
+    contribution_artifact_reviewers = {}
     for position, receipt in enumerate(normalized_values):
         run_id = required_text(receipt.get("run_id"), "run id")
         sequence = receipt.get("sequence")
@@ -565,6 +760,16 @@ def translate_receipts(
         stage = required_text(receipt.get("stage"), "stage")
         if stage not in allowed_stages:
             raise ValueError("unknown receipt stage")
+        if stage == "finding_contribution":
+            source = (receipt["evidence_ref"], receipt["source_finding_id"])
+            if source in contribution_sources:
+                raise ValueError("source finding has multiple decisions")
+            contribution_sources.add(source)
+            prior_reviewer = contribution_artifact_reviewers.setdefault(
+                receipt["evidence_ref"], receipt["reviewer"],
+            )
+            if prior_reviewer != receipt["reviewer"]:
+                raise ValueError("source artifact reviewer discontinuity")
         occurred_at = required_text(receipt.get("occurred_at"), "occurred_at")
         node_id = receipt.get("node_id")
         if node_id is not None:

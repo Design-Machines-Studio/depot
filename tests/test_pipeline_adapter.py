@@ -238,6 +238,97 @@ class PipelineAdapterTests(unittest.TestCase):
         self.assertNotIn("authorization", event.payload)
         self.assertNotIn("never-show", repr(event.payload))
 
+    def test_attempt_usage_aliases_translate_to_neutral_scoped_fields(self):
+        receipt = {
+            "run_id": "usage-1", "sequence": 0, "stage": "attempt_usage",
+            "status": "observed", "node_id": "build", "chunkId": "chunk-a",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/usage.json",
+            "requestedProvider": "openrouter", "attemptedProvider": "openai",
+            "implementedBy": "codex", "provider": "openai", "modelUsed": "gpt-5.6-sol",
+            "host": "codex", "attempt": 2, "durationSeconds": 4.5,
+            "waitCategory": "capacity", "usageScope": "attempt",
+            "inputUsageCount": 10, "outputUsageCount": 5,
+            "cacheReadUsageCount": 3, "cacheWriteUsageCount": 1,
+            "reasoningUsageCount": 2, "costUsd": 0.02,
+            "measurementSource": "provider_receipt", "usageEstimated": False,
+        }
+        payload = translate_pipeline_receipts([receipt])[0].payload
+        self.assertEqual(payload["chunk_id"], "chunk-a")
+        self.assertEqual(payload["usage_scope"], "attempt")
+        self.assertEqual(payload["input_usage_count"], 10)
+        self.assertEqual(payload["requested_provider"], "openrouter")
+        self.assertEqual(payload["implemented_by"], "codex")
+        self.assertEqual(payload["model"], "gpt-5.6-sol")
+        self.assertNotIn("inputUsageCount", payload)
+
+    def test_attempt_usage_fails_closed_on_invalid_types_scope_identity_and_duals(self):
+        base = {
+            "run_id": "usage-1", "sequence": 0, "stage": "attempt_usage",
+            "status": "observed", "node_id": "build", "attempt": 1,
+            "chunk_id": "chunk-a", "duration_seconds": 1.0,
+            "requested_provider": "openrouter", "attempted_provider": "openai",
+            "implemented_by": "codex", "model": "gpt-5.6-sol", "host": "codex",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/usage.json",
+            "usage_scope": "attempt", "usage_count": 10,
+            "measurement_source": "provider_receipt", "usage_estimated": False,
+        }
+        mutations = (
+            {"usage_count": True}, {"usage_count": -1}, {"cost_usd": float("nan")},
+            {"cost_usd": float("inf")}, {"usage_scope": "span"},
+            {"measurement_source": ""}, {"usage_estimated": 0}, {"attempt": 0},
+            {"node_id": None}, {"usageScope": "run"},
+            {"costUsd": 1.0, "cost_usd": 2.0},
+            {"measurement_source": "x" * 4097},
+        )
+        for mutation in mutations:
+            candidate = copy.deepcopy(base)
+            candidate.update(mutation)
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                translate_pipeline_receipts([candidate])
+
+    def test_run_scoped_usage_rejects_attempt_identity_and_legacy_tokens_survive(self):
+        run_total = {
+            "run_id": "usage-1", "sequence": 0, "stage": "run_summary",
+            "status": "succeeded", "node_id": None,
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/summary.json",
+            "usageScope": "run", "tokens": 10,
+            "measurementSource": "provider_receipt", "usageEstimated": False,
+        }
+        event = translate_pipeline_receipts([run_total])[0]
+        self.assertEqual(event.payload["usage_count"], 10)
+        invalid = copy.deepcopy(run_total)
+        invalid["attempt"] = 1
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([invalid])
+        legacy = copy.deepcopy(run_total)
+        for key in ("usageScope", "measurementSource", "usageEstimated"):
+            legacy.pop(key)
+        self.assertEqual(translate_pipeline_receipts([legacy])[0].payload["usage_count"], 10)
+
+    def test_only_exact_human_help_shapes_are_normalized_as_interventions(self):
+        exact = {
+            "run_id": "human-1", "sequence": 0,
+            "stage": "deterministic_validation", "status": "blocked",
+            "action": "human_help_required", "node_id": "chunk-a", "attempt": 2,
+            "humanInterventionId": "human-a",
+            "humanInterventionReason": "identical_failure_convergence",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/human.json",
+        }
+        payload = translate_pipeline_receipts([exact])[0].payload
+        self.assertTrue(payload["human_intervention"])
+        wrong_reason = copy.deepcopy(exact)
+        wrong_reason["human_intervention_reason"] = "browser_evidence_unavailable"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([wrong_reason])
+        unrelated = copy.deepcopy(exact)
+        unrelated.update({"stage": "progress", "action": "not_help"})
+        payload = translate_pipeline_receipts([unrelated])[0].payload
+        self.assertNotIn("human_intervention", payload)
+
     def test_documented_camelcase_receipt_fields_are_preserved_not_dropped(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         receipts[2].update({

@@ -95,6 +95,7 @@ def _semantic(event: WorkflowEvent, *, normalize_host: bool = False) -> tuple:
         payload.get("status"), payload.get("workflow_class"),
         payload.get("workflow_class_defaulted"),
         ("host_execution" if normalize_host else payload.get("execution_mode")), routing,
+        payload.get("model"),
         (_normalized_reference(payload.get("authoritative_receipt"))
          if normalize_host else payload.get("authoritative_receipt")),
         payload.get("first_pass"), payload.get("persona_expected"),
@@ -122,6 +123,19 @@ def _semantic(event: WorkflowEvent, *, normalize_host: bool = False) -> tuple:
         payload.get("topology_edge"),
         payload.get("finding_count"), payload.get("prior_findings_signature"),
         payload.get("convergence_signature"),
+        payload.get("chunk_id"), payload.get("usage_scope"),
+        payload.get("usage_count"), payload.get("input_usage_count"),
+        payload.get("output_usage_count"), payload.get("cache_read_usage_count"),
+        payload.get("cache_write_usage_count"), payload.get("reasoning_usage_count"),
+        payload.get("cost_usd"), payload.get("duration_seconds"),
+        payload.get("wait_category"), payload.get("measurement_source"),
+        payload.get("usage_estimated"), payload.get("source_finding_id"),
+        payload.get("canonical_finding_id"), payload.get("finding_disposition"),
+        payload.get("agreement"), payload.get("decision_reason_code"),
+        payload.get("evidence_ref"), payload.get("action"),
+        payload.get("human_intervention"), payload.get("human_intervention_id"),
+        payload.get("human_intervention_reason"), payload.get("reason_code"),
+        payload.get("missing_case_ids"),
     )
 
 
