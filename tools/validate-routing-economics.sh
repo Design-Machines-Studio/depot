@@ -36,6 +36,85 @@ require_absent() {
   fi
 }
 
+decision_leverage_valid() {
+  local source="$1"
+  jq -e '
+    {
+      "scope":"workflow-depth-only",
+      "allowedLevels":["low","medium","high"],
+      "legacyDefault":{
+        "planningDepth":"current-standard-path",
+        "verificationDepth":"current-standard-path",
+        "receiptFlag":"decision_profile_defaulted=true",
+        "semanticClaim":"unknown-not-low-low"
+      },
+      "rules":{
+        "lowLow":{
+          "when":{"uncertainty":"low","consequence":"low"},
+          "planningDepth":"standard",
+          "verificationDepth":"standard",
+          "optimized":true
+        },
+        "highUncertainty":{
+          "when":{"uncertainty":"high"},
+          "planningDepth":"one-independent-opinion-plus-bounded-synthesis",
+          "verificationDepth":"standard-unless-high-consequence",
+          "optimized":false
+        },
+        "highConsequence":{
+          "when":{"consequence":"high"},
+          "planningDepth":"standard-unless-high-uncertainty",
+          "verificationDepth":"stronger-existing-independent-seam",
+          "optimized":false
+        },
+        "highHigh":{
+          "when":{"uncertainty":"high","consequence":"high"},
+          "planningDepth":"one-independent-opinion-plus-bounded-synthesis",
+          "verificationDepth":"stronger-existing-independent-seam",
+          "optimized":false
+        }
+      },
+      "invariants":[
+        "routing-unchanged",
+        "safety-gates-unchanged",
+        "browser-and-persona-coverage-unchanged",
+        "workflow-class-unchanged",
+        "cleanup-unchanged",
+        "economics-unchanged",
+        "no-debate-or-per-chunk-full-review"
+      ]
+    } as $expected
+    | .decisionLeverage as $d
+    | ($d == $expected)
+      and
+      ([$d | paths as $p
+        | ($p[-1] | tostring | ascii_downcase)
+        | select(test("provider|model|executor|security|routingoverride|sensitivepathexception"))]
+       | length == 0)
+      and
+      ([$d | paths(scalars) as $p | getpath($p)
+        | select(type == "string") | ascii_downcase
+        | select(test("provider|model|executor|security|routingoverride|sensitivepathexception"))]
+       | length == 0)
+  ' "$source" >/dev/null 2>&1
+}
+
+expect_decision_leverage_reject() {
+  local label="$1"
+  local filter="$2"
+  local mutated
+
+  if ! mutated="$(jq -c "$filter" "$routing")"; then
+    printf "  FAIL  decision leverage mutation fixture builds: %s\n" "$label"
+    failures=1
+  elif printf '%s\n' "$mutated" | decision_leverage_valid -; then
+    printf "  FAIL  decision leverage rejects mutation: %s\n" "$label"
+    failures=1
+  else
+    printf "  OK    decision leverage rejects mutation: %s\n" "$label"
+  fi
+}
+
 routing="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
 schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
@@ -81,43 +160,21 @@ if [ -f "$routing" ]; then
       and ($targets.providerSplit == null)
   ' "$routing" >/dev/null || { printf "  FAIL  active subscription profile is the sole valid 100%% routing target\n"; failures=1; }
   jq -e '[.agentType[] | select(.fallbackProvider? != null) | .fallbackProvider == "codex"] | all' "$routing" >/dev/null || { printf "  FAIL  coding reviewer fallbacks return to Codex\n"; failures=1; }
-  jq -e '
-    .decisionLeverage as $d
-    | ($d | type) == "object"
-      and $d.scope == "workflow-depth-only"
-      and $d.allowedLevels == ["low","medium","high"]
-      and $d.legacyDefault == {
-        "planningDepth":"current-standard-path",
-        "verificationDepth":"current-standard-path",
-        "receiptFlag":"decision_profile_defaulted=true",
-        "semanticClaim":"unknown-not-low-low"
-      }
-      and $d.rules.lowLow == {
-        "when":{"uncertainty":"low","consequence":"low"},
-        "planningDepth":"standard",
-        "verificationDepth":"standard",
-        "optimized":true
-      }
-      and $d.rules.highUncertainty.planningDepth == "one-independent-opinion-plus-bounded-synthesis"
-      and $d.rules.highUncertainty.verificationDepth == "standard-unless-high-consequence"
-      and $d.rules.highConsequence.planningDepth == "standard-unless-high-uncertainty"
-      and $d.rules.highConsequence.verificationDepth == "stronger-existing-independent-seam"
-      and $d.rules.highHigh.planningDepth == "one-independent-opinion-plus-bounded-synthesis"
-      and $d.rules.highHigh.verificationDepth == "stronger-existing-independent-seam"
-      and ($d.rules | [.[] | .optimized] | any) == true
-      and ($d.rules | [.[] | select(.when.uncertainty == "high") | .planningDepth == "one-independent-opinion-plus-bounded-synthesis"] | all)
-      and ($d.rules | [.[] | select(.when.consequence == "high") | .verificationDepth == "stronger-existing-independent-seam"] | all)
-  ' "$routing" >/dev/null || { printf "  FAIL  decision leverage has the exact depth-only mapping and legacy provenance\n"; failures=1; }
-  jq -e '
-    .decisionLeverage as $d
-    | ([$d | paths as $p
-        | ($p[-1] | tostring | ascii_downcase)
-        | select(test("provider|model|executor|security"))] | length == 0)
-      and
-      ([$d | paths(scalars) as $p | getpath($p)
-        | select(type == "string") | ascii_downcase
-        | select(test("provider|model|executor|security"))] | length == 0)
-  ' "$routing" >/dev/null || { printf "  FAIL  decision leverage contains no routing or security-control keys\n"; failures=1; }
+  if decision_leverage_valid "$routing"; then
+    printf "  OK    decision leverage is an exact closed depth-only policy\n"
+  else
+    printf "  FAIL  decision leverage is an exact closed depth-only policy\n"
+    failures=1
+  fi
+  expect_decision_leverage_reject "highUncertainty selector" '.decisionLeverage.rules.highUncertainty.when = {"uncertainty":"medium"}'
+  expect_decision_leverage_reject "highConsequence selector" '.decisionLeverage.rules.highConsequence.when = {"consequence":"medium"}'
+  expect_decision_leverage_reject "highHigh selectors" '.decisionLeverage.rules.highHigh.when = {"uncertainty":"high","consequence":"medium"}'
+  expect_decision_leverage_reject "extra rule" '.decisionLeverage.rules.unbounded = .decisionLeverage.rules.lowLow'
+  expect_decision_leverage_reject "routingOverride authority" '.decisionLeverage.routingOverride = {"reason":"test"}'
+  expect_decision_leverage_reject "sensitivePathException authority" '.decisionLeverage.sensitivePathException = true'
+  expect_decision_leverage_reject "provider authority" '.decisionLeverage.rules.lowLow.provider = "codex"'
+  expect_decision_leverage_reject "model authority" '.decisionLeverage.rules.lowLow.model = "test-model"'
+  expect_decision_leverage_reject "executor authority" '.decisionLeverage.rules.lowLow.executor = "codex"'
 fi
 
 if [ -f "$routing" ] && [ -f "$delegation_policy" ]; then
@@ -156,6 +213,10 @@ require_text "$orchestrator" "routingOverride" "orchestrator rejects silent exec
 require_text "$orchestrator" 'decide-validation-retry --reason deterministic_validation_failure' "orchestrator delegates retry policy to the kernel CLI"
 require_text "$orchestrator" 'reason_code: deterministic_validation_failure' "orchestrator projects the exact ValidationFeedback reason"
 require_text "$orchestrator" 'builder_session_continuity' "orchestrator records strict builder continuity"
+require_text "$orchestrator" '"failing_check_ids":' "orchestrator uses the canonical failing-check field"
+require_absent "$orchestrator" '"ordered_failing_check_ids":' "orchestrator rejects the non-canonical failing-check field"
+require_text "$orchestrator" '"fallback": true' "orchestrator feedback fallback is boolean"
+require_absent "$orchestrator" '"fallback": "openrouter->codex"' "orchestrator feedback never encodes fallback as a transition string"
 require_text "$orchestrator" 'stage: browser_recovery' "browser recovery remains a separate blocked receipt"
 require_text "$orchestrator" "final review must run on the provider that did not implement" "orchestrator enforces cross-provider final review"
 require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-mortem step"

@@ -85,7 +85,7 @@ When this command runs in Codex and the session exposes `multi_agent_v1.spawn_ag
 
 **Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
 
-The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
+The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, boolean `fallback`, and `fallbackReason`. `fallback` is strictly `true|false`, never a transition string or null; the requested, attempted, and implemented provider fields carry the transition. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
 
 It also preserves `decisionProfile` and
 `decision_profile_defaulted`. Read `decisionLeverage` from the routing policy as

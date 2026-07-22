@@ -658,8 +658,9 @@ kernel command below, invalidates older dispatch claims:
 Decision leverage does not revise the behavioral contract.
 
 Every initial or replacement dispatch receipt preserves provider provenance as
-`requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and
-`fallbackReason`. Never relabel the requested provider after fallback. A
+`requestedProvider`, `attemptedProvider`, `implementedBy`, boolean `fallback`,
+and `fallbackReason`. The provider fields carry the transition; `fallback` is
+strictly true or false and never a transition string or null. Never relabel the requested provider after fallback. A
 replacement additionally records the prior attempt reference and why same-
 session resume was unavailable.
 
@@ -747,7 +748,10 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 
 For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex."` The agentic OpenRouter path is valid only when it writes files, verifies, commits, and emits an OpenRouter receipt.
 
-After a valid Codex or OpenRouter path produces a commit, write a receipt with `implementedBy: {codex|openrouter}`, fallback source/target, verification, and usage, then proceed to Step 3e.
+After a valid Codex or OpenRouter path produces a commit, write a receipt with
+`requestedProvider`, `attemptedProvider`, `implementedBy: {codex|openrouter}`,
+boolean `fallback`, `fallbackReason`, verification, and usage, then proceed to
+Step 3e.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
@@ -867,7 +871,7 @@ shape stays closed):
   "stage": "deterministic_validation",
   "contract_digest": "sha256:<current>",
   "contract_revision": 1,
-  "ordered_failing_check_ids": ["CHK-..."],
+  "failing_check_ids": ["CHK-..."],
   "evidence_refs": ["receipts/<safe-ref>"],
   "failure_signature": "sha256:<stable-safe-digest>",
   "retry_reason": "deterministic_validation_failure",
@@ -880,7 +884,7 @@ shape stays closed):
   "requestedProvider": "openrouter",
   "attemptedProvider": "codex",
   "implementedBy": "codex",
-  "fallback": "openrouter->codex",
+  "fallback": true,
   "fallbackReason": "provider-unavailable",
   "prior_attempt_ref": "receipts/<safe-prior-attempt-ref>",
   "resume_unavailable_reason": "session-continuity-unavailable",
@@ -889,17 +893,22 @@ shape stays closed):
 }
 ```
 
-`ordered_failing_check_ids` is sorted by the behavioral contract's check order.
+`failing_check_ids` uses the exact canonical field name and is sorted by the
+behavioral contract's check order, never discovery time, lexical display order,
+or provider output order.
 The closed enums are `builder_session_continuity:
 proven|unavailable|invalid`, `action:
 resume|replace|human_help_required`, and `implementedBy: codex|openrouter|null`;
-the human-help, prior-attempt, resume-reason, and fallback fields are null only
-when their condition does not apply.
+`fallback` is strictly boolean and is never a transition string or null. The
+provider transition is carried only by `requestedProvider`, `attemptedProvider`,
+and `implementedBy`; `fallbackReason` is a stable reason when `fallback: true`
+and null otherwise. The human-help, prior-attempt, and resume-reason fields are
+null only when their condition does not apply.
 `evidence_refs`, `prior_attempt_ref`, `receipt_ref`, and `repo_scope_ref` are the
 only durable references; they must be repository-scoped, bounded, safe, and
 redacted. Never include raw output, prompts, session tokens, credentials, URLs,
 or host paths. Derive `failure_signature` deterministically from the current
-contract digest/revision, ordered failing check IDs, and digests of the safe
+contract digest/revision, `failing_check_ids` in contract order, and digests of the safe
 evidence receipts. `attempt` and `remaining_retry_budget` are projections of the
 kernel decision below, never locally authored limits.
 
@@ -939,7 +948,7 @@ success.
 
 When continuity is unavailable/invalid but retry is allowed, dispatch an
 explicit replacement and record requested provider, attempted provider,
-implementedBy, fallback and reason, prior attempt reference, and the stable
+implementedBy, boolean fallback and reason, prior attempt reference, and the stable
 reason resume was unavailable. If replacement cannot be safely dispatched,
 use `human_help_required`.
 
@@ -947,7 +956,9 @@ When the kernel returns `identical_failure_convergence` or
 `retry_budget_exhausted`, write the closed feedback receipt above with
 `action: human_help_required`, plus a deterministic
 `human_intervention_id` derived from run ID, chunk ID, stage, contract digest,
-and failure signature, and `human_intervention_reason` exactly
+failure signature, and the stable dispatch attempt identity bound by
+`prior_attempt_ref` (never a timestamp or display-order ordinal), and
+`human_intervention_reason` exactly
 `identical_failure_convergence` or `retry_budget_exhausted`. Mark the chunk
 failed, mark every transitive dependency blocked, and never translate the stop
 to skipped, passed, or successful.
@@ -1109,7 +1120,11 @@ Run `/codex:review` once. If zero findings, proceed. If findings, fix and re-run
 EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | deferred: [N]
 ```
 
-Append `implementedBy: <provider>` and `fallback: <from>-><to>|none` to the chunk receipt adjacent to the eval gate line.
+Append `requestedProvider: <provider>`, `attemptedProvider: <provider>`,
+`implementedBy: <provider>`, `fallback: true|false`, and
+`fallbackReason: <stable-reason|null>` to the chunk receipt adjacent to the eval
+gate line. `fallback` is always boolean; the three provider fields carry any
+transition.
 
 Also record `requestedProvider`, `attemptedProvider`, and `fallbackReason`. Preserve unavailable attempts and misroutes honestly across `full_cli`, `codex_native`, and generic hosts. Append the complete authoritative evaluation receipt to the cumulative ledger and defer shadow observation until `all-chunks-complete`; never synthesize `EVAL_GATE_PASSED` from a kernel prediction.
 
@@ -1250,6 +1265,11 @@ authoritative blocked receipt has `stage: browser_recovery`, `status: blocked`,
 `human_intervention_reason: browser_evidence_unavailable`. Do not put browser
 exhaustion into the deterministic-validation attempt ledger, and do not replace
 this shape with `action: resume|replace`.
+
+Derive the browser `human_intervention_id` from the run ID, node/chunk ID,
+canonical sorted missing-case set, and stable terminal browser-attempt identity.
+Never include a timestamp, receipt display order, or mutable attempt-list index
+in that identifier.
 
 Append the authoritative `BROWSER_VERIFIED` or blocked human-help receipt to the
 cumulative ledger. Defer shadow observation until `all-chunks-complete`. A
