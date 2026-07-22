@@ -25,10 +25,10 @@
 | Chunk | Classification | Dispatch | Validation | Evaluation | Merge | Cleanup |
 |-------|----------------|----------|------------|------------|-------|---------|
 | 01-repository-verification-foundation | Logic | codex / complete | focused verification passed | passed (2 iterations) | merged (`23787b7`) | Docker 0/0; worktree and merged branch removed |
-| 02-artifact-safety-and-staging | Logic | pending | pending | pending | pending | pending |
-| 03-browser-scenarios-and-bundles | Logic | pending | pending | pending | pending | pending |
+| 02-artifact-safety-and-staging | Logic | codex / complete | 109 focused tests passed | passed (3 iterations) | merged (`8a68f9f`) | Docker 0/0; worktree and merged branch removed |
+| 03-browser-scenarios-and-bundles | Logic | codex / complete | 62 browser + 106 in-repo tests passed | passed (2 iterations) | merged (`c091b2a`) | Docker 0/0; worktree and merged branch removed |
 | 04-read-only-review-and-findings | Logic | pending | pending | pending | pending | pending |
-| 05-ci-evidence-and-closeout | Logic | pending | pending | pending | pending | pending |
+| 05-ci-evidence-and-closeout | Logic | codex / complete | 36 focused tests passed | passed (3 iterations) | merged (`083e578`) | Docker 0/0; worktree and merged branch removed |
 | 06-assembly-repository-profile | Trivial | pending | pending | pending | pending | pending |
 | 07-pipeline-integration-and-scout | Integration | pending | pending | pending | pending | pending |
 | 08-cross-plugin-release-integration | Integration | pending | pending | pending | pending | pending |

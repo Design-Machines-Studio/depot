@@ -94,5 +94,113 @@
     "execution_mode": "codex_native",
     "cleanup_removed": 0,
     "cleanup_blocked": 0
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 7, "stage": "dependency_ready", "status": "ready",
+    "node_id": "02-artifact-safety-and-staging", "occurred_at": "2026-07-22T13:44:37Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/02-artifact-safety-and-staging.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 8, "stage": "dependency_ready", "status": "ready",
+    "node_id": "03-browser-scenarios-and-bundles", "occurred_at": "2026-07-22T13:44:38Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/03-browser-scenarios-and-bundles.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 9, "stage": "dependency_ready", "status": "ready",
+    "node_id": "05-ci-evidence-and-closeout", "occurred_at": "2026-07-22T13:44:39Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/05-ci-evidence-and-closeout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 10, "stage": "dispatch", "status": "succeeded",
+    "node_id": "02-artifact-safety-and-staging", "occurred_at": "2026-07-22T13:44:40Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/02-artifact-safety-and-staging.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "provider": "codex", "attempt": 1
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 11, "stage": "dispatch", "status": "succeeded",
+    "node_id": "03-browser-scenarios-and-bundles", "occurred_at": "2026-07-22T13:44:41Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/03-browser-scenarios-and-bundles.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "provider": "codex", "attempt": 1
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 12, "stage": "dispatch", "status": "succeeded",
+    "node_id": "05-ci-evidence-and-closeout", "occurred_at": "2026-07-22T13:44:42Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/05-ci-evidence-and-closeout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "provider": "codex", "attempt": 1
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 13, "stage": "deterministic_validation", "status": "passed",
+    "node_id": "02-artifact-safety-and-staging", "occurred_at": "2026-07-22T13:44:43Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/02-artifact-safety-and-staging.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "first_pass": false
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 14, "stage": "deterministic_validation", "status": "passed",
+    "node_id": "03-browser-scenarios-and-bundles", "occurred_at": "2026-07-22T13:44:44Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/03-browser-scenarios-and-bundles.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "first_pass": false
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 15, "stage": "deterministic_validation", "status": "passed",
+    "node_id": "05-ci-evidence-and-closeout", "occurred_at": "2026-07-22T13:44:45Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/05-ci-evidence-and-closeout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "first_pass": false
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 16, "stage": "evaluation_gate", "status": "passed",
+    "node_id": "02-artifact-safety-and-staging", "occurred_at": "2026-07-22T13:44:46Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/02-artifact-safety-and-staging.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 17, "stage": "evaluation_gate", "status": "passed",
+    "node_id": "03-browser-scenarios-and-bundles", "occurred_at": "2026-07-22T13:44:47Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/03-browser-scenarios-and-bundles.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 18, "stage": "evaluation_gate", "status": "passed",
+    "node_id": "05-ci-evidence-and-closeout", "occurred_at": "2026-07-22T13:44:48Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/05-ci-evidence-and-closeout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 19, "stage": "merge_disposition", "status": "merged",
+    "node_id": "02-artifact-safety-and-staging", "occurred_at": "2026-07-22T13:47:28Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/02-artifact-safety-and-staging.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 20, "stage": "merge_disposition", "status": "merged",
+    "node_id": "03-browser-scenarios-and-bundles", "occurred_at": "2026-07-22T13:47:29Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/03-browser-scenarios-and-bundles.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 21, "stage": "merge_disposition", "status": "merged",
+    "node_id": "05-ci-evidence-and-closeout", "occurred_at": "2026-07-22T13:47:30Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/05-ci-evidence-and-closeout.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 22, "stage": "chunk_cleanup", "status": "clean",
+    "node_id": "02-artifact-safety-and-staging", "occurred_at": "2026-07-22T13:47:31Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/02-artifact-safety-and-staging-cleanup-receipt.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 23, "stage": "chunk_cleanup", "status": "clean",
+    "node_id": "03-browser-scenarios-and-bundles", "occurred_at": "2026-07-22T13:47:32Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/03-browser-scenarios-and-bundles-cleanup-receipt.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 24, "stage": "chunk_cleanup", "status": "clean",
+    "node_id": "05-ci-evidence-and-closeout", "occurred_at": "2026-07-22T13:47:33Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/05-ci-evidence-and-closeout-cleanup-receipt.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
   }
 ]

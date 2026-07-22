@@ -1,0 +1,19 @@
+{
+  "chunk_id": "05-ci-evidence-and-closeout",
+  "status": "merged",
+  "classification": "Logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": ["4a0a7d7339147cc142454299fb99149f609a94e2", "e26a3cbfab1c000ac5103ba567d9b0b75e57e96a", "7b630abd7ba37190ebcd7637e1fd9f7aba34a725"],
+  "merge_commit": "083e5783a4b294728f8cc8cc3788b4f783562d71",
+  "validation": "36 focused tests passed; schemas parsed; git diff --check passed",
+  "review": {"iterations": 3, "owned_findings_fixed": 7, "findings_remaining": 0, "deferred": 0, "new_p1_p2": 0},
+  "ambiguity_resolved": false,
+  "evaluation": "EVAL_GATE_PASSED: 05-ci-evidence-and-closeout | classification: Logic | iterations: 3 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

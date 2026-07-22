@@ -1,0 +1,19 @@
+{
+  "chunk_id": "02-artifact-safety-and-staging",
+  "status": "merged",
+  "classification": "Logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": ["7703ee9295b38d2b79c1e851a0c5c8157db068a4", "2a76c7fa14fc7946b32b10a52e201ac915f14360", "8795866f2d27fb281dddce19e5054b9d78250f9f"],
+  "merge_commit": "8a68f9f836b1dd3950c8737e1039f2a3313cbb50",
+  "validation": "109 focused tests passed; schemas parsed; git diff --check passed",
+  "review": {"iterations": 3, "owned_findings_fixed": 5, "findings_remaining": 0, "deferred": 0, "new_p1_p2": 0},
+  "ambiguity_resolved": false,
+  "evaluation": "EVAL_GATE_PASSED: 02-artifact-safety-and-staging | classification: Logic | iterations: 3 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

@@ -1,0 +1,22 @@
+{
+  "chunk_id": "03-browser-scenarios-and-bundles",
+  "status": "merged",
+  "classification": "Logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "contract_digest": "sha256:6d31f8bb85c10f81e20b229f05014099de4f99c037f35a08da3ef7b0db5cf284",
+  "contract_revision": 1,
+  "commits": ["df5c70dba17054d05816990d342ac16cf7e4ae83", "270cee6ec8819ef0438eb248f475c2d8e3854386"],
+  "merge_commit": "c091b2aea9febf70d78c878db833818448e01d5d",
+  "validation": "62 browser scenario/recovery tests and 106 in-repository focused tests passed; git diff --check passed",
+  "external_baseline": "the live sibling Assembly Baseplate persona declaration test reports an unchanged frontmatter error outside this chunk's repository scope",
+  "browser_evidence": "not_declared: this chunk implements neutral contracts and made no live-browser claim",
+  "review": {"iterations": 2, "owned_findings_fixed": 3, "findings_remaining": 0, "deferred": 0, "new_p1_p2": 0},
+  "ambiguity_resolved": true,
+  "ambiguity_summary": "Used immutable data-only steps and exact-match bundles behind a separate BrowserScenarioAdapter; rejected widening BrowserAdapter or driving a live browser.",
+  "evaluation": "EVAL_GATE_PASSED: 03-browser-scenarios-and-bundles | classification: Logic | iterations: 2 | findings_remaining: 0 | deferred: 0",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}
