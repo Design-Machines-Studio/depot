@@ -387,6 +387,6 @@ Pipeline failure analysis documents live in `docs/post-mortems/`:
 These postmortems inform the Known Pipeline Failure Modes section above and the hardening measures in the pipeline plugin.
 
 <!-- airlift:start -->
-An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 5, 2026-07-22T11:20:02Z).
+An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 7, 2026-07-22T17:40:53Z).
 Read it before continuing.
 <!-- airlift:end -->
