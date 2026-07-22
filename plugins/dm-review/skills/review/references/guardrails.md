@@ -67,13 +67,20 @@ Don't match exact header text -- agents use different formatting (`## Findings`,
 
 **Threshold:** >25 findings from a single agent
 
-**Action:** Truncate to top 25 by severity (all P1s first, then P2s, then P3s). Note in the report: "Truncated from N to 25 findings (showing highest severity)."
+**Action:** Limit the canonical finding count to the top 25 by severity (all
+P1s first, then P2s, then P3s). Preserve the full raw output. Put every source
+finding beyond the cap in `Synthesis Decisions` as
+`discarded/agent-findings-cap` with its raw ref; do not silently erase it. Note
+in the report: "Truncated from N to 25 findings (showing highest severity)."
 
 ### Ghost File Detection
 
 **Check:** Each finding references a file path. That path must appear in the changed files list.
 
-**Action:** Discard findings referencing files not in the diff. Log: "Discarded N findings referencing files not in changeset (hallucinated references)."
+**Action:** Exclude findings referencing files not in the diff from canonical
+counts, but keep each source position in `Synthesis Decisions` as
+`discarded/out-of-scope` with evidence, rationale, and raw ref. Log: "Discarded
+N findings referencing files not in changeset (hallucinated references)."
 
 ### Line Number Validation
 
@@ -111,11 +118,41 @@ See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full decisi
 
 Used by the consolidator (Phase 5) when merging findings from multiple agents.
 
-### Same file + same line (exact match)
-Merge into one finding. Keep the higher severity. List all source agents.
+### Canonical identity (required before matching)
+
+Every candidate receives the canonical identity exact form
+`finding-v1:sha256(<normalized-key>)`. The normalized key is serialized in
+this order: lowercase POSIX path; smallest stable structural anchor (normalized
+line span only if no anchor exists); normalized issue category; and
+whitespace-collapsed root-cause invariant. Reviewer, provider, model, severity,
+remediation, and discovery order are excluded.
+
+Use the most specific durable symbol, heading, test name, selector, or data path
+as the structural anchor. Normalize anchor/category/root-cause text to lowercase
+with leading/trailing whitespace removed and internal whitespace collapsed.
+Normalize the line fallback as `lines=<start>-<end>`. Hash the labeled UTF-8
+fields in the order and serialization specified by the consolidator contract.
+
+Input permutations preserve IDs and decision ordering. Severity disagreement
+changes the ledger, not identity. A severity-derived ID is invalid.
+
+### Same canonical identity
+
+Merge exact duplicates without count inflation. Use `exact-duplicate` when the
+normalized descriptions and evidence are equivalent, or
+`same-root-cause-merge` when independently worded findings describe the same
+root cause. List all source IDs, agents, providers, models, evidence, and raw
+artifact references.
+
+### Same file + same line
+
+Treat as a merge candidate only. If category or root-cause invariant differs,
+keep separate canonical findings.
 
 ### Same file + adjacent lines (within 3 lines)
-Merge if descriptions reference the same logical issue. Consolidator judges based on description similarity. If in doubt, keep separate.
+Treat as a merge candidate only. Merge only when the structural anchor,
+category, and root-cause invariant identify the same issue. If in doubt, keep
+separate.
 
 ### Same file + different lines
 Keep as separate findings, even if descriptions are similar. Different locations = different findings.
@@ -124,7 +161,47 @@ Keep as separate findings, even if descriptions are similar. Different locations
 Keep both. Note the pattern: "This issue appears in N files."
 
 ### Same finding, different severity
-Two agents flag the same issue on the same line at different severities. Escalate to the higher severity. Note the disagreement: "security-auditor: P1, code-simplicity-reviewer: P3 -- escalated to P1." Severity disagreements signal that human judgment is needed.
+Preserve both source severities and set `agreement: disputed`. Select the
+canonical severity using reproducible test/runtime evidence first, then direct
+HEAD evidence, diff/context evidence, standards-based reasoning, and finally
+reviewer consensus. If evidence is otherwise tied, choose the higher severity.
+Record the chosen severity and evidence rationale. Severity disagreement
+changes the ledger, not the finding ID.
 
 ### Contradicting findings
-Keep both with a note: "Agents disagree -- manual review recommended."
+Contradictions never disappear. Keep both source positions, evidence, raw refs,
+and severities visible in `Synthesis Decisions`; use `agreement: disputed`.
+When competing root-cause positions have different canonical IDs, emit sorted
+reciprocal `cross_id_link=<finding-id>|<finding-id>` entries and mark both rows
+disputed. Distinct identity is not evidence of uniqueness.
+Unresolved positions are `retained` with `retained-disagreement`. A position
+may be `discarded` with `superseded-by-stronger-evidence` only when the
+deterministic evidence priority resolves it, and the discarded position still
+remains visible in the ledger.
+
+### Decision validation
+
+`agreement: unique|corroborated|disputed` is independent of
+`finding_disposition: retained|merged|discarded`. Every source finding must
+have exactly one non-empty source ID, lane, requested provider, attempted
+provider, implemented-by provider, model, agent, source severity, evidence,
+`raw_ref`, disposition, reason code, and rationale. Source severities are
+`P1|P2|P3`. Every source ID is unique within the canonical decision. `unique`
+requires exactly one source; `corroborated` requires at least two independent
+sources. A within-ID `disputed` decision requires at least two local source
+positions; a cross-ID `disputed` decision requires at least one local source
+plus reciprocal links to the competing finding rows and their source positions.
+
+Each source uses exactly one closed reason code:
+`retained-unique`, `retained-corroborated`, `retained-disagreement`,
+`exact-duplicate`, `same-root-cause-merge`,
+`superseded-by-stronger-evidence`, `out-of-scope`, `not-reproducible`, or
+`agent-findings-cap`.
+Reject missing, duplicate, or free-form reason codes; empty or duplicate source
+IDs; missing source severities; agreement/source-count mismatches; one-way,
+self-referential, malformed, or missing cross-ID dispute links; flattened
+contradictions; severity-derived IDs; missing raw refs; and reports missing the
+`Synthesis Decisions` section.
+
+Raw outputs are immutable: reference them, never rewrite or delete them. A
+consolidated summary cannot substitute for absent raw evidence.
