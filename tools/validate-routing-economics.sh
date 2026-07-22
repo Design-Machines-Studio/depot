@@ -81,6 +81,43 @@ if [ -f "$routing" ]; then
       and ($targets.providerSplit == null)
   ' "$routing" >/dev/null || { printf "  FAIL  active subscription profile is the sole valid 100%% routing target\n"; failures=1; }
   jq -e '[.agentType[] | select(.fallbackProvider? != null) | .fallbackProvider == "codex"] | all' "$routing" >/dev/null || { printf "  FAIL  coding reviewer fallbacks return to Codex\n"; failures=1; }
+  jq -e '
+    .decisionLeverage as $d
+    | ($d | type) == "object"
+      and $d.scope == "workflow-depth-only"
+      and $d.allowedLevels == ["low","medium","high"]
+      and $d.legacyDefault == {
+        "planningDepth":"current-standard-path",
+        "verificationDepth":"current-standard-path",
+        "receiptFlag":"decision_profile_defaulted=true",
+        "semanticClaim":"unknown-not-low-low"
+      }
+      and $d.rules.lowLow == {
+        "when":{"uncertainty":"low","consequence":"low"},
+        "planningDepth":"standard",
+        "verificationDepth":"standard",
+        "optimized":true
+      }
+      and $d.rules.highUncertainty.planningDepth == "one-independent-opinion-plus-bounded-synthesis"
+      and $d.rules.highUncertainty.verificationDepth == "standard-unless-high-consequence"
+      and $d.rules.highConsequence.planningDepth == "standard-unless-high-uncertainty"
+      and $d.rules.highConsequence.verificationDepth == "stronger-existing-independent-seam"
+      and $d.rules.highHigh.planningDepth == "one-independent-opinion-plus-bounded-synthesis"
+      and $d.rules.highHigh.verificationDepth == "stronger-existing-independent-seam"
+      and ($d.rules | [.[] | .optimized] | any) == true
+      and ($d.rules | [.[] | select(.when.uncertainty == "high") | .planningDepth == "one-independent-opinion-plus-bounded-synthesis"] | all)
+      and ($d.rules | [.[] | select(.when.consequence == "high") | .verificationDepth == "stronger-existing-independent-seam"] | all)
+  ' "$routing" >/dev/null || { printf "  FAIL  decision leverage has the exact depth-only mapping and legacy provenance\n"; failures=1; }
+  jq -e '
+    .decisionLeverage as $d
+    | ([$d | paths as $p
+        | ($p[-1] | tostring | ascii_downcase)
+        | select(test("provider|model|executor|security"))] | length == 0)
+      and
+      ([$d | paths(scalars) as $p | getpath($p)
+        | select(type == "string") | ascii_downcase
+        | select(test("provider|model|executor|security"))] | length == 0)
+  ' "$routing" >/dev/null || { printf "  FAIL  decision leverage contains no routing or security-control keys\n"; failures=1; }
 fi
 
 if [ -f "$routing" ] && [ -f "$delegation_policy" ]; then
@@ -101,10 +138,14 @@ require_text "$schema" '`"openrouter"`' "manifest schema includes openrouter exe
 require_text "$schema" '| `integration` | `codex` |' "manifest schema maps integration to Codex"
 require_text "$schema" "routingOverride" "manifest schema defines explicit routing overrides"
 require_text "$schema" "splitAttempted" "manifest override records whether offline work was split"
+require_text "$schema" '`decisionProfile`' "manifest schema requires an approved decision profile"
+require_text "$schema" '`decision_profile_defaulted=true`' "manifest schema preserves legacy profile provenance"
 require_text "$promptcraft" "routing-policy.json" "promptcraft reads shared routing policy"
 require_text "$promptcraft" '`integration` -> `codex`' "promptcraft maps integration to Codex"
 require_text "$promptcraft" "routingOverride" "promptcraft requires explicit executor override receipts"
 require_text "$promptcraft" "splitAttempted" "promptcraft splits tool-dependent and offline work first"
+require_text "$promptcraft" "one independent" "promptcraft bounds high-uncertainty planning depth"
+require_text "$promptcraft" "decision_profile_defaulted=true" "promptcraft documents legacy standard-depth provenance"
 require_text "$orchestrator" "MUST NOT implement it in-process" "orchestrator forbids absorbing externally routed chunks"
 require_text "$orchestrator" 'integration) PRIMARY_RAIL="codex"' "orchestrator fallback maps integration to Codex"
 require_text "$orchestrator" "implementedBy:" "orchestrator receipts record implementedBy"
@@ -112,6 +153,10 @@ require_text "$orchestrator" "providerSplit:" "orchestrator summary records prov
 require_text "$orchestrator" "eligibleProviderSplit:" "orchestrator records eligible provider usage"
 require_text "$orchestrator" "deficit-round-robin" "orchestrator applies routing pressure during dispatch"
 require_text "$orchestrator" "routingOverride" "orchestrator rejects silent executor overrides"
+require_text "$orchestrator" 'decide-validation-retry --reason deterministic_validation_failure' "orchestrator delegates retry policy to the kernel CLI"
+require_text "$orchestrator" 'reason_code: deterministic_validation_failure' "orchestrator projects the exact ValidationFeedback reason"
+require_text "$orchestrator" 'builder_session_continuity' "orchestrator records strict builder continuity"
+require_text "$orchestrator" 'stage: browser_recovery' "browser recovery remains a separate blocked receipt"
 require_text "$orchestrator" "final review must run on the provider that did not implement" "orchestrator enforces cross-provider final review"
 require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-mortem step"
 require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JSONL delta"

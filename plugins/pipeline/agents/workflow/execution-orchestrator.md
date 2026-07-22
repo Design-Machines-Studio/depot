@@ -181,6 +181,7 @@ Before any chunk runs:
 
 ```text
 0e. Ref registry initialized (capture worktree/branch before-state)
+0f. Approved decision profile validated and behavioral contract bound after run.started
 ```
 
 For each chunk, you MUST complete ALL applicable steps in order:
@@ -237,6 +238,28 @@ Produce the independent prediction before corresponding authoritative actions, t
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
+The next canonical transition is `run.started`. After that transition and before
+the first builder dispatch, Pipeline generates
+`plans/<feature-slug>/verification-contract.json` from only the approved Key
+Requirements and final chunk acceptance criteria. Use the strict
+`behavioral-verification-contract-schema.json` shape with stable `REQ-*`,
+`REG-*`, and `CHK-*` IDs. Resolve every selected persona/browser case ID against
+the authoritative declarations in `verification-contract.md`; an unresolved
+persona, scenario, route binding, browser, viewport, authentication fixture, or
+case ID blocks dispatch. Generated matrices and invented sample personas are not
+authority.
+
+Validate and bind the initial contract exactly once:
+
+```text
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir plans/<feature-slug> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
+```
+
+Reject a non-zero exit, malformed receipt, or a receipt not carrying the exact
+current `contract_digest` and `revision`. The kernel seals and validates; it
+never selects ready nodes, schedules builders, changes Pipeline gates, or
+authorizes merge. Mark `0f` complete only after the binding receipt is durable.
+
 Append receipts to the cumulative ledger at every boundary, but invoke the
 observer only twice: at `all-chunks-complete` before final full review and at
 terminal after the final authoritative receipt. Before either observation,
@@ -267,6 +290,31 @@ Before any git operations, validate the manifest:
 2. **Prompt path containment:** Resolve each chunk's `prompt` path canonically. Verify all resolve within the project's `plans/` directory. Reject and stop if any path escapes.
 3. **Schema check:** Verify `chunks` is an array, each chunk has `id`, `prompt`, `level`, `dependsOn`. Recompute the level groups from `chunks` and compare to `executionPlan.levels` -- if they disagree, `chunks` is authoritative.
 4. **Workflow class:** Accept only `chore|bug|feature|hotfix|security|investigation|migration`. If absent on a legacy manifest, set the translated value to `feature` and record `workflow_class_defaulted=true`; never infer it from `kind`, files, or prose. Pass it unchanged into RunSpec, events, receipts, and metrics. Existing security provider and approval overrides remain authoritative.
+5. **Decision profile:** New manifests require exactly one closed object with
+   exactly `uncertainty`, `consequence`, and `rationale`. The first two values
+   are `low|medium|high`; rationale is a non-empty string. Reject extra keys,
+   malformed/multiple values, or conflict with the approved plan. Copy the
+   approved profile unchanged and keep it separate from `workflowClass`, risk,
+   overlap risk, complexity, kind/executor, and routing overrides. A legacy
+   manifest with no field follows the current standard path and records
+   `decision_profile_defaulted=true`; absence is unknown provenance, not
+   low/low evidence.
+
+Read `decisionLeverage` from `routing-policy.json` and apply it only to workflow
+depth. Low/low uses the optimized standard path. High uncertainty consumes
+exactly one independent planning opinion plus one bounded synthesis performed
+before execution. High consequence strengthens the existing independent final
+verification seam and blocks on degraded/missing lane coverage. High/high does
+both; other combinations retain standard depth. Never use the profile to
+select a provider/model/executor, create a routing override, relax security,
+alter workflow class, reduce browser/persona cases, skip focused/sensitive/final
+review, weaken zero-deferral or cleanup, alter economics, or add full review to
+every ordinary chunk.
+
+**Bootstrap limitation:** If this current bootstrap manifest predates
+`decisionProfile`, do not retrofit it. An explanatory profile may be derived
+from the approved plan, but execution remains the legacy standard path with
+`decision_profile_defaulted=true` until a new manifest is generated.
 
 If validation fails, report the specific issue and stop.
 
@@ -595,6 +643,26 @@ Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orches
 
 Every chunk receipt records `routingEligibility`, target profile, selected provider, actual provider, and exclusion or adjustment reason. The run summary records both the raw `providerSplit:` and `eligibleProviderSplit:` plus target variance; a variance with no recorded cause is an invalid run receipt.
 
+**Bound behavioral contract interlock:** Before every builder dispatch, read the
+current durable binding receipt and include its exact `contract_digest` and
+`revision` in the dispatch. A builder completion receipt MUST claim those exact
+current values. Missing, stale, malformed, or mismatched claims fail
+deterministic validation; do not reinterpret them as review feedback or success.
+A contract revision, when explicitly human-approved and bound through the
+kernel command below, invalidates older dispatch claims:
+
+```text
+"$WORKFLOW_KERNEL" revise-verification-contract --state-dir plans/<feature-slug> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
+```
+
+Decision leverage does not revise the behavioral contract.
+
+Every initial or replacement dispatch receipt preserves provider provenance as
+`requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and
+`fallbackReason`. Never relabel the requested provider after fallback. A
+replacement additionally records the prior attempt reference and why same-
+session resume was unavailable.
+
 **Step 3d.0 -- Cascade activation gate.** Resolve the decision engine from the pipeline plugin cache and decide whether the cascade is active:
 
 ```bash
@@ -789,12 +857,107 @@ You MUST verify these before proceeding:
    receipt, or metadata-only commits do not invalidate a passing code suite.
 4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
+For an eligible deterministic check failure, do not send prose back to a new
+builder and do not duplicate retry policy. Persist a bounded closed feedback
+receipt containing exactly these fields (nullable fields remain present so the
+shape stays closed):
+
+```json
+{
+  "stage": "deterministic_validation",
+  "contract_digest": "sha256:<current>",
+  "contract_revision": 1,
+  "ordered_failing_check_ids": ["CHK-..."],
+  "evidence_refs": ["receipts/<safe-ref>"],
+  "failure_signature": "sha256:<stable-safe-digest>",
+  "retry_reason": "deterministic_validation_failure",
+  "attempt": 1,
+  "remaining_retry_budget": 1,
+  "builder_session_continuity": "unavailable",
+  "action": "replace",
+  "human_intervention_id": null,
+  "human_intervention_reason": null,
+  "requestedProvider": "openrouter",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": "openrouter->codex",
+  "fallbackReason": "provider-unavailable",
+  "prior_attempt_ref": "receipts/<safe-prior-attempt-ref>",
+  "resume_unavailable_reason": "session-continuity-unavailable",
+  "receipt_ref": "receipts/<safe-ref>",
+  "repo_scope_ref": ".workflow-kernel/repository-scope.json"
+}
+```
+
+`ordered_failing_check_ids` is sorted by the behavioral contract's check order.
+The closed enums are `builder_session_continuity:
+proven|unavailable|invalid`, `action:
+resume|replace|human_help_required`, and `implementedBy: codex|openrouter|null`;
+the human-help, prior-attempt, resume-reason, and fallback fields are null only
+when their condition does not apply.
+`evidence_refs`, `prior_attempt_ref`, `receipt_ref`, and `repo_scope_ref` are the
+only durable references; they must be repository-scoped, bounded, safe, and
+redacted. Never include raw output, prompts, session tokens, credentials, URLs,
+or host paths. Derive `failure_signature` deterministically from the current
+contract digest/revision, ordered failing check IDs, and digests of the safe
+evidence receipts. `attempt` and `remaining_retry_budget` are projections of the
+kernel decision below, never locally authored limits.
+
+Invoke the policy exactly once for that failure:
+
+```text
+$WORKFLOW_KERNEL decide-validation-retry --reason deterministic_validation_failure --attempt-ledger <artifact> --signature <stable-signature>
+```
+
+Reject non-zero output, extra/missing fields, wrong types, or a document whose
+keys are not exactly `allowed`, `reason_code`, `budget`, `attempt_count`, and
+`prior_signature`. Consume all five fields. Set the receipt attempt from the
+returned `attempt_count` plus the selected retry, and remaining budget from the
+returned `budget` and `attempt_count`; do not write a prose retry limit. Before
+the next failure decision, durably append the prior failure count and signature
+to the same `AttemptLedger`. A different new signature consumes remaining
+budget without resetting history; an identical signature participates in the
+kernel's convergence decision.
+
+Project the rich receipt into the kernel's current `ValidationFeedback` with
+exactly three fields:
+
+```text
+node_id: <chunk-id>
+reason_code: deterministic_validation_failure
+evidence: [<safe feedback receipt ref>, <safe deterministic evidence refs>]
+```
+
+Resume the same builder only when durable evidence proves all of: the original
+dispatch identity, protected session token/handle, same host, same repository
+scope, same chunk/node, same requested/actual rail context, and the exact current
+contract digest/revision. This is `builder_session_continuity: proven`. Missing
+proof is `unavailable`; conflicting proof is `invalid`. Neither may resume. Use
+the host adapter's `resume_or_replace` seam with the exact three-field
+`ValidationFeedback`; a resume result without evidence or exact context is not
+success.
+
+When continuity is unavailable/invalid but retry is allowed, dispatch an
+explicit replacement and record requested provider, attempted provider,
+implementedBy, fallback and reason, prior attempt reference, and the stable
+reason resume was unavailable. If replacement cannot be safely dispatched,
+use `human_help_required`.
+
+When the kernel returns `identical_failure_convergence` or
+`retry_budget_exhausted`, write the closed feedback receipt above with
+`action: human_help_required`, plus a deterministic
+`human_intervention_id` derived from run ID, chunk ID, stage, contract digest,
+and failure signature, and `human_intervention_reason` exactly
+`identical_failure_convergence` or `retry_budget_exhausted`. Mark the chunk
+failed, mark every transitive dependency blocked, and never translate the stop
+to skipped, passed, or successful.
+
 If any check fails:
 
-- Log the failure
-- Flag the chunk as "failed"
-- Skip dependent chunks
-- Continue with independent chunks
+- For an eligible deterministic failure, run the bounded feedback/retry protocol above.
+- For a non-retryable failure, log it and flag the chunk as failed.
+- Mark dependent chunks blocked; do not silently skip them.
+- Continue only independent chunks.
 
 Mark `[chunk-id] 5. Validate subagent output` complete.
 
@@ -1080,6 +1243,14 @@ Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criter
 
 For required browser-tooling failure, first persist safe attempt evidence, then quit the primary browser process/engine session (closing a tab is insufficient), launch a fresh primary profile with a changed session identity and retry once, then recheck the target and try a genuinely different configured engine. If restart or alternate launch cannot be proved, record that explicitly. Exhaustion ends `human_help_required` with all attempts and exact missing case IDs; it is never skipped, approved, empty coverage, or curl-verified. Product/application assertion failures are terminal findings and do not trigger browser restart. Curl and reachability are diagnostics only and never satisfy `BROWSER_VERIFIED`.
 
+Browser exhaustion is separate from deterministic-validation feedback. Its
+authoritative blocked receipt has `stage: browser_recovery`, `status: blocked`,
+`reason_code: human_help_required`, the ordered bounded attempt receipts, exact
+`missing_case_ids`, a deterministic `human_intervention_id`, and
+`human_intervention_reason: browser_evidence_unavailable`. Do not put browser
+exhaustion into the deterministic-validation attempt ledger, and do not replace
+this shape with `action: resume|replace`.
+
 Append the authoritative `BROWSER_VERIFIED` or blocked human-help receipt to the
 cumulative ledger. Defer shadow observation until `all-chunks-complete`. A
 recovered alternate-engine pass remains degraded recovery evidence, not
@@ -1128,6 +1299,11 @@ mismatch is parity evidence and does not reverse or manufacture the merge.
 ### 3j: Clean Up Worktree
 
 This boundary runs only after deterministic validation, review/evaluation, required evidence capture (or an explicit blocked receipt), and merge disposition are authoritative. It cleans both registered Docker resources and Git refs for this chunk.
+
+Cleanup remains at this chunk repository-cleanup boundary. Docker cleanup is
+limited to exact resources registered as owned by this run/node and authorized
+by the sealed cleanup plan; decision profile, retry feedback, convergence, or a
+replacement builder never broadens ownership or permits name/glob/prune cleanup.
 
 Read the chunk's registered resources and use these exact interfaces:
 
@@ -1207,6 +1383,13 @@ First materialize the cumulative authoritative receipt array through the
 The observation remains shadow evidence and cannot approve the final review.
 
 Verification invariant: use Codex and OpenRouter as independent coding providers. The final review must run on the provider that did not implement the majority of code. If OpenRouter implemented a chunk, Codex reviews it; if Codex implemented it, OpenRouter reviews it. If either lane is unavailable, report the gap and do not substitute Claude coding review.
+
+For `decisionProfile.consequence: high`, this existing final independent seam is
+the stronger verification depth: require all applicable independent lanes and
+conditional reviewers to return valid evidence. A missing, declined, dead, or
+degraded required lane stops `human_help_required`; do not approve from the
+remaining lane. This escalation does not add a full review to each ordinary
+chunk and does not relax sensitive-path or browser requirements.
 
 ```text
 Run a full-mode review on the feature branch using the helper pattern above:

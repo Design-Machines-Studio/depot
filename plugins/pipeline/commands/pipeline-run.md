@@ -30,6 +30,14 @@ Before executing, verify:
 5. **On the manifest base branch** with latest changes -- use `manifest.baseBranch` when present, defaulting to `main`. The base may be any existing ref, including an unmerged PR branch, stacked branch, or hotfix branch.
 6. **Bypass permissions active** -- If not, warn: "Autonomous execution requires bypass permissions mode. Enable it and re-run."
 7. **Workflow class is valid** -- Accept only `chore|bug|feature|hotfix|security|investigation|migration`. For a legacy manifest with no `workflowClass`, use `feature` and record `workflow_class_defaulted=true`. Never infer the class. Pass the validated value unchanged to the orchestrator, shadow translator, receipts, and metrics.
+8. **Decision profile is valid** -- New manifests require exactly one closed
+   object with exactly `uncertainty`, `consequence`, and `rationale`;
+   uncertainty/consequence are `low|medium|high`, and rationale is a non-empty
+   string. Reject extra keys, malformed/multiple values, or a conflict with the
+   approved plan. Keep it separate from workflow class, risk, overlap,
+   complexity, kind/executor, and routing overrides. For a legacy manifest with
+   no profile, retain the current standard path and record
+   `decision_profile_defaulted=true`; absence is not low/low evidence.
 
 If any check fails, report the issue and stop.
 
@@ -48,6 +56,21 @@ The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulat
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature>/manifest.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
 ```
 
+After the canonical `run.started` transition and before the first builder
+dispatch, generate `plans/<feature>/verification-contract.json` only from the
+approved requirements and final acceptance criteria. Resolve persona/browser
+case IDs against authoritative project declarations and block unresolved IDs.
+Validate and bind the initial contract exactly once:
+
+```text
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir plans/<feature> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
+```
+
+The binding receipt's `contract_digest` and `revision` are dispatch authority.
+Every builder dispatch and completion must name those exact current values; a
+missing or mismatched claim is deterministic validation failure, never success.
+The kernel seals/validates this artifact but never schedules a builder or gate.
+
 Append every later authoritative receipt to the cumulative ledger. Observe only
 at the `all-chunks-complete` checkpoint before final full review and at the
 terminal checkpoint. Each observation uses:
@@ -63,6 +86,15 @@ When this command runs in Codex and the session exposes `multi_agent_v1.spawn_ag
 **Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
 
 The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
+
+It also preserves `decisionProfile` and
+`decision_profile_defaulted`. Read `decisionLeverage` from the routing policy as
+depth-only: low/low optimized; high uncertainty one independent planning
+opinion plus bounded synthesis; high consequence the stronger existing
+independent verification seam; high/high both. Never use it to select a
+provider/model/executor, alter security or workflow class, override
+browser/persona cases, weaken cleanup, or change economics. High consequence
+does not add full review to every ordinary chunk.
 
 Measure orchestration pauses with authoritative `progress` receipts carrying a
 nonnegative `duration_seconds` and exactly one `wait_category` from
@@ -81,6 +113,22 @@ Never estimate an interval or classify active implementation/review as waiting.
 - A requirement to commit its chunk changes before reporting completion.
 
 Wait for the worker result before validating that chunk. Do not dispatch overlapping chunks in parallel unless the manifest level grouping and file ownership are disjoint.
+
+On eligible deterministic validation failure, the adapter follows the
+orchestrator's canonical feedback receipt and invokes exactly:
+
+```text
+$WORKFLOW_KERNEL decide-validation-retry --reason deterministic_validation_failure --attempt-ledger <artifact> --signature <stable-signature>
+```
+
+Reject non-zero or malformed output and consume exactly `allowed`,
+`reason_code`, `budget`, `attempt_count`, and `prior_signature`. Pipeline does
+not duplicate retry limits in prose. Resume the same builder only with durable
+host/session/repository/chunk/current-contract continuity; otherwise dispatch an
+explicitly receipted replacement. Project rich feedback into kernel
+`ValidationFeedback` using exactly `node_id`,
+`reason_code: deterministic_validation_failure`, and safe receipt evidence
+references.
 
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
