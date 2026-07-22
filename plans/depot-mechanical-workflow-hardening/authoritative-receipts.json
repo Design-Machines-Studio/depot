@@ -310,5 +310,41 @@
     "node_id": "07-pipeline-integration-and-scout", "occurred_at": "2026-07-22T15:53:06Z",
     "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/07-pipeline-integration-and-scout-cleanup-receipt.json",
     "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 43, "stage": "dependency_ready", "status": "ready",
+    "node_id": "08-cross-plugin-release-integration", "occurred_at": "2026-07-22T16:57:01Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/08-cross-plugin-release-integration.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 44, "stage": "dispatch", "status": "succeeded",
+    "node_id": "08-cross-plugin-release-integration", "occurred_at": "2026-07-22T16:57:02Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/08-cross-plugin-release-integration.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "provider": "codex", "attempt": 1
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 45, "stage": "deterministic_validation", "status": "passed",
+    "node_id": "08-cross-plugin-release-integration", "occurred_at": "2026-07-22T16:57:03Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/08-cross-plugin-release-integration.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "first_pass": false
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 46, "stage": "evaluation_gate", "status": "passed",
+    "node_id": "08-cross-plugin-release-integration", "occurred_at": "2026-07-22T16:57:04Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/08-cross-plugin-release-integration.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 47, "stage": "merge_disposition", "status": "merged",
+    "node_id": "08-cross-plugin-release-integration", "occurred_at": "2026-07-22T16:57:05Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/receipts/08-cross-plugin-release-integration.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native"
+  },
+  {
+    "run_id": "depot-mechanical-workflow-hardening", "sequence": 48, "stage": "chunk_cleanup", "status": "clean",
+    "node_id": "08-cross-plugin-release-integration", "occurred_at": "2026-07-22T16:57:06Z",
+    "authoritative_receipt": "plans/depot-mechanical-workflow-hardening/docker/08-cross-plugin-release-integration-cleanup-receipt.json",
+    "host": "codex", "mechanism": "codex_native", "workflow_class": "feature", "execution_mode": "codex_native", "cleanup_removed": 0, "cleanup_blocked": 0
   }
 ]
