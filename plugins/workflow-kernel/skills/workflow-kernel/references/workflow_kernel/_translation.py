@@ -86,6 +86,9 @@ _MISSING = object()
 _CONTRACT_STAGES = frozenset({
     "verification_contract_bound", "verification_contract_revised",
 })
+_PRE_CONTRACT_STAGES = frozenset({
+    "progress", "manifest_validation", "dependency_ready",
+})
 _CONTRACT_FIELDS = frozenset({
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
@@ -366,8 +369,16 @@ def _normalized_receipt_fields(receipt: Mapping[str, object]) -> dict:
         if camel not in normalized:
             continue
         candidate = normalized.pop(camel)
-        if snake in normalized and normalized[snake] != candidate:
-            raise ValueError("conflicting receipt field " + snake + "/" + camel)
+        if snake in normalized:
+            existing = normalized[snake]
+            if (
+                type(candidate) not in {str, bool, int, float, type(None)}
+                or type(existing) is not type(candidate)
+                or existing != candidate
+            ):
+                raise ValueError(
+                    "conflicting receipt field " + snake + "/" + camel,
+                )
         normalized[snake] = candidate
     return normalized
 
@@ -566,7 +577,10 @@ def translate_receipts(
         elif has_contract_binding:
             claimed = receipt.get("contract_digest", _MISSING)
             if current_contract is None:
-                if claimed is not _MISSING:
+                if (
+                    stage not in _PRE_CONTRACT_STAGES
+                    or claimed is not _MISSING
+                ):
                     raise ValueError("verification contract not yet bound")
             elif (
                 type(claimed) is not str

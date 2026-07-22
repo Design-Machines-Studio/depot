@@ -369,6 +369,55 @@ class PipelineAdapterTests(unittest.TestCase):
             for event in events
         ))
 
+        prebinding = copy.deepcopy(receipts)
+        prebinding.insert(0, {
+            "run_id": "run-1", "sequence": 0, "stage": "manifest_validation",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/prebinding.json",
+            "workflow_class": "feature", "execution_mode": "generic",
+            "status": "completed",
+        })
+        for sequence, receipt in enumerate(prebinding):
+            receipt["sequence"] = sequence
+        translated = translate_pipeline_receipts(prebinding)
+        self.assertEqual(
+            translated[0].payload["verification_contract_provenance"],
+            "pre_binding",
+        )
+        for stage in (
+            "dispatch", "deterministic_validation", "evaluation_gate",
+            "browser_verification", "merge_disposition", "chunk_cleanup",
+            "requirements_cross_check", "terminal_reconciliation", "run_summary",
+        ):
+            bypass = copy.deepcopy(prebinding)
+            bypass[0]["stage"] = stage
+            with self.subTest(prebinding_stage=stage), self.assertRaises(ValueError):
+                translate_pipeline_receipts(bypass)
+
+        for snake, camel in (
+            ("schema_version", "schemaVersion"),
+            ("revision", "contractRevision"),
+        ):
+            conflicting_type = copy.deepcopy(receipts)
+            conflicting_type[0][camel] = True
+            with self.subTest(alias=camel), self.assertRaises(ValueError):
+                translate_pipeline_receipts(conflicting_type)
+
+            calls = []
+
+            class Hostile:
+                def __eq__(self, _other):
+                    calls.append("equality")
+                    raise RuntimeError("sk-secret-equality")
+
+            hostile = copy.deepcopy(receipts)
+            hostile[0][snake] = Hostile()
+            hostile[0][camel] = Hostile()
+            with self.subTest(hostile_alias=camel), self.assertRaises(ValueError) as raised:
+                translate_pipeline_receipts(hostile)
+            self.assertEqual(calls, [])
+            self.assertNotIn("sk-secret-equality", repr(raised.exception))
+
         for name, mutate in (
             ("revision_jump", lambda value: value[1].update({"revision": 3})),
             ("stale_previous", lambda value: value[1].update({
