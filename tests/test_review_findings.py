@@ -1,15 +1,20 @@
 import copy
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import workflow_kernel.review_records as review_records
+from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.events import EventStore
 from workflow_kernel.review_records import (
     build_finding_record, build_lane_record, canonical_finding_id,
-    capture_review_boundary, compare_review_boundary, persist_review_record,
-    project_review_markdown, project_todo_rows, validate_finding_record,
+    capture_review_boundary, compare_review_boundary, consolidate_findings,
+    persist_review_record, project_review_markdown, project_todo_rows,
+    source_scope_digest, validate_finding_record,
     validate_lane_record,
 )
 from workflow_kernel.state import RunLease
@@ -19,6 +24,7 @@ class ReviewFindingTests(unittest.TestCase):
     def finding(self, **changes):
         value = {
             "run_id": "review-1", "source_finding_id": "security.finding-1",
+            "lane_id": "security", "cross_id_links": [],
             "rule_id": "authz.boundary", "category": "Authorization Boundary",
             "severity": "P1", "path": "internal/auth/handler.go",
             "anchor": "HandleAdmin", "root_cause": "Caller role is not checked",
@@ -45,6 +51,7 @@ class ReviewFindingTests(unittest.TestCase):
             "attempted_provider": "openai", "implemented_by": "codex",
             "model": "gpt-5.6-sol", "attempt": 1, "coverage_gap_reason": None,
             "build_binding_ref": "bindings/build.json", "browser_bundle_refs": [],
+            "finding_refs": ["records/findings/sha256-a.json"],
         }
         value.update(changes)
         return build_lane_record(**value)
@@ -74,30 +81,94 @@ class ReviewFindingTests(unittest.TestCase):
             self.lane(state="degraded", missing_case_ids=["persona-admin"],
                       partial_output=True, output_ref=None,
                       coverage_gap_reason="browser unavailable")
+        schemas = {
+            "review-finding-record-schema.json": self.finding(),
+            "review-lane-record-schema.json": self.lane(),
+        }
+        for name, record in schemas.items():
+            with self.subTest(schema=name):
+                schema = json.loads((KERNEL_REFERENCES / name).read_text())
+                self.assertTrue(schema_matches(record, schema))
 
     def test_immutable_persistence_is_idempotent_and_survives_lane_crash(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); store = EventStore(root / "state")
             finding = self.finding()
+            artifacts = store.root / "artifacts"
             with RunLease(store.state_path) as lease:
                 first = persist_review_record(
-                    finding, root / "artifacts", store, lease, 0,
+                    finding, artifacts, store, lease, 0,
                     run_id="review-1", occurred_at="2026-07-14T00:00:00Z",
                 )
                 second = persist_review_record(
-                    finding, root / "artifacts", store, lease, 1,
+                    finding, artifacts, store, lease, 1,
                     run_id="review-1", occurred_at="2026-07-14T00:01:00Z",
                 )
             self.assertEqual(first, second)
             self.assertEqual(len(store.replay()), 1)
-            self.assertEqual(json.loads((root / "artifacts" / first["record_ref"]).read_text()), finding)
+            self.assertEqual(json.loads((artifacts / first["record_ref"]).read_text()), finding)
             self.assertEqual(store.replay()[0].payload["record_digest"], finding["record_digest"])
             # No lane record was written: the already-committed finding remains authoritative.
-            self.assertFalse((root / "artifacts" / "records" / "lanes").exists())
+            self.assertFalse((artifacts / "records" / "lanes").exists())
             conflict = self.finding(category="Authentication Boundary")
             with RunLease(store.state_path) as lease, self.assertRaises(ValueError):
-                persist_review_record(conflict, root / "artifacts", store, lease, 1,
+                persist_review_record(conflict, artifacts, store, lease, 1,
                                       run_id="review-1", occurred_at="2026-07-14T00:02:00Z")
+
+            # The same local ID from a different lane/raw/provider attempt is distinct.
+            other_scope = self.finding(
+                lane_id="architecture", raw_ref="raw/architecture.md#finding-1",
+                source_agents=["architecture-reviewer"], category="Authentication Boundary",
+            )
+            self.assertNotEqual(source_scope_digest(finding), source_scope_digest(other_scope))
+            with RunLease(store.state_path) as lease:
+                persist_review_record(other_scope, artifacts, store, lease, 1,
+                                      run_id="review-1", occurred_at="2026-07-14T00:03:00Z")
+            self.assertEqual(len(store.replay()), 2)
+
+    def test_artifact_root_is_bound_to_event_store_and_parent_is_fsynced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); store = EventStore(root / "state")
+            outside = root / "outside"; outside.mkdir()
+            with RunLease(store.state_path) as lease, self.assertRaises(ValueError):
+                persist_review_record(self.finding(), outside, store, lease, 0,
+                                      run_id="review-1", occurred_at="2026-07-14T00:00:00Z")
+            link = store.root / "linked-artifacts"; link.symlink_to(outside, target_is_directory=True)
+            with RunLease(store.state_path) as lease, self.assertRaises(ValueError):
+                persist_review_record(self.finding(), link, store, lease, 0,
+                                      run_id="review-1", occurred_at="2026-07-14T00:00:00Z")
+            original_bind = review_records.bind_durable_path
+            swapped = store.root / "swapped-artifacts" / "records" / "findings"
+            displaced = store.root / "displaced-findings"
+            did_swap = False
+
+            def swap_before_binding(path):
+                nonlocal did_swap
+                if not did_swap and Path(path).name.startswith("sha256-"):
+                    did_swap = True
+                    swapped.rename(displaced)
+                    swapped.symlink_to(outside, target_is_directory=True)
+                return original_bind(path)
+
+            with mock.patch(
+                    "workflow_kernel.review_records.bind_durable_path",
+                    side_effect=swap_before_binding), \
+                    RunLease(store.state_path) as lease, self.assertRaises(ValueError):
+                persist_review_record(
+                    self.finding(), store.root / "swapped-artifacts", store,
+                    lease, 0, run_id="review-1",
+                    occurred_at="2026-07-14T00:00:00Z",
+                )
+            swapped.unlink()
+            displaced.rename(swapped)
+            real_fsync = os.fsync; calls = []
+            def observed_fsync(descriptor):
+                calls.append(descriptor); return real_fsync(descriptor)
+            with mock.patch("workflow_kernel.review_records.os.fsync", side_effect=observed_fsync), \
+                    RunLease(store.state_path) as lease:
+                persist_review_record(self.finding(), store.root / "artifacts", store, lease, 0,
+                                      run_id="review-1", occurred_at="2026-07-14T00:00:00Z")
+            self.assertGreaterEqual(len(calls), 2)
 
     def test_lane_partial_output_and_deterministic_views_preserve_evidence(self):
         finding = self.finding()
@@ -111,6 +182,58 @@ class ReviewFindingTests(unittest.TestCase):
         row["problem"] = "edited projection"
         self.assertEqual(validate_finding_record(finding)["observed_evidence"],
                          "A member request reaches the admin mutation.")
+
+    def test_canonical_projection_groups_sources_and_preserves_disputes_and_lane_refs(self):
+        first = self.finding()
+        second = self.finding(
+            lane_id="architecture", raw_ref="raw/architecture.md#finding-1",
+            source_agents=["architecture-reviewer"], severity="P2",
+            attempted_provider="openrouter", model="z-ai/glm-5.2", attempt=2,
+            agreement="corroborated", decision_reason_code="retained-corroborated",
+        )
+        lane = self.lane(finding_refs=[
+            "records/findings/sha256-a.json", "records/findings/sha256-b.json",
+        ])
+        architecture_lane = self.lane(
+            lane_id="architecture", source_agents=["architecture-reviewer"],
+            output_ref="raw/architecture.md",
+            finding_refs=["records/findings/sha256-b.json"],
+        )
+        canonical = consolidate_findings([second, first], [lane, architecture_lane])
+        self.assertEqual(len(canonical), 1)
+        self.assertEqual(canonical[0]["severity"], "P1")
+        self.assertTrue(canonical[0]["severity_disputed"])
+        self.assertEqual(len(canonical[0]["sources"]), 2)
+        self.assertEqual(project_review_markdown(
+            [first, second], [lane, architecture_lane],
+        ).count("### ["), 1)
+        row = project_todo_rows([second, first], [lane, architecture_lane])[0]
+        self.assertEqual(len(row["source_record_digests"]), 2)
+        self.assertEqual(row["source_record_digests"], sorted(row["source_record_digests"]))
+        self.assertTrue(all(source["lane_finding_refs"] for source in canonical[0]["sources"]))
+
+        other_id = canonical_finding_id(first["path"], first["anchor"],
+                                        first["category"], "Different root cause")
+        linked_first = self.finding(cross_id_links=[other_id], agreement="disputed",
+                                    decision_reason_code="retained-disagreement")
+        linked_other = self.finding(
+            source_finding_id="security.finding-2", root_cause="Different root cause",
+            canonical_finding_id=other_id, cross_id_links=[first["canonical_finding_id"]],
+            agreement="disputed", decision_reason_code="retained-disagreement",
+        )
+        disputed = consolidate_findings([linked_other, linked_first])
+        self.assertEqual([item["agreement"] for item in disputed], ["disputed", "disputed"])
+        conflicting_scope = self.finding(severity="P2")
+        with self.assertRaises(ValueError):
+            consolidate_findings([first, conflicting_scope])
+
+    def test_lane_missing_and_unknown_states_preserve_finding_references(self):
+        for state in ("missing", "unknown"):
+            lane = self.lane(state=state, partial_output=False, output_ref=None,
+                             missing_case_ids=["case-a"],
+                             coverage_gap_reason="lane produced no terminal evidence")
+            self.assertEqual(validate_lane_record(lane)["finding_refs"],
+                             ["records/findings/sha256-a.json"])
 
     def test_read_only_boundary_allows_owned_artifacts_and_detects_mutations(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -143,6 +266,28 @@ class ReviewFindingTests(unittest.TestCase):
             self.assertIn("provider_receipts_digest", compare_review_boundary(provider_before, provider_after)["changed"])
             (root / "todos").mkdir(); (root / "todos" / "001-pending-p1.md").write_text("mutation\n")
             self.assertIn("product_status_digest", compare_review_boundary(clean, capture_review_boundary(root, artifacts))["changed"])
+
+            product.write_text("dirty-one\n")
+            dirty_before = capture_review_boundary(root, artifacts)
+            product.write_text("dirty-two\n")
+            dirty_change = compare_review_boundary(dirty_before, capture_review_boundary(root, artifacts))
+            self.assertNotIn("product_status_digest", dirty_change["changed"])
+            self.assertIn("product_content_digest", dirty_change["changed"])
+            untracked = root / "untracked.txt"; untracked.write_text("one\n")
+            untracked_before = capture_review_boundary(root, artifacts)
+            untracked.write_text("two\n")
+            self.assertIn("product_content_digest", compare_review_boundary(
+                untracked_before, capture_review_boundary(root, artifacts),
+            )["changed"])
+            provider_dir = artifacts / "receipts"; provider_dir.mkdir()
+            provider = provider_dir / "provider.json"; provider.write_text("before\n")
+            provider_before = capture_review_boundary(root, artifacts, ["receipts/provider.json"])
+            provider.write_text("after\n")
+            provider_change = compare_review_boundary(provider_before, capture_review_boundary(
+                root, artifacts, ["receipts/provider.json"],
+            ))
+            self.assertNotIn("product_content_digest", provider_change["changed"])
+            self.assertIn("provider_receipts_digest", provider_change["changed"])
 
     def test_plain_review_prose_is_read_only_and_fix_paths_own_mutation(self):
         root = Path(__file__).parents[1]

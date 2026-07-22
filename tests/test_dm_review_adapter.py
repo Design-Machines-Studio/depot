@@ -194,6 +194,7 @@ class DmReviewAdapterTests(unittest.TestCase):
             "authoritative_receipt": "receipts/finding-record.json",
             "record_ref": "records/findings/sha256-a.json", "record_digest": "sha256:" + "a" * 64,
             "source_finding_id": "security.finding-1",
+            "lane_id": "security", "source_scope_digest": "sha256:" + "e" * 64,
             "canonical_finding_id": "finding-v1:sha256:" + "b" * 64,
             "rule_id": "authz.boundary", "category": "authorization",
             "severity": "P1", "path": "internal/auth.go", "anchor": "HandleAdmin",
@@ -213,6 +214,7 @@ class DmReviewAdapterTests(unittest.TestCase):
             "source_agents": ["visual-reviewer"], "requested_provider": "openai",
             "attempted_provider": None, "implemented_by": None, "model": None, "attempt": 1,
             "build_binding_ref": "bindings/build.json", "browser_bundle_refs": ["browser/recovery.json"],
+            "finding_refs": ["records/findings/sha256-a.json"],
         }
         events = translate_review_receipts([finding, lane])
         self.assertEqual(events[0].payload["record_digest"], finding["record_digest"])

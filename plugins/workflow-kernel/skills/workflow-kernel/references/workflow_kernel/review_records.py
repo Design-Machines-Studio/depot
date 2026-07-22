@@ -10,6 +10,7 @@ import stat
 import subprocess
 from pathlib import Path
 
+from ._files import _OwnedResourceScope, bind_durable_path
 from .events import EventStore
 from .redaction import (
     contains_high_confidence_secret, normalize_evidence_reference,
@@ -35,10 +36,12 @@ _REASON_DISPOSITION = {
 }
 _LANE_STATES = frozenset({
     "requested", "completed", "failed", "degraded", "unavailable",
+    "missing", "unknown",
 })
 _FINDING_FIELDS = frozenset({
     "schema_version", "record_kind", "run_id", "source_finding_id",
-    "canonical_finding_id", "rule_id", "category", "severity", "path",
+    "lane_id", "canonical_finding_id", "cross_id_links", "rule_id",
+    "category", "severity", "path",
     "anchor", "root_cause", "observed_evidence", "proposed_fix",
     "evidence_refs", "raw_ref", "source_agents", "requested_provider",
     "attempted_provider", "implemented_by", "model", "attempt",
@@ -50,7 +53,8 @@ _LANE_FIELDS = frozenset({
     "expected_coverage", "missing_case_ids", "partial_output", "output_ref",
     "source_agents", "requested_provider", "attempted_provider",
     "implemented_by", "model", "attempt", "coverage_gap_reason",
-    "build_binding_ref", "browser_bundle_refs", "record_digest",
+    "build_binding_ref", "browser_bundle_refs", "finding_refs",
+    "record_digest",
 })
 
 
@@ -136,6 +140,26 @@ def canonical_finding_id(path, anchor, category, root_cause):
     return "finding-v1:sha256:" + hashlib.sha256(key.encode()).hexdigest()
 
 
+def _finding_id(value, name):
+    value = _text(value, name, limit=96)
+    if _FINDING_ID.fullmatch(value) is None:
+        _fail("invalid " + name)
+    return value
+
+
+def source_scope_digest(record):
+    """Scope an agent-local finding ID to its lane, raw artifact, and attempt."""
+    return _digest({
+        "lane_id": record["lane_id"],
+        "raw_artifact": record["raw_ref"].partition("#")[0],
+        "requested_provider": record["requested_provider"],
+        "attempted_provider": record["attempted_provider"],
+        "implemented_by": record["implemented_by"],
+        "model": record["model"], "attempt": record["attempt"],
+        "source_finding_id": record["source_finding_id"],
+    })
+
+
 def validate_finding_record(value):
     if type(value) is not dict or set(value) != _FINDING_FIELDS:
         _fail("finding record fields mismatch")
@@ -147,7 +171,9 @@ def validate_finding_record(value):
         "schema_version": 1, "record_kind": "finding",
         "run_id": _identity(value["run_id"], "run id"),
         "source_finding_id": _identity(value["source_finding_id"], "source finding id"),
-        "canonical_finding_id": _text(value["canonical_finding_id"], "canonical finding id", limit=96),
+        "lane_id": _identity(value["lane_id"], "lane id"),
+        "canonical_finding_id": _finding_id(value["canonical_finding_id"], "canonical finding id"),
+        "cross_id_links": _list(value["cross_id_links"], "cross id link", _finding_id),
         "rule_id": _identity(value["rule_id"], "rule id"),
         "category": _text(value["category"], "category", limit=256),
         "severity": value["severity"],
@@ -182,6 +208,8 @@ def validate_finding_record(value):
     expected_id = canonical_finding_id(body["path"], body["anchor"], body["category"], body["root_cause"])
     if _FINDING_ID.fullmatch(body["canonical_finding_id"]) is None or body["canonical_finding_id"] != expected_id:
         _fail("canonical finding id mismatch")
+    if body["canonical_finding_id"] in body["cross_id_links"]:
+        _fail("self-referential cross id link")
     if value["record_digest"] != _digest(body):
         _fail("finding record digest mismatch")
     body["record_digest"] = value["record_digest"]
@@ -222,6 +250,7 @@ def validate_lane_record(value):
         "coverage_gap_reason": _text(value["coverage_gap_reason"], "coverage gap reason", nullable=True),
         "build_binding_ref": _reference(value["build_binding_ref"], "build binding reference"),
         "browser_bundle_refs": _list(value["browser_bundle_refs"], "browser bundle reference", _reference),
+        "finding_refs": _list(value["finding_refs"], "finding reference", _reference),
     }
     if body["state"] not in _LANE_STATES or type(body["partial_output"]) is not bool:
         _fail("invalid lane state")
@@ -247,8 +276,37 @@ def build_lane_record(**fields):
     return validate_lane_record(fields)
 
 
+def _ensure_owned_artifact_root(artifact_root, event_store):
+    event_root = Path(os.path.abspath(event_store.root))
+    root = Path(os.path.abspath(artifact_root))
+    try:
+        relative = root.relative_to(event_root)
+    except ValueError:
+        _fail("artifact root outside owned run root")
+    if not relative.parts:
+        _fail("artifact root must be beneath owned run root")
+    event_physical = Path(os.path.realpath(event_root))
+    current = event_root
+    for part in relative.parts:
+        current /= part
+        try:
+            entry = os.lstat(current)
+        except FileNotFoundError:
+            os.mkdir(current, 0o700)
+            entry = os.lstat(current)
+        if not stat.S_ISDIR(entry.st_mode) or stat.S_ISLNK(entry.st_mode):
+            _fail("unsafe review record directory")
+        physical = Path(os.path.realpath(current))
+        if physical != event_physical and event_physical not in physical.parents:
+            _fail("artifact root escaped owned run root")
+    return root
+
+
 def _ensure_directory(path):
-    path.mkdir(parents=True, exist_ok=True)
+    try:
+        os.mkdir(path, 0o700)
+    except FileExistsError:
+        pass
     entry = os.lstat(path)
     if not stat.S_ISDIR(entry.st_mode) or stat.S_ISLNK(entry.st_mode):
         _fail("unsafe review record directory")
@@ -260,6 +318,15 @@ def _read_regular(path):
         _fail("unsafe review record")
     with path.open("rb") as handle:
         return handle.read()
+
+
+def _read_descriptor(descriptor):
+    chunks = []
+    while True:
+        chunk = os.read(descriptor, 65_536)
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
 
 
 def _event_match(event, kind, identity_field, identity, digest, reference):
@@ -281,41 +348,61 @@ def persist_review_record(record, artifact_root, event_store: EventStore,
                           occurred_at: str):
     """Write a content-addressed document, then append its bounded EventStore ref."""
     if record.get("record_kind") == "finding":
-        record = validate_finding_record(record); identity_field = "source_finding_id"
+        record = validate_finding_record(record)
+        identity_field = "source_scope_digest"
+        identity = source_scope_digest(record)
     elif record.get("record_kind") == "lane":
         record = validate_lane_record(record); identity_field = "lane_id"
+        identity = record[identity_field]
     else:
         _fail("unknown review record kind")
     run_id = _identity(run_id, "run id")
     if record["run_id"] != run_id:
         _fail("review record run mismatch")
-    root = Path(artifact_root)
-    _ensure_directory(root)
+    root = _ensure_owned_artifact_root(artifact_root, event_store)
+    _ensure_directory(root / "records")
     records_root = root / "records" / (record["record_kind"] + "s")
     _ensure_directory(records_root)
     encoded = _canonical_bytes(record) + b"\n"
     name = record["record_digest"].replace(":", "-") + ".json"
     path = records_root / name
     reference = path.relative_to(root).as_posix()
-    for existing_path in sorted(records_root.glob("sha256-*.json")):
-        existing = json.loads(_read_regular(existing_path))
-        if existing.get(identity_field) == record[identity_field] and existing != record:
-            _fail("conflicting review record identity")
-    if path.exists():
-        if _read_regular(path) != encoded:
-            _fail("conflicting content address")
-    else:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL
-                             | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    binding = bind_durable_path(path)
+    event_physical = Path(os.path.realpath(event_store.root))
+    if binding.path.parent != event_physical and event_physical not in binding.path.parent.parents:
+        _fail("record path escaped owned run root")
+    with _OwnedResourceScope() as scope:
+        directory = scope.pin(binding)
+        for existing_name in sorted(os.listdir(directory.descriptor)):
+            if not existing_name.startswith("sha256-") or not existing_name.endswith(".json"):
+                continue
+            descriptor = scope.own(directory.open_regular(existing_name, os.O_RDONLY))
+            existing = json.loads(_read_descriptor(descriptor))
+            existing = (
+                validate_finding_record(existing) if record["record_kind"] == "finding"
+                else validate_lane_record(existing)
+            )
+            existing_identity = (
+                source_scope_digest(existing) if record["record_kind"] == "finding"
+                else existing.get("lane_id")
+            )
+            if existing_identity == identity and existing != record:
+                _fail("conflicting review record identity")
         try:
+            descriptor = scope.own(directory.open_regular(
+                name, os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            ))
+        except FileExistsError:
+            descriptor = scope.own(directory.open_regular(name, os.O_RDONLY))
+            if _read_descriptor(descriptor) != encoded:
+                _fail("conflicting content address")
+        else:
             view = memoryview(encoded)
             while view:
                 view = view[os.write(descriptor, view):]
             os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
+            directory.fsync()
     digest = record["record_digest"]
-    identity = record[identity_field]
     result = {"record_ref": reference, "record_digest": digest}
     if _already_recorded(event_store, record["record_kind"], identity_field, identity, digest, reference):
         return result
@@ -326,6 +413,11 @@ def persist_review_record(record, artifact_root, event_store: EventStore,
         "browser_bundle_refs": record["browser_bundle_refs"],
         identity_field: identity, "evidence": [reference],
     }
+    if record["record_kind"] == "finding":
+        payload.update(source_finding_id=record["source_finding_id"],
+                       lane_id=record["lane_id"])
+    else:
+        payload["finding_refs"] = record["finding_refs"]
     try:
         event_store.append(WorkflowEvent(
             1, expected_sequence, run_id, None, "evidence.recorded",
@@ -337,21 +429,93 @@ def persist_review_record(record, artifact_root, event_store: EventStore,
     return result
 
 
+def consolidate_findings(findings, lanes=()):
+    records = [validate_finding_record(dict(item)) for item in findings]
+    lane_records = [validate_lane_record(dict(item)) for item in lanes]
+    by_id = {}
+    source_scopes = {}
+    for item in records:
+        scope = source_scope_digest(item)
+        previous = source_scopes.setdefault(scope, item["record_digest"])
+        if previous != item["record_digest"]:
+            _fail("conflicting review record identity")
+        by_id.setdefault(item["canonical_finding_id"], []).append(item)
+    known = set(by_id)
+    links = {}
+    for canonical_id, items in by_id.items():
+        links[canonical_id] = sorted({link for item in items for link in item["cross_id_links"]})
+        if not set(links[canonical_id]) <= known:
+            _fail("cross id link targets missing finding")
+    for canonical_id, targets in links.items():
+        if any(canonical_id not in links[target] for target in targets):
+            _fail("cross id links are not reciprocal")
+    lane_refs = {}
+    for lane in lane_records:
+        lane_refs.setdefault(lane["lane_id"], set()).update(lane["finding_refs"])
+    severity_rank = {"P1": 0, "P2": 1, "P3": 2}
+    result = []
+    for canonical_id in sorted(by_id):
+        items = sorted(by_id[canonical_id], key=lambda item: (
+            source_scope_digest(item), item["record_digest"],
+        ))
+        retained = [item for item in items if item["finding_disposition"] == "retained"]
+        selected = retained or items
+        severities = sorted({item["severity"] for item in items}, key=severity_rank.get)
+        scopes = {source_scope_digest(item) for item in items}
+        agreement = (
+            "disputed" if links[canonical_id] or any(item["agreement"] == "disputed" for item in items)
+            else "corroborated" if len(scopes) > 1 else "unique"
+        )
+        representative = min(selected, key=lambda item: (
+            severity_rank[item["severity"]], item["record_digest"],
+        ))
+        sources = []
+        for item in items:
+            sources.append({
+                "record_digest": item["record_digest"],
+                "source_scope_digest": source_scope_digest(item),
+                "source_finding_id": item["source_finding_id"],
+                "lane_id": item["lane_id"], "raw_ref": item["raw_ref"],
+                "source_agents": item["source_agents"], "severity": item["severity"],
+                "requested_provider": item["requested_provider"],
+                "attempted_provider": item["attempted_provider"],
+                "implemented_by": item["implemented_by"], "model": item["model"],
+                "attempt": item["attempt"], "agreement": item["agreement"],
+                "finding_disposition": item["finding_disposition"],
+                "decision_reason_code": item["decision_reason_code"],
+                "evidence_refs": item["evidence_refs"],
+                "lane_finding_refs": sorted(lane_refs.get(item["lane_id"], ())),
+            })
+        result.append({
+            "canonical_finding_id": canonical_id, "severity": severities[0],
+            "source_severities": severities, "severity_disputed": len(severities) > 1,
+            "agreement": agreement, "cross_id_links": links[canonical_id],
+            "rule_id": representative["rule_id"], "category": representative["category"],
+            "path": representative["path"], "anchor": representative["anchor"],
+            "root_cause": representative["root_cause"],
+            "observed_evidence": representative["observed_evidence"],
+            "proposed_fix": representative["proposed_fix"], "sources": sources,
+            "retained": bool(retained),
+        })
+    return result
+
+
 def project_review_markdown(findings, lanes):
-    findings = sorted((validate_finding_record(dict(item)) for item in findings),
-                      key=lambda item: (item["severity"], item["canonical_finding_id"], item["source_finding_id"]))
+    canonical = consolidate_findings(findings, lanes)
     lanes = sorted((validate_lane_record(dict(item)) for item in lanes), key=lambda item: item["lane_id"])
     lines = ["# Structured Review", "", "## Findings", ""]
-    if not findings:
+    if not canonical:
         lines.append("No findings recorded.")
-    for item in findings:
+    for item in canonical:
         lines.extend((f"### [{item['severity']}] {item['category']}",
                       f"- ID: `{item['canonical_finding_id']}`",
                       f"- Rule: `{item['rule_id']}`",
                       f"- Where: `{item['path']}#{item['anchor']}`",
                       f"- Evidence: {item['observed_evidence']}",
                       f"- Proposed fix: {item['proposed_fix']}",
-                      f"- Disposition: {item['finding_disposition']} ({item['agreement']})", ""))
+                      f"- Agreement: {item['agreement']}",
+                      f"- Source records: {', '.join(source['record_digest'] for source in item['sources'])}",
+                      f"- Cross-ID disputes: {', '.join(item['cross_id_links']) or 'none'}", ""))
     lines.extend(("## Coverage", ""))
     if not lanes:
         lines.append("No lanes recorded.")
@@ -361,18 +525,21 @@ def project_review_markdown(findings, lanes):
     return "\n".join(lines).rstrip() + "\n"
 
 
-def project_todo_rows(findings):
+def project_todo_rows(findings, lanes=()):
     """Return a deterministic editing view; callers must never replay it as truth."""
     rows = []
-    for item in sorted((validate_finding_record(dict(value)) for value in findings),
-                       key=lambda value: value["canonical_finding_id"]):
-        if item["finding_disposition"] != "retained":
+    for item in consolidate_findings(findings, lanes):
+        if not item["retained"]:
             continue
         rows.append({
             "finding_id": item["canonical_finding_id"], "priority": item["severity"].lower(),
             "title": item["category"], "where": item["path"] + "#" + item["anchor"],
             "problem": item["observed_evidence"], "fix": item["proposed_fix"],
-            "record_digest": item["record_digest"],
+            "source_record_digests": sorted(
+                source["record_digest"] for source in item["sources"]
+            ),
+            "source_severities": item["source_severities"],
+            "severity_disputed": item["severity_disputed"],
         })
     return rows
 
@@ -392,10 +559,89 @@ def _product_status(root, artifact_relative):
         paths = [path]
         if "R" in status or "C" in status:
             paths.append(parts[position].decode("utf-8", "surrogateescape")); position += 1
-        if any(value == artifact_relative or value.startswith(artifact_relative + "/") for value in paths):
+        if all(value == artifact_relative or value.startswith(artifact_relative + "/") for value in paths):
             continue
         rows.append([status, *paths])
     return _canonical_bytes(sorted(rows))
+
+
+def _hash_regular(path):
+    before = os.lstat(path)
+    if not stat.S_ISREG(before.st_mode):
+        _fail("boundary path is not regular")
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65_536), b""):
+            digest.update(chunk)
+    after = os.lstat(path)
+    if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns) != (
+            after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns):
+        _fail("boundary path changed during capture")
+    return "sha256:" + digest.hexdigest()
+
+
+def _repository_content(root, artifact_relative):
+    rows = []
+    for directory, names, files in os.walk(root, topdown=True, followlinks=False):
+        directory_path = Path(directory)
+        relative_directory = directory_path.relative_to(root).as_posix()
+        kept = []
+        for name in names:
+            relative = name if relative_directory == "." else relative_directory + "/" + name
+            if relative == ".git" or relative.startswith(".git/"):
+                continue
+            if relative == artifact_relative or relative.startswith(artifact_relative + "/"):
+                continue
+            path = directory_path / name
+            entry = os.lstat(path)
+            if stat.S_ISLNK(entry.st_mode):
+                rows.append([relative, "symlink", os.readlink(path)])
+            elif stat.S_ISDIR(entry.st_mode):
+                kept.append(name)
+            else:
+                rows.append([relative, "special", entry.st_mode, entry.st_size])
+        names[:] = kept
+        for name in files:
+            path = directory_path / name
+            relative = name if relative_directory == "." else relative_directory + "/" + name
+            if relative == artifact_relative or relative.startswith(artifact_relative + "/"):
+                continue
+            entry = os.lstat(path)
+            if stat.S_ISLNK(entry.st_mode):
+                rows.append([relative, "symlink", os.readlink(path)])
+            elif stat.S_ISREG(entry.st_mode):
+                rows.append([relative, "file", _hash_regular(path)])
+            else:
+                rows.append([relative, "special", entry.st_mode, entry.st_size])
+    return _canonical_bytes(sorted(rows))
+
+
+def _provider_state(root, artifact, references):
+    rows = []
+    for reference in references:
+        artifact_path = artifact / reference
+        try:
+            os.lstat(artifact_path)
+        except FileNotFoundError:
+            path = root / reference
+        else:
+            path = artifact_path
+        try:
+            path.relative_to(root)
+        except ValueError:
+            _fail("provider receipt outside repository")
+        try:
+            entry = os.lstat(path)
+        except FileNotFoundError:
+            rows.append([reference, "missing"])
+        else:
+            if stat.S_ISREG(entry.st_mode):
+                rows.append([reference, "file", _hash_regular(path)])
+            elif stat.S_ISLNK(entry.st_mode):
+                rows.append([reference, "symlink", os.readlink(path)])
+            else:
+                rows.append([reference, "other", entry.st_mode])
+    return _canonical_bytes(rows)
 
 
 def capture_review_boundary(repository_root, artifact_root, provider_receipts=()):
@@ -410,11 +656,15 @@ def capture_review_boundary(repository_root, artifact_root, provider_receipts=()
         "index_digest": "sha256:" + hashlib.sha256(_git(root, "ls-files", "--stage").encode()).hexdigest(),
         "refs_digest": "sha256:" + hashlib.sha256(_git(root, "for-each-ref", "--format=%(refname) %(objectname)").encode()).hexdigest(),
         "product_status_digest": "sha256:" + hashlib.sha256(_product_status(root, relative)).hexdigest(),
-        "provider_receipts_digest": _digest(providers),
+        "product_content_digest": "sha256:" + hashlib.sha256(_repository_content(root, relative)).hexdigest(),
+        "provider_receipts_digest": "sha256:" + hashlib.sha256(
+            _provider_state(root, artifact, providers),
+        ).hexdigest(),
     }
 
 
 def compare_review_boundary(before, after):
-    keys = ("head", "index_digest", "refs_digest", "product_status_digest", "provider_receipts_digest")
+    keys = ("head", "index_digest", "refs_digest", "product_status_digest",
+            "product_content_digest", "provider_receipts_digest")
     changed = [key for key in keys if before.get(key) != after.get(key)]
     return {"read_only": not changed, "changed": changed}

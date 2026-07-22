@@ -50,6 +50,10 @@ provider preference. Agreement merges contributor IDs; disagreement is retained
 in the synthesis decision ledger and changes the decision, not the finding's
 identity. A summary never substitutes for missing raw evidence.
 
+Before rendering, group source records by canonical ID and preserve every
+source-scoped ID/ref, lane finding ref, provider attempt, source severity, and
+decision. Reciprocal cross-ID disputes remain separate canonical findings.
+
 After consolidation, emit contribution receipts that attribute retained,
 superseded, duplicate, resolved, and disagreement outcomes to the contributing
 attempts. These receipts are observation-only economics evidence: they cannot

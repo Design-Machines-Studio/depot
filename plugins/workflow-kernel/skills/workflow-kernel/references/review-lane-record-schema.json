@@ -3,18 +3,18 @@
   "$id": "https://design-machines.local/workflow-kernel/review-lane-record-v1.schema.json",
   "title": "Review Lane Record v1",
   "type": "object", "additionalProperties": false,
-  "required": ["schema_version", "record_kind", "run_id", "lane_id", "state", "expected_coverage", "missing_case_ids", "partial_output", "output_ref", "source_agents", "requested_provider", "attempted_provider", "implemented_by", "model", "attempt", "coverage_gap_reason", "build_binding_ref", "browser_bundle_refs", "record_digest"],
+  "required": ["schema_version", "record_kind", "run_id", "lane_id", "state", "expected_coverage", "missing_case_ids", "partial_output", "output_ref", "source_agents", "requested_provider", "attempted_provider", "implemented_by", "model", "attempt", "coverage_gap_reason", "build_binding_ref", "browser_bundle_refs", "finding_refs", "record_digest"],
   "properties": {
     "schema_version": {"const": 1}, "record_kind": {"const": "lane"},
     "run_id": {"$ref": "#/$defs/id"}, "lane_id": {"$ref": "#/$defs/id"},
-    "state": {"enum": ["requested", "completed", "failed", "degraded", "unavailable"]},
+    "state": {"enum": ["requested", "completed", "failed", "degraded", "unavailable", "missing", "unknown"]},
     "expected_coverage": {"$ref": "#/$defs/ids"}, "missing_case_ids": {"$ref": "#/$defs/ids"},
     "partial_output": {"type": "boolean"}, "output_ref": {"$ref": "#/$defs/nullableText"},
     "source_agents": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
     "requested_provider": {"$ref": "#/$defs/nullableText"}, "attempted_provider": {"$ref": "#/$defs/nullableText"},
     "implemented_by": {"$ref": "#/$defs/nullableText"}, "model": {"$ref": "#/$defs/nullableText"},
     "attempt": {"type": "integer", "minimum": 1}, "coverage_gap_reason": {"$ref": "#/$defs/nullableText"},
-    "build_binding_ref": {"$ref": "#/$defs/text"}, "browser_bundle_refs": {"$ref": "#/$defs/refs"},
+    "build_binding_ref": {"$ref": "#/$defs/text"}, "browser_bundle_refs": {"$ref": "#/$defs/refs"}, "finding_refs": {"$ref": "#/$defs/refs"},
     "record_digest": {"pattern": "^sha256:[0-9a-f]{64}$"}
   },
   "$defs": {

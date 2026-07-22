@@ -82,12 +82,15 @@ Write the exact declared dependent node IDs to the dependency JSON file, using `
 ## Mechanical Read-only Boundary
 
 Plain review is inspection and reporting only. Its sole writable repository
-surface is the declared evidence root, `.claude/ux-review/` by default. Before
+surface is the declared evidence root physically beneath the EventStore-owned
+run root, `<event-store-root>/review-artifacts/` by default. Before
 Phase 1, capture the repository boundary with `capture_review_boundary`; after
 Phase 8, capture it again and require `compare_review_boundary(...).read_only`
-to be true. The check covers product/config files, Git index, HEAD, refs,
-todos/tracking files, and provider mutation receipts while excluding the owned
-evidence root.
+to be true. The check hashes product/source/config/tracking file contents as
+well as status, Git index, HEAD, refs, and the content/state of provider
+mutation receipts while excluding the physically bound owned evidence root.
+The evidence root must be beneath the EventStore-owned run root; symlink escapes
+or identity changes fail closed.
 
 Plain review MUST NOT edit product, source, configuration, or tracking files;
 stage or commit changes; create/delete refs or stashes; reset/rewrite history;

@@ -66,6 +66,7 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "path", "anchor", "source_agents", "build_binding_ref",
     "browser_bundle_refs", "lane_id", "state", "expected_coverage",
     "partial_output", "output_ref", "coverage_gap_reason",
+    "source_scope_digest", "finding_refs",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -124,6 +125,7 @@ RECEIPT_FIELD_ALIASES = {
     "browserBundleRefs": "browser_bundle_refs", "laneId": "lane_id",
     "expectedCoverage": "expected_coverage", "partialOutput": "partial_output",
     "outputRef": "output_ref", "coverageGapReason": "coverage_gap_reason",
+    "sourceScopeDigest": "source_scope_digest", "findingRefs": "finding_refs",
     # Legacy producer vocabulary. The durable kernel name is deliberately
     # neutral because not every provider reports tokens.
     "tokens": "usage_count",
@@ -182,6 +184,7 @@ _MAX_MISSING_CASE_ID_BYTES = 16_384
 _REVIEW_RECORD_STAGES = frozenset({"finding_record", "lane_record"})
 _REVIEW_LANE_STATES = frozenset({
     "requested", "completed", "failed", "degraded", "unavailable",
+    "missing", "unknown",
 })
 _REVIEW_FINDING_ID = re.compile(r"finding-v1:sha256:[0-9a-f]{64}\Z")
 
@@ -591,8 +594,13 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             raise ValueError("invalid source agents")
         receipt["source_agents"] = agents
         if stage == "finding_record":
-            for field in ("source_finding_id", "rule_id"):
+            for field in ("source_finding_id", "rule_id", "lane_id"):
                 receipt[field] = _bounded_identity(receipt.get(field), field)
+            scope_digest = required_text(
+                receipt.get("source_scope_digest"), "source scope digest",
+            )
+            if _CONTRACT_DIGEST.fullmatch(scope_digest) is None:
+                raise ValueError("invalid source scope digest")
             canonical = required_text(
                 receipt.get("canonical_finding_id"), "canonical finding id",
             )
@@ -633,6 +641,13 @@ def _validate_observation_receipt(receipt: dict) -> dict:
                 raise ValueError("incomplete lane lacks coverage gap reason")
             if receipt["partial_output"] and output_ref is None:
                 raise ValueError("partial lane lacks output reference")
+            finding_refs = receipt.get("finding_refs")
+            if type(finding_refs) is not list or len(finding_refs) > 256:
+                raise ValueError("invalid lane finding references")
+            finding_refs = [safe_reference(value) for value in finding_refs]
+            if len(finding_refs) != len(set(finding_refs)):
+                raise ValueError("invalid lane finding references")
+            receipt["finding_refs"] = finding_refs
 
     scoped = "usage_scope" in receipt
     detailed = bool((_USAGE_COUNT_FIELDS - {"usage_count"}) & set(receipt))
@@ -761,6 +776,8 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
     elif receipt.get("stage") in _REVIEW_RECORD_STAGES:
         payload["evidence"].append(receipt["record_ref"])
         payload["evidence"].extend(receipt["browser_bundle_refs"])
+        if receipt.get("stage") == "lane_record":
+            payload["evidence"].extend(receipt["finding_refs"])
     return payload
 
 
@@ -959,7 +976,7 @@ def translate_receipts(
                 raise ValueError("source artifact reviewer discontinuity")
         elif stage in _REVIEW_RECORD_STAGES:
             identity = (
-                receipt["source_finding_id"] if stage == "finding_record"
+                receipt["source_scope_digest"] if stage == "finding_record"
                 else receipt["lane_id"]
             )
             content = (receipt["record_digest"], receipt["record_ref"])
