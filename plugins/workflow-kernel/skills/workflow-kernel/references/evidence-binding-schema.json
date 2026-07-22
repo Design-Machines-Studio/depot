@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://designmachines.ca/schemas/evidence-binding-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "commit_sha", "tree_digest", "tracked_diff_digest", "untracked_digest", "untracked_classification", "profile_digest", "plan_digest", "scenario_digest", "command_digest", "artifact_digest", "image_digest", "started_at", "completed_at", "exit_status", "evidence_digest", "binding_digest"],
+  "properties": {
+    "schema_version": {"const": 1}, "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+    "tree_digest": {"$ref": "#/$defs/digest"}, "tracked_diff_digest": {"$ref": "#/$defs/digest"}, "untracked_digest": {"$ref": "#/$defs/digest"},
+    "untracked_classification": {"enum": ["none", "safe", "private", "mixed", "unknown"]}, "profile_digest": {"$ref": "#/$defs/digest"},
+    "plan_digest": {"$ref": "#/$defs/digest"}, "scenario_digest": {"$ref": "#/$defs/nullable_digest"}, "command_digest": {"$ref": "#/$defs/digest"},
+    "artifact_digest": {"$ref": "#/$defs/nullable_digest"}, "image_digest": {"$ref": "#/$defs/nullable_digest"},
+    "started_at": {"$ref": "#/$defs/timestamp"}, "completed_at": {"$ref": "#/$defs/timestamp"}, "exit_status": {"type": ["integer", "null"], "minimum": 0},
+    "evidence_digest": {"$ref": "#/$defs/digest"}, "binding_digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "nullable_digest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}, "timestamp": {"type": "string", "format": "date-time"}}
+}

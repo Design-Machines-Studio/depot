@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "https://designmachines.ca/schemas/verification-result-schema.json",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "lane_id", "plan_digest", "status", "started_at", "completed_at", "exit_code", "command_digest", "evidence_refs", "packages", "parser_status", "parser_reason"],
+  "properties": {
+    "schema_version": {"const": 1}, "lane_id": {"$ref": "#/$defs/id"}, "plan_digest": {"$ref": "#/$defs/digest"},
+    "status": {"enum": ["passed", "failed", "skipped", "unavailable", "blocked"]}, "started_at": {"$ref": "#/$defs/timestamp"}, "completed_at": {"$ref": "#/$defs/timestamp"},
+    "exit_code": {"type": ["integer", "null"], "minimum": 0}, "command_digest": {"$ref": "#/$defs/digest"},
+    "evidence_refs": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/string"}},
+    "packages": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/package"}},
+    "parser_status": {"enum": ["complete", "malformed", "truncated", "not_applicable"]}, "parser_reason": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "string": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "timestamp": {"type": "string", "format": "date-time"},
+    "package": {"type": "object", "additionalProperties": false, "required": ["package", "status", "elapsed_milliseconds", "failures", "coverage_basis_points"], "properties": {
+      "package": {"$ref": "#/$defs/string"}, "status": {"enum": ["passed", "failed", "skipped"]}, "elapsed_milliseconds": {"type": "integer", "minimum": 0},
+      "failures": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/string"}}, "coverage_basis_points": {"type": ["integer", "null"], "minimum": 0, "maximum": 10000}
+    }}
+  }
+}

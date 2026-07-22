@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from tests import KERNEL_REFERENCES, schema_matches
+from workflow_kernel.argv import validate_safe_argv
 from workflow_kernel.behavioral_contract import (
     MAX_CONTRACT_BYTES, canonical_bytes, contract_digest, obligations,
     parse_contract_bytes, validate_contract, validate_initial_binding,
@@ -55,6 +56,19 @@ def contract_one():
 
 
 class BehavioralContractTests(unittest.TestCase):
+    def test_behavioral_contract_consumes_the_shared_safe_argv_validator(self):
+        safe = ["python3.12", "-m", "unittest", "tests.test_example"]
+        self.assertEqual(validate_safe_argv(safe), tuple(safe))
+        contract = contract_one()
+        contract["checks"][0]["argv"] = safe
+        self.assertEqual(validate_contract(contract)["checks"][0]["argv"], safe)
+        for unsafe in (["sh", "-c", "echo no"], ["tool", "--token", "opaque"]):
+            with self.subTest(argv=unsafe), self.assertRaises(ValueError):
+                validate_safe_argv(unsafe)
+            candidate = contract_one(); candidate["checks"][0]["argv"] = unsafe
+            with self.assertRaises(ValueError):
+                validate_contract(candidate)
+
     def test_documented_shape_matches_schema_and_bool_numeric_values_do_not(self):
         contract = contract_one()
         self.assertTrue(schema_matches(contract, SCHEMA))
@@ -372,6 +386,12 @@ class BehavioralContractTests(unittest.TestCase):
         for name, raw in bad.items():
             with self.subTest(name=name), self.assertRaises(ValueError):
                 parse_contract_bytes(raw)
+
+    def test_behavioral_contract_argv_remains_json_array_only(self):
+        value = contract_one()
+        value["checks"][0]["argv"] = tuple(value["checks"][0]["argv"])
+        with self.assertRaises(ValueError):
+            validate_contract(value)
 
 
 if __name__ == "__main__":
