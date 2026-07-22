@@ -6,8 +6,10 @@ import hashlib
 import json
 import os
 import re
+import selectors
 import stat
 import subprocess
+import time
 from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
@@ -635,130 +637,116 @@ def _repository_content(root, artifact_relative):
     return _canonical_bytes(sorted(rows))
 
 
-def _provider_path(root, artifact, reference):
-    artifact_path = artifact / reference
-    try:
-        os.lstat(artifact_path)
-    except FileNotFoundError:
-        return root / reference
-    return artifact_path
+_GITHUB_INVENTORIES = (
+    ("issues", "issues?state=all&per_page=100"),
+    ("pulls", "pulls?state=all&per_page=100"),
+    ("issue_comments", "issues/comments?per_page=100"),
+    ("pull_comments", "pulls/comments?per_page=100"),
+    ("labels", "labels?per_page=100"),
+)
 
 
-def _provider_state(root, artifact, references):
-    rows = []
-    for reference in references:
-        path = _provider_path(root, artifact, reference)
-        try:
-            path.relative_to(root)
-        except ValueError:
-            _fail("provider receipt outside repository")
-        try:
-            entry = os.lstat(path)
-        except FileNotFoundError:
-            rows.append([reference, "missing"])
-        else:
-            if stat.S_ISREG(entry.st_mode):
-                rows.append([reference, "file", _hash_regular(path)])
-            elif stat.S_ISLNK(entry.st_mode):
-                rows.append([reference, "symlink", os.readlink(path)])
-            else:
-                rows.append([reference, "other", entry.st_mode])
-    return _canonical_bytes(rows)
+class _ProviderUnavailable(RuntimeError):
+    pass
 
 
-def _provider_snapshot(root, artifact, reference, expected_inventory_digest):
-    unavailable = (_canonical_bytes([["provider-observation", "unavailable"]]),
-                   None, None, "provider_state_unavailable")
-    if reference is None or expected_inventory_digest is None:
-        return unavailable
-    if type(expected_inventory_digest) is not str or _DIGEST.fullmatch(
-            expected_inventory_digest) is None:
-        return (_canonical_bytes([["provider-observation", "invalid-expected-inventory"]]),
-                None, None, "provider_state_incomplete")
-    reference = _reference(reference, "provider snapshot reference")
-    path = _provider_path(root, artifact, reference)
+class _ProviderIncomplete(RuntimeError):
+    pass
+
+
+def _run_bounded(argv, root, *, timeout=30.0, output_limit=8 * 1024 * 1024):
     try:
-        path.relative_to(root)
-    except ValueError:
-        _fail("provider snapshot outside repository")
-    try:
-        entry = os.lstat(path)
-    except FileNotFoundError:
-        return unavailable
-    if not stat.S_ISREG(entry.st_mode):
-        state = "symlink" if stat.S_ISLNK(entry.st_mode) else "other"
-        return (_canonical_bytes([[reference, state]]), None, None,
-                "provider_state_incomplete")
-    marker_digest = _hash_regular(path)
-    try:
-        marker = json.loads(path.read_text(encoding="utf-8"))
-        if (type(marker) is not dict or set(marker) != {
-                "schema_version", "authority", "observation_state",
-                "observer_identity", "observer_source", "observed_at",
-                "inventory_digest", "receipt_refs", "observation_ref"}
-                or marker.get("schema_version") != 1
-                or marker.get("authority") != "independent-provider-observation"):
-            raise ValueError("invalid provider snapshot marker")
-        observation_state = marker.get("observation_state")
-        if observation_state == "unavailable":
-            return (_canonical_bytes([[reference, "unavailable", marker_digest]]),
-                    None, None, "provider_state_unavailable")
-        if observation_state != "complete":
-            raise ValueError("provider snapshot is incomplete")
-        _identity(marker.get("observer_identity"), "provider observer identity")
-        observer_source = _text(marker.get("observer_source"), "provider observer source")
-        if not (observer_source.startswith("provider-api:")
-                or observer_source.startswith("connector:")):
-            raise ValueError("provider observer is not independent")
-        observed_at = _text(marker.get("observed_at"), "provider observed at")
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z", observed_at) is None:
-            raise ValueError("invalid provider observation time")
-        receipts = _list(
-            marker.get("receipt_refs"), "provider mutation receipt", _reference,
+        process = subprocess.Popen(
+            tuple(argv), cwd=root, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={**os.environ, "GH_HOST": "github.com", "GH_PAGER": "cat"},
         )
-        if not receipts:
-            raise ValueError("provider observation inventory is empty")
-        inventory_digest = _digest(sorted(receipts))
-        if (marker.get("inventory_digest") != inventory_digest
-                or inventory_digest != expected_inventory_digest):
-            raise ValueError("provider inventory does not match sealed expectation")
-        observation_ref = _reference(
-            marker.get("observation_ref"), "provider observation reference",
-        )
-        observation_path = _provider_path(root, artifact, observation_ref)
+    except OSError as error:
+        raise _ProviderUnavailable from error
+    selector = selectors.DefaultSelector()
+    streams = {process.stdout: bytearray(), process.stderr: bytearray()}
+    for stream in streams:
+        selector.register(stream, selectors.EVENT_READ)
+    deadline = time.monotonic() + timeout
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _ProviderUnavailable("provider observation timed out")
+            for key, _events in selector.select(min(remaining, 0.25)):
+                chunk = os.read(key.fileobj.fileno(), 65_536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+                streams[key.fileobj].extend(chunk)
+                if sum(len(value) for value in streams.values()) > output_limit:
+                    raise _ProviderIncomplete("provider observation exceeded output bound")
         try:
-            observation_path.relative_to(root)
-        except ValueError:
-            raise ValueError("provider observation outside repository")
-        observation_entry = os.lstat(observation_path)
-        if not stat.S_ISREG(observation_entry.st_mode) or observation_entry.st_size < 1:
-            raise ValueError("provider observation evidence is unavailable")
-        observation_digest = _hash_regular(observation_path)
-    except (OSError, UnicodeError, json.JSONDecodeError, ValueError, TypeError):
-        return (_canonical_bytes([[reference, "invalid", marker_digest]]), None, None,
-                "provider_state_incomplete")
-    state = json.loads(_provider_state(root, artifact, receipts))
-    observation = _digest({
-        "marker_digest": marker_digest,
-        "observation_digest": observation_digest,
-        "observer_identity": marker["observer_identity"],
-        "observer_source": marker["observer_source"],
-        "observed_at": observed_at,
-    })
-    return _canonical_bytes(state), observation, observed_at, None
+            return_code = process.wait(timeout=max(0.01, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired as error:
+            raise _ProviderUnavailable("provider observation timed out") from error
+    except Exception:
+        process.kill()
+        process.wait()
+        raise
+    finally:
+        selector.close()
+        for stream in streams:
+            stream.close()
+    if return_code != 0:
+        raise _ProviderUnavailable("provider API observation failed")
+    return bytes(streams[process.stdout])
 
 
-def capture_review_boundary(repository_root, artifact_root, *,
-                            provider_snapshot_ref=None,
-                            provider_expected_inventory_digest=None):
+def _github_repository(root):
+    try:
+        remote = _git(root, "remote", "get-url", "origin").strip()
+    except subprocess.CalledProcessError as error:
+        raise _ProviderUnavailable from error
+    match = re.fullmatch(
+        r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+?)(?:\.git)?",
+        remote,
+    )
+    if match is None:
+        raise _ProviderUnavailable("origin is not an unambiguous GitHub repository")
+    return match.group(1), match.group(2)
+
+
+def _github_provider_state(root):
+    try:
+        owner, repository = _github_repository(root)
+        inventory = {}
+        for name, suffix in _GITHUB_INVENTORIES:
+            endpoint = f"repos/{owner}/{repository}/{suffix}"
+            output = _run_bounded((
+                "gh", "api", "--method", "GET", endpoint,
+                "--paginate", "--slurp",
+                "-H", "Accept: application/vnd.github+json",
+                "-H", "X-GitHub-Api-Version: 2022-11-28",
+            ), root, timeout=30.0, output_limit=8 * 1024 * 1024)
+            pages = json.loads(output)
+            if (type(pages) is not list or not pages
+                    or any(type(page) is not list or len(page) > 100 for page in pages)
+                    or any(len(page) != 100 for page in pages[:-1])):
+                raise _ProviderIncomplete("provider pagination is incomplete")
+            inventory[name] = pages
+        return _canonical_bytes({
+            "observer": "gh-api", "owner": owner, "repository": repository,
+            "inventories": inventory,
+        }), None
+    except _ProviderUnavailable:
+        return _canonical_bytes([["github", "unavailable"]]), "provider_state_unavailable"
+    except (_ProviderIncomplete, json.JSONDecodeError, UnicodeError, TypeError, ValueError):
+        return _canonical_bytes([["github", "incomplete"]]), "provider_state_incomplete"
+
+
+def capture_review_boundary(repository_root, artifact_root):
     root = Path(repository_root).resolve()
     artifact = Path(artifact_root).resolve()
     if artifact != root and root not in artifact.parents:
         _fail("artifact root outside repository")
     relative = artifact.relative_to(root).as_posix()
-    provider_state, observation_digest, provider_observed_at, provider_reason = _provider_snapshot(
-        root, artifact, provider_snapshot_ref, provider_expected_inventory_digest,
-    )
+    provider_state, provider_reason = _github_provider_state(root)
     return {
         "head": _git(root, "rev-parse", "HEAD").strip(),
         "index_digest": "sha256:" + hashlib.sha256(_git(root, "ls-files", "--stage").encode()).hexdigest(),
@@ -768,34 +756,18 @@ def capture_review_boundary(repository_root, artifact_root, *,
         "provider_receipts_digest": "sha256:" + hashlib.sha256(
             provider_state,
         ).hexdigest(),
-        "provider_observation_digest": observation_digest,
-        "provider_observed_at": provider_observed_at,
-        "provider_expected_inventory_digest": provider_expected_inventory_digest,
         "provider_state_reason": provider_reason,
     }
 
 
 def compare_review_boundary(before, after):
     keys = ("head", "index_digest", "refs_digest", "product_status_digest",
-            "product_content_digest", "provider_receipts_digest",
-            "provider_expected_inventory_digest")
+            "product_content_digest", "provider_receipts_digest")
     changed = [key for key in keys if before.get(key) != after.get(key)]
     reasons = sorted({reason for reason in (
         before.get("provider_state_reason"), after.get("provider_state_reason"),
     ) if reason is not None})
-    ordered_observations = (before.get("provider_observed_at") is not None
-                            and after.get("provider_observed_at") is not None
-                            and before["provider_observed_at"] < after["provider_observed_at"])
-    if not ordered_observations and "provider_state_incomplete" not in reasons:
-        reasons.append("provider_state_incomplete")
-        reasons.sort()
-    authoritative = (not reasons
-                     and before.get("provider_observation_digest") is not None
-                     and after.get("provider_observation_digest") is not None
-                     and before.get("provider_expected_inventory_digest") is not None
-                     and before.get("provider_expected_inventory_digest")
-                     == after.get("provider_expected_inventory_digest")
-                     and ordered_observations)
+    authoritative = not reasons
     return {"read_only": authoritative and not changed, "changed": changed,
             "provider_state_authoritative": authoritative,
             "provider_state_reasons": reasons}

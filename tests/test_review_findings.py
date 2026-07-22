@@ -291,129 +291,115 @@ class ReviewFindingTests(unittest.TestCase):
             product = root / "product.txt"; product.write_text("base\n")
             subprocess.run(("git", "add", "product.txt"), cwd=root, check=True)
             subprocess.run(("git", "commit", "-qm", "base"), cwd=root, check=True)
+            subprocess.run((
+                "git", "remote", "add", "origin",
+                "git@github.com:design-machines/review-test.git",
+            ), cwd=root, check=True)
             artifacts = root / ".claude" / "ux-review"
-            artifacts.mkdir(parents=True)
-            provider_dir = artifacts / "receipts"; provider_dir.mkdir()
-            inventory_receipt = provider_dir / "provider-inventory.json"
-            inventory_receipt.write_text('{"resources":[]}\n')
-            baseline_receipts = ("receipts/provider-inventory.json",)
-            snapshot = artifacts / "provider-snapshot.json"
-            observation = artifacts / "provider-api-observation.json"
-            def inventory_digest(receipts=()):
-                return review_records._digest(sorted(receipts))
-            def set_snapshot(receipts=baseline_receipts, *, state="complete",
-                             observed_at="2026-07-14T00:00:00Z"):
-                observation.write_text(json.dumps({
-                    "provider": "github", "resources": list(receipts),
-                    "observed_at": observed_at,
-                }))
-                snapshot.write_text(json.dumps({
-                    "schema_version": 1,
-                    "authority": "independent-provider-observation",
-                    "observation_state": state,
-                    "observer_identity": "github-provider-observer",
-                    "observer_source": "provider-api:github",
-                    "observed_at": observed_at,
-                    "inventory_digest": inventory_digest(receipts),
-                    "receipt_refs": list(receipts),
-                    "observation_ref": "provider-api-observation.json",
-                }))
-            def boundary(receipts=baseline_receipts, *, expected_receipts=None):
-                return capture_review_boundary(
-                    root, artifacts,
-                    provider_snapshot_ref="provider-snapshot.json",
-                    provider_expected_inventory_digest=inventory_digest(
-                        receipts if expected_receipts is None else expected_receipts
-                    ),
+            inventories = {name: [[]] for name, _suffix in review_records._GITHUB_INVENTORIES}
+            calls = []
+            def observed_gh(argv, cwd, **bounds):
+                calls.append((tuple(argv), Path(cwd), bounds))
+                endpoint = argv[4]
+                name = next(name for name, suffix in review_records._GITHUB_INVENTORIES
+                            if endpoint.endswith(suffix))
+                return json.dumps(inventories[name]).encode()
+            def boundary():
+                return capture_review_boundary(root, artifacts)
+
+            with mock.patch(
+                    "workflow_kernel.review_records._run_bounded",
+                    side_effect=observed_gh):
+                before = boundary()
+                artifacts.mkdir(parents=True)
+                (artifacts / "report.md").write_text("evidence\n")
+                self.assertTrue(compare_review_boundary(before, boundary())["read_only"])
+                self.assertTrue(all(call[1] == root.resolve() for call in calls))
+                self.assertTrue(all(call[2] == {
+                    "timeout": 30.0, "output_limit": 8 * 1024 * 1024,
+                } for call in calls))
+                expected_endpoints = {
+                    f"repos/design-machines/review-test/{suffix}"
+                    for _name, suffix in review_records._GITHUB_INVENTORIES
+                }
+                self.assertEqual({call[0][4] for call in calls}, expected_endpoints)
+                for argv, _cwd, _bounds in calls:
+                    self.assertEqual(argv[:4], ("gh", "api", "--method", "GET"))
+                    self.assertEqual(argv[5:7], ("--paginate", "--slurp"))
+
+                product.write_text("changed\n")
+                changed = compare_review_boundary(before, boundary())
+                self.assertIn("product_status_digest", changed["changed"])
+                subprocess.run(("git", "add", "product.txt"), cwd=root, check=True)
+                staged = compare_review_boundary(before, boundary())
+                self.assertIn("index_digest", staged["changed"])
+                subprocess.run(("git", "commit", "-qm", "mutation"), cwd=root, check=True)
+                committed = compare_review_boundary(before, boundary())
+                self.assertIn("head", committed["changed"])
+                clean = boundary()
+                subprocess.run(("git", "branch", "review-mutated-ref"), cwd=root, check=True)
+                self.assertIn("refs_digest", compare_review_boundary(clean, boundary())["changed"])
+
+                inventories["issues"] = [[{"id": 1, "title": "provider mutation"}]]
+                provider_change = compare_review_boundary(clean, boundary())
+                self.assertIn("provider_receipts_digest", provider_change["changed"])
+                inventories["issues"] = [[]]
+                (root / "todos").mkdir()
+                (root / "todos" / "001-pending-p1.md").write_text("mutation\n")
+                self.assertIn("product_status_digest",
+                              compare_review_boundary(clean, boundary())["changed"])
+
+                product.write_text("dirty-one\n")
+                dirty_before = boundary()
+                product.write_text("dirty-two\n")
+                dirty_change = compare_review_boundary(dirty_before, boundary())
+                self.assertNotIn("product_status_digest", dirty_change["changed"])
+                self.assertIn("product_content_digest", dirty_change["changed"])
+                untracked = root / "untracked.txt"; untracked.write_text("one\n")
+                untracked_before = boundary()
+                untracked.write_text("two\n")
+                self.assertIn("product_content_digest", compare_review_boundary(
+                    untracked_before, boundary(),
+                )["changed"])
+
+            with self.assertRaises(TypeError):
+                capture_review_boundary(
+                    root, artifacts, provider_snapshot_ref="self-attested.json",
                 )
-            set_snapshot()
-            before = boundary()
-            (artifacts / "report.md").write_text("evidence\n")
-            set_snapshot(observed_at="2026-07-14T00:01:00Z")
-            unchanged = compare_review_boundary(before, boundary())
-            self.assertTrue(unchanged["read_only"])
-            self.assertTrue(unchanged["provider_state_authoritative"])
 
-            product.write_text("changed\n")
-            changed = compare_review_boundary(before, boundary())
-            self.assertIn("product_status_digest", changed["changed"])
-            subprocess.run(("git", "add", "product.txt"), cwd=root, check=True)
-            staged = compare_review_boundary(before, boundary())
-            self.assertIn("index_digest", staged["changed"])
-            subprocess.run(("git", "commit", "-qm", "mutation"), cwd=root, check=True)
-            committed = compare_review_boundary(before, boundary())
-            self.assertIn("head", committed["changed"])
-            clean = boundary()
-            subprocess.run(("git", "branch", "review-mutated-ref"), cwd=root, check=True)
-            self.assertIn("refs_digest", compare_review_boundary(clean, boundary())["changed"])
-            set_snapshot(["receipts/provider-before.json"]); provider_before = boundary(["receipts/provider-before.json"])
-            set_snapshot(["receipts/provider-after.json"]); provider_after = boundary(["receipts/provider-after.json"])
-            self.assertIn("provider_receipts_digest", compare_review_boundary(provider_before, provider_after)["changed"])
-            (root / "todos").mkdir(); (root / "todos" / "001-pending-p1.md").write_text("mutation\n")
-            self.assertIn("product_status_digest", compare_review_boundary(clean, boundary(["receipts/provider-after.json"]))["changed"])
-
-            product.write_text("dirty-one\n")
-            set_snapshot(); dirty_before = boundary()
-            product.write_text("dirty-two\n")
-            dirty_change = compare_review_boundary(dirty_before, boundary())
-            self.assertNotIn("product_status_digest", dirty_change["changed"])
-            self.assertIn("product_content_digest", dirty_change["changed"])
-            untracked = root / "untracked.txt"; untracked.write_text("one\n")
-            untracked_before = boundary()
-            untracked.write_text("two\n")
-            self.assertIn("product_content_digest", compare_review_boundary(
-                untracked_before, boundary(),
-            )["changed"])
-            provider = provider_dir / "provider.json"; provider.write_text("before\n")
-            set_snapshot(["receipts/provider.json"])
-            provider_before = boundary(["receipts/provider.json"])
-            provider.write_text("after\n")
-            provider_change = compare_review_boundary(
-                provider_before, boundary(["receipts/provider.json"]),
-            )
-            self.assertNotIn("product_content_digest", provider_change["changed"])
-            self.assertIn("provider_receipts_digest", provider_change["changed"])
-
-            omitted = capture_review_boundary(root, artifacts)
-            omitted_result = compare_review_boundary(omitted, omitted)
-            self.assertFalse(omitted_result["read_only"])
-            self.assertIn("provider_state_unavailable",
-                          omitted_result["provider_state_reasons"])
-
-            snapshot.write_text(json.dumps({
-                "schema_version": 1, "authority": "complete-provider-snapshot",
-                "provider_receipts": [],
-            }))
-            self_attested = boundary()
-            self_attested_result = compare_review_boundary(self_attested, self_attested)
-            self.assertFalse(self_attested_result["read_only"])
+            inventories["issues"] = [[{}], [{}]]
+            with mock.patch(
+                    "workflow_kernel.review_records._run_bounded",
+                    side_effect=observed_gh):
+                incomplete = boundary()
+            incomplete_result = compare_review_boundary(incomplete, incomplete)
+            self.assertFalse(incomplete_result["read_only"])
             self.assertIn("provider_state_incomplete",
-                          self_attested_result["provider_state_reasons"])
+                          incomplete_result["provider_state_reasons"])
 
-            set_snapshot([])
-            empty_attestation = boundary([], expected_receipts=[])
-            empty_result = compare_review_boundary(
-                empty_attestation, empty_attestation,
-            )
-            self.assertFalse(empty_result["read_only"])
+            with mock.patch(
+                    "workflow_kernel.review_records._run_bounded",
+                    return_value=b"["):
+                malformed = boundary()
+            malformed_result = compare_review_boundary(malformed, malformed)
+            self.assertFalse(malformed_result["read_only"])
             self.assertIn("provider_state_incomplete",
-                          empty_result["provider_state_reasons"])
+                          malformed_result["provider_state_reasons"])
 
-            set_snapshot(["receipts/provider.json"])
-            incomplete_inventory = boundary(
-                ["receipts/provider.json"],
-                expected_receipts=["receipts/provider.json", "receipts/omitted.json"],
-            )
-            inventory_result = compare_review_boundary(
-                provider_before, incomplete_inventory,
-            )
-            self.assertFalse(inventory_result["read_only"])
+            with mock.patch(
+                    "workflow_kernel.review_records._run_bounded",
+                    side_effect=review_records._ProviderIncomplete):
+                unbounded = boundary()
+            unbounded_result = compare_review_boundary(unbounded, unbounded)
+            self.assertFalse(unbounded_result["read_only"])
             self.assertIn("provider_state_incomplete",
-                          inventory_result["provider_state_reasons"])
+                          unbounded_result["provider_state_reasons"])
 
-            set_snapshot(["receipts/provider.json"], state="unavailable")
-            unavailable = boundary(["receipts/provider.json"])
-            unavailable_result = compare_review_boundary(provider_before, unavailable)
+            with mock.patch(
+                    "workflow_kernel.review_records._run_bounded",
+                    side_effect=review_records._ProviderUnavailable):
+                unavailable = boundary()
+            unavailable_result = compare_review_boundary(unavailable, unavailable)
             self.assertFalse(unavailable_result["read_only"])
             self.assertIn("provider_state_unavailable",
                           unavailable_result["provider_state_reasons"])

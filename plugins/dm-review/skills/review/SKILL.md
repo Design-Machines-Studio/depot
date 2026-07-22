@@ -89,13 +89,14 @@ Phase 8, capture it again and require `compare_review_boundary(...).read_only`
 to be true. The check hashes product/source/config/tracking file contents as
 well as status, Git index, HEAD, refs, and the content/state of provider
 mutation receipts while excluding the physically bound owned evidence root.
-Provider state is authoritative only when each capture names an independently
-acquired provider observation with observer identity/source, observation time,
-API evidence, and receipt inventory bound to a separately sealed expected
-inventory digest. Both captures must validate complete and share that binding;
-a local self-attestation, unavailable observation, missing evidence, or
-incomplete inventory makes the comparison not read-only with an explicit
-`provider_state_unavailable` or `provider_state_incomplete` reason.
+Provider state is authoritative only when each capture successfully derives the
+GitHub repository from `origin` and performs the fixed, bounded, paginated
+read-only `gh api` inventory of all issues, pull requests, issue/PR comments,
+and labels. The pre/post canonical inventory digests must match exactly; local
+markers, expected inventories, or receipt files are never authority. Missing
+remote/CLI/auth/API access fails as `provider_state_unavailable`; malformed,
+truncated, unbounded, or incomplete pagination fails as
+`provider_state_incomplete`. Either result makes the review not read-only.
 The evidence root must be beneath the EventStore-owned run root; symlink escapes
 or identity changes fail closed.
 
