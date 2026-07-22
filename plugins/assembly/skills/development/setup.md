@@ -55,6 +55,10 @@ Build uses lightningcss for CSS bundling/minification and esbuild for JS.
 All Go commands run inside Docker -- never on the host. Manual verification is
 planned through Workflow Kernel using
 `plugins/assembly/skills/assembly-build/references/assembly-baseplate-verification-profile.json`.
+Load the sibling production adapter
+`plugins/assembly/skills/assembly-build/references/assembly_verification_adapter.py`
+from the resolved plugin and invoke `plan_assembly_verification(...)`; its
+status and selected argv are authoritative.
 Use `/assembly-build generate`, `/assembly-build build`, `/assembly-build
 focused`, `/assembly-build test`, or `/assembly-build race`; execute only the
 safe argv selected by the repository verification plan.

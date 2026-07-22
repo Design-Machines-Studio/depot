@@ -11,22 +11,30 @@ Baseplate defaults live in
 `plugins/assembly/skills/assembly-build/references/assembly-baseplate-verification-profile.json`;
 do not reconstruct or guess Go commands from this document.
 
+Load the sibling production adapter
+`plugins/assembly/skills/assembly-build/references/assembly_verification_adapter.py`
+from the resolved Assembly plugin and call `plan_assembly_verification(...)`.
+Its returned status and selected argv are the executable authority. Do not
+duplicate its marker, profile, Compose, or UX parsing logic.
+
 ## Resolution and precedence
 
 1. Resolve the compatible Workflow Kernel runtime using its sanctioned runtime
    resolver. If it cannot be resolved, stop with `unavailable` and explain how
    to install or refresh the Workflow Kernel plugin.
-2. Look for an explicit project repository-verification profile. A valid
+2. Let `plan_assembly_verification(...)` look for an explicit project
+   repository-verification profile. A valid
    project profile outranks the Assembly profile. An incomplete or invalid
    explicit project profile is blocking; do not silently fall back.
 3. Use the Assembly Baseplate profile only when the repository has the declared
    Baseplate identity (`go.mod`, `docker-compose.yml`, and `cmd/assembly`). The
    profile outranks heuristics. An unmatched repository is `unavailable`.
-4. Validate the selected profile with Workflow Kernel's strict
+4. The adapter validates the selected profile with Workflow Kernel's strict
    repository-verification profile contract, bind the current repository state,
    changed paths/packages, risk inputs, and requested lane IDs, then derive the
    verification plan.
-5. Execute only selected, runnable `argv` arrays exactly as returned. Never join
+5. Execute only the adapter's selected, runnable `argv` arrays exactly as
+   returned. Never join
    them into a shell string, interpolate environment values, or substitute a
    generic package path.
 
@@ -62,8 +70,9 @@ Absent, stopped, stale, or mismatched service evidence cannot authorize
   merge-group, and post-merge lanes retain separate authority. A passing PR
   lane cannot satisfy Baseplate's non-PR race or container-scan evidence.
 - UX task frontmatter under `tests/ux/tasks/` is authoritative for runnable
-  status, persona, route, authentication, expected outcome, optional viewport
-  and engine, and screenshot points. An absent task directory is `not_declared`;
+  status, persona, route, authentication, expected outcome, viewport
+  and engine, and screenshot points. Runnable declarations require explicit
+  viewport and engine values. An absent task directory is `not_declared`;
   malformed present declarations are blocking. `coverage-matrix.md` is not
   declaration authority.
 - Browser evidence follows the shared ladder: preserve the failed attempt, quit

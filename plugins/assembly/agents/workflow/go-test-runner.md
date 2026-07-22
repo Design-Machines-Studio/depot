@@ -18,6 +18,12 @@ the Assembly profile outranks heuristics. Invalid explicit project config,
 unsupported repositories, missing Kernel runtime, or incomplete declarations
 are `unavailable` and stop execution.
 
+Load the production
+`plugins/assembly/skills/assembly-build/references/assembly_verification_adapter.py`
+from the resolved Assembly plugin and call `plan_assembly_verification(...)`.
+Use its result directly; do not recreate profile precedence, repository marker
+checks, Compose evidence checks, UX parsing, or lane selection in agent prose.
+
 Bind the current repository state, changed paths, changed packages, explicit
 focused declarations, and risk inputs. Derive the plan before running tests:
 

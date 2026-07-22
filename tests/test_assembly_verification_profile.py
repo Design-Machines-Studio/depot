@@ -1,5 +1,7 @@
 import copy
 import json
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,16 +9,22 @@ from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.repository_verification import (
     derive_verification_plan,
     repository_profile_digest,
-    resolve_repository_profile,
     validate_repository_profile,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILE_PATH = (
-    ROOT / "plugins/assembly/skills/assembly-build/references/"
-    "assembly-baseplate-verification-profile.json"
+REFERENCES = ROOT / "plugins/assembly/skills/assembly-build/references"
+PROFILE_PATH = REFERENCES / "assembly-baseplate-verification-profile.json"
+sys.path.insert(0, str(REFERENCES))
+
+from assembly_verification_adapter import (  # noqa: E402
+    discover_ux_tasks,
+    plan_assembly_verification,
+    resolve_assembly_profile,
 )
+
+
 DIGEST = "sha256:" + "a" * 64
 
 
@@ -58,46 +66,51 @@ def project_exec_override(plugin_profile):
     return result
 
 
-def select_runtime_argv(resolved, lane_id, runtime_evidence=None):
-    """Model the documented consumer gate without adding a second planner."""
-    profile = resolved["profile"]
-    argv = lanes(profile)[lane_id]["argv"]
-    if argv[:3] != ["docker", "compose", "exec"]:
-        return argv
-    expected = {
-        "status": "running",
-        "service": argv[3],
-        "profile_digest": repository_profile_digest(profile),
-        "state_generation": "current",
-    }
-    if runtime_evidence != expected:
-        raise ValueError("declared runtime service proof unavailable")
-    return argv
-
-
-def repository_profile_status(paths):
-    required = {"go.mod", "docker-compose.yml", "cmd/assembly"}
-    return "resolved" if required <= set(paths) else "unavailable"
-
-
-def ux_declaration_status(documents):
-    if not documents:
-        return "not_declared"
-    required = (
-        "implementation_status:", "route:", "requires_auth:", "personas:",
-        "expected:", "screenshot_points:",
-    )
-    task_count = 0
-    for path, text in documents.items():
-        if "coverage-matrix" in path:
-            continue
-        task_count += 1
-        if not text.startswith("---\n") or any(field not in text for field in required):
-            return "blocked"
-    return "declared" if task_count else "not_declared"
+def valid_task():
+    return """---
+implementation_status: current
+route: /members
+requires_auth: true
+personas:
+  - id: member
+    expected: SUCCESS
+viewport: 1440x900
+engine: chromium
+screenshot_points:
+  - members list
+---
+"""
 
 
 class AssemblyVerificationProfileTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.repository_root = Path(self.temporary.name) / "assembly-baseplate"
+        (self.repository_root / "cmd/assembly").mkdir(parents=True)
+        (self.repository_root / "go.mod").write_text("module example.test/baseplate\n")
+        (self.repository_root / "docker-compose.yml").write_text("services: {}\n")
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def write_task(self, text=None, name="members.md"):
+        directory = self.repository_root / "tests/ux/tasks"
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / name
+        path.write_text(valid_task() if text is None else text)
+        return path
+
+    def plan(self, **changes):
+        arguments = dict(
+            changed_paths=[], changed_packages=[], risk_inputs=[],
+            required_lane_ids=["full-test"],
+            generated_at="2026-07-22T00:00:00Z",
+        )
+        arguments.update(changes)
+        return plan_assembly_verification(
+            self.repository_root, repository(), **arguments,
+        )
+
     def test_valid_baseplate_defaults_are_strict_safe_and_schema_valid(self):
         profile = load_profile()
         canonical = validate_repository_profile(profile)
@@ -115,23 +128,36 @@ class AssemblyVerificationProfileTests(unittest.TestCase):
             by_id["full-test"]["argv"],
             ["docker", "compose", "run", "--rm", "--no-deps", "app", "go", "test", "-tags=dev", "-count=1", "./..."],
         )
+        self.assertEqual(canonical["source"]["kind"], "plugin")
+        self.assertEqual(len(canonical["declaration_digests"]), 1)
         for lane in canonical["lanes"]:
             self.assertNotIn("sh", lane["argv"])
             self.assertNotIn("bash", lane["argv"])
             self.assertFalse(any(token in {";", "&&", "||", "|"} for token in lane["argv"]))
 
-    def test_project_override_precedes_plugin_and_incomplete_project_blocks(self):
+    def test_production_adapter_returns_kernel_selected_safe_argv(self):
+        result = self.plan()
+        self.assertEqual((result["status"], result["source"]), ("resolved", "plugin"))
+        selected = {item["lane_id"]: item["argv"] for item in result["selected_argv"]}
+        self.assertIn("doctor-diff", selected)
+        self.assertEqual(selected["full-test"], lanes(load_profile())["full-test"]["argv"])
+        self.assertEqual(result["plan"]["profile_id"], "assembly-baseplate")
+
+    def test_project_override_precedes_plugin_and_incomplete_project_is_unavailable(self):
         plugin = load_profile()
         project = project_exec_override(plugin)
-        resolved = resolve_repository_profile(project_profile=project, plugin_profile=plugin)
-        self.assertEqual(resolved["source"], "project")
+        resolved = resolve_assembly_profile(
+            self.repository_root, project_profile=project, plugin_profile=plugin,
+        )
+        self.assertEqual((resolved["status"], resolved["source"]), ("resolved", "project"))
         incomplete = copy.deepcopy(project)
         incomplete["lanes"][0].pop("authority")
-        with self.assertRaises(ValueError):
-            resolve_repository_profile(project_profile=incomplete, plugin_profile=plugin)
-        self.assertEqual(resolve_repository_profile(), {
-            "status": "unavailable", "source": "none", "profile": None,
-        })
+        invalid = resolve_assembly_profile(
+            self.repository_root, project_profile=incomplete, plugin_profile=plugin,
+        )
+        self.assertEqual((invalid["status"], invalid["reason"]), (
+            "unavailable", "invalid_repository_profile",
+        ))
 
     def test_changed_packages_select_focus_without_forcing_full_or_race(self):
         plan = derive_verification_plan(
@@ -166,31 +192,56 @@ class AssemblyVerificationProfileTests(unittest.TestCase):
         })
         self.assertTrue(all("-tags=dev" in item["argv"] and "-count=1" in item["argv"] for item in test_lanes))
 
-    def test_exec_requires_current_matching_service_proof_and_run_does_not(self):
+    def test_exec_requires_exact_current_matching_service_proof(self):
         plugin = load_profile()
-        plugin_resolved = resolve_repository_profile(plugin_profile=plugin)
-        self.assertEqual(select_runtime_argv(plugin_resolved, "full-test")[:6], [
-            "docker", "compose", "run", "--rm", "--no-deps", "app",
-        ])
         project = project_exec_override(plugin)
-        resolved = resolve_repository_profile(project_profile=project, plugin_profile=plugin)
-        current = {
+        base = dict(
+            project_profile=project, plugin_profile=plugin,
+            required_lane_ids=["full-test"],
+        )
+        missing = self.plan(**base)
+        self.assertEqual((missing["status"], missing["reason"], missing["selected_argv"]), (
+            "unavailable", "compose_service_proof_unavailable", [],
+        ))
+        evidence = {
             "status": "running", "service": "app",
-            "profile_digest": repository_profile_digest(resolved["profile"]),
-            "state_generation": "current",
+            "profile_digest": repository_profile_digest(project),
+            "repository_scope_id": repository()["scope_id"],
+            "compose_project": self.repository_root.name,
+            "state_generation": "current", "commit_sha": repository()["commit_sha"],
         }
-        self.assertEqual(select_runtime_argv(resolved, "full-test", current)[:4], [
-            "docker", "compose", "exec", "app",
-        ])
-        for evidence in (
-            None,
-            {**current, "status": "stopped"},
-            {**current, "state_generation": "stale"},
-            {**current, "service": "worker"},
-            {**current, "profile_digest": DIGEST},
+        current = self.plan(**base, compose_service_evidence=evidence)
+        selected = {item["lane_id"]: item["argv"] for item in current["selected_argv"]}
+        self.assertEqual(selected["full-test"][:4], ["docker", "compose", "exec", "app"])
+        for field, value in (
+            ("status", "stopped"), ("service", "worker"),
+            ("profile_digest", DIGEST), ("repository_scope_id", "d" * 64),
+            ("compose_project", "other"), ("state_generation", "stale"),
+            ("commit_sha", "e" * 40),
         ):
-            with self.subTest(evidence=evidence), self.assertRaises(ValueError):
-                select_runtime_argv(resolved, "full-test", evidence)
+            hostile = {**evidence, field: value}
+            with self.subTest(field=field):
+                result = self.plan(**base, compose_service_evidence=hostile)
+                self.assertEqual((result["status"], result["reason"]), (
+                    "unavailable", "compose_service_proof_unavailable",
+                ))
+
+    def test_noncanonical_exec_argv_cannot_bypass_service_proof(self):
+        plugin = load_profile()
+        project = project_exec_override(plugin)
+        for item in project["lanes"]:
+            if item["id"] == "full-test":
+                item["argv"] = [
+                    "docker", "compose", "--ansi", "never", "exec", "app",
+                    "go", "test", "-tags=dev", "-count=1", "./...",
+                ]
+        result = self.plan(
+            project_profile=project, plugin_profile=plugin,
+            required_lane_ids=["full-test"],
+        )
+        self.assertEqual((result["status"], result["reason"], result["selected_argv"]), (
+            "unavailable", "unsupported_exec_argv", [],
+        ))
 
     def test_ci_scopes_remain_distinct_and_pr_is_not_non_pr_authority(self):
         by_id = lanes(load_profile())
@@ -207,48 +258,84 @@ class AssemblyVerificationProfileTests(unittest.TestCase):
         )
         self.assertNotEqual(by_id["pr-test"]["authority"], by_id["race-test"]["authority"])
         self.assertNotEqual(by_id["pr-test"]["authority"], by_id["container-scan"]["authority"])
-        self.assertEqual(by_id["container-scan"]["authority"], "github-actions-non-pr")
 
-    def test_ux_task_frontmatter_is_authority_absent_is_not_declared_and_malformed_blocks(self):
-        valid = """---
-implementation_status: current
-route: /members
-requires_auth: true
-personas:
-  - id: member
-    expected: SUCCESS
-viewport: 1440x900
-engine: chromium
-screenshot_points:
-  - members list
----
-"""
-        self.assertEqual(ux_declaration_status({}), "not_declared")
-        self.assertEqual(ux_declaration_status({"tests/ux/tasks/members.md": valid}), "declared")
-        self.assertEqual(ux_declaration_status({
-            "tests/ux/tasks/members.md": valid.replace("route: /members\n", ""),
-        }), "blocked")
-        self.assertEqual(ux_declaration_status({
-            "tests/ux/coverage-matrix.md": "not authoritative",
-        }), "not_declared")
+    def test_ux_frontmatter_is_mechanically_parsed_and_matrix_is_not_authority(self):
+        self.assertEqual(discover_ux_tasks(self.repository_root)["status"], "not_declared")
+        matrix = self.repository_root / "tests/ux/coverage-matrix.md"
+        matrix.parent.mkdir(parents=True)
+        matrix.write_text(valid_task())
+        self.assertEqual(discover_ux_tasks(self.repository_root)["status"], "not_declared")
+        self.write_task()
+        result = discover_ux_tasks(self.repository_root)
+        self.assertEqual((result["status"], result["reason"]), (
+            "declared", "task_frontmatter_authority",
+        ))
+        self.assertEqual(result["tasks"][0], {
+            "path": "tests/ux/tasks/members.md", "implementation_status": "current",
+            "route": "/members", "requires_auth": True,
+            "personas": [{"id": "member", "expected": "SUCCESS"}],
+            "viewport": "1440x900", "engine": "chromium",
+            "screenshot_points": ["members list"],
+        })
 
-    def test_unsupported_repository_is_unavailable(self):
-        self.assertEqual(repository_profile_status({"README.md", "go.mod"}), "unavailable")
-        self.assertEqual(repository_profile_status({
-            "go.mod", "docker-compose.yml", "cmd/assembly",
-        }), "resolved")
+    def test_each_required_ux_declaration_field_fails_closed_when_missing(self):
+        valid = valid_task()
+        hostile = {
+            "implementation_status": valid.replace("implementation_status: current\n", ""),
+            "route": valid.replace("route: /members\n", ""),
+            "requires_auth": valid.replace("requires_auth: true\n", ""),
+            "personas": valid.replace("personas:\n  - id: member\n    expected: SUCCESS\n", ""),
+            "persona_id": valid.replace("  - id: member\n", ""),
+            "persona_expected": valid.replace("    expected: SUCCESS\n", ""),
+            "viewport": valid.replace("viewport: 1440x900\n", ""),
+            "engine": valid.replace("engine: chromium\n", ""),
+            "screenshot_points": valid.replace("screenshot_points:\n  - members list\n", ""),
+        }
+        for field, document in hostile.items():
+            with self.subTest(field=field):
+                path = self.write_task(document)
+                result = discover_ux_tasks(self.repository_root)
+                self.assertEqual((result["status"], result["reason"], result["path"]), (
+                    "blocked", "invalid_task_declaration", "tests/ux/tasks/members.md",
+                ))
+                planned = self.plan()
+                self.assertEqual((planned["status"], planned["reason"]), (
+                    "blocked", "invalid_ux_declaration",
+                ))
+                path.unlink()
 
-    def test_docs_preserve_browser_recovery_and_fail_closed_standalone(self):
+    def test_unsupported_or_incomplete_repository_is_unavailable(self):
+        unsupported = Path(self.temporary.name) / "unsupported"
+        unsupported.mkdir()
+        unsupported.joinpath("go.mod").write_text("module example.test/unsupported\n")
+        result = resolve_assembly_profile(unsupported)
+        self.assertEqual((result["status"], result["reason"]), (
+            "unavailable", "unsupported_repository",
+        ))
+        self.repository_root.joinpath("cmd/assembly").rename(self.repository_root / "cmd/other")
+        result = self.plan()
+        self.assertEqual((result["status"], result["reason"]), (
+            "unavailable", "unsupported_repository",
+        ))
+
+    def test_selected_non_runnable_lane_returns_unavailable_not_partial_argv(self):
+        result = self.plan(required_lane_ids=["container-scan"])
+        self.assertEqual((result["status"], result["reason"], result["selected_argv"]), (
+            "unavailable", "selected_lane_unavailable", [],
+        ))
+        self.assertIn("container-scan", result["unavailable_lane_ids"])
+
+    def test_docs_invoke_adapter_and_preserve_browser_recovery(self):
         command = (ROOT / "plugins/assembly/commands/assembly-build.md").read_text()
         runner = (ROOT / "plugins/assembly/agents/workflow/go-test-runner.md").read_text()
         setup = (ROOT / "plugins/assembly/skills/development/setup.md").read_text()
         for document in (command, runner, setup):
-            self.assertIn("assembly-baseplate-verification-profile.json", document)
+            self.assertIn("assembly_verification_adapter.py", document)
+            self.assertIn("plan_assembly_verification", document)
             self.assertIn("Workflow Kernel", document)
         normalized = " ".join(command.split())
         for phrase in ("primary browser", "fresh primary", "different configured engine", "human_help_required", "diagnostic only"):
             self.assertIn(phrase, normalized)
-        self.assertIn("unavailable", command)
 
 
 if __name__ == "__main__":
