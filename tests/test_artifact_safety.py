@@ -264,12 +264,40 @@ class ArtifactSafetyTests(unittest.TestCase):
         deleted = deleted_artifact_record("old.txt", old_digest, provenance="git_diff", owner="chunk-02")
         self.write("new.txt")
         renamed = self.classify("new.txt", source_path="old.txt")
-        intents = [self.intent("delete", "old.txt", old_digest),
-                   self.intent("rename", "new.txt", renamed["digest"], source="old.txt")]
-        result = build_staging_allowlist(intents, [deleted, renamed], {"old.txt": None, "new.txt": renamed["digest"]})
-        self.assertEqual([item["operation"] for item in result["authorized"]], ["rename", "delete"])
-        missing_source = build_staging_allowlist(intents[1:], [renamed], {"new.txt": renamed["digest"]})
+        deleted_result = build_staging_allowlist(
+            [self.intent("delete", "old.txt", old_digest)], [deleted], {"old.txt": None},
+        )
+        self.assertEqual(["delete"], [item["operation"] for item in deleted_result["authorized"]])
+        rename_intent = self.intent("rename", "new.txt", renamed["digest"], source="old.txt")
+        rename_result = build_staging_allowlist(
+            [rename_intent], [deleted, renamed], {"old.txt": None, "new.txt": renamed["digest"]},
+        )
+        self.assertEqual(["rename"], [item["operation"] for item in rename_result["authorized"]])
+        missing_source = build_staging_allowlist([rename_intent], [renamed], {"new.txt": renamed["digest"]})
         self.assertEqual(missing_source["rejected"][0]["reason"], "unclassified")
+
+    def test_delete_plus_rename_and_rename_cycles_reject_every_involved_intent(self):
+        old_digest = "sha256:" + "8" * 64
+        deleted = deleted_artifact_record("old.txt", old_digest, provenance="git_diff", owner="chunk-02")
+        self.write("new.txt")
+        renamed = self.classify("new.txt", source_path="old.txt")
+        conflict = build_staging_allowlist(
+            [self.intent("delete", "old.txt", old_digest),
+             self.intent("rename", "new.txt", renamed["digest"], source="old.txt")],
+            [deleted, renamed], {"old.txt": None, "new.txt": renamed["digest"]},
+        )
+        self.assertEqual([], conflict["authorized"])
+        self.assertEqual({"conflicting_intent"}, {item["reason"] for item in conflict["rejected"]})
+
+        self.write("old.txt")
+        reverse = self.classify("old.txt", source_path="new.txt")
+        cycle = build_staging_allowlist(
+            [self.intent("rename", "new.txt", renamed["digest"], source="old.txt"),
+             self.intent("rename", "old.txt", reverse["digest"], source="new.txt")],
+            [renamed, reverse], {"old.txt": reverse["digest"], "new.txt": renamed["digest"]},
+        )
+        self.assertEqual([], cycle["authorized"])
+        self.assertEqual({"conflicting_intent"}, {item["reason"] for item in cycle["rejected"]})
 
 
 if __name__ == "__main__":

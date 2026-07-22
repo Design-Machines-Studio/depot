@@ -442,21 +442,20 @@ def build_staging_allowlist(intended_changes, records, observed_digests):
                 "path": _unsafe_path_reference(raw.get("path")),
                 "reason": "unsafe_path",
             })
-    target_counts = {}
-    source_counts = {}
+    path_use_counts = {}
     for item in intents:
-        target_counts[item["path"]] = target_counts.get(item["path"], 0) + 1
+        path_use_counts[item["path"]] = path_use_counts.get(item["path"], 0) + 1
         if item["operation"] == "rename":
-            source_counts[item["source_path"]] = source_counts.get(item["source_path"], 0) + 1
-    conflicting_targets = {path for path, count in target_counts.items() if count > 1}
-    conflicting_sources = {path for path, count in source_counts.items() if count > 1}
+            source = item["source_path"]
+            path_use_counts[source] = path_use_counts.get(source, 0) + 1
+    conflicting_paths = {path for path, count in path_use_counts.items() if count > 1}
     authorized = []
     rejected = sorted(unsafe_rejections, key=lambda item: (item["path"], item["operation"]))
     for intent in sorted(intents, key=lambda item: (item["path"], item["operation"], item["source_path"] or "")):
         record = by_path.get(intent["path"])
         reason = (
-            "conflicting_intent" if intent["path"] in conflicting_targets
-            or intent["operation"] == "rename" and intent["source_path"] in conflicting_sources
+            "conflicting_intent" if intent["path"] in conflicting_paths
+            or intent["operation"] == "rename" and intent["source_path"] in conflicting_paths
             else None
         )
         if reason is None and record is None:
