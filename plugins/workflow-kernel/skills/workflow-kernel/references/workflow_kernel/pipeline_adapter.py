@@ -30,6 +30,9 @@ PIPELINE_STAGES = frozenset({
     "terminal_reconciliation", "run_summary",
     "verification_contract_bound", "verification_contract_revised",
     "attempt_usage", "browser_recovery",
+    "repository_verification_plan", "artifact_classification",
+    "staging_allowlist", "browser_bundle", "ci_snapshot", "closeout_audit",
+    "improvement_input_index", "improvement_report", "improvement_prompt",
 })
 _RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
 

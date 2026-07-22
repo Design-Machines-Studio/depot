@@ -32,6 +32,9 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `independent-prediction-receipts.json` | 2 | Independently produced pre-action prediction source; retained with the bound prediction through comparison and deleted only after semantic match |
 | `shadow-report.json` | 2 | Predicted-versus-authoritative comparison; never changes run outcome |
 | `metrics.json` | 2 | Proposal-only reliability aggregation generated after the terminal receipt |
+| `improvement-input-index.json` | 3 | Immutable redaction-safe Stage A index sealed before cleanup; retained with an open draft PR |
+| `upstream-improvements.json` | 3 | Authoritative proposal-only Stage B candidate/dedupe report |
+| `upstream-improvement-prompt.md` | 3 | Deterministic projection of eligible candidates; never authority over the JSON report |
 | `docker/*.json` | 2 | Creation plans/receipts, bound node-status and inventory snapshots, sealed cleanup plans, outcomes, and cleanup receipts |
 | `brainstorm.html` | 2 | Design decisions (HTML + `visualDecisions` island) |
 | `original-prompt.md` | 3 | User's verbatim input -- ground truth (markdown) |
@@ -80,7 +83,7 @@ Protected builder restore blobs are not ordinary artifacts. Store them only in p
 
 ## Cleanup Rules
 
-Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: Docker reconciliation; artifact and Git cleanup while preserving terminal shadow inputs; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; eligible shadow Tier 2 deletion only on semantic `match`; then manifest/receipt-input cleanup on that same match. Receipt fields never precede their Docker/Git/artifact outcomes, and `manifest.json` is never removed before terminal observation finishes. The repository scope file is not eligible Tier 2, and parity match alone never authorizes terminal run-state deletion.
+Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: seal the safe Scout input index; Docker reconciliation; artifact and Git cleanup while preserving terminal shadow inputs; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; finalize the Scout JSON and prompt projection; eligible shadow Tier 2 deletion only on semantic `match`; then manifest/receipt-input cleanup on that same match. Receipt fields never precede their Docker/Git/artifact outcomes, `manifest.json` is never removed before terminal observation finishes, and Scout source artifacts are never removed before Stage A seals their approved safe references. The repository scope file is not eligible Tier 2, and parity match alone never authorizes terminal run-state deletion.
 
 ### On successful pipeline completion (Step 5b)
 
@@ -88,7 +91,8 @@ Step 5b runs on every exit path -- success, failure, and every answer to the Pha
 2. Delete Tier 1 plus consumed prompts/brainstorm artifacts and complete Git cleanup/readiness checks. Preserve `manifest.json`, `authoritative-receipts.json`, and shadow/RunSpec artifacts.
 3. Write `plans/<feature-slug>/receipt.md` from those completed authoritative outcomes.
 4. Append the terminal receipt, run terminal observation, comparison, and metrics using the retained manifest and cumulative receipt array.
-5. On semantic `match`, delete eligible shadow Tier 2 such as the bound prediction, then delete the consumed manifest, authoritative receipt array, independent prediction source, and Docker plan/proof inputs. The source and bound prediction are never deleted before bind and comparison. Preserve `.workflow-kernel/repository-scope.json` unconditionally. Preserve the terminal run directory unless a fresh Docker inventory filtered by the exact `repository_scope_id` proves zero objects for that exact `(scope_id, run_id)` and contains no matching object whose inspect failed; only then may the directory be replaced by or reduced to a durable terminal tombstone. On any other parity result, preserve all terminal inputs and shadow artifacts for investigation.
+5. Finalize `upstream-improvements.json` from the sealed index and exact terminal outcomes, then render `upstream-improvement-prompt.md`; preserve both feature-scoped artifacts.
+6. On semantic `match`, delete eligible shadow Tier 2 such as the bound prediction, then delete the consumed manifest, authoritative receipt array, independent prediction source, and Docker plan/proof inputs. The source and bound prediction are never deleted before bind and comparison. Preserve `.workflow-kernel/repository-scope.json` unconditionally. Preserve the terminal run directory unless a fresh Docker inventory filtered by the exact `repository_scope_id` proves zero objects for that exact `(scope_id, run_id)` and contains no matching object whose inspect failed; only then may the directory be replaced by or reduced to a durable terminal tombstone. On any other parity result, preserve all terminal inputs and shadow artifacts for investigation.
 6. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`.
 
 Shadow artifacts never authorize cleanup, supply receipt fields, or substitute for an authoritative receipt.

@@ -1605,11 +1605,23 @@ Append one line to `docs/pipeline-metrics/ledger.md` with date, feature, provide
 
 Mark `FINAL 5. Run Post-Mortem` complete.
 
+### Step 5a.1: Seal Upstream Improvement Scout inputs
+
+Run this proposal-only Stage A on every full run, including a clean run. After
+final review, requirements crosscheck, Codify (when triggered), and the run
+post-mortem exist, but before any cleanup, classify and redact every proposed
+Scout input through the artifact classifier. Seal only approved safe references
+and digests in `plans/<feature-slug>/improvement-input-index.json`. Raw/private
+content, credentials, environment values, and speculative benefit claims are
+forbidden. The sealed index is immutable even when cleanup later removes a
+source artifact. This stage observes evidence; it cannot schedule work, change
+findings/routing, or mutate plugin, PR, issue, release, cache, or merge state.
+
 ## Step 5b: Artifact and Repository Cleanup
 
 Reconcile authoritative Docker ownership first, then clean artifacts and Git refs, then write the final authoritative cleanup/terminal receipt, and only then run shadow observation/comparison/metrics. This order is mandatory.
 
-`STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> shadow_tier2_delete_on_match -> manifest_input_cleanup_on_match`
+`STEP5B_ORDER: scout_input_index_sealed -> docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> scout_finalize_and_render -> shadow_tier2_delete_on_match -> manifest_input_cleanup_on_match`
 
 **This step is mandatory and runs on every exit path** -- success, review failure, chunk-blocking failure, pipeline-blocking failure, and every answer to the caller's Phase 7 gate. If the run is aborting because of an exception, this step still runs: it is deterministic git and cannot make the failure worse.
 
@@ -1831,6 +1843,21 @@ Only after the complete final authoritative cleanup/terminal receipt exists, app
 ```
 
 These commands are observation-only and cannot alter Docker, Git, artifact, merge, review, or receipt outcomes.
+
+### 6a. Finalize Upstream Improvement Scout output
+
+Before any terminal shadow/input deletion, run proposal-only Scout Stage B from
+the sealed input index plus the exact completed Docker/artifact/Git cleanup
+outcomes, authoritative terminal receipt, shadow comparison, and metrics. Write
+the structured authority to `plans/<feature-slug>/upstream-improvements.json`,
+then deterministically project only eligible one-off/recurring/standing work to
+`plans/<feature-slug>/upstream-improvement-prompt.md`. Completed, superseded,
+and rejected controls remain in JSON for dedupe and never reappear as fresh
+prompt work. Missing telemetry stays `unavailable`, never zero or estimated
+savings. An empty candidate list with `no_evidence_backed_improvement` is a
+successful run. The Scout does not replace friction-triggered Codify or the
+economics/reliability post-mortem and has no scheduling, mutation, merge, or
+release authority.
 
 Before deletion, capture the comparison category/reasons and aggregate metric summary in the orchestrator's Step 6 report state. When comparison returns semantic `match`, first delete eligible shadow Tier 2 artifacts (`pipeline-shadow-observation.json`, `pipeline-shadow-prediction.json`, `shadow-report.json`, and `metrics.json`), then delete the consumed terminal inputs (`manifest.json`, `authoritative-receipts.json`, `independent-prediction-receipts.json`, and eligible Docker plan/status/outcome artifacts). Never auto-delete `.workflow-kernel/repository-scope.json`; it is repository-lifetime durable. Parity match alone never authorizes deletion of `.workflow-kernel/runs/<run-id>/`. Keep that terminal run directory, or a durable tombstone, until a new Docker inventory filtered by the exact repository scope proves zero objects with the exact `(scope_id, run_id)` and has no uninspectable matching object. The prediction source and bound prediction are never deleted before binding and comparison. Preserve all terminal inputs for `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, `unsafe_to_promote`, runtime unavailability, invalid input, unsafe/blocked, or write conflict. Record the captured comparison/metrics disposition in the final summary without rewriting the authoritative cleanup receipt.
 

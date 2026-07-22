@@ -591,6 +591,18 @@ Before presenting this gate, confirm the orchestrator's Step 5b ran its reposito
 5. Re-verify the repository readiness checks (clean tree, no stale worktree registrations).
 6. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.` Then reproduce the inventory's "Remaining after cleanup" table so the user sees exactly which branches still exist and why.
 
+## Every-run Upstream Improvement Scout
+
+During Phase 6, require the execution orchestrator to seal the redaction-safe
+`improvement-input-index.json` after final review/Codify/post-mortem evidence
+exists and before cleanup. After exact cleanup, the authoritative terminal
+receipt, and shadow comparison/metrics, require it to finalize
+`upstream-improvements.json` and deterministically render
+`upstream-improvement-prompt.md`. Both full-CLI and Codex-native execution use
+this exact order. Empty output is valid. The Scout is proposal-only and cannot
+modify current findings, sources, routing, PR/issues, releases, marketplaces,
+installed caches, or merge state.
+
 ## Self-Audit
 
 Before delivering to the user, verify your own compliance by answering these questions honestly:
@@ -612,5 +624,6 @@ Before delivering to the user, verify your own compliance by answering these que
 14. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
 15. **Codify audit:** If the run had friction (findings, >1 review iteration, a resolved ambiguity, or a repeated guardrail trip), did the orchestrator run the codify loop (Step 5.2)? For any failure pattern not already in CLAUDE.md "Known Pipeline Failure Modes," did it surface a postmortem stub + candidate Known Failure Mode entry as a Codify Proposal, rather than silently swallowing a novel failure? A new failure that produces no codify proposal is a missed compounding opportunity.
 16. **Run economics audit:** Did the orchestrator write `plans/<feature-slug>/run-postmortem.md`, report measured `providerSplit`, append `docs/pipeline-metrics/ledger.md`, and label recommendations `AWAITING APPROVAL`? A run that skips the post-mortem FAILS the self-audit.
+17. **Scout ordering audit:** Was the safe input index sealed before cleanup, and was the structured report plus prompt projection finalized only after cleanup, terminal receipt, parity, and metrics? Did unavailable telemetry remain unavailable and completed controls stay out of prompt work?
 
 If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.

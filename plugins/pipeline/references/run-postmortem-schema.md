@@ -36,3 +36,13 @@ Kernel reliability data is measurement only. A parity report or reliability reco
 ```
 
 Recommendations are never auto-applied. The human approves every plugin-source or routing-policy change.
+
+## Separation from the Upstream Improvement Scout
+
+This post-mortem remains the measured economics/reliability record and its
+recommendations remain `AWAITING APPROVAL`. The every-run Scout may cite its
+safe reference after Stage A classification, but cannot rewrite this document.
+Scout candidates live in `upstream-improvements.json`; the generated prompt is
+only a deterministic projection. Missing token, cost, wait, cleanup, or
+authority telemetry remains explicitly unavailable in both systems and never
+becomes zero, an estimate, or an invented savings claim.

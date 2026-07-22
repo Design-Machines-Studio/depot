@@ -67,6 +67,13 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "browser_bundle_refs", "lane_id", "state", "expected_coverage",
     "partial_output", "output_ref", "coverage_gap_reason",
     "source_scope_digest", "finding_refs",
+    "verification_profile_ref", "verification_plan_ref",
+    "artifact_classification_ref", "staging_allowlist_ref",
+    "browser_bundle_ref", "ci_evidence_ref", "closeout_audit_ref",
+    "read_only_boundary_ref", "improvement_input_index_ref",
+    "improvement_report_ref", "improvement_prompt_ref",
+    "terminal_receipt_ref", "shadow_report_ref", "metrics_ref",
+    "mechanical_refs_provenance",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -126,6 +133,19 @@ RECEIPT_FIELD_ALIASES = {
     "expectedCoverage": "expected_coverage", "partialOutput": "partial_output",
     "outputRef": "output_ref", "coverageGapReason": "coverage_gap_reason",
     "sourceScopeDigest": "source_scope_digest", "findingRefs": "finding_refs",
+    "verificationProfileRef": "verification_profile_ref",
+    "verificationPlanRef": "verification_plan_ref",
+    "artifactClassificationRef": "artifact_classification_ref",
+    "stagingAllowlistRef": "staging_allowlist_ref",
+    "browserBundleRef": "browser_bundle_ref", "ciEvidenceRef": "ci_evidence_ref",
+    "closeoutAuditRef": "closeout_audit_ref",
+    "readOnlyBoundaryRef": "read_only_boundary_ref",
+    "improvementInputIndexRef": "improvement_input_index_ref",
+    "improvementReportRef": "improvement_report_ref",
+    "improvementPromptRef": "improvement_prompt_ref",
+    "terminalReceiptRef": "terminal_receipt_ref",
+    "shadowReportRef": "shadow_report_ref", "metricsRef": "metrics_ref",
+    "mechanicalRefsProvenance": "mechanical_refs_provenance",
     # Legacy producer vocabulary. The durable kernel name is deliberately
     # neutral because not every provider reports tokens.
     "tokens": "usage_count",
@@ -187,6 +207,14 @@ _REVIEW_LANE_STATES = frozenset({
     "missing", "unknown",
 })
 _REVIEW_FINDING_ID = re.compile(r"finding-v1:sha256:[0-9a-f]{64}\Z")
+_MECHANICAL_REF_FIELDS = frozenset({
+    "verification_profile_ref", "verification_plan_ref",
+    "artifact_classification_ref", "staging_allowlist_ref",
+    "browser_bundle_ref", "ci_evidence_ref", "closeout_audit_ref",
+    "read_only_boundary_ref", "improvement_input_index_ref",
+    "improvement_report_ref", "improvement_prompt_ref",
+    "terminal_receipt_ref", "shadow_report_ref", "metrics_ref",
+})
 
 
 def required_text(value: object, field: str) -> str:
@@ -541,6 +569,17 @@ def _nonnegative_number(value: object, field: str, *, integer: bool) -> object:
 def _validate_observation_receipt(receipt: dict) -> dict:
     """Validate optional telemetry without assigning it workflow authority."""
     receipt.pop("human_intervention", None)
+    present_mechanical_refs = _MECHANICAL_REF_FIELDS & set(receipt)
+    for field in present_mechanical_refs:
+        receipt[field] = safe_reference(receipt[field])
+    expected_provenance = (
+        "authoritative_receipt" if present_mechanical_refs
+        else "legacy_default_absent"
+    )
+    provenance = receipt.get("mechanical_refs_provenance", expected_provenance)
+    if provenance != expected_provenance:
+        raise ValueError("invalid mechanical reference provenance")
+    receipt["mechanical_refs_provenance"] = provenance
     if "decision_profile" in receipt:
         receipt["decision_profile"] = normalize_decision_profile(
             receipt["decision_profile"],
@@ -778,6 +817,11 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
         payload["evidence"].extend(receipt["browser_bundle_refs"])
         if receipt.get("stage") == "lane_record":
             payload["evidence"].extend(receipt["finding_refs"])
+    payload["evidence"].extend(
+        receipt[field] for field in sorted(_MECHANICAL_REF_FIELDS)
+        if field in receipt
+    )
+    payload["evidence"] = list(dict.fromkeys(payload["evidence"]))
     return payload
 
 
