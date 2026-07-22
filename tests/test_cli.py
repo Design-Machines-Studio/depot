@@ -86,8 +86,46 @@ class CliTests(unittest.TestCase):
     def test_help_lists_commands(self):
         result = self.run_cli("--help")
         self.assertEqual(result.returncode, 0)
-        for command in ("init", "validate", "append", "replay", "status"):
+        for command in (
+            "init", "validate", "append", "replay", "status",
+            "verification-plan", "verification-run", "verification-result",
+            "evidence-match", "artifact-classify", "staging-allowlist",
+            "browser-scenario-validate", "browser-bundle-record", "review-record",
+            "ci-evidence-normalize", "closeout-audit", "improvement-index",
+            "improvement-finalize", "improvement-render",
+        ):
             self.assertIn(command, result.stdout)
+
+    def test_review_record_persists_event_reference_and_improvement_render_is_plain_markdown(self):
+        from tests.test_improvements import ImprovementScoutTests
+        from tests.test_review_findings import ReviewFindingTests
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            record = root / "finding.json"
+            record.write_text(json.dumps(ReviewFindingTests().finding()))
+            output = root / "record-ref.json"
+            result = self.run_cli(
+                "review-record", "--record", str(record),
+                "--state-dir", str(root / "state"),
+                "--artifact-root", str(root / "state" / "artifacts"),
+                "--run-id", "review-1", "--occurred-at", "2026-07-14T00:00:00Z",
+                "--expected-sequence", "0", "--output", str(output),
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(json.loads(output.read_text())["record_ref"].startswith("records/findings/"))
+            self.assertEqual(len((root / "state" / "events.jsonl").read_text().splitlines()), 1)
+
+            helper = ImprovementScoutTests()
+            report = root / "report.json"
+            report.write_text(json.dumps(helper.report([])))
+            prompt = root / "upstream-prompt.md"
+            rendered = self.run_cli(
+                "improvement-render", "--report", str(report), "--output", str(prompt),
+            )
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            self.assertTrue(prompt.read_text().startswith("# Depot Upstream Improvement Run\n"))
+            with self.assertRaises(json.JSONDecodeError):
+                json.loads(prompt.read_text())
 
     def test_init_append_replay_status_and_safe_error(self):
         with tempfile.TemporaryDirectory() as directory:

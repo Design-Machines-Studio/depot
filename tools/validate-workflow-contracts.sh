@@ -296,7 +296,7 @@ require_text "$orchestrator" 'revise-verification-contract --state-dir .workflow
 require_text "$pipeline_run" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "pipeline-run binds contracts in the canonical run directory"
 require_absent "$orchestrator" 'bind-verification-contract --state-dir plans/' "orchestrator never binds contracts in the observation directory"
 require_absent "$pipeline_run" 'bind-verification-contract --state-dir plans/' "pipeline-run never binds contracts in the observation directory"
-require_text "$orchestrator" "STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics" "orchestrator preserves terminal cleanup ordering"
+require_text "$orchestrator" "STEP5B_ORDER: scout_input_index_sealed -> docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> scout_finalize_and_render -> shadow_tier2_delete_on_match -> manifest_input_cleanup_on_match" "orchestrator preserves terminal cleanup ordering"
 require_text "$orchestrator" "Broad prune, wildcards, negative filters, and name-based ownership are forbidden." "orchestrator forbids broad Docker cleanup"
 require_text "$kernel_skill" "Initialize every run in shadow mode" "kernel documents shadow default"
 require_text "$kernel_cli" "default=RunMode.SHADOW.value" "kernel CLI defaults to shadow"

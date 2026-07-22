@@ -54,12 +54,26 @@ PROMOTION_CHECK_SOURCES = {
     "provider_security_boundaries_unchanged": ("scenario replay",),
 }
 SCHEMA_DOCUMENTS = frozenset({
+    "artifact-classification-schema.json",
     "behavioral-verification-contract-schema.json",
+    "browser-evidence-bundle-schema.json",
     "browser-recovery-schema.json",
+    "browser-scenario-schema.json",
+    "ci-evidence-schema.json",
     "cleanup-plan-schema.json",
     "cleanup-receipt-schema.json",
+    "closeout-audit-schema.json",
+    "evidence-binding-schema.json",
+    "improvement-input-index-schema.json",
+    "improvement-report-schema.json",
+    "repository-verification-profile-schema.json",
     "resource-registry-schema.json",
+    "review-finding-record-schema.json",
+    "review-lane-record-schema.json",
+    "staging-allowlist-schema.json",
+    "verification-plan-schema.json",
     "verification-profile-schema.json",
+    "verification-result-schema.json",
     "workflow-classes-schema.json",
     "workflow-policy-schema.json",
 })
@@ -85,8 +99,35 @@ BEHAVIORAL_CLI_CASES = {
     "execute-cleanup-step": ("--state-dir", "<state>", "--plan", "<missing>", "--step-index", "0", "--inventory", "<missing>", "--node-statuses", "<missing>", "--outcomes", "<missing>", "--output", "<output>"),
     "record-cleanup": ("--state-dir", "<state>", "--plan", "<missing>", "--outcomes", "<missing>"),
     "plan-reconcile": ("--state-dir", "<state>", "--run-id", "validator-cli", "--output", "<output>"),
+    "verification-plan": ("--profile", "<missing>", "--repository", "<missing>", "--request", "<missing>", "--output", "<output>"),
+    "verification-run": ("--plan", "<missing>", "--profile", "<missing>", "--repository", "<missing>", "--prerequisites", "<missing>", "--lane-id", "lane", "--repo-root", "<state>", "--output", "<output>"),
+    "verification-result": ("--result", "<missing>", "--output", "<output>"),
+    "evidence-match": ("--expected", "<missing>", "--current", "<missing>", "--output", "<output>"),
+    "artifact-classify": ("--repo-root", "<state>", "--path", "missing.txt", "--lifecycle", "durable", "--provenance", "generated", "--owner", "validator", "--output", "<output>"),
+    "staging-allowlist": ("--intended-changes", "<missing>", "--records", "<missing>", "--observed-digests", "<missing>", "--output", "<output>"),
+    "browser-scenario-validate": ("--scenario", "<missing>", "--output", "<output>"),
+    "browser-bundle-record": ("--scenario", "<missing>", "--bundle", "<missing>", "--output", "<output>"),
+    "review-record": ("--record", "<missing>", "--state-dir", "<state>", "--artifact-root", "<state>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z", "--expected-sequence", "0", "--output", "<output>"),
+    "ci-evidence-normalize": ("--raw", "<missing>", "--output", "<output>"),
+    "closeout-audit": ("--expected", "<missing>", "--observed", "<missing>", "--output", "<output>"),
+    "improvement-index": ("--request", "<missing>", "--output", "<output>"),
+    "improvement-finalize": ("--request", "<missing>", "--output", "<output>"),
+    "improvement-render": ("--report", "<missing>", "--output", "<output>"),
 }
 SUCCESSFUL_CLI_COMMANDS = frozenset(BEHAVIORAL_CLI_CASES)
+BEHAVIORAL_CLI_EXITS = {
+    command: (0 if command in {
+        "init", "validate", "append", "replay", "status", "plan-cleanup",
+    } else 2)
+    for command in BEHAVIORAL_CLI_CASES
+}
+DETERMINISTIC_CLI_COMMANDS = frozenset({
+    "verification-plan", "verification-result", "evidence-match",
+    "artifact-classify", "staging-allowlist", "browser-scenario-validate",
+    "browser-bundle-record", "review-record", "ci-evidence-normalize",
+    "closeout-audit", "improvement-index", "improvement-finalize",
+    "improvement-render",
+})
 
 sys.path.insert(0, str(REFERENCES))
 sys.path.insert(0, str(ROOT))
@@ -363,7 +404,7 @@ def check_promotion(context):
     ]
 
 
-def check_cli(context):
+def check_cli(context, *, new_cli_only=False):
     from workflow_kernel import cli
     expected = {
         "init", "validate", "append", "replay", "status",
@@ -373,6 +414,11 @@ def check_cli(context):
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
+        "verification-plan", "verification-run", "verification-result",
+        "evidence-match", "artifact-classify", "staging-allowlist",
+        "browser-scenario-validate", "browser-bundle-record", "review-record",
+        "ci-evidence-normalize", "closeout-audit", "improvement-index",
+        "improvement-finalize", "improvement-render",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
@@ -406,27 +452,165 @@ def check_cli(context):
                 for item in template
             ]
             completed = run([sys.executable, "-m", "workflow_kernel", command, *argv])
-            if command in {
-                "init", "validate", "append", "replay", "status",
-                "plan-cleanup",
-            }:
-                require(completed.returncode == 0, f"{command} behavioral execution failed")
-            else:
-                safe_outcomes = {
-                    cli.EXIT_INVALID, cli.EXIT_UNSAFE_PLAN,
-                    cli.EXIT_RUNTIME_UNAVAILABLE, cli.EXIT_PARITY_GAP,
-                    cli.EXIT_CONFLICT,
-                }
-                if command == "plan-reconcile":
-                    safe_outcomes.add(0)
-                require(completed.returncode in safe_outcomes,
-                        f"{command} did not produce a defined outcome")
+            require(
+                completed.returncode == BEHAVIORAL_CLI_EXITS[command],
+                f"{command} exit contract changed",
+            )
             outcomes[command] = completed.returncode
 
         def successful(command, *arguments):
-            completed = run([sys.executable, "-m", "workflow_kernel", command, *map(str, arguments)])
+            argv = [*map(str, arguments)]
+            completed = run([sys.executable, "-m", "workflow_kernel", command, *argv])
             require(completed.returncode == 0, f"{command} valid fixture execution failed")
             outcomes[command] = completed.returncode
+            if command in DETERMINISTIC_CLI_COMMANDS:
+                output_index = argv.index("--output") + 1
+                first_output = Path(argv[output_index])
+                repeated = root / f"{command}-repeated-output"
+                argv[output_index] = str(repeated)
+                second = run([sys.executable, "-m", "workflow_kernel", command, *argv])
+                require(second.returncode == 0, f"{command} repeat execution failed")
+                require(first_output.read_bytes() == repeated.read_bytes(),
+                        f"{command} output is nondeterministic")
+
+        def expect_exit(command, expected_exit, *arguments):
+            completed = run([sys.executable, "-m", "workflow_kernel", command,
+                             *map(str, arguments)])
+            require(completed.returncode == expected_exit,
+                    f"{command} negative exit contract changed")
+
+        def write_fixture(name, value):
+            path = root / name
+            path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+            return path
+
+        from tests.test_repository_verification import profile, repository
+        verification_profile = write_fixture("repository-profile.json", profile())
+        repository_state = write_fixture("repository-state.json", repository())
+        plan_request = write_fixture("verification-plan-request.json", {
+            "changed_paths": [], "changed_packages": [], "risk_inputs": [],
+            "required_lane_ids": [], "generated_at": "2026-07-14T00:00:00Z",
+        })
+        verification_plan = root / "verification-plan.json"
+        successful("verification-plan", "--profile", verification_profile,
+                   "--repository", repository_state, "--request", plan_request,
+                   "--output", verification_plan)
+        prerequisites = write_fixture("prerequisites.json", {"tool:git": "available"})
+        verification_result = root / "verification-result.json"
+        successful("verification-run", "--plan", verification_plan,
+                   "--profile", verification_profile, "--repository", repository_state,
+                   "--prerequisites", prerequisites, "--lane-id", "doctor",
+                   "--repo-root", root, "--output", verification_result)
+        stale_repository = dict(repository()); stale_repository["commit_sha"] = "d" * 40
+        expect_exit("verification-run", cli.EXIT_UNSAFE_PLAN,
+                    "--plan", verification_plan, "--profile", verification_profile,
+                    "--repository", write_fixture("stale-repository.json", stale_repository),
+                    "--prerequisites", prerequisites, "--lane-id", "doctor",
+                    "--repo-root", root, "--output", root / "stale-result.json")
+
+        missing_tool_profile = profile()
+        missing_tool_profile["lanes"][0]["argv"] = ["workflow-kernel-missing-tool"]
+        missing_tool_profile["lanes"][0]["prerequisites"] = [{
+            "kind": "tool", "id": "workflow-kernel-missing-tool", "required": True,
+        }]
+        missing_profile = write_fixture("missing-tool-profile.json", missing_tool_profile)
+        missing_plan = root / "missing-tool-plan.json"
+        successful("verification-plan", "--profile", missing_profile,
+                   "--repository", repository_state, "--request", plan_request,
+                   "--output", missing_plan)
+        expect_exit("verification-run", cli.EXIT_RUNTIME_UNAVAILABLE,
+                    "--plan", missing_plan, "--profile", missing_profile,
+                    "--repository", repository_state,
+                    "--prerequisites", write_fixture("missing-tool-prerequisites.json", {
+                        "tool:workflow-kernel-missing-tool": "available",
+                    }), "--lane-id", "doctor", "--repo-root", root,
+                    "--output", root / "missing-tool-result.json")
+        successful("verification-result", "--result", verification_result,
+                   "--output", root / "validated-verification-result.json")
+
+        from tests.test_evidence_binding import binding
+        evidence_binding = write_fixture("evidence-binding.json", binding())
+        successful("evidence-match", "--expected", evidence_binding,
+                   "--current", evidence_binding, "--output", root / "evidence-match.json")
+
+        safe_artifact = root / "safe-artifact.txt"
+        safe_artifact.write_text("safe fixture\n", encoding="utf-8")
+        classification = root / "artifact-classification.json"
+        successful("artifact-classify", "--repo-root", root, "--path", safe_artifact.name,
+                   "--lifecycle", "durable", "--provenance", "generated",
+                   "--owner", "validator", "--output", classification)
+        secret_artifact = root / "secret-artifact.txt"
+        secret_artifact.write_text("Authorization: Bearer opaque-value", encoding="utf-8")
+        expect_exit("artifact-classify", cli.EXIT_UNSAFE_PLAN,
+                    "--repo-root", root, "--path", secret_artifact.name,
+                    "--lifecycle", "durable", "--provenance", "generated",
+                    "--owner", "validator", "--output", root / "blocked-artifact.json")
+        expect_exit("artifact-classify", cli.EXIT_UNSAFE_PLAN,
+                    "--repo-root", root, "--path", "../escape.txt",
+                    "--lifecycle", "durable", "--provenance", "generated",
+                    "--owner", "validator", "--output", root / "unsafe-path.json")
+        classified = json.loads(classification.read_text(encoding="utf-8"))
+        intended = write_fixture("intended-changes.json", [{
+            "operation": "modify", "path": safe_artifact.name,
+            "source_path": None, "expected_digest": classified["digest"],
+        }])
+        records = write_fixture("artifact-records.json", [classified])
+        observed_digests = write_fixture("observed-digests.json", {
+            safe_artifact.name: classified["digest"],
+        })
+        successful("staging-allowlist", "--intended-changes", intended,
+                   "--records", records, "--observed-digests", observed_digests,
+                   "--output", root / "staging-allowlist.json")
+
+        from tests.test_browser_scenarios import bundle, recovery_receipt, scenario
+        browser_scenario = write_fixture("browser-scenario.json", scenario().to_dict())
+        browser_bundle = write_fixture("browser-bundle.json", bundle().to_dict())
+        browser_recovery = write_fixture("browser-recovery.json", recovery_receipt().to_dict())
+        successful("browser-scenario-validate", "--scenario", browser_scenario,
+                   "--output", root / "validated-browser-scenario.json")
+        successful("browser-bundle-record", "--scenario", browser_scenario,
+                   "--bundle", browser_bundle, "--recovery-receipt", browser_recovery,
+                   "--output", root / "sealed-browser-bundle.json")
+
+        from tests.test_review_findings import ReviewFindingTests
+        finding = write_fixture("review-finding.json", ReviewFindingTests().finding())
+        review_state = root / "review-state"
+        successful("review-record", "--record", finding, "--state-dir", review_state,
+                   "--artifact-root", review_state / "artifacts", "--run-id", "review-1",
+                   "--occurred-at", "2026-07-14T00:00:00Z", "--expected-sequence", "0",
+                   "--output", root / "review-record-ref.json")
+
+        from tests.test_ci_evidence import raw
+        successful("ci-evidence-normalize", "--raw", write_fixture("ci-raw.json", raw()),
+                   "--output", root / "ci-evidence.json")
+        from tests.test_closeout import expected as closeout_expected, observed as closeout_observed
+        successful("closeout-audit", "--expected", write_fixture("closeout-expected.json", closeout_expected()),
+                   "--observed", write_fixture("closeout-observed.json", closeout_observed()),
+                   "--output", root / "closeout-audit.json")
+
+        from tests.test_improvements import ImprovementScoutTests
+        improvement = ImprovementScoutTests()
+        index_request = write_fixture("improvement-index-request.json", {
+            "run_id": "feature-run-1", "feature_slug": "feature-run",
+            "sealed_at": "2026-07-14T01:00:00Z", "inputs": [improvement.input()],
+        })
+        improvement_index = root / "improvement-index.json"
+        successful("improvement-index", "--request", index_request, "--output", improvement_index)
+        cleanup, shadow, metrics = improvement.outcomes()
+        finalize_request = write_fixture("improvement-finalize-request.json", {
+            "input_index": json.loads(improvement_index.read_text(encoding="utf-8")),
+            "finalized_at": "2026-07-14T02:00:00Z", "cleanup_outcomes": cleanup,
+            "shadow_outcome": shadow, "metrics": metrics,
+            "candidates": [improvement.candidate()],
+        })
+        improvement_report = root / "improvement-report.json"
+        successful("improvement-finalize", "--request", finalize_request,
+                   "--output", improvement_report)
+        successful("improvement-render", "--report", improvement_report,
+                   "--output", root / "upstream-improvements.md")
+        if new_cli_only:
+            context["cli_commands"] = dict(outcomes)
+            return
 
         def initialize(run_id):
             directory = root / ".workflow-kernel" / "runs" / run_id

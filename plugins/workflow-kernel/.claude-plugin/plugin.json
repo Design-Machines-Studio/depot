@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "description": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
-  "version": "0.3.0",
+  "description": "Neutral deterministic run state, repository verification, evidence binding, artifact safety, review records, browser evidence, CI normalization, closeout audit, and proposal-only improvement mechanics for Design Machines workflows.",
+  "version": "0.4.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -20,7 +20,7 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow-kernel state, behavioral verification contracts, event ledgers, contribution receipts, and attempt economics when explicitly requested.",
+        "description": "Validate, derive, record, compare, audit, and render deterministic workflow evidence through the stable file-bound CLI.",
         "triggers": [
           "validate a workflow-kernel run",
           "replay workflow events",

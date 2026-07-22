@@ -1,9 +1,12 @@
 {
   "name": "assembly",
-  "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "3.8.0",
+  "description": "Assembly governance application development with Go, Templ, Datastar, and executable repository verification profiles",
+  "version": "3.9.0",
   "author": {
     "name": "Design Machines"
+  },
+  "pluginDependencies": {
+    "workflow-kernel": ">=0.4.0"
   },
   "optionalPluginDependencies": {
     "council": ">=1.5.0",

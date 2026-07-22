@@ -46,6 +46,12 @@ imported by `cli.py` for validation. The launcher also
 starts Bash in privileged isolation, uses Python `-I`, unsets caller startup
 variables, and hop-bounds its own symlink path (a cycle exits `4`).
 
+Kernel 0.4.0 adds fourteen mechanical integration commands to the stable ledger,
+prediction, metrics, and exact-resource cleanup surface. Resolve one launcher
+per run and use `workflow_kernel --help` as the exact command inventory. These
+commands consume explicit local files; none accepts shell strings, caller
+environment values, credentials, or live provider access.
+
 ## Trust boundaries (fail closed)
 
 - Accept an in-repository runtime only beneath the same canonical Depot

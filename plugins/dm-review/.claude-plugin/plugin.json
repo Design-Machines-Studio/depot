@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
-  "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
-  "version": "1.45.0",
+  "description": "Read-only code review orchestrator with structured findings, browser and CI evidence, zero-deferral, and explicit fix/loop mutation ownership",
+  "version": "1.46.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -12,7 +12,7 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.3.0"
+    "workflow-kernel": ">=0.4.0"
   },
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
