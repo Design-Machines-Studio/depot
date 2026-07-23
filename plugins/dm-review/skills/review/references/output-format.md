@@ -30,7 +30,9 @@ The canonical unified report format produced by the review-consolidator after al
 ### P1 -- Critical (Blocks Merge)
 
 #### [Finding Title]
+- **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
+- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Clear description of the problem
 - **Fix:** Specific remediation steps
@@ -43,7 +45,9 @@ The canonical unified report format produced by the review-consolidator after al
 ### P2 -- Important (Should Fix)
 
 #### [Finding Title]
+- **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
+- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Description
 - **Fix:** Remediation
@@ -55,12 +59,76 @@ The canonical unified report format produced by the review-consolidator after al
 ### P3 -- Fix Before Merge
 
 #### [Finding Title]
+- **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
+- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Description
 - **Fix:** Remediation
 
 [Repeat for each P3 finding -- same detail format as P1/P2]
+
+---
+
+### Synthesis Decisions
+
+| Finding ID | Agreement | Disputed with | Selected outcome | Source decisions | Evidence rationale |
+|------------|-----------|---------------|------------------|------------------|--------------------|
+| `finding-v1:sha256(aaaa...)` | disputed | `finding-v1:sha256(bbbb...)` via reciprocal `cross_id_link` | retained as P1 | `source-id-a`: lane=`openrouter-fallback`, requested=`OpenRouter`, attempted=`OpenRouter`, implemented-by=`Codex`, model=`gpt-5`, agent=`security-auditor`, severity=`P1`, evidence=`runtime test reproduces unsafe write`, disposition/reason=`retained/retained-disagreement`, raw_ref=`raw/security.md#finding-1`, rationale=`runtime evidence establishes this root cause` | Reproducible runtime evidence supports source A and outranks the linked static hypothesis. |
+| `finding-v1:sha256(bbbb...)` | disputed | `finding-v1:sha256(aaaa...)` via reciprocal `cross_id_link` | discarded in favor of stronger evidence | `source-id-b`: lane=`openrouter`, requested=`OpenRouter`, attempted=`OpenRouter`, implemented-by=`OpenRouter`, model=`z-ai/glm-5.2`, agent=`pattern-recognition-specialist`, severity=`P3`, evidence=`static inspection attributes the write to a different root cause`, disposition/reason=`discarded/superseded-by-stronger-evidence`, raw_ref=`raw/patterns.md#finding-2`, rationale=`runtime reproduction contradicts this root-cause position` | The contradictory source position and its evidence remain visible despite the discarded outcome. |
+
+One row per canonical finding, sorted by finding ID. Within a row, sort source
+decisions by source finding ID. Sort cross-ID links by ordered ID pair and emit
+them reciprocally on every linked row. Use
+`agreement: unique|corroborated|disputed`
+independently from `finding_disposition: retained|merged|discarded`. Each source
+decision names its literal lane, requested/attempted/implemented-by provider,
+model, agent, source evidence, source severity, disposition, closed
+`decision_reason_code`, raw artifact reference, and a compact rationale. For
+severity disagreement, show every source severity, the chosen severity, and why
+the selected evidence outranks the alternatives.
+Contradictions and discarded positions remain visible.
+
+If there are zero raw findings, emit `Synthesis Decisions: none -- no source
+findings required a decision.` The section is still required.
+
+The machine-readable synthesis companion is an exact JSON object with
+`schema_version: 1`, `artifact_role: "synthesis_decisions"`, the review
+`run_id`, integer `source_finding_count`, normalized UTC `occurred_at`, and
+`decisions`. There is
+exactly one decision per raw source finding. Each decision contains:
+`source_finding_id`, `finding_path`, `finding_anchor`, `finding_category`,
+`finding_root_cause`, `finding_disposition`, `agreement`,
+`decision_reason_code`, `reviewer`, `lane`, `requested_provider`,
+`attempted_provider`, `implemented_by`, `provider`, `model`, `source_severity`,
+`evidence_ref`, positive integer `attempt`, and `occurred_at`. Use literal provider/model values
+from the lane receipt; use `not_reported` when that receipt does not name one.
+The kernel normalizes the four identity inputs, recomputes the exact
+`finding-v1:sha256(<64 lowercase hex>)` identifier, checks cardinality, and
+appends the ordered contribution receipts.
+
+The raw companion is an exact object with `schema_version: 1`,
+`artifact_role: "raw_finding_inventory"`, the same `run_id`, and `findings`.
+Every finding has `source_finding_id`, `reviewer`, `lane`, `source_severity`,
+`evidence_ref`, and the four `finding_path`/`finding_anchor`/
+`finding_category`/`finding_root_cause` identity inputs. The lane companion is
+an exact object with `schema_version: 1`,
+`artifact_role: "review_lane_receipts"`, the same `run_id`, and one `lanes`
+entry for every required lane. Each entry has `reviewer`, `lane`,
+`requested_provider`, `attempted_provider`, `implemented_by`, `provider`,
+`model`, nonempty `evidence_refs`, nonnegative integer `finding_count`, and the
+content-addressed `raw_output_ref` and `raw_output_digest`. Lane names and
+reviewer/lane identities must be unique. The raw-output companion is an exact
+object with `schema_version: 1`,
+`artifact_role: "review_lane_raw_outputs"`, the same `run_id`, and one
+`outputs` entry per requested lane. Each output contains only `reviewer`,
+`lane`, and `findings`; `findings` uses the raw inventory finding shape and may
+be empty. Every raw finding's `reviewer`/`lane` and `evidence_ref` must resolve
+to that literal lane entry, and the independently parsed union of all raw lane
+outputs must equal the raw inventory and decisions exactly. All four inputs
+must contain no credential-shaped value, URL userinfo, credential query,
+authorization string, or compound credential assignment; the exporter
+validates them before hashing or creating any sealed artifact.
 
 ---
 
@@ -152,6 +220,12 @@ The consolidator preserves the original citation format from each agent.
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
 7. **Full agent reports** are always included in collapsible sections for reference
 8. **No sugar-coating** -- if the code has problems, say so directly
+9. **Stable identity is mandatory** -- every retained canonical finding uses
+   `finding-v1:sha256(<normalized-key>)`, derived without reviewer, provider,
+   model, severity, remediation, or discovery order
+10. **Synthesis decisions are complete** -- every source finding appears with
+    provenance, evidence, raw ref, agreement, disposition, closed reason code,
+    and rationale; raw reviewer reports remain verbatim below
 
 ## Merge Recommendation Logic (zero-deferral default)
 

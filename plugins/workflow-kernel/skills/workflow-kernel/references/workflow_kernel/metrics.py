@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+import math
 from typing import Iterable, Mapping, Optional, Tuple
 
 from .schema import WorkflowEvent
@@ -15,6 +16,20 @@ WAIT_CATEGORIES = (
     "external_dependency",
     "capacity",
     "ci",
+)
+USAGE_FIELDS = (
+    "usage_count", "input_usage_count", "output_usage_count",
+    "cache_read_usage_count", "cache_write_usage_count",
+    "reasoning_usage_count",
+)
+CONTRIBUTION_BUCKETS = (
+    "retained", "merged", "discarded", "unique", "corroborated", "disputed",
+)
+ATTEMPT_ROW_FIELDS = (
+    "chunk_id", "attempt", "reviewer", "lane", "requested_provider",
+    "attempted_provider", "implemented_by", "provider", "model", "host",
+    "duration_seconds", "wait_category", "usage_scope", *USAGE_FIELDS,
+    "cost_usd", "measurement_source", "usage_estimated",
 )
 
 
@@ -27,6 +42,7 @@ class ReliabilityReport:
     models: Mapping[str, int]
     hosts: Mapping[str, int]
     workflow_classes: Mapping[str, int]
+    decision_profiles: Mapping[str, int]
     isolation_modes: Mapping[str, int]
     isolation_strategies: Mapping[str, int]
     retry_reasons: Mapping[str, int]
@@ -56,6 +72,20 @@ class ReliabilityReport:
     cost_to_clean: Optional[float]
     fallback_rate: float
     cleanup_reliability: float
+    attempt_economics: Tuple[Mapping[str, object], ...]
+    usage_totals: Mapping[str, Optional[int]]
+    usage_total_provenance: Mapping[str, Optional[str]]
+    usage_measurement_coverage: Mapping[str, object]
+    cost_total_provenance: Optional[str]
+    cost_measurement_coverage: Mapping[str, object]
+    canonical_finding_count: int
+    finding_contribution_count: int
+    finding_contributions_by_reviewer: Mapping[str, Mapping[str, int]]
+    finding_contributions_by_provider: Mapping[str, Mapping[str, int]]
+    finding_contributions_by_model: Mapping[str, Mapping[str, int]]
+    human_intervention_count: int
+    human_interventions_by_reason: Mapping[str, int]
+    human_intervention_attempts: Tuple[Mapping[str, object], ...]
     proposals: Tuple[Mapping[str, object], ...]
 
     def to_dict(self) -> dict:
@@ -65,6 +95,7 @@ class ReliabilityReport:
             "attempts_by_node": dict(self.attempts_by_node),
             "providers": dict(self.providers), "models": dict(self.models),
             "hosts": dict(self.hosts), "workflow_classes": dict(self.workflow_classes),
+            "decision_profiles": dict(self.decision_profiles),
             "isolation_modes": dict(self.isolation_modes),
             "isolation_strategies": dict(self.isolation_strategies),
             "retry_reasons": dict(self.retry_reasons),
@@ -86,6 +117,28 @@ class ReliabilityReport:
             "wait_seconds_by_category": dict(self.wait_seconds_by_category),
             "cost_to_clean": self.cost_to_clean, "fallback_rate": self.fallback_rate,
             "cleanup_reliability": self.cleanup_reliability,
+            "attempt_economics": [dict(value) for value in self.attempt_economics],
+            "usage_totals": dict(self.usage_totals),
+            "usage_total_provenance": dict(self.usage_total_provenance),
+            "usage_measurement_coverage": dict(self.usage_measurement_coverage),
+            "cost_total_provenance": self.cost_total_provenance,
+            "cost_measurement_coverage": dict(self.cost_measurement_coverage),
+            "canonical_finding_count": self.canonical_finding_count,
+            "finding_contribution_count": self.finding_contribution_count,
+            "finding_contributions_by_reviewer": {
+                key: dict(value) for key, value in self.finding_contributions_by_reviewer.items()
+            },
+            "finding_contributions_by_provider": {
+                key: dict(value) for key, value in self.finding_contributions_by_provider.items()
+            },
+            "finding_contributions_by_model": {
+                key: dict(value) for key, value in self.finding_contributions_by_model.items()
+            },
+            "human_intervention_count": self.human_intervention_count,
+            "human_interventions_by_reason": dict(self.human_interventions_by_reason),
+            "human_intervention_attempts": [
+                dict(value) for value in self.human_intervention_attempts
+            ],
             "proposals": [dict(value) for value in self.proposals],
             "observation_only": True,
         }
@@ -95,9 +148,145 @@ def _number(payload, key, kind):
     if key not in payload:
         return kind(0)
     value = payload[key]
-    if type(value) not in ((int,) if kind is int else (int, float)) or value < 0:
+    valid_type = type(value) is int if kind is int else type(value) in {int, float}
+    if not valid_type or value < 0 or (type(value) is float and not math.isfinite(value)):
         raise ValueError("invalid numeric metric: " + key)
     return kind(value)
+
+
+def _attempt_identity(event: WorkflowEvent) -> Optional[tuple]:
+    """Coverage identity; provider/model remain row dimensions, not attempts."""
+    payload = event.payload
+    attempt = payload.get("attempt")
+    if type(attempt) is not int or attempt < 1:
+        return None
+    node_or_chunk = payload.get("chunk_id") or event.node_id
+    if type(node_or_chunk) is not str or not node_or_chunk:
+        return None
+    return (
+        event.run_id, node_or_chunk, attempt,
+        payload.get("reviewer"), payload.get("lane"),
+    )
+
+
+def _coverage_assignments(expected, rows, predicate):
+    grouped = defaultdict(set)
+    for identity in expected:
+        grouped[identity[:3]].add(identity)
+    normalized_expected = set()
+    for identities in grouped.values():
+        detailed = {
+            identity for identity in identities
+            if identity[3] is not None or identity[4] is not None
+        }
+        normalized_expected.update(detailed or identities)
+
+    def resolved(identity):
+        if identity[3] is not None or identity[4] is not None:
+            return identity
+        candidates = {
+            candidate for candidate in normalized_expected
+            if candidate[:3] == identity[:3]
+        }
+        return next(iter(candidates)) if len(candidates) == 1 else identity
+
+    measured_counts = Counter()
+    unassigned = 0
+    assigned_rows = []
+    for identity, payload in rows:
+        if not predicate(payload):
+            continue
+        assigned = resolved(identity)
+        if assigned not in normalized_expected:
+            unassigned += 1
+            continue
+        measured_counts[assigned] += 1
+        assigned_rows.append((assigned, payload))
+    measured = set(measured_counts)
+    return {
+        "expected": len(normalized_expected),
+        "measured": len(measured),
+        "estimated": len({
+            identity for identity, payload in assigned_rows
+            if identity in measured
+            and payload.get("usage_estimated") is True
+        }),
+        "missing": len(normalized_expected - measured),
+        "overlap": sum(1 for count in measured_counts.values() if count > 1),
+        "unassigned": unassigned,
+    }, assigned_rows
+
+
+def _coverage(expected, rows, predicate) -> dict:
+    return _coverage_assignments(expected, rows, predicate)[0]
+
+
+def _dimension_summary(values) -> dict:
+    result = {}
+    for key, disposition, agreement in values:
+        if type(key) is not str or not key:
+            continue
+        if key not in result:
+            result[key] = {bucket: 0 for bucket in CONTRIBUTION_BUCKETS}
+        result[key][disposition] += 1
+        result[key][agreement] += 1
+    return result
+
+
+def _scoped_totals(attempt_rows, run_rows, legacy_rows, expected_attempts):
+    usage_totals = {}
+    usage_provenance = {}
+    for field in USAGE_FIELDS:
+        run_values = [payload[field] for payload in run_rows if field in payload]
+        legacy_values = [payload[field] for payload in legacy_rows if field in payload]
+        coverage, assigned_rows = _coverage_assignments(
+            expected_attempts, attempt_rows, lambda payload: field in payload,
+        )
+        attempt_values = [payload[field] for _, payload in assigned_rows]
+        if len(run_values) > 1:
+            raise ValueError("overlapping authoritative run usage: " + field)
+        if run_values:
+            usage_totals[field] = sum(run_values)
+            usage_provenance[field] = "authoritative_run_total"
+        elif legacy_values:
+            usage_totals[field] = sum(legacy_values)
+            usage_provenance[field] = "legacy_unscoped_run_summary"
+        elif (
+            coverage["expected"] > 0
+            and coverage["missing"] == 0
+            and coverage["overlap"] == 0
+            and coverage["unassigned"] == 0
+            and len(attempt_values) == coverage["expected"]
+        ):
+            usage_totals[field] = sum(attempt_values)
+            usage_provenance[field] = "derived_complete_attempts"
+        else:
+            usage_totals[field] = None
+            usage_provenance[field] = None
+
+    run_costs = [payload["cost_usd"] for payload in run_rows if "cost_usd" in payload]
+    legacy_costs = [payload["cost_usd"] for payload in legacy_rows if "cost_usd" in payload]
+    cost_coverage, assigned_cost_rows = _coverage_assignments(
+        expected_attempts, attempt_rows, lambda payload: "cost_usd" in payload,
+    )
+    attempt_costs = [payload["cost_usd"] for _, payload in assigned_cost_rows]
+    if len(run_costs) > 1:
+        raise ValueError("overlapping authoritative run cost")
+    if run_costs:
+        cost, cost_provenance = sum(run_costs), "authoritative_run_total"
+    elif legacy_costs:
+        cost, cost_provenance = sum(legacy_costs), "legacy_unscoped_run_summary"
+    elif (
+        cost_coverage["expected"] > 0
+        and cost_coverage["missing"] == 0
+        and cost_coverage["overlap"] == 0
+        and cost_coverage["unassigned"] == 0
+        and len(attempt_costs) == cost_coverage["expected"]
+    ):
+        cost, cost_provenance = sum(attempt_costs), "derived_complete_attempts"
+    else:
+        cost, cost_provenance = None, None
+    return usage_totals, usage_provenance, cost, cost_provenance
 
 
 class MetricsAggregator:
@@ -116,6 +305,7 @@ class MetricsAggregator:
             "provider", "model", "host", "workflow_class", "isolation_mode",
             "isolation_strategy",
         )}
+        decision_profiles = Counter()
         attempts = Counter()
         retry_reasons = Counter()
         findings = Counter()
@@ -124,17 +314,31 @@ class MetricsAggregator:
         explicit_node_durations = Counter()
         nodes_with_explicit_duration = set()
         totals = Counter()
-        tokens = 0
-        cost = 0.0
-        saw_tokens = saw_cost = False
         validation_count = validation_first = fallbacks = completed = terminals = 0
         wait_seconds = Counter()
+        expected_attempts = set()
+        attempt_rows = []
+        economics = []
+        run_rows = []
+        legacy_rows = []
+        contributions = []
+        canonical_findings = set()
+        interventions = []
+        seen_interventions = {}
         for event in values:
             payload = event.payload
             for name, counter in dimensions.items():
                 value = payload.get(name)
                 if type(value) is str and value:
                     counter[value] += 1
+            profile = payload.get("decision_profile")
+            if isinstance(profile, Mapping):
+                decision_profiles[
+                    profile.get("uncertainty", "invalid") + "/"
+                    + profile.get("consequence", "invalid")
+                ] += 1
+            elif payload.get("decision_profile_defaulted") is True:
+                decision_profiles["legacy-defaulted"] += 1
             node = event.node_id or "run"
             try:
                 node_times[node].append(datetime.fromisoformat(event.occurred_at.replace("Z", "+00:00")))
@@ -142,19 +346,18 @@ class MetricsAggregator:
                 pass
             if "duration_seconds" in payload:
                 nodes_with_explicit_duration.add(node)
-                explicit_node_durations[node] += _number(
-                    payload, "duration_seconds", float,
-                )
+                explicit_node_durations[node] += _number(payload, "duration_seconds", float)
             wait_category = payload.get("wait_category")
             if wait_category is not None:
                 if wait_category not in WAIT_CATEGORIES:
                     raise ValueError("invalid wait category: " + str(wait_category))
-                wait_seconds[wait_category] += _number(
-                    payload, "duration_seconds", float,
-                )
+                wait_seconds[wait_category] += _number(payload, "duration_seconds", float)
             attempt = payload.get("attempt")
             if type(attempt) is int and attempt > 0:
                 attempts[node] = max(attempts[node], attempt)
+            identity = _attempt_identity(event)
+            if identity is not None:
+                expected_attempts.add(identity)
             reason = payload.get("retry_reason", payload.get("fallback_reason"))
             if type(reason) is str and reason:
                 retry_reasons[reason] += 1
@@ -175,15 +378,68 @@ class MetricsAggregator:
                 "cleanup_removed", "cleanup_retained", "cleanup_blocked", "cleanup_foreign",
             ):
                 totals[name] += _number(payload, name, int)
-            if "usage_count" in payload:
-                saw_tokens = True
-                tokens += _number(payload, "usage_count", int)
-            if "cost_usd" in payload:
-                saw_cost = True
-                cost += _number(payload, "cost_usd", float)
+            if payload.get("usage_scope") == "attempt" and identity is not None:
+                attempt_rows.append((identity, payload))
+                row = {"run_id": event.run_id, "node_id": event.node_id}
+                row.update({
+                    field: payload[field]
+                    for field in ATTEMPT_ROW_FIELDS if field in payload
+                })
+                economics.append(row)
+            elif payload.get("usage_scope") == "run":
+                run_rows.append(payload)
+            elif any(field in payload for field in (*USAGE_FIELDS, "cost_usd")):
+                legacy_rows.append(payload)
+            if payload.get("stage") == "finding_contribution":
+                contributions.append(payload)
+                if payload.get("finding_disposition") in {"retained", "merged"}:
+                    canonical_findings.add(payload["canonical_finding_id"])
+            if payload.get("human_intervention") is True:
+                intervention_id = payload.get("human_intervention_id")
+                row = {
+                    "human_intervention_id": intervention_id,
+                    "human_intervention_reason": payload["human_intervention_reason"],
+                    "producer_stage": payload.get("stage"),
+                    "run_id": event.run_id, "node_id": event.node_id,
+                }
+                for field in (
+                    "chunk_id", "attempt", "missing_case_ids",
+                    "recovery_receipt_digests",
+                ):
+                    if field in payload:
+                        row[field] = payload[field]
+                if "contract_digest" in payload:
+                    row["contract_digest"] = payload["contract_digest"]
+                identity = (
+                    row["producer_stage"], row["run_id"], row["node_id"],
+                    row.get("chunk_id"), row.get("attempt"),
+                    row["human_intervention_reason"],
+                    tuple(row.get("missing_case_ids", ())),
+                    tuple(row.get("recovery_receipt_digests", ())),
+                    row.get("contract_digest"),
+                )
+                prior = seen_interventions.setdefault(intervention_id, identity)
+                if prior != identity:
+                    raise ValueError("conflicting human intervention identity")
+                if prior == identity and not any(
+                    item["human_intervention_id"] == intervention_id
+                    for item in interventions
+                ):
+                    interventions.append(row)
             if payload.get("stage") in ("run_summary", "review_terminal"):
                 terminals += 1
                 completed += int(payload.get("status") in ("succeeded", "clean", "findings"))
+
+        usage_coverage = _coverage(
+            expected_attempts, attempt_rows,
+            lambda payload: any(field in payload for field in USAGE_FIELDS),
+        )
+        cost_coverage = _coverage(
+            expected_attempts, attempt_rows, lambda payload: "cost_usd" in payload,
+        )
+        usage_totals, usage_provenance, cost, cost_provenance = _scoped_totals(
+            attempt_rows, run_rows, legacy_rows, expected_attempts,
+        )
         durations = {
             node: (
                 explicit_node_durations[node]
@@ -233,10 +489,29 @@ class MetricsAggregator:
                 "human_approval_required": True, "rationale": "observed_cleanup_block",
                 "evidence_count": totals["cleanup_blocked"],
             },)
+        by_reviewer = _dimension_summary(
+            (payload.get("reviewer"), payload["finding_disposition"], payload["agreement"])
+            for payload in contributions
+        )
+        by_provider = _dimension_summary(
+            (
+                payload.get("provider", payload.get("implemented_by")),
+                payload["finding_disposition"], payload["agreement"],
+            )
+            for payload in contributions
+        )
+        by_model = _dimension_summary(
+            (payload.get("model"), payload["finding_disposition"], payload["agreement"])
+            for payload in contributions
+        )
+        intervention_reasons = Counter(
+            row["human_intervention_reason"] for row in interventions
+        )
         return ReliabilityReport(
             len(values), durations, dict(attempts), dict(dimensions["provider"]),
             dict(dimensions["model"]), dict(dimensions["host"]),
-            dict(dimensions["workflow_class"]), dict(dimensions["isolation_mode"]),
+            dict(dimensions["workflow_class"]), dict(decision_profiles),
+            dict(dimensions["isolation_mode"]),
             dict(dimensions["isolation_strategy"]),
             dict(retry_reasons), tuple(convergence),
             validation_first / validation_count if validation_count else 0.0,
@@ -246,15 +521,16 @@ class MetricsAggregator:
             totals["browser_passed"], totals["browser_recovered"],
             totals["browser_missing"], totals["cleanup_removed"],
             totals["cleanup_retained"], totals["cleanup_blocked"],
-            totals["cleanup_foreign"], tokens if saw_tokens else None,
-            cost if saw_cost else None,
+            totals["cleanup_foreign"], usage_totals["usage_count"], cost,
             completed / terminals if terminals else 0.0,
-            clean_seconds,
-            wall_clock_seconds,
-            active_compute_seconds,
+            clean_seconds, wall_clock_seconds, active_compute_seconds,
             {category: wait_seconds[category] for category in WAIT_CATEGORIES},
-            cost / clean_total if saw_cost and clean_total else None,
+            cost / clean_total if cost is not None and clean_total else None,
             fallbacks / len(values) if values else 0.0,
             clean_total / cleanup_total if cleanup_total else 0.0,
+            tuple(economics), usage_totals, usage_provenance, usage_coverage,
+            cost_provenance, cost_coverage, len(canonical_findings),
+            len(contributions), by_reviewer, by_provider, by_model,
+            len(interventions), dict(intervention_reasons), tuple(interventions),
             proposals,
         )

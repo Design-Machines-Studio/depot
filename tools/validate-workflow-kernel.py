@@ -53,15 +53,34 @@ PROMOTION_CHECK_SOURCES = {
     "browser_recovery_scenarios_passed": ("scenario replay",),
     "provider_security_boundaries_unchanged": ("scenario replay",),
 }
+SCHEMA_DOCUMENTS = frozenset({
+    "behavioral-verification-contract-schema.json",
+    "verification-contract-approval-schema.json",
+    "browser-recovery-schema.json",
+    "cleanup-plan-schema.json",
+    "cleanup-receipt-schema.json",
+    "resource-registry-schema.json",
+    "verification-profile-schema.json",
+    "workflow-classes-schema.json",
+    "workflow-policy-schema.json",
+})
 BEHAVIORAL_CLI_CASES = {
     "init": ("<run>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z"),
     "validate": ("<run>",),
     "append": ("<run>", "--event", "<event>"),
     "replay": ("<run>",),
     "status": ("<run>",),
+    "decide-validation-retry": ("--state-dir", "<state>", "--reason", "deterministic_validation_failure"),
+    "authorize-verification-contract-revision": (
+        "--state-dir", "<state>", "--approval", "<missing>",
+        "--host-capability", "<missing>",
+    ),
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
+    "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
+    "revise-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
+    "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
@@ -132,7 +151,10 @@ def check_documents(context):
     from workflow_kernel.policies import load_policy
     from workflow_kernel.workflows import WorkflowTemplates
     schemas = sorted(REFERENCES.glob("*-schema.json"))
-    require(len(schemas) == 7, "unexpected schema document count")
+    require(
+        {path.name for path in schemas} == SCHEMA_DOCUMENTS,
+        "schema document set changed",
+    )
     for path in schemas:
         document = json.loads(path.read_text(encoding="utf-8"))
         require(type(document) is dict, f"{path.name} is not an object")
@@ -151,7 +173,23 @@ def check_documents(context):
         visit(document)
     load_policy(REFERENCES / "workflow-policy.json")
     WorkflowTemplates(REFERENCES / "workflow-classes.json")
+    from workflow_kernel.pipeline_adapter import PIPELINE_STAGES, translate_pipeline_receipts
+    from workflow_kernel.dm_review_adapter import REVIEW_STAGES, translate_review_receipts
+    replayed_ledgers = []
+    for path in sorted(ROOT.glob("plans/**/authoritative-receipts.json")):
+        receipts = json.loads(path.read_text(encoding="utf-8"))
+        require(type(receipts) is list, f"{path} is not a receipt array")
+        stages = {item.get("stage") for item in receipts if type(item) is dict}
+        if stages <= PIPELINE_STAGES:
+            translate_pipeline_receipts(receipts)
+        elif stages <= REVIEW_STAGES:
+            translate_review_receipts(receipts)
+        else:
+            raise ValidationFailure(f"{path} uses non-canonical receipt stages")
+        replayed_ledgers.append(str(path.relative_to(ROOT)))
+    require(replayed_ledgers, "checked-in authoritative receipt ledger missing")
     context["schema_documents"] = [path.name for path in schemas]
+    context["authoritative_receipt_ledgers"] = replayed_ledgers
 
 
 def check_unittests(context):
@@ -286,7 +324,15 @@ def check_hosts(context):
     results = {}
     for host in ("codex", "generic"):
         report = ShadowComparator().compare_receipt_sets(sets[host], sets["claude-code"])
-        require(report.semantic_match and not report.safe_to_promote, f"{host} compatibility mismatch")
+        require(
+            not report.safe_to_promote and (
+                report.semantic_match and report.reason == "explained_host_difference"
+                or not report.semantic_match
+                and report.reason == "explained_host_economics_difference"
+                and "economics_difference" in report.differences
+            ),
+            f"{host} compatibility mismatch",
+        )
         results[host] = report.reason
     context["host_compatibility"] = {"claude-code": "reference", **results}
     require(set(context["host_compatibility"]) == CANONICAL_HOSTS, "host compatibility IDs drifted")
@@ -350,10 +396,15 @@ def check_promotion(context):
 def check_cli(context):
     from workflow_kernel import cli
     expected = {
-        "init", "validate", "append", "replay", "status", "bind-prediction",
-        "observe-pipeline", "observe-review", "compare", "metrics", "plan-create",
-        "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step",
-        "execute-cleanup-step", "record-cleanup", "plan-reconcile",
+        "init", "validate", "append", "replay", "status",
+        "decide-validation-retry", "bind-prediction",
+        "authorize-verification-contract-revision",
+        "bind-verification-contract", "revise-verification-contract",
+        "observe-pipeline", "observe-review", "export-review-contributions",
+        "compare", "metrics",
+        "plan-create", "plan-compose", "record-create", "plan-cleanup",
+        "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+        "plan-reconcile",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
@@ -458,9 +509,114 @@ def check_cli(context):
             "mode": "full", "workflow_class": "bug", "executionMode": "generic",
         }), encoding="utf-8")
         review_receipts = json.loads((RECEIPTS / "dm-review.json").read_text(encoding="utf-8"))
+        review_prefix = root / "review-prefix.json"
+        review_prefix.write_text(json.dumps(review_receipts[:-1]), encoding="utf-8")
+        decisions = root / "synthesis-decisions.json"
+        decisions.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "synthesis_decisions",
+            "run_id": "review-1", "source_finding_count": 1,
+            "occurred_at": "2026-07-14T01:04:30Z",
+            "decisions": [{
+                "source_finding_id": "security-P1-auth-boundary",
+                "finding_path": "internal/auth.py", "finding_anchor": "authorize",
+                "finding_category": "authorization",
+                "finding_root_cause": "missing boundary check",
+                "finding_disposition": "retained", "agreement": "unique",
+                "decision_reason_code": "retained-unique",
+                "reviewer": "security", "lane": "security",
+                "requested_provider": "claude", "attempted_provider": "claude",
+                "implemented_by": "codex", "provider": "codex",
+                "model": "not_reported", "source_severity": "P1",
+                "evidence_ref": "receipts/review/security-finding.json",
+                "attempt": 2, "occurred_at": "2026-07-14T01:02:00Z",
+            }],
+        }), encoding="utf-8")
+        raw_findings = root / "raw-finding-inventory.json"
+        raw_findings.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "raw_finding_inventory",
+            "run_id": "review-1", "findings": [{
+                "source_finding_id": "security-P1-auth-boundary",
+                "reviewer": "security", "lane": "security",
+                "source_severity": "P1",
+                "evidence_ref": "receipts/review/security-finding.json",
+                "finding_path": "internal/auth.py", "finding_anchor": "authorize",
+                "finding_category": "authorization",
+                "finding_root_cause": "missing boundary check",
+            }],
+        }), encoding="utf-8")
+        raw_value = json.loads(raw_findings.read_text(encoding="utf-8"))
+        lane_outputs = [
+            {"reviewer": "security", "lane": "security",
+             "findings": raw_value["findings"]},
+            {"reviewer": "architecture", "lane": "architecture", "findings": []},
+            {"reviewer": "visual", "lane": "visual", "findings": []},
+        ]
+        lane_output_bindings = {}
+        for output in lane_outputs:
+            digest = hashlib.sha256(json.dumps(
+                output, sort_keys=True, separators=(",", ":"),
+            ).encode()).hexdigest()
+            lane_output_bindings[output["lane"]] = {
+                "raw_output_ref": (
+                    "contribution-inputs/raw-lane-output-sha256-"
+                    + digest + ".json"
+                ),
+                "raw_output_digest": "sha256:" + digest,
+                "finding_count": len(output["findings"]),
+            }
+        raw_lane_outputs = root / "raw-lane-outputs.json"
+        raw_lane_outputs.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "review_lane_raw_outputs",
+            "run_id": "review-1", "outputs": lane_outputs,
+        }), encoding="utf-8")
+        lane_receipts = root / "review-lane-receipts.json"
+        lane_receipts.write_text(json.dumps({
+            "schema_version": 1, "artifact_role": "review_lane_receipts",
+            "run_id": "review-1", "lanes": [
+                {
+                    "reviewer": "security", "lane": "security",
+                    "requested_provider": "claude", "attempted_provider": "claude",
+                    "implemented_by": "codex", "provider": "codex",
+                    "model": "not_reported",
+                    "evidence_refs": ["receipts/review/security-finding.json"],
+                    **lane_output_bindings["security"],
+                },
+                {
+                    "reviewer": "architecture", "lane": "architecture",
+                    "requested_provider": "codex", "attempted_provider": "codex",
+                    "implemented_by": "codex", "provider": "codex",
+                    "model": "not_reported",
+                    "evidence_refs": ["receipts/review/architecture.json"],
+                    **lane_output_bindings["architecture"],
+                },
+                {
+                    "reviewer": "visual", "lane": "visual",
+                    "requested_provider": "codex", "attempted_provider": "codex",
+                    "implemented_by": "codex", "provider": "codex",
+                    "model": "not_reported",
+                    "evidence_refs": ["receipts/review/visual-unavailable.json"],
+                    **lane_output_bindings["visual"],
+                },
+            ],
+        }), encoding="utf-8")
+        contributed = root / "review-contributed.json"
+        successful(
+            "export-review-contributions", "--request", request,
+            "--decisions", decisions, "--raw-findings", raw_findings,
+            "--lane-receipts", lane_receipts,
+            "--raw-lane-outputs", raw_lane_outputs, "--receipts", review_prefix,
+            "--state-dir", root, "--output", contributed,
+        )
+        contributed_receipts = json.loads(contributed.read_text(encoding="utf-8"))
+        terminal = {**review_receipts[-1], "sequence": len(contributed_receipts)}
+        authoritative_review = root / "review-authoritative.json"
+        authoritative_review.write_text(
+            json.dumps([*contributed_receipts, terminal]), encoding="utf-8",
+        )
         review_prediction = root / "review-prediction.json"
         review_prediction.write_text(json.dumps([
-            {**item, "prediction_basis": "pre-action"} for item in review_receipts
+            {**item, "prediction_basis": "pre-action"}
+            for item in [*contributed_receipts, terminal]
         ]), encoding="utf-8")
         successful(
             "bind-prediction", "--type", "review", "--request", request,
@@ -469,11 +625,48 @@ def check_cli(context):
         start(review_run, "review-1")
         successful(
             "observe-review", "--request", request,
-            "--receipts", RECEIPTS / "dm-review.json", "--state-dir", root,
+            "--receipts", authoritative_review, "--state-dir", root,
         )
         successful(
             "metrics", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "metrics.json",
+        )
+
+        from tests.test_runtime_cli import verification_contract
+        from workflow_kernel.behavioral_contract import contract_digest
+
+        contract_run = initialize("contract-1")
+        contract_value = verification_contract()
+        contract_path = root / "verification-contract-1.json"
+        contract_path.write_text(json.dumps(contract_value), encoding="utf-8")
+        successful(
+            "bind-verification-contract", "--state-dir", contract_run,
+            "--contract", contract_path,
+        )
+        revision_value = json.loads(json.dumps(contract_value))
+        revision_value.update({
+            "revision": 2,
+            "previous_contract_digest": contract_digest(contract_value),
+        })
+        revision_value["revision_justification"] = {
+            "reason_code": "metadata_update",
+            "summary": "Retain the approved behavioral obligations.",
+            "added_obligation_ids": [],
+            "retained_obligation_ids": [
+                "PROOF:CHK-001:REQ-001", "REG-001", "REQ-001",
+            ],
+            "removed_obligation_ids": [],
+            "human_approval_evidence_ref": None,
+        }
+        revision_path = root / "verification-contract-2.json"
+        revision_path.write_text(json.dumps(revision_value), encoding="utf-8")
+        successful(
+            "revise-verification-contract", "--state-dir", contract_run,
+            "--contract", revision_path,
+        )
+        successful(
+            "decide-validation-retry", "--state-dir", contract_run,
+            "--reason", "deterministic_validation_failure",
         )
 
         argv = root / "create-argv.json"
@@ -537,6 +730,7 @@ def check_cli(context):
             "--outcomes", outcomes_path,
         )
 
+        from tests.test_behavioral_contract import BehavioralContractTests
         from tests.test_runtime_cli import RuntimeCliTests
         for command, method in (
             ("execute-cleanup-step", "test_stale_cli_action_executes_under_old_run_guard_without_current_run_node_witness"),
@@ -546,6 +740,42 @@ def check_cli(context):
             RuntimeCliTests(method).run(result)
             require(result.wasSuccessful(), f"{command} valid fixture execution failed")
             outcomes[command] = 0
+        hostile_cases = (
+            (
+                BehavioralContractTests,
+                "test_documented_shape_matches_schema_and_bool_numeric_values_do_not",
+                "unsupported schema",
+            ),
+            (
+                BehavioralContractTests,
+                "test_strict_closed_validation_and_safe_argv_links",
+                "unsafe argv",
+            ),
+            (
+                BehavioralContractTests,
+                "test_revision_recomputes_deltas_and_requires_approval_for_weakening",
+                "unauthorized weakening",
+            ),
+            (
+                RuntimeCliTests,
+                "test_verification_contract_revision_uses_replay_and_rejects_stale_digest",
+                "stale digest",
+            ),
+            (
+                RuntimeCliTests,
+                "test_verification_contract_rejects_symlink_input_and_artifact_escape",
+                "unsafe durable path",
+            ),
+            (
+                RuntimeCliTests,
+                "test_decide_validation_retry_rejects_hostile_ledgers_without_echo_or_writes",
+                "hostile retry ledger",
+            ),
+        )
+        for case, method, label in hostile_cases:
+            result = unittest.TestResult()
+            case(method).run(result)
+            require(result.wasSuccessful(), f"CLI hostile case failed: {label}")
         require(set(outcomes) == SUCCESSFUL_CLI_COMMANDS, "successful CLI coverage incomplete")
     invalid = run([sys.executable, "-m", "workflow_kernel", "not-a-command"])
     require(invalid.returncode == cli.EXIT_INVALID, "invalid CLI exit code changed")
@@ -560,6 +790,7 @@ def check_cli(context):
     require(blocked == cli.EXIT_UNSAFE_PLAN, "blocked CLI exit code changed")
     context["cli_commands"] = sorted(expected)
     context["cli_execution"] = outcomes
+    context["cli_hostile_cases"] = [label for _case, _method, label in hostile_cases]
 
 
 def check_workflow_classes(context):

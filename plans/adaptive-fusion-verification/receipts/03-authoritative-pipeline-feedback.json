@@ -1,0 +1,16 @@
+{
+  "chunk_id": "03-authoritative-pipeline-feedback",
+  "status": "merged",
+  "classification": "config",
+  "requestedProvider": "openrouter",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": true,
+  "fallbackReason": "tenant-policy-denied",
+  "openrouter_attempt_status": "declined-before-export",
+  "validation": "routing economics and workflow contracts validators passed",
+  "evaluation": "EVAL_GATE_PASSED: 03-authoritative-pipeline-feedback | classification: config | iterations: 2 | findings_remaining: 0 | deferred: 0",
+  "ambiguity_resolved": false,
+  "commit": "947545a4ed4b7970e4b317ae0982052efedd7eb2",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

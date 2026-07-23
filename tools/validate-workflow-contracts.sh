@@ -59,6 +59,23 @@ require_absent() {
   fi
 }
 
+require_before() {
+  local file="$1"
+  local first="$2"
+  local second="$3"
+  local label="$4"
+  local first_line second_line
+
+  first_line="$(grep -nF -m1 -- "$first" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  second_line="$(grep -nF -m1 -- "$second" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  if [ -n "$first_line" ] && [ -n "$second_line" ] && [ "$first_line" -lt "$second_line" ]; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  fi
+}
+
 # --------------------------------------------------------------------------
 # Group 1: Repository cleanup contract
 # --------------------------------------------------------------------------
@@ -67,9 +84,12 @@ contract="$REPO_ROOT/plugins/dm-review/skills/review/references/repo-cleanup-con
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 pipeline_run="$REPO_ROOT/plugins/pipeline/commands/pipeline-run.md"
+pipeline_prompts="$REPO_ROOT/plugins/pipeline/commands/pipeline-prompts.md"
 pipeline_fix="$REPO_ROOT/plugins/pipeline/commands/pipeline-fix.md"
 lifecycle="$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"
 review_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
+review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
 review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
 review_fix="$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
@@ -78,6 +98,8 @@ kernel_cli="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references
 kernel_promotion="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/promotion.py"
 postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
 manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
+verification_contract="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md"
+behavioral_schema="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/behavioral-verification-contract-schema.json"
 
 printf "Repository cleanup contract:\n"
 
@@ -257,6 +279,23 @@ require_text "$pipeline_run" "The Markdown manifest, this command, routing polic
 require_text "$pipeline_run" "runtime unavailable/incompatible" "pipeline preserves fallback when the kernel is unavailable"
 require_text "$review_skill" "Kernel prediction is observation-only" "dm-review keeps shadow observation non-authoritative"
 require_text "$review_skill" "human_help_required" "dm-review preserves required browser recovery escalation"
+require_text "$verification_contract" "## Behavioral contract lifecycle" "shared verification contract defines the behavioral lifecycle"
+require_text "$verification_contract" '`bind-verification-contract`' "shared verification contract binds before dispatch"
+require_text "$verification_contract" '`revise-verification-contract`' "shared verification contract audits revisions"
+require_text "$verification_contract" "quit the primary process or engine session" "shared verification contract requires primary quit"
+require_text "$verification_contract" "fresh primary session" "shared verification contract requires primary restart"
+require_text "$verification_contract" "different configured" "shared verification contract requires an alternate engine"
+require_text "$verification_contract" '`human_help_required`' "shared verification contract ends exhausted recovery in human help"
+require_text "$behavioral_schema" '"previous_contract_digest"' "behavioral schema binds revision ancestry"
+require_text "$behavioral_schema" '"proves_regression_ids"' "behavioral schema requires executable regression proof links"
+require_text "$verification_contract" 'Every prohibited regression has an' "shared verification contract requires regression coverage"
+require_before "$orchestrator" 'bind-verification-contract --state-dir' '### 3d: Dispatch Implementation Subagent' "orchestrator binds contract before dispatch"
+require_before "$pipeline_run" 'bind-verification-contract --state-dir' '**Implementation dispatch:**' "pipeline-run binds contract before dispatch"
+require_text "$orchestrator" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "orchestrator binds contracts in the canonical run directory"
+require_text "$orchestrator" 'revise-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "orchestrator revises contracts in the canonical run directory"
+require_text "$pipeline_run" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "pipeline-run binds contracts in the canonical run directory"
+require_absent "$orchestrator" 'bind-verification-contract --state-dir plans/' "orchestrator never binds contracts in the observation directory"
+require_absent "$pipeline_run" 'bind-verification-contract --state-dir plans/' "pipeline-run never binds contracts in the observation directory"
 require_text "$orchestrator" "STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics" "orchestrator preserves terminal cleanup ordering"
 require_text "$orchestrator" "Broad prune, wildcards, negative filters, and name-based ownership are forbidden." "orchestrator forbids broad Docker cleanup"
 require_text "$kernel_skill" "Initialize every run in shadow mode" "kernel documents shadow default"
@@ -277,6 +316,20 @@ require_text "$orchestrator" "Empty-plan fast path" "orchestrator skips no-op cl
 require_text "$promptcraft" "Do not create an orchestrator-owned closeout chunk" "promptcraft excludes closeout-only chunks"
 require_text "$promptcraft" "no more than 8 total chunks" "promptcraft enforces the default run-size budget"
 require_text "$manifest_schema" "scope: newly discovered desirable work" "manifest contract freezes approved scope"
+require_text "$pipeline_prompts" 'exact closed `decisionProfile`' "pipeline-prompts requires an approved decision profile"
+require_text "$pipeline_prompts" '`bind-verification-contract`' "pipeline-prompts publishes contract binding"
+require_text "$pipeline_prompts" '`decide-validation-retry`' "pipeline-prompts publishes bounded validation feedback"
+require_text "$pipeline_prompts" "primary process/session quit" "pipeline-prompts publishes primary browser recovery"
+require_text "$pipeline_prompts" '`human_help_required`' "pipeline-prompts publishes human escalation"
+require_text "$pipeline_prompts" "optimized ordinary path" "pipeline-prompts preserves the optimized ordinary path"
+require_text "$review_cmd" "canonical finding IDs" "dm-review publishes stable finding identities"
+require_text "$review_cmd" "disagreement is retained" "dm-review publishes disagreement preservation"
+require_text "$review_cmd" "contribution receipts" "dm-review publishes contribution receipts"
+require_text "$review_cmd" "raw evidence" "dm-review requires raw evidence"
+require_text "$review_cmd" "zero-deferral recommendation" "dm-review preserves zero-deferral"
+require_text "$review_cmd" "reported coverage gap" "dm-review preserves explicit coverage"
+require_text "$review_cmd" "observation-only economics evidence" "dm-review contributions remain observation-only"
+require_text "$review_consolidator" "stable ID" "review consolidator preserves stable IDs"
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"

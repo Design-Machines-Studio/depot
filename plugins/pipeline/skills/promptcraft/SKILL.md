@@ -73,6 +73,30 @@ Read the plan and identify discrete chunks of work. A chunk is:
   approved requirement. Do not expand a running chunk merely because adjacent
   cleanup or polish becomes visible.
 
+**Decision profile and leverage gate:** Read exactly one approved
+`decisionProfile` from the plan island and copy it unchanged. It is a closed
+object with exactly `uncertainty`, `consequence`, and `rationale`; the first two
+are `low|medium|high` and the rationale is a non-empty string. Extra keys,
+malformed values, multiple profiles, or conflict with approved upstream data
+blocks prompt generation and returns to the Phase 3 user gate.
+
+Keep `decisionProfile` distinct from `workflowClass`, `risk`, `overlapRisk`,
+`estimatedComplexity`, `kind`, `executor`, and `routingOverride`. Apply the
+`decisionLeverage` section from `routing-policy.json` to workflow depth only:
+low/low uses the optimized current path; high uncertainty adds one independent
+planning opinion plus one bounded synthesis; high consequence strengthens the
+existing independent verification seam; high/high applies both; all other
+combinations keep standard depth. Never expand this into debate or full review
+per chunk. It cannot select providers/models/executors, relax security, alter
+workflow class, reduce browser/persona evidence, weaken cleanup, or alter
+economics.
+
+Legacy input with no profile is consumption-only compatibility: keep the
+current standard path and record `decision_profile_defaulted=true`. This is
+unknown provenance, not low/low evidence. Do not generate a new manifest from
+legacy absence. During this bootstrap, an already-generated current manifest
+must not be retrofitted even if its approved plan can explain a profile.
+
 ### Phase 2: Context Extraction
 
 For each chunk, extract from the plan, research brief, and assessment brief:
@@ -268,6 +292,30 @@ Validate the generated manifest against the required schema before handoff.
 
 Every new manifest also carries the explicit top-level `workflowClass` copied unchanged from the approved plan island. Accepted values are `chore|bug|feature|hotfix|security|investigation|migration`. If the plan does not contain exactly one approved value, stop and return to the pipeline Phase 3 user gate; promptcraft never chooses or infers it from filenames, chunk kinds, prompt prose, risk, or keyword heuristics. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
 
+Every new manifest also carries the exact approved top-level
+`decisionProfile`. Validate the closed shape and exact plan/manifest equality;
+reject malformed, multiple, extra-key, or conflicting profiles. Never infer it
+from `workflowClass`, risk, complexity, kind, executor, or routing data.
+
+### Phase 3l.5: Behavioral Contract Readiness Gate
+
+Prepare deterministic contract inputs from the approved Key Requirements and
+the final acceptance criteria. Assign stable `REQ-*` and `CHK-*` IDs, preserve
+explicit prohibited regressions, and classify every requirement as executable
+or manual per
+`plugins/workflow-kernel/skills/workflow-kernel/references/behavioral-verification-contract-schema.json`.
+For UI/integration work, resolve selected persona and browser case IDs from the
+authoritative declarations described by `verification-contract.md`; generated
+coverage matrices and invented sample personas are not authority. Any unresolved
+persona, scenario, route binding, browser, viewport, auth fixture, or case ID
+blocks handoff.
+
+Promptcraft does not bind or pre-authorize the contract. The execution
+orchestrator generates the canonical JSON from these approved inputs only after
+`run.started`, then validates and binds it before the first builder dispatch.
+Every dispatch and builder completion must echo the current contract digest and
+revision exactly.
+
 ### Phase 3m: Fixture SDK Conformance Gate
 
 **Trigger:** the chunk touches `internal/fixtures/`, the `Module` interface, or a fixture SDK path.
@@ -334,7 +382,7 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk
 
 Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
-Read top-level `workflowClass` from the approved plan data island, copy it explicitly into every generated manifest, and preserve that exact value through handoff. Missing or ambiguous plan data blocks generation and returns to the user gate. Security classification does not weaken or replace existing sensitive-path provider and approval rules.
+Read top-level `workflowClass` and the exact closed `decisionProfile` from the approved plan data island, copy both explicitly into every generated manifest, and preserve those exact values through handoff. Missing, ambiguous, malformed, multiple, or conflicting plan data blocks generation and returns to the user gate. Security classification does not weaken or replace existing sensitive-path provider and approval rules.
 
 Each chunk object in the manifest MUST include `kind` and `executor` fields (classified in Phase 1, step 6 from `routing-policy.json`). Example:
 
@@ -372,6 +420,7 @@ The manifest encodes:
 - Feature branch naming
 - Execution metadata
 - Workflow class for trusted kernel policy translation
+- Approved decision profile for depth-only planning and verification leverage
 
 ### Phase 6: Requirements Coverage Check
 

@@ -465,7 +465,7 @@ class CliTests(unittest.TestCase):
     def test_documented_cache_resolver_is_quiet_with_only_codex_cache(self):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(
-                directory, ".codex", "0.1.0", "print('codex-only-runtime')\n",
+                directory, ".codex", "0.3.0", "print('codex-only-runtime')\n",
             )
             caller = Path(directory) / "caller"
             conflicting = caller / "workflow_kernel"
@@ -484,7 +484,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(directory, ".claude", "0.9.9")
             self.install_cached_runtime(
-                directory, ".codex", "0.1.0", "print('fallback-runtime')\n",
+                directory, ".codex", "0.3.0", "print('fallback-runtime')\n",
             )
             result = self.run_cache_resolver(directory)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -498,7 +498,7 @@ class CliTests(unittest.TestCase):
                 mtime=200,
             )
             self.install_cached_runtime(
-                directory, ".claude", "0.1.0", "print('older-viable-runtime')\n",
+                directory, ".claude", "0.3.0", "print('older-viable-runtime')\n",
                 mtime=100,
             )
             result = self.run_cache_resolver(directory)
@@ -509,7 +509,7 @@ class CliTests(unittest.TestCase):
     def test_documented_cache_resolver_prioritizes_valid_claude_over_newer_codex(self):
         with tempfile.TemporaryDirectory() as directory:
             self.install_cached_runtime(
-                directory, ".claude", "0.1.0", "print('claude-priority-runtime')\n",
+                directory, ".claude", "0.3.0", "print('claude-priority-runtime')\n",
                 mtime=100,
             )
             self.install_cached_runtime(
@@ -541,7 +541,7 @@ class CliTests(unittest.TestCase):
                 "raise RuntimeError('broken-claude')\n",
             )
             self.install_cached_runtime(
-                directory, ".codex", "0.1.0",
+                directory, ".codex", "0.3.0",
                 "print('codex-fallback-runtime')\n",
             )
             result = self.run_cache_resolver(directory)
@@ -556,11 +556,11 @@ class CliTests(unittest.TestCase):
                 mtime=300,
             )
             self.install_cached_runtime(
-                directory, ".claude", "0.1.9", "print('older-semver-runtime')\n",
+                directory, ".claude", "0.3.9", "print('older-semver-runtime')\n",
                 mtime=200,
             )
             self.install_cached_runtime(
-                directory, ".claude", "0.1.10", "print('newer-semver-runtime')\n",
+                directory, ".claude", "0.3.10", "print('newer-semver-runtime')\n",
                 mtime=100,
             )
             result = self.run_cache_resolver(directory)
@@ -575,7 +575,7 @@ class CliTests(unittest.TestCase):
         # importability probe, because the probe executes candidate code.
         cases = (
             ("wrong-name", {"manifest_name": "not-workflow-kernel"}),
-            ("version-mismatch", {"manifest_version": "0.1.0"}),
+            ("version-mismatch", {"manifest_version": "0.3.0"}),
             ("missing-manifest", {"manifest": False}),
         )
         for name, kwargs in cases:
@@ -588,7 +588,7 @@ class CliTests(unittest.TestCase):
                     **kwargs,
                 )
                 self.install_cached_runtime(
-                    directory, ".claude", "0.1.0", "print('valid-runtime')\n",
+                    directory, ".claude", "0.3.0", "print('valid-runtime')\n",
                 )
                 result = self.run_cache_resolver(directory)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -616,7 +616,7 @@ class CliTests(unittest.TestCase):
             cache_root.mkdir(parents=True)
             (cache_root / "0.9.9").symlink_to(outside, target_is_directory=True)
             self.install_cached_runtime(
-                directory, ".claude", "0.1.0", "print('contained-runtime')\n",
+                directory, ".claude", "0.3.0", "print('contained-runtime')\n",
             )
             result = self.run_cache_resolver(directory)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -645,7 +645,7 @@ class CliTests(unittest.TestCase):
             (rogue / "__init__.py").write_text("")
             (rogue / "__main__.py").write_text("print('poison-runtime')\n")
             self.install_cached_runtime(
-                directory, ".claude", "0.1.0", "print('clean-runtime')\n",
+                directory, ".claude", "0.3.0", "print('clean-runtime')\n",
             )
             result = self.run_cache_resolver(
                 directory, PYTHONPATH=str(poison),
@@ -670,7 +670,7 @@ class CliTests(unittest.TestCase):
                 "from pathlib import Path; Path(%r).write_text('x')\n" % str(marker)
             )
             self.install_cached_runtime(
-                directory, ".claude", "0.1.0", "print('isolated-runtime')\n",
+                directory, ".claude", "0.3.0", "print('isolated-runtime')\n",
             )
             result = self.run_cache_resolver(
                 directory, BASH_ENV=str(bash_env), PYTHONUSERBASE=str(home / "userbase"),
@@ -693,7 +693,7 @@ class CliTests(unittest.TestCase):
             package.mkdir(parents=True)
             (root / ".claude-plugin").mkdir()
             (root / ".claude-plugin/plugin.json").write_text(json.dumps({
-                "name": "workflow-kernel", "version": "0.1.0",
+                "name": "workflow-kernel", "version": "0.3.0",
             }))
             launcher = refs / "workflow-kernel-launcher.sh"
             launcher.write_text(source.read_text())
@@ -716,7 +716,7 @@ class CliTests(unittest.TestCase):
             home = Path(directory)
             marker = home / "escaped-initializer-executed"
             refs = self.install_cached_runtime(
-                directory, ".claude", "0.1.0", "print('runtime-main')\n",
+                directory, ".claude", "0.3.0", "print('runtime-main')\n",
             )
             initializer = home / "escaped-init.py"
             initializer.write_text(
@@ -736,13 +736,13 @@ class CliTests(unittest.TestCase):
             / "workflow-kernel-launcher.sh"
         )
         with tempfile.TemporaryDirectory() as directory:
-            trusted = Path(directory) / "account-home/.codex/plugins/cache/depot/workflow-kernel/0.1.0"
+            trusted = Path(directory) / "account-home/.codex/plugins/cache/depot/workflow-kernel/0.3.0"
             refs = trusted / "skills/workflow-kernel/references"
             package = refs / "workflow_kernel"
             package.mkdir(parents=True)
             (trusted / ".claude-plugin").mkdir()
             (trusted / ".claude-plugin/plugin.json").write_text(json.dumps({
-                "name": "workflow-kernel", "version": "0.1.0",
+                "name": "workflow-kernel", "version": "0.3.0",
             }))
             launcher = refs / "workflow-kernel-launcher.sh"
             launcher.write_text(source.read_text())
@@ -776,7 +776,7 @@ class CliTests(unittest.TestCase):
             )
             (refs / "workflow_kernel").symlink_to(outside, target_is_directory=True)
             self.install_cached_runtime(
-                directory, ".codex", "0.1.0", "print('contained-runtime')\n",
+                directory, ".codex", "0.3.0", "print('contained-runtime')\n",
             )
             result = self.run_cache_resolver(directory)
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -792,7 +792,7 @@ class CliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             refs = self.install_cached_runtime(
                 directory, ".claude", "0.9.9", "print('mismatched-runtime')\n",
-                manifest_version="0.1.0",
+                manifest_version="0.3.0",
             )
             launcher = refs / "workflow-kernel-launcher.sh"
             launcher.write_text(source.read_text())

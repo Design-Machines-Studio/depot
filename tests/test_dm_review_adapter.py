@@ -1,9 +1,16 @@
 import json
+import copy
+import hashlib
 import unittest
 from pathlib import Path
 
 from workflow_kernel.model import HostCapabilities, WorkflowClass
-from workflow_kernel.dm_review_adapter import ReviewRequest, translate_review, translate_review_receipts
+from workflow_kernel.dm_review_adapter import (
+    ReviewRequest, export_finding_contributions,
+    require_complete_contribution_coverage, translate_review,
+    translate_review_receipts,
+)
+from workflow_kernel._translation import canonical_finding_identity
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
@@ -77,6 +84,380 @@ class DmReviewAdapterTests(unittest.TestCase):
         self.assertEqual(by_stage["convergence"].payload["prior_findings_signature"], "sha256:" + "a" * 64)
         self.assertEqual(by_stage["review_terminal"].payload["status"], "findings")
         self.assertTrue(all(event.payload["authoritative_receipt"] in event.payload["evidence"] for event in events))
+
+    def contribution(self, sequence, source_id="source-a", **changes):
+        identity = {
+            "finding_path": "internal/review.py",
+            "finding_anchor": "review.finding",
+            "finding_category": "trust boundary",
+            "finding_root_cause": "caller supplied identity",
+        }
+        canonical_id, _ = canonical_finding_identity(*identity.values())
+        value = {
+            "run_id": "review-contribution", "sequence": sequence,
+            "stage": "finding_contribution", "status": "recorded",
+            "node_id": "review-convergence", "attempt": 1,
+            "occurred_at": f"2026-07-14T01:0{sequence}:00Z",
+            "authoritative_receipt": f"receipts/contribution-{sequence}.json",
+            "source_finding_id": source_id,
+            "canonical_finding_id": canonical_id, **identity,
+            "finding_disposition": "retained", "agreement": "unique",
+            "decision_reason_code": "retained-unique", "reviewer": "security",
+            "source_severity": "P2",
+            "lane": "security", "requested_provider": "openai",
+            "attempted_provider": "openai", "implemented_by": "codex",
+            "provider": "openai", "model": "gpt-5.6-sol",
+            "evidence_ref": "raw/security.json",
+        }
+        value.update(changes)
+        return value
+
+    def test_finding_contributions_translate_one_event_per_stable_source_decision(self):
+        receipts = [
+            self.contribution(0),
+            self.contribution(
+                1, "source-b", finding_disposition="merged",
+                agreement="corroborated", decision_reason_code="exact-duplicate",
+                reviewer="architecture", lane="openrouter-fallback",
+                requested_provider="openrouter", attempted_provider="openrouter",
+                implemented_by="codex", provider="openai", model="not_reported",
+                evidence_ref="raw/architecture.json",
+            ),
+        ]
+        events = translate_review_receipts(receipts)
+        self.assertEqual([event.payload["source_finding_id"] for event in events], ["source-a", "source-b"])
+        self.assertEqual(events[1].payload["canonical_finding_id"], receipts[1]["canonical_finding_id"])
+        self.assertEqual(events[1].payload["finding_disposition"], "merged")
+        self.assertIn("raw/architecture.json", events[1].payload["evidence"])
+        self.assertEqual(events[1].payload["provider"], "openai")
+        self.assertEqual(events[1].payload["model"], "not_reported")
+
+    def test_contribution_aliases_and_disputed_decisions_remain_literal(self):
+        receipt = self.contribution(0)
+        for snake, camel in (
+            ("source_finding_id", "sourceFindingId"),
+            ("canonical_finding_id", "canonicalFindingId"),
+            ("finding_disposition", "findingDisposition"),
+            ("decision_reason_code", "decisionReasonCode"),
+            ("evidence_ref", "evidenceRef"),
+        ):
+            receipt[camel] = receipt.pop(snake)
+        receipt.update({
+            "agreement": "disputed", "decisionReasonCode": "retained-disagreement",
+        })
+        payload = translate_review_receipts([receipt])[0].payload
+        self.assertEqual(payload["agreement"], "disputed")
+        self.assertEqual(payload["decision_reason_code"], "retained-disagreement")
+
+    def test_contributions_reject_duplicate_sources_invalid_decisions_and_unsafe_refs(self):
+        with self.assertRaises(ValueError):
+            translate_review_receipts([self.contribution(0), self.contribution(1)])
+        mutations = (
+            {"source_finding_id": ""}, {"canonical_finding_id": ""},
+            {"finding_disposition": "deduped"}, {"agreement": "consensus"},
+            {"decision_reason_code": "free-form"},
+            {"finding_disposition": "discarded", "decision_reason_code": "retained-unique"},
+            {"evidence_ref": "/private/raw.json"}, {"attempt": True},
+        )
+        for mutation in mutations:
+            candidate = self.contribution(0)
+            candidate.update(mutation)
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                translate_review_receipts([candidate])
+
+    def test_local_source_ids_are_scoped_to_artifact_with_reviewer_consistency(self):
+        first = self.contribution(0, "finding-1", evidence_ref="raw/security-a.json")
+        second = self.contribution(
+            1, "finding-1", evidence_ref="raw/security-b.json",
+            finding_root_cause="different caller supplied identity",
+            canonical_finding_id=canonical_finding_identity(
+                "internal/review.py", "review.finding", "trust boundary",
+                "different caller supplied identity",
+            )[0],
+        )
+        events = translate_review_receipts([first, second])
+        self.assertEqual(len(events), 2)
+        inconsistent = self.contribution(
+            1, "finding-2", evidence_ref="raw/security-a.json",
+            reviewer="architecture",
+        )
+        with self.assertRaises(ValueError):
+            translate_review_receipts([first, inconsistent])
+
+    def test_browser_help_requires_blocked_shape_and_stable_case_identity(self):
+        from tests.test_browser_recovery import BrowserRecoveryTests
+        helper = BrowserRecoveryTests(); helper.setUp()
+        recovery = helper.blocked_with_unavailable_readiness()
+        receipt = {
+            "run_id": "review-help", "sequence": 0, "stage": "browser_recovery",
+            "status": "blocked", "reason_code": "human_help_required",
+            "node_id": "review-browser", "occurred_at": "2026-07-14T01:00:00Z",
+            "authoritative_receipt": "receipts/browser-help.json",
+            "human_intervention_id": "human-browser-a",
+            "human_intervention_reason": "browser_evidence_unavailable",
+            "missing_case_ids": ["case-1"],
+            "recovery_receipts": [recovery.to_dict()],
+        }
+        payload = translate_review_receipts([receipt])[0].payload
+        self.assertTrue(payload["human_intervention"])
+        invalid = copy.deepcopy(receipt)
+        invalid["missing_case_ids"] = []
+        with self.assertRaises(ValueError):
+            translate_review_receipts([invalid])
+        wrong_reason = copy.deepcopy(receipt)
+        wrong_reason["human_intervention_reason"] = "retry_budget_exhausted"
+        with self.assertRaises(ValueError):
+            translate_review_receipts([wrong_reason])
+        invalid_id = copy.deepcopy(receipt)
+        invalid_id["missing_case_ids"] = ["case/unsafe"]
+        with self.assertRaises(ValueError):
+            translate_review_receipts([invalid_id])
+
+        incomplete = copy.deepcopy(receipt)
+        incomplete.pop("recovery_receipts")
+        with self.assertRaises(ValueError):
+            translate_review_receipts([incomplete])
+
+    def test_review_request_preserves_explicit_decision_profile(self):
+        profile = {
+            "uncertainty": "high", "consequence": "medium",
+            "rationale": "Review trust and observation seams.",
+        }
+        request = ReviewRequest.from_mapping({
+            "run_id": "review-profile", "requested_lanes": ["security"],
+            "decisionProfile": profile, "decisionProfileDefaulted": False,
+        })
+        self.assertEqual(request.to_dict()["decision_profile"], profile)
+        spec = translate_review(request, HostCapabilities("codex", frozenset()))
+        self.assertEqual(dict(spec.decision_profile), profile)
+        self.assertFalse(spec.decision_profile_defaulted)
+
+    def test_exporter_derives_ids_sequences_and_enforces_cardinality(self):
+        request = ReviewRequest("review-export", ("security",), execution_mode="generic")
+        decision = {
+            key: value for key, value in self.contribution(0).items()
+            if key in {
+                "source_finding_id", "finding_path", "finding_anchor",
+                "finding_category", "finding_root_cause",
+                "finding_disposition", "agreement", "decision_reason_code",
+                "reviewer", "lane", "requested_provider", "attempted_provider",
+                "implemented_by", "provider", "model", "source_severity", "evidence_ref",
+                "attempt", "occurred_at",
+            }
+        }
+        decisions = {
+            "schema_version": 1, "artifact_role": "synthesis_decisions",
+            "run_id": request.run_id, "source_finding_count": 1,
+            "occurred_at": "2026-07-14T01:00:00Z", "decisions": [decision],
+        }
+        raw_findings = {
+            "schema_version": 1, "artifact_role": "raw_finding_inventory",
+            "run_id": request.run_id,
+            "findings": [{key: decision[key] for key in {
+                "source_finding_id", "reviewer", "lane", "source_severity",
+                "evidence_ref", "finding_path", "finding_anchor",
+                "finding_category", "finding_root_cause",
+            }}],
+        }
+        lane_output = {
+            "reviewer": "security", "lane": "security",
+            "findings": copy.deepcopy(raw_findings["findings"]),
+        }
+        lane_output_digest = hashlib.sha256(json.dumps(
+            lane_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        lane_output_ref = (
+            "contribution-inputs/raw-lane-output-sha256-"
+            + lane_output_digest + ".json"
+        )
+        raw_lane_outputs = {
+            "schema_version": 1, "artifact_role": "review_lane_raw_outputs",
+            "run_id": request.run_id, "outputs": [lane_output],
+        }
+        lane_receipts = {
+            "schema_version": 1, "artifact_role": "review_lane_receipts",
+            "run_id": request.run_id, "lanes": [{
+                **{key: decision[key] for key in {
+                    "reviewer", "lane", "requested_provider",
+                    "attempted_provider", "implemented_by", "provider", "model",
+                }},
+                "evidence_refs": [decision["evidence_ref"]],
+                "raw_output_ref": lane_output_ref,
+                "raw_output_digest": "sha256:" + lane_output_digest,
+                "finding_count": 1,
+            }],
+        }
+        documents = {
+            "decisions": ("synthesis-decisions", decisions),
+            "raw_findings": ("raw-finding-inventory", raw_findings),
+            "lane_receipts": ("lane-receipts", lane_receipts),
+            "raw_lane_outputs": ("raw-lane-outputs", raw_lane_outputs),
+        }
+        def make_references(values):
+            references = {}
+            for key, (role, document) in values.items():
+                encoded = json.dumps(
+                    document, sort_keys=True, separators=(",", ":"),
+                ).encode()
+                references[key] = (
+                    "contribution-inputs/" + role + "-sha256-"
+                    + hashlib.sha256(encoded).hexdigest() + ".json"
+                )
+            return references
+
+        references = make_references(documents)
+        exported = export_finding_contributions(
+            request, decisions, raw_findings, lane_receipts, raw_lane_outputs,
+            (), references,
+        )
+        self.assertEqual(exported[0]["sequence"], 0)
+        self.assertEqual(exported[1]["stage"], "finding_contribution_coverage")
+        self.assertTrue(exported[1]["coverage_complete"])
+        self.assertRegex(
+            exported[0]["canonical_finding_id"],
+            r"^finding-v1:sha256\([0-9a-f]{64}\)$",
+        )
+        with self.assertRaises(ValueError):
+            export_finding_contributions(
+                request, {**decisions, "source_finding_count": 2},
+                raw_findings, lane_receipts, raw_lane_outputs, (), references,
+            )
+
+        hostile = copy.deepcopy(decisions)
+        hostile["decisions"][0]["provider"] = "anthropic"
+        hostile_references = make_references({
+            **documents, "decisions": ("synthesis-decisions", hostile),
+        })
+        with self.assertRaises(ValueError):
+            export_finding_contributions(
+                request, hostile, raw_findings, lane_receipts,
+                raw_lane_outputs, (), hostile_references,
+            )
+
+        unsafe_decisions = copy.deepcopy(decisions)
+        unsafe_lanes = copy.deepcopy(lane_receipts)
+        unsafe_decisions["decisions"][0]["model"] = "sk-secret-model-value"
+        unsafe_lanes["lanes"][0]["model"] = "sk-secret-model-value"
+        unsafe_documents = {
+            "decisions": ("synthesis-decisions", unsafe_decisions),
+            "raw_findings": ("raw-finding-inventory", raw_findings),
+            "lane_receipts": ("lane-receipts", unsafe_lanes),
+            "raw_lane_outputs": ("raw-lane-outputs", raw_lane_outputs),
+        }
+        with self.assertRaisesRegex(ValueError, "unsafe contribution input"):
+            export_finding_contributions(
+                request, unsafe_decisions, raw_findings, unsafe_lanes,
+                raw_lane_outputs, (), make_references(unsafe_documents),
+            )
+
+        for unsafe_value in (
+            "https://user:password@example.invalid/review",
+            "https://example.invalid/review?access_token=secret",
+            "api_token=compound-secret-value",
+            "Authorization: Bearer compound-secret-value",
+        ):
+            unsafe_decisions = copy.deepcopy(decisions)
+            unsafe_decisions["decisions"][0]["model"] = unsafe_value
+            unsafe_documents = {
+                **documents,
+                "decisions": ("synthesis-decisions", unsafe_decisions),
+            }
+            with self.subTest(unsafe_value=unsafe_value), self.assertRaisesRegex(
+                ValueError, "unsafe contribution input",
+            ):
+                export_finding_contributions(
+                    request, unsafe_decisions, raw_findings, lane_receipts,
+                    raw_lane_outputs, (), make_references(unsafe_documents),
+                )
+
+        duplicate_lanes = copy.deepcopy(lane_receipts)
+        duplicate_lanes["lanes"].append({
+            **duplicate_lanes["lanes"][0], "reviewer": "second-reviewer",
+        })
+        duplicate_documents = {
+            **documents, "lane_receipts": ("lane-receipts", duplicate_lanes),
+        }
+        with self.assertRaisesRegex(ValueError, "duplicate review lane receipt"):
+            export_finding_contributions(
+                request, decisions, raw_findings, duplicate_lanes,
+                raw_lane_outputs, (), make_references(duplicate_documents),
+            )
+
+        omitted_output = {**lane_output, "findings": []}
+        omitted_digest = hashlib.sha256(json.dumps(
+            omitted_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        omitted_outputs = {**raw_lane_outputs, "outputs": [omitted_output]}
+        omitted_lanes = copy.deepcopy(lane_receipts)
+        omitted_lanes["lanes"][0].update({
+            "raw_output_ref": (
+                "contribution-inputs/raw-lane-output-sha256-"
+                + omitted_digest + ".json"
+            ),
+            "raw_output_digest": "sha256:" + omitted_digest,
+            "finding_count": 0,
+        })
+        omitted_documents = {
+            **documents,
+            "lane_receipts": ("lane-receipts", omitted_lanes),
+            "raw_lane_outputs": ("raw-lane-outputs", omitted_outputs),
+        }
+        with self.assertRaisesRegex(ValueError, "raw lane output union mismatch"):
+            export_finding_contributions(
+                request, decisions, raw_findings, omitted_lanes,
+                omitted_outputs, (), make_references(omitted_documents),
+            )
+
+        with self.assertRaisesRegex(ValueError, "raw lane output seal mismatch"):
+            export_finding_contributions(
+                request, decisions, raw_findings, lane_receipts,
+                raw_lane_outputs, (), references,
+                {lane_output_ref: {**lane_output, "findings": []}},
+            )
+
+        zero_decisions = {
+            **decisions, "source_finding_count": 0, "decisions": [],
+        }
+        zero_raw = {**raw_findings, "findings": []}
+        zero_output = {**lane_output, "findings": []}
+        zero_output_digest = hashlib.sha256(json.dumps(
+            zero_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        zero_lane_outputs = {**raw_lane_outputs, "outputs": [zero_output]}
+        zero_lanes = copy.deepcopy(lane_receipts)
+        zero_lanes["lanes"][0].update({
+            "raw_output_ref": (
+                "contribution-inputs/raw-lane-output-sha256-"
+                + zero_output_digest + ".json"
+            ),
+            "raw_output_digest": "sha256:" + zero_output_digest,
+            "finding_count": 0,
+        })
+        zero_documents = {
+            "decisions": ("synthesis-decisions", zero_decisions),
+            "raw_findings": ("raw-finding-inventory", zero_raw),
+            "lane_receipts": ("lane-receipts", zero_lanes),
+            "raw_lane_outputs": ("raw-lane-outputs", zero_lane_outputs),
+        }
+        zero = export_finding_contributions(
+            request, zero_decisions, zero_raw, zero_lanes, zero_lane_outputs,
+            (), make_references(zero_documents),
+        )
+        self.assertEqual([value["stage"] for value in zero], [
+            "finding_contribution_coverage",
+        ])
+        require_complete_contribution_coverage(zero)
+        with self.assertRaisesRegex(ValueError, "missing finding contribution coverage"):
+            require_complete_contribution_coverage(())
+        incomplete = copy.deepcopy(zero)
+        incomplete[0]["coverage_complete"] = False
+        with self.assertRaisesRegex(ValueError, "incomplete finding contribution coverage"):
+            require_complete_contribution_coverage(incomplete)
+
+    def test_credential_shaped_free_form_values_are_not_durable(self):
+        receipt = self.contribution(0, provider="sk-secret-provider")
+        payload = translate_review_receipts([receipt])[0].payload
+        self.assertNotIn("sk-secret-provider", repr(payload))
 
 
 if __name__ == "__main__":

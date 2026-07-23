@@ -1,0 +1,19 @@
+{
+  "chunk_id": "06-cross-plugin-release-integration",
+  "status": "merged",
+  "classification": "logic",
+  "requestedProvider": "openrouter",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": true,
+  "fallbackReason": "tenant-policy-denied",
+  "openrouter_attempt_status": "declined-before-export",
+  "validation": "9 release tests, 31 compatibility/parity/release tests, routing, dm-review, workflow-contract, dependency, dual-compatibility, generated-file, and composition-reference gates passed; full kernel/composition gate has one permitted live assembly-baseplate declaration mismatch",
+  "evaluation": "EVAL_GATE_PASSED: 06-cross-plugin-release-integration | classification: logic | iterations: 1 | findings_remaining: 0 | deferred: 0",
+  "ambiguity_resolved": true,
+  "ambiguity_summary": "Kept cross-host economics normalization observation-only while preserving strict same-host parity; left external Assembly declarations untouched.",
+  "verificationCaveat": "The prompt's bare unittest command omits the repository-required workflow_kernel import path; the equivalent PYTHONPATH invocation passes 9/9.",
+  "commit": "b7e65c8b41b24a5058449b6ea392de804c165daa",
+  "mergeCommit": "e97ce0872a3009334df09e25f9ea3f619b3a05ee",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

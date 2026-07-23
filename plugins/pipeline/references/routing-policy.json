@@ -17,6 +17,51 @@
     },
     "rationale": "Coding-only calibration: subscriptionProfiles[activeSubscriptionProfile] is the sole target. Codex Pro 20x uses 65/0/35 Codex/Claude/OpenRouter; switching to codex-5x uses 40/0/60. Claude is non-coding-only and therefore has zero coding share. Apply the target as routing pressure only among eligible chunks; security and required live-tool capabilities remain authoritative and their exclusions must be receipted. DeepSeek V4 usage is counted under OpenRouter."
   },
+  "decisionLeverage": {
+    "scope": "workflow-depth-only",
+    "allowedLevels": ["low", "medium", "high"],
+    "legacyDefault": {
+      "planningDepth": "current-standard-path",
+      "verificationDepth": "current-standard-path",
+      "receiptFlag": "decision_profile_defaulted=true",
+      "semanticClaim": "unknown-not-low-low"
+    },
+    "rules": {
+      "lowLow": {
+        "when": {"uncertainty": "low", "consequence": "low"},
+        "planningDepth": "standard",
+        "verificationDepth": "standard",
+        "optimized": true
+      },
+      "highUncertainty": {
+        "when": {"uncertainty": "high"},
+        "planningDepth": "one-independent-opinion-plus-bounded-synthesis",
+        "verificationDepth": "standard-unless-high-consequence",
+        "optimized": false
+      },
+      "highConsequence": {
+        "when": {"consequence": "high"},
+        "planningDepth": "standard-unless-high-uncertainty",
+        "verificationDepth": "stronger-existing-independent-seam",
+        "optimized": false
+      },
+      "highHigh": {
+        "when": {"uncertainty": "high", "consequence": "high"},
+        "planningDepth": "one-independent-opinion-plus-bounded-synthesis",
+        "verificationDepth": "stronger-existing-independent-seam",
+        "optimized": false
+      }
+    },
+    "invariants": [
+      "routing-unchanged",
+      "safety-gates-unchanged",
+      "browser-and-persona-coverage-unchanged",
+      "workflow-class-unchanged",
+      "cleanup-unchanged",
+      "economics-unchanged",
+      "no-debate-or-per-chunk-full-review"
+    ]
+  },
   "chunkKind": {
     "_comment_kinds": "config/docs/mechanical-logic/logic/ui/integration are ROUTING buckets, not manifest kind enum values. The manifest kind enum stays {ui, logic, integration, config}; docs and mechanical-logic are refinements carried by the manifest `executor` field (derived from kind + estimatedComplexity per manifest-schema.md Executor Mapping), not first-class kinds. model-cascade.class_from_kind bridges only the manifest kinds (logic/config/docs/ui/integration); mechanical-logic routes via `executor: openrouter` set at prompt-generation time, so it needs no class_from_kind entry.",
     "config": {

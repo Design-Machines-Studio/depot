@@ -1,5 +1,60 @@
 # Verification Contract
 
+## Behavioral contract lifecycle
+
+Before implementation dispatch, Pipeline materializes one closed behavioral
+verification contract from approved requirements and current-state regressions.
+It uses stable `REQ-*`, `REG-*`, and `CHK-*` identities; argv is always a JSON
+array and is validated but never executed while binding. Every automated check
+declares both `proves_requirement_ids` and `proves_regression_ids`; either list
+may be empty, but their union may not be. Every prohibited regression has an
+executable proof, and every check records its baseline expectation. Requirements
+that cannot run automatically remain explicit manual requirements rather than
+disappearing from coverage.
+
+`bind-verification-contract` validates revision 1, writes one content-addressed
+artifact beneath the bound repository/run scope, and appends its audit event
+before dispatch. Idempotent retry may reproduce only that exact binding.
+`revise-verification-contract` requires the current contract digest, the next
+revision, and exact added/retained/removed obligation sets. Any behavioral
+weakening—including removed requirements, regressions, proof links, persona or
+browser cases, every downward transition in the closed
+`must_fail > may_pass > not_runnable` order, changed argv, or reduced manual
+coverage—requires a content-addressed approval receipt with an allowlisted
+authority's HMAC-SHA256 over the canonical actor, authority, approved decision,
+UTC issuance and expiry, fresh nonce, run ID, and exact prior/candidate contract
+digests. Its owner-only host capability file must live outside repository scope,
+is read only by `authorize-verification-contract-revision`, and its path and key
+are never persisted. The coordinator must record the reserved
+`verification_contract_revision_authorized` lifecycle event before revision; a
+self-authored receipt, command invocation, or repository-held key is not
+authority. The signature unforgeably binds the nonce and the ledger consumes it
+once. Stale digests, expired windows, invalid signatures, non-allowlisted
+authorities, nonce reuse, unsupported schema versions, unsafe argv, unauthorized
+weakening, symlink escapes, and unsafe durable paths fail closed without partial
+artifacts or raw hostile data.
+
+The behavioral contract and declared persona/browser profile are one evidence
+boundary. The contract records the authoritative profile ID and full-document
+digest. Contract `persona_case_ids` and `browser_case_ids` must each exactly
+equal the required selected case IDs below; neither layer may fabricate, silently drop,
+or reinterpret required coverage. Contract evidence is established before any
+implementation dispatch, and later deterministic-validation feedback stays
+bound to its current digest and revision.
+
+Pipeline materializes the authoritative profile before the contract. Discovery
+status `not_declared` is still an authoritative non-null profile and binds empty
+persona/browser case arrays. A null profile ID/digest pair means legacy/no-profile
+input only; both arrays must then be empty and no profile artifact flag is passed.
+
+Required browser evidence follows one primary recovery ladder: preserve the
+failed attempt, quit the primary process or engine session, launch and prove a
+fresh primary session, retry once, then try one genuinely different configured
+engine. If evidence still cannot complete, stop with blocked
+`human_help_required` and the exact missing case IDs. This ladder is part of the
+behavioral contract; it cannot be weakened into skipped, deferred, degraded,
+curl-verified, or an inferred persona/browser sample.
+
 ## Declared coverage
 
 The kernel implicitly discovers only `tests/ux/personas/_index.md`, persona

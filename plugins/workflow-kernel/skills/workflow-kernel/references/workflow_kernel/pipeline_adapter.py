@@ -26,8 +26,11 @@ __all__ = [
 PIPELINE_STAGES = frozenset({
     "progress", "manifest_validation", "dependency_ready", "dispatch",
     "deterministic_validation", "evaluation_gate", "browser_verification",
-    "merge_disposition", "chunk_cleanup", "requirements_cross_check",
-    "terminal_reconciliation", "run_summary",
+    "merge_disposition", "chunk_cleanup", "final_dm_review",
+    "requirements_cross_check", "terminal_reconciliation", "run_summary",
+    "verification_contract_bound", "verification_contract_revised",
+    "verification_contract_revision_authorized",
+    "attempt_usage", "browser_recovery",
 })
 _RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
 
@@ -159,6 +162,10 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
     requested_executor = dual_key(
         manifest, "requested_executor", "requestedExecutor", default=None,
     )
+    decision_profile = dual_key(
+        manifest, "decision_profile", "decisionProfile", default=None,
+    )
+    decision_profile_defaulted = decision_profile is None
     context = WorkflowContext(
         changed_paths=tuple(changed_paths), requested_executor=requested_executor,
         risk=risk,
@@ -169,6 +176,8 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
     return RunSpec(
         run_id, workflow_class, defaulted, execution_mode, profile.host_name,
         nodes, chunks, levels, cached is not None and cached != levels,
+        decision_profile=decision_profile,
+        decision_profile_defaulted=decision_profile_defaulted,
     )
 
 
@@ -183,10 +192,22 @@ def translate_pipeline_receipts(
 def translate_builder_decision(
     decision: BuilderSessionDecision, *, authoritative_receipt_reference: str,
     sequence: int, occurred_at: str,
+    current_contract_digest: Optional[str] = None,
+    claimed_contract_digest: Optional[str] = None,
 ) -> WorkflowEvent:
     reference = safe_reference(authoritative_receipt_reference)
     if type(decision) is not BuilderSessionDecision:
         raise ValueError("invalid builder decision")
+    legacy_contract = (
+        current_contract_digest is None and claimed_contract_digest is None
+    )
+    if not legacy_contract and (
+        type(current_contract_digest) is not str
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", current_contract_digest) is None
+        or type(claimed_contract_digest) is not str
+        or claimed_contract_digest != current_contract_digest
+    ):
+        raise ValueError("verification contract digest mismatch")
     base = decision.to_evidence_event(
         run_id=decision.context.run_id, sequence=sequence,
         node_id=decision.context.node_id, occurred_at=occurred_at,
@@ -196,12 +217,20 @@ def translate_builder_decision(
         values.extend(decision.result.evidence)
     values.extend(base.payload["evidence"])
     evidence = tuple(dict.fromkeys(values))
+    payload = {
+        "evidence": list(evidence),
+        "authoritative_receipt": reference,
+        "stage": "builder_continuity",
+        "status": decision.status,
+        "verification_contract_bound": not legacy_contract,
+        "verification_contract_provenance": (
+            "legacy_default_absent" if legacy_contract
+            else "authoritative_receipt"
+        ),
+    }
+    if not legacy_contract:
+        payload["contract_digest"] = current_contract_digest
     return WorkflowEvent(
         1, sequence, base.run_id, base.node_id, "evidence.recorded",
-        occurred_at, {
-            "evidence": list(evidence),
-            "authoritative_receipt": reference,
-            "stage": "builder_continuity",
-            "status": decision.status,
-        },
+        occurred_at, payload,
     )

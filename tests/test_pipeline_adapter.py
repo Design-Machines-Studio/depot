@@ -69,6 +69,145 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_manifest(self.manifest("unknown"), self.profile())
 
+    def test_decision_profile_is_closed_preserved_and_legacy_defaulted(self):
+        legacy = translate_manifest(self.manifest(), self.profile())
+        self.assertIsNone(legacy.decision_profile)
+        self.assertTrue(legacy.decision_profile_defaulted)
+        for uncertainty, consequence in (("low", "low"), ("high", "high")):
+            manifest = self.manifest()
+            manifest["decisionProfile"] = {
+                "uncertainty": uncertainty,
+                "consequence": consequence,
+                "rationale": "Approved bounded depth decision.",
+            }
+            spec = translate_manifest(manifest, self.profile())
+            self.assertEqual(spec.decision_profile["uncertainty"], uncertainty)
+            self.assertEqual(spec.decision_profile["consequence"], consequence)
+            self.assertFalse(spec.decision_profile_defaulted)
+            self.assertEqual(
+                spec.to_dict()["decision_profile"], manifest["decisionProfile"],
+            )
+            self.assertEqual(spec, type(spec).from_dict(spec.to_dict()))
+
+        prose = self.manifest()
+        prose["decisionProfile"] = {
+            "uncertainty": "medium", "consequence": "low",
+            "rationale": "Token budget is bounded for this planning pass.",
+        }
+        self.assertEqual(
+            translate_manifest(prose, self.profile()).decision_profile["uncertainty"],
+            "medium",
+        )
+        ordinary = self.manifest()
+        ordinary["decisionProfile"] = {
+            "uncertainty": "medium", "consequence": "low",
+            "rationale": "Use primary_key=account_id, cache-key: request-path, and max_token=4096.",
+        }
+        self.assertEqual(
+            translate_manifest(ordinary, self.profile()).decision_profile["consequence"],
+            "low",
+        )
+
+        invalid = []
+        for profile in (
+            {"uncertainty": "unknown", "consequence": "low", "rationale": "x"},
+            {"uncertainty": "low", "consequence": "low", "rationale": ""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "token=live-secret"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "api_key=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "client_secret=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "github_token=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "authtoken=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "bearertoken=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "idtoken=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "oauth2token=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "AWS_SECRET_ACCESS_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "OPENAI_API_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "STRIPE_SECRET_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "GITHUB_CLIENT_SECRET=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "NPM_TOKEN=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"OPENAI_API_KEY\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "'GITHUB_CLIENT_SECRET': 'opaque-credential-value'"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openaiApiKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"openAIApiKey\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAIAPIKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"openAIAPIToken\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAIJWTSecret=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAISigningKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "openAIEncryptionKey=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "NEXTAUTH_SECRET=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "MYSQL_ROOT_PASSWORD=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "SSH_PASSPHRASE=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "SENTRY_DSN=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "HTTP_COOKIE=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "HTTP_AUTHORIZATION=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "_OPENAI_API_KEY=opaque-credential-value"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"_OPENAI_API_KEY\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "\"config.OPENAI_API_KEY\": \"opaque-credential-value\""},
+            {"uncertainty": "low", "consequence": "low", "rationale": "temporary id ASIAIOSFODNN7EXAMPLE"},
+            {"uncertainty": "low", "consequence": "low", "rationale": "x", "extra": True},
+        ):
+            manifest = self.manifest(); manifest["decisionProfile"] = profile
+            invalid.append(manifest)
+        conflict = self.manifest()
+        conflict["decisionProfile"] = {
+            "uncertainty": "low", "consequence": "low", "rationale": "one",
+        }
+        conflict["decision_profile"] = {
+            "uncertainty": "high", "consequence": "high", "rationale": "two",
+        }
+        invalid.append(conflict)
+        for manifest in invalid:
+            with self.subTest(manifest=manifest), self.assertRaises(ValueError):
+                translate_manifest(manifest, self.profile())
+
+    def test_decision_profile_receipt_context_is_preserved_and_continuous(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        profile = {
+            "uncertainty": "high", "consequence": "high",
+            "rationale": "Use bounded synthesis and stronger verification.",
+        }
+        receipts[0]["decisionProfile"] = profile
+        events = translate_pipeline_receipts(receipts)
+        self.assertTrue(all(event.payload["decision_profile"] == profile for event in events))
+        self.assertTrue(all(not event.payload["decision_profile_defaulted"] for event in events))
+        changed = copy.deepcopy(receipts)
+        changed[-1]["decisionProfile"] = {
+            **profile, "consequence": "low",
+        }
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(changed)
+        malformed = copy.deepcopy(receipts)
+        malformed[0]["decisionProfile"] = {"uncertainty": "high"}
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(malformed)
+
+    def test_decision_profile_uses_one_durable_projection_at_boundaries(self):
+        cases = (
+            ("x" * 256, "x" * 256),
+            ("x" * 257, "value-sha256:"),
+            ("Review https://example.test/private?tokenized=1", "value-sha256:"),
+        )
+        for rationale, expected_fragment in cases:
+            with self.subTest(length=len(rationale), rationale=rationale[:16]):
+                manifest = self.manifest()
+                manifest["decisionProfile"] = {
+                    "uncertainty": "high", "consequence": "medium",
+                    "rationale": rationale,
+                }
+                spec = translate_manifest(manifest, self.profile())
+                canonical = dict(spec.decision_profile)
+                self.assertIn(expected_fragment, canonical["rationale"])
+                receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+                receipts[0]["decisionProfile"] = manifest["decisionProfile"]
+                events = translate_pipeline_receipts(receipts)
+                self.assertTrue(all(
+                    event.payload["decision_profile"] == canonical
+                    for event in events
+                ))
+                self.assertEqual(spec, type(spec).from_dict(spec.to_dict()))
+                if len(rationale) > 256 or "://" in rationale:
+                    self.assertNotIn(rationale, canonical["rationale"])
+
     def test_pipeline_receipts_map_named_stages_and_keep_authoritative_refs(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         events = translate_pipeline_receipts(receipts)
@@ -238,6 +377,110 @@ class PipelineAdapterTests(unittest.TestCase):
         self.assertNotIn("authorization", event.payload)
         self.assertNotIn("never-show", repr(event.payload))
 
+    def test_attempt_usage_aliases_translate_to_neutral_scoped_fields(self):
+        receipt = {
+            "run_id": "usage-1", "sequence": 0, "stage": "attempt_usage",
+            "status": "observed", "node_id": "build", "chunkId": "chunk-a",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/usage.json",
+            "requestedProvider": "openrouter", "attemptedProvider": "openai",
+            "implementedBy": "codex", "provider": "openai", "modelUsed": "gpt-5.6-sol",
+            "host": "codex", "attempt": 2, "durationSeconds": 4.5,
+            "waitCategory": "capacity", "usageScope": "attempt",
+            "inputUsageCount": 10, "outputUsageCount": 5,
+            "cacheReadUsageCount": 3, "cacheWriteUsageCount": 1,
+            "reasoningUsageCount": 2, "costUsd": 0.02,
+            "measurementSource": "provider_receipt", "usageEstimated": False,
+        }
+        payload = translate_pipeline_receipts([receipt])[0].payload
+        self.assertEqual(payload["chunk_id"], "chunk-a")
+        self.assertEqual(payload["usage_scope"], "attempt")
+        self.assertEqual(payload["input_usage_count"], 10)
+        self.assertEqual(payload["requested_provider"], "openrouter")
+        self.assertEqual(payload["implemented_by"], "codex")
+        self.assertEqual(payload["model"], "gpt-5.6-sol")
+        self.assertNotIn("inputUsageCount", payload)
+
+    def test_attempt_usage_fails_closed_on_invalid_types_scope_identity_and_duals(self):
+        base = {
+            "run_id": "usage-1", "sequence": 0, "stage": "attempt_usage",
+            "status": "observed", "node_id": "build", "attempt": 1,
+            "chunk_id": "chunk-a", "duration_seconds": 1.0,
+            "requested_provider": "openrouter", "attempted_provider": "openai",
+            "implemented_by": "codex", "model": "gpt-5.6-sol", "host": "codex",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/usage.json",
+            "usage_scope": "attempt", "usage_count": 10,
+            "measurement_source": "provider_receipt", "usage_estimated": False,
+        }
+        mutations = (
+            {"usage_count": True}, {"usage_count": -1}, {"cost_usd": float("nan")},
+            {"cost_usd": float("inf")}, {"usage_scope": "span"},
+            {"measurement_source": ""}, {"usage_estimated": 0}, {"attempt": 0},
+            {"node_id": None}, {"usageScope": "run"},
+            {"costUsd": 1.0, "cost_usd": 2.0},
+            {"measurement_source": "x" * 4097},
+        )
+        for mutation in mutations:
+            candidate = copy.deepcopy(base)
+            candidate.update(mutation)
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                translate_pipeline_receipts([candidate])
+
+    def test_run_scoped_usage_rejects_attempt_identity_and_legacy_tokens_survive(self):
+        run_total = {
+            "run_id": "usage-1", "sequence": 0, "stage": "run_summary",
+            "status": "succeeded", "node_id": None,
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/summary.json",
+            "usageScope": "run", "tokens": 10,
+            "measurementSource": "provider_receipt", "usageEstimated": False,
+        }
+        event = translate_pipeline_receipts([run_total])[0]
+        self.assertEqual(event.payload["usage_count"], 10)
+        invalid = copy.deepcopy(run_total)
+        invalid["attempt"] = 1
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([invalid])
+        legacy = copy.deepcopy(run_total)
+        for key in ("usageScope", "measurementSource", "usageEstimated"):
+            legacy.pop(key)
+        self.assertEqual(translate_pipeline_receipts([legacy])[0].payload["usage_count"], 10)
+
+    def test_only_exact_human_help_shapes_are_normalized_as_interventions(self):
+        exact = {
+            "run_id": "human-1", "sequence": 0,
+            "stage": "deterministic_validation", "status": "blocked",
+            "action": "human_help_required", "node_id": "chunk-a", "attempt": 2,
+            "humanInterventionId": "human-a",
+            "humanInterventionReason": "identical_failure_convergence",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/human.json",
+        }
+        payload = translate_pipeline_receipts([exact])[0].payload
+        self.assertTrue(payload["human_intervention"])
+        for reason in (
+            "replacement_adapter_dispatch_failed",
+            "replacement_invalid_session_handle",
+            "replacement_session_handle_unavailable",
+        ):
+            replacement = copy.deepcopy(exact)
+            replacement["humanInterventionReason"] = reason
+            self.assertEqual(
+                translate_pipeline_receipts([replacement])[0].payload[
+                    "human_intervention_reason"
+                ],
+                reason,
+            )
+        wrong_reason = copy.deepcopy(exact)
+        wrong_reason["human_intervention_reason"] = "browser_evidence_unavailable"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([wrong_reason])
+        unrelated = copy.deepcopy(exact)
+        unrelated.update({"stage": "progress", "action": "not_help"})
+        payload = translate_pipeline_receipts([unrelated])[0].payload
+        self.assertNotIn("human_intervention", payload)
+
     def test_documented_camelcase_receipt_fields_are_preserved_not_dropped(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         receipts[2].update({
@@ -297,6 +540,234 @@ class PipelineAdapterTests(unittest.TestCase):
         self.assertEqual(event.node_id, "build")
         self.assertIn("receipts/builder.json", event.payload["evidence"])
         self.assertIn("builder-observation/dispatch-blocked", event.payload["evidence"])
+        self.assertFalse(event.payload["verification_contract_bound"])
+        self.assertEqual(
+            event.payload["verification_contract_provenance"],
+            "legacy_default_absent",
+        )
+
+        digest = "sha256:" + "a" * 64
+        current = translate_builder_decision(
+            decision, authoritative_receipt_reference="receipts/builder.json",
+            sequence=3, occurred_at="2026-07-14T00:00:00Z",
+            current_contract_digest=digest, claimed_contract_digest=digest,
+        )
+        self.assertEqual(current.payload["contract_digest"], digest)
+        self.assertTrue(current.payload["verification_contract_bound"])
+        for claimed in (None, "sha256:" + "b" * 64, "not-a-digest"):
+            with self.subTest(claimed=claimed), self.assertRaises(ValueError):
+                translate_builder_decision(
+                    decision,
+                    authoritative_receipt_reference="receipts/builder.json",
+                    sequence=3, occurred_at="2026-07-14T00:00:00Z",
+                    current_contract_digest=digest,
+                    claimed_contract_digest=claimed,
+                )
+
+    def test_contract_receipts_are_semantic_contiguous_and_current(self):
+        first = "sha256:" + "a" * 64
+        second = "sha256:" + "b" * 64
+        profile_id = "profile-sha256:" + "d" * 64
+        profile_digest = "sha256:" + "e" * 64
+        profile_ref = "verification-profiles/sha256-" + "e" * 64 + ".json"
+        approval_ref = "verification-approvals/sha256-" + "c" * 64 + ".json"
+
+        def contract_receipt(stage, sequence, digest, revision, previous):
+            return {
+                "run_id": "run-1", "sequence": sequence, "stage": stage,
+                "occurred_at": f"2026-07-14T00:00:0{sequence}Z",
+                "authoritative_receipt": f"receipts/{sequence}.json",
+                "workflow_class": "feature", "execution_mode": "generic",
+                "contract_id": "contract-1", "schema_version": 1,
+                "revision": revision, "contract_digest": digest,
+                "contract_ref": (
+                    "verification-contracts/sha256-"
+                    + digest.removeprefix("sha256:") + ".json"
+                ),
+                "previous_contract_digest": previous,
+                "reason_code": "approved_revision",
+                "human_approval_evidence_ref": (
+                    None if stage == "verification_contract_bound" else approval_ref
+                ),
+                "verification_profile_id": profile_id,
+                "verification_profile_digest": profile_digest,
+                "verification_profile_ref": profile_ref,
+            }
+
+        receipts = [
+            contract_receipt(
+                "verification_contract_bound", 0, first, 1, None,
+            ),
+            contract_receipt(
+                "verification_contract_revised", 2, second, 2, first,
+            ),
+            {
+                "run_id": "run-1", "sequence": 3, "stage": "dispatch",
+                "occurred_at": "2026-07-14T00:00:03Z",
+                "authoritative_receipt": "receipts/3.json",
+                "workflow_class": "feature", "execution_mode": "generic",
+                "contract_digest": second, "status": "completed",
+            },
+        ]
+        receipts.insert(1, {
+            "run_id": "run-1", "sequence": 1,
+            "stage": "verification_contract_revision_authorized",
+            "occurred_at": "2026-07-14T00:00:01Z",
+            "authoritative_receipt": "receipts/1.json",
+            "workflow_class": "feature", "execution_mode": "generic",
+            "previous_contract_digest": first,
+            "candidate_contract_digest": second,
+            "approval_ref": approval_ref, "actor": "reviewer-1",
+            "authority": "design-machines-human-approval-v1",
+            "decision": "approved", "nonce": "approval-nonce-1",
+            "issued_at": "2026-07-14T00:00:00Z",
+            "expires_at": "2026-07-14T00:05:00Z",
+        })
+        events = translate_pipeline_receipts(receipts)
+        self.assertIn("verification_contract_bound", events[0].payload["evidence"])
+        self.assertIn("verification_contract_revised", events[2].payload["evidence"])
+        self.assertEqual(events[2].payload["revision"], 2)
+        self.assertEqual(events[2].payload["previous_contract_digest"], first)
+        self.assertEqual(events[3].payload["contract_digest"], second)
+        self.assertEqual(events[2].payload["verification_profile_id"], profile_id)
+        self.assertTrue(all(
+            event.payload["verification_contract_provenance"]
+            == "authoritative_receipt"
+            for event in events
+        ))
+
+        prebinding = copy.deepcopy(receipts)
+        prebinding.insert(0, {
+            "run_id": "run-1", "sequence": 0, "stage": "manifest_validation",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/prebinding.json",
+            "workflow_class": "feature", "execution_mode": "generic",
+            "status": "completed",
+        })
+        for sequence, receipt in enumerate(prebinding):
+            receipt["sequence"] = sequence
+        translated = translate_pipeline_receipts(prebinding)
+        self.assertEqual(
+            translated[0].payload["verification_contract_provenance"],
+            "pre_binding",
+        )
+        for stage in (
+            "dispatch", "deterministic_validation", "evaluation_gate",
+            "browser_verification", "merge_disposition", "chunk_cleanup",
+            "final_dm_review", "requirements_cross_check",
+            "terminal_reconciliation", "run_summary",
+        ):
+            bypass = copy.deepcopy(prebinding)
+            bypass[0]["stage"] = stage
+            with self.subTest(prebinding_stage=stage), self.assertRaises(ValueError):
+                translate_pipeline_receipts(bypass)
+
+        for snake, camel in (
+            ("schema_version", "schemaVersion"),
+            ("revision", "contractRevision"),
+        ):
+            conflicting_type = copy.deepcopy(receipts)
+            conflicting_type[0][camel] = True
+            with self.subTest(alias=camel), self.assertRaises(ValueError):
+                translate_pipeline_receipts(conflicting_type)
+
+            calls = []
+
+            class Hostile:
+                def __eq__(self, _other):
+                    calls.append("equality")
+                    raise RuntimeError("sk-secret-equality")
+
+            hostile = copy.deepcopy(receipts)
+            hostile[0][snake] = Hostile()
+            hostile[0][camel] = Hostile()
+            with self.subTest(hostile_alias=camel), self.assertRaises(ValueError) as raised:
+                translate_pipeline_receipts(hostile)
+            self.assertEqual(calls, [])
+            self.assertNotIn("sk-secret-equality", repr(raised.exception))
+
+        for name, mutate in (
+            ("revision_jump", lambda value: value[2].update({"revision": 3})),
+            ("stale_previous", lambda value: value[2].update({
+                "previous_contract_digest": "sha256:" + "c" * 64,
+            })),
+            ("stale_builder", lambda value: value[3].update({
+                "contract_digest": first,
+            })),
+            ("malformed_digest", lambda value: value[0].update({
+                "contract_digest": "sha256:not-a-digest",
+            })),
+            ("changed_contract_id", lambda value: value[2].update({
+                "contract_id": "other-contract",
+            })),
+            ("missing_builder_digest", lambda value: value[3].pop("contract_digest")),
+            ("unknown_contract_key", lambda value: value[0].update({
+                "contract_secret": "must-not-echo",
+            })),
+            ("unknown_version", lambda value: value[0].update({
+                "schema_version": 2,
+            })),
+        ):
+            candidate = copy.deepcopy(receipts)
+            mutate(candidate)
+            with self.subTest(name=name), self.assertRaises(ValueError) as raised:
+                translate_pipeline_receipts(candidate)
+            self.assertNotIn("must-not-echo", repr(raised.exception))
+
+        for name, mutate in (
+            ("missing_profile_id", lambda value: value[0].pop("verification_profile_id")),
+            ("missing_profile_ref", lambda value: value[0].pop("verification_profile_ref")),
+            ("non_content_approval", lambda value: value[2].update({
+                "human_approval_evidence_ref": "approvals/reviewer.json",
+            })),
+            ("missing_authorization", lambda value: value.pop(1)),
+        ):
+            candidate = copy.deepcopy(receipts)
+            mutate(candidate)
+            for sequence, receipt in enumerate(candidate):
+                receipt["sequence"] = sequence
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                translate_pipeline_receipts(candidate)
+
+    def test_final_review_is_a_literal_pipeline_stage(self):
+        receipt = {
+            "run_id": "reviewed-run", "sequence": 0,
+            "stage": "final_dm_review", "status": "clean",
+            "node_id": None, "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/final-dm-review.json",
+            "workflow_class": "feature", "execution_mode": "codex_native",
+            "unresolved_findings": 0, "deferred_findings": 0,
+        }
+        event = translate_pipeline_receipts([receipt])[0]
+        self.assertEqual(event.payload["stage"], "final_dm_review")
+        self.assertEqual(
+            event.payload["authoritative_receipt"],
+            "receipts/final-dm-review.json",
+        )
+
+    def test_contract_alias_conflicts_and_legacy_absence_fail_closed(self):
+        legacy = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        events = translate_pipeline_receipts(legacy)
+        self.assertTrue(all(
+            event.payload["verification_contract_provenance"]
+            == "legacy_default_absent"
+            and not event.payload["verification_contract_bound"]
+            and "verification_contract_bound" not in event.payload["evidence"]
+            for event in events
+        ))
+
+        mixed = copy.deepcopy(legacy)
+        mixed[0]["contractDigest"] = "sha256:" + "a" * 64
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(mixed)
+
+        conflicting = copy.deepcopy(legacy)
+        conflicting[0].update({
+            "contractDigest": "sha256:" + "a" * 64,
+            "contract_digest": "sha256:" + "b" * 64,
+        })
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(conflicting)
 
 
 if __name__ == "__main__":

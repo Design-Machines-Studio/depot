@@ -216,11 +216,28 @@ def _validate_anchored_execution(
         raise invalid_policy("workflow_requirement_unsatisfied")
 
 
+def _validate_contract_ancestry(records: tuple[dict, ...]) -> None:
+    """Require the policy-declared contract gate to dominate all execution."""
+    by_id = {record["id"]: record for record in records}
+    contract = by_id.get("verification_contract")
+    if contract is None:
+        raise invalid_policy("workflow_requirement_unsatisfied")
+    for record in records:
+        if (
+            record["executor"] is not None
+            and contract["id"] not in _ancestors(record, by_id)
+        ):
+            raise invalid_policy("workflow_requirement_unsatisfied")
+
+
 def _validate_safety_anchor(
     anchor: Mapping[str, object],
     classes: dict[WorkflowClass, tuple[dict, ...]],
     promotion: tuple[dict, ...],
 ) -> None:
+    executable_classes = set(WorkflowClass) - set(anchor["non_executable_classes"])
+    if set(anchor["classes"]) != executable_classes:
+        raise invalid_policy("workflow_requirement_unsatisfied")
     for records in classes.values():
         _validate_required_stages(records, anchor["common"])
     for kind in anchor["non_executable_classes"]:
@@ -229,9 +246,11 @@ def _validate_safety_anchor(
     for kind, required in anchor["classes"].items():
         _validate_required_stages(classes[kind], required)
         _validate_anchored_execution(classes[kind], required)
+        _validate_contract_ancestry(classes[kind])
     for required in anchor["promotion"].values():
         _validate_required_stages(promotion, required)
         _validate_anchored_execution(promotion, required)
+        _validate_contract_ancestry(promotion)
 
 
 def _load_templates(

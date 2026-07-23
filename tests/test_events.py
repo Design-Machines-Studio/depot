@@ -8,6 +8,8 @@ from unittest import mock
 
 from tests import detail_digest, swap_parent_after_relative_stat
 from workflow_kernel.events import EventStore, encode_event
+from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
+from workflow_kernel.dm_review_adapter import translate_review_receipts
 from workflow_kernel.schema import (
     CorruptEventError, InvalidSchemaError, KernelError, LeaseConflictError,
     SequenceConflictError, UnsafePayloadError, WorkflowEvent,
@@ -31,6 +33,82 @@ def append_event(store, value, expected_sequence):
 
 
 class EventStoreTests(unittest.TestCase):
+    def test_telemetry_payload_is_redacted_bounded_immutable_and_replay_safe(self):
+        raw = {
+            "stage": "attempt_usage", "usage_scope": "attempt", "attempt": 1,
+            "input_usage_count": 10, "cost_usd": 0.01,
+            "measurement_source": "https://telemetry.example/receipt",
+            "usage_estimated": False, "missing_case_ids": ["case-a"],
+            "api_token": "never-persist-this-secret",
+            "evidence": ["receipts/attempt.json"],
+        }
+        candidate = WorkflowEvent(
+            1, 0, "run-telemetry", "chunk-a", "evidence.recorded",
+            "2026-07-14T00:00:00Z", raw,
+        )
+        raw["input_usage_count"] = 999
+        raw["missing_case_ids"].append("case-b")
+        self.assertEqual(candidate.payload["input_usage_count"], 10)
+        self.assertEqual(candidate.payload["missing_case_ids"], ("case-a",))
+        with self.assertRaises(TypeError):
+            candidate.payload["attempt"] = 2
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            append_event(store, candidate, 0)
+            durable = store.path.read_text()
+            self.assertNotIn("never-persist-this-secret", durable)
+            self.assertNotIn("telemetry.example", durable)
+            replayed = store.replay()
+            self.assertEqual(replayed[0].payload["input_usage_count"], 10)
+            self.assertEqual(store.validate()[0], replayed)
+
+    def test_translated_telemetry_enforces_string_case_and_document_boundaries(self):
+        usage = {
+            "run_id": "run-telemetry", "sequence": 0, "stage": "attempt_usage",
+            "status": "observed", "node_id": "chunk-a", "chunk_id": "chunk-a",
+            "attempt": 1, "requested_provider": "openrouter",
+            "attempted_provider": "openai", "implemented_by": "codex",
+            "provider": "openai", "model": "gpt-5.6-sol", "host": "codex",
+            "duration_seconds": 1.0, "usage_scope": "attempt", "usage_count": 10,
+            "measurement_source": "m" * 4096, "usage_estimated": False,
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/telemetry.json",
+        }
+        translated = translate_pipeline_receipts([usage])[0]
+        with tempfile.TemporaryDirectory() as directory:
+            store = EventStore(directory)
+            append_event(store, translated, 0)
+            self.assertEqual(store.replay()[0].payload["usage_count"], 10)
+        overlong = dict(usage)
+        sentinel = "never-render-overlong-telemetry"
+        overlong["measurement_source"] = sentinel + "x" * 4097
+        with self.assertRaises(ValueError) as raised:
+            translate_pipeline_receipts([overlong])
+        self.assertNotIn(sentinel, str(raised.exception))
+
+        from tests.test_browser_recovery import BrowserRecoveryTests
+        helper = BrowserRecoveryTests(); helper.setUp()
+        recovery = helper.blocked_with_unavailable_readiness()
+
+        browser = {
+            "run_id": "run-browser", "sequence": 0, "stage": "browser_recovery",
+            "status": "blocked", "reason_code": "human_help_required",
+            "node_id": "review-browser",
+            "human_intervention_id": "human-browser-boundary",
+            "human_intervention_reason": "browser_evidence_unavailable",
+            "missing_case_ids": ["case-1"],
+            "recovery_receipts": [recovery.to_dict()],
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/browser-boundary.json",
+        }
+        event = translate_review_receipts([browser])[0]
+        self.assertEqual(event.payload["missing_case_ids"], ("case-1",))
+        self.assertEqual(len(event.payload["recovery_receipt_digests"]), 1)
+        over_count = dict(browser)
+        over_count["missing_case_ids"] = [f"case-{index}" for index in range(257)]
+        with self.assertRaises(ValueError):
+            translate_review_receipts([over_count])
+
     def test_require_absent_accepts_missing_and_classifies_existing_entries(self):
         with tempfile.TemporaryDirectory() as directory:
             EventStore(directory).require_absent()

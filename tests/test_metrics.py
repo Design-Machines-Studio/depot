@@ -5,17 +5,59 @@ from pathlib import Path
 
 from workflow_kernel.metrics import MetricsAggregator
 from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
+from workflow_kernel.dm_review_adapter import translate_review_receipts
+from workflow_kernel.schema import WorkflowEvent
+from workflow_kernel._translation import canonical_finding_identity
 
 
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 
 
+def contribution_identity():
+    values = {
+        "finding_path": "internal/review.py",
+        "finding_anchor": "review.finding",
+        "finding_category": "trust boundary",
+        "finding_root_cause": "unbound source contribution",
+    }
+    values["canonical_finding_id"] = canonical_finding_identity(
+        values["finding_path"], values["finding_anchor"],
+        values["finding_category"], values["finding_root_cause"],
+    )[0]
+    return values
+
+
+CONTRIBUTION_PROVENANCE = {
+    "lane": "security", "requested_provider": "openrouter",
+    "attempted_provider": "openai", "implemented_by": "codex",
+    "provider": "openai", "model": "gpt-5.6-sol", "source_severity": "P2",
+}
+
+
 class MetricsTests(unittest.TestCase):
+    def usage_receipt(self, sequence, attempt, **measurements):
+        receipt = {
+            "run_id": "economics-1", "sequence": sequence,
+            "stage": "attempt_usage", "status": "observed",
+            "node_id": "chunk-a", "chunk_id": "chunk-a",
+            "occurred_at": f"2026-07-14T00:0{sequence}:00Z",
+            "authoritative_receipt": f"receipts/attempt-{sequence}.json",
+            "host": "codex", "provider": "openai", "model": "gpt-5.6-sol",
+            "requested_provider": "openrouter", "attempted_provider": "openai",
+            "implemented_by": "codex", "attempt": attempt,
+            "duration_seconds": 1.0,
+            "usage_scope": "attempt", "measurement_source": "provider_receipt",
+            "usage_estimated": False,
+        }
+        receipt.update(measurements)
+        return receipt
+
     def test_aggregates_reliability_dimensions_without_mutating_events(self):
         events = translate_pipeline_receipts(json.loads((FIXTURES / "pipeline-claude.json").read_text()))
         before = tuple(event.to_dict() for event in events)
         report = MetricsAggregator().aggregate(events)
         self.assertEqual(report.workflow_classes, {"feature": 11})
+        self.assertEqual(report.decision_profiles, {"legacy-defaulted": 11})
         self.assertEqual(report.hosts, {"claude-code": 11})
         self.assertEqual(report.validation_first_pass_rate, 1.0)
         self.assertEqual(report.persona_expected, 2)
@@ -118,6 +160,19 @@ class MetricsTests(unittest.TestCase):
             {"sequential-on-branch": len(receipts)},
         )
 
+    def test_decision_profile_feeds_metrics_without_becoming_authority(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        receipts[0]["decisionProfile"] = {
+            "uncertainty": "high", "consequence": "high",
+            "rationale": "Bounded synthesis plus stronger verification.",
+        }
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts(receipts),
+        )
+        self.assertEqual(
+            report.decision_profiles, {"high/high": len(receipts)},
+        )
+
     def test_replay_duplicate_gap_and_order_are_rejected(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         variants = []
@@ -127,6 +182,307 @@ class MetricsTests(unittest.TestCase):
         for value in variants:
             with self.assertRaises(ValueError):
                 MetricsAggregator().aggregate(translate_pipeline_receipts(value))
+
+    def test_run_total_precedes_complete_attempt_breakdown_without_double_count(self):
+        receipts = [
+            self.usage_receipt(0, 1, usage_count=100, input_usage_count=60, cost_usd=0.1),
+            self.usage_receipt(1, 2, usage_count=200, input_usage_count=120, cost_usd=0.2),
+            {
+                "run_id": "economics-1", "sequence": 2, "stage": "run_summary",
+                "status": "succeeded", "node_id": None,
+                "occurred_at": "2026-07-14T00:02:00Z",
+                "authoritative_receipt": "receipts/run-total.json",
+                "usage_scope": "run", "measurement_source": "billing_export",
+                "usage_estimated": False, "usage_count": 250,
+                "input_usage_count": 150, "cost_usd": 0.25,
+            },
+        ]
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(report.tokens, 250)
+        self.assertEqual(report.usage_totals["input_usage_count"], 150)
+        self.assertEqual(report.cost_usd, 0.25)
+        self.assertEqual(report.usage_total_provenance["usage_count"], "authoritative_run_total")
+        self.assertEqual(report.cost_total_provenance, "authoritative_run_total")
+        self.assertEqual(report.usage_measurement_coverage["measured"], 2)
+        self.assertEqual(len(report.attempt_economics), 2)
+
+    def test_complete_attempts_derive_totals_and_partial_coverage_stays_unknown(self):
+        complete = [
+            self.usage_receipt(0, 1, usage_count=100, output_usage_count=40, cost_usd=0.1),
+            self.usage_receipt(1, 2, usage_count=200, output_usage_count=80, cost_usd=0.2),
+        ]
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(complete))
+        self.assertEqual(report.tokens, 300)
+        self.assertAlmostEqual(report.cost_usd, 0.3)
+        self.assertEqual(report.usage_total_provenance["usage_count"], "derived_complete_attempts")
+        self.assertEqual(report.usage_measurement_coverage["missing"], 0)
+
+        missing = [complete[0], {
+            **{key: value for key, value in complete[1].items() if key not in {
+                "usage_scope", "measurement_source", "usage_estimated",
+                "usage_count", "output_usage_count", "cost_usd",
+            }},
+            "stage": "dispatch",
+        }]
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(missing))
+        self.assertIsNone(report.tokens)
+        self.assertIsNone(report.cost_usd)
+        self.assertEqual(
+            report.usage_measurement_coverage,
+            {"expected": 2, "measured": 1, "estimated": 0, "missing": 1,
+             "overlap": 0, "unassigned": 0},
+        )
+
+    def test_usage_and_cost_coverage_are_independent_and_estimation_is_visible(self):
+        cost_only = self.usage_receipt(0, 1, cost_usd=0.3)
+        cost_report = MetricsAggregator().aggregate(translate_pipeline_receipts([cost_only]))
+        self.assertIsNone(cost_report.tokens)
+        self.assertEqual(cost_report.cost_usd, 0.3)
+        self.assertEqual(cost_report.usage_measurement_coverage["missing"], 1)
+        self.assertEqual(cost_report.cost_measurement_coverage["measured"], 1)
+
+        usage_only = self.usage_receipt(0, 1, usage_count=9, usage_estimated=True)
+        usage_report = MetricsAggregator().aggregate(translate_pipeline_receipts([usage_only]))
+        self.assertEqual(usage_report.tokens, 9)
+        self.assertIsNone(usage_report.cost_usd)
+        self.assertEqual(usage_report.usage_measurement_coverage["estimated"], 1)
+        self.assertEqual(usage_report.cost_measurement_coverage["missing"], 1)
+
+    def test_overlapping_attempt_measurements_do_not_create_a_total(self):
+        receipts = [
+            self.usage_receipt(0, 1, usage_count=10, cost_usd=0.1),
+            self.usage_receipt(1, 1, usage_count=10, cost_usd=0.1),
+        ]
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertIsNone(report.tokens)
+        self.assertIsNone(report.cost_usd)
+        self.assertEqual(report.usage_measurement_coverage["overlap"], 1)
+
+    def test_coverage_identity_coalesces_dispatch_or_contribution_with_usage(self):
+        usage = self.usage_receipt(
+            1, 1, usage_count=10, reviewer="security", lane="security",
+        )
+        dispatch = {
+            **{key: value for key, value in usage.items() if key not in {
+                "usage_scope", "usage_count", "measurement_source",
+                "usage_estimated", "duration_seconds",
+            }},
+            "sequence": 0, "stage": "dispatch",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/dispatch.json",
+            "provider": "openrouter", "model": "requested-model",
+        }
+        for field in ("chunk_id", "reviewer", "lane"):
+            dispatch.pop(field)
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts([dispatch, usage]),
+        )
+        self.assertEqual(report.usage_measurement_coverage["expected"], 1)
+        self.assertEqual(report.usage_measurement_coverage["measured"], 1)
+        self.assertEqual(report.tokens, 10)
+
+        contribution = {
+            "run_id": "economics-1", "sequence": 0,
+            "stage": "finding_contribution", "status": "recorded",
+            "node_id": "chunk-a", "chunk_id": "chunk-a", "attempt": 1,
+            "reviewer": "security", "lane": "security",
+            "source_finding_id": "source-a", **contribution_identity(),
+            "finding_disposition": "retained", "agreement": "unique",
+            "decision_reason_code": "retained-unique",
+            "provider": "openrouter", "model": "review-model",
+            "evidence_ref": "raw/security.json",
+            **CONTRIBUTION_PROVENANCE,
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/contribution.json",
+        }
+        report = MetricsAggregator().aggregate(translate_review_receipts([
+            contribution, usage,
+        ]))
+        self.assertEqual(report.usage_measurement_coverage["expected"], 1)
+        self.assertEqual(report.usage_measurement_coverage["missing"], 0)
+
+    def test_generic_measurement_is_unassigned_when_reviewer_expectations_are_ambiguous(self):
+        common = {
+            "run_id": "ambiguous-coverage", "stage": "finding_contribution",
+            "status": "recorded", "node_id": "review-convergence",
+            "chunk_id": "chunk-a", "attempt": 1,
+            **contribution_identity(), "agreement": "corroborated",
+            "evidence_ref": "raw/reviewer-a.json",
+            **CONTRIBUTION_PROVENANCE,
+        }
+        receipts = [
+            {**common, "sequence": 0, "reviewer": "security", "lane": "security",
+             "source_finding_id": "source-a", "finding_disposition": "retained",
+             "decision_reason_code": "retained-corroborated",
+             "occurred_at": "2026-07-14T00:00:00Z",
+             "authoritative_receipt": "receipts/contribution-a.json"},
+            {**common, "sequence": 1, "reviewer": "architecture", "lane": "architecture",
+             "source_finding_id": "source-b", "finding_disposition": "merged",
+             "decision_reason_code": "exact-duplicate",
+             "evidence_ref": "raw/reviewer-b.json",
+             "occurred_at": "2026-07-14T00:01:00Z",
+             "authoritative_receipt": "receipts/contribution-b.json"},
+            {
+                "run_id": "ambiguous-coverage", "sequence": 2,
+                "stage": "attempt_usage", "status": "observed",
+                "node_id": "review-convergence", "chunk_id": "chunk-a", "attempt": 1,
+                "requested_provider": "openrouter", "attempted_provider": "openai",
+                "implemented_by": "codex", "provider": "openai",
+                "model": "gpt-5.6-sol", "host": "codex", "duration_seconds": 1.0,
+                "usage_scope": "attempt", "usage_count": 10,
+                "measurement_source": "provider_receipt", "usage_estimated": False,
+                "occurred_at": "2026-07-14T00:02:00Z",
+                "authoritative_receipt": "receipts/generic-usage.json",
+            },
+        ]
+        report = MetricsAggregator().aggregate(translate_review_receipts(receipts))
+        self.assertEqual(report.usage_measurement_coverage, {
+            "expected": 2, "measured": 0, "estimated": 0, "missing": 2,
+            "overlap": 0, "unassigned": 1,
+        })
+        self.assertIsNone(report.tokens)
+
+    def test_ambiguous_field_rows_cannot_manufacture_complete_field_totals(self):
+        assigned = [
+            self.usage_receipt(
+                0, 1, reviewer="security", lane="security",
+                usage_count=10, input_usage_count=6,
+            ),
+            self.usage_receipt(
+                1, 1, reviewer="architecture", lane="architecture",
+                usage_count=20, input_usage_count=12,
+            ),
+        ]
+        ambiguous = []
+        for sequence, value in ((2, 5), (3, 8)):
+            row = self.usage_receipt(sequence, 1, input_usage_count=value)
+            ambiguous.append(row)
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts(assigned + ambiguous),
+        )
+        self.assertEqual(report.tokens, 30)
+        self.assertIsNone(report.usage_totals["input_usage_count"])
+        self.assertIsNone(
+            report.usage_total_provenance["input_usage_count"],
+        )
+        self.assertEqual(report.usage_measurement_coverage["unassigned"], 2)
+
+    def test_contributions_preserve_canonical_count_and_existing_yield(self):
+        common = {
+            "run_id": "review-economics", "stage": "finding_contribution",
+            "status": "recorded", "node_id": "review-convergence",
+            **contribution_identity(),
+            "agreement": "corroborated", "attempt": 1,
+            "evidence_ref": "raw/findings.json",
+            **CONTRIBUTION_PROVENANCE,
+        }
+        receipts = [
+            {**common, "sequence": 0, "occurred_at": "2026-07-14T00:00:00Z",
+             "authoritative_receipt": "receipts/source-a.json", "source_finding_id": "source-a",
+             "finding_disposition": "retained", "decision_reason_code": "retained-corroborated",
+             "reviewer": "security", "provider": "openai", "model": "gpt-5.6-sol",
+             "evidence_ref": "raw/security.json"},
+            {**common, "sequence": 1, "occurred_at": "2026-07-14T00:01:00Z",
+             "authoritative_receipt": "receipts/source-b.json", "source_finding_id": "source-b",
+             "finding_disposition": "merged", "decision_reason_code": "exact-duplicate",
+             "reviewer": "architecture", "provider": "anthropic", "model": "claude-opus",
+             "evidence_ref": "raw/architecture.json"},
+        ]
+        report = MetricsAggregator().aggregate(translate_review_receipts(receipts))
+        self.assertEqual(report.canonical_finding_count, 1)
+        self.assertEqual(report.finding_contribution_count, 2)
+        self.assertEqual(report.finding_contributions_by_reviewer["security"]["corroborated"], 1)
+        self.assertEqual(report.finding_contributions_by_reviewer["architecture"]["merged"], 1)
+        self.assertEqual(report.unique_reviewer_yield, 0)
+
+    def test_human_interventions_dedupe_by_id_and_ignore_human_gate_wait(self):
+        validation = {
+            "run_id": "human-1", "sequence": 0, "stage": "deterministic_validation",
+            "status": "blocked", "action": "human_help_required", "node_id": "chunk-a",
+            "attempt": 2, "human_intervention_id": "human-validation-a",
+            "human_intervention_reason": "retry_budget_exhausted",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/human-a.json",
+        }
+        receipts = [validation, {
+            "run_id": "human-1", "sequence": 1, "stage": "run_summary",
+            "status": "blocked", "node_id": None,
+            "human_intervention_id": "human-validation-a",
+            "human_intervention_reason": "retry_budget_exhausted",
+            "occurred_at": "2026-07-14T00:01:00Z",
+            "authoritative_receipt": "receipts/summary.json",
+        }, {
+            "run_id": "human-1", "sequence": 2, "stage": "progress",
+            "status": "waiting", "node_id": None, "wait_category": "human_gate",
+            "duration_seconds": 30, "occurred_at": "2026-07-14T00:02:00Z",
+            "authoritative_receipt": "receipts/wait.json",
+        }]
+        report = MetricsAggregator().aggregate(translate_pipeline_receipts(receipts))
+        self.assertEqual(report.human_intervention_count, 1)
+        self.assertEqual(report.human_interventions_by_reason, {"retry_budget_exhausted": 1})
+        self.assertEqual(report.human_intervention_attempts[0]["attempt"], 2)
+        self.assertEqual(report.wait_seconds_by_category["human_gate"], 30)
+
+    def test_conflicting_human_intervention_id_reuse_is_rejected(self):
+        first = {
+            "run_id": "human-conflict", "sequence": 0,
+            "stage": "deterministic_validation", "status": "blocked",
+            "action": "human_help_required", "node_id": "chunk-a",
+            "attempt": 1, "human_intervention_id": "human-a",
+            "human_intervention_reason": "retry_budget_exhausted",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/human-first.json",
+        }
+        identical = {
+            **first, "sequence": 1,
+            "occurred_at": "2026-07-14T00:01:00Z",
+            "authoritative_receipt": "receipts/human-identical.json",
+        }
+        report = MetricsAggregator().aggregate(
+            translate_pipeline_receipts([first, identical]),
+        )
+        self.assertEqual(report.human_intervention_count, 1)
+
+        mutations = []
+        attempt = dict(identical); attempt["attempt"] = 2; mutations.append(attempt)
+        reason = dict(identical); reason["human_intervention_reason"] = "identical_failure_convergence"; mutations.append(reason)
+        node = dict(identical); node["node_id"] = "chunk-b"; mutations.append(node)
+        browser = {
+            "run_id": "human-conflict", "sequence": 1,
+            "stage": "browser_recovery", "status": "blocked",
+            "reason_code": "human_help_required", "node_id": "chunk-a",
+            "human_intervention_id": "human-a",
+            "human_intervention_reason": "browser_evidence_unavailable",
+            "missing_case_ids": ["browser-primary"],
+            "occurred_at": "2026-07-14T00:01:00Z",
+            "authoritative_receipt": "receipts/human-browser.json",
+        }
+        mutations.append(browser)
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                MetricsAggregator().aggregate(
+                    translate_pipeline_receipts([first, mutation]),
+                )
+
+        payload = {
+            "stage": "deterministic_validation", "status": "blocked",
+            "human_intervention": True, "human_intervention_id": "human-a",
+            "human_intervention_reason": "retry_budget_exhausted", "attempt": 1,
+            "contract_digest": "sha256:" + "a" * 64,
+        }
+        events = [
+            WorkflowEvent(
+                1, 0, "human-conflict", "chunk-a", "evidence.recorded",
+                "2026-07-14T00:00:00Z", payload,
+            ),
+            WorkflowEvent(
+                1, 1, "human-conflict", "chunk-a", "evidence.recorded",
+                "2026-07-14T00:01:00Z",
+                {**payload, "contract_digest": "sha256:" + "b" * 64},
+            ),
+        ]
+        with self.assertRaises(ValueError):
+            MetricsAggregator().aggregate(events)
 
 
 if __name__ == "__main__":

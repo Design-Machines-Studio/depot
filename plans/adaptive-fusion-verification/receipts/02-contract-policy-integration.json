@@ -1,0 +1,15 @@
+{
+  "chunk_id": "02-contract-policy-integration",
+  "status": "merged",
+  "classification": "logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "validation": "137 focused tests passed",
+  "evaluation": "EVAL_GATE_PASSED: 02-contract-policy-integration | classification: logic | iterations: 2 | findings_remaining: 0 | deferred: 0",
+  "ambiguity_resolved": true,
+  "commit": "b4b42806a4a382c76a61c92b29af731f57cd3b99",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="plan">
+  <title>Plan: Adaptive Fusion and Verification</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 65ch; --reel-max: 80rem; --space-1: 0.375rem; --space-2: 0.75rem; --space-3: 1rem; --space-4: 1.5rem; --space-5: 2rem; --surface: Canvas; --text: CanvasText; --muted: GrayText; --rule: GrayText; --link: LinkText; --control: ButtonFace; --control-text: ButtonText; --control-hover: Highlight; --control-hover-text: HighlightText; --control-active: SelectedItem; --control-active-text: SelectedItemText; --focus: Highlight; --font-body: system-ui, -apple-system, "Segoe UI", sans-serif; --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.6 var(--font-body); background: var(--surface); color: var(--text); }
+    h1, h2, h3 { line-height: 1.2; text-wrap: balance; }
+    h1 { font-size: 1.875rem; }
+    h2 { font-size: 1.375rem; margin-top: var(--space-5); }
+    h3 { font-size: 1.125rem; }
+    a { color: var(--link); }
+    a:hover { text-decoration-thickness: 0.15em; }
+    a:focus-visible, .reel:focus-visible, .widget__copy:focus-visible { outline: 0.2rem solid var(--focus); outline-offset: 0.2rem; }
+    code, pre { font-family: var(--font-mono); }
+    pre { overflow-x: auto; padding: var(--space-2); border: 1px solid var(--rule); }
+    table { border-collapse: collapse; min-width: 42rem; width: 100%; }
+    caption { font-weight: 700; padding-block-end: var(--space-2); text-align: left; }
+    th, td { border: 1px solid var(--rule); padding: var(--space-1) var(--space-2); text-align: left; vertical-align: top; }
+    th { font-weight: 650; }
+    .skip-link { position: absolute; left: -9999px; top: var(--space-2); background: var(--surface); color: var(--text); }
+    .skip-link:focus { left: var(--space-2); padding: var(--space-2) var(--space-3); z-index: 10; }
+    .scheme-subtle { background: var(--surface); color: var(--text); }
+    .center, .artifact-main, .artifact-header, .artifact-footer { max-width: var(--measure); margin-inline: auto; padding: var(--space-3); }
+    .artifact-header nav ul { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; padding: 0; }
+    .artifact-meta, small, .widget__status { color: var(--muted); }
+    .widget--edit [contenteditable]:focus { outline: 0.2rem solid var(--focus); outline-offset: -0.2rem; }
+    .widget__copy { margin: var(--space-2) 0; border: 1px solid var(--rule); border-radius: 0.25rem; background: var(--control); color: var(--control-text); font: inherit; font-weight: 650; padding: var(--space-1) var(--space-2); cursor: pointer; transition: background-color 120ms ease, color 120ms ease, transform 120ms ease; }
+    .widget__copy:hover { background: var(--control-hover); color: var(--control-hover-text); }
+    .widget__copy:active { background: var(--control-active); color: var(--control-active-text); transform: translateY(0.1rem); }
+    .widget__status { min-height: 1.6em; margin-block: 0; }
+    .stack > * + * { margin-block-start: var(--space-4); }
+    .reel { width: min(var(--reel-max), calc(100vw - 2rem)); max-width: none; overflow-x: auto; overscroll-behavior-inline: contain; position: relative; left: 50%; transform: translateX(-50%); }
+    @media print { nav, .widget__copy, .widget__status { display: none; } .artifact-main { max-width: none; } .reel { left: auto; transform: none; width: 100%; overflow: visible; } }
+  </style>
+</head>
+<body class="scheme-subtle">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="artifact-header">
+    <nav aria-label="Pipeline artifacts"><ul><li><a href="assessment.html">Assessment</a></li><li><a href="research.html">Research</a></li><li><a href="plan.html" aria-current="page">Plan</a></li><li>Prompts pending</li></ul></nav>
+    <p class="artifact-meta"><span class="artifact-kind">plan</span> &middot; generated 2026-07-22T10:05:43+08:00</p>
+  </header>
+  <main id="content" class="artifact-main center stack">
+    <h1>Plan: Adaptive Fusion and Verification</h1>
+
+    <section aria-labelledby="overview">
+      <h2 id="overview">Overview</h2>
+      <p>Implement six bounded chunks from refreshed <code>origin/main</code>. The plan preserves Pipeline 1.31.0's fast ordinary-chunk path and promotes only selected kernel concepts into authoritative orchestration. Pipeline remains the coordinator; workflow-kernel seals, validates, replays, and measures; dm-review supplies independent criticism and structured synthesis.</p>
+      <div class="reel" role="region" aria-label="Plan overview table" tabindex="0"><table>
+        <caption>Approved plan configuration</caption>
+        <tbody>
+          <tr><th scope="row">Workflow class</th><td><code>feature</code></td></tr>
+          <tr><th scope="row">Decision profile</th><td><code>uncertainty: medium</code>, <code>consequence: high</code></td></tr>
+          <tr><th scope="row">Base</th><td>Refreshed <code>origin/main</code> (verified at <code>21f3d9b</code>; refresh again before execution)</td></tr>
+          <tr><th scope="row">Feature branch</th><td><code>codex/adaptive-fusion-verification</code></td></tr>
+          <tr><th scope="row">Execution mode</th><td>Full pipeline, <code>noMergeOnCompletion: true</code></td></tr>
+          <tr><th scope="row">Non-goals</th><td>Mandatory fusion, multi-round debate, immutable tests, local inference, auto-changing routing policy, full dm-review on every ordinary chunk</td></tr>
+        </tbody>
+      </table></div>
+      <p>Dependency flow: <code>01 contract core → 02 policy integration → 03 authoritative pipeline</code>; <code>04 review synthesis</code> can begin independently; <code>03 + 04 → 05 metrics</code>; all feed <code>06 cross-plugin release integration</code>.</p>
+    </section>
+
+    <section aria-labelledby="chunks" class="widget--edit" data-island-key="chunks">
+      <h2 id="chunks">Chunk Decomposition</h2>
+      <p>Each row becomes <code>prompts/NN-&lt;slug&gt;.md</code>. Acceptance text is abbreviated here; generated prompts will carry numbered executable criteria and complete file ownership.</p>
+      <div class="reel" role="region" aria-label="Chunk decomposition table" tabindex="0"><table>
+        <caption>Implementation chunks, acceptance criteria, and dependencies</caption>
+        <thead><tr><th scope="col" data-field="n">NN</th><th scope="col" data-field="slug">Slug</th><th scope="col" data-field="scope">Scope</th><th scope="col" data-field="acceptance">Acceptance</th><th scope="col" data-field="deps" data-list="true">Depends on</th></tr></thead>
+        <tbody>
+          <tr>
+            <th scope="row" contenteditable="true">01</th>
+            <td contenteditable="true">behavioral-contract-core</td>
+            <td contenteditable="true">Add a separately versioned behavioral contract schema/model, canonical digest, safe argv checks, requirement coverage, prohibited regressions, baseline expectations, explicit unverifiable items, append-only revisions, CLI binding, and focused tests.</td>
+            <td contenteditable="true">Contract identity is deterministic; unsafe/unknown/deep/oversized data fails closed; revisions are monotonic and removal/weakening requires approval evidence; tests remain editable; binding is append-only and secret-safe; legacy kernel state/event schema remains compatible.</td>
+            <td contenteditable="true" data-list="true"></td>
+          </tr>
+          <tr>
+            <th scope="row" contenteditable="true">02</th>
+            <td contenteditable="true">contract-policy-integration</td>
+            <td contenteditable="true">Add a verification-contract evidence node before every executable workflow build path, widen the closed safety anchor consistently, translate contract binding/revision receipts, and preserve investigation promotion semantics.</td>
+            <td contenteditable="true">Every executable class crosses verification_contract_bound before dispatch; investigation stays non-executable until promotion; contract binds after run.started without disturbing prediction ordering; current digest is revalidated before accepting builder output; legacy manifests remain observable with explicit default provenance.</td>
+            <td contenteditable="true" data-list="true">01</td>
+          </tr>
+          <tr>
+            <th scope="row" contenteditable="true">03</th>
+            <td contenteditable="true">authoritative-pipeline-feedback</td>
+            <td contenteditable="true">Generate and bind the behavioral contract, add approved decisionProfile fields and policy-derived workflow depth, document the existing risk field, and replace fail-and-skip validation with bounded same-builder follow-up or explicit replacement.</td>
+            <td contenteditable="true">Contract is finalized before dispatch and cannot be silently weakened; failures carry contract digest, check IDs, safe evidence, signature, and remaining budget; same-session continuity is claimed only with proof; repeated/exhausted failures stop for help; browser recovery and sensitive/provider rules are unchanged; low-low legacy fast path remains optimized.</td>
+            <td contenteditable="true" data-list="true">02</td>
+          </tr>
+          <tr>
+            <th scope="row" contenteditable="true">04</th>
+            <td contenteditable="true">review-synthesis-provenance</td>
+            <td contenteditable="true">Extend the canonical dm-review consolidator, guardrails, output format, and review protocol with stable canonical IDs and a synthesis ledger for corroborated, unique, disputed, retained, merged, and discarded findings.</td>
+            <td contenteditable="true">Raw reviewer artifacts remain authoritative evidence; contradictions and severity disagreements survive; retained decisions name rationale and sources; merged/discarded items use closed reason codes; existing todo filenames/source_agents and zero-deferral recommendation logic remain compatible; ordinary chunks do not gain full multi-agent review.</td>
+            <td contenteditable="true" data-list="true"></td>
+          </tr>
+          <tr>
+            <th scope="row" contenteditable="true">05</th>
+            <td contenteditable="true">attempt-economics-and-contribution</td>
+            <td contenteditable="true">Add finding_contribution events, per-attempt provider/model/usage/time/cost rows, measurement provenance and coverage, contribution dimensions, parity semantics, and aggregation tests on top of origin/main active-versus-waiting metrics.</td>
+            <td contenteditable="true">Attempt and run usage never double-count; missing usage remains unknown; existing unscoped totals remain valid; input/output/cache/reasoning fields are optional and secret-safe; contributions aggregate by reviewer/provider/model and disposition; unique_reviewer_yield keeps its old meaning; mutation of semantic fields produces parity differences; recommendations remain proposal-only.</td>
+            <td contenteditable="true" data-list="true">03, 04</td>
+          </tr>
+          <tr>
+            <th scope="row" contenteditable="true">06</th>
+            <td contenteditable="true">cross-plugin-release-integration</td>
+            <td contenteditable="true">Integrate versions/dependencies, workflow documentation, canonical commands, generated Codex aliases/manifests, validator schema/CLI inventories, compatibility fixtures, and release checks across workflow-kernel, Pipeline, and dm-review.</td>
+            <td contenteditable="true">Canonical manifests are bumped and marketplace dependencies agree; generated surfaces are current; help/CLI/schema counts are exact; legacy fixtures pass; focused suites and Depot-owned composition checks pass; external assembly-baseplate declaration failure is reported separately unless caused by this change; git diff check is clean.</td>
+            <td contenteditable="true" data-list="true">01, 02, 03, 04, 05</td>
+          </tr>
+        </tbody>
+      </table></div>
+      <button type="button" class="widget__copy" data-copy-island data-copy-label="Chunk decomposition" aria-describedby="chunks-copy-status">Copy chunk decomposition as JSON</button>
+      <p id="chunks-copy-status" class="widget__status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </section>
+
+    <section aria-labelledby="decisions" class="widget--edit" data-island-key="decisions">
+      <h2 id="decisions">Decisions &amp; Tradeoffs</h2>
+      <div class="reel" role="region" aria-label="Decisions and tradeoffs table" tabindex="0"><table>
+        <caption>Approved decisions, rationale, and alternatives</caption>
+        <thead><tr><th scope="col" data-field="id">ID</th><th scope="col" data-field="decision">Decision</th><th scope="col" data-field="rationale">Rationale</th><th scope="col" data-field="alternatives" data-list="true">Alternatives</th></tr></thead>
+        <tbody>
+          <tr><th scope="row" contenteditable="true">D1</th><td contenteditable="true">Pipeline stays authoritative; kernel seals and validates.</td><td contenteditable="true">Preserves the existing trust boundary and avoids inventing another execution harness.</td><td contenteditable="true" data-list="true">Promote kernel to scheduler, Add separate fusion harness</td></tr>
+          <tr><th scope="row" contenteditable="true">D2</th><td contenteditable="true">Bind the behavioral contract after run.started and before builder dispatch.</td><td contenteditable="true">Satisfies pre-build authority without breaking prediction binding's exact initialized-bound-started ordering.</td><td contenteditable="true" data-list="true">Bind before run.started, Put contract only in prompts</td></tr>
+          <tr><th scope="row" contenteditable="true">D3</th><td contenteditable="true">Protect behavioral requirements and evidence; keep tests editable.</td><td contenteditable="true">Independent verification should prevent silent goal changes without freezing a validator's imperfect implementation.</td><td contenteditable="true" data-list="true">Make test files read-only, Allow builder to change acceptance criteria</td></tr>
+          <tr><th scope="row" contenteditable="true">D4</th><td contenteditable="true">Decision leverage affects workflow depth, not provider selection.</td><td contenteditable="true">Uncertainty and consequence are orthogonal to task fit, sensitive paths, live tools, availability, and quality floors.</td><td contenteditable="true" data-list="true">Nine-cell executor matrix, Overload risk or complexity</td></tr>
+          <tr><th scope="row" contenteditable="true">D5</th><td contenteditable="true">Extend dm-review convergence instead of adding a generic fusion command.</td><td contenteditable="true">Captures disagreement where independent perspectives already exist and avoids another public workflow surface.</td><td contenteditable="true" data-list="true">Add opinion/fusion commands, Mandatory two-model review</td></tr>
+          <tr><th scope="row" contenteditable="true">D6</th><td contenteditable="true">Attempt usage is scoped and nullable; run totals take aggregate precedence.</td><td contenteditable="true">Prevents double-counting and prevents missing provider telemetry from appearing free.</td><td contenteditable="true" data-list="true">Treat missing as zero, Sum every receipt</td></tr>
+          <tr><th scope="row" contenteditable="true">D7</th><td contenteditable="true">Start from refreshed origin/main and preserve Pipeline 1.31.0 speed work.</td><td contenteditable="true">The current checkout is an ancestor and lacks already-merged performance changes.</td><td contenteditable="true" data-list="true">Branch from stale checkout, Reimplement speed work</td></tr>
+          <tr><th scope="row" contenteditable="true">D8</th><td contenteditable="true">Use workflowClass feature with medium uncertainty and high consequence.</td><td contenteditable="true">This is a new cross-plugin capability with a clear goal but substantial compatibility and trust-boundary consequences.</td><td contenteditable="true" data-list="true">Chore, High uncertainty, Security class</td></tr>
+        </tbody>
+      </table></div>
+      <button type="button" class="widget__copy" data-copy-island data-copy-label="Decisions and tradeoffs" aria-describedby="decisions-copy-status">Copy decisions and tradeoffs as JSON</button>
+      <p id="decisions-copy-status" class="widget__status" role="status" aria-live="polite" aria-atomic="true"></p>
+    </section>
+
+    <section aria-labelledby="coverage">
+      <h2 id="coverage">Requirements Coverage</h2>
+      <div class="reel" role="region" aria-label="Requirements coverage table" tabindex="0"><table>
+        <caption>Requirements mapped to implementation chunks and evidence</caption>
+        <thead><tr><th scope="col">#</th><th scope="col">Requirement</th><th scope="col">Chunks</th><th scope="col">Evidence fence</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">1</th><td>Versioned pre-build verification contract with explicit revision authority</td><td>01, 02, 03</td><td>Contract/schema/CLI tests; workflow graph tests; manifest and orchestrator contract assertions</td></tr>
+          <tr><th scope="row">2</th><td>Authoritative validation feedback and browser recovery with bounded escalation</td><td>03</td><td>Retry/signature/session-continuity tests; existing browser recovery suites remain green</td></tr>
+          <tr><th scope="row">3</th><td>Preserve reviewer disagreement and provenance</td><td>04, 05</td><td>Consolidator fixtures plus contribution receipt, parity, and aggregation tests</td></tr>
+          <tr><th scope="row">4</th><td>Select extra perspectives using uncertainty and consequence</td><td>03, 04</td><td>Decision-profile legacy/new manifest tests; routing-security invariant validation</td></tr>
+          <tr><th scope="row">5</th><td>Measure per-attempt economics and contribution</td><td>05</td><td>No-double-count, missing-coverage, contribution-dimension, and semantic mutation tests</td></tr>
+          <tr><th scope="row">6</th><td>Retain kernel safety, cleanup, personas, browser, routing, and zero-deferral guarantees</td><td>All; integrated by 06</td><td>Focused suites, workflow-kernel release gate, routing economics, dual compatibility, generated checks, composition, diff check</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section aria-labelledby="verification">
+      <h2 id="verification">Verification Strategy</h2>
+      <ol>
+        <li>Run focused unit suites after each chunk and repository-wide workflow-kernel tests once per completed level.</li>
+        <li>Run <code>tools/validate-workflow-kernel.py</code>, <code>tools/validate-workflow-contracts.sh</code>, routing economics, dependency, generated alias/manifest, dual-compatibility, and full composition checks.</li>
+        <li>Test legacy manifests and receipts explicitly; absence of new fields must preserve current standard behavior with default provenance.</li>
+        <li>Test security invariants: decision leverage cannot authorize an untrusted provider, weaken sensitive routing, change workflow class, or mutate cleanup authority.</li>
+        <li>Test economics invariants: scoped attempts do not duplicate run totals and missing provider data remains missing.</li>
+        <li>Keep the known external Assembly UX declaration mismatch separate from Depot regressions unless the parser contract changes.</li>
+      </ol>
+    </section>
+  </main>
+  <footer class="artifact-footer"><p>Pipeline planning artifact.</p></footer>
+  <script type="application/json" id="pipeline-data">
+  {
+    "artifact": "plan",
+    "slug": "adaptive-fusion-verification",
+    "workflowClass": "feature",
+    "decisionProfile": {
+      "uncertainty": "medium",
+      "consequence": "high",
+      "rationale": "The desired behavior is clear, but the authoritative/shadow integration seam and cross-plugin compatibility consequences are substantial."
+    },
+    "baseBranch": "main",
+    "featureBranch": "codex/adaptive-fusion-verification",
+    "noMergeOnCompletion": true,
+    "chunks": [
+      {"n":"01","slug":"behavioral-contract-core","scope":"Add the separately versioned behavioral contract model, schema, digest, revision, CLI binding, and focused tests.","acceptance":"Deterministic identity; safe argv; fail-closed validation; monotonic approved revisions; editable tests; legacy core schema compatibility.","deps":[]},
+      {"n":"02","slug":"contract-policy-integration","scope":"Add verification-contract evidence nodes and safety-anchor integration before executable workflow builds.","acceptance":"All executable paths require bound contract evidence; prediction ordering and investigation promotion remain valid; legacy manifests remain observable.","deps":["01"]},
+      {"n":"03","slug":"authoritative-pipeline-feedback","scope":"Generate and bind contracts, add decisionProfile workflow-depth policy, document risk, and make validation feedback/resume authoritative.","acceptance":"Bound pre-build contract; bounded same-builder or explicit replacement loop; signature stop; human escalation; unchanged browser/security/fast-path behavior.","deps":["02"]},
+      {"n":"04","slug":"review-synthesis-provenance","scope":"Add disagreement-aware synthesis and stable source provenance to dm-review convergence.","acceptance":"Corroborated, unique, disputed, retained, merged, and discarded records; raw sources and todo compatibility retained; no ordinary-chunk review expansion.","deps":[]},
+      {"n":"05","slug":"attempt-economics-and-contribution","scope":"Add structured contribution events and per-attempt economics/measurement coverage to kernel translation, parity, and metrics.","acceptance":"No double-counting; missing remains unknown; legacy totals valid; exact contribution dimensions; semantic parity; proposal-only policy.","deps":["03","04"]},
+      {"n":"06","slug":"cross-plugin-release-integration","scope":"Integrate versions, dependencies, docs, canonical commands, generated aliases/manifests, validators, fixtures, and release gates.","acceptance":"All canonical/generated surfaces agree; compatibility and Depot-owned gates pass; sibling failure is separated; clean diff.","deps":["01","02","03","04","05"]}
+    ],
+    "decisions": [
+      {"id":"D1","decision":"Pipeline stays authoritative; kernel seals and validates.","rationale":"Preserves the existing trust boundary.","alternatives":["Promote kernel to scheduler","Add a separate fusion harness"]},
+      {"id":"D2","decision":"Bind after run.started and before builder dispatch.","rationale":"Preserves exact prediction authority ordering while remaining pre-build.","alternatives":["Bind before run.started","Prompt-only contract"]},
+      {"id":"D3","decision":"Protect behavior and evidence, not test files.","rationale":"Prevents silent goal changes while allowing test improvement.","alternatives":["Immutable tests","Mutable criteria"]},
+      {"id":"D4","decision":"Decision leverage controls workflow depth, not provider selection.","rationale":"Keeps uncertainty/consequence orthogonal to security and task fit.","alternatives":["Executor matrix","Overload risk"]},
+      {"id":"D5","decision":"Extend dm-review convergence rather than add a fusion command.","rationale":"Uses the existing independent-review seam with less surface area.","alternatives":["New opinion/fusion commands","Mandatory multi-model review"]},
+      {"id":"D6","decision":"Scope attempt usage and preserve unknown values.","rationale":"Prevents double-counting and false zero cost.","alternatives":["Sum all receipts","Missing equals zero"]},
+      {"id":"D7","decision":"Base on refreshed origin/main and preserve 1.31.0 optimizations.","rationale":"Avoids rebuilding or regressing merged speed work.","alternatives":["Use stale checkout"]},
+      {"id":"D8","decision":"Use feature, medium uncertainty, high consequence.","rationale":"New capability with substantial compatibility consequences.","alternatives":["Chore","Security","High uncertainty"]}
+    ],
+    "requirementsCoverage": [
+      {"requirement":"Versioned pre-build verification contract with explicit revision authority","chunk":"01, 02, 03"},
+      {"requirement":"Authoritative validation feedback and browser recovery with bounded escalation","chunk":"03"},
+      {"requirement":"Preserve reviewer disagreement and provenance","chunk":"04, 05"},
+      {"requirement":"Select extra perspectives using uncertainty and consequence","chunk":"03, 04"},
+      {"requirement":"Measure per-attempt economics and contribution","chunk":"05"},
+      {"requirement":"Retain existing safety, cleanup, persona, browser, routing, and zero-deferral guarantees","chunk":"01, 02, 03, 04, 05, 06"}
+    ]
+  }
+  </script>
+  <script defer>
+  (function () {
+    "use strict";
+    function serializeTable(table) {
+      var headers = [].slice.call(table.querySelectorAll("thead th"));
+      var fields = headers.map(function (th) { return { key: th.getAttribute("data-field") || th.textContent.trim(), list: th.getAttribute("data-list") === "true" }; });
+      return [].slice.call(table.querySelectorAll("tbody tr")).map(function (tr) {
+        var cells = [].slice.call(tr.children); var obj = {};
+        fields.forEach(function (f, i) { var raw = cells[i] ? cells[i].textContent.trim() : ""; obj[f.key] = f.list ? raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean) : raw; });
+        return obj;
+      });
+    }
+    function announce(status, label, succeeded) {
+      status.textContent = succeeded ? label + " copied as JSON." : "Could not copy " + label.toLowerCase() + ". Select the table and copy it manually.";
+    }
+    function legacyCopy(text) {
+      var area = document.createElement("textarea");
+      area.value = text; area.setAttribute("readonly", ""); area.style.position = "fixed"; area.style.left = "-9999px";
+      document.body.appendChild(area); area.select();
+      try { return document.execCommand("copy"); } catch (error) { return false; } finally { document.body.removeChild(area); }
+    }
+    function copy(text, button, status) {
+      var label = button.getAttribute("data-copy-label");
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { announce(status, label, true); }, function () { announce(status, label, legacyCopy(text)); });
+        return;
+      }
+      announce(status, label, legacyCopy(text));
+    }
+    document.addEventListener("click", function (event) { var button = event.target.closest("[data-copy-island]"); if (!button) return; var section = button.closest(".widget--edit"); var status = document.getElementById(button.getAttribute("aria-describedby")); var payload = {}; payload[section.getAttribute("data-island-key")] = serializeTable(section.querySelector("table")); copy(JSON.stringify(payload, null, 2), button, status); });
+  }());
+  </script>
+</body>
+</html>

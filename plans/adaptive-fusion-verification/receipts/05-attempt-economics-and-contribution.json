@@ -1,0 +1,15 @@
+{
+  "chunk_id": "05-attempt-economics-and-contribution",
+  "status": "merged",
+  "classification": "logic",
+  "requestedProvider": "codex",
+  "attemptedProvider": "codex",
+  "implementedBy": "codex",
+  "fallback": false,
+  "fallbackReason": null,
+  "validation": "109 focused tests passed",
+  "evaluation": "EVAL_GATE_PASSED: 05-attempt-economics-and-contribution | classification: logic | iterations: 3 | findings_remaining: 0 | deferred: 0",
+  "ambiguity_resolved": true,
+  "commit": "421b0dfd2fbc89c9ced96b994f364d45fdf12b1e",
+  "docker_cleanup": "created 0, removed 0, blocked 0"
+}

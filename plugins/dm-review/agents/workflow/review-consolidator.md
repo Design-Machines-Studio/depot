@@ -66,21 +66,114 @@ An agent can die mid-flight -- monthly spend limit, context overflow, or crash -
 
 ### Step 1: Collect All Findings
 Extract every finding from every agent. For each finding, record:
+- A source finding ID that keeps the raw finding addressable by lane, provider,
+  model, agent, raw artifact reference, and agent-local finding anchor
 - Source agent name
+- Requested and implemented provider and model (use `not_reported` when the
+  lane receipt does not name a model; never infer or relabel provenance)
 - Severity (P1/P2/P3)
 - File path and line number
 - Description
 - Reference (OWASP, WCAG, pattern name, etc.)
+- The evidence text and a `raw_ref` into the untouched reviewer artifact
 
 When Codex-native and OpenRouter reviewers both ran, merge findings from both before applying severity mapping; a finding from either coding provider is in-scope unless direct code evidence at HEAD disproves it. Optional Claude output is limited to non-coding voice/editorial lanes.
 
-### Step 2: Deduplicate
-When multiple agents flag the same file and line:
-- Keep the finding at the **higher** severity
-- List all source agents: `**Source:** agent-1, agent-2`
-- Merge descriptions if they add different context
+Raw reviewer artifacts are immutable evidence. Consolidation MUST NOT rewrite,
+delete, or replace them with the unified report. Preserve each artifact and use
+its stable `raw_ref`; a summary is never a substitute for missing raw evidence.
 
-Example: Both `security-auditor` and `a11y-html-reviewer` flag an XSS issue on the same line -> keep as one P1 finding with both agents listed.
+### Step 2: Assign Canonical Identity
+
+Assign every candidate finding a deterministic identity before deduplication.
+The canonical identity exact form is
+`finding-v1:sha256(<normalized-key>)`, where `sha256(...)` is the lowercase
+SHA-256 digest of the UTF-8 normalized key serialized in this field order:
+
+```text
+path=<lowercase POSIX path>\nanchor=<smallest stable structural anchor, or normalized line span only if no anchor exists>\ncategory=<normalized issue category>\nroot_cause=<whitespace-collapsed root-cause invariant>
+```
+
+The smallest stable structural anchor is the most specific durable symbol,
+heading, test name, selector, or data path that contains the issue. Normalize
+anchor/category/root-cause text to lowercase with leading/trailing whitespace
+removed and internal whitespace collapsed. Normalize a line-span fallback as
+`lines=<start>-<end>` (a single line repeats the same number). The literal
+field labels, LF separators, and final field value are hashed; do not add a
+trailing LF.
+
+Exclude reviewer, provider, model, severity, remediation, and discovery order
+from identity. Reordering inputs MUST preserve finding IDs and decisions;
+severity disagreement changes the decision ledger, not identity. Different
+root-cause invariants remain distinct even at the same file and line.
+
+### Step 2.5: Classify and Decide
+
+First group matching canonical identities. Then run a second dispute-link pass
+across distinct identities that share normalized path, structural anchor, and
+issue category. When their root-cause positions contradict, keep both IDs and
+emit sorted reciprocal `cross_id_link=<finding-id>|<finding-id>` entries in
+`Synthesis Decisions`. Never merge the IDs merely to express the dispute.
+
+After grouping and cross-ID linking, set two independent fields:
+
+- `agreement: unique` -- one independent source position supports the finding.
+- `agreement: corroborated` -- two or more independent source positions agree.
+- `agreement: disputed` -- sources contradict existence, scope, root cause,
+  severity, or outcome, including positions linked across canonical IDs. A
+  majority does not erase the minority position.
+- `finding_disposition: retained|merged|discarded` -- the treatment of each
+  source finding, independent of `agreement`.
+
+Every source finding gets a rationale and exactly one
+`decision_reason_code` from this closed vocabulary:
+
+- `retained-unique`
+- `retained-corroborated`
+- `retained-disagreement`
+- `exact-duplicate`
+- `same-root-cause-merge`
+- `superseded-by-stronger-evidence`
+- `out-of-scope`
+- `not-reproducible`
+- `agent-findings-cap`
+
+`exact-duplicate` and `same-root-cause-merge` require `merged`;
+`superseded-by-stronger-evidence`, `out-of-scope`, and `not-reproducible`
+require `discarded`; `agent-findings-cap` also requires `discarded`; the three
+`retained-*` codes require `retained`.
+Free-form reason codes are invalid. Every merge or discard names the retained
+canonical finding (when one exists), cites the evidence, and explains the
+decision. `not-reproducible` requires the Phase 5 verify-before-close evidence
+at HEAD. `out-of-scope` records a rejected reviewer input; it never defers an
+in-scope P1/P2/P3 finding or changes zero-deferral recommendations.
+
+Exact duplicates merge without count inflation. Findings at the same location
+with distinct root causes remain separate. Same-line and adjacent-line rules
+are candidate discovery only; they never override the normalized root cause.
+Contradictions never disappear: preserve both source positions, severities,
+evidence, and raw refs in the decision trail. Unresolved disagreement uses
+`retained-disagreement`. When deterministic evidence resolves a position, it
+may use `superseded-by-stronger-evidence`, but the rejected position remains
+visible in `Synthesis Decisions`. A cross-ID dispute sets `agreement: disputed`
+on every linked row and records the reciprocal finding IDs; it must not leave
+either competing root-cause position labeled `unique`.
+
+Evidence priority is deterministic: reproducible test/runtime evidence,
+direct evidence at HEAD, diff/context evidence, standards-based reasoning,
+then reviewer consensus. Consensus alone never outranks contradictory test or
+runtime evidence. For severity disagreement, preserve every source severity,
+select a canonical severity using this evidence priority (higher severity when
+evidence is otherwise tied), and record the selected severity plus rationale.
+
+Sort canonical findings by finding ID, source decisions by source finding ID,
+and cross-ID dispute links by the ordered ID pair before emitting the ledger.
+Emit each unordered dispute pair in both directions. This makes input reordering
+a no-op and keeps either finding independently navigable.
+
+Example: Both `security-auditor` and `a11y-html-reviewer` flag the same XSS
+root cause under the same structural anchor -> keep one canonical finding with
+both sources, without losing either raw artifact reference.
 
 ### Step 3: Apply Severity Mapping
 
@@ -92,7 +185,7 @@ Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output
 
 ### Step 5: Generate Report
 
-Follow the exact template in `references/output-format.md`. Include all required sections: header, merge recommendation, P1/P2/P3 findings, agent summary table, and detailed agent reports in collapsible sections.
+Follow the exact template in `references/output-format.md`. Include all required sections: header, merge recommendation, P1/P2/P3 findings, the compact `Synthesis Decisions` ledger, agent summary table, and detailed raw agent reports in collapsible sections. Every retained canonical finding includes its stable ID and all contributing source IDs, agents, providers, models, evidence, and raw refs.
 
 ### Step 5.5: Coverage Gaps
 
@@ -106,7 +199,8 @@ If there are no gaps, state `Coverage Gaps: none -- all lanes completed within b
 ## Rules
 
 1. Every finding from every agent must appear in the report -- don't drop anything
-2. Deduplication merges findings, it doesn't remove them
+2. Deduplication merges findings without count inflation; its decision trail
+   preserves every source position and raw reference
 3. The merge recommendation is mechanical -- follow the logic exactly
 4. Full agent outputs go in collapsible `<details>` sections at the bottom
 5. Sort P1 findings by impact: security first, then accessibility, then architecture, then others
@@ -116,3 +210,9 @@ If there are no gaps, state `Coverage Gaps: none -- all lanes completed within b
 9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
 10. **Flag band-aid recommendations** -- if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended -- replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
 11. **Dual-perspective findings are additive** -- Codex-native and OpenRouter review lanes are peers. Dedup overlapping findings; never discard a unique finding merely because the other coding provider did not mention it. Optional Claude voice/editorial findings remain additive but are non-coding.
+12. **Contradictions are reportable evidence** -- never flatten disagreement
+    into one unattributed conclusion; preserve source severities, selected
+    outcome, and evidence rationale.
+13. **Provenance is literal** -- if a requested provider falls back, retain the
+    requested, attempted, and implemented-by values. Never silently relabel a
+    Codex fallback as OpenRouter work.

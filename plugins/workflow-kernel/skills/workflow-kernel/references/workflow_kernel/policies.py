@@ -297,8 +297,12 @@ def _workflow_safety_anchor(value: object) -> Mapping[str, object]:
     )
     if type(value["schema_version"]) is not int or value["schema_version"] != 1:
         raise invalid_policy("unsupported_safety_anchor_version")
+    executable_classes = {
+        kind.value for kind in WorkflowClass
+        if kind is not WorkflowClass.INVESTIGATION
+    }
     classes = _exact_keys(
-        value["classes"], {"hotfix", "security", "migration"},
+        value["classes"], executable_classes,
         "invalid_workflow_safety_anchor",
     )
     promotion = _exact_keys(

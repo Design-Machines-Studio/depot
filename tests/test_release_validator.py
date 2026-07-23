@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import unittest
 from pathlib import Path
 
@@ -21,14 +22,33 @@ class ReleaseValidatorTests(unittest.TestCase):
 
     def test_cli_behavior_cases_cover_every_command_without_help_only_probes(self):
         expected = {
-            "init", "validate", "append", "replay", "status", "bind-prediction",
-            "observe-pipeline", "observe-review", "compare", "metrics", "plan-create",
-            "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step",
-            "execute-cleanup-step", "record-cleanup", "plan-reconcile",
+            "init", "validate", "append", "replay", "status",
+            "decide-validation-retry", "bind-prediction",
+            "authorize-verification-contract-revision",
+            "bind-verification-contract", "revise-verification-contract",
+            "observe-pipeline", "observe-review", "export-review-contributions",
+            "compare", "metrics",
+            "plan-create", "plan-compose", "record-create", "plan-cleanup",
+            "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+            "plan-reconcile",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
         self.assertTrue(all("--help" not in case for case in VALIDATOR.BEHAVIORAL_CLI_CASES.values()))
+
+    def test_schema_inventory_is_exactly_the_nine_released_documents(self):
+        expected = {
+            "behavioral-verification-contract-schema.json",
+            "verification-contract-approval-schema.json",
+            "browser-recovery-schema.json",
+            "cleanup-plan-schema.json",
+            "cleanup-receipt-schema.json",
+            "resource-registry-schema.json",
+            "verification-profile-schema.json",
+            "workflow-classes-schema.json",
+            "workflow-policy-schema.json",
+        }
+        self.assertEqual(VALIDATOR.SCHEMA_DOCUMENTS, expected)
 
     def test_promotion_evidence_is_derived_from_completed_checks(self):
         complete = {
@@ -48,6 +68,32 @@ class ReleaseValidatorTests(unittest.TestCase):
             ROOT / "plans" / "ai-developer-workflow-kernel" / "receipts" /
             "06-workflow-kernel-release-evidence.json",
         )
+
+    def test_checked_in_closeout_ledger_uses_literal_stages_and_real_artifacts(self):
+        ledger_path = (
+            ROOT / "plans" / "adaptive-fusion-verification" /
+            "authoritative-receipts.json"
+        )
+        receipts = json.loads(ledger_path.read_text())
+        closeout = receipts[-4:]
+        self.assertEqual(
+            [receipt["stage"] for receipt in closeout],
+            [
+                "final_dm_review", "requirements_cross_check",
+                "terminal_reconciliation", "run_summary",
+            ],
+        )
+        self.assertEqual(
+            [receipt["authoritative_receipt"] for receipt in closeout],
+            [
+                "plans/adaptive-fusion-verification/receipts/final-dm-review.json",
+                "plans/adaptive-fusion-verification/final-requirements-crosscheck.md",
+                "plans/adaptive-fusion-verification/docker/terminal-current-run-receipt.json",
+                "plans/adaptive-fusion-verification/receipt.md",
+            ],
+        )
+        for receipt in closeout:
+            self.assertTrue((ROOT / receipt["authoritative_receipt"]).is_file())
 
     def test_generated_host_compatibility_uses_canonical_host_ids(self):
         context = {}

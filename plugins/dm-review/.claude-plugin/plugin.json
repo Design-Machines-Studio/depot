@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
-  "description": "Code review orchestrator that launches parallel review agents across accessibility, security, architecture, CSS, voice, governance, Codex second-opinion, and OpenRouter policy-routed domains for Go+Templ+Datastar, Craft CMS, and Live Wires projects",
-  "version": "1.44.0",
+  "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
+  "version": "1.45.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -12,7 +12,7 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.1.1"
+    "workflow-kernel": ">=0.3.0"
   },
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",

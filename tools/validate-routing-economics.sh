@@ -36,6 +36,102 @@ require_absent() {
   fi
 }
 
+require_before() {
+  local file="$1"
+  local first="$2"
+  local second="$3"
+  local label="$4"
+  local first_line second_line
+
+  first_line="$(grep -nF -m1 -- "$first" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  second_line="$(grep -nF -m1 -- "$second" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  if [ -n "$first_line" ] && [ -n "$second_line" ] && [ "$first_line" -lt "$second_line" ]; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  fi
+}
+
+decision_leverage_valid() {
+  local source="$1"
+  jq -e '
+    {
+      "scope":"workflow-depth-only",
+      "allowedLevels":["low","medium","high"],
+      "legacyDefault":{
+        "planningDepth":"current-standard-path",
+        "verificationDepth":"current-standard-path",
+        "receiptFlag":"decision_profile_defaulted=true",
+        "semanticClaim":"unknown-not-low-low"
+      },
+      "rules":{
+        "lowLow":{
+          "when":{"uncertainty":"low","consequence":"low"},
+          "planningDepth":"standard",
+          "verificationDepth":"standard",
+          "optimized":true
+        },
+        "highUncertainty":{
+          "when":{"uncertainty":"high"},
+          "planningDepth":"one-independent-opinion-plus-bounded-synthesis",
+          "verificationDepth":"standard-unless-high-consequence",
+          "optimized":false
+        },
+        "highConsequence":{
+          "when":{"consequence":"high"},
+          "planningDepth":"standard-unless-high-uncertainty",
+          "verificationDepth":"stronger-existing-independent-seam",
+          "optimized":false
+        },
+        "highHigh":{
+          "when":{"uncertainty":"high","consequence":"high"},
+          "planningDepth":"one-independent-opinion-plus-bounded-synthesis",
+          "verificationDepth":"stronger-existing-independent-seam",
+          "optimized":false
+        }
+      },
+      "invariants":[
+        "routing-unchanged",
+        "safety-gates-unchanged",
+        "browser-and-persona-coverage-unchanged",
+        "workflow-class-unchanged",
+        "cleanup-unchanged",
+        "economics-unchanged",
+        "no-debate-or-per-chunk-full-review"
+      ]
+    } as $expected
+    | .decisionLeverage as $d
+    | ($d == $expected)
+      and
+      ([$d | paths as $p
+        | ($p[-1] | tostring | ascii_downcase)
+        | select(test("provider|model|executor|security|routingoverride|sensitivepathexception"))]
+       | length == 0)
+      and
+      ([$d | paths(scalars) as $p | getpath($p)
+        | select(type == "string") | ascii_downcase
+        | select(test("provider|model|executor|security|routingoverride|sensitivepathexception"))]
+       | length == 0)
+  ' "$source" >/dev/null 2>&1
+}
+
+expect_decision_leverage_reject() {
+  local label="$1"
+  local filter="$2"
+  local mutated
+
+  if ! mutated="$(jq -c "$filter" "$routing")"; then
+    printf "  FAIL  decision leverage mutation fixture builds: %s\n" "$label"
+    failures=1
+  elif printf '%s\n' "$mutated" | decision_leverage_valid -; then
+    printf "  FAIL  decision leverage rejects mutation: %s\n" "$label"
+    failures=1
+  else
+    printf "  OK    decision leverage rejects mutation: %s\n" "$label"
+  fi
+}
+
 routing="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
 schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
@@ -47,6 +143,10 @@ runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 delegation_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 dm_review="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+dm_review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
+kernel_metrics="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/metrics.py"
+kernel_pipeline_adapter="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/pipeline_adapter.py"
+kernel_translation="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py"
 assess="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
 research="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
@@ -81,6 +181,21 @@ if [ -f "$routing" ]; then
       and ($targets.providerSplit == null)
   ' "$routing" >/dev/null || { printf "  FAIL  active subscription profile is the sole valid 100%% routing target\n"; failures=1; }
   jq -e '[.agentType[] | select(.fallbackProvider? != null) | .fallbackProvider == "codex"] | all' "$routing" >/dev/null || { printf "  FAIL  coding reviewer fallbacks return to Codex\n"; failures=1; }
+  if decision_leverage_valid "$routing"; then
+    printf "  OK    decision leverage is an exact closed depth-only policy\n"
+  else
+    printf "  FAIL  decision leverage is an exact closed depth-only policy\n"
+    failures=1
+  fi
+  expect_decision_leverage_reject "highUncertainty selector" '.decisionLeverage.rules.highUncertainty.when = {"uncertainty":"medium"}'
+  expect_decision_leverage_reject "highConsequence selector" '.decisionLeverage.rules.highConsequence.when = {"consequence":"medium"}'
+  expect_decision_leverage_reject "highHigh selectors" '.decisionLeverage.rules.highHigh.when = {"uncertainty":"high","consequence":"medium"}'
+  expect_decision_leverage_reject "extra rule" '.decisionLeverage.rules.unbounded = .decisionLeverage.rules.lowLow'
+  expect_decision_leverage_reject "routingOverride authority" '.decisionLeverage.routingOverride = {"reason":"test"}'
+  expect_decision_leverage_reject "sensitivePathException authority" '.decisionLeverage.sensitivePathException = true'
+  expect_decision_leverage_reject "provider authority" '.decisionLeverage.rules.lowLow.provider = "codex"'
+  expect_decision_leverage_reject "model authority" '.decisionLeverage.rules.lowLow.model = "test-model"'
+  expect_decision_leverage_reject "executor authority" '.decisionLeverage.rules.lowLow.executor = "codex"'
 fi
 
 if [ -f "$routing" ] && [ -f "$delegation_policy" ]; then
@@ -101,10 +216,17 @@ require_text "$schema" '`"openrouter"`' "manifest schema includes openrouter exe
 require_text "$schema" '| `integration` | `codex` |' "manifest schema maps integration to Codex"
 require_text "$schema" "routingOverride" "manifest schema defines explicit routing overrides"
 require_text "$schema" "splitAttempted" "manifest override records whether offline work was split"
+require_text "$schema" '`decisionProfile`' "manifest schema requires an approved decision profile"
+require_text "$schema" '`decision_profile_defaulted=true`' "manifest schema preserves legacy profile provenance"
+require_text "$kernel_pipeline_adapter" '"decision_profile", "decisionProfile"' "kernel adapter reads the closed decision profile"
+require_text "$kernel_translation" '"decision_profile", "decision_profile_defaulted"' "kernel RunSpec and receipts preserve decision profile provenance"
+require_text "$kernel_metrics" 'decision_profiles' "kernel metrics expose decision profile observations"
 require_text "$promptcraft" "routing-policy.json" "promptcraft reads shared routing policy"
 require_text "$promptcraft" '`integration` -> `codex`' "promptcraft maps integration to Codex"
 require_text "$promptcraft" "routingOverride" "promptcraft requires explicit executor override receipts"
 require_text "$promptcraft" "splitAttempted" "promptcraft splits tool-dependent and offline work first"
+require_text "$promptcraft" "one independent" "promptcraft bounds high-uncertainty planning depth"
+require_text "$promptcraft" "decision_profile_defaulted=true" "promptcraft documents legacy standard-depth provenance"
 require_text "$orchestrator" "MUST NOT implement it in-process" "orchestrator forbids absorbing externally routed chunks"
 require_text "$orchestrator" 'integration) PRIMARY_RAIL="codex"' "orchestrator fallback maps integration to Codex"
 require_text "$orchestrator" "implementedBy:" "orchestrator receipts record implementedBy"
@@ -112,6 +234,16 @@ require_text "$orchestrator" "providerSplit:" "orchestrator summary records prov
 require_text "$orchestrator" "eligibleProviderSplit:" "orchestrator records eligible provider usage"
 require_text "$orchestrator" "deficit-round-robin" "orchestrator applies routing pressure during dispatch"
 require_text "$orchestrator" "routingOverride" "orchestrator rejects silent executor overrides"
+require_text "$orchestrator" 'decide-validation-retry --state-dir .workflow-kernel/runs/<run-id> --reason deterministic_validation_failure' "orchestrator delegates retry policy to authoritative kernel run state"
+require_text "$orchestrator" 'reason_code: deterministic_validation_failure' "orchestrator projects the exact ValidationFeedback reason"
+require_text "$orchestrator" 'builder_session_continuity' "orchestrator records strict builder continuity"
+require_text "$orchestrator" 'replacement_adapter_dispatch_failed' "orchestrator preserves replacement-dispatch failure reasons"
+require_text "$orchestrator" '"failing_check_ids":' "orchestrator uses the canonical failing-check field"
+require_absent "$orchestrator" '"ordered_failing_check_ids":' "orchestrator rejects the non-canonical failing-check field"
+require_text "$orchestrator" '"fallback": true' "orchestrator feedback fallback is boolean"
+require_absent "$orchestrator" '"fallback": "openrouter->codex"' "orchestrator feedback never encodes fallback as a transition string"
+require_text "$orchestrator" 'stage: browser_recovery' "browser recovery remains a separate blocked receipt"
+require_before "$orchestrator" 'bind-verification-contract --state-dir' '### 3d: Dispatch Implementation Subagent' "contract evidence precedes implementation dispatch"
 require_text "$orchestrator" "final review must run on the provider that did not implement" "orchestrator enforces cross-provider final review"
 require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-mortem step"
 require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JSONL delta"
@@ -153,6 +285,9 @@ require_text "$dm_review" '**A0. If the agent is `openrouter-bulk-analyst`:**' "
 require_text "$dm_review" "Never launch this coding-review lane through a Claude" "dm-review keeps bulk review off Claude execution"
 require_text "$dm_review" 'a Claude `Agent` call is not a valid Branch A launcher' "dm-review keeps generic OpenRouter review off Claude execution"
 require_text "$dm_review" '--mode mechanical-review' "dm-review delegates the safe remainder of mixed diffs"
+require_text "$dm_review_cmd" "contribution receipts" "dm-review exposes finding contribution receipts"
+require_text "$dm_review_cmd" "observation-only economics evidence" "contributions cannot become routing authority"
+require_text "$kernel_metrics" '"observation_only": True' "kernel economics output is observation-only"
 require_text "$agent_runner" 'set(canon) | set(configured)' "OpenRouter runner cannot weaken the minimum path denylist"
 require_text "$agent_runner" "RUNNER DECLINED -- SENSITIVE CONTENT" "OpenRouter runner declines high-confidence secrets in added lines"
 require_text "$agent_runner" 'neverRouteToOpenRouter' "OpenRouter runner reads the Codex-return security boundary"

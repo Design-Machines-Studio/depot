@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/behavioral-verification-contract-schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_id", "revision", "previous_contract_digest", "requirements", "prohibited_regressions", "checks", "persona_case_ids", "browser_case_ids", "verification_profile_id", "verification_profile_digest", "manual_requirements", "revision_justification"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "previous_contract_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "requirements": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/requirement"}},
+    "prohibited_regressions": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/regression"}},
+    "checks": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/check"}},
+    "persona_case_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/stable_id"}},
+    "browser_case_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/stable_id"}},
+    "verification_profile_id": {"type": ["string", "null"], "pattern": "^profile-sha256:[0-9a-f]{64}$"},
+    "verification_profile_digest": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+    "manual_requirements": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"$ref": "#/$defs/manual_requirement"}},
+    "revision_justification": {"$ref": "#/$defs/revision_justification"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"verification_profile_id": {"type": "null"}}},
+      "then": {"properties": {"verification_profile_digest": {"type": "null"}, "persona_case_ids": {"maxItems": 0}, "browser_case_ids": {"maxItems": 0}}},
+      "else": {"properties": {"verification_profile_digest": {"type": "string"}}}
+    },
+    {
+      "if": {"properties": {"verification_profile_digest": {"type": "null"}}},
+      "then": {"properties": {"verification_profile_id": {"type": "null"}}},
+      "else": {"properties": {"verification_profile_id": {"type": "string"}}}
+    }
+  ],
+  "$defs": {
+    "stable_id": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "nonempty_string": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "source_ref": {"type": "string", "minLength": 1, "maxLength": 2048, "pattern": "^[^\\u0000-\\u001f\\u007f]+$"},
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_ref", "statement"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^REQ-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128},
+        "source_ref": {"$ref": "#/$defs/source_ref"},
+        "statement": {"$ref": "#/$defs/nonempty_string"}
+      }
+    },
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source_ref", "statement"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^REG-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128},
+        "source_ref": {"$ref": "#/$defs/source_ref"},
+        "statement": {"$ref": "#/$defs/nonempty_string"}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "argv", "proves_requirement_ids", "proves_regression_ids", "baseline_expectation"],
+      "anyOf": [
+        {"properties": {"proves_requirement_ids": {"minItems": 1}}},
+        {"properties": {"proves_regression_ids": {"minItems": 1}}}
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^CHK-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128},
+        "argv": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000]+$"}},
+        "proves_requirement_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"type": "string", "pattern": "^REQ-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128}},
+        "proves_regression_ids": {"type": "array", "uniqueItems": true, "maxItems": 1024, "items": {"type": "string", "pattern": "^REG-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128}},
+        "baseline_expectation": {"enum": ["must_fail", "may_pass", "not_runnable"]}
+      }
+    },
+    "manual_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirement_id", "reason_code", "evidence_ref"],
+      "properties": {
+        "requirement_id": {"type": "string", "pattern": "^REQ-[A-Za-z0-9][A-Za-z0-9._-]*$", "maxLength": 128},
+        "reason_code": {"$ref": "#/$defs/stable_id"},
+        "evidence_ref": {"oneOf": [{"$ref": "#/$defs/source_ref"}, {"type": "null"}]}
+      }
+    },
+    "revision_justification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason_code", "summary", "added_obligation_ids", "retained_obligation_ids", "removed_obligation_ids", "human_approval_evidence_ref"],
+      "properties": {
+        "reason_code": {"$ref": "#/$defs/stable_id"},
+        "summary": {"$ref": "#/$defs/nonempty_string"},
+        "added_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}},
+        "retained_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}},
+        "removed_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}},
+        "human_approval_evidence_ref": {"oneOf": [{"$ref": "#/$defs/source_ref"}, {"type": "null"}]}
+      }
+    }
+  }
+}

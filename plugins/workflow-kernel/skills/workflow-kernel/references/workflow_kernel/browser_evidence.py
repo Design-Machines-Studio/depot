@@ -486,6 +486,61 @@ class BrowserRecoveryReceipt:
     target_origin_digest: str
     declared_route_digest: str = ""
 
+    @classmethod
+    def from_dict(cls, value):
+        """Reconstruct a durable receipt through the same sealed validators.
+
+        This is intentionally strict: observation adapters must not accept a
+        caller-authored terminal summary without replaying every attempt and
+        lifecycle record through the canonical recovery model.
+        """
+        try:
+            if type(value) is not dict:
+                raise ValueError
+            expected = {field.name for field in fields(cls)}
+            if set(value) != expected:
+                raise ValueError
+            raw_attempts = value["attempts"]
+            raw_lifecycle = value["lifecycle"]
+            if type(raw_attempts) is not list or type(raw_lifecycle) is not list:
+                raise ValueError
+            attempt_fields = {field.name for field in fields(BrowserAttempt)}
+            lifecycle_fields = {
+                field.name for field in fields(BrowserLifecycleEvidence)
+            }
+            attempts = []
+            for item in raw_attempts:
+                if type(item) is not dict or set(item) != attempt_fields:
+                    raise ValueError
+                candidate = dict(item)
+                if type(candidate["configured_engines"]) is not list:
+                    raise ValueError
+                candidate["configured_engines"] = tuple(
+                    candidate["configured_engines"]
+                )
+                attempts.append(BrowserAttempt(**candidate))
+            lifecycle = []
+            for item in raw_lifecycle:
+                if type(item) is not dict or set(item) != lifecycle_fields:
+                    raise ValueError
+                candidate = dict(item)
+                checks = candidate["readiness_checks"]
+                if checks is not None:
+                    if type(checks) is not list:
+                        raise ValueError
+                    candidate["readiness_checks"] = tuple(checks)
+                lifecycle.append(BrowserLifecycleEvidence(**candidate))
+            candidate = dict(value)
+            for key in ("missing_case_ids", "configured_engines"):
+                if type(candidate[key]) is not list:
+                    raise ValueError
+                candidate[key] = tuple(candidate[key])
+            candidate["attempts"] = tuple(attempts)
+            candidate["lifecycle"] = tuple(lifecycle)
+            return cls(**candidate)
+        except Exception:
+            raise ValueError("invalid browser recovery receipt") from None
+
     def __post_init__(self):
         try:
             if type(self.attempts) is not tuple or type(self.lifecycle) is not tuple:

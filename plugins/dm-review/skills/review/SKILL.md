@@ -598,14 +598,63 @@ done
 
 Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 
-1. **Collect** all findings from all agent outputs (post-guardrail)
-2. **Deduplicate** findings using the precision rules in `${CLAUDE_SKILL_DIR}/references/guardrails.md` (same-line merge, adjacent-line merge, severity-disagreement escalation)
-3. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
-4. **Determine merge recommendation** using the zero-deferral logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
+1. **Collect** all findings from all agent outputs, including entries excluded
+   from canonical counts by output guardrails, assigning each source finding
+   an addressable ID and recording its literal
+   lane/provider/model/agent, evidence, and `raw_ref`. Raw reviewer artifacts
+   remain untouched and are never replaced by the summary.
+2. **Assign stable identity** in the exact form
+   `finding-v1:sha256(<normalized-key>)`, where the normalized key is lowercase
+   POSIX path + smallest stable structural anchor (normalized line span only if
+   no anchor exists) + normalized issue category + whitespace-collapsed
+   root-cause invariant. Exclude reviewer/provider/model/severity/remediation/
+   discovery order. Input reorder preserves IDs and decisions; severity
+   disagreement changes the ledger, not identity.
+3. **Classify and decide** using `agreement: unique|corroborated|disputed`
+   independently from `finding_disposition: retained|merged|discarded`. Every
+   source finding gets a rationale and a closed reason code. Preserve
+   contradictions, source severities, selected severity, and evidence rationale;
+   exact duplicates do not inflate counts and distinct root causes stay separate
+   but receive sorted reciprocal cross-ID dispute links when their positions
+   contradict. A linked root-cause position is disputed, never unique.
+   Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context
+   evidence, standards-based reasoning, and reviewer consensus.
+4. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
+5. **Determine merge recommendation** using the zero-deferral logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
    - Any P1 -> "BLOCKS MERGE"
    - Any P2 OR any P3 -> "APPROVE WITH FIXES" (P3-only is NOT clean under zero-deferral; use `--allow-defer-p3` to explicitly opt out with justification)
    - Zero findings -> "CLEAN"
-5. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`
+6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
+
+Materialize the decisions, sealed raw-finding inventory, and literal lane
+receipts described by `references/output-format.md` as
+`synthesis-decisions.json`, `raw-finding-inventory.json`,
+`review-lane-receipts.json`, and `raw-lane-outputs.json`. Then invoke the trusted launcher; this is the sole
+producer of canonical contribution IDs, receipt sequences, and the durable
+coverage receipt:
+
+```bash
+"$WORKFLOW_KERNEL" export-review-contributions \
+  --request .claude/ux-review/workflow-kernel/request.json \
+  --decisions .claude/ux-review/workflow-kernel/synthesis-decisions.json \
+  --raw-findings .claude/ux-review/workflow-kernel/raw-finding-inventory.json \
+  --lane-receipts .claude/ux-review/workflow-kernel/review-lane-receipts.json \
+  --raw-lane-outputs .claude/ux-review/workflow-kernel/raw-lane-outputs.json \
+  --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
+  --state-dir .claude/ux-review/workflow-kernel \
+  --output .claude/ux-review/workflow-kernel/authoritative-receipts.json
+```
+
+The command rejects credential-shaped content and credential-bearing URIs
+before hashing or persistence, content-addresses all four canonical inputs and
+every raw lane output under `contribution-inputs/`, and
+fails closed unless the raw inventory, synthesis decisions, literal lane
+provenance, finding counts, raw lane-output union, and lane evidence references
+agree exactly. Exactly one receipt and raw output is required per requested
+lane, including lanes with zero findings. Never hand-author
+`canonical_finding_id`, `sequence`, `finding_contribution`, or contribution
+coverage receipts. A zero-finding synthesis still runs the command with count
+zero and all required lane receipts so missing producer coverage is observable.
 
 Output the full report to the user.
 
@@ -613,7 +662,7 @@ Output the full report to the user.
 
 Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case. Each row names requested/attempted/implemented-by provider, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
 
-Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` command atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation and direct comparison reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. Observation requires the matching artifact and never creates or changes it. The source input and bound artifact remain until comparison; only an exact semantic match permits their post-match deletion. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity match alone never deletes terminal run state: retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; internal diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` appear only in `differences`.
+Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` command atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends exact binding evidence to the canonical lifecycle ledger while the run is still `planned`. The next lifecycle transition must be `run.started`; observation and direct comparison reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this durable pre-start ordering proves independence. Observation requires the matching artifact and never creates or changes it. The source input and bound artifact remain until comparison; only an exact semantic match permits their post-match deletion. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity match alone never deletes terminal run state: retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `explained_host_economics_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; economics differences are explicit non-matches and internal diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` appear only in `differences`.
 
 #### Verify-before-close gate
 

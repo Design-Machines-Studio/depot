@@ -274,12 +274,12 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.44.0",
+      "version": "1.45.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Code review orchestrator with parallel agents for accessibility, security, architecture, CSS, voice, governance, Codex second-opinion review, OpenRouter policy routing with DeepSeek model fallbacks, visual browser testing, UX design review, visual design quality, and Live Wires CSS compliance",
+      "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
       "capabilities_summary": {
         "skills": 2,
         "agents": 15,
@@ -348,12 +348,12 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.31.0",
+      "version": "1.32.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Autonomous feature development pipeline with assessment, research, bounded prompt generation, adversarial review, and worktree-based execution with risk-tiered review gates",
+      "description": "Autonomous feature development pipeline with approved decision-depth profiles, bound behavioral verification contracts, bounded validation feedback, browser recovery, risk-tiered review, and isolated worktree execution",
       "capabilities_summary": {
         "skills": 4,
         "agents": 2,
@@ -373,12 +373,12 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Neutral deterministic run-state, replay, recovery, receipts, shadow observation, and active-versus-wait runtime metrics for Design Machines workflows.",
+      "description": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 0,
