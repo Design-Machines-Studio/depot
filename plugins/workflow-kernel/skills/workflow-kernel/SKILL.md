@@ -333,6 +333,9 @@ classifications, and trend identities before treating any lane as admissible.
 Catalog `content_digest` is SHA-256 over the canonical newline-terminated JSON
 projection containing `catalog_id`, `schema_version`, `catalog_version`,
 `source_reference`, `rules`, and `metrics`; the digest field itself is excluded.
+When a catalog rule declares `alternative_decisions`, it must also declare one
+`profile_decision` selected from that non-empty unique identifier set. Rules
+that do not opt into this pair remain ordinary neutral catalog definitions.
 
 Profiles never grant execution trust. `inspection-run` requires a host-issued
 attestation from a path outside the canonical repository root. The attestation
@@ -382,6 +385,7 @@ workflow-kernel-launcher.sh inspection-run \
   --repository-root <root> --profile <profile> --lane-id <primary-id> \
   --attestation <host-path-outside-repository> --source git --ref <ref> \
   --commit <sha> --dirty <true|false> --purpose <purpose> \
+  --authorization-event-id <host-observed-event-id> \
   [--observations <json>]
 workflow-kernel-launcher.sh resolve-plugin-bundle \
   --plugin <name> \

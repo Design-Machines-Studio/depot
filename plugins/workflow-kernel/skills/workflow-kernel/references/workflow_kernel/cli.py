@@ -2747,6 +2747,7 @@ def command_inspection_run(args):
         profile, args.lane_id, attestation,
         source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
         purpose=args.purpose,
+        operator_authorization_event_id=args.authorization_event_id,
     )
     observations = [] if args.observations is None else _inspection_json(args.observations)
     finished_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -3036,6 +3037,10 @@ def parser():
     inspection_run.add_argument("--commit", required=True)
     inspection_run.add_argument("--dirty", choices=("true", "false"), required=True)
     inspection_run.add_argument("--purpose", required=True)
+    inspection_run.add_argument(
+        "--authorization-event-id", required=True,
+        help="host-observed operator authorization event bound by the attestation",
+    )
     inspection_run.add_argument("--observations")
     inspection_run.set_defaults(handler=command_inspection_run)
 

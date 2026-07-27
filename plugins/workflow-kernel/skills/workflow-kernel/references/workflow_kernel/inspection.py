@@ -233,6 +233,21 @@ def _validate_catalogs(catalogs):
             _exact_object(item, rule_fields, reason="invalid_catalog_rule")
             if type(item["definition"]) is not dict:
                 _fail("invalid_catalog_rule", field=item.get("rule_id"))
+            alternatives = item["definition"].get("alternative_decisions")
+            decision = item["definition"].get("profile_decision")
+            if alternatives is not None or decision is not None:
+                if (
+                    type(alternatives) is not list
+                    or not alternatives
+                    or any(
+                        type(value) is not str or _IDENTIFIER.fullmatch(value) is None
+                        for value in alternatives
+                    )
+                    or len(set(alternatives)) != len(alternatives)
+                    or type(decision) is not str
+                    or decision not in alternatives
+                ):
+                    _fail("missing_profile_decision", field=item.get("rule_id"))
         for item in metrics:
             _exact_object(item, metric_fields, reason="invalid_catalog_metric")
             if type(item["definition"]) is not dict:
@@ -584,7 +599,10 @@ def _profile_source_unchanged(profile):
         _fail("profile_digest_mismatch")
 
 
-def validate_host_attestation(attestation, profile, *, source, ref, commit, dirty, purpose):
+def validate_host_attestation(
+    attestation, profile, *, source, ref, commit, dirty, purpose,
+    operator_authorization_event_id,
+):
     _exact_object(attestation, _ATTESTATION_FIELDS, reason="invalid_attestation")
     if (
         type(attestation["schema_version"]) is not int
@@ -602,6 +620,7 @@ def validate_host_attestation(attestation, profile, *, source, ref, commit, dirt
         "commit": commit,
         "dirty": dirty,
         "purpose": purpose,
+        "operator_authorization_event_id": operator_authorization_event_id,
     }
     for field, value in expected.items():
         if type(attestation[field]) is not type(value) or attestation[field] != value:
@@ -818,7 +837,8 @@ def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
 
 
 def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, commit,
-                             dirty, purpose, adapter=None, clock=None,
+                             dirty, purpose, operator_authorization_event_id,
+                             adapter=None, clock=None,
                              pre_admission_hook=None):
     """Admit and execute selected primary lanes from one immutable snapshot."""
     if type(profile) is not InspectionProfile or not profile.source_identity:
@@ -836,6 +856,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
     validate_host_attestation(
         attestation, profile, source=source, ref=ref, commit=commit,
         dirty=dirty, purpose=purpose,
+        operator_authorization_event_id=operator_authorization_event_id,
     )
     if pre_admission_hook is not None:
         pre_admission_hook()

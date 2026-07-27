@@ -30,8 +30,9 @@ output can supply or self-assert this authority. The profile is never allowed
 to nominate the attestation path.
 
 `inspection-run` freezes the validated profile snapshot, matches every
-attestation binding, revalidates the profile source identity, and executes only
-the frozen snapshot. A missing, repository-held, self-asserted, stale, or
+attestation binding—including the caller's host-observed operator
+authorization event ID—revalidates the profile source identity, and executes
+only the frozen snapshot. A missing, repository-held, self-asserted, stale, or
 mismatched attestation fails before subprocess invocation.
 
 ## Untrusted Pull Requests

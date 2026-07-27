@@ -131,6 +131,7 @@ Invoke `inspection-run` with requested primary lane IDs only. Repeat
   --ref "$VERIFIED_REF" \
   --commit "$VERIFIED_COMMIT" \
   --dirty "$DIRTY_STATE" \
+  --authorization-event-id "$AUTHORIZATION_EVENT_ID" \
   --purpose quality-pulse
 ```
 

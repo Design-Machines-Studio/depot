@@ -366,6 +366,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "profile_digest": "sha256:" + "0" * 64,
                 "source": "other", "ref": "refs/heads/other",
                 "commit": "b" * 40, "dirty": True, "purpose": "other-purpose",
+                "operator_authorization_event_id": "different-event",
             }
             for field, changed in bindings.items():
                 fake = FakeAdapter([0])
@@ -376,6 +377,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                         attestation(profile, **{field: changed}),
                         source="git", ref="refs/heads/test", commit=COMMIT,
                         dirty=False, purpose="scheduled-quality-pulse",
+                        operator_authorization_event_id="operator-event-1",
                         adapter=fake,
                     ),
                     (
@@ -398,6 +400,49 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "unknown_key",
             )
 
+    def test_opt_in_catalog_decision_is_complete_and_selected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = self.repository(Path(directory))
+
+            def bind_catalog(value):
+                catalog = value["catalogs"][0]
+                catalog["content_digest"] = catalog_digest(catalog)
+                for binding in value["metrics"] + value["rules"]:
+                    binding["catalog_digest"] = catalog["content_digest"]
+
+            missing = profile_document()
+            missing["catalogs"][0]["rules"][0]["definition"].update({
+                "alternative_decisions": ["keep-default", "use-wrapper"],
+            })
+            bind_catalog(missing)
+            self.assert_reason(
+                lambda: validate_inspection_profile(missing, repository),
+                "missing_profile_decision",
+            )
+
+            invalid = copy.deepcopy(missing)
+            invalid["catalogs"][0]["rules"][0]["definition"][
+                "profile_decision"
+            ] = "unlisted-decision"
+            bind_catalog(invalid)
+            self.assert_reason(
+                lambda: validate_inspection_profile(invalid, repository),
+                "missing_profile_decision",
+            )
+
+            selected = copy.deepcopy(missing)
+            selected["catalogs"][0]["rules"][0]["definition"][
+                "profile_decision"
+            ] = "use-wrapper"
+            bind_catalog(selected)
+            profile = validate_inspection_profile(selected, repository)
+            self.assertEqual(
+                profile.document["catalogs"][0]["rules"][0]["definition"][
+                    "profile_decision"
+                ],
+                "use-wrapper",
+            )
+
     def test_post_validation_mutation_is_detected_without_adapter_call(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -414,6 +459,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                     profile, ["primary"], attestation(profile),
                     source="git", ref="refs/heads/test", commit=COMMIT,
                     dirty=False, purpose="scheduled-quality-pulse",
+                    operator_authorization_event_id="operator-event-1",
                     adapter=fake, pre_admission_hook=mutate,
                 ),
                 "profile_digest_mismatch",
@@ -441,6 +487,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                     profile, ["primary"], attestation(profile),
                     source="git", ref="refs/heads/test", commit=COMMIT,
                     dirty=False, purpose="scheduled-quality-pulse",
+                    operator_authorization_event_id="operator-event-1",
                     adapter=fake, pre_admission_hook=mutate,
                 ),
                 "profile_digest_mismatch",
@@ -460,6 +507,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 profile, ["primary"], attestation(profile),
                 source="git", ref="refs/heads/test", commit=COMMIT,
                 dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
                 adapter=fake, clock=lambda: next(ticks),
             )
             self.assertEqual([item["status"] for item in receipts], [
@@ -481,6 +529,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 profile, ["primary"], attestation(profile),
                 source="git", ref="refs/heads/test", commit=COMMIT,
                 dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
                 adapter=successful, clock=lambda: next(ticks),
             )
             self.assertEqual([item["status"] for item in receipts], [
@@ -501,6 +550,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 profile, ["primary"], attestation(profile),
                 source="git", ref="refs/heads/test", commit=COMMIT,
                 dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
                 adapter=raising, clock=lambda: next(ticks),
             )
             self.assertEqual(receipts[0]["status"], "unavailable")
@@ -525,6 +575,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 profile, ["primary"], attestation(profile),
                 source="git", ref="refs/heads/test", commit=COMMIT,
                 dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
                 adapter=fake, clock=lambda: next(ticks),
             )
             self.assertEqual(
@@ -643,6 +694,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "--lane-id", "primary", "--attestation", "/missing-attestation",
                 "--source", "git", "--ref", "refs/heads/test",
                 "--commit", COMMIT, "--dirty", "false",
+                "--authorization-event-id", "operator-event-1",
                 "--purpose", "scheduled-quality-pulse",
             ],
             text=True, capture_output=True, env=env, check=False,
