@@ -2726,6 +2726,18 @@ def command_inspection_trend(args):
     return 0
 
 
+def command_inspection_finalize(args):
+    from .inspection import finalize_authoritative_result
+
+    trend = None if args.trend is None else _inspection_json(args.trend)
+    _emit(finalize_authoritative_result(
+        _inspection_json(args.input),
+        publication_status=args.publication_status,
+        trend_result=trend,
+    ))
+    return 0
+
+
 def command_inspection_render(args):
     from .inspection import render_markdown
 
@@ -3000,6 +3012,27 @@ def parser():
     inspection_trend.add_argument("--current", required=True)
     inspection_trend.add_argument("--baseline", required=True)
     inspection_trend.set_defaults(handler=command_inspection_trend)
+
+    inspection_finalize = commands.add_parser(
+        "inspection-finalize",
+        help="advance authoritative inspection publication and trend lifecycle",
+        description=(
+            "Validate authoritative JSON, bind a closed publication status and "
+            "optional inspection-trend result, then emit a re-digested artifact. "
+            "Invalid lifecycle input exits non-zero."
+        ),
+    )
+    inspection_finalize.add_argument("--input", required=True)
+    inspection_finalize.add_argument(
+        "--publication-status",
+        choices=(
+            "authoritative_json_ready", "markdown_rendered",
+            "published", "publication_failed",
+        ),
+        required=True,
+    )
+    inspection_finalize.add_argument("--trend")
+    inspection_finalize.set_defaults(handler=command_inspection_finalize)
 
     inspection_render = commands.add_parser(
         "inspection-render",

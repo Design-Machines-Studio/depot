@@ -116,7 +116,8 @@
       "surface_ids": [
         "editorial-theme"
       ],
-      "confidence": "high"
+      "confidence": "high",
+      "actionability": "actionable"
     }
   ],
   "outputs": {

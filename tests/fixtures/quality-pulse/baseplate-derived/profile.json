@@ -357,7 +357,8 @@
       "surface_ids": [
         "baseplate-application"
       ],
-      "confidence": "high"
+      "confidence": "high",
+      "actionability": "actionable"
     },
     {
       "classification_id": "design_panel_actionable",
@@ -373,7 +374,8 @@
         "baseplate-application",
         "design-panel"
       ],
-      "confidence": "high"
+      "confidence": "high",
+      "actionability": "actionable"
     },
     {
       "classification_id": "design_panel_informational",
@@ -388,7 +390,8 @@
       "surface_ids": [
         "design-panel"
       ],
-      "confidence": "low"
+      "confidence": "low",
+      "actionability": "informational"
     },
     {
       "classification_id": "legacy_wrapper_exempt",
@@ -401,7 +404,8 @@
       "surface_ids": [
         "design-panel"
       ],
-      "confidence": "high"
+      "confidence": "high",
+      "actionability": "informational"
     }
   ],
   "outputs": {

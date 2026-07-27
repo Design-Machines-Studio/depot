@@ -43,6 +43,7 @@ quality changes.
 
 ```text
 evidence.status: available | unavailable | failed | fallback | skipped
+lane.status: available | fallback
 finding.classification: actionable | informational | unknown
 finding.actionability: actionable | informational
 finding.surface: repository-profile-defined closed ID
@@ -50,7 +51,8 @@ finding.confidence: high | medium | low | unknown
 finding.evidence_confidence: primary | fallback | unavailable
 ```
 
-Fallback evidence names its unavailable or failed primary, records both
+Lane status never overwrites observation-level evidence status. Fallback
+evidence names its unavailable or failed primary, records both
 `lane_id` and `primary_lane_id`, and downgrades classification confidence by one
 level in addition to `evidence_confidence: fallback`. Evidence failure does not manufacture a finding
 classification. Conversely, a finding classification does not erase its
@@ -66,10 +68,13 @@ pulse.
 2. validate its complete schema and closed vocabularies;
 3. recompute and verify the stable projection digest;
 4. run redaction checks;
-5. render Markdown from that validated JSON;
-6. publish the Markdown only when rendering succeeds.
+5. bind the compatible trend result or baseline discontinuity with
+   `inspection-finalize`;
+6. render Markdown from that validated JSON;
+7. bind `markdown_rendered`, then `published` only after each host action
+   succeeds.
 
-Any failure in steps 1-4 prevents Markdown publication. A stale prior digest
+Any failure in steps 1-5 prevents Markdown publication. A stale prior digest
 must not be relabeled as current.
 
 ## Trend Compatibility

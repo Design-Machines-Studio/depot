@@ -407,7 +407,8 @@ def check_cli(context):
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
         "inspection-validate", "inspection-classify", "inspection-trend",
-        "inspection-render", "inspection-run", "resolve-plugin-bundle",
+        "inspection-finalize", "inspection-render", "inspection-run",
+        "resolve-plugin-bundle",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
@@ -416,7 +417,8 @@ def check_cli(context):
     require(set(choices) == expected, "runtime command set changed")
     inspection_commands = {
         "inspection-validate", "inspection-classify", "inspection-trend",
-        "inspection-render", "inspection-run", "resolve-plugin-bundle",
+        "inspection-finalize", "inspection-render", "inspection-run",
+        "resolve-plugin-bundle",
     }
     require(
         set(BEHAVIORAL_CLI_CASES) == expected - inspection_commands,

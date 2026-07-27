@@ -28,7 +28,8 @@ owns:
 - closed surface IDs;
 - catalog bindings;
 - selected rule and metric IDs;
-- thresholds, exemptions, and classification policy;
+- thresholds, exemptions, and classification policy, including each known
+  classification's explicit `actionability: actionable|informational`;
 - primary and fallback lane declarations, exact argv, immutable identities,
   timeouts, and evidence paths;
 - authoritative JSON and Markdown output locations;

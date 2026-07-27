@@ -6,7 +6,8 @@ from .inspection import (
     PROFILE_SCHEMA_VERSION, InspectionError, InspectionProfile, SubprocessAdapter,
     authoritative_bytes, build_authoritative_result, classify_observations,
     compare_trends, execute_inspection_lanes, load_host_attestation,
-    load_inspection_profile, normalize_owned_path, render_markdown,
+    finalize_authoritative_result, load_inspection_profile,
+    normalize_owned_path, render_markdown,
     stable_projection, validate_authoritative_result,
     validate_host_attestation, validate_inspection_profile,
 )
@@ -52,5 +53,6 @@ __all__ = [
     "execute_inspection_lanes", "classify_observations",
     "build_authoritative_result", "validate_authoritative_result",
     "authoritative_bytes", "stable_projection", "compare_trends",
+    "finalize_authoritative_result",
     "render_markdown",
 ]

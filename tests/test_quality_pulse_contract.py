@@ -748,6 +748,8 @@ class QualityPulseContract(unittest.TestCase):
     def case_generic(self):
         _profile, result = self.authoritative("live-wires-generic")
         self.assertEqual(result["observations"][0]["classification"], "live_wires_actionable")
+        self.assertTrue(result["observations"][0]["actionable"])
+        self.assertEqual(result["completion_state"], "complete_with_findings")
         text = json.dumps(result)
         self.assertNotIn("baseplate", text.lower())
         self.assertNotIn("assembly", text.lower())

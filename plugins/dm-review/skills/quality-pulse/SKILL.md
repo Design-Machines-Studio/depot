@@ -181,10 +181,12 @@ classification contract:
 
 ```text
 evidence.status: available | unavailable | failed | fallback | skipped
+lane.status: available | fallback
 finding.classification: actionable | informational | unknown
 finding.actionability: actionable | informational
 finding.surface: repository-profile-defined closed ID
-finding.confidence: primary | fallback | inferred | unavailable
+finding.confidence: high | medium | low | unknown
+finding.evidence_confidence: primary | fallback | unavailable
 ```
 
 Evidence status and finding classification are independent. Unknown path,
@@ -203,8 +205,18 @@ Any such unknown fails the pulse. Never coerce `unknown` to informational.
 ### 6. Publish JSON, then Markdown
 
 Emit the authoritative JSON contract in `output-contract.md`, then validate it
-and recompute its stable projection digest. Only after that succeeds may
-`inspection-render` produce the Markdown digest:
+and recompute its stable projection digest. Bind an optional trend result and
+each publication transition with `inspection-finalize`; the command validates
+the closed lifecycle state and emits a re-digested artifact:
+
+```sh
+"$WORKFLOW_KERNEL" inspection-finalize \
+  --input "$AUTHORITATIVE_JSON" \
+  --publication-status authoritative_json_ready \
+  [--trend "$TREND_RESULT"]
+```
+
+Only after that succeeds may `inspection-render` produce the Markdown digest:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-render --input "$AUTHORITATIVE_JSON"
@@ -226,6 +238,12 @@ calculate a misleading delta.
   --current "$AUTHORITATIVE_JSON" \
   --baseline "$COMPATIBLE_BASELINE"
 ```
+
+Pass that JSON result back through `inspection-finalize --trend`. After
+Markdown is durably written, finalize with `--publication-status
+markdown_rendered`; after the host publication succeeds, finalize once more
+with `--publication-status published`. Never relabel publication without the
+corresponding completed host action.
 
 ## Invocation Guidance
 

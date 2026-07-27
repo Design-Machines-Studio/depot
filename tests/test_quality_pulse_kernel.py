@@ -15,7 +15,8 @@ from tests import KERNEL_REFERENCES
 from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
     classify_observations, compare_trends, execute_inspection_lanes,
-    load_host_attestation, load_inspection_profile, normalize_owned_path,
+    finalize_authoritative_result, load_host_attestation,
+    load_inspection_profile, normalize_owned_path,
     render_markdown, stable_projection, validate_authoritative_result,
     validate_inspection_profile,
 )
@@ -99,6 +100,7 @@ def profile_document():
             "classification_id": "within-limit",
             "rule_ids": ["bounded-count"], "metric_ids": ["item-count"],
             "surface_ids": ["primary-source"], "confidence": "high",
+            "actionability": "informational",
         }],
         "outputs": {
             "authoritative_json": "output/result.json",
@@ -851,7 +853,8 @@ class QualityPulseKernelTests(unittest.TestCase):
             finding = result["observations"][0]
             self.assertEqual(finding["lane_id"], "fallback")
             self.assertEqual(finding["primary_lane_id"], "primary")
-            self.assertEqual(finding["evidence_status"], "fallback")
+            self.assertEqual(finding["evidence_status"], "available")
+            self.assertEqual(finding["lane_status"], "fallback")
             self.assertEqual(finding["evidence_confidence"], "fallback")
             self.assertEqual(finding["confidence"], "medium")
             self.assertEqual(result["completion_state"], "complete_with_gaps")
@@ -958,6 +961,55 @@ class QualityPulseKernelTests(unittest.TestCase):
                 current["publication_status"], "authoritative_json_ready",
             )
             self.assertEqual(current["trend_result"]["status"], "not_compared")
+            finalized = finalize_authoritative_result(
+                current,
+                publication_status="published",
+                trend_result=compare_trends(current, current),
+            )
+            self.assertEqual(finalized["publication_status"], "published")
+            self.assertEqual(finalized["trend_result"]["status"], "compatible")
+            self.assertNotEqual(
+                finalized["stable_projection_digest"],
+                current["stable_projection_digest"],
+            )
+
+            actionable_document = profile_document()
+            actionable_document["classifications"][0][
+                "actionability"
+            ] = "actionable"
+            actionable_profile = validate_inspection_profile(
+                actionable_document, repository,
+            )
+            actionable = self.result(actionable_profile)
+            self.assertTrue(actionable["observations"][0]["actionable"])
+            self.assertEqual(
+                actionable["completion_state"], "complete_with_findings",
+            )
+
+            failed_raw = [observation(evidence_status="failed")]
+            failed_evidence = build_authoritative_result(
+                profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, observations=failed_raw,
+                lane_receipts=[receipt_for_observations(failed_raw)],
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:01Z",
+                    "operator_authorization_event_id": "operator-event-1",
+                    "purpose": "scheduled-quality-pulse",
+                    "selected_lane_ids": ["primary"],
+                },
+            )
+            failed_finding = failed_evidence["observations"][0]
+            self.assertEqual(failed_finding["evidence_status"], "failed")
+            self.assertEqual(failed_finding["lane_status"], "available")
+            self.assertEqual(
+                failed_finding["evidence_confidence"], "unavailable",
+            )
+            self.assertEqual(failed_evidence["completion_state"], "blocked")
+            self.assertEqual(
+                failed_evidence["blockers"][0]["reason_code"],
+                "evidence_failed",
+            )
 
             forged_receipt = copy.deepcopy(current)
             forged_receipt["lane_receipts"][0]["exit_code"] = 42
@@ -1017,7 +1069,8 @@ class QualityPulseKernelTests(unittest.TestCase):
         self.assertEqual(help_result.returncode, 0)
         for command in (
             "inspection-validate", "inspection-classify", "inspection-trend",
-            "inspection-render", "inspection-run", "resolve-plugin-bundle",
+            "inspection-finalize", "inspection-render", "inspection-run",
+            "resolve-plugin-bundle",
         ):
             self.assertIn(command, help_result.stdout)
             detail = subprocess.run(

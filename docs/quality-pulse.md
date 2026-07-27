@@ -71,7 +71,10 @@ Every declared lane has one literal state:
 - `skipped`: declared lane was not needed or requested.
 
 Fallback retains its `primary_lane_id`, reason, and lower confidence. A missing
-or failed primary is never rewritten as fallback success. Unknown schema,
+or failed primary is never rewritten as fallback success. Producing-lane
+status is recorded separately and never overwrites an observation's own
+evidence status. Known classifications declare actionability explicitly in
+the validated profile. Unknown schema,
 surface, path, rule, metric, classification, or evidence vocabulary retains
 redacted raw telemetry, becomes `classification: unknown`, remains actionable,
 and fails the pulse.
@@ -83,8 +86,11 @@ Publication order is fixed:
 1. produce authoritative JSON;
 2. validate its closed schema and stable projection digest;
 3. verify durable redaction;
-4. render Markdown from that validated JSON;
-5. retain compatible trend state or a structured baseline discontinuity.
+4. bind compatible trend state or a structured baseline discontinuity with
+   `inspection-finalize`;
+5. render Markdown from that validated JSON;
+6. bind `markdown_rendered` and later `published` only after those host actions
+   succeed.
 
 Authoritative JSON is the source of truth. Markdown is a derived reader view
 and never feeds classification or trend comparison. The stable projection

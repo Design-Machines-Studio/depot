@@ -540,6 +540,7 @@ def _validate_profile_document(document, repository_root):
 
     classification_fields = frozenset({
         "classification_id", "rule_ids", "metric_ids", "surface_ids", "confidence",
+        "actionability",
     })
     classifications = _exact_list(document["classifications"], field="classifications")
     _unique_by_id(classifications, "classification_id", field="classifications")
@@ -547,6 +548,8 @@ def _validate_profile_document(document, repository_root):
         _exact_object(item, classification_fields, reason="invalid_classification")
         if item["confidence"] not in {"high", "medium", "low", "unknown"}:
             _fail("unknown_confidence", field=item["classification_id"])
+        if item["actionability"] not in {"actionable", "informational"}:
+            _fail("unknown_actionability", field=item["classification_id"])
         for field, known in (
             ("rule_ids", rule_ids), ("metric_ids", metric_ids),
             ("surface_ids", surface_ids),
@@ -841,7 +844,11 @@ def classify_observations(profile, observations):
             "confidence": "unknown" if reason else classifications[
                 raw["classification_id"]
             ]["confidence"],
-            "actionable": reason is not None,
+            "actionable": (
+                reason is not None
+                or classifications[raw["classification_id"]]["actionability"]
+                == "actionable"
+            ),
             "reason_code": reason or "classified",
             "evidence_status": (
                 raw.get("evidence_status")
@@ -849,6 +856,7 @@ def classify_observations(profile, observations):
                 else "failed"
             ),
             "evidence_confidence": "unavailable",
+            "lane_status": None,
             "lane_id": None,
             "primary_lane_id": None,
             "evidence_references": normalized_evidence,
@@ -1134,8 +1142,15 @@ def _bind_observation_provenance(classified, lane_receipts):
                 _fail("unbound_lane_evidence")
             observation["lane_id"] = receipt["lane_id"]
             observation["primary_lane_id"] = receipt["primary_lane_id"]
-            observation["evidence_status"] = receipt["status"]
-            if receipt["status"] == "fallback":
+            observation["lane_status"] = receipt["status"]
+            if observation["evidence_status"] in {
+                "unavailable", "failed", "skipped",
+            }:
+                observation["evidence_confidence"] = "unavailable"
+            elif (
+                receipt["status"] == "fallback"
+                or observation["evidence_status"] == "fallback"
+            ):
                 observation["evidence_confidence"] = "fallback"
                 observation["confidence"] = confidence_fallback[
                     observation["confidence"]
@@ -1210,12 +1225,21 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
             and item["lane_id"] not in fallback_covered
         )
     ]
-    blockers.extend({
-        "blocker_type": "observation",
-        "lane_id": item["lane_id"],
-        "observation_id": item["observation_id"],
-        "reason_code": item["reason_code"],
-    } for item in observations if item["reason_code"] != "classified")
+    for item in observations:
+        if item["reason_code"] != "classified":
+            blockers.append({
+                "blocker_type": "observation",
+                "lane_id": item["lane_id"],
+                "observation_id": item["observation_id"],
+                "reason_code": item["reason_code"],
+            })
+        elif item["evidence_status"] in {"unavailable", "failed"}:
+            blockers.append({
+                "blocker_type": "observation",
+                "lane_id": item["lane_id"],
+                "observation_id": item["observation_id"],
+                "reason_code": f"evidence_{item['evidence_status']}",
+            })
     blockers.sort(key=lambda item: (
         item["blocker_type"], item["lane_id"] or "",
         item["observation_id"] or "", item["reason_code"],
@@ -1237,19 +1261,84 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
         "actual_identities": actual,
         "coverage_gaps": gaps,
         "blockers": blockers,
-        "publication_status": "authoritative_json_ready",
-        "trend_result": {
-            "schema_version": 1,
-            "status": "not_compared",
-            "reason_code": "baseline_not_supplied",
-            "incompatible_identity_fields": [],
-            "deltas": [],
-        },
     }
 
 
+def _default_trend_result():
+    return {
+        "schema_version": 1,
+        "status": "not_compared",
+        "reason_code": "baseline_not_supplied",
+        "incompatible_identity_fields": [],
+        "deltas": [],
+    }
+
+
+def _validate_lifecycle(publication_status, trend_result):
+    if publication_status not in {
+        "authoritative_json_ready", "markdown_rendered",
+        "published", "publication_failed",
+    }:
+        _fail("invalid_publication_status")
+    trend = _exact_object(
+        trend_result,
+        frozenset({
+            "schema_version", "status", "reason_code",
+            "incompatible_identity_fields", "deltas",
+        }),
+        reason="invalid_trend_result",
+    )
+    incompatible = _exact_list(
+        trend["incompatible_identity_fields"],
+        field="incompatible_identity_fields",
+    )
+    deltas = _exact_list(trend["deltas"], field="deltas")
+    if type(trend["schema_version"]) is not int or trend["schema_version"] != 1:
+        _fail("invalid_trend_result")
+    if trend["status"] == "not_compared":
+        valid = (
+            trend["reason_code"] == "baseline_not_supplied"
+            and not incompatible and not deltas
+        )
+    elif trend["status"] == "baseline_discontinuity":
+        valid = (
+            trend["reason_code"] == "incompatible_baseline"
+            and bool(incompatible) and not deltas
+            and all(type(item) is str and item for item in incompatible)
+        )
+    elif trend["status"] == "compatible":
+        valid = (
+            trend["reason_code"] == "comparable"
+            and not incompatible
+        )
+        delta_fields = frozenset({
+            "observation_id", "current", "baseline", "delta",
+        })
+        for item in deltas:
+            _exact_object(item, delta_fields, reason="invalid_trend_result")
+            if (
+                type(item["observation_id"]) is not str
+                or _IDENTIFIER.fullmatch(item["observation_id"]) is None
+                or type(item["current"]) not in {int, float}
+                or type(item["current"]) is bool
+                or type(item["baseline"]) not in {int, float}
+                or type(item["baseline"]) is bool
+                or type(item["delta"]) not in {int, float}
+                or type(item["delta"]) is bool
+                or item["current"] - item["baseline"] != item["delta"]
+            ):
+                _fail("invalid_trend_result")
+    else:
+        valid = False
+    if not valid:
+        _fail("invalid_trend_result")
+    return publication_status, trend
+
+
 def build_authoritative_result(profile, *, source, ref, commit, dirty,
-                               observations, lane_receipts, invocation):
+                               observations, lane_receipts, invocation,
+                               publication_status="authoritative_json_ready",
+                               trend_result=None):
     if type(profile) is not InspectionProfile:
         _fail("validated_profile_required")
     if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
@@ -1363,6 +1452,10 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     lane_receipts = bound_receipts
     redacted_count = sum(item["redacted_values"] for item in classified)
     redacted_count += sum(item.get("redacted_values", 0) for item in lane_receipts)
+    publication_status, trend_result = _validate_lifecycle(
+        publication_status,
+        _default_trend_result() if trend_result is None else trend_result,
+    )
     result = {
         "schema_version": AUTHORITATIVE_SCHEMA_VERSION,
         "result_type": "inspection_authoritative",
@@ -1378,6 +1471,8 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         "profile_snapshot": profile.to_dict(),
         "compatibility_identity": _compatibility_identity(profile),
         **_derive_pulse_state(profile, lane_receipts, classified, invocation),
+        "publication_status": publication_status,
+        "trend_result": trend_result,
         "observations": classified,
         "lane_receipts": lane_receipts,
         "invocation": invocation,
@@ -1529,7 +1624,8 @@ def validate_authoritative_result(result):
     observation_fields = frozenset({
         "observation_id", "surface_id", "rule_id", "metric_id",
         "classification", "confidence", "actionable", "reason_code",
-        "evidence_status", "evidence_confidence", "lane_id", "primary_lane_id",
+        "evidence_status", "evidence_confidence", "lane_status",
+        "lane_id", "primary_lane_id",
         "evidence_references", "raw_telemetry",
         "source_observation_digest", "redacted_values",
     })
@@ -1541,9 +1637,31 @@ def validate_authoritative_result(result):
         )
         if (
             observation["evidence_status"] not in EVIDENCE_STATUSES
+            or observation["lane_status"] not in {"available", "fallback"}
             or observation["evidence_confidence"] not in {
                 "primary", "fallback", "unavailable",
             }
+            or (
+                observation["evidence_status"] in {
+                    "unavailable", "failed", "skipped",
+                }
+                and observation["evidence_confidence"] != "unavailable"
+            )
+            or (
+                observation["evidence_status"] == "available"
+                and observation["lane_status"] == "available"
+                and observation["evidence_confidence"] != "primary"
+            )
+            or (
+                (
+                    observation["evidence_status"] == "fallback"
+                    or observation["lane_status"] == "fallback"
+                )
+                and observation["evidence_status"] not in {
+                    "unavailable", "failed", "skipped",
+                }
+                and observation["evidence_confidence"] != "fallback"
+            )
             or type(observation["actionable"]) is not bool
             or type(observation["source_observation_digest"]) is not str
             or _DIGEST.fullmatch(
@@ -1878,7 +1996,7 @@ def validate_authoritative_result(result):
     pulse_fields = frozenset({
         "pulse_id", "completion_state", "requested_identities",
         "attempted_identities", "actual_identities", "coverage_gaps",
-        "blockers", "publication_status", "trend_result",
+        "blockers",
     })
     expected_pulse = _derive_pulse_state(
         embedded_profile, result["lane_receipts"],
@@ -1888,6 +2006,7 @@ def validate_authoritative_result(result):
         field: result[field] for field in pulse_fields
     } != expected_pulse:
         _fail("invalid_pulse_state")
+    _validate_lifecycle(result["publication_status"], result["trend_result"])
     redaction = _exact_object(
         result["redaction"], frozenset({"applied", "redacted_value_count"}),
         reason="invalid_redaction_outcome",
@@ -1908,6 +2027,22 @@ def validate_authoritative_result(result):
     if _canonical_digest(stable_projection(result)) != result["stable_projection_digest"]:
         _fail("authoritative_digest_mismatch")
     return result
+
+
+def finalize_authoritative_result(result, *, publication_status, trend_result=None):
+    """Advance closed publication/trend lifecycle state and rebind the digest."""
+    current = validate_authoritative_result(result)
+    updated = json.loads(json.dumps(current, allow_nan=False))
+    publication_status, trend_result = _validate_lifecycle(
+        publication_status,
+        current["trend_result"] if trend_result is None else trend_result,
+    )
+    updated["publication_status"] = publication_status
+    updated["trend_result"] = trend_result
+    updated["stable_projection_digest"] = _canonical_digest(
+        stable_projection(updated),
+    )
+    return validate_authoritative_result(updated)
 
 
 def authoritative_bytes(result):
@@ -2011,6 +2146,7 @@ __all__ = [
     "InspectionError", "InspectionProfile", "PROFILE_SCHEMA_VERSION", "SubprocessAdapter",
     "authoritative_bytes", "build_authoritative_result", "classify_observations",
     "compare_trends", "decode_json_bytes", "execute_inspection_lanes",
+    "finalize_authoritative_result",
     "load_host_attestation", "load_inspection_profile", "normalize_owned_path",
     "render_markdown", "stable_projection", "validate_authoritative_result",
     "validate_host_attestation", "validate_inspection_profile",

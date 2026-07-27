@@ -249,7 +249,8 @@
         "rule_ids",
         "metric_ids",
         "surface_ids",
-        "confidence"
+        "confidence",
+        "actionability"
       ],
       "properties": {
         "classification_id": {"$ref": "#/$defs/id"},
@@ -268,7 +269,8 @@
           "uniqueItems": true,
           "items": {"$ref": "#/$defs/id"}
         },
-        "confidence": {"enum": ["high", "medium", "low", "unknown"]}
+        "confidence": {"enum": ["high", "medium", "low", "unknown"]},
+        "actionability": {"enum": ["actionable", "informational"]}
       }
     }
   }

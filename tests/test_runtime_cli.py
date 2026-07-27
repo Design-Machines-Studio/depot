@@ -1410,7 +1410,8 @@ class RuntimeCliTests(unittest.TestCase):
         )
         for command in (
             "inspection-validate", "inspection-classify", "inspection-trend",
-            "inspection-render", "inspection-run", "resolve-plugin-bundle",
+            "inspection-finalize", "inspection-render", "inspection-run",
+            "resolve-plugin-bundle",
             "init", "plan-create",
         ):
             self.assertIn(command, choices)
