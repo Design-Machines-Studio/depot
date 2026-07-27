@@ -26,7 +26,9 @@ Then install individual plugins:
 /plugin install the-local@depot
 /plugin install chef@depot
 /plugin install pipeline@depot
+/plugin install workflow-kernel@depot
 /plugin install openrouter@depot
+/plugin install airlift@depot
 ```
 
 Codex compatibility is generated from the Claude manifests. Claude remains the
@@ -45,7 +47,7 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-18 plugins | 38 domain-facing skills + 1 internal workflow-kernel skill + 33 generated Codex command-skill aliases | 38 agents | 33 commands
+18 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 38 agents | 34 commands
 
 ### ned
 
@@ -157,17 +159,21 @@ WCAG 2.2 accessibility auditing and enforcement. 2 skills, 5 agents, 1 command.
 
 ### dm-review
 
-Code review orchestrator with parallel agents. 2 skills, 14 agents, 5 commands.
+Code review orchestrator with parallel agents and deterministic repository
+quality pulses. 3 skills, 15 agents, 6 commands.
 
 - **review** -- Single-command reviews launching up to 15 parallel agents tailored to Go+Templ+Datastar, Craft CMS, and Live Wires, with issue tracking, reorg-only PR verification for behavior-preserving file decomposition, and closure reconciliation across PR bodies, issue state, and review-finding issues
 - **visual-test** -- Standalone visual browser testing for rendered pages using Playwright
+- **quality-pulse** -- Scheduled/local repository audit using trusted profiles, authoritative JSON, explicit lane evidence, and compatible trends
 - 12 review agents: security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer, go-build-verifier, craft-reviewer, test-coverage-reviewer, visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer, migration-validator
+- 1 second-opinion review agent: codex-perspective
 - 2 workflow agents: review-consolidator, review-memory-recorder
 - `/dm-review` -- Full review with all applicable agents
 - `/dm-review-quick` -- Quick review with 5 core agents only
 - `/dm-review-fix` -- Resolve pending review findings from todos/
 - `/dm-review-visual` -- Visual browser testing on rendered pages
 - `/dm-review-loop` -- Review-fix convergence loop until zero findings
+- `/dm-review-quality-pulse` -- Run the repository quality-pulse workflow
 
 ### the-local
 
@@ -193,26 +199,50 @@ Science-driven cooking assistant with dietary analysis. 1 skill, 1 agent, 4 comm
 
 ### pipeline
 
-Autonomous feature development pipeline. 3 skills, 2 agents, 4 commands.
+Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 
 - **assess** -- Pre-plan assessment of current codebase state and UX before planning changes
 - **research** -- Multi-source context gathering from ai-memory, RAG, web search, and domain plugins
 - **promptcraft** -- Generates self-contained execution prompts with overlap-aware dependency ordering
+- **eval-sweep** -- Ledger-first system-wide route, breakpoint, and accessibility evaluation
 - **plan-adversary** (agent) -- Adversarial review of plans and prompts, iterating to convergence
 - **execution-orchestrator** (agent) -- Autonomous worktree execution with review-fix loops and zero-deferral policy
 - `/pipeline` -- Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver
 - `/pipeline-assess` -- Pre-plan assessment of current state
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
 - `/pipeline-run` -- Execute prompts in worktrees with review-fix loops
+- `/pipeline-fix` -- Execute a bounded fix pass over numbered findings
+
+### workflow-kernel
+
+Neutral deterministic workflow and inspection mechanics. 1 internal skill.
+
+- **workflow-kernel** -- Run-state replay/recovery, behavioral contracts,
+  receipts, trusted inspection profiles, contained lanes, redaction, canonical
+  output, and compatible trends
 
 ### openrouter
 
 Unified external-model provider for quality-first agentic work and lower-cost mechanical review. 1 skill, 2 agents, 1 command.
 
-- **openrouter-delegate** -- Delegates through OpenRouter to Kimi K3, GLM-5.2, DeepSeek V4, MiniMax M3, and frontier models
+- **openrouter-delegate** -- Threat-classified delegation to permitted open
+  models for non-secret work, including security-related content when output
+  and execution controls remain active
 - **openrouter-bulk-analyst** (agent) -- Reviews full diffs with GLM-5.2 and a DeepSeek V4 model fallback
 - **openrouter-agent-runner** (agent) -- Runs dm-review mechanical agents through OpenRouter model slugs
 - `/openrouter` -- Delegate a task to any configured OpenRouter model
+
+OpenAI and Anthropic models are prohibited through OpenRouter; use their native
+Codex and Claude CLIs.
+
+### airlift
+
+Cross-harness session handoff. 1 skill, 3 commands.
+
+- **airlift** -- Deterministic checkpoint and resume bundles across supported harnesses
+- `/airlift-out` -- Create or refresh a handoff bundle
+- `/airlift-in` -- Resume from a handoff bundle
+- `/airlift-install` -- Manage the optional early-warning monitor
 
 ## Orchestration
 
@@ -231,9 +261,14 @@ See [docs/orchestration-patterns.md](docs/orchestration-patterns.md) for details
 ```shell
 ./tools/validate-composition.sh --all    # run all validators
 ./tools/validate-dual-compat.sh          # check Claude/Codex manifest sync and cache fallbacks
+./tools/validate-quality-pulse.sh        # run the 49-case offline pulse conformance suite
+./tools/validate-marketplace-capabilities.sh # prove Claude/Codex discovery mappings
 ./tools/eval-descriptions.sh             # run description trigger evals
 ./tools/check-dependencies.sh            # check plugin dependencies
 ```
+
+See [Repository Quality Pulse](docs/quality-pulse.md) and the
+[Baseplate post-release handoff](docs/baseplate-quality-pulse-handoff.md).
 
 ## License
 

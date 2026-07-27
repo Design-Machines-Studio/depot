@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-KERNEL_VERSION_FLOOR = (0, 3, 0)
+KERNEL_VERSION_FLOOR = (0, 4, 0)
 _KERNEL_SEMVER = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 )

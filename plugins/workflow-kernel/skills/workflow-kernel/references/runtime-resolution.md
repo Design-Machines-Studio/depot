@@ -75,8 +75,9 @@ root plus durable cache class, version, and reason.
   `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then
   `~/.codex/plugins/cache/depot/`.
 - Version compatibility is semantic: same-major versions at or above the
-  declared `>=0.3.0` floor. This floor is the capability boundary for
-  authoritative retry decisions and behavioral-contract bind/revise commands.
+  declared `>=0.4.0` floor. This floor is the capability boundary for
+  inspection commands, authoritative retry decisions, and behavioral-contract
+  bind/revise commands.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,

@@ -103,10 +103,10 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-18 plugins | 38 domain-facing skills + 1 internal workflow-kernel skill + 33 generated Codex command-skill aliases | 38 agent cards | 33 commands
+18 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 38 agent cards | 34 commands
 
 The generated search index counts every manifest-discovered surface, including
-the internal kernel skill: 39 skills and 38 agents. The 38 count above preserves
+the internal kernel skill: 40 skills and 38 agents. The 39 count above preserves
 the domain-facing skill inventory used by the release plan.
 
 | Plugin | Purpose |
@@ -122,12 +122,13 @@ the domain-facing skill inventory used by the release plan.
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
 | **project-scaffolder** | Project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement |
-| **dm-review** | Code review orchestrator with parallel agents and visual browser testing |
+| **dm-review** | Code review orchestrator with parallel agents, visual browser testing, and deterministic repository quality pulses |
 | **the-local** | Self-hosted Matrix network -- Element Web branding, Synapse config |
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
-| **workflow-kernel** | Neutral deterministic run state, replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by workflow plugins |
-| **openrouter** | Unified OpenRouter provider: Kimi K3 agentic execution plus GLM-5.2/DeepSeek V4 mechanical review, pipeline cascade, and dm-review routing |
+| **workflow-kernel** | Neutral deterministic workflow state plus trusted inspection profiles, contained lanes, redaction, canonical output, and compatible trends |
+| **openrouter** | Threat-classified OpenRouter provider for permitted non-secret work; OpenAI and Anthropic remain native-CLI-only |
+| **airlift** | Deterministic cross-harness checkpoint and resume bundles with guarded OpenRouter continuation |
 
 ## Conventions
 

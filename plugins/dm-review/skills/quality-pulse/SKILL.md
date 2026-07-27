@@ -39,7 +39,8 @@ Read these focused contracts before execution:
 
 Resolve exactly one trusted workflow-kernel launcher per run using the host
 dependency root and the kernel's canonical
-`references/runtime-resolution.md` contract. Require
+`references/runtime-resolution.md` contract. Require workflow-kernel
+`>=0.4.0` and
 `skills/workflow-kernel/references/workflow-kernel-launcher.sh` from that
 selected plugin root and verify it is executable. Reuse that launcher for the
 entire pulse. Do not use an independent cache glob, mtime-first lookup, PATH

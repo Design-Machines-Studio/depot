@@ -1251,7 +1251,7 @@ class RuntimeCliTests(unittest.TestCase):
             root = Path(directory); depot = root / "depot"; pipeline = depot / "plugins" / "pipeline"
             runtime = depot / "plugins" / "workflow-kernel"; refs = runtime / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
             refs.mkdir(parents=True); pipeline.mkdir(parents=True)
-            (runtime / ".claude-plugin").mkdir(); (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":"0.3.0"}))
+            (runtime / ".claude-plugin").mkdir(); (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":"0.4.0"}))
             (refs / "__main__.py").write_text("")
             forged = root / "target" / "workflow_kernel"; forged.mkdir(parents=True); (forged / "__main__.py").write_text("")
             self.assertEqual(resolve_workflow_kernel_runtime(pipeline, home=root / "home"), refs.parent.resolve())
@@ -1264,7 +1264,7 @@ class RuntimeCliTests(unittest.TestCase):
             root = Path(directory); pipeline = root / "depot" / "plugins" / "pipeline"
             pipeline.mkdir(parents=True)
             cache = root / "home" / ".claude" / "plugins" / "cache" / "depot" / "workflow-kernel"
-            for version in ("0.3.9", "0.3.10", "1.0.0"):
+            for version in ("0.4.9", "0.4.10", "1.0.0"):
                 runtime = cache / version
                 refs = runtime / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
                 refs.mkdir(parents=True)
@@ -1272,7 +1272,7 @@ class RuntimeCliTests(unittest.TestCase):
                 (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":version}))
                 (refs / "__main__.py").write_text("")
             resolved = resolve_workflow_kernel_runtime(pipeline, home=root / "home")
-            self.assertEqual(resolved, (cache / "0.3.10" / "skills" / "workflow-kernel" / "references").resolve())
+            self.assertEqual(resolved, (cache / "0.4.10" / "skills" / "workflow-kernel" / "references").resolve())
 
     def test_plugin_bundle_resolver_is_semver_coherent_and_active_host_only_breaks_ties(self):
         from workflow_kernel.runtime_resolution import resolve_plugin_bundle

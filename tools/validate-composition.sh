@@ -608,6 +608,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}Marketplace capability mappings:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-marketplace-capabilities.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}Dual compatibility:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-dual-compat.sh"; then
     any_failed=1
@@ -625,6 +630,16 @@ run_composition_checks() {
 
   printf "\n${BOLD}OpenRouter model cascade:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-cascade.sh"; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}OpenRouter coherent bundle resolution:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-openrouter-resolution.sh" --all; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Airlift OpenRouter boundary:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-airlift-openrouter-boundary.sh"; then
     any_failed=1
   fi
 

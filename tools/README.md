@@ -153,6 +153,20 @@ This validator is invoked exactly once by
 `./tools/validate-composition.sh --all`; default composition-only validation is
 unchanged.
 
+## validate-marketplace-capabilities.sh
+
+Proves that canonical dm-review capability arrays, marketplace summary counts,
+generated Codex capability arrays, bounded discovery tags, the Claude command,
+and the generated Codex command-skill alias agree:
+
+```bash
+./tools/validate-marketplace-capabilities.sh
+```
+
+It also validates the global Codex marketplace against its actual generated
+plugin-entry schema rather than requiring per-plugin capability fields that do
+not belong there. This validator is invoked once by composition validation.
+
 ## check-release-preflight.sh
 
 Read-only. Verifies a release is actually safe to tag and push, then prints a

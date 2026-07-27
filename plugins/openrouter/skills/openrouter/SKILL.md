@@ -57,23 +57,33 @@ Default 90s. Increase to 120-180s for large inputs (big diffs).
 
 ### Step 4: Invoke OpenRouter
 
-Resolve the wrapper via the plugin cache (works from any CWD, including non-depot worktrees), then invoke it. Pipe via stdin for prompts containing code or special characters:
+Resolve `WORKFLOW_KERNEL` once using the workflow-kernel runtime-resolution contract. Then select one coherent installed OpenRouter bundle and derive the wrapper from it. Pipe prompts containing code or special characters through stdin:
 
 ```bash
-WRAPPER_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER_PATH" ] && break
-done
-if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
-  echo "openrouter wrapper not found in plugin cache" >&2
-  exit 1
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+if [ -n "$ACTIVE_HOST" ]; then
+  BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+    --minimum-version 1.6.0 \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --active-host "$ACTIVE_HOST")
+else
+  BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+    --minimum-version 1.6.0 \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh)
 fi
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
+WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+[ -x "$WRAPPER_PATH" ] || exit 1
 
 RESULT=$(echo "${USER_PROMPT}" | bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}")
 ```
 
 The wrapper JSON-encodes the prompt safely; never embed raw user input directly in a curl `-d` body.
+Models beginning with `openai/` or `anthropic/` are invalid on this command. Use the native Codex or Claude CLI instead.
 
 ### Step 5: Handle Errors
 
