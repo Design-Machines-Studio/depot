@@ -1,10 +1,10 @@
 # Quality-Pulse Output Contract
 
-The signed authoritative JSON is the source of truth. Its content-addressed
-JSON/Markdown snapshot and profile-declared JSON/Markdown files are durable,
-validated views; no pathname is trusted without revalidating the HMAC and
-exact derived Markdown. They never become inputs to classification or trend
-comparison.
+Authoritative JSON is the sole source of truth. Its host-keyed,
+content-addressed JSON/Markdown snapshot and the profile-declared JSON/Markdown
+files are durable, validated views; no pathname is trusted without
+revalidating the HMAC and exact derived Markdown. They never become inputs to
+classification or trend comparison.
 
 ## Required Authoritative Evidence
 
