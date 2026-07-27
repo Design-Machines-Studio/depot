@@ -92,10 +92,12 @@ Publication order is fixed:
 6. bind `markdown_rendered` and later `published` only after those host actions
    succeed.
 
-Authoritative JSON is the source of truth. Markdown is a derived reader view
-and never feeds classification or trend comparison. The stable projection
-excludes volatile invocation time while retaining commit, profile/catalog,
-metric, tool, lane, evidence, and redaction identities.
+The published source of truth is the sealed, content-addressed JSON/Markdown
+bundle under `.quality-pulse-publications/<pulse-id>/<state-digest>/`.
+Profile-declared JSON and Markdown paths are replaceable reader views and never
+feed classification, trend comparison, or publication validation. The stable
+projection excludes volatile invocation time while retaining commit,
+profile/catalog, metric, tool, lane, evidence, and redaction identities.
 
 Trend deltas are calculated only when schema, profile digest, metric/catalog
 bindings, and tool/image/service identities are compatible. Otherwise the

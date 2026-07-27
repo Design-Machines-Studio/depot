@@ -2,6 +2,7 @@ import copy
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,6 @@ from unittest import mock
 from tests import KERNEL_REFERENCES
 
 from workflow_kernel import cli as kernel_cli
-from workflow_kernel import inspection as inspection_module
 from workflow_kernel.cli import command_inspection_publish
 from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
@@ -23,7 +23,7 @@ from workflow_kernel.inspection import (
     load_host_publication_authority_key, load_inspection_profile,
     normalize_owned_path,
     render_markdown, stable_projection, validate_authoritative_result,
-    validate_inspection_profile,
+    validate_inspection_profile, validate_published_outputs,
 )
 from workflow_kernel.receipts import _canonical_bytes
 COMMIT = "a" * 40
@@ -1404,11 +1404,31 @@ class QualityPulseKernelTests(unittest.TestCase):
             source = repository / "ready.json"
             source.write_text(json.dumps(self.result(profile)))
             emitted = []
+            immutable_reopen_denied = []
+            original_immutable_write = (
+                kernel_cli._write_immutable_publication_file
+            )
+
+            def write_and_probe_immutable_file(path, encoded):
+                original_immutable_write(path, encoded)
+                try:
+                    descriptor = os.open(path, os.O_WRONLY)
+                except PermissionError:
+                    immutable_reopen_denied.append(Path(path).name)
+                else:
+                    os.close(descriptor)
+                    self.fail("sealed publication file reopened writable")
+
             with (
                 mock.patch(
                     "workflow_kernel.inspection."
                     "_host_publication_authority_key_path",
                     return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.cli."
+                    "_write_immutable_publication_file",
+                    side_effect=write_and_probe_immutable_file,
                 ),
                 mock.patch(
                     "workflow_kernel.cli._emit",
@@ -1430,11 +1450,76 @@ class QualityPulseKernelTests(unittest.TestCase):
             validate_authoritative_result(
                 published, publication_authority_key=PUBLICATION_KEY,
             )
+            self.assertCountEqual(
+                immutable_reopen_denied, ["authoritative.json", "report.md"],
+            )
+            bundle = (
+                repository / ".quality-pulse-publications"
+                / published["pulse_id"]
+                / published["publication_state_digest"].removeprefix(
+                    "sha256:",
+                )
+            )
+            bundle_json = bundle / "authoritative.json"
+            bundle_markdown = bundle / "report.md"
+            self.assertEqual(
+                bundle_json.read_bytes(),
+                authoritative_bytes(
+                    published, publication_authority_key=PUBLICATION_KEY,
+                ),
+            )
+            self.assertEqual(bundle_markdown.read_text(), markdown_path.read_text())
+            self.assertEqual(stat.S_IMODE(bundle.stat().st_mode), 0o500)
+            self.assertEqual(stat.S_IMODE(bundle_json.stat().st_mode), 0o400)
+            self.assertEqual(
+                stat.S_IMODE(bundle_markdown.stat().st_mode), 0o400,
+            )
+            self.assertEqual(
+                validate_published_outputs(
+                    published, repository,
+                    publication_authority_key=PUBLICATION_KEY,
+                ),
+                published,
+            )
+
+            bundle_json_before = bundle_json.read_bytes()
+            bundle_markdown_before = bundle_markdown.read_bytes()
+            markdown_path.write_text("mutable profile view changed\n")
+            authoritative_path.write_text('{"mutable":"view"}\n')
+            self.assertEqual(
+                validate_published_outputs(
+                    published, repository,
+                    publication_authority_key=PUBLICATION_KEY,
+                ),
+                published,
+            )
+            self.assertEqual(bundle_json.read_bytes(), bundle_json_before)
+            self.assertEqual(
+                bundle_markdown.read_bytes(), bundle_markdown_before,
+            )
+
+            emitted.clear()
+            with (
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_host_publication_authority_key_path",
+                    return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.cli._emit",
+                    side_effect=lambda value: emitted.append(value),
+                ),
+            ):
+                self.assertEqual(command_inspection_publish(SimpleNamespace(
+                    repository_root=str(repository),
+                    input=str(source),
+                )), 0)
+            self.assertEqual(emitted, [published])
+            self.assertEqual(json.loads(authoritative_path.read_text()), published)
+            self.assertEqual(markdown_path.read_bytes(), bundle_markdown_before)
+
             write_count = 0
             original_write_json = kernel_cli._write_json
-            original_verify_output = (
-                inspection_module._verify_exact_publication_output
-            )
 
             def corrupt_after_rendered_json(path, value):
                 nonlocal write_count
@@ -1474,15 +1559,14 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "markdown_rendered",
             )
 
-            verify_count = 0
-
-            def corrupt_json_after_final_comparison(*args):
-                nonlocal verify_count
-                original_verify_output(*args)
-                verify_count += 1
-                if verify_count == 5:
-                    authoritative_path.write_text('{"stale":true}\n')
-
+            os.chmod(bundle, 0o700)
+            bundle_json.unlink()
+            bundle_markdown.unlink()
+            bundle.rmdir()
+            attacker_directory = repository / "attacker-bundle"
+            attacker_directory.mkdir()
+            bundle.symlink_to(attacker_directory, target_is_directory=True)
+            emitted.clear()
             with (
                 mock.patch(
                     "workflow_kernel.inspection."
@@ -1490,11 +1574,9 @@ class QualityPulseKernelTests(unittest.TestCase):
                     return_value=publication_key.resolve(),
                 ),
                 mock.patch(
-                    "workflow_kernel.inspection."
-                    "_verify_exact_publication_output",
-                    side_effect=corrupt_json_after_final_comparison,
+                    "workflow_kernel.cli._emit",
+                    side_effect=lambda value: emitted.append(value),
                 ),
-                mock.patch("workflow_kernel.cli._emit"),
             ):
                 self.assert_reason(
                     lambda: command_inspection_publish(SimpleNamespace(
@@ -1503,84 +1585,8 @@ class QualityPulseKernelTests(unittest.TestCase):
                     )),
                     "publication_action_not_verified",
                 )
-            self.assertEqual(
-                json.loads(authoritative_path.read_text())[
-                    "publication_status"
-                ],
-                "markdown_rendered",
-            )
-
-            write_count = 0
-
-            def corrupt_after_published_json(path, value):
-                nonlocal write_count
-                original_write_json(path, value)
-                write_count += 1
-                if write_count == 3:
-                    markdown_path.write_text("stale after published replace\n")
-
-            with (
-                mock.patch(
-                    "workflow_kernel.inspection."
-                    "_host_publication_authority_key_path",
-                    return_value=publication_key.resolve(),
-                ),
-                mock.patch(
-                    "workflow_kernel.cli._write_json",
-                    side_effect=corrupt_after_published_json,
-                ),
-                mock.patch("workflow_kernel.cli._emit"),
-            ):
-                self.assert_reason(
-                    lambda: command_inspection_publish(SimpleNamespace(
-                        repository_root=str(repository),
-                        input=str(source),
-                    )),
-                    "publication_action_not_verified",
-                )
-            self.assertEqual(
-                json.loads(authoritative_path.read_text())[
-                    "publication_status"
-                ],
-                "markdown_rendered",
-            )
-
-            verify_count = 0
-            def corrupt_between_final_pair_checks(*args):
-                nonlocal verify_count
-                original_verify_output(*args)
-                verify_count += 1
-                if verify_count == 4:
-                    markdown_path.write_text(
-                        "stale between final pair checks\n",
-                    )
-
-            with (
-                mock.patch(
-                    "workflow_kernel.inspection."
-                    "_host_publication_authority_key_path",
-                    return_value=publication_key.resolve(),
-                ),
-                mock.patch(
-                    "workflow_kernel.inspection."
-                    "_verify_exact_publication_output",
-                    side_effect=corrupt_between_final_pair_checks,
-                ),
-                mock.patch("workflow_kernel.cli._emit"),
-            ):
-                self.assert_reason(
-                    lambda: command_inspection_publish(SimpleNamespace(
-                        repository_root=str(repository),
-                        input=str(source),
-                    )),
-                    "publication_action_not_verified",
-                )
-            self.assertEqual(
-                json.loads(authoritative_path.read_text())[
-                    "publication_status"
-                ],
-                "markdown_rendered",
-            )
+            self.assertEqual(emitted, [])
+            self.assertTrue(bundle.is_symlink())
 
     def test_cli_help_and_invalid_inputs_have_stable_nonzero_exit(self):
         env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))

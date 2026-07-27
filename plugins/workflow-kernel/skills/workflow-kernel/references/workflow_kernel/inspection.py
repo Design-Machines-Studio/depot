@@ -2505,7 +2505,10 @@ def _verify_exact_publication_output(current, root, output_key, expected):
         root, current["profile_snapshot"]["outputs"][output_key],
         must_exist=True,
     )
-    candidate = root / relative
+    _verify_exact_publication_file(root / relative, expected)
+
+
+def _verify_exact_publication_file(candidate, expected, *, require_sealed=False):
     if any(item.is_symlink() for item in (candidate, *candidate.parents)):
         _fail("publication_action_not_verified")
     try:
@@ -2518,6 +2521,16 @@ def _verify_exact_publication_output(current, root, output_key, expected):
                 not stat.S_ISREG(before.st_mode)
                 or before.st_nlink != 1
                 or before.st_size != len(expected)
+                or (
+                    require_sealed
+                    and (
+                        stat.S_IMODE(before.st_mode) & 0o222
+                        or (
+                            hasattr(os, "getuid")
+                            and before.st_uid != os.getuid()
+                        )
+                    )
+                )
             ):
                 _fail("publication_action_not_verified")
             actual = os.read(descriptor, len(expected) + 1)
@@ -2556,23 +2569,37 @@ def validate_published_outputs(
     if current["publication_status"] != "published":
         _fail("publication_action_not_verified")
     root = _repository_root(repository_root)
-    _verify_exact_publication_output(
-        current, root, "markdown",
+    bundle = (
+        root / ".quality-pulse-publications" / current["pulse_id"]
+        / current["publication_state_digest"].removeprefix("sha256:")
+    )
+    try:
+        bundle_entry = os.stat(bundle, follow_symlinks=False)
+    except OSError:
+        _fail("publication_action_not_verified")
+    if (
+        not stat.S_ISDIR(bundle_entry.st_mode)
+        or bundle.is_symlink()
+        or stat.S_IMODE(bundle_entry.st_mode) & 0o222
+        or (
+            hasattr(os, "getuid")
+            and bundle_entry.st_uid != os.getuid()
+        )
+    ):
+        _fail("publication_action_not_verified")
+    _verify_exact_publication_file(
+        bundle / "report.md",
         render_markdown(
             current, publication_authority_key=publication_authority_key,
         ).encode("utf-8"),
+        require_sealed=True,
     )
-    _verify_exact_publication_output(
-        current, root, "authoritative_json",
+    _verify_exact_publication_file(
+        bundle / "authoritative.json",
         authoritative_bytes(
             current, publication_authority_key=publication_authority_key,
         ),
-    )
-    _verify_exact_publication_output(
-        current, root, "markdown",
-        render_markdown(
-            current, publication_authority_key=publication_authority_key,
-        ).encode("utf-8"),
+        require_sealed=True,
     )
     return current
 

@@ -56,13 +56,14 @@ derives the output paths from the validated profile, durably writes and
 byte-verifies the exact Markdown before the rendered transition, then durably
 writes and byte-verifies the exact rendered authoritative JSON before the
 published transition. Identical, symlink-aliased, hard-linked, or
-identity-changing destinations fail closed, and both final outputs revalidate
-immediately before emission, with Markdown checked again after JSON. If any
-post-replacement check fails, the exact rendered-state JSON is durably restored
-before the command returns an error; no durable false published claim is left.
-Both outputs and their parent directories are temporarily made read-only for
-the final validation-and-emission interval, preventing either pathname from
-being replaced between the pair checks and the success boundary.
+identity-changing profile destinations fail closed. The published authority is
+not either mutable profile pathname: the kernel creates the exact signed JSON
+and Markdown read-only from birth inside an unguessable staging directory and
+atomically promotes that directory to a content-addressed path under
+`.quality-pulse-publications/`. Validation derives that path from the pulse ID
+and signed publication-state digest. The profile JSON and Markdown are
+replaceable views, so a descriptor opened against an older view cannot mutate
+the sealed publication bundle or change what `published` means.
 
 ## Untrusted Pull Requests
 

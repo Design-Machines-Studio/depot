@@ -11,6 +11,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -413,35 +414,146 @@ def _publication_output_guard(repository_root, authoritative_path, markdown_path
     return revalidate
 
 
-def _seal_publication_outputs(authoritative_path, markdown_path):
-    paths = (Path(authoritative_path), Path(markdown_path))
-    original_modes = {}
+def _write_immutable_publication_file(path, encoded):
+    destination = Path(path)
+    descriptor = None
+    created_identity = None
     try:
-        for path in paths:
-            entry = os.stat(path, follow_symlinks=False)
-            if not stat.S_ISREG(entry.st_mode):
-                raise InspectionError("invalid_publication_outputs")
-            original_modes[path] = stat.S_IMODE(entry.st_mode)
-            os.chmod(path, original_modes[path] & ~0o222)
-        for parent in dict.fromkeys(path.parent for path in paths):
-            entry = os.stat(parent, follow_symlinks=False)
-            if not stat.S_ISDIR(entry.st_mode):
-                raise InspectionError("invalid_publication_outputs")
-            original_modes[parent] = stat.S_IMODE(entry.st_mode)
-            os.chmod(parent, original_modes[parent] & ~0o222)
+        descriptor = os.open(
+            destination,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o400,
+        )
+        opened = os.fstat(descriptor)
+        created_identity = (opened.st_dev, opened.st_ino)
+        pending = encoded
+        while pending:
+            count = os.write(descriptor, pending)
+            if count <= 0:
+                raise OSError("immutable publication write made no progress")
+            pending = pending[count:]
+        os.fsync(descriptor)
+        opened = os.fstat(descriptor)
+        entry = os.stat(destination, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or opened.st_nlink != 1
+            or stat.S_IMODE(opened.st_mode) != 0o400
+            or opened.st_size != len(encoded)
+            or created_identity != (entry.st_dev, entry.st_ino)
+        ):
+            raise InspectionError("publication_action_not_verified")
     except BaseException:
-        for path, mode in reversed(tuple(original_modes.items())):
+        if descriptor is not None:
             try:
-                os.chmod(path, mode)
+                os.close(descriptor)
+            except OSError:
+                pass
+            descriptor = None
+        if created_identity is not None:
+            try:
+                entry = os.stat(destination, follow_symlinks=False)
+                if (
+                    stat.S_ISREG(entry.st_mode)
+                    and (entry.st_dev, entry.st_ino) == created_identity
+                ):
+                    destination.unlink()
             except OSError:
                 pass
         raise
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
-    def restore():
-        for path, mode in reversed(tuple(original_modes.items())):
-            os.chmod(path, mode)
 
-    return restore
+def _fsync_directory(path):
+    descriptor = os.open(
+        path,
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_NOFOLLOW", 0),
+    )
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _discard_publication_stage(path):
+    stage = Path(path)
+    try:
+        os.chmod(stage, 0o700)
+    except OSError:
+        return
+    for name in ("authoritative.json", "report.md"):
+        try:
+            (stage / name).unlink()
+        except FileNotFoundError:
+            pass
+    stage.rmdir()
+
+
+def _commit_publication_bundle(
+    repository_root, published, markdown, publication_key,
+):
+    from .inspection import authoritative_bytes
+
+    root = Path(repository_root).resolve(strict=True)
+    publications = root / ".quality-pulse-publications"
+    pulse_root = publications / published["pulse_id"]
+    for directory in (publications, pulse_root):
+        created = False
+        try:
+            directory.mkdir(mode=0o700)
+            created = True
+        except FileExistsError:
+            pass
+        entry = os.stat(directory, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(entry.st_mode)
+            or directory.is_symlink()
+            or (
+                hasattr(os, "getuid")
+                and entry.st_uid != os.getuid()
+            )
+            or stat.S_IMODE(entry.st_mode) & 0o022
+        ):
+            raise InspectionError("invalid_publication_outputs") from None
+        if created:
+            _fsync_directory(directory.parent)
+    digest = published["publication_state_digest"].removeprefix("sha256:")
+    destination = pulse_root / digest
+    stage = Path(tempfile.mkdtemp(prefix=".staging-", dir=pulse_root))
+    os.chmod(stage, 0o700)
+    try:
+        _write_immutable_publication_file(
+            stage / "authoritative.json",
+            authoritative_bytes(
+                published, publication_authority_key=publication_key,
+            ),
+        )
+        _write_immutable_publication_file(
+            stage / "report.md", markdown.encode("utf-8"),
+        )
+        os.chmod(stage, 0o500)
+        _fsync_directory(stage)
+        try:
+            os.rename(stage, destination)
+        except OSError:
+            _discard_publication_stage(stage)
+            if not destination.is_dir() or destination.is_symlink():
+                raise InspectionError(
+                    "publication_action_not_verified",
+                ) from None
+        _fsync_directory(pulse_root)
+    except BaseException:
+        if stage.exists():
+            try:
+                _discard_publication_stage(stage)
+            except OSError:
+                pass
+        raise
+    return destination
 
 
 def _write_json_once(path, value):
@@ -2893,28 +3005,23 @@ def command_inspection_publish(args):
         publication_authority_key=publication_key,
         publication_repository_root=args.repository_root,
     )
-    restore_seal = None
     try:
-        _write_json(authoritative_path, published)
-        revalidate_outputs()
-        restore_seal = _seal_publication_outputs(
-            authoritative_path, markdown_path,
+        _commit_publication_bundle(
+            repository_root, published, markdown, publication_key,
         )
         validate_published_outputs(
             published, repository_root,
             publication_authority_key=publication_key,
         )
+        _write_text(markdown_path, markdown)
+        revalidate_outputs()
+        _write_json(authoritative_path, published)
         revalidate_outputs()
         _emit(published)
     except BaseException as error:
-        if restore_seal is not None:
-            restore_seal()
-        _write_json(authoritative_path, rendered)
-        revalidate_outputs()
         if isinstance(error, InspectionError):
             raise
         raise InspectionError("publication_action_not_verified") from None
-    restore_seal()
     return 0
 
 

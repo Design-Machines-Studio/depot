@@ -248,15 +248,17 @@ Publish only through the operation-coupled command:
 `inspection-publish` derives both destinations from the validated profile
 snapshot. It durably writes the exact rendered Markdown before minting
 `markdown_rendered`, durably writes that exact authoritative JSON before
-minting `published`, then atomically replaces the authoritative JSON with the
-published envelope. JSON and Markdown destinations must be distinct,
+minting `published`, then creates the signed JSON and Markdown read-only from
+birth inside an unguessable staging directory. It atomically promotes that
+directory to
+`.quality-pulse-publications/<pulse-id>/<publication-state-digest>/` before
+emitting success. JSON and Markdown profile destinations must be distinct,
 non-aliased regular-file paths whose parent identities remain stable for the
-full transaction. Both final files are revalidated immediately before
-emission, including a second Markdown check after JSON. Any mismatch after the
-published replacement restores the exact rendered-state JSON before the
-command fails. Both output files and their parent directories are temporarily
-sealed read-only across final validation and emission, then their original
-modes are restored. A caller cannot request either transition directly.
+rendered transition. The sealed bundle is the published authority; validation
+derives its path from the signed envelope and checks exact bytes, ownership,
+link count, and read-only modes. Profile JSON and Markdown are replaceable
+views, so an older open descriptor cannot alter the bundle. A caller cannot
+request either transition directly.
 
 ### 7. Compare a compatible baseline
 
