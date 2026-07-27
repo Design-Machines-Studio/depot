@@ -128,6 +128,45 @@ PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references \
 See `docs/workflow-kernel.md` for architecture, command examples, shadow
 authority boundaries, cleanup safety, promotion gates, and troubleshooting.
 
+## validate-quality-pulse.sh
+
+Runs the stdlib-only, offline consumer conformance suite for the repository
+quality-pulse contract:
+
+```bash
+./tools/validate-quality-pulse.sh
+```
+
+The named `QP-*` cases validate strict profiles and catalog bindings, all four
+classification buckets, trusted-host execution authority, primary/fallback
+evidence separation, deterministic stable projections, compatible trends,
+redaction, JSON-before-Markdown publication, and a non-Assembly Live Wires
+consumer. Generated artifacts live only in temporary directories, and every
+case verifies that the checked-in fixture tree remains byte-identical.
+
+The Baseplate-derived fixture is synthetic release-readiness evidence. It does
+not read Baseplate production files, pull its synthetic image declarations,
+prove a released installation, or authorize closure of issue #572. A real
+post-release run against a clean current Baseplate commit remains required.
+
+This validator is invoked exactly once by
+`./tools/validate-composition.sh --all`; default composition-only validation is
+unchanged.
+
+## validate-marketplace-capabilities.sh
+
+Proves that canonical dm-review capability arrays, marketplace summary counts,
+generated Codex capability arrays, bounded discovery tags, the Claude command,
+and the generated Codex command-skill alias agree:
+
+```bash
+./tools/validate-marketplace-capabilities.sh
+```
+
+It also validates the global Codex marketplace against its actual generated
+plugin-entry schema rather than requiring per-plugin capability fields that do
+not belong there. This validator is invoked once by composition validation.
+
 ## check-release-preflight.sh
 
 Read-only. Verifies a release is actually safe to tag and push, then prints a

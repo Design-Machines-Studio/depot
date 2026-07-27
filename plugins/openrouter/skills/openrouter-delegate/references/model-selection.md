@@ -8,16 +8,10 @@ Prices are the live OpenRouter catalog snapshot from 2026-07-18, in USD per mill
 
 | Slug | Name | Input / output | Context | Quality and role |
 |------|------|----------------|---------|------------------|
-| `openai/gpt-5.6-sol` | GPT-5.6 Sol | $5 / $30 | 1.05M | AA 59; paid frontier head |
 | `moonshotai/kimi-k3` | Kimi K3 | $3 / $15; $0.30 cache read | 1M | AA 57; quality-first OpenRouter agentic head, max-only reasoning; one capacity-limited provider |
-| `anthropic/claude-opus-4.8` | Claude Opus 4.8 | $5 / $25 | 1M | AA 56; research/non-coding reference only, excluded from coding ladders |
-| `openai/gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15 | 1.05M | AA 55; precedes equally rated GPT-5.5 on price |
-| `openai/gpt-5.5` | GPT-5.5 | $5 / $30 | 1.05M | AA 55; legacy/native-CLI fallback |
 | `x-ai/grok-4.5` | Grok 4.5 | $2 / $6 | 500K | AA 54; near-frontier value fallback |
-| `anthropic/claude-sonnet-5` | Claude Sonnet 5 | $2 / $10 | 1M | AA 53; research/non-coding reference only, excluded from coding ladders |
 | `z-ai/glm-5.2` | GLM-5.2 | about $0.91 / $2.86 | 1M | AA 51; mechanical and bulk quality-per-dollar default |
 | `meta/muse-spark-1.1` | Muse Spark 1.1 | $1.25 / $4.25 | 1M | AA 51; multimodal frontier value |
-| `openai/gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6 | 1.05M | AA 51; GLM wins the quality tie on price |
 | `google/gemini-3.5-flash` | Gemini 3.5 Flash | $1.50 / $9 | 1M | AA 50; multimodal frontier tail |
 | `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro | $0.435 / $0.87 | 1M | AA 44; cheap code-analysis fallback through OpenRouter |
 | `minimax/minimax-m3` | MiniMax-M3 | $0.30 / $1.20 | 1M model; top endpoint about 524K | AA 44; multimodal cost workhorse |
@@ -33,7 +27,7 @@ Prices are the live OpenRouter catalog snapshot from 2026-07-18, in USD per mill
 | Big-diff review (>=10K lines) | `z-ai/glm-5.2` | 180s | 1M context; longer timeout for very large diffs. |
 | Second-opinion analysis | `z-ai/glm-5.2` | 90s | Cheap cross-check that does not become the implementation. |
 | Config / doc generation | `z-ai/glm-5.2` | 90s | One-shot text the caller writes to disk. |
-| Frontier cross-check (cascade) | `openai/gpt-5.6-sol` | 120s | Paid frontier head; Kimi K3 is the next quality rung, then Terra and GPT-5.5. |
+| Frontier cross-check (cascade) | `moonshotai/kimi-k3` | 120s | Highest-quality eligible OpenRouter rung; native Codex is the fallback when valid OpenRouter capacity is exhausted. |
 
 The current `openrouter-wrapper.sh` accepts text prompts only. Model modality columns describe upstream capability, not an operational claim that this rail can yet attach images, audio, video, or files.
 
@@ -46,6 +40,8 @@ z-ai/glm-5.2 -> deepseek/deepseek-v4-pro -> minimax/minimax-m3 -> deepseek/deeps
 ```
 
 For quality-first direct calls, pass `deepseek/deepseek-v4-pro` as the immediate fallback. Use `minimax/minimax-m3` instead only for an explicitly cost-first call. The wrapper accepts one fallback; the pipeline cascade owns the full ladder and continues through later models on per-model failures.
+
+OpenAI and Anthropic are deliberately absent from this catalog. Never pass `openai/*` or `anthropic/*` as a primary or fallback. OpenAI models use the native Codex CLI; Anthropic models use the native Claude CLI for the allowed non-coding/compatibility lanes.
 
 ## Privacy (demoted -- opt-in only)
 

@@ -24,6 +24,17 @@ MODEL="${1:-}"; PROMPT_ARG="${2:-}"; TIMEOUT="${3:-90}"; FALLBACK="${4:-}"
 if [ -z "$MODEL" ] || [ -z "$PROMPT_ARG" ]; then
   echo "usage: $0 <model> <prompt|-> [timeout] [fallback]" >&2; exit 2
 fi
+
+for candidate in "$MODEL" "$FALLBACK"; do
+  [ -z "$candidate" ] && continue
+  candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
+  case "$candidate_origin" in
+    openai/*|anthropic/*)
+      echo "### RUNNER FAILURE: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
+      exit 2
+      ;;
+  esac
+done
 [ -z "${OPENROUTER_API_KEY:-}" ] && { echo "### RUNNER FAILURE: OPENROUTER_API_KEY unset" >&2; exit 1; }
 
 BASE="${OPENROUTER_BASE:-https://openrouter.ai/api/v1}"

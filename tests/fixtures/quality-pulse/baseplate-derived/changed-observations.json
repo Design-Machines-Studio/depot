@@ -1,0 +1,76 @@
+[
+  {
+    "schema_version": 1,
+    "observation_id": "bp-application-regression",
+    "surface_id": "baseplate-application",
+    "rule_id": "bp-app-regression",
+    "metric_id": "app-regression-count",
+    "path": "internal/baseplate/admin/pages/design_panel_sections.templ",
+    "classification_id": "baseplate_actionable",
+    "evidence_status": "available",
+    "evidence_references": [
+      "quality-pulse-evidence/baseplate-regression.json"
+    ],
+    "raw_telemetry": {
+      "issue": "#572",
+      "synthetic": true,
+      "value": 1
+    }
+  },
+  {
+    "schema_version": 1,
+    "observation_id": "design-panel-javascript-count",
+    "surface_id": "design-panel",
+    "rule_id": "bp-js-source-count",
+    "metric_id": "javascript-source-count",
+    "path": "public/js/design-panel.js",
+    "classification_id": "design_panel_informational",
+    "evidence_status": "fallback",
+    "evidence_references": [
+      "quality-pulse-evidence/javascript-count.json"
+    ],
+    "raw_telemetry": {
+      "definition_id": "javascript-source-count-v1",
+      "ordered_paths": [
+        "internal/baseplate/admin/pages/design_panel_sections.templ",
+        "internal/components/shell/design_panel.templ",
+        "public/js/design-panel.js"
+      ],
+      "value": 4
+    }
+  },
+  {
+    "schema_version": 1,
+    "observation_id": "design-panel-sensitive-finding",
+    "surface_id": "design-panel",
+    "rule_id": "bp-sensitive-surface",
+    "metric_id": "sensitive-finding-count",
+    "path": "internal/components/shell/design_panel.templ",
+    "classification_id": "design_panel_actionable",
+    "evidence_status": "available",
+    "evidence_references": [
+      "quality-pulse-evidence/design-panel-sensitive.json"
+    ],
+    "raw_telemetry": {
+      "category": "authorization-default-deny",
+      "value": 1
+    }
+  },
+  {
+    "schema_version": 1,
+    "observation_id": "unknown-repository-observation",
+    "surface_id": "unknown-surface",
+    "rule_id": "unknown-rule",
+    "metric_id": "unknown-metric",
+    "path": "unknown/location.txt",
+    "classification_id": "unknown-classification",
+    "evidence_status": "available",
+    "evidence_references": [
+      "quality-pulse-evidence/unknown.json"
+    ],
+    "raw_telemetry": {
+      "retained": "unknown fixture telemetry",
+      "value": 1
+    }
+  }
+]

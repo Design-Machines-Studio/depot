@@ -129,10 +129,11 @@ Plugins compose through five patterns documented in `docs/orchestration-patterns
 
 Workflow Kernel is the neutral mechanics leaf beneath pipeline and dm-review.
 It owns deterministic run state, replay, receipts, verification evidence,
-shadow comparison, and exact owned-resource cleanup. The consuming Markdown
-workflows remain authoritative in v0.1.0; shadow is the default, and unavailable
-runtime falls back to Markdown without deleting event history. See
-`docs/workflow-kernel.md`.
+shadow comparison, exact owned-resource cleanup, trusted inspection profiles,
+contained lanes, redaction, canonical output, and compatible trends. Version
+0.4.0 keeps workflow shadow as the default while allowing consumers to
+explicitly delegate bounded authoritative mechanics. See
+`docs/workflow-kernel.md` and `docs/quality-pulse.md`.
 
 ## Composition Validation
 
@@ -142,7 +143,14 @@ Validate all cross-plugin references, dependencies, eval accuracy, and search in
 ./tools/validate-composition.sh --all
 ```
 
-Individual validators: `eval-descriptions.sh` (description accuracy), `check-dependencies.sh` (dependency resolution and the workflow-kernel leaf contract), `validate-workflow-kernel.py` (offline behavioral proof), `validate-composition.sh` (composition references), `validate-workflow-contracts.sh` (repository cleanup, Datastar-first, Baseplate evidence, and workflow-kernel integration anchors).
+Individual validators: `eval-descriptions.sh` (description accuracy),
+`check-dependencies.sh` (dependency resolution and the workflow-kernel leaf
+contract), `validate-workflow-kernel.py` (offline behavioral proof),
+`validate-quality-pulse.sh` (49-case synthetic consumer conformance),
+`validate-marketplace-capabilities.sh` (canonical/generated discovery
+mappings), `validate-composition.sh` (composition references), and
+`validate-workflow-contracts.sh` (repository cleanup, Datastar-first,
+Baseplate evidence, and workflow-kernel integration anchors).
 
 Before tagging or pushing a release, run the preflight. It is read-only and prints a release receipt:
 
@@ -216,10 +224,10 @@ To update, fetch the page with `notion-fetch`, then use `notion-update-page` wit
 
 ## The Plugins
 
-18 plugins | 38 domain-facing skills + 1 internal workflow-kernel skill + 33 generated Codex command-skill aliases | 38 agent cards | 33 commands
+18 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 38 agent cards | 34 commands
 
 The generated search index counts every manifest-discovered surface, including
-the internal kernel skill: 39 skills and 38 agents. The 38 count above preserves
+the internal kernel skill: 40 skills and 38 agents. The 39 count above preserves
 the domain-facing skill inventory used by the release plan.
 
 | Plugin | Purpose |
@@ -235,12 +243,12 @@ the domain-facing skill inventory used by the release plan.
 | **design-practice** | Typography, layout, data visualization, and identity design philosophy |
 | **project-scaffolder** | Claude Code project infrastructure scaffolding with hooks, agents, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters) |
 | **accessibility-compliance** | WCAG 2.2 auditing and enforcement for Live Wires, Templ+Datastar, and Craft CMS |
-| **dm-review** | Code review orchestrator with parallel agents, visual browser testing, UX design review, visual design quality review, and Live Wires CSS compliance across all DM stacks |
+| **dm-review** | Code review orchestrator with parallel agents, browser testing, and deterministic scheduled/local repository quality pulses |
 | **the-local** | Self-hosted Matrix network (The Local) -- Element Web branding, Synapse config, server ops |
 | **chef** | Science-driven cooking assistant with Mela integration, dietary analysis, meal planning, and Bali sourcing |
 | **pipeline** | Autonomous feature development pipeline with assessment, research, prompt generation, adversarial review, worktree execution with review-fix loops, and `/pipeline-fix` fix-pass flavor for addressing numbered review findings |
-| **workflow-kernel** | Neutral deterministic run state, event-ledger replay, recovery, shadow parity, verification, and exact owned-resource cleanup shared by pipeline and dm-review |
-| **openrouter** | Unified external-model provider: Kimi K3 quality-first agentic execution, GLM-5.2/DeepSeek V4 mechanical review, bulk analysis, frontier cross-checks, and dm-review routing over one OpenAI-compatible endpoint and one credential. ZDR is opt-in. |
+| **workflow-kernel** | Neutral deterministic run state, inspection profiles, contained lanes, redaction, canonical output, replay, recovery, verification, and exact cleanup |
+| **openrouter** | Threat-classified external-model provider for permitted non-secret work; OpenAI and Anthropic remain native-CLI-only |
 | **airlift** | Model- and harness-agnostic session-handoff capability. Writes a deterministic `.airlift/` bundle (HANDOFF.md, state.json, git-diff patch, RESUME_PROMPT.md) so a usage cap or rate limit becomes a non-event -- resume in any harness (Claude Code, Codex, DeepSeek, Kiro, OpenCode). Tier-1 deterministic checkpoint (no model budget) plus optional ccusage early-warning monitor; wired into pipeline and dm-review phase boundaries. |
 
 ## Description Evaluation
@@ -374,3 +382,8 @@ Pipeline failure analysis documents live in `docs/post-mortems/`:
 - `2026-04-10-pipeline-visual-testing-postmortem.md` -- 7 failure modes from Assembly pipeline bypass and visual testing gaps
 
 These postmortems inform the Known Pipeline Failure Modes section above and the hardening measures in the pipeline plugin.
+
+<!-- airlift:start -->
+An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 5, 2026-07-27T01:58:26Z).
+Read it before continuing.
+<!-- airlift:end -->

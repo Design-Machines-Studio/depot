@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "policy_id": "dm-review-quality-pulse",
+  "policy_version": "1.0.0",
+  "completion_labels": {
+    "blocked": "blocked",
+    "gaps": "complete_with_gaps",
+    "findings": "complete_with_findings",
+    "clean": "complete"
+  },
+  "lane_gap_statuses": [
+    "unavailable",
+    "failed"
+  ],
+  "lane_blocker_statuses": [
+    "unavailable",
+    "failed"
+  ],
+  "observation_blocker_evidence_statuses": [
+    "unavailable",
+    "failed",
+    "skipped"
+  ],
+  "classified_reason_code": "classified"
+}

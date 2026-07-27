@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.11.8"
+    "version": "1.11.9"
   },
   "plugins": [
     {
@@ -158,7 +158,7 @@
     {
       "name": "live-wires",
       "source": "./plugins/live-wires",
-      "version": "1.7.2",
+      "version": "1.8.0",
       "author": {
         "name": "Design Machines"
       },
@@ -274,18 +274,20 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.45.0",
+      "version": "1.46.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
       "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
       "capabilities_summary": {
-        "skills": 2,
+        "skills": 3,
         "agents": 15,
-        "commands": 5,
+        "commands": 6,
         "tags": [
           "code-review",
+          "quality-pulse",
+          "repository-audit",
           "orchestrator",
           "multi-agent",
           "security",
@@ -348,7 +350,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.32.0",
+      "version": "1.33.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -373,7 +375,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -396,7 +398,7 @@
     {
       "name": "airlift",
       "source": "./plugins/airlift",
-      "version": "1.2.0",
+      "version": "1.3.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -420,7 +422,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.5.0",
+      "version": "1.6.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

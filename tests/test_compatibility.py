@@ -84,7 +84,7 @@ class CompatibilityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             references = (
                 Path(directory) / ".claude" / "plugins" / "cache" / "depot"
-                / "workflow-kernel" / "0.3.0" / "skills" / "workflow-kernel"
+                / "workflow-kernel" / "0.4.0" / "skills" / "workflow-kernel"
                 / "references"
             )
             shutil.copytree(
@@ -146,10 +146,11 @@ class CompatibilityTests(unittest.TestCase):
         from workflow_kernel.cli import (
             compatible_kernel_version, resolve_workflow_kernel_runtime,
         )
-        self.assertEqual(compatible_kernel_version("0.3.0"), (0, 3, 0))
         self.assertEqual(compatible_kernel_version("0.4.0"), (0, 4, 0))
-        self.assertEqual(compatible_kernel_version("0.3.10"), (0, 3, 10))
-        for incompatible in ("1.0.0", "0.2.9", "0.3", "0.3.0-rc1", 1, None):
+        self.assertEqual(compatible_kernel_version("0.4.10"), (0, 4, 10))
+        for incompatible in (
+            "1.0.0", "0.3.9", "0.2.9", "0.4", "0.4.0-rc1", 1, None,
+        ):
             with self.subTest(version=incompatible):
                 self.assertIsNone(compatible_kernel_version(incompatible))
 
@@ -172,8 +173,8 @@ class CompatibilityTests(unittest.TestCase):
             pipeline = root / "depot" / "plugins" / "pipeline"
             pipeline.mkdir(parents=True)
             # Compatible same-major minor bump is discoverable.
-            newer = install(root, ".claude", "0.4.0")
-            install(root, ".claude", "0.3.9")
+            newer = install(root, ".claude", "0.4.1")
+            install(root, ".claude", "0.4.0")
             self.assertEqual(
                 resolve_workflow_kernel_runtime(pipeline, home=root / "home"),
                 newer.resolve(),
@@ -182,9 +183,9 @@ class CompatibilityTests(unittest.TestCase):
             root = Path(directory)
             pipeline = root / "depot" / "plugins" / "pipeline"
             pipeline.mkdir(parents=True)
-            # Semver order, not lexical or mtime order: 0.3.10 > 0.3.9.
-            newest = install(root, ".claude", "0.3.10")
-            install(root, ".claude", "0.3.9")
+            # Semver order, not lexical or mtime order: 0.4.10 > 0.4.9.
+            newest = install(root, ".claude", "0.4.10")
+            install(root, ".claude", "0.4.9")
             self.assertEqual(
                 resolve_workflow_kernel_runtime(pipeline, home=root / "home"),
                 newest.resolve(),
@@ -194,7 +195,7 @@ class CompatibilityTests(unittest.TestCase):
             pipeline = root / "depot" / "plugins" / "pipeline"
             pipeline.mkdir(parents=True)
             # A declared version that mismatches its path segment is rejected.
-            install(root, ".claude", "0.3.5", declared="0.3.4")
+            install(root, ".claude", "0.4.5", declared="0.4.4")
             with self.assertRaises(FileNotFoundError):
                 resolve_workflow_kernel_runtime(pipeline, home=root / "home")
 
@@ -205,12 +206,12 @@ class CompatibilityTests(unittest.TestCase):
                 root = Path(directory)
                 pipeline = root / "depot" / "plugins" / "pipeline"
                 pipeline.mkdir(parents=True)
-                plugin = root / "home" / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel" / "0.3.0"
+                plugin = root / "home" / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel" / "0.4.0"
                 package = plugin / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
                 package.mkdir(parents=True)
                 (package / "__main__.py").write_text("")
                 (plugin / ".claude-plugin").mkdir()
-                (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "workflow-kernel", "version": "0.3.0"}))
+                (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "workflow-kernel", "version": "0.4.0"}))
                 self.assertEqual(resolve_workflow_kernel_runtime(pipeline, home=root / "home"), package.parent.resolve())
 
     def test_runtime_trust_serves_any_plugins_sibling_but_rejects_foreign_roots(self):
@@ -220,12 +221,12 @@ class CompatibilityTests(unittest.TestCase):
         from workflow_kernel.cli import resolve_workflow_kernel_runtime
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            plugin = root / "home" / ".claude" / "plugins" / "cache" / "depot" / "workflow-kernel" / "0.3.0"
+            plugin = root / "home" / ".claude" / "plugins" / "cache" / "depot" / "workflow-kernel" / "0.4.0"
             package = plugin / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
             package.mkdir(parents=True)
             (package / "__main__.py").write_text("")
             (plugin / ".claude-plugin").mkdir()
-            (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "workflow-kernel", "version": "0.3.0"}))
+            (plugin / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": "workflow-kernel", "version": "0.4.0"}))
             future = root / "depot" / "plugins" / "future-orchestrator"
             future.mkdir(parents=True)
             self.assertEqual(

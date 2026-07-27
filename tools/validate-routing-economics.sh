@@ -141,6 +141,7 @@ model_cascade="$REPO_ROOT/plugins/pipeline/references/model-cascade.json"
 harness="$REPO_ROOT/plugins/pipeline/references/harness-profile.json"
 runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
+bulk_runner="$REPO_ROOT/plugins/openrouter/agents/review/openrouter-bulk-analyst.md"
 delegation_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 dm_review="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
 dm_review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
@@ -251,7 +252,21 @@ require_text "$orchestrator" "AWAITING APPROVAL" "postmortem recommendations are
 require_text "$model_cascade" '"openrouter"' "model cascade defines OpenRouter class"
 if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
   jq -e '(.cascades | has("claude") | not) and ([.cascades[].ladder[]] | index("native_judgment") | not)' "$model_cascade" >/dev/null || { printf "  FAIL  coding cascades exclude Claude-native ladders\n"; failures=1; }
-  jq -e '[.hosts[].roles.frontier_api.models[]? | startswith("anthropic/")] | any | not' "$harness" >/dev/null || { printf "  FAIL  OpenRouter coding ladders exclude Anthropic models\n"; failures=1; }
+  jq -e '
+    [.hosts[].roles | to_entries[]
+      | select(.value.kind == "wrapper" or .value.kind == "openrouter_exec")
+      | .value.models[]?
+      | select(test("^(openai|anthropic)/") or test("^gpt-") or test("^(opus|sonnet|haiku)$"))]
+    | length == 0
+  ' "$harness" >/dev/null || { printf "  FAIL  every OpenRouter rail excludes native-vendor primary and fallback identities\n"; failures=1; }
+  jq -e '
+    [.quality_rank | keys[] | select(test("^(openai|anthropic)/"))] | length == 0
+  ' "$model_cascade" >/dev/null || { printf "  FAIL  model cascade excludes OpenRouter-prefixed native-vendor identities\n"; failures=1; }
+  if ! jq -e '.hosts.generic.roles.native_judgment.kind == "none"' "$harness" >/dev/null ||
+     ! jq -e '([.cascades[].ladder[]] | index("native_judgment") | not)' "$model_cascade" >/dev/null; then
+    printf "  FAIL  generic/native-vendor intent is unavailable rather than mapped to OpenRouter\n"
+    failures=1
+  fi
 fi
 # Note: the harness openrouter_exec rung and cascade dispatch are covered functionally by
 # validate-openrouter-cascade.sh (dry-run descent test); not re-grepped here to avoid double-reporting.
@@ -259,6 +274,18 @@ fi
 # Cross-file SSOT: for every kind present in both files, routing-policy cascadeClass must equal
 # model-cascade class_from_kind, so the shared kind->class mapping cannot silently drift.
 if [ -f "$routing" ] && [ -f "$model_cascade" ]; then
+  jq -e '
+    .invariants.providerOrigin == {
+      "schemaVersion":1,
+      "openrouterForbiddenModelPrefixes":["openai/","anthropic/"],
+      "nativeOpenAIExecution":"codex-cli-only",
+      "nativeAnthropicExecution":"claude-cli-only",
+      "genericNativeVendorFallback":"unavailable",
+      "appliesTo":["primary","fallback"],
+      "failureMode":"fail-closed-before-provider-contact",
+      "rationale":"Provider origin is operational provenance. Third-party OpenRouter models remain eligible after disclosure and output controls; nationality is not a routing embargo."
+    }
+  ' "$routing" >/dev/null || { printf "  FAIL  routing policy provider-origin invariant is missing or malformed\n"; failures=1; }
   drift="$(jq -rs '
     (.[0].chunkKind) as $ck | (.[1].class_from_kind) as $cfk
     | [ $ck | to_entries[]
@@ -288,9 +315,11 @@ require_text "$dm_review" '--mode mechanical-review' "dm-review delegates the sa
 require_text "$dm_review_cmd" "contribution receipts" "dm-review exposes finding contribution receipts"
 require_text "$dm_review_cmd" "observation-only economics evidence" "contributions cannot become routing authority"
 require_text "$kernel_metrics" '"observation_only": True' "kernel economics output is observation-only"
-require_text "$agent_runner" 'set(canon) | set(configured)' "OpenRouter runner cannot weaken the minimum path denylist"
+require_text "$agent_runner" 'File names, security-looking directories' "OpenRouter runner forbids path-name disclosure classification"
 require_text "$agent_runner" "RUNNER DECLINED -- SENSITIVE CONTENT" "OpenRouter runner declines high-confidence secrets in added lines"
-require_text "$agent_runner" 'neverRouteToOpenRouter' "OpenRouter runner reads the Codex-return security boundary"
+require_absent "$bulk_runner" 'internal/auth/**' "OpenRouter bulk runner has no hard-coded path embargo"
+require_absent "$bulk_runner" 'Protected files stay on Codex' "OpenRouter bulk runner does not filter by path name"
+require_text "$bulk_runner" 'Actual credentials, private keys' "OpenRouter bulk runner classifies exact outbound content"
 require_text "$agent_runner" "Codex" "OpenRouter runner returns sensitive work to Codex"
 require_text "$pipeline_cmd" "Codex + OpenRouter" "Phase 5 defaults to Codex plus OpenRouter lenses"
 require_text "$pipeline_cmd" "PIPELINE_CLAUDE_ADVERSARY=1" "Claude adversary is optional third lens"

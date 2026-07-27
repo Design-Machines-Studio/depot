@@ -12,14 +12,18 @@ import json
 import os
 import pwd
 import re
+import stat
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 
-KERNEL_VERSION_FLOOR = (0, 3, 0)
+KERNEL_VERSION_FLOOR = (0, 4, 0)
 _KERNEL_SEMVER = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 )
+_PLUGIN_NAME = re.compile(r"[a-z0-9][a-z0-9-]{0,127}")
+_ASSET_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]*")
 
 
 def compatible_kernel_version(text):
@@ -33,6 +37,171 @@ def compatible_kernel_version(text):
     if version[0] != KERNEL_VERSION_FLOOR[0] or version < KERNEL_VERSION_FLOOR:
         return None
     return version
+
+
+def semantic_version(text):
+    """Parse one strict release semantic version, excluding mutable aliases."""
+    if type(text) is not str:
+        return None
+    match = _KERNEL_SEMVER.fullmatch(text)
+    return tuple(int(part) for part in match.groups()) if match is not None else None
+
+
+@dataclass(frozen=True, slots=True)
+class PluginBundle:
+    """One coherent installed-plugin root and its durable selection receipt."""
+
+    root: Path
+    cache_class: str
+    version: str
+    reason: str
+
+    def to_dict(self):
+        return {
+            "schema_version": 1,
+            "selected_root": (
+                f"~/.{self.cache_class}/plugins/cache/depot/"
+                f"{self.root.parent.name}/{self.root.name}"
+            ),
+            "cache_class": self.cache_class,
+            "version": self.version,
+            "reason": self.reason,
+        }
+
+
+def _asset_path(root, relative, *, executable=False):
+    if type(relative) is not str or not relative or "\\" in relative:
+        return None
+    path = Path(relative)
+    if (
+        path.is_absolute()
+        or any(not _ASSET_SEGMENT.fullmatch(part) for part in path.parts)
+        or any(part in {".", ".."} for part in path.parts)
+    ):
+        return None
+    try:
+        resolved = (root / path).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    try:
+        mode = resolved.stat().st_mode
+    except OSError:
+        return None
+    if (
+        not stat.S_ISREG(mode)
+        or not resolved.is_relative_to(root)
+        or any(
+            (root / Path(*path.parts[:index])).is_symlink()
+            for index in range(1, len(path.parts) + 1)
+        )
+        or mode & (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH) == 0
+        or not os.access(resolved, os.R_OK)
+        or executable and (
+            mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH) == 0
+            or not os.access(resolved, os.X_OK)
+        )
+    ):
+        return None
+    return resolved
+
+
+def _plugin_bundle_candidate(root, cache_boundary, plugin_name, version,
+                             cache_class, required_assets,
+                             required_executables):
+    try:
+        if root.is_symlink():
+            return None
+        resolved = root.resolve(strict=True)
+        boundary = cache_boundary.resolve(strict=True)
+        if not resolved.is_dir() or not resolved.is_relative_to(boundary):
+            return None
+        marker = ".claude-plugin" if cache_class == "claude" else ".codex-plugin"
+        manifest_path = resolved / marker / "plugin.json"
+        if manifest_path.is_symlink():
+            return None
+        manifest = manifest_path.resolve(strict=True)
+        if not manifest.is_file() or not manifest.is_relative_to(resolved):
+            return None
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+        if (
+            type(document) is not dict
+            or document.get("name") != plugin_name
+            or document.get("version") != version
+        ):
+            return None
+        if any(_asset_path(resolved, asset) is None for asset in required_assets):
+            return None
+        if any(
+            _asset_path(resolved, asset, executable=True) is None
+            for asset in required_executables
+        ):
+            return None
+        return resolved
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def resolve_plugin_bundle(plugin_name, required_assets=(), *, home=None,
+                          active_host=None, minimum_version=None,
+                          required_executables=()):
+    """Select one highest compatible complete bundle across Claude/Codex caches.
+
+    Compatibility is same-major at or above ``minimum_version`` when supplied.
+    The active host affects only an equal-version tie.
+    """
+    if type(plugin_name) is not str or _PLUGIN_NAME.fullmatch(plugin_name) is None:
+        raise ValueError("invalid plugin name")
+    if (
+        type(required_assets) not in {tuple, list}
+        or type(required_executables) not in {tuple, list}
+        or not required_assets and not required_executables
+    ):
+        raise ValueError("required assets are missing")
+    if active_host not in {None, "claude", "codex"}:
+        raise ValueError("invalid active host")
+    floor = semantic_version(minimum_version) if minimum_version is not None else None
+    if minimum_version is not None and floor is None:
+        raise ValueError("invalid minimum version")
+    home = (
+        Path(pwd.getpwuid(os.getuid()).pw_dir)
+        if home is None else Path(home)
+    )
+    candidates = []
+    for cache_class in ("claude", "codex"):
+        cache = (
+            home / f".{cache_class}" / "plugins" / "cache" / "depot"
+            / plugin_name
+        )
+        if not cache.is_dir():
+            continue
+        for entry in cache.iterdir():
+            version = semantic_version(entry.name)
+            if version is None or (
+                floor is not None and (version[0] != floor[0] or version < floor)
+            ):
+                continue
+            root = _plugin_bundle_candidate(
+                entry, cache, plugin_name, entry.name, cache_class,
+                required_assets, required_executables,
+            )
+            if root is not None:
+                candidates.append((version, cache_class, root, entry.name))
+    if not candidates:
+        raise FileNotFoundError("compatible complete plugin bundle unavailable")
+    highest = max(item[0] for item in candidates)
+    equal = [item for item in candidates if item[0] == highest]
+    equal.sort(key=lambda item: (
+        0 if item[1] == active_host else 1,
+        0 if item[1] == "claude" else 1,
+        str(item[2]),
+    ))
+    _parsed, cache_class, root, version = equal[0]
+    reason = (
+        "active_host_equal_version_tiebreak"
+        if len(equal) > 1 and active_host is not None
+        else "highest_compatible_semver"
+    )
+    return PluginBundle(root, cache_class, version, reason)
 
 
 def _contained(path: Path, boundary: Path) -> bool:

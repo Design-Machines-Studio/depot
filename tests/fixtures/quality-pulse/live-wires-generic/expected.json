@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "fixture": "editorial-site-live-wires",
+  "expected_classification": "live_wires_actionable",
+  "expected_stable_projection_digest": "sha256:39dcff7788c0e1d4a4249dd1f13087d8a46044f3d28cac8a4a161981a59c070b",
+  "expected_markdown_sha256": "sha256:1a786e84f4cc96c5cf1edead4e7802e36060123bfa4abd2b3d2a984a57c5a932"
+}

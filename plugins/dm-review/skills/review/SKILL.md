@@ -36,10 +36,18 @@ Match the review depth to the moment. Running full multi-round review on every c
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 5 core agents (+ ui-standards-reviewer when UI files changed). No memory capture, no conditional agents beyond file-type triggers. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
-| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. Protected file sections are removed before disclosure; security review stays on Codex. |
+| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. The exact diff is content-scanned immediately before disclosure; actual secrets/private data are declined, while safe security-related content remains eligible. Security judgment stays on Codex. |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
-**Escalation exception:** when a chunk touches auth, federation, or secrets paths (`internal/auth/**`, `internal/federation/**`, `**/secretbox*`, `**/destructive_confirmation*`, `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick tier and run full Codex-native `security-auditor` review. These lanes never go to OpenRouter and are never quick-only.
+**Escalation exception:** when a chunk touches auth, federation, or
+security-related paths (`internal/auth/**`, `internal/federation/**`,
+`**/secretbox*`, `**/destructive_confirmation*`,
+`internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick
+tier and run the full Codex-native `security-auditor` lane. That security
+judgment never goes to OpenRouter. The same diff may still reach supplementary
+OpenRouter mechanical lanes when the immediate content boundary finds no
+actual secret, private data, or prohibited execution authority; path names
+alone never decline disclosure.
 
 ## Shadow Workflow Kernel Contract
 
@@ -190,17 +198,51 @@ Read `plugins/pipeline/references/routing-policy.json` before selecting models *
 ```bash
 OPENROUTER_RUNNER_PATH=""
 OPENROUTER_SECURITY_POLICY_PATH=""
+OPENROUTER_BOUNDARY_PATH=""
+OPENROUTER_BUNDLE_ROOT=""
+OPENROUTER_BUNDLE_REF=""
+OPENROUTER_BUNDLE_VERSION=""
+OPENROUTER_CACHE_CLASS=""
+OPENROUTER_RESOLUTION_REASON=""
 if [ -n "${OPENROUTER_API_KEY:-}" ]; then
-  for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    OPENROUTER_RUNNER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/agents/workflow/openrouter-agent-runner.md 2>/dev/null | head -1)
-    if [ -n "$OPENROUTER_RUNNER_PATH" ]; then
-      OPENROUTER_VERSION_ROOT=$(cd "$(dirname "$OPENROUTER_RUNNER_PATH")/../.." && pwd -P)
-      OPENROUTER_SECURITY_POLICY_PATH="$OPENROUTER_VERSION_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
-      [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && break
+  : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh once per review first}"
+  OPENROUTER_ACTIVE_HOST=""
+  [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && OPENROUTER_ACTIVE_HOST="claude"
+  [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && OPENROUTER_ACTIVE_HOST="codex"
+  resolve_openrouter_bundle() {
+    if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
+      "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+        --minimum-version 1.6.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --required-asset agents/workflow/openrouter-agent-runner.md \
+        --required-asset agents/review/openrouter-bulk-analyst.md \
+        --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+        --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+        --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+        --required-asset skills/openrouter-delegate/references/prompt-templates.md
+    else
+      "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+        --minimum-version 1.6.0 \
+        --required-asset agents/workflow/openrouter-agent-runner.md \
+        --required-asset agents/review/openrouter-bulk-analyst.md \
+        --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+        --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+        --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+        --required-asset skills/openrouter-delegate/references/prompt-templates.md
     fi
-  done
+  }
+  BUNDLE_JSON=$(resolve_openrouter_bundle) || BUNDLE_JSON=""
+  OPENROUTER_BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty' 2>/dev/null)
+  case "$OPENROUTER_BUNDLE_REF" in
+    "~/"*) OPENROUTER_BUNDLE_ROOT="$HOME/${OPENROUTER_BUNDLE_REF#\~/}" ;;
+  esac
+  OPENROUTER_RUNNER_PATH="$OPENROUTER_BUNDLE_ROOT/agents/workflow/openrouter-agent-runner.md"
+  OPENROUTER_SECURITY_POLICY_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+  OPENROUTER_BOUNDARY_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+  OPENROUTER_BUNDLE_VERSION=$(printf '%s' "$BUNDLE_JSON" | jq -r '.version // empty' 2>/dev/null)
+  OPENROUTER_CACHE_CLASS=$(printf '%s' "$BUNDLE_JSON" | jq -r '.cache_class // empty' 2>/dev/null)
+  OPENROUTER_RESOLUTION_REASON=$(printf '%s' "$BUNDLE_JSON" | jq -r '.reason // empty' 2>/dev/null)
 fi
-OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] && [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && echo true || echo false )
+OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] && [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && [ -x "$OPENROUTER_BOUNDARY_PATH" ] && echo true || echo false )
 ```
 
 **When `OPENROUTER_AVAILABLE=true`:** agents marked for OpenRouter MUST use `openrouter-agent-runner`. Mechanical orchestration runs on Codex or directly in the host; do not spend Claude coding quota to invoke the wrapper.
@@ -387,7 +429,7 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
 
 **A. If the agent is routed to OpenRouter** (in the model table and `OPENROUTER_AVAILABLE=true`):
 
-1. **Read the openrouter-agent-runner definition** from `$OPENROUTER_RUNNER_PATH` (resolved in Phase 3). If the path was not preserved between phases, recompute it with the same Claude-first/Codex-fallback cache-root loop. Never use a depot-relative path here -- reviews run in worktrees outside the depot.
+1. **Read the openrouter-agent-runner definition** from `$OPENROUTER_RUNNER_PATH` in the coherent bundle selected in Phase 3. If the selection receipt was not preserved, rerun the same workflow-kernel `resolve-plugin-bundle` request for the complete asset set; never resolve one asset independently.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
    - `target_agent_path` -- path to the original agent's definition file
@@ -395,7 +437,10 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    - `target_model` -- full primary OpenRouter slug from policy or the inline table
    - `fallback_model` -- full fallback OpenRouter slug from policy or the inline table
    - `target_timeout` -- `90` or `60` per the table
-   - `security_policy_path` -- `$OPENROUTER_SECURITY_POLICY_PATH`, resolved beside the installed runner
+   - `openrouter_bundle_ref` -- ephemeral home-relative selected root used only
+     to bind runner execution to the definition that was loaded; never publish it
+   - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --
+     durable resolver evidence (never the selected root)
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
@@ -530,7 +575,10 @@ A **lane** is a review path with its own provider and absence mode: Codex, OpenR
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
 | Codex-native coding agent | Agent errored or timed out | No Claude retry; apply guardrails immediately |
 
-Coding fallback moves between OpenRouter and Codex only. Sensitive paths never go to OpenRouter and start on Codex, so they have no external lane to fall back from.
+Coding fallback moves between OpenRouter and Codex only. Security judgment
+starts on Codex and has no external lane to fall back from. Supplementary
+mechanical lanes remain content-gated: actual secret/private content declines
+OpenRouter, while safe security-related content is eligible regardless of path.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
 

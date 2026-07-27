@@ -46,6 +46,28 @@ imported by `cli.py` for validation. The launcher also
 starts Bash in privileged isolation, uses Python `-I`, unsets caller startup
 variables, and hop-bounds its own symlink path (a cycle exits `4`).
 
+## Coherent installed-plugin bundles
+
+The neutral `resolve-plugin-bundle` CLI selects one installed plugin root for
+callers that need a coherent set of runtime assets:
+
+```sh
+"$WORKFLOW_KERNEL" resolve-plugin-bundle \
+  --plugin <name> \
+  [--required-asset <readable-relative-path> ...] \
+  [--required-executable <executable-relative-path> ...] \
+  [--minimum-version <semver>] [--active-host <claude|codex>]
+```
+
+At least one required asset or executable is mandatory. Every path must be a
+contained, non-symlink regular file. Ordinary assets must be readable;
+executable assets must be readable and have executable mode and access. The
+resolver evaluates completeness before ranking candidates, so a broken higher
+version is skipped and the next compatible complete version may win. It never
+combines assets across roots. Semantic version outranks mtime, and active host
+breaks only equal-version ties. The result exposes a home-relative ephemeral
+root plus durable cache class, version, and reason.
+
 ## Trust boundaries (fail closed)
 
 - Accept an in-repository runtime only beneath the same canonical Depot
@@ -53,8 +75,9 @@ variables, and hop-bounds its own symlink path (a cycle exits `4`).
   `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then
   `~/.codex/plugins/cache/depot/`.
 - Version compatibility is semantic: same-major versions at or above the
-  declared `>=0.3.0` floor. This floor is the capability boundary for
-  authoritative retry decisions and behavioral-contract bind/revise commands.
+  declared `>=0.4.0` floor. This floor is the capability boundary for
+  inspection commands, authoritative retry decisions, and behavioral-contract
+  bind/revise commands.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,

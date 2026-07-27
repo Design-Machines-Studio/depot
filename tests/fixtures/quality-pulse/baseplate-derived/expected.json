@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "fixture": "baseplate-572-synthetic",
+  "issue": "#572",
+  "real_run_evidence": false,
+  "closure_authority": "none",
+  "expected_bucket_order": [
+    "baseplate_actionable",
+    "design_panel_informational",
+    "design_panel_actionable",
+    "unknown_fail_closed"
+  ],
+  "expected_lane_statuses": [
+    "unavailable",
+    "fallback"
+  ],
+  "expected_stable_projection_digest": "sha256:d4b9bf9df9de3f28ef55ca07a5a4794eca170d2586cbdb21e87e7cadb7073983",
+  "expected_markdown_sha256": "sha256:ba8e2597c996f2d303a5e82f5228e8dcb9c30c253d9a03dad9d5b653ed7d4fab"
+}

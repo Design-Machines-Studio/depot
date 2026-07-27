@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: This skill should be used when the user asks to "validate workflow state", "replay workflow events", "inspect a workflow ledger", or "use the workflow kernel" for shared pipeline and review mechanics.
-version: 0.3.0
+version: 0.4.0
 ---
 
 # Workflow Kernel
@@ -23,7 +23,7 @@ first, then versioned cache directories under `~/.claude` and `~/.codex`
 ordered by parsed semver -- never `ls -td` mtime, so re-pulling an older
 version cannot shadow a newer one), verifies Python 3.12+, sets the module
 path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
-or above the declared `>=0.3.0` capability floor. The complete consumer-facing
+or above the declared `>=0.4.0` capability floor. The complete consumer-facing
 resolution and fail-closed contract, including the launcher discovery
 snippet, is `references/runtime-resolution.md`; consuming plugins link there
 instead of restating it.
@@ -34,8 +34,9 @@ checkout or invoke the module with
 
 ## Operating Contract
 
-Initialize every run in shadow mode by default. Version 0.3.0 permits a canonical caller
-may explicitly select an approved `enforce` or `native` mode and delegate the
+Initialize every run in shadow mode by default. Version 0.4.0 permits a
+canonical caller to explicitly select an approved `enforce` or `native` mode
+and delegate the
 bounded authoritative mechanics for behavioral-contract binding/revision,
 validation-retry decisions, review-contribution export, and guarded
 owned-resource cleanup. The kernel never selects providers, review findings,
@@ -63,7 +64,8 @@ evidence attachment and one cleanup reconciliation.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.3.0 surface includes state/replay commands, contract bind/revise and retry
+0.4.0 surface includes state/replay and inspection commands, contract
+bind/revise and retry
 decisions, prediction/observation/comparison, canonical review-contribution
 export, metrics, and guarded resource planning/execution/reconciliation.
 Consume successful operational output and errors as stable JSON. Treat
@@ -322,6 +324,137 @@ using all other URI schemes are rejected.
 Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and
 newline terminated so Claude, Codex, and generic hosts consume identical bytes.
+
+## Neutral Inspection Contract
+
+Inspection profiles use
+`references/inspection-profile-schema.json` and schema version 1. They contain
+only stable IDs and repository-owned declarations. Validate the complete
+profile, catalogs, references, paths, Docker/Compose argv, evidence outputs,
+classifications, a separately supplied workflow-owned result policy, and trend
+identities before treating any lane as admissible. The kernel digest-binds and
+applies the closed result policy mechanically; it does not invent product
+completion labels or blocker sets.
+Catalog `content_digest` is SHA-256 over the canonical newline-terminated JSON
+projection containing `catalog_id`, `schema_version`, `catalog_version`,
+`source_reference`, `rules`, and `metrics`; the digest field itself is excluded.
+When a catalog rule declares `alternative_decisions`, it must also declare one
+`profile_decision` selected from that non-empty unique identifier set. Rules
+that do not opt into this pair remain ordinary neutral catalog definitions.
+
+Profiles never grant execution trust. `inspection-run` requires a host-issued
+attestation from a path outside the canonical repository root. The attestation
+binds the repository root, normalized repository-relative profile path,
+canonical validated profile digest, verified Git source/ref and commit, dirty
+state, operator authorization event ID, and execution purpose. The kernel
+freezes the validated snapshot, compares every binding, revalidates the source
+file identity, and then executes only that snapshot. Missing, repository-held,
+self-asserted, stale, or mismatched authority fails before subprocess
+invocation.
+
+Inspection-profile v1 admits exact pinned `docker run` argv arrays only. Compose
+is rejected because mutable external Compose configuration is not covered by
+the profile attestation. The profile cannot declare host mounts. The kernel
+synthesizes a fixed read-only
+mount of the attested repository at `/workspace` and a unique empty read-write
+evidence mount at `/inspection-evidence`; direct Docker lanes also receive
+`--network=none`, a read-only container filesystem, PID/memory/CPU ceilings,
+all capabilities dropped, and `no-new-privileges`; all lanes use the host
+operator's numeric user/group identity. A successful lane must
+write a lane-bound schema-1 observation envelope to
+`/inspection-evidence/observations.json`. The kernel never invokes a shell,
+inherits arbitrary environment values, accepts mutable `latest` identities,
+or accepts exit-zero without fresh digest-bound evidence. It uses the canonical
+repository root, the declared timeout, and exactly:
+
+```text
+PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin
+LANG=C
+LC_ALL=C
+TZ=UTC
+```
+
+Primary `available`, `unavailable`, and `failed` receipts remain distinct.
+Fallback success is `fallback` with its `primary_lane_id`; an unused fallback is
+`skipped`. Unknown observation schema, path, surface, metric, rule,
+classification, or evidence state produces an actionable fail-closed
+classification while retaining redacted raw telemetry.
+
+Receipts retain separate identities for the profile-declared argv and the
+kernel-synthesized execution policy (fixed host Docker search path, network,
+root filesystem, user, and fixed mount semantics). After verifying the fresh
+raw lane envelope, the authoritative
+receipt retains a redacted source-evidence snapshot and its digest. Every
+classified observation carries the digest of its exact redacted source object,
+and the authoritative artifact retains the normalized profile snapshot bound
+to its existing profile digest. Durable validation replays classification from
+that profile and the source snapshot, then checks the complete classified
+projection digest. This detects same-ID content
+substitution even when an attacker recomputes the classified and stable
+projection digests.
+
+Authoritative inspection JSON includes volatile invocation provenance and an
+explicit stable-projection digest. Compare trends only when schema, profile,
+metric-definition, and lane tool/image/plugin identities match. Render
+Markdown only from authoritative JSON that revalidates and whose stable digest
+recomputes; never parse Markdown into authority.
+
+The stable CLI surface is:
+
+```sh
+workflow-kernel-launcher.sh inspection-validate \
+  --repository-root <root> --profile <repository-relative-profile>
+workflow-kernel-launcher.sh inspection-classify \
+  --repository-root <root> --profile <profile> --observations <json>
+workflow-kernel-launcher.sh inspection-trend \
+  --repository-root <root> \
+  --current <authoritative-json> --baseline <authoritative-json>
+workflow-kernel-launcher.sh inspection-render \
+  --repository-root <root> --input <authoritative-json>
+workflow-kernel-launcher.sh inspection-publish \
+  --repository-root <root> --input <authoritative-json>
+workflow-kernel-launcher.sh inspection-run \
+  --repository-root <root> --profile <profile> --lane-id <primary-id> \
+  --attestation <host-path-outside-repository> \
+  --source git --ref <ref> \
+  --commit <sha> --dirty <true|false> --purpose <purpose> \
+  --authorization-event-id <host-observed-event-id>
+workflow-kernel-launcher.sh resolve-plugin-bundle \
+  --plugin <name> \
+  [--required-asset <readable-relative-path> ...] \
+  [--required-executable <executable-relative-path> ...] \
+  [--minimum-version <semver>] [--active-host <claude|codex>]
+```
+
+Publication commands load their HMAC authority only from the current OS
+account's fixed
+`~/.config/design-machines/workflow-kernel/inspection-publication-authority.key`. The
+account home is resolved from the OS account database rather than `$HOME`.
+Profiles and command arguments cannot select or override the key path; the
+host provisions it as a current-user-owned, single-link, mode-`0600` regular
+file outside the repository.
+
+`inspection-finalize` accepts only the ready state for deterministic trend
+binding. `inspection-render` is a preview. Only `inspection-publish` may mint
+`markdown_rendered` and `published`, and it does so only after durable,
+byte-exact verification of distinct, non-aliased profile-declared outputs.
+Their parent and file identities remain guarded through final revalidation;
+post-replacement failure restores the rendered-state JSON before returning.
+The host seals both files and their parents read-only across final validation
+and success emission.
+
+Successful commands emit canonical JSON except `inspection-render`, which emits
+Markdown. Validation, trust, compatibility, or resolution failures emit stable
+safe JSON on stderr and return a non-zero status. `resolve-plugin-bundle`
+selects the highest compatible strict semantic version across Claude and Codex
+caches, uses the active host only for an equal-version tie, validates the
+cache-specific manifest and complete relative asset set, and returns one
+home-relative root from which callers derive every asset. At least one required
+asset or executable is mandatory. Ordinary assets must be contained,
+non-symlink readable regular files. Required executables must additionally
+carry an executable mode and pass the host executable-access check. A broken
+higher version is incomplete and is skipped before selecting the next
+compatible complete bundle.
 
 ## Reference Runtime
 

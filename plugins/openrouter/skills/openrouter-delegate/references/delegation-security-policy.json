@@ -1,43 +1,66 @@
 {
-  "schemaVersion": 1,
-  "neverRouteToOpenRouter": {
-    "pathGlobs": [
-      "internal/auth/**",
-      "internal/federation/**",
-      "**/secretbox*",
-      "**/destructive_confirmation*",
-      "internal/baseplate/email/settings*",
-      "deploy/**",
-      "*.env*"
+  "schemaVersion": 2,
+  "disclosureControls": {
+    "refuseClasses": [
+      "high-confidence credentials",
+      "private keys",
+      "authenticated connection strings / DSNs",
+      "access or session tokens",
+      "explicitly classified private or regulated values"
     ],
-    "onMatch": "route-codex",
-    "rationale": "Auth, federation trust, secret encryption, destructive-confirmation tokens, email-delivery secrets, deploy secrets, and env files stay on Codex-native execution and substantive review. Mechanical review may delegate only the filtered safe remainder."
+    "placeholderValues": [
+      "<token>",
+      "<redacted>",
+      "REDACTED",
+      "example",
+      "changeme",
+      "${VARIABLE}",
+      "$VARIABLE",
+      "..."
+    ],
+    "onMatch": "decline-disclosure",
+    "exitCode": 3,
+    "rationale": "Classify the exact outbound bytes. Names of files, directories, headers, variables, vendors, nationalities, and jurisdictions are not disclosure evidence."
   },
-  "contentRedaction": {
-    "refusePatterns": [
-      "environment variable values",
-      "API tokens or keys",
-      "connection strings / DSNs",
-      "production hostnames with request paths",
-      "migration or seed files containing credentials"
+  "executionControls": {
+    "requirements": [
+      "non-empty validated unified diff",
+      "normalized relative paths",
+      "exact complete owned-path allowlist",
+      "no symlink escape",
+      "trusted caller-supplied verification",
+      "allowlist-only staging"
     ],
-    "onMatch": "return-to-codex",
-    "rationale": "Strip or refuse sensitive content before delegation. If it remains after filtering, return the chunk to Codex-native review."
+    "modelCommandAuthority": "none",
+    "malformedInput": "fail-closed"
   },
   "delegationModes": {
     "execution": {
-      "sensitiveMatch": "route-codex",
-      "scope": "whole-chunk"
+      "contentValidation": "exact-outbound-prompt-and-complete-diff",
+      "outputAuthority": "validated-unified-diff-within-owned-paths"
     },
     "mechanical-review": {
-      "sensitiveMatch": "filter-file-sections",
-      "emptyRemainder": "route-codex",
-      "credentialValues": "route-codex"
+      "contentValidation": "complete-diff-including-removed-lines",
+      "outputAuthority": "review-text-only"
     },
     "artifact-review": {
-      "sensitivePathReferences": "allow",
-      "credentialValues": "route-codex"
+      "contentValidation": "exact-artifact-content",
+      "pathReferences": "allow",
+      "outputAuthority": "review-text-only"
+    },
+    "artifact-delegation": {
+      "contentValidation": "multiple-explicit-text-files-exact-bytes",
+      "pathReferences": "allow",
+      "outputAuthority": "none",
+      "executionPathAuthority": "none"
     }
+  },
+  "reviewControls": {
+    "highConsequenceSecuritySignoff": "independent-codex-required",
+    "modelNationalityEmbargo": false,
+    "vendorJurisdictionEmbargo": false,
+    "pathNameEmbargo": false,
+    "rationale": "Security-related implementation may be delegated after content and output validation; consequential security completion remains independently reviewed by Codex."
   },
   "positiveRouting": {
     "intendedLanes": [
@@ -47,6 +70,6 @@
       "large-diff first-pass triage",
       "doc consistency"
     ],
-    "rationale": "These are the OpenRouter mechanical lanes when no security boundary is matched."
+    "rationale": "These are the OpenRouter mechanical lanes when exact outbound content passes disclosure controls."
   }
 }

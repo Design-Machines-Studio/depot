@@ -221,5 +221,10 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf "READY: preflight passed. Tagging and pushing are safe to perform.\n"
+if [ "$SKIP_NET" -eq 1 ]; then
+  printf "READY: local preflight passed. The repository is ready for tagging.\n"
+  printf "       Push safety is unverified because --no-net skipped the origin probe.\n"
+else
+  printf "READY: preflight passed. Tagging and pushing are safe to perform.\n"
+fi
 printf "       This script performed neither -- run them explicitly.\n\n"

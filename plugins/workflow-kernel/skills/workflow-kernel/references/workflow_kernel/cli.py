@@ -11,16 +11,18 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ._files import PinnedDirectory, _OwnedResourceScope, bind_durable_path
 from .events import EventStore
+from .inspection import InspectionError
 from .repository_scope import repository_scope as _repository_scope
 from .runtime_resolution import (
     KERNEL_VERSION_FLOOR, compatible_kernel_version,
-    resolve_workflow_kernel_runtime,
+    resolve_plugin_bundle, resolve_workflow_kernel_runtime, semantic_version,
 )
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
@@ -330,6 +332,32 @@ def _write_json(path, value):
             count = os.write(descriptor, pending)
             if count <= 0:
                 raise OSError("json write made no progress")
+            pending = pending[count:]
+        os.fsync(descriptor)
+        directory.require_identity(descriptor, temporary)
+        directory.replace(temporary, binding.path.name)
+        owned.disown_temporary()
+        directory.fsync()
+
+
+def _write_text(path, value):
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = value.encode("utf-8")
+    binding = bind_durable_path(destination)
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        directory.revalidate()
+        directory.regular_exists(binding.path.name)
+        descriptor, temporary = directory.create_temporary(
+            binding.path.name + ".tmp-", ".md",
+        )
+        owned.own_temporary(descriptor, temporary)
+        pending = encoded
+        while pending:
+            count = os.write(descriptor, pending)
+            if count <= 0:
+                raise OSError("text write made no progress")
             pending = pending[count:]
         os.fsync(descriptor)
         directory.require_identity(descriptor, temporary)
@@ -2679,6 +2707,187 @@ def command_record_cleanup(args):
     return _cleanup_receipt_status(receipt)
 
 
+def _inspection_json(path):
+    from .inspection import decode_json_bytes
+
+    try:
+        return decode_json_bytes(Path(path).read_bytes())
+    except OSError:
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "input_read_failed",
+        }) from None
+
+
+def command_inspection_validate(args):
+    from .inspection import load_inspection_profile, load_result_policy
+
+    profile = load_inspection_profile(args.profile, args.repository_root)
+    result_policy = load_result_policy(args.result_policy)
+    _emit({
+        "schema_version": 1, "status": "validated",
+        "profile_id": profile.document["profile_id"],
+        "profile_version": profile.document["profile_version"],
+        "profile_path": profile.profile_path,
+        "profile_digest": profile.digest,
+        "result_policy_id": result_policy.document["policy_id"],
+        "result_policy_version": result_policy.document["policy_version"],
+        "result_policy_digest": result_policy.digest,
+    })
+    return 0
+
+
+def command_snapshot_files(args):
+    from .inspection import snapshot_regular_files
+
+    _emit({
+        "schema_version": 1,
+        "status": "snapshotted",
+        "files": snapshot_regular_files(
+            args.source_root,
+            args.destination_root,
+            args.name,
+        ),
+    })
+    return 0
+
+
+def command_kernel_info(args):
+    version = ".".join(str(item) for item in KERNEL_VERSION_FLOOR)
+    requested = (
+        semantic_version(args.minimum_version)
+        if args.minimum_version
+        else KERNEL_VERSION_FLOOR
+    )
+    if (
+        requested is None
+        or requested[0] != KERNEL_VERSION_FLOOR[0]
+        or KERNEL_VERSION_FLOOR < requested
+    ):
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "kernel_version_incompatible",
+        })
+    _emit({
+        "schema_version": 1,
+        "kernel_version": version,
+        "status": "compatible",
+    })
+    return 0
+
+
+def command_inspection_classify(args):
+    from .inspection import classify_observations, load_inspection_profile
+
+    profile = load_inspection_profile(args.profile, args.repository_root)
+    observations = _inspection_json(args.observations)
+    _emit({
+        "schema_version": 1,
+        "classifications": classify_observations(profile, observations),
+    })
+    return 0
+
+
+def command_inspection_trend(args):
+    from .inspection import compare_trends, load_host_publication_authority_key
+
+    publication_key = load_host_publication_authority_key(args.repository_root)
+    _emit(compare_trends(
+        _inspection_json(args.current), _inspection_json(args.baseline),
+        publication_authority_key=publication_key,
+    ))
+    return 0
+
+
+def command_inspection_finalize(args):
+    from .inspection import (
+        finalize_authoritative_result, load_host_publication_authority_key,
+    )
+
+    baseline = None if args.baseline is None else _inspection_json(args.baseline)
+    publication_key = load_host_publication_authority_key(args.repository_root)
+    _emit(finalize_authoritative_result(
+        _inspection_json(args.input),
+        publication_status=args.publication_status,
+        baseline=baseline,
+        publication_authority_key=publication_key,
+    ))
+    return 0
+
+
+def command_inspection_publish(args):
+    from .publication import publish_authoritative_result
+
+    _emit(publish_authoritative_result(
+        _inspection_json(args.input),
+        args.repository_root,
+    ))
+    return 0
+
+
+def command_inspection_render(args):
+    from .inspection import render_markdown, load_host_publication_authority_key
+
+    publication_key = load_host_publication_authority_key(args.repository_root)
+    sys.stdout.write(render_markdown(
+        _inspection_json(args.input),
+        publication_authority_key=publication_key,
+    ))
+    return 0
+
+
+def command_inspection_run(args):
+    from .inspection import (
+        build_authoritative_result, execute_inspection_lanes,
+        load_host_attestation, load_inspection_profile,
+        load_host_publication_authority_key, load_result_policy,
+    )
+
+    started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    profile = load_inspection_profile(args.profile, args.repository_root)
+    result_policy = load_result_policy(args.result_policy)
+    attestation = load_host_attestation(args.attestation, profile.repository_root)
+    publication_key = load_host_publication_authority_key(
+        profile.repository_root,
+    )
+    dirty = args.dirty == "true"
+    receipts, observations = execute_inspection_lanes(
+        profile, args.lane_id, attestation,
+        source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
+        purpose=args.purpose,
+        operator_authorization_event_id=args.authorization_event_id,
+        return_observations=True,
+    )
+    finished_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    _emit(build_authoritative_result(
+        profile, result_policy,
+        source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
+        observations=observations, lane_receipts=receipts,
+        invocation={
+            "started_at": started_at, "finished_at": finished_at,
+            "operator_authorization_event_id": attestation[
+                "operator_authorization_event_id"
+            ],
+            "purpose": args.purpose, "selected_lane_ids": sorted(args.lane_id),
+        },
+        publication_authority_key=publication_key,
+    ))
+    return 0
+
+
+def command_resolve_plugin_bundle(args):
+    try:
+        bundle = resolve_plugin_bundle(
+            args.plugin, args.required_asset,
+            active_host=args.active_host, minimum_version=args.minimum_version,
+            required_executables=args.required_executable,
+        )
+    except (FileNotFoundError, ValueError):
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "plugin_bundle_unavailable",
+        }) from None
+    _emit(bundle.to_dict())
+    return 0
+
+
 def parser():
     result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
     commands = result.add_subparsers(dest="command", required=True)
@@ -2862,6 +3071,181 @@ def parser():
     reconcile.add_argument("--node-statuses")
     reconcile.add_argument("--output", required=True)
     reconcile.set_defaults(handler=command_plan_reconcile)
+
+    snapshot_files = commands.add_parser(
+        "snapshot-files",
+        help="copy owned regular files without following links",
+        description=(
+            "Read source files descriptor-relatively with no-follow identity "
+            "checks and create private destination files with exact bytes."
+        ),
+    )
+    snapshot_files.add_argument("--source-root", required=True)
+    snapshot_files.add_argument("--destination-root", required=True)
+    snapshot_files.add_argument("--name", action="append", required=True)
+    snapshot_files.set_defaults(handler=command_snapshot_files)
+
+    kernel_info = commands.add_parser(
+        "kernel-info",
+        help="report and validate the workflow-kernel runtime version",
+        description=(
+            "Emit the runtime version and fail non-zero when it is incompatible "
+            "with an optional semantic-version floor."
+        ),
+    )
+    kernel_info.add_argument("--minimum-version")
+    kernel_info.set_defaults(handler=command_kernel_info)
+
+    inspection_validate = commands.add_parser(
+        "inspection-validate",
+        help="validate a complete inspection profile and emit its canonical digest",
+        description=(
+            "Validate one closed inspection profile before lane admission. "
+            "Failures are structured JSON on stderr with a non-zero exit."
+        ),
+    )
+    inspection_validate.add_argument("--repository-root", required=True)
+    inspection_validate.add_argument("--profile", required=True)
+    inspection_validate.add_argument("--result-policy", required=True)
+    inspection_validate.set_defaults(handler=command_inspection_validate)
+
+    inspection_classify = commands.add_parser(
+        "inspection-classify",
+        help="classify observations against closed validated profile IDs",
+        description=(
+            "Emit deterministic JSON classifications; unknown inputs are actionable "
+            "fail-closed results. Invalid inputs exit non-zero."
+        ),
+    )
+    inspection_classify.add_argument("--repository-root", required=True)
+    inspection_classify.add_argument("--profile", required=True)
+    inspection_classify.add_argument("--observations", required=True)
+    inspection_classify.set_defaults(handler=command_inspection_classify)
+
+    inspection_trend = commands.add_parser(
+        "inspection-trend",
+        help="compare compatible authoritative inspection results",
+        description=(
+            "Emit JSON deltas or a baseline_discontinuity. Invalid authoritative "
+            "JSON exits non-zero."
+        ),
+    )
+    inspection_trend.add_argument("--current", required=True)
+    inspection_trend.add_argument("--baseline", required=True)
+    inspection_trend.add_argument("--repository-root", required=True)
+    inspection_trend.set_defaults(handler=command_inspection_trend)
+
+    inspection_finalize = commands.add_parser(
+        "inspection-finalize",
+        help="advance authoritative inspection publication and trend lifecycle",
+        description=(
+            "Validate authoritative JSON, compute an optional baseline trend, "
+            "and rebind the ready-state attestation before emitting a re-digested "
+            "artifact. Rendered and published transitions are available only "
+            "through inspection-publish. Invalid lifecycle input exits non-zero."
+        ),
+    )
+    inspection_finalize.add_argument("--input", required=True)
+    inspection_finalize.add_argument("--repository-root", required=True)
+    inspection_finalize.add_argument(
+        "--publication-status",
+        choices=("authoritative_json_ready",),
+        required=True,
+    )
+    inspection_finalize.add_argument(
+        "--baseline",
+        help=(
+            "authoritative baseline JSON; the kernel computes and binds the "
+            "trend result rather than accepting caller-supplied deltas"
+        ),
+    )
+    inspection_finalize.set_defaults(handler=command_inspection_finalize)
+
+    inspection_publish = commands.add_parser(
+        "inspection-publish",
+        help="durably publish profile-declared Markdown and authoritative JSON",
+        description=(
+            "Render and durably replace the validated profile-declared Markdown "
+            "and authoritative JSON outputs, minting lifecycle attestations only "
+            "after the corresponding writes. Failures exit non-zero."
+        ),
+    )
+    inspection_publish.add_argument("--input", required=True)
+    inspection_publish.add_argument("--repository-root", required=True)
+    inspection_publish.set_defaults(handler=command_inspection_publish)
+
+    inspection_render = commands.add_parser(
+        "inspection-render",
+        help="render Markdown from validated authoritative inspection JSON",
+        description=(
+            "Accept only validated authoritative JSON and emit Markdown. Prose or "
+            "digest-mismatched JSON exits non-zero."
+        ),
+    )
+    inspection_render.add_argument("--input", required=True)
+    inspection_render.add_argument("--repository-root", required=True)
+    inspection_render.set_defaults(handler=command_inspection_render)
+
+    inspection_run = commands.add_parser(
+        "inspection-run",
+        help="run attested Docker-backed lanes from an immutable profile snapshot",
+        description=(
+            "Validate and freeze a profile, verify a host-issued attestation outside "
+            "the repository, execute selected declared primary lanes without a "
+            "shell, and emit authoritative JSON. Any admission failure exits "
+            "non-zero before subprocess execution."
+        ),
+    )
+    inspection_run.add_argument("--repository-root", required=True)
+    inspection_run.add_argument("--profile", required=True)
+    inspection_run.add_argument(
+        "--result-policy",
+        required=True,
+        help="trusted workflow-owned result-policy JSON",
+    )
+    inspection_run.add_argument(
+        "--lane-id", action="append", required=True,
+        help="declared primary lane ID; repeat for multiple lanes",
+    )
+    inspection_run.add_argument(
+        "--attestation", required=True,
+        help="host-issued attestation file outside the repository",
+    )
+    inspection_run.add_argument("--source", choices=("git",), required=True)
+    inspection_run.add_argument("--ref", required=True)
+    inspection_run.add_argument("--commit", required=True)
+    inspection_run.add_argument("--dirty", choices=("true", "false"), required=True)
+    inspection_run.add_argument("--purpose", required=True)
+    inspection_run.add_argument(
+        "--authorization-event-id", required=True,
+        help="host-observed operator authorization event bound by the attestation",
+    )
+    inspection_run.set_defaults(handler=command_inspection_run)
+
+    resolve_bundle = commands.add_parser(
+        "resolve-plugin-bundle",
+        help="select one coherent installed-plugin bundle across host caches",
+        description=(
+            "Emit one home-relative selected root, cache class, semantic version, "
+            "and selection reason. Malformed, incompatible, or incomplete bundles "
+            "exit non-zero."
+        ),
+    )
+    resolve_bundle.add_argument("--plugin", required=True)
+    resolve_bundle.add_argument(
+        "--required-asset", action="append", default=[],
+        help="required path relative to the selected plugin root; repeat as needed",
+    )
+    resolve_bundle.add_argument(
+        "--required-executable", action="append", default=[],
+        help=(
+            "required readable executable path relative to the selected plugin "
+            "root; repeat as needed"
+        ),
+    )
+    resolve_bundle.add_argument("--minimum-version")
+    resolve_bundle.add_argument("--active-host", choices=("claude", "codex"))
+    resolve_bundle.set_defaults(handler=command_resolve_plugin_bundle)
     return result
 
 
@@ -2869,6 +3253,15 @@ def main(argv=None):
     try:
         args = parser().parse_args(argv)
         return args.handler(args)
+    except InspectionError as exc:
+        _emit({
+            "error": {
+                "code": "inspection_error",
+                "message": "inspection input rejected",
+                "details": {"reason_code": exc.reason_code},
+            },
+        }, sys.stderr)
+        return EXIT_INVALID
     except KernelError as exc:
         _emit(serialize_kernel_error(exc), sys.stderr)
         if exc.code in {"sequence_conflict", "revision_conflict", "lease_conflict"}:

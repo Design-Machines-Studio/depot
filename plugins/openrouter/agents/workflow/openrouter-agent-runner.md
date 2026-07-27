@@ -24,7 +24,8 @@ The caller passes you these inputs in the prompt body:
 - `target_model` -- full OpenRouter model slug such as `z-ai/glm-5.2` or `deepseek/deepseek-v4-pro`
 - `fallback_model` -- optional full OpenRouter model slug tried by the wrapper on HTTP 429/503
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
-- `security_policy_path` -- absolute path to OpenRouter's installed `delegation-security-policy.json`
+- `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
+- `openrouter_bundle_version` and `cache_class` -- expected resolver identity
 - `diff_content` -- the diff to review
 - `changed_files` -- newline-delimited, normalized, unfiltered list of every changed file path
 - `project_context` -- stack info (for example, `Plugin Marketplace (Markdown+JSON)`)
@@ -70,11 +71,25 @@ validate_model_slug "$target_model" || {
   echo "ERROR: invalid target_model (expected full OpenRouter slug): $target_model" >&2
   exit 2
 }
+target_model_origin="$(printf '%s' "$target_model" | tr '[:upper:]' '[:lower:]')"
+case "$target_model_origin" in
+  openai/*|anthropic/*)
+    echo "ERROR: native-vendor-origin invariant rejected target_model: $target_model" >&2
+    exit 2
+    ;;
+esac
 if [ -n "${fallback_model:-}" ]; then
   validate_model_slug "$fallback_model" || {
     echo "ERROR: invalid fallback_model (expected full OpenRouter slug): $fallback_model" >&2
     exit 2
   }
+  fallback_model_origin="$(printf '%s' "$fallback_model" | tr '[:upper:]' '[:lower:]')"
+  case "$fallback_model_origin" in
+    openai/*|anthropic/*)
+      echo "ERROR: native-vendor-origin invariant rejected fallback_model: $fallback_model" >&2
+      exit 2
+      ;;
+  esac
 fi
 
 [[ "$target_timeout" =~ ^[1-9][0-9]*$ ]] || {
@@ -104,20 +119,47 @@ case "$RESOLVED" in
   *) echo "ERROR: target_agent_path outside trusted depot roots: $target_agent_path" >&2; exit 2 ;;
 esac
 
-SECURITY_POLICY_RESOLVED=$(python3 - "$security_policy_path" <<'PY'
-import os, sys
-path = os.path.realpath(sys.argv[1])
-if not os.path.isfile(path):
-    raise SystemExit(2)
-print(path)
-PY
-) || { echo "ERROR: OpenRouter delegation security policy is unavailable" >&2; exit 2; }
-case "$SECURITY_POLICY_RESOLVED" in
-  "$DEPOT_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"|\
-  "$HOME"/.claude/plugins/cache/depot/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json|\
-  "$HOME"/.codex/plugins/cache/depot/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json) ;;
-  *) echo "ERROR: security_policy_path is not the trusted OpenRouter policy" >&2; exit 2 ;;
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+resolve_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --required-asset agents/workflow/openrouter-agent-runner.md \
+      --required-asset agents/review/openrouter-bulk-analyst.md \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-asset skills/openrouter-delegate/references/prompt-templates.md
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-asset agents/workflow/openrouter-agent-runner.md \
+      --required-asset agents/review/openrouter-bulk-analyst.md \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-asset skills/openrouter-delegate/references/prompt-templates.md
+  fi
+}
+BUNDLE_JSON=$(resolve_bundle)
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("selected_root",""))')
+RESOLVED_VERSION=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))')
+RESOLVED_CLASS=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("cache_class",""))')
+[ "$BUNDLE_REF" = "$openrouter_bundle_ref" ] &&
+  [ "$RESOLVED_VERSION" = "$openrouter_bundle_version" ] &&
+  [ "$RESOLVED_CLASS" = "$cache_class" ] || {
+    echo "ERROR: coherent OpenRouter bundle changed after runner selection" >&2
+    exit 2
+  }
+case "$BUNDLE_REF" in
+  "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}" ;;
+  *) echo "ERROR: coherent OpenRouter bundle unavailable" >&2; exit 2 ;;
 esac
+SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+[ -r "$SECURITY_POLICY_RESOLVED" ] || { echo "ERROR: OpenRouter delegation security policy is unavailable" >&2; exit 2; }
 
 TARGET_BODY=$(awk 'BEGIN{fm=0} /^---$/{fm++; next} fm>=2{print}' "$RESOLVED")
 if [ -z "$TARGET_BODY" ]; then
@@ -126,13 +168,17 @@ if [ -z "$TARGET_BODY" ]; then
 fi
 ```
 
+`openrouter_bundle_ref` is process-local binding data. Do not include it in
+review output or durable receipts; only version, cache class, and resolution
+reason are durable.
+
 The body becomes the selected OpenRouter model's system prompt.
 
-### Step 1.4: Security Boundary -- Granular Mechanical Review
+### Step 1.4: Threat/Content Boundary -- Mechanical Review
 
-**Third-party models are mechanical reviewers, never security reviewers.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode. The helper owns the immutable minimum denylist and computes `set(canon) | set(configured)` from `neverRouteToOpenRouter`, so policy drift can only make routing stricter. It removes complete diff sections for protected paths before disclosure while leaving the full diff for Codex security and architecture lanes.
+**Third-party models are mechanical reviewers, never the independent security reviewer.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode immediately before building the outgoing prompt. File names, security-looking directories, model nationality, and vendor jurisdiction do not classify content. The legacy `neverRouteToOpenRouter` path embargo and `set(canon) | set(configured)` hard-coded union MUST NOT be used.
 
-The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies paths against the unfiltered `changed_files` list, scans the filtered payload for credential values, and writes both a filtered diff and filtered path list. Exit 3 means either no safe review remainder or credential material remains; route the lane to Codex. Any other non-zero status is a fail-closed runner failure.
+The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies every path against the complete unfiltered `changed_files` list, checks physical containment, and scans the complete diff—including additions, context, and removed lines—for actual credentials, private keys, authenticated DSNs, access/session tokens, and classified private values. Safe auth, federation, deploy, security, and `.env.example` content remains eligible. Exit 3 means actual disclosure risk and routes the lane to Codex without reaching the wrapper. Any other non-zero status is malformed or unverifiable input and is a fail-closed runner failure.
 
 ```bash
 BOUNDARY_HELPER="$(dirname "$SECURITY_POLICY_RESOLVED")/delegation-boundary.sh"
@@ -157,10 +203,10 @@ else
     cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
-### RUNNER DECLINED -- SENSITIVE CONTENT OR NO SAFE REMAINDER
-The shared boundary could not produce a credential-free mechanical-review
-remainder. Route this chunk to the Codex-native reviewer instead; no diff
-content was sent to OpenRouter.
+### RUNNER DECLINED -- SENSITIVE CONTENT
+The shared boundary found actual disclosure risk in the mechanical-review
+payload. Route this chunk to the Codex-native reviewer instead; no diff
+content was sent to OpenRouter and the network wrapper was not reached.
 
 ### Critical (P1)
 ### Serious (P2)
@@ -175,6 +221,8 @@ fi
 FILTERED_DIFF=$(cat "$BOUNDARY_FILTERED")
 FILTERED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_PATHS")
 ```
+
+The historical `FILTERED_*` variable names are retained for compatibility; the threat-based gate returns the complete safe diff and complete touched-path list rather than removing sections by path name.
 
 ### Step 2: Build the Prompts
 
@@ -201,15 +249,11 @@ Follow the review criteria in your system prompt exactly. Report findings using 
 
 ### Step 3: Invoke the OpenRouter Wrapper
 
-Resolve the wrapper through the supported plugin caches. Pass the user prompt on stdin and the target body through `OPENROUTER_SYSTEM`; both variables remain quoted and are never re-evaluated by the shell. The wrapper prints model text directly on stdout.
+Use the coherent OpenRouter bundle resolved in Step 1. Pass the user prompt on stdin and the target body through `OPENROUTER_SYSTEM`; both variables remain quoted and are never re-evaluated by the shell. The wrapper prints model text directly on stdout.
 
 ```bash
-WRAPPER_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER_PATH" ] && break
-done
-if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
+WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+if [ ! -x "$WRAPPER_PATH" ]; then
   cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
@@ -345,7 +389,8 @@ Normalize the response to the P1/P2/P3/Approved structure without dropping or re
 1. **Tag every finding** with `[openrouter/{model}/{agent}]`; the full model slug is part of the attribution.
 2. **Fail with the structured envelope.** Missing keys, wrapper failures, empty responses, and refusals produce `### RUNNER FAILURE` so dm-review retries the lane on Codex.
 3. **Preserve all findings verbatim.** Re-tag and normalize headings only.
-4. **Never bypass the security boundary.** Declined or fully redacted chunks return to Codex and cannot produce a clean OpenRouter receipt.
+4. **Never bypass the security boundary.** A disclosure decline returns to Codex and cannot produce a clean OpenRouter receipt.
+5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a Codex security sign-off even when non-secret implementation content was eligible for OpenRouter.
 
 ## Why This Architecture
 

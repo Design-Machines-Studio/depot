@@ -1,0 +1,3201 @@
+"""Neutral, deterministic inspection mechanics for repository-owned profiles.
+
+Domain policy stays in the owning workflow plugin.  This module validates and
+freezes repository profiles and separately supplied policy, admits only
+digest-bound host-authorized Docker execution, and produces canonical redacted
+data from which human-readable output is rendered.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import os
+import pwd
+import re
+import stat
+import subprocess
+import tempfile
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from types import MappingProxyType
+
+from .receipts import _canonical_bytes
+from .redaction import (
+    REDACTED, contains_high_confidence_secret, is_secret_key,
+    normalize_durable_string, normalize_evidence_reference,
+    sanitize_durable_payload,
+)
+PROFILE_SCHEMA_VERSION = 1
+AUTHORITATIVE_SCHEMA_VERSION = 1
+FIXED_EXECUTION_ENV = MappingProxyType({
+    "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "TZ": "UTC",
+})
+EVIDENCE_STATUSES = frozenset({
+    "available", "unavailable", "failed", "fallback", "skipped",
+})
+_IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}\Z")
+_SEMVER = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_COMMIT = re.compile(r"[0-9a-f]{40}(?:[0-9a-f]{24})?\Z")
+_GIT_REF = re.compile(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,254}\Z")
+_COMPOSE_IDENTITY = re.compile(r"([a-z0-9][a-z0-9._-]{0,127})@sha256:[0-9a-f]{64}\Z")
+_IMAGE_IDENTITY = re.compile(r"[^@\s]+@sha256:[0-9a-f]{64}\Z")
+_SHELL_TOKEN = re.compile(r"(?:\$\(|`|[;&|<>]|\r|\n)")
+_LANE_REPOSITORY_TARGET = "/workspace"
+_LANE_EVIDENCE_TARGET = "/inspection-evidence"
+_LANE_EVIDENCE_NAME = "observations.json"
+_MAX_LANE_EVIDENCE_BYTES = 16 * 1024 * 1024
+_HOST_PUBLICATION_AUTHORITY_KEY_PARTS = (
+    ".config", "design-machines", "workflow-kernel",
+    "inspection-publication-authority.key",
+)
+_PROFILE_FIELDS = frozenset({
+    "schema_version", "profile_id", "profile_version", "repository",
+    "catalogs", "surfaces", "metrics", "rules", "lanes", "classifications",
+    "outputs", "trend_compatibility",
+})
+_ATTESTATION_FIELDS = frozenset({
+    "schema_version", "repository_root", "profile_path", "profile_digest",
+    "source", "ref", "commit", "dirty", "operator_authorization_event_id",
+    "purpose",
+})
+_PUBLICATION_ATTESTATION_FIELDS = frozenset({
+    "schema_version", "inspection_id", "stable_projection_digest",
+    "prior_publication_status", "prior_publication_state_digest",
+    "publication_status", "publication_state_digest", "host_action",
+    "operator_authorization_event_id", "authority_key_id", "signature",
+})
+
+
+class InspectionError(Exception):
+    """Closed, stable inspection failure safe for process-boundary emission."""
+
+    __slots__ = ("reason_code",)
+
+    def __init__(self, reason_code):
+        if type(reason_code) is not str or _IDENTIFIER.fullmatch(reason_code) is None:
+            reason_code = "inspection_error"
+        self.reason_code = reason_code
+        super().__init__("inspection input rejected")
+
+
+def _fail(reason_code, *, field=None):
+    del field
+    raise InspectionError(reason_code)
+
+
+def _exact_object(value, fields, *, required=None, reason="invalid_object"):
+    if type(value) is not dict:
+        _fail(reason)
+    keys = frozenset(value)
+    required = fields if required is None else frozenset(required)
+    if not required <= keys:
+        _fail("missing_field", field=sorted(required - keys)[0])
+    if not keys <= fields:
+        _fail("unknown_key", field=sorted(keys - fields)[0])
+    return value
+
+
+def _exact_list(value, *, field):
+    if type(value) is not list:
+        _fail("wrong_type", field=field)
+    return value
+
+
+def _string(value, *, field, identifier=False):
+    if type(value) is not str or not value:
+        _fail("wrong_type", field=field)
+    if identifier and _IDENTIFIER.fullmatch(value) is None:
+        _fail("invalid_identifier", field=field)
+    return value
+
+
+def _integer(value, *, field, minimum=0, maximum=None):
+    if type(value) is not int or value < minimum or (
+        maximum is not None and value > maximum
+    ):
+        _fail("wrong_type", field=field)
+    return value
+
+
+def _unique_by_id(items, id_field, *, field):
+    seen = set()
+    for item in items:
+        if type(item) is not dict:
+            _fail("invalid_collection_item", field=field)
+        identity = _string(item.get(id_field), field=f"{field}.{id_field}", identifier=True)
+        if identity in seen:
+            _fail("duplicate_id", field=f"{field}.{id_field}")
+        seen.add(identity)
+    return seen
+
+
+def _duplicate_rejecting_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            _fail("duplicate_json_key", field=key)
+        value[key] = item
+    return value
+
+
+def decode_json_bytes(raw):
+    if type(raw) is not bytes or len(raw) > 16 * 1024 * 1024:
+        _fail("invalid_json")
+    try:
+        return json.loads(
+            raw.decode("utf-8"), object_pairs_hook=_duplicate_rejecting_object,
+            parse_constant=lambda _value: _fail("invalid_json"),
+        )
+    except InspectionError:
+        raise
+    except (UnicodeError, json.JSONDecodeError):
+        _fail("invalid_json")
+
+
+def _freeze(value):
+    if type(value) is dict:
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if type(value) is list:
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
+def _thaw(value):
+    if isinstance(value, Mapping):
+        return {key: _thaw(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_thaw(item) for item in value]
+    return value
+
+
+def _canonical_digest(value):
+    return "sha256:" + hashlib.sha256(_canonical_bytes(value)).hexdigest()
+
+
+def _repository_root(value):
+    try:
+        root = Path(value).resolve(strict=True)
+    except (OSError, RuntimeError, TypeError, ValueError):
+        _fail("invalid_repository_root")
+    if not root.is_dir():
+        _fail("invalid_repository_root")
+    return root
+
+
+def normalize_owned_path(repository_root, value, *, must_exist=False):
+    """Return a normalized repository-relative POSIX path."""
+    root = _repository_root(repository_root)
+    if type(value) is not str or not value or "\0" in value or "\\" in value:
+        _fail("invalid_repository_path")
+    candidate = Path(value)
+    if candidate.is_absolute() or any(part in {"", ".", ".."} for part in candidate.parts):
+        _fail("invalid_repository_path")
+    normalized = Path(*candidate.parts)
+    try:
+        resolved = (root / normalized).resolve(strict=must_exist)
+    except (OSError, RuntimeError, ValueError):
+        _fail("invalid_repository_path")
+    if not resolved.is_relative_to(root):
+        _fail("repository_path_escape")
+    return normalized.as_posix()
+
+
+def _validate_repository_relative_path(value):
+    if (
+        type(value) is not str
+        or not value
+        or len(value) > 2048
+        or value.startswith("/")
+        or "\\" in value
+        or "\0" in value
+        or any(segment in {"", ".", ".."} for segment in value.split("/"))
+    ):
+        _fail("invalid_repository_path")
+    return value
+
+
+def _validate_catalogs(catalogs):
+    fields = frozenset({
+        "catalog_id", "schema_version", "catalog_version", "source_reference",
+        "content_digest", "rules", "metrics",
+    })
+    rule_fields = frozenset({"rule_id", "definition"})
+    metric_fields = frozenset({"metric_id", "definition"})
+    catalog_ids = _unique_by_id(catalogs, "catalog_id", field="catalogs")
+    catalog_index = {}
+    all_rule_ids = set()
+    all_metric_ids = set()
+    for catalog in catalogs:
+        _exact_object(catalog, fields, reason="invalid_catalog")
+        catalog_id = catalog["catalog_id"]
+        if type(catalog["schema_version"]) is not int or catalog["schema_version"] != 1:
+            _fail("unsupported_catalog_schema", field=catalog_id)
+        version = _string(catalog["catalog_version"], field="catalog_version")
+        if _SEMVER.fullmatch(version) is None:
+            _fail("invalid_catalog_version", field=catalog_id)
+        try:
+            source = normalize_evidence_reference(catalog["source_reference"])
+        except (TypeError, ValueError):
+            _fail("invalid_catalog_source", field=catalog_id)
+        catalog["source_reference"] = source
+        rules = _exact_list(catalog["rules"], field="catalog.rules")
+        metrics = _exact_list(catalog["metrics"], field="catalog.metrics")
+        for item in rules:
+            _exact_object(item, rule_fields, reason="invalid_catalog_rule")
+            if type(item["definition"]) is not dict:
+                _fail("invalid_catalog_rule", field=item.get("rule_id"))
+            alternatives = item["definition"].get("alternative_decisions")
+            decision = item["definition"].get("profile_decision")
+            if alternatives is not None or decision is not None:
+                if (
+                    type(alternatives) is not list
+                    or not alternatives
+                    or any(
+                        type(value) is not str or _IDENTIFIER.fullmatch(value) is None
+                        for value in alternatives
+                    )
+                    or len(set(alternatives)) != len(alternatives)
+                    or type(decision) is not str
+                    or decision not in alternatives
+                ):
+                    _fail("missing_profile_decision", field=item.get("rule_id"))
+        for item in metrics:
+            _exact_object(item, metric_fields, reason="invalid_catalog_metric")
+            if type(item["definition"]) is not dict:
+                _fail("invalid_catalog_metric", field=item.get("metric_id"))
+        rule_ids = _unique_by_id(rules, "rule_id", field="catalog.rules")
+        metric_ids = _unique_by_id(metrics, "metric_id", field="catalog.metrics")
+        if all_rule_ids & rule_ids or all_metric_ids & metric_ids:
+            _fail("duplicate_catalog_member_id", field=catalog_id)
+        all_rule_ids |= rule_ids
+        all_metric_ids |= metric_ids
+        projection = {
+            key: catalog[key] for key in (
+                "catalog_id", "schema_version", "catalog_version",
+                "source_reference", "rules", "metrics",
+            )
+        }
+        digest = _canonical_digest(projection)
+        if type(catalog["content_digest"]) is not str or catalog["content_digest"] != digest:
+            _fail("catalog_digest_mismatch", field=catalog_id)
+        catalog_index[catalog_id] = {
+            "version": version, "digest": digest,
+            "rules": rule_ids, "metrics": metric_ids,
+        }
+    return catalog_ids, catalog_index
+
+
+def _validate_bindings(items, *, kind, id_field, catalog_index):
+    fields = (
+        frozenset({id_field, "catalog_id", "catalog_version", "catalog_digest"})
+        if kind == "metric"
+        else frozenset({
+            id_field, "catalog_id", "catalog_version", "catalog_digest",
+            "metric_ids", "surface_ids",
+        })
+    )
+    identities = _unique_by_id(items, id_field, field=kind + "s")
+    for item in items:
+        _exact_object(item, fields, reason=f"invalid_{kind}")
+        catalog_id = _string(item["catalog_id"], field="catalog_id", identifier=True)
+        catalog = catalog_index.get(catalog_id)
+        if catalog is None:
+            _fail("unknown_catalog_reference", field=catalog_id)
+        if (
+            item["catalog_version"] != catalog["version"]
+            or item["catalog_digest"] != catalog["digest"]
+        ):
+            _fail("catalog_binding_mismatch", field=item[id_field])
+        if item[id_field] not in catalog[kind + "s"]:
+            _fail(f"unknown_{kind}_reference", field=item[id_field])
+    return identities
+
+
+def _validate_lane_argv(lane, repository_root):
+    argv = _exact_list(lane["argv"], field="lane.argv")
+    if not argv or any(type(arg) is not str or not arg for arg in argv):
+        _fail("invalid_lane_argv", field=lane["lane_id"])
+    if argv[0] != "docker":
+        _fail("untrusted_executable", field=lane["lane_id"])
+    if argv[:2] != ["docker", "run"]:
+        _fail("invalid_lane_argv", field=lane["lane_id"])
+    prohibited = {
+        "sh", "bash", "zsh", "-c", "--env", "--env-file", "-e",
+        "--volume", "-v", "--mount", "--privileged", "--entrypoint",
+        "--network=host", "--pid=host", "--userns=host",
+    }
+    if any(
+        arg in prohibited
+        or arg.startswith((
+            "-e", "--env=", "--volume=", "--mount=", "--entrypoint=",
+            "--device", "--cap-add", "--security-opt", "--network",
+            "--pid", "--userns",
+        ))
+        or "docker.sock" in arg
+        or _SHELL_TOKEN.search(arg)
+        for arg in argv
+    ):
+        _fail("shell_or_environment_authority", field=lane["lane_id"])
+    index = 2
+    allowed_flags = {"--rm", "--pull=never", "--read-only", "--no-healthcheck"}
+    while index < len(argv) and argv[index] in allowed_flags:
+        index += 1
+    if index >= len(argv) or argv[index] != lane["image_identity"]:
+        _fail("lane_identity_mismatch", field=lane["lane_id"])
+
+
+def _execution_argv(lane, repository_root, evidence_root):
+    """Add fixed host-owned mounts without granting the profile mount authority."""
+    declared = list(lane["argv"])
+    repository_mount = (
+        f"type=bind,source={repository_root},"
+        f"target={_LANE_REPOSITORY_TARGET},readonly"
+    )
+    evidence_mount = (
+        f"type=bind,source={evidence_root},target={_LANE_EVIDENCE_TARGET}"
+    )
+    image_index = declared.index(lane["image_identity"])
+    return (
+        declared[:image_index]
+        + [
+            "--network=none", "--read-only",
+            "--pids-limit=256", "--memory=1g", "--cpus=2",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
+            "--user", f"{os.getuid()}:{os.getgid()}",
+            "--mount", repository_mount,
+            "--mount", evidence_mount,
+        ]
+        + declared[image_index:]
+    )
+
+
+def _execution_policy_digest(lane):
+    """Stable identity for kernel-synthesized execution controls."""
+    return _canonical_digest({
+        "schema_version": 1,
+        "declared_argv": lane["argv"],
+        "repository_mount": {
+            "source": "attested_repository_root",
+            "target": _LANE_REPOSITORY_TARGET,
+            "mode": "read-only",
+        },
+        "evidence_mount": {
+            "source": "fresh_kernel_temporary_directory",
+            "target": _LANE_EVIDENCE_TARGET,
+            "mode": "read-write",
+            "file": _LANE_EVIDENCE_NAME,
+        },
+        "network": "none",
+        "root_filesystem": "read-only",
+        "pids_limit": 256,
+        "memory": "1g",
+        "cpus": "2",
+        "capabilities": "drop_all",
+        "no_new_privileges": True,
+        "user": "host_numeric_uid_gid",
+        "environment": dict(FIXED_EXECUTION_ENV),
+    })
+
+
+def _validate_snapshot_names(names):
+    if (
+        type(names) not in {list, tuple}
+        or not names
+        or any(
+            type(name) is not str
+            or not name
+            or name in {".", ".."}
+            or "/" in name
+            or "\\" in name
+            or "\x00" in name
+            for name in names
+        )
+        or len(names) != len(set(names))
+    ):
+        _fail("snapshot_request_invalid")
+    return tuple(names)
+
+
+def _open_snapshot_directory(path):
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        return os.open(Path(path), directory_flags)
+    except OSError:
+        _fail("snapshot_directory_invalid")
+
+
+def _read_snapshot_source(source_fd, name, current_uid):
+    try:
+        source_file = os.open(
+            name,
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=source_fd,
+        )
+    except OSError:
+        _fail("snapshot_source_invalid")
+    try:
+        opened = os.fstat(source_file)
+        named = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or not stat.S_ISREG(named.st_mode)
+            or opened.st_nlink != 1
+            or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+            or (
+                current_uid is not None
+                and opened.st_uid != current_uid
+            )
+            or opened.st_size > _MAX_LANE_EVIDENCE_BYTES
+        ):
+            _fail("snapshot_source_invalid")
+        chunks = []
+        length = 0
+        while True:
+            chunk = os.read(source_file, 65536)
+            if not chunk:
+                break
+            length += len(chunk)
+            if length > _MAX_LANE_EVIDENCE_BYTES:
+                _fail("snapshot_source_invalid")
+            chunks.append(chunk)
+        after = os.fstat(source_file)
+        if (
+            (
+                after.st_dev,
+                after.st_ino,
+                after.st_mode,
+                after.st_nlink,
+                after.st_uid,
+                after.st_size,
+                after.st_mtime_ns,
+            )
+            != (
+                opened.st_dev,
+                opened.st_ino,
+                opened.st_mode,
+                opened.st_nlink,
+                opened.st_uid,
+                opened.st_size,
+                opened.st_mtime_ns,
+            )
+        ):
+            _fail("snapshot_source_changed")
+        return b"".join(chunks)
+    finally:
+        os.close(source_file)
+
+
+def _write_snapshot_destination(destination_fd, name, payload):
+    try:
+        target = os.open(
+            name,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=destination_fd,
+        )
+    except OSError:
+        _fail("snapshot_destination_invalid")
+    try:
+        offset = 0
+        while offset < len(payload):
+            written = os.write(target, payload[offset:])
+            if written <= 0:
+                _fail("snapshot_destination_invalid")
+            offset += written
+        os.fsync(target)
+    finally:
+        os.close(target)
+
+
+def snapshot_regular_files(source_root, destination_root, names):
+    """Copy exact regular-file bytes without following source or target links."""
+    names = _validate_snapshot_names(names)
+    source_fd = _open_snapshot_directory(source_root)
+    try:
+        destination_fd = _open_snapshot_directory(destination_root)
+    except BaseException:
+        os.close(source_fd)
+        raise
+    try:
+        source_directory = os.fstat(source_fd)
+        destination_directory = os.fstat(destination_fd)
+        current_uid = os.geteuid() if hasattr(os, "geteuid") else None
+        if (
+            not stat.S_ISDIR(source_directory.st_mode)
+            or not stat.S_ISDIR(destination_directory.st_mode)
+            or (
+                current_uid is not None
+                and (
+                    source_directory.st_uid != current_uid
+                    or destination_directory.st_uid != current_uid
+                )
+            )
+            or stat.S_IMODE(destination_directory.st_mode) & 0o077
+        ):
+            _fail("snapshot_directory_invalid")
+        copied = []
+        for name in names:
+            payload = _read_snapshot_source(source_fd, name, current_uid)
+            _write_snapshot_destination(destination_fd, name, payload)
+            copied.append({
+                "name": name,
+                "size": len(payload),
+                "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
+            })
+        if (
+            (
+                os.fstat(source_fd).st_dev,
+                os.fstat(source_fd).st_ino,
+            )
+            != (source_directory.st_dev, source_directory.st_ino)
+            or (
+                os.fstat(destination_fd).st_dev,
+                os.fstat(destination_fd).st_ino,
+            )
+            != (destination_directory.st_dev, destination_directory.st_ino)
+        ):
+            _fail("snapshot_directory_changed")
+        os.fsync(destination_fd)
+        return copied
+    finally:
+        os.close(destination_fd)
+        os.close(source_fd)
+
+
+def _read_lane_evidence(evidence_root, lane_id):
+    """Read one fresh lane-bound observation envelope without following links."""
+    path = Path(evidence_root) / _LANE_EVIDENCE_NAME
+    try:
+        descriptor = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            opened = os.fstat(descriptor)
+            entry = os.lstat(path)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or stat.S_ISLNK(entry.st_mode)
+                or opened.st_nlink != 1
+                or (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino)
+                or opened.st_size > _MAX_LANE_EVIDENCE_BYTES
+            ):
+                _fail("invalid_lane_evidence")
+            raw = b""
+            while True:
+                chunk = os.read(descriptor, 65536)
+                if not chunk:
+                    break
+                raw += chunk
+                if len(raw) > _MAX_LANE_EVIDENCE_BYTES:
+                    _fail("invalid_lane_evidence")
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("missing_lane_evidence")
+
+    envelope = decode_json_bytes(raw)
+    _exact_object(
+        envelope,
+        frozenset({"schema_version", "lane_id", "observations"}),
+        reason="invalid_lane_evidence",
+    )
+    if envelope["schema_version"] != 1 or envelope["lane_id"] != lane_id:
+        _fail("invalid_lane_evidence")
+    observations = _exact_list(
+        envelope["observations"], field="lane_evidence.observations",
+    )
+    observation_ids = []
+    for observation in observations:
+        if type(observation) is not dict:
+            _fail("invalid_lane_evidence")
+        observation_ids.append(_string(
+            observation.get("observation_id"),
+            field="observation_id", identifier=True,
+        ))
+    if len(observation_ids) != len(set(observation_ids)):
+        _fail("duplicate_id")
+    canonical = _canonical_bytes(envelope)
+    return (
+        observations,
+        observation_ids,
+        "sha256:" + hashlib.sha256(canonical).hexdigest(),
+    )
+
+
+def _validate_profile_document(document, repository_root):
+    _exact_object(document, _PROFILE_FIELDS, reason="invalid_profile")
+    if (
+        type(document["schema_version"]) is not int
+        or document["schema_version"] != PROFILE_SCHEMA_VERSION
+    ):
+        _fail("unsupported_schema_version", field="schema_version")
+    _string(document["profile_id"], field="profile_id", identifier=True)
+    version = _string(document["profile_version"], field="profile_version")
+    if _SEMVER.fullmatch(version) is None:
+        _fail("invalid_profile_version", field="profile_version")
+
+    repository = _exact_object(
+        document["repository"], frozenset({"scope_paths"}), reason="invalid_repository",
+    )
+    repository["scope_paths"] = sorted({
+        normalize_owned_path(repository_root, path)
+        for path in _exact_list(repository["scope_paths"], field="repository.scope_paths")
+    })
+
+    catalogs = _exact_list(document["catalogs"], field="catalogs")
+    _catalog_ids, catalog_index = _validate_catalogs(catalogs)
+
+    surfaces = _exact_list(document["surfaces"], field="surfaces")
+    surface_fields = frozenset({"surface_id", "paths"})
+    surface_ids = _unique_by_id(surfaces, "surface_id", field="surfaces")
+    for surface in surfaces:
+        _exact_object(surface, surface_fields, reason="invalid_surface")
+        surface["paths"] = sorted({
+            normalize_owned_path(repository_root, path)
+            for path in _exact_list(surface["paths"], field="surface.paths")
+        })
+
+    metrics = _exact_list(document["metrics"], field="metrics")
+    metric_ids = _validate_bindings(
+        metrics, kind="metric", id_field="metric_id", catalog_index=catalog_index,
+    )
+    rules = _exact_list(document["rules"], field="rules")
+    rule_ids = _validate_bindings(
+        rules, kind="rule", id_field="rule_id", catalog_index=catalog_index,
+    )
+    for rule in rules:
+        linked_metrics = set(_exact_list(rule["metric_ids"], field="rule.metric_ids"))
+        linked_surfaces = set(_exact_list(rule["surface_ids"], field="rule.surface_ids"))
+        if not linked_metrics <= metric_ids:
+            _fail("unknown_metric_reference", field=rule["rule_id"])
+        if not linked_surfaces <= surface_ids:
+            _fail("unknown_surface_reference", field=rule["rule_id"])
+        rule["metric_ids"] = sorted(linked_metrics)
+        rule["surface_ids"] = sorted(linked_surfaces)
+
+    lane_fields = frozenset({
+        "lane_id", "execution_type", "argv", "tool_identity", "image_identity",
+        "service_identity", "plugin_version", "timeout_seconds",
+        "primary_lane_id", "evidence_paths",
+    })
+    lanes = _exact_list(document["lanes"], field="lanes")
+    lane_ids = _unique_by_id(lanes, "lane_id", field="lanes")
+    for lane in lanes:
+        _exact_object(lane, lane_fields, reason="invalid_lane")
+        if lane["execution_type"] != "docker":
+            _fail("unknown_execution_type", field=lane["lane_id"])
+        identity = _string(lane["tool_identity"], field="tool_identity")
+        if not identity.startswith("docker:") or _SEMVER.fullmatch(identity[7:]) is None:
+            _fail("unpinned_tool_identity", field=lane["lane_id"])
+        for field in ("image_identity", "service_identity"):
+            if lane[field] is not None and type(lane[field]) is not str:
+                _fail("wrong_type", field=field)
+        image = _string(lane["image_identity"], field="image_identity")
+        if _IMAGE_IDENTITY.fullmatch(image) is None:
+            _fail("unpinned_image_identity", field=lane["lane_id"])
+        if lane["service_identity"] is not None:
+            _fail("invalid_lane_identity", field=lane["lane_id"])
+        plugin_version = _string(lane["plugin_version"], field="plugin_version")
+        if _SEMVER.fullmatch(plugin_version) is None:
+            _fail("invalid_plugin_version", field=lane["lane_id"])
+        _integer(lane["timeout_seconds"], field="timeout_seconds", minimum=1, maximum=86400)
+        lane["evidence_paths"] = sorted({
+            normalize_owned_path(repository_root, path)
+            for path in _exact_list(lane["evidence_paths"], field="evidence_paths")
+        })
+        _validate_lane_argv(lane, repository_root)
+    for lane in lanes:
+        primary = lane["primary_lane_id"]
+        if primary is not None:
+            if type(primary) is not str or primary not in lane_ids or primary == lane["lane_id"]:
+                _fail("invalid_fallback_relationship", field=lane["lane_id"])
+            target = next(item for item in lanes if item["lane_id"] == primary)
+            if target["primary_lane_id"] is not None:
+                _fail("fallback_chain_forbidden", field=lane["lane_id"])
+
+    classification_fields = frozenset({
+        "classification_id", "rule_ids", "metric_ids", "surface_ids", "confidence",
+        "actionability",
+    })
+    classifications = _exact_list(document["classifications"], field="classifications")
+    _unique_by_id(classifications, "classification_id", field="classifications")
+    for item in classifications:
+        _exact_object(item, classification_fields, reason="invalid_classification")
+        if item["confidence"] not in {"high", "medium", "low", "unknown"}:
+            _fail("unknown_confidence", field=item["classification_id"])
+        if item["actionability"] not in {"actionable", "informational"}:
+            _fail("unknown_actionability", field=item["classification_id"])
+        for field, known in (
+            ("rule_ids", rule_ids), ("metric_ids", metric_ids),
+            ("surface_ids", surface_ids),
+        ):
+            values = set(_exact_list(item[field], field=f"classification.{field}"))
+            if not values <= known:
+                _fail("unknown_classification_reference", field=item["classification_id"])
+            item[field] = sorted(values)
+
+    outputs = _exact_object(
+        document["outputs"], frozenset({"authoritative_json", "markdown"}),
+        reason="invalid_outputs",
+    )
+    outputs["authoritative_json"] = normalize_owned_path(
+        repository_root, outputs["authoritative_json"],
+    )
+    outputs["markdown"] = normalize_owned_path(repository_root, outputs["markdown"])
+    if outputs["authoritative_json"] == outputs["markdown"]:
+        _fail("invalid_outputs")
+    trend = _exact_object(
+        document["trend_compatibility"],
+        frozenset({"schema_version", "required_identity_fields"}),
+        reason="invalid_trend_compatibility",
+    )
+    if type(trend["schema_version"]) is not int or trend["schema_version"] != 1:
+        _fail("unsupported_trend_schema")
+    required = set(_exact_list(
+        trend["required_identity_fields"], field="trend_compatibility.required_identity_fields",
+    ))
+    mandatory = {
+        "profile", "result_policy", "metric_definitions", "tool_identities",
+    }
+    if required != mandatory:
+        _fail("incomplete_trend_identity")
+
+    for field in ("catalogs", "surfaces", "metrics", "rules", "lanes", "classifications"):
+        key = field[:-1] + "_id" if field != "classifications" else "classification_id"
+        if field == "catalogs":
+            key = "catalog_id"
+        document[field].sort(key=lambda item: item[key])
+    return document
+
+
+@dataclass(frozen=True, slots=True)
+class InspectionProfile:
+    """One immutable validated profile snapshot and its observed source identity."""
+
+    document: Mapping
+    canonical_bytes: bytes
+    digest: str
+    repository_root: Path
+    profile_path: str
+    source_identity: tuple
+
+    def to_dict(self):
+        return _thaw(self.document)
+
+
+@dataclass(frozen=True, slots=True)
+class InspectionResultPolicy:
+    """One immutable workflow-owned result-policy snapshot."""
+
+    document: Mapping
+    canonical_bytes: bytes
+    digest: str
+
+    def to_dict(self):
+        return _thaw(self.document)
+
+
+def validate_result_policy(document):
+    if type(document) is not dict:
+        _fail("invalid_result_policy")
+    try:
+        policy = json.loads(json.dumps(document, allow_nan=False))
+    except (TypeError, ValueError):
+        _fail("invalid_result_policy")
+    _exact_object(
+        policy,
+        frozenset({
+            "schema_version", "policy_id", "policy_version",
+            "completion_labels", "lane_gap_statuses",
+            "lane_blocker_statuses", "observation_blocker_evidence_statuses",
+            "classified_reason_code",
+        }),
+        reason="invalid_result_policy",
+    )
+    if policy["schema_version"] != 1:
+        _fail("invalid_result_policy")
+    _string(policy["policy_id"], field="policy_id", identifier=True)
+    if (
+        type(policy["policy_version"]) is not str
+        or _SEMVER.fullmatch(policy["policy_version"]) is None
+    ):
+        _fail("invalid_result_policy")
+    completion_labels = _exact_object(
+        policy["completion_labels"],
+        frozenset({"blocked", "gaps", "findings", "clean"}),
+        reason="invalid_result_policy",
+    )
+    for field, value in completion_labels.items():
+        _string(value, field=field, identifier=True)
+    if len(set(completion_labels.values())) != len(completion_labels):
+        _fail("invalid_result_policy")
+    for field in (
+        "lane_gap_statuses",
+        "lane_blocker_statuses",
+        "observation_blocker_evidence_statuses",
+    ):
+        statuses = _exact_list(policy[field], field=field)
+        if (
+            any(status not in EVIDENCE_STATUSES for status in statuses)
+            or len(statuses) != len(set(statuses))
+        ):
+            _fail("invalid_result_policy")
+        policy[field] = sorted(statuses)
+    if not set(policy["lane_blocker_statuses"]) <= set(
+        policy["lane_gap_statuses"]
+    ):
+        _fail("invalid_result_policy")
+    _string(
+        policy["classified_reason_code"],
+        field="classified_reason_code",
+        identifier=True,
+    )
+    canonical = _canonical_bytes(policy)
+    return InspectionResultPolicy(
+        _freeze(policy),
+        canonical,
+        "sha256:" + hashlib.sha256(canonical).hexdigest(),
+    )
+
+
+def load_result_policy(policy_path):
+    try:
+        path = Path(policy_path)
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = os.fstat(descriptor)
+            raw = b""
+            while True:
+                chunk = os.read(descriptor, 65536)
+                if not chunk:
+                    break
+                raw += chunk
+                if len(raw) > 1024 * 1024:
+                    _fail("invalid_result_policy")
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except (OSError, TypeError, ValueError):
+        _fail("invalid_result_policy")
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or (
+            before.st_dev, before.st_ino, before.st_mode, before.st_nlink,
+            before.st_uid, before.st_size, before.st_mtime_ns,
+        )
+        != (
+            after.st_dev, after.st_ino, after.st_mode, after.st_nlink,
+            after.st_uid, after.st_size, after.st_mtime_ns,
+        )
+    ):
+        _fail("invalid_result_policy")
+    return validate_result_policy(decode_json_bytes(raw))
+
+
+def validate_inspection_profile(document, repository_root, *, profile_path="profile.json"):
+    root = _repository_root(repository_root)
+    path = normalize_owned_path(root, profile_path)
+    if type(document) is not dict:
+        _fail("invalid_profile")
+    try:
+        mutable = json.loads(json.dumps(document, allow_nan=False))
+    except (TypeError, ValueError):
+        _fail("wrong_type")
+    validated = _validate_profile_document(mutable, root)
+    canonical = _canonical_bytes(validated)
+    return InspectionProfile(
+        _freeze(validated), canonical,
+        "sha256:" + hashlib.sha256(canonical).hexdigest(),
+        root, path, (),
+    )
+
+
+def load_inspection_profile(profile_path, repository_root):
+    root = _repository_root(repository_root)
+    path = Path(profile_path)
+    if path.is_absolute():
+        try:
+            relative = path.resolve(strict=True).relative_to(root).as_posix()
+        except (OSError, RuntimeError, ValueError):
+            _fail("profile_outside_repository")
+    else:
+        relative = normalize_owned_path(root, str(path), must_exist=True)
+        path = root / relative
+    try:
+        lexical = path if path.is_absolute() else root / path
+        if lexical.is_symlink():
+            _fail("profile_symlink_forbidden")
+        descriptor = os.open(lexical, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            before = os.fstat(descriptor)
+            raw = b""
+            while True:
+                chunk = os.read(descriptor, 65536)
+                if not chunk:
+                    break
+                raw += chunk
+                if len(raw) > 16 * 1024 * 1024:
+                    _fail("profile_size_limit")
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("profile_read_failed")
+    identity = (
+        after.st_dev, after.st_ino, after.st_size,
+        after.st_mtime_ns, after.st_ctime_ns,
+    )
+    if identity != (
+        before.st_dev, before.st_ino, before.st_size,
+        before.st_mtime_ns, before.st_ctime_ns,
+    ):
+        _fail("profile_digest_mismatch")
+    profile = validate_inspection_profile(
+        decode_json_bytes(raw), root, profile_path=relative,
+    )
+    return InspectionProfile(
+        profile.document, profile.canonical_bytes, profile.digest,
+        root, relative, identity,
+    )
+
+
+def _profile_source_unchanged(profile):
+    if not profile.source_identity:
+        return
+    try:
+        stat_result = os.stat(
+            profile.repository_root / profile.profile_path, follow_symlinks=False,
+        )
+    except OSError:
+        _fail("profile_digest_mismatch")
+    current = (
+        stat_result.st_dev, stat_result.st_ino,
+        stat_result.st_size, stat_result.st_mtime_ns, stat_result.st_ctime_ns,
+    )
+    if current != profile.source_identity or stat_result.st_mode & 0o170000 != 0o100000:
+        _fail("profile_digest_mismatch")
+
+
+def validate_host_attestation(
+    attestation, profile, *, source, ref, commit, dirty, purpose,
+    operator_authorization_event_id,
+):
+    _exact_object(attestation, _ATTESTATION_FIELDS, reason="invalid_attestation")
+    if (
+        type(attestation["schema_version"]) is not int
+        or attestation["schema_version"] != 1
+    ):
+        _fail("unsupported_attestation_schema")
+    if type(dirty) is not bool or type(attestation["dirty"]) is not bool:
+        _fail("invalid_attestation_binding", field="dirty")
+    expected = {
+        "repository_root": str(profile.repository_root),
+        "profile_path": profile.profile_path,
+        "profile_digest": profile.digest,
+        "source": source,
+        "ref": ref,
+        "commit": commit,
+        "dirty": dirty,
+        "purpose": purpose,
+        "operator_authorization_event_id": operator_authorization_event_id,
+    }
+    for field, value in expected.items():
+        if type(attestation[field]) is not type(value) or attestation[field] != value:
+            reason = "profile_digest_mismatch" if field == "profile_digest" else "attestation_binding_mismatch"
+            _fail(reason, field=field)
+    if source != "git" or type(ref) is not str or _GIT_REF.fullmatch(ref) is None:
+        _fail("unverified_repository_source")
+    if type(commit) is not str or _COMMIT.fullmatch(commit) is None:
+        _fail("invalid_commit_binding")
+    _string(
+        attestation["operator_authorization_event_id"],
+        field="operator_authorization_event_id", identifier=True,
+    )
+    _string(purpose, field="purpose", identifier=True)
+    return MappingProxyType(dict(attestation))
+
+
+def load_host_attestation(path, repository_root):
+    return _load_external_attestation(path, repository_root)
+
+
+def _host_publication_authority_key_path():
+    try:
+        account_home = pwd.getpwuid(os.getuid()).pw_dir
+    except (KeyError, OSError):
+        _fail("publication_authority_key_read_failed")
+    if type(account_home) is not str or not account_home:
+        _fail("publication_authority_key_read_failed")
+    home = Path(account_home)
+    if not home.is_absolute():
+        _fail("publication_authority_key_read_failed")
+    return home.joinpath(*_HOST_PUBLICATION_AUTHORITY_KEY_PARTS)
+
+
+def load_host_publication_authority_key(repository_root):
+    path = _host_publication_authority_key_path()
+    root = _repository_root(repository_root)
+    candidate = Path(path)
+    if (
+        not candidate.is_absolute()
+        or any(item.is_symlink() for item in (candidate, *candidate.parents))
+    ):
+        _fail("untrusted_publication_authority_key")
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        _fail("publication_authority_key_read_failed")
+    if resolved.is_relative_to(root):
+        _fail("untrusted_publication_authority_key")
+    try:
+        expected = os.stat(resolved, follow_symlinks=False)
+        descriptor = os.open(
+            candidate, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = os.fstat(descriptor)
+            if (
+                (
+                    before.st_dev, before.st_ino, before.st_mode,
+                    before.st_uid, before.st_nlink, before.st_size,
+                    before.st_mtime_ns, before.st_ctime_ns,
+                )
+                != (
+                    expected.st_dev, expected.st_ino, expected.st_mode,
+                    expected.st_uid, expected.st_nlink, expected.st_size,
+                    expected.st_mtime_ns, expected.st_ctime_ns,
+                )
+                or not stat.S_ISREG(before.st_mode)
+                or before.st_uid != os.getuid()
+                or before.st_nlink != 1
+                or before.st_mode & 0o077
+            ):
+                _fail("untrusted_publication_authority_key")
+            key = os.read(descriptor, 4097)
+            if os.read(descriptor, 1):
+                _fail("invalid_publication_authority_key")
+            after = os.fstat(descriptor)
+            if (
+                before.st_dev, before.st_ino, before.st_size,
+                before.st_mtime_ns, before.st_ctime_ns,
+            ) != (
+                after.st_dev, after.st_ino, after.st_size,
+                after.st_mtime_ns, after.st_ctime_ns,
+            ):
+                _fail("publication_authority_key_changed")
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("publication_authority_key_read_failed")
+    return _validate_publication_authority_key(key)
+
+
+def _load_external_attestation(path, repository_root):
+    root = _repository_root(repository_root)
+    candidate = Path(path).resolve(strict=True)
+    if candidate.is_relative_to(root):
+        _fail("repository_controlled_attestation")
+    if Path(path).is_symlink() or not candidate.is_file():
+        _fail("untrusted_attestation_channel")
+    try:
+        return decode_json_bytes(candidate.read_bytes())
+    except OSError:
+        _fail("attestation_read_failed")
+
+
+def _redact_durable(value):
+    redacted = 0
+    if type(value) is dict:
+        result = {}
+        for key, item in value.items():
+            if type(key) is str and is_secret_key(key):
+                result[key] = REDACTED
+                if item != REDACTED:
+                    redacted += 1
+            else:
+                result[key], count = _redact_durable(item)
+                redacted += count
+        return result, redacted
+    if type(value) is list:
+        result = []
+        for item in value:
+            safe, count = _redact_durable(item)
+            result.append(safe)
+            redacted += count
+        return result, redacted
+    if type(value) is str and contains_high_confidence_secret(value):
+        return REDACTED, 1
+    return sanitize_durable_payload(value), 0
+
+
+def classify_observations(profile, observations):
+    if type(profile) is not InspectionProfile:
+        _fail("validated_profile_required")
+    if type(observations) is not list:
+        _fail("invalid_observations")
+    document = profile.to_dict()
+    surfaces = {item["surface_id"]: item for item in document["surfaces"]}
+    metrics = {item["metric_id"] for item in document["metrics"]}
+    rules = {item["rule_id"] for item in document["rules"]}
+    classifications = {
+        item["classification_id"]: item for item in document["classifications"]
+    }
+    results = []
+    for index, raw in enumerate(observations):
+        safe_raw, redacted = _redact_durable(raw)
+        source_observation_digest = _canonical_digest(safe_raw)
+        reason = None
+        normalized_evidence = []
+        if type(raw) is not dict or raw.get("schema_version") != 1:
+            reason = "unknown_observation_schema"
+        else:
+            required = {
+                "schema_version", "observation_id", "surface_id", "rule_id",
+                "metric_id", "path", "classification_id", "evidence_status",
+                "evidence_references", "raw_telemetry",
+            }
+            if set(raw) != required:
+                reason = "invalid_observation_shape"
+            elif raw["surface_id"] not in surfaces:
+                reason = "unknown_surface"
+            elif raw["metric_id"] not in metrics:
+                reason = "unknown_metric"
+            elif raw["rule_id"] not in rules:
+                reason = "unknown_rule"
+            elif raw["classification_id"] not in classifications:
+                reason = "unknown_classification"
+            elif raw["evidence_status"] not in EVIDENCE_STATUSES:
+                reason = "unknown_evidence_status"
+            else:
+                try:
+                    path = normalize_owned_path(profile.repository_root, raw["path"])
+                    references = raw["evidence_references"]
+                    if (
+                        type(references) is not list
+                        or any(type(reference) is not str for reference in references)
+                    ):
+                        raise ValueError("invalid evidence reference list")
+                    normalized_evidence = [
+                        normalize_evidence_reference(reference)
+                        for reference in references
+                    ]
+                except (InspectionError, TypeError, ValueError):
+                    reason = "unknown_path"
+                else:
+                    if path not in surfaces[raw["surface_id"]]["paths"]:
+                        reason = "unknown_path"
+        if reason is None:
+            declared = classifications[raw["classification_id"]]
+            if (
+                raw["rule_id"] not in declared["rule_ids"]
+                or raw["metric_id"] not in declared["metric_ids"]
+                or raw["surface_id"] not in declared["surface_ids"]
+            ):
+                reason = "classification_binding_mismatch"
+        results.append({
+            "observation_id": (
+                raw.get("observation_id")
+                if type(raw) is dict and type(raw.get("observation_id")) is str
+                else f"unknown-{index:04d}"
+            ),
+            "surface_id": raw.get("surface_id") if type(raw) is dict else None,
+            "rule_id": raw.get("rule_id") if type(raw) is dict else None,
+            "metric_id": raw.get("metric_id") if type(raw) is dict else None,
+            "classification": "unknown" if reason else raw["classification_id"],
+            "confidence": "unknown" if reason else classifications[
+                raw["classification_id"]
+            ]["confidence"],
+            "actionable": (
+                reason is not None
+                or classifications[raw["classification_id"]]["actionability"]
+                == "actionable"
+            ),
+            "reason_code": reason or "classified",
+            "evidence_status": (
+                raw.get("evidence_status")
+                if type(raw) is dict and raw.get("evidence_status") in EVIDENCE_STATUSES
+                else "failed"
+            ),
+            "evidence_confidence": "unavailable",
+            "lane_status": None,
+            "lane_id": None,
+            "primary_lane_id": None,
+            "evidence_references": normalized_evidence,
+            "raw_telemetry": (
+                safe_raw.get("raw_telemetry", {})
+                if type(safe_raw) is dict else safe_raw
+            ),
+            "source_observation_digest": source_observation_digest,
+            "redacted_values": redacted,
+        })
+    return sorted(results, key=lambda item: item["observation_id"])
+
+
+class SubprocessAdapter:
+    """Injectable shell-free subprocess boundary."""
+
+    def run(self, argv, *, cwd, env, timeout):
+        return subprocess.run(
+            tuple(argv), cwd=cwd, env=dict(env), timeout=timeout,
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True, shell=False, check=False,
+        )
+
+
+def _timestamp(clock):
+    value = clock()
+    if type(value) is datetime:
+        if value.tzinfo is None:
+            _fail("invalid_invocation_time")
+        value = value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    return normalize_durable_string(value)
+
+
+def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
+    started = _timestamp(clock)
+    reason = "completed"
+    observations = []
+    observation_ids = []
+    evidence_digest = None
+    with tempfile.TemporaryDirectory(prefix="inspection-evidence-") as evidence_root:
+        try:
+            completed = adapter.run(
+                tuple(_execution_argv(lane, root, evidence_root)),
+                cwd=root, env=FIXED_EXECUTION_ENV,
+                timeout=lane["timeout_seconds"],
+            )
+            exit_code = completed.returncode
+            if type(exit_code) is not int:
+                _fail("invalid_adapter_result")
+            if exit_code == 0:
+                try:
+                    observations, observation_ids, evidence_digest = (
+                        _read_lane_evidence(evidence_root, lane["lane_id"])
+                    )
+                except InspectionError as error:
+                    status, reason = "failed", error.reason_code
+                else:
+                    status = "fallback" if fallback_reason else "available"
+                    reason = fallback_reason or "completed"
+            elif exit_code in {125, 126, 127}:
+                status, reason = "unavailable", "runtime_unavailable"
+            else:
+                status, reason = "failed", "nonzero_exit"
+            stdout, stdout_redacted = _redact_durable(completed.stdout)
+            stderr, stderr_redacted = _redact_durable(completed.stderr)
+        except (OSError, subprocess.TimeoutExpired):
+            status = "unavailable"
+            reason = "runtime_unavailable"
+            exit_code = None
+            stdout = stderr = ""
+            stdout_redacted = stderr_redacted = 0
+    finished = _timestamp(clock)
+    return {
+        "lane_id": lane["lane_id"],
+        "status": status,
+        "reason_code": reason,
+        "primary_lane_id": lane["primary_lane_id"],
+        "argv_identity": _canonical_digest({"argv": lane["argv"]}),
+        "execution_policy_digest": _execution_policy_digest(lane),
+        "tool_identity": lane["tool_identity"],
+        "image_identity": lane["image_identity"],
+        "service_identity": lane["service_identity"],
+        "plugin_version": lane["plugin_version"],
+        "timeout_seconds": lane["timeout_seconds"],
+        "started_at": started,
+        "finished_at": finished,
+        "exit_code": exit_code,
+        "evidence_references": list(lane["evidence_paths"]),
+        "evidence_digest": evidence_digest,
+        "observation_ids": observation_ids,
+        "classified_observations_digest": None,
+        "stdout": stdout,
+        "stderr": stderr,
+        "redacted_values": stdout_redacted + stderr_redacted,
+    }, observations
+
+
+def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, commit,
+                             dirty, purpose, operator_authorization_event_id,
+                             adapter=None, clock=None,
+                             pre_admission_hook=None, return_observations=False):
+    """Admit and execute selected primary lanes from one immutable snapshot."""
+    if type(profile) is not InspectionProfile or not profile.source_identity:
+        _fail("loaded_profile_required")
+    if type(lane_ids) not in {list, tuple} or not lane_ids:
+        _fail("lane_selection_required")
+    document = profile.to_dict()
+    lanes = {item["lane_id"]: item for item in document["lanes"]}
+    if any(type(item) is not str or item not in lanes for item in lane_ids):
+        _fail("unknown_lane_id")
+    if len(set(lane_ids)) != len(lane_ids):
+        _fail("duplicate_lane_id")
+    if any(lanes[item]["primary_lane_id"] is not None for item in lane_ids):
+        _fail("fallback_requires_primary")
+    validate_host_attestation(
+        attestation, profile, source=source, ref=ref, commit=commit,
+        dirty=dirty, purpose=purpose,
+        operator_authorization_event_id=operator_authorization_event_id,
+    )
+    if pre_admission_hook is not None:
+        pre_admission_hook()
+    _profile_source_unchanged(profile)
+
+    adapter = SubprocessAdapter() if adapter is None else adapter
+    clock = (
+        (lambda: datetime.now(timezone.utc))
+        if clock is None else clock
+    )
+    fallbacks = {}
+    for lane in document["lanes"]:
+        if lane["primary_lane_id"] is not None:
+            fallbacks.setdefault(lane["primary_lane_id"], []).append(lane)
+    receipts = []
+    observations = []
+    for lane_id in lane_ids:
+        primary = lanes[lane_id]
+        receipt, lane_observations = _attempt(
+            primary, adapter, profile.repository_root, clock,
+        )
+        receipts.append(receipt)
+        observations.extend(lane_observations)
+        candidates = sorted(fallbacks.get(lane_id, ()), key=lambda item: item["lane_id"])
+        if receipt["status"] == "available":
+            for fallback in candidates:
+                receipts.append({
+                    "lane_id": fallback["lane_id"], "status": "skipped",
+                    "reason_code": "primary_available", "primary_lane_id": lane_id,
+                    "argv_identity": _canonical_digest({"argv": fallback["argv"]}),
+                    "execution_policy_digest": _execution_policy_digest(fallback),
+                    "tool_identity": fallback["tool_identity"],
+                    "image_identity": fallback["image_identity"],
+                    "service_identity": fallback["service_identity"],
+                    "plugin_version": fallback["plugin_version"],
+                    "timeout_seconds": fallback["timeout_seconds"],
+                    "started_at": None, "finished_at": None, "exit_code": None,
+                    "evidence_references": list(fallback["evidence_paths"]),
+                    "evidence_digest": None, "observation_ids": [],
+                    "classified_observations_digest": None,
+                    "stdout": "", "stderr": "", "redacted_values": 0,
+                })
+            continue
+        fallback_reason = (
+            "primary_unavailable"
+            if receipt["status"] == "unavailable" else "primary_failed"
+        )
+        fallback_succeeded = False
+        for fallback in candidates:
+            if fallback_succeeded:
+                receipts.append({
+                    "lane_id": fallback["lane_id"], "status": "skipped",
+                    "reason_code": "earlier_fallback_available",
+                    "primary_lane_id": lane_id,
+                    "argv_identity": _canonical_digest({"argv": fallback["argv"]}),
+                    "execution_policy_digest": _execution_policy_digest(fallback),
+                    "tool_identity": fallback["tool_identity"],
+                    "image_identity": fallback["image_identity"],
+                    "service_identity": fallback["service_identity"],
+                    "plugin_version": fallback["plugin_version"],
+                    "timeout_seconds": fallback["timeout_seconds"],
+                    "started_at": None, "finished_at": None, "exit_code": None,
+                    "evidence_references": list(fallback["evidence_paths"]),
+                    "evidence_digest": None, "observation_ids": [],
+                    "classified_observations_digest": None,
+                    "stdout": "", "stderr": "", "redacted_values": 0,
+                })
+                continue
+            fallback_receipt, fallback_observations = _attempt(
+                fallback, adapter, profile.repository_root, clock,
+                fallback_reason=fallback_reason,
+            )
+            receipts.append(fallback_receipt)
+            if fallback_receipt["status"] == "fallback":
+                fallback_succeeded = True
+                observations.extend(fallback_observations)
+    if return_observations:
+        return receipts, observations
+    return receipts
+
+
+def _compatibility_identity(profile, result_policy):
+    document = profile.to_dict()
+    return {
+        "schema_version": AUTHORITATIVE_SCHEMA_VERSION,
+        "profile": {
+            "profile_id": document["profile_id"],
+            "profile_version": document["profile_version"],
+            "profile_digest": profile.digest,
+        },
+        "result_policy": {
+            "policy_id": result_policy.document["policy_id"],
+            "policy_version": result_policy.document["policy_version"],
+            "policy_digest": result_policy.digest,
+        },
+        "metric_definitions": [
+            {
+                "metric_id": item["metric_id"],
+                "catalog_id": item["catalog_id"],
+                "catalog_version": item["catalog_version"],
+                "catalog_digest": item["catalog_digest"],
+            }
+            for item in document["metrics"]
+        ],
+        "tool_identities": [
+            {
+                "lane_id": item["lane_id"],
+                "tool_identity": item["tool_identity"],
+                "image_identity": item["image_identity"],
+                "service_identity": item["service_identity"],
+                "plugin_version": item["plugin_version"],
+                "execution_policy_digest": _execution_policy_digest(item),
+            }
+            for item in document["lanes"]
+        ],
+    }
+
+
+def stable_projection(result):
+    receipts = []
+    for receipt in result["lane_receipts"]:
+        receipts.append({
+            key: value for key, value in receipt.items()
+            if key not in {"started_at", "finished_at", "stdout", "stderr"}
+        })
+    return {
+        "schema_version": result["schema_version"],
+        "result_type": result["result_type"],
+        "repository": result["repository"],
+        "profile": result["profile"],
+        "profile_snapshot": result["profile_snapshot"],
+        "result_policy": result["result_policy"],
+        "result_policy_snapshot": result["result_policy_snapshot"],
+        "compatibility_identity": result["compatibility_identity"],
+        "inspection_id": result["inspection_id"],
+        "completion_state": result["completion_state"],
+        "requested_identities": result["requested_identities"],
+        "attempted_identities": result["attempted_identities"],
+        "actual_identities": result["actual_identities"],
+        "coverage_gaps": result["coverage_gaps"],
+        "blockers": result["blockers"],
+        "trend_result": result["trend_result"],
+        "trend_baseline_digest": (
+            None
+            if result["trend_baseline"] is None
+            else _canonical_digest(result["trend_baseline"])
+        ),
+        "invocation": {
+            "operator_authorization_event_id": (
+                result["invocation"]["operator_authorization_event_id"]
+            ),
+            "purpose": result["invocation"]["purpose"],
+            "selected_lane_ids": result["invocation"]["selected_lane_ids"],
+        },
+        "observations": result["observations"],
+        "lane_receipts": receipts,
+        "redaction": result["redaction"],
+    }
+
+
+def _publication_state_digest_for(stable_projection_digest, publication_status):
+    return _canonical_digest({
+        "schema_version": 1,
+        "stable_projection_digest": stable_projection_digest,
+        "publication_status": publication_status,
+    })
+
+
+def _publication_state_digest(result):
+    return _publication_state_digest_for(
+        result["stable_projection_digest"], result["publication_status"],
+    )
+
+
+def _validate_publication_authority_key(key):
+    if (
+        type(key) is not bytes
+        or len(key) < 32
+        or len(key) > 4096
+    ):
+        _fail("invalid_publication_authority_key")
+    return key
+
+
+def _publication_attestation_payload(attestation):
+    return {
+        key: value for key, value in attestation.items()
+        if key != "signature"
+    }
+
+
+def _publication_attestation_signature(attestation, key):
+    return "hmac-sha256:" + hmac.new(
+        _validate_publication_authority_key(key),
+        _canonical_bytes(_publication_attestation_payload(attestation)),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _publication_key_id(key):
+    return "sha256:" + hashlib.sha256(
+        _validate_publication_authority_key(key),
+    ).hexdigest()
+
+
+def _publication_transition(prior_status, publication_status):
+    expected = {
+        ("uninitialized", "authoritative_json_ready"): (
+            "authoritative_json_completed"
+        ),
+        ("authoritative_json_ready", "authoritative_json_ready"): (
+            "authoritative_json_completed"
+        ),
+        ("authoritative_json_ready", "markdown_rendered"): (
+            "markdown_write_completed"
+        ),
+        ("markdown_rendered", "published"): "publication_completed",
+        ("authoritative_json_ready", "publication_failed"): (
+            "publication_failed"
+        ),
+        ("markdown_rendered", "publication_failed"): "publication_failed",
+        ("published", "published"): "publication_completed",
+        ("publication_failed", "publication_failed"): "publication_failed",
+    }
+    action = expected.get((prior_status, publication_status))
+    if action is None:
+        _fail("invalid_publication_transition")
+    return action
+
+
+def _issue_publication_attestation(result, key, prior_status):
+    key = _validate_publication_authority_key(key)
+    attestation = {
+        "schema_version": 1,
+        "inspection_id": result["inspection_id"],
+        "stable_projection_digest": result["stable_projection_digest"],
+        "prior_publication_status": prior_status,
+        "prior_publication_state_digest": _publication_state_digest_for(
+            result["stable_projection_digest"], prior_status,
+        ),
+        "publication_status": result["publication_status"],
+        "publication_state_digest": result["publication_state_digest"],
+        "host_action": _publication_transition(
+            prior_status, result["publication_status"],
+        ),
+        "operator_authorization_event_id": result["invocation"][
+            "operator_authorization_event_id"
+        ],
+        "authority_key_id": _publication_key_id(key),
+    }
+    attestation["signature"] = _publication_attestation_signature(
+        attestation, key,
+    )
+    return attestation
+
+
+def _validate_publication_attestation(result, attestation, key):
+    key = _validate_publication_authority_key(key)
+    _exact_object(
+        attestation, _PUBLICATION_ATTESTATION_FIELDS,
+        reason="invalid_publication_attestation",
+    )
+    for field in (
+        "inspection_id", "host_action", "operator_authorization_event_id",
+    ):
+        if (
+            type(attestation[field]) is not str
+            or _IDENTIFIER.fullmatch(attestation[field]) is None
+        ):
+            _fail("invalid_publication_attestation")
+    for field in (
+        "stable_projection_digest", "prior_publication_state_digest",
+        "publication_state_digest", "authority_key_id",
+    ):
+        if (
+            type(attestation[field]) is not str
+            or _DIGEST.fullmatch(attestation[field]) is None
+        ):
+            _fail("invalid_publication_attestation")
+    if (
+        type(attestation["schema_version"]) is not int
+        or attestation["schema_version"] != 1
+        or type(attestation["signature"]) is not str
+        or re.fullmatch(
+            r"hmac-sha256:[0-9a-f]{64}", attestation["signature"],
+        ) is None
+    ):
+        _fail("invalid_publication_attestation")
+    prior_status = attestation["prior_publication_status"]
+    host_action = _publication_transition(
+        prior_status, result["publication_status"],
+    )
+    if (
+        attestation["inspection_id"] != result["inspection_id"]
+        or attestation["stable_projection_digest"]
+        != result["stable_projection_digest"]
+        or attestation["prior_publication_status"] != prior_status
+        or attestation["prior_publication_state_digest"]
+        != _publication_state_digest_for(
+            result["stable_projection_digest"], prior_status,
+        )
+        or attestation["publication_status"] != result["publication_status"]
+        or attestation["publication_state_digest"]
+        != result["publication_state_digest"]
+        or attestation["host_action"] != host_action
+        or attestation["operator_authorization_event_id"]
+        != result["invocation"]["operator_authorization_event_id"]
+        or attestation["authority_key_id"] != _publication_key_id(key)
+        or not hmac.compare_digest(
+            attestation["signature"],
+            _publication_attestation_signature(attestation, key),
+        )
+    ):
+        _fail("publication_attestation_binding_mismatch")
+    return attestation
+
+
+def _trend_baseline_projection(baseline):
+    return {
+        "schema_version": 1,
+        "authoritative_schema_version": baseline["schema_version"],
+        "authoritative_stable_projection_digest": (
+            baseline["stable_projection_digest"]
+        ),
+        "compatibility_identity": json.loads(json.dumps(
+            baseline["compatibility_identity"], allow_nan=False,
+        )),
+        "observation_values": sorted([
+            {
+                "observation_id": item["observation_id"],
+                "value": item["raw_telemetry"]["value"],
+            }
+            for item in baseline["observations"]
+            if (
+                type(item["raw_telemetry"]) is dict
+                and type(item["raw_telemetry"].get("value")) in {int, float}
+                and type(item["raw_telemetry"].get("value")) is not bool
+            )
+        ], key=lambda item: item["observation_id"]),
+    }
+
+
+def _validate_trend_baseline_projection(baseline):
+    _exact_object(
+        baseline,
+        frozenset({
+            "schema_version", "authoritative_schema_version",
+            "authoritative_stable_projection_digest",
+            "compatibility_identity", "observation_values",
+        }),
+        reason="invalid_trend_result",
+    )
+    if (
+        type(baseline["schema_version"]) is not int
+        or baseline["schema_version"] != 1
+        or type(baseline["authoritative_schema_version"]) is not int
+        or type(baseline["authoritative_stable_projection_digest"]) is not str
+        or _DIGEST.fullmatch(
+            baseline["authoritative_stable_projection_digest"],
+        ) is None
+        or type(baseline["compatibility_identity"]) is not dict
+    ):
+        _fail("invalid_trend_result")
+    values = _exact_list(
+        baseline["observation_values"], field="observation_values",
+    )
+    prior_id = None
+    for item in values:
+        _exact_object(
+            item, frozenset({"observation_id", "value"}),
+            reason="invalid_trend_result",
+        )
+        if (
+            type(item["observation_id"]) is not str
+            or _IDENTIFIER.fullmatch(item["observation_id"]) is None
+            or (
+                type(item["value"]) not in {int, float}
+                or type(item["value"]) is bool
+            )
+            or (prior_id is not None and item["observation_id"] <= prior_id)
+        ):
+            _fail("invalid_trend_result")
+        prior_id = item["observation_id"]
+    safe_baseline, leaked = _redact_durable(baseline)
+    del safe_baseline
+    if leaked:
+        _fail("invalid_trend_result")
+    return baseline
+
+
+def _bind_observation_provenance(classified, lane_receipts):
+    """Bind each finding to the lane that produced it and degrade fallback confidence."""
+    by_id = {
+        item["observation_id"]: dict(item) for item in classified
+    }
+    confidence_fallback = {
+        "high": "medium", "medium": "low", "low": "unknown",
+        "unknown": "unknown",
+    }
+    for receipt in lane_receipts:
+        if receipt["status"] not in {"available", "fallback"}:
+            continue
+        for observation_id in receipt["observation_ids"]:
+            observation = by_id.get(observation_id)
+            if observation is None or observation["lane_id"] is not None:
+                _fail("unbound_lane_evidence")
+            observation["lane_id"] = receipt["lane_id"]
+            observation["primary_lane_id"] = receipt["primary_lane_id"]
+            observation["lane_status"] = receipt["status"]
+            if (
+                observation["evidence_status"] == "fallback"
+                and receipt["status"] != "fallback"
+            ):
+                _fail("unbound_lane_evidence")
+            if observation["evidence_status"] in {
+                "unavailable", "failed", "skipped",
+            }:
+                observation["evidence_confidence"] = "unavailable"
+            elif receipt["status"] == "fallback":
+                observation["evidence_confidence"] = "fallback"
+                observation["confidence"] = confidence_fallback[
+                    observation["confidence"]
+                ]
+            else:
+                observation["evidence_confidence"] = "primary"
+    if any(item["lane_id"] is None for item in by_id.values()):
+        _fail("unbound_lane_evidence")
+    return sorted(by_id.values(), key=lambda item: item["observation_id"])
+
+
+def _inspection_lane_identity(lane):
+    return {
+        "lane_id": lane["lane_id"],
+        "tool_identity": lane["tool_identity"],
+        "image_identity": lane["image_identity"],
+        "service_identity": lane["service_identity"],
+        "plugin_version": lane["plugin_version"],
+        "execution_policy_digest": _execution_policy_digest(lane),
+    }
+
+
+def _derive_result_state(
+    profile, result_policy, lane_receipts, observations, invocation,
+):
+    """Apply separately validated workflow policy to inspection evidence."""
+    profile_document = profile.to_dict()
+    lanes = {item["lane_id"]: item for item in profile_document["lanes"]}
+    if type(result_policy) is not InspectionResultPolicy:
+        _fail("validated_result_policy_required")
+    policy = result_policy.to_dict()
+    selected = invocation.get("selected_lane_ids")
+    if (
+        type(selected) is not list
+        or any(
+            type(lane_id) is not str
+            or lane_id not in lanes
+            or lanes[lane_id]["primary_lane_id"] is not None
+            for lane_id in selected
+        )
+    ):
+        _fail("invalid_invocation")
+    requested = [
+        _inspection_lane_identity(lanes[lane_id]) for lane_id in selected
+    ]
+    attempted = [
+        _inspection_lane_identity(lanes[item["lane_id"]])
+        for item in lane_receipts if item["started_at"] is not None
+    ]
+    actual = [
+        _inspection_lane_identity(lanes[item["lane_id"]])
+        for item in lane_receipts if item["status"] in {"available", "fallback"}
+    ]
+    gaps = [
+        {
+            "lane_id": item["lane_id"],
+            "status": item["status"],
+            "reason_code": item["reason_code"],
+            "primary_lane_id": item["primary_lane_id"],
+        }
+        for item in lane_receipts
+        if item["status"] in policy["lane_gap_statuses"]
+    ]
+    fallback_covered = {
+        item["primary_lane_id"] for item in lane_receipts
+        if item["status"] == "fallback"
+    }
+    blockers = [
+        {
+            "blocker_type": "lane",
+            "lane_id": item["lane_id"],
+            "observation_id": None,
+            "reason_code": item["reason_code"],
+        }
+        for item in lane_receipts
+        if (
+            item["lane_id"] in selected
+            and item["status"] in policy["lane_blocker_statuses"]
+            and item["lane_id"] not in fallback_covered
+        )
+    ]
+    for item in observations:
+        if item["reason_code"] != policy["classified_reason_code"]:
+            blockers.append({
+                "blocker_type": "observation",
+                "lane_id": item["lane_id"],
+                "observation_id": item["observation_id"],
+                "reason_code": item["reason_code"],
+            })
+        elif item["evidence_status"] in policy[
+            "observation_blocker_evidence_statuses"
+        ]:
+            blockers.append({
+                "blocker_type": "observation",
+                "lane_id": item["lane_id"],
+                "observation_id": item["observation_id"],
+                "reason_code": f"evidence_{item['evidence_status']}",
+            })
+    blockers.sort(key=lambda item: (
+        item["blocker_type"], item["lane_id"] or "",
+        item["observation_id"] or "", item["reason_code"],
+    ))
+    gaps.sort(key=lambda item: item["lane_id"])
+    labels = policy["completion_labels"]
+    if blockers:
+        completion_state = labels["blocked"]
+    elif gaps:
+        completion_state = labels["gaps"]
+    elif any(item["actionable"] for item in observations):
+        completion_state = labels["findings"]
+    else:
+        completion_state = labels["clean"]
+    return {
+        "inspection_id": invocation.get("purpose"),
+        "completion_state": completion_state,
+        "requested_identities": requested,
+        "attempted_identities": attempted,
+        "actual_identities": actual,
+        "coverage_gaps": gaps,
+        "blockers": blockers,
+    }
+
+
+def _default_trend_result():
+    return {
+        "schema_version": 1,
+        "status": "not_compared",
+        "reason_code": "baseline_not_supplied",
+        "incompatible_identity_fields": [],
+        "deltas": [],
+    }
+
+
+def _validate_lifecycle(publication_status, trend_result):
+    if publication_status not in {
+        "authoritative_json_ready", "markdown_rendered",
+        "published", "publication_failed",
+    }:
+        _fail("invalid_publication_status")
+    trend = _exact_object(
+        trend_result,
+        frozenset({
+            "schema_version", "status", "reason_code",
+            "incompatible_identity_fields", "deltas",
+        }),
+        reason="invalid_trend_result",
+    )
+    incompatible = _exact_list(
+        trend["incompatible_identity_fields"],
+        field="incompatible_identity_fields",
+    )
+    deltas = _exact_list(trend["deltas"], field="deltas")
+    if type(trend["schema_version"]) is not int or trend["schema_version"] != 1:
+        _fail("invalid_trend_result")
+    if trend["status"] == "not_compared":
+        valid = (
+            trend["reason_code"] == "baseline_not_supplied"
+            and not incompatible and not deltas
+        )
+    elif trend["status"] == "baseline_discontinuity":
+        valid = (
+            trend["reason_code"] == "incompatible_baseline"
+            and bool(incompatible) and not deltas
+            and all(type(item) is str and item for item in incompatible)
+        )
+    elif trend["status"] == "compatible":
+        valid = (
+            trend["reason_code"] == "comparable"
+            and not incompatible
+        )
+        delta_fields = frozenset({
+            "observation_id", "current", "baseline", "delta",
+        })
+        for item in deltas:
+            _exact_object(item, delta_fields, reason="invalid_trend_result")
+            if (
+                type(item["observation_id"]) is not str
+                or _IDENTIFIER.fullmatch(item["observation_id"]) is None
+                or type(item["current"]) not in {int, float}
+                or type(item["current"]) is bool
+                or type(item["baseline"]) not in {int, float}
+                or type(item["baseline"]) is bool
+                or type(item["delta"]) not in {int, float}
+                or type(item["delta"]) is bool
+                or item["current"] - item["baseline"] != item["delta"]
+            ):
+                _fail("invalid_trend_result")
+    else:
+        valid = False
+    if not valid:
+        _fail("invalid_trend_result")
+    return publication_status, trend
+
+
+def build_authoritative_result(profile, result_policy, *, source, ref, commit, dirty,
+                               observations, lane_receipts, invocation,
+                               publication_authority_key):
+    publication_authority_key = _validate_publication_authority_key(
+        publication_authority_key,
+    )
+    if type(profile) is not InspectionProfile:
+        _fail("validated_profile_required")
+    if type(result_policy) is not InspectionResultPolicy:
+        _fail("validated_result_policy_required")
+    if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
+        _fail("invalid_repository_provenance")
+    lanes_by_id = {
+        item["lane_id"]: item for item in profile.to_dict()["lanes"]
+    }
+    normalized_receipts = []
+    for receipt in _exact_list(lane_receipts, field="lane_receipts"):
+        if type(receipt) is not dict:
+            _fail("invalid_lane_receipt")
+        lane = lanes_by_id.get(receipt.get("lane_id"))
+        if lane is None:
+            _fail("invalid_lane_receipt")
+        expected_policy_digest = _execution_policy_digest(lane)
+        supplied_policy_digest = receipt.get("execution_policy_digest")
+        if (
+            supplied_policy_digest is not None
+            and supplied_policy_digest != expected_policy_digest
+        ):
+            _fail("invalid_lane_receipt")
+        normalized = dict(receipt)
+        normalized["execution_policy_digest"] = expected_policy_digest
+        normalized_receipts.append(normalized)
+    lane_receipts = normalized_receipts
+
+    raw_observations = _exact_list(observations, field="observations")
+    raw_ids = []
+    for observation in raw_observations:
+        if type(observation) is not dict:
+            _fail("invalid_lane_evidence")
+        raw_ids.append(_string(
+            observation.get("observation_id"),
+            field="observation_id", identifier=True,
+        ))
+    if len(raw_ids) != len(set(raw_ids)):
+        _fail("duplicate_id")
+    raw_by_id = {
+        item["observation_id"]: item for item in raw_observations
+    }
+
+    bound_ids = []
+    for receipt in _exact_list(lane_receipts, field="lane_receipts"):
+        if type(receipt) is not dict:
+            _fail("invalid_lane_receipt")
+        receipt_ids = _exact_list(
+            receipt.get("observation_ids"), field="observation_ids",
+        )
+        digest = receipt.get("evidence_digest")
+        if receipt.get("status") in {"available", "fallback"}:
+            if (
+                type(digest) is not str
+                or _DIGEST.fullmatch(digest) is None
+                or any(type(item) is not str for item in receipt_ids)
+            ):
+                _fail("unbound_lane_evidence")
+            try:
+                bound_observations = [
+                    raw_by_id[item] for item in receipt_ids
+                ]
+            except KeyError:
+                _fail("unbound_lane_evidence")
+            envelope = {
+                "schema_version": 1,
+                "lane_id": receipt.get("lane_id"),
+                "observations": bound_observations,
+            }
+            if _canonical_digest(envelope) != digest:
+                _fail("unbound_lane_evidence")
+            bound_ids.extend(receipt_ids)
+        elif digest is not None or receipt_ids:
+            _fail("unbound_lane_evidence")
+    if sorted(bound_ids) != sorted(raw_ids) or len(bound_ids) != len(set(bound_ids)):
+        _fail("unbound_lane_evidence")
+
+    classified = _bind_observation_provenance(
+        classify_observations(profile, raw_observations), lane_receipts,
+    )
+    classified_by_id = {
+        item["observation_id"]: item for item in classified
+    }
+    bound_receipts = []
+    for receipt in lane_receipts:
+        bound_receipt = dict(receipt)
+        if receipt["status"] in {"available", "fallback"}:
+            source_observations = [
+                raw_by_id[item] for item in receipt["observation_ids"]
+            ]
+            evidence_snapshot = []
+            snapshot_redactions = 0
+            for source_observation in source_observations:
+                safe_source, redacted = _redact_durable(source_observation)
+                evidence_snapshot.append(safe_source)
+                snapshot_redactions += redacted
+            bound_receipt["evidence_snapshot"] = evidence_snapshot
+            bound_receipt["evidence_digest"] = _canonical_digest({
+                "schema_version": 1,
+                "lane_id": receipt["lane_id"],
+                "observations": evidence_snapshot,
+            })
+            bound_receipt["classified_observations_digest"] = _canonical_digest([
+                classified_by_id[item] for item in receipt["observation_ids"]
+            ])
+            bound_receipt["redacted_values"] = (
+                bound_receipt.get("redacted_values", 0) + snapshot_redactions
+            )
+        else:
+            bound_receipt["evidence_snapshot"] = []
+            bound_receipt["classified_observations_digest"] = None
+        bound_receipts.append(bound_receipt)
+    lane_receipts = bound_receipts
+    redacted_count = sum(item["redacted_values"] for item in classified)
+    redacted_count += sum(item.get("redacted_values", 0) for item in lane_receipts)
+    publication_status, trend_result = _validate_lifecycle(
+        "authoritative_json_ready", _default_trend_result(),
+    )
+    result = {
+        "schema_version": AUTHORITATIVE_SCHEMA_VERSION,
+        "result_type": "inspection_authoritative",
+        "repository": {
+            "source": source, "ref": ref, "commit": commit, "dirty": dirty,
+        },
+        "profile": {
+            "profile_id": profile.document["profile_id"],
+            "profile_version": profile.document["profile_version"],
+            "profile_digest": profile.digest,
+            "profile_path": profile.profile_path,
+        },
+        "profile_snapshot": profile.to_dict(),
+        "result_policy": {
+            "policy_id": result_policy.document["policy_id"],
+            "policy_version": result_policy.document["policy_version"],
+            "policy_digest": result_policy.digest,
+        },
+        "result_policy_snapshot": result_policy.to_dict(),
+        "compatibility_identity": _compatibility_identity(
+            profile, result_policy,
+        ),
+        **_derive_result_state(
+            profile,
+            result_policy,
+            lane_receipts,
+            classified,
+            invocation,
+        ),
+        "publication_status": publication_status,
+        "trend_result": trend_result,
+        "trend_baseline": None,
+        "observations": classified,
+        "lane_receipts": lane_receipts,
+        "invocation": invocation,
+        "redaction": {
+            "applied": redacted_count > 0,
+            "redacted_value_count": redacted_count,
+        },
+    }
+    result["stable_projection_digest"] = _canonical_digest(stable_projection(result))
+    result["publication_state_digest"] = _publication_state_digest(result)
+    result["publication_attestation"] = _issue_publication_attestation(
+        result, publication_authority_key, "uninitialized",
+    )
+    return validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
+    )
+
+
+def _validate_authoritative_structure(result):
+    fields = frozenset({
+        "schema_version", "result_type", "repository", "profile",
+        "profile_snapshot", "result_policy", "result_policy_snapshot",
+        "compatibility_identity", "inspection_id",
+        "completion_state", "requested_identities", "attempted_identities",
+        "actual_identities", "coverage_gaps", "blockers",
+        "publication_status", "trend_result", "trend_baseline", "observations",
+        "lane_receipts", "invocation", "redaction", "stable_projection_digest",
+        "publication_state_digest", "publication_attestation",
+    })
+    _exact_object(result, fields, reason="invalid_authoritative_result")
+    if (
+        type(result["schema_version"]) is not int
+        or result["schema_version"] != AUTHORITATIVE_SCHEMA_VERSION
+        or result["result_type"] != "inspection_authoritative"
+    ):
+        _fail("unsupported_authoritative_schema")
+    repository = _exact_object(
+        result["repository"], frozenset({"source", "ref", "commit", "dirty"}),
+        reason="invalid_authoritative_repository",
+    )
+    if (
+        repository["source"] != "git"
+        or type(repository["ref"]) is not str
+        or _GIT_REF.fullmatch(repository["ref"]) is None
+        or type(repository["commit"]) is not str
+        or _COMMIT.fullmatch(repository["commit"]) is None
+        or type(repository["dirty"]) is not bool
+    ):
+        _fail("invalid_authoritative_repository")
+    profile = _exact_object(
+        result["profile"],
+        frozenset({"profile_id", "profile_version", "profile_digest", "profile_path"}),
+        reason="invalid_authoritative_profile",
+    )
+    _string(profile["profile_id"], field="profile_id", identifier=True)
+    if (
+        type(profile["profile_version"]) is not str
+        or _SEMVER.fullmatch(profile["profile_version"]) is None
+        or type(profile["profile_digest"]) is not str
+        or _DIGEST.fullmatch(profile["profile_digest"]) is None
+    ):
+        _fail("invalid_authoritative_profile")
+    try:
+        _validate_repository_relative_path(profile["profile_path"])
+    except InspectionError:
+        _fail("invalid_authoritative_profile")
+    try:
+        embedded_profile = validate_inspection_profile(
+            result["profile_snapshot"], Path("/"),
+            profile_path=profile["profile_path"],
+        )
+    except InspectionError:
+        _fail("invalid_authoritative_profile")
+    if (
+        embedded_profile.to_dict() != result["profile_snapshot"]
+        or embedded_profile.digest != profile["profile_digest"]
+        or embedded_profile.document["profile_id"] != profile["profile_id"]
+        or embedded_profile.document["profile_version"] != profile["profile_version"]
+    ):
+        _fail("invalid_authoritative_profile")
+    try:
+        embedded_policy = validate_result_policy(
+            result["result_policy_snapshot"],
+        )
+    except InspectionError:
+        _fail("invalid_authoritative_result_policy")
+    result_policy = _exact_object(
+        result["result_policy"],
+        frozenset({"policy_id", "policy_version", "policy_digest"}),
+        reason="invalid_authoritative_result_policy",
+    )
+    if result_policy != {
+        "policy_id": embedded_policy.document["policy_id"],
+        "policy_version": embedded_policy.document["policy_version"],
+        "policy_digest": embedded_policy.digest,
+    }:
+        _fail("invalid_authoritative_result_policy")
+    compatibility = _exact_object(
+        result["compatibility_identity"],
+        frozenset({
+            "schema_version", "profile", "result_policy",
+            "metric_definitions", "tool_identities",
+        }),
+        reason="invalid_compatibility_identity",
+    )
+    if (
+        type(compatibility["schema_version"]) is not int
+        or compatibility["schema_version"] != 1
+    ):
+        _fail("invalid_compatibility_identity")
+    compatibility_profile = _exact_object(
+        compatibility["profile"],
+        frozenset({"profile_id", "profile_version", "profile_digest"}),
+        reason="invalid_compatibility_identity",
+    )
+    if compatibility_profile != {
+        "profile_id": profile["profile_id"],
+        "profile_version": profile["profile_version"],
+        "profile_digest": profile["profile_digest"],
+    }:
+        _fail("invalid_compatibility_identity")
+    if compatibility != _compatibility_identity(
+        embedded_profile,
+        embedded_policy,
+    ):
+        _fail("invalid_compatibility_identity")
+    return profile, embedded_profile, embedded_policy, compatibility
+
+
+def _validate_authoritative_compatibility(
+    compatibility, profile, embedded_profile,
+):
+    metric_fields = frozenset({
+        "metric_id", "catalog_id", "catalog_version", "catalog_digest",
+    })
+    metric_ids = set()
+    for metric in _exact_list(
+        compatibility["metric_definitions"], field="metric_definitions",
+    ):
+        _exact_object(metric, metric_fields, reason="invalid_compatibility_identity")
+        metric_id = _string(metric["metric_id"], field="metric_id", identifier=True)
+        if metric_id in metric_ids:
+            _fail("invalid_compatibility_identity")
+        metric_ids.add(metric_id)
+        _string(metric["catalog_id"], field="catalog_id", identifier=True)
+        if (
+            type(metric["catalog_version"]) is not str
+            or _SEMVER.fullmatch(metric["catalog_version"]) is None
+            or type(metric["catalog_digest"]) is not str
+            or _DIGEST.fullmatch(metric["catalog_digest"]) is None
+        ):
+            _fail("invalid_compatibility_identity")
+    tool_fields = frozenset({
+        "lane_id", "tool_identity", "image_identity", "service_identity",
+        "plugin_version", "execution_policy_digest",
+    })
+    lane_ids = set()
+    for tool in _exact_list(
+        compatibility["tool_identities"], field="tool_identities",
+    ):
+        _exact_object(tool, tool_fields, reason="invalid_compatibility_identity")
+        lane_id = _string(tool["lane_id"], field="lane_id", identifier=True)
+        if lane_id in lane_ids:
+            _fail("invalid_compatibility_identity")
+        lane_ids.add(lane_id)
+        if (
+            type(tool["tool_identity"]) is not str
+            or not tool["tool_identity"].startswith("docker:")
+            or _SEMVER.fullmatch(tool["tool_identity"][7:]) is None
+            or type(tool["plugin_version"]) is not str
+            or _SEMVER.fullmatch(tool["plugin_version"]) is None
+            or type(tool["execution_policy_digest"]) is not str
+            or _DIGEST.fullmatch(tool["execution_policy_digest"]) is None
+        ):
+            _fail("invalid_compatibility_identity")
+        image, service = tool["image_identity"], tool["service_identity"]
+        if not (
+            type(image) is str
+            and service is None
+            and _IMAGE_IDENTITY.fullmatch(image) is not None
+        ):
+            _fail("invalid_compatibility_identity")
+    tool_by_lane = {
+        item["lane_id"]: item for item in compatibility["tool_identities"]
+    }
+    return tool_by_lane
+
+
+def _validate_authoritative_observations(result):
+    observation_fields = frozenset({
+        "observation_id", "surface_id", "rule_id", "metric_id",
+        "classification", "confidence", "actionable", "reason_code",
+        "evidence_status", "evidence_confidence", "lane_status",
+        "lane_id", "primary_lane_id",
+        "evidence_references", "raw_telemetry",
+        "source_observation_digest", "redacted_values",
+    })
+    authoritative_observation_ids = []
+    for observation in _exact_list(result["observations"], field="observations"):
+        _exact_object(
+            observation, observation_fields,
+            reason="invalid_authoritative_observation",
+        )
+        if (
+            observation["evidence_status"] not in EVIDENCE_STATUSES
+            or observation["lane_status"] not in {"available", "fallback"}
+            or observation["evidence_confidence"] not in {
+                "primary", "fallback", "unavailable",
+            }
+            or (
+                observation["evidence_status"] in {
+                    "unavailable", "failed", "skipped",
+                }
+                and observation["evidence_confidence"] != "unavailable"
+            )
+            or (
+                observation["evidence_status"] == "available"
+                and observation["lane_status"] == "available"
+                and observation["evidence_confidence"] != "primary"
+            )
+            or (
+                (
+                    observation["evidence_status"] == "fallback"
+                    or observation["lane_status"] == "fallback"
+                )
+                and observation["evidence_status"] not in {
+                    "unavailable", "failed", "skipped",
+                }
+                and observation["evidence_confidence"] != "fallback"
+            )
+            or (
+                observation["evidence_status"] == "fallback"
+                and observation["lane_status"] != "fallback"
+            )
+            or type(observation["actionable"]) is not bool
+            or type(observation["source_observation_digest"]) is not str
+            or _DIGEST.fullmatch(
+                observation["source_observation_digest"],
+            ) is None
+            or type(observation["redacted_values"]) is not int
+        ):
+            _fail("invalid_authoritative_observation")
+        authoritative_observation_ids.append(_string(
+            observation["observation_id"],
+            field="observation_id", identifier=True,
+        ))
+        for field in (
+            "surface_id", "rule_id", "metric_id", "lane_id", "primary_lane_id",
+        ):
+            if observation[field] is not None:
+                _string(observation[field], field=field, identifier=True)
+        _string(observation["classification"], field="classification", identifier=True)
+        _string(observation["reason_code"], field="reason_code", identifier=True)
+        if observation["confidence"] not in {"high", "medium", "low", "unknown"}:
+            _fail("invalid_authoritative_observation")
+        references = _exact_list(
+            observation["evidence_references"], field="evidence_references",
+        )
+        if any(
+            type(reference) is not str
+            or normalize_evidence_reference(reference) != reference
+            for reference in references
+        ):
+            _fail("invalid_authoritative_observation")
+        try:
+            if json.loads(
+                json.dumps(observation["raw_telemetry"], allow_nan=False),
+            ) != observation["raw_telemetry"]:
+                _fail("invalid_authoritative_observation")
+        except (TypeError, ValueError):
+            _fail("invalid_authoritative_observation")
+        safe_telemetry, leaked = _redact_durable(observation["raw_telemetry"])
+        if safe_telemetry != observation["raw_telemetry"] or leaked:
+            _fail("invalid_authoritative_observation")
+    return authoritative_observation_ids
+
+
+def _validate_lane_receipt_metadata(receipt, receipt_fields, tool_by_lane):
+    _exact_object(receipt, receipt_fields, reason="invalid_lane_receipt")
+    if (
+        receipt["status"] not in EVIDENCE_STATUSES
+        or type(receipt["timeout_seconds"]) is not int
+        or receipt["timeout_seconds"] < 1
+        or type(receipt["redacted_values"]) is not int
+        or receipt["redacted_values"] < 0
+        or (
+            receipt["exit_code"] is not None
+            and type(receipt["exit_code"]) is not int
+        )
+    ):
+        _fail("invalid_lane_receipt")
+    _string(receipt["lane_id"], field="lane_id", identifier=True)
+    _string(receipt["reason_code"], field="reason_code", identifier=True)
+    if receipt["primary_lane_id"] is not None:
+        _string(
+            receipt["primary_lane_id"], field="primary_lane_id", identifier=True,
+        )
+    if (
+        type(receipt["argv_identity"]) is not str
+        or _DIGEST.fullmatch(receipt["argv_identity"]) is None
+        or type(receipt["execution_policy_digest"]) is not str
+        or _DIGEST.fullmatch(receipt["execution_policy_digest"]) is None
+        or type(receipt["tool_identity"]) is not str
+        or not receipt["tool_identity"].startswith("docker:")
+        or _SEMVER.fullmatch(receipt["tool_identity"][7:]) is None
+        or type(receipt["plugin_version"]) is not str
+        or _SEMVER.fullmatch(receipt["plugin_version"]) is None
+        or type(receipt["stdout"]) is not str
+        or type(receipt["stderr"]) is not str
+        or contains_high_confidence_secret(receipt["stdout"])
+        or contains_high_confidence_secret(receipt["stderr"])
+    ):
+        _fail("invalid_lane_receipt")
+    declared_tool = tool_by_lane.get(receipt["lane_id"])
+    if declared_tool is None or any(
+        receipt[field] != declared_tool[field]
+        for field in (
+            "tool_identity", "image_identity", "service_identity",
+            "plugin_version", "execution_policy_digest",
+        )
+    ):
+        _fail("invalid_lane_receipt")
+    if (
+        receipt["status"] in {"fallback", "skipped"}
+        and receipt["primary_lane_id"] is None
+    ):
+        _fail("invalid_lane_receipt")
+    for field in ("started_at", "finished_at"):
+        if receipt[field] is not None:
+            normalize_durable_string(receipt[field])
+    _validate_lane_receipt_status(receipt)
+
+
+def _validate_lane_receipt_status(receipt):
+    has_times = (
+        receipt["started_at"] is not None
+        and receipt["finished_at"] is not None
+    )
+    evidence_failure_reasons = {
+        "missing_lane_evidence", "invalid_lane_evidence", "invalid_json",
+        "duplicate_json_key", "duplicate_id", "missing_field",
+        "unknown_key", "wrong_type", "invalid_identifier",
+        "invalid_collection_item",
+    }
+    if receipt["status"] == "available":
+        valid_semantics = (
+            receipt["exit_code"] == 0
+            and receipt["reason_code"] == "completed"
+            and receipt["primary_lane_id"] is None
+            and has_times
+        )
+    elif receipt["status"] == "fallback":
+        valid_semantics = (
+            receipt["exit_code"] == 0
+            and receipt["reason_code"] in {
+                "primary_unavailable", "primary_failed",
+            }
+            and receipt["primary_lane_id"] is not None
+            and has_times
+        )
+    elif receipt["status"] == "unavailable":
+        valid_semantics = (
+            receipt["exit_code"] in {None, 125, 126, 127}
+            and receipt["reason_code"] == "runtime_unavailable"
+            and has_times
+        )
+    elif receipt["status"] == "failed":
+        valid_semantics = has_times and (
+            (
+                receipt["reason_code"] == "nonzero_exit"
+                and type(receipt["exit_code"]) is int
+                and receipt["exit_code"] not in {0, 125, 126, 127}
+            )
+            or (
+                receipt["reason_code"] in evidence_failure_reasons
+                and receipt["exit_code"] == 0
+            )
+        )
+    else:
+        valid_semantics = (
+            receipt["exit_code"] is None
+            and receipt["reason_code"] in {
+                "primary_available", "earlier_fallback_available",
+            }
+            and receipt["primary_lane_id"] is not None
+            and receipt["started_at"] is None
+            and receipt["finished_at"] is None
+            and receipt["stdout"] == ""
+            and receipt["stderr"] == ""
+            and receipt["redacted_values"] == 0
+        )
+    if not valid_semantics:
+        _fail("invalid_lane_receipt")
+
+
+
+def _validate_lane_receipt_evidence(receipt):
+    for reference in _exact_list(
+        receipt["evidence_references"], field="evidence_references",
+    ):
+        if (
+            type(reference) is not str
+            or normalize_evidence_reference(reference) != reference
+        ):
+            _fail("invalid_lane_receipt")
+    observation_ids = _exact_list(
+        receipt["observation_ids"], field="observation_ids",
+    )
+    evidence_snapshot = _exact_list(
+        receipt["evidence_snapshot"], field="evidence_snapshot",
+    )
+    if (
+        any(
+            type(item) is not str or _IDENTIFIER.fullmatch(item) is None
+            for item in observation_ids
+        )
+        or len(observation_ids) != len(set(observation_ids))
+    ):
+        _fail("invalid_lane_receipt")
+    if receipt["status"] in {"available", "fallback"}:
+        if (
+            type(receipt["evidence_digest"]) is not str
+            or _DIGEST.fullmatch(receipt["evidence_digest"]) is None
+            or type(receipt["classified_observations_digest"]) is not str
+            or _DIGEST.fullmatch(
+                receipt["classified_observations_digest"],
+            ) is None
+        ):
+            _fail("invalid_lane_receipt")
+        try:
+            snapshot_bytes = json.dumps(
+                evidence_snapshot, allow_nan=False,
+            )
+            snapshot_round_trip = json.loads(snapshot_bytes)
+        except (TypeError, ValueError):
+            _fail("invalid_lane_receipt")
+        safe_snapshot, leaked = _redact_durable(evidence_snapshot)
+        if (
+            snapshot_round_trip != evidence_snapshot
+            or safe_snapshot != evidence_snapshot
+            or leaked
+        ):
+            _fail("invalid_lane_receipt")
+        snapshot_ids = []
+        for source_observation in evidence_snapshot:
+            if type(source_observation) is not dict:
+                _fail("invalid_lane_receipt")
+            snapshot_ids.append(_string(
+                source_observation.get("observation_id"),
+                field="observation_id", identifier=True,
+            ))
+        if snapshot_ids != observation_ids:
+            _fail("unbound_lane_evidence")
+        evidence_envelope = {
+            "schema_version": 1,
+            "lane_id": receipt["lane_id"],
+            "observations": evidence_snapshot,
+        }
+        if _canonical_digest(evidence_envelope) != receipt["evidence_digest"]:
+            _fail("unbound_lane_evidence")
+        return observation_ids
+    elif (
+        receipt["evidence_digest"] is not None
+        or receipt["classified_observations_digest"] is not None
+        or evidence_snapshot
+        or observation_ids
+    ):
+        _fail("invalid_lane_receipt")
+    return []
+
+
+def _validate_authoritative_receipts(
+    result, tool_by_lane, authoritative_observation_ids,
+):
+    receipt_fields = frozenset({
+        "lane_id", "status", "reason_code", "primary_lane_id", "argv_identity",
+        "execution_policy_digest",
+        "tool_identity", "image_identity", "service_identity", "plugin_version",
+        "timeout_seconds", "started_at", "finished_at", "exit_code",
+        "evidence_references", "evidence_digest", "evidence_snapshot",
+        "observation_ids",
+        "classified_observations_digest",
+        "stdout", "stderr", "redacted_values",
+    })
+    bound_observation_ids = []
+    receipt_lane_ids = []
+    for receipt in _exact_list(result["lane_receipts"], field="lane_receipts"):
+        _validate_lane_receipt_metadata(receipt, receipt_fields, tool_by_lane)
+        receipt_lane_ids.append(receipt["lane_id"])
+        bound_observation_ids.extend(
+            _validate_lane_receipt_evidence(receipt)
+        )
+    if len(receipt_lane_ids) != len(set(receipt_lane_ids)):
+        _fail("invalid_lane_receipt")
+    if (
+        len(authoritative_observation_ids) != len(set(authoritative_observation_ids))
+        or len(bound_observation_ids) != len(set(bound_observation_ids))
+        or sorted(authoritative_observation_ids) != sorted(bound_observation_ids)
+    ):
+        _fail("unbound_lane_evidence")
+
+
+def _validate_authoritative_replay(result, embedded_profile):
+    authoritative_by_id = {
+        item["observation_id"]: item for item in result["observations"]
+    }
+    replay_sources = [
+        source
+        for receipt in result["lane_receipts"]
+        if receipt["status"] in {"available", "fallback"}
+        for source in receipt["evidence_snapshot"]
+    ]
+    expected_authoritative = {
+        item["observation_id"]: item
+        for item in _bind_observation_provenance(
+            classify_observations(embedded_profile, replay_sources),
+            result["lane_receipts"],
+        )
+    }
+    for receipt in result["lane_receipts"]:
+        if receipt["status"] in {"available", "fallback"}:
+            classified_projection = [
+                authoritative_by_id[item] for item in receipt["observation_ids"]
+            ]
+            if (
+                _canonical_digest(classified_projection)
+                != receipt["classified_observations_digest"]
+            ):
+                _fail("unbound_lane_evidence")
+            source_by_id = {
+                item["observation_id"]: item
+                for item in receipt["evidence_snapshot"]
+            }
+            if len(source_by_id) != len(receipt["evidence_snapshot"]):
+                _fail("unbound_lane_evidence")
+            expected_projection = [
+                expected_authoritative[item] for item in receipt["observation_ids"]
+            ]
+            if any(
+                {
+                    key: value for key, value in actual.items()
+                    if key != "redacted_values"
+                }
+                != {
+                    key: value for key, value in expected.items()
+                    if key != "redacted_values"
+                }
+                for actual, expected
+                in zip(classified_projection, expected_projection, strict=True)
+            ):
+                _fail("unbound_lane_evidence")
+
+
+
+def _validate_authoritative_invocation(
+    result, embedded_profile, embedded_policy,
+):
+    invocation = _exact_object(
+        result["invocation"],
+        frozenset({
+            "started_at", "finished_at", "operator_authorization_event_id",
+            "purpose", "selected_lane_ids",
+        }),
+        reason="invalid_invocation",
+    )
+    for field in ("started_at", "finished_at"):
+        if type(invocation[field]) is not str:
+            _fail("invalid_invocation")
+        normalize_durable_string(invocation[field])
+    _string(
+        invocation["operator_authorization_event_id"],
+        field="operator_authorization_event_id", identifier=True,
+    )
+    _string(invocation["purpose"], field="purpose", identifier=True)
+    selected = _exact_list(
+        invocation["selected_lane_ids"], field="selected_lane_ids",
+    )
+    if (
+        any(type(lane_id) is not str or _IDENTIFIER.fullmatch(lane_id) is None
+            for lane_id in selected)
+        or len(set(selected)) != len(selected)
+    ):
+        _fail("invalid_invocation")
+    primary_receipt_ids = {
+        receipt["lane_id"] for receipt in result["lane_receipts"]
+        if receipt["primary_lane_id"] is None
+    }
+    fallback_primary_ids = {
+        receipt["primary_lane_id"] for receipt in result["lane_receipts"]
+        if receipt["primary_lane_id"] is not None
+    }
+    if (
+        primary_receipt_ids != set(selected)
+        or not fallback_primary_ids.issubset(set(selected))
+    ):
+        _fail("invalid_invocation")
+    result_fields = frozenset({
+        "inspection_id", "completion_state", "requested_identities",
+        "attempted_identities", "actual_identities", "coverage_gaps",
+        "blockers",
+    })
+    expected_result = _derive_result_state(
+        embedded_profile, embedded_policy, result["lane_receipts"],
+        result["observations"], invocation,
+    )
+    if {
+        field: result[field] for field in result_fields
+    } != expected_result:
+        _fail("invalid_result_state")
+    _validate_lifecycle(result["publication_status"], result["trend_result"])
+
+
+
+def _validate_authoritative_integrity(
+    result, publication_authority_key,
+):
+    baseline = result["trend_baseline"]
+    if result["trend_result"]["status"] == "not_compared":
+        if baseline is not None:
+            _fail("invalid_trend_result")
+    else:
+        _validate_trend_baseline_projection(baseline)
+        expected_trend = _compare_trend_values(result, baseline)
+        if result["trend_result"] != expected_trend:
+            _fail("invalid_trend_result")
+    redaction = _exact_object(
+        result["redaction"], frozenset({"applied", "redacted_value_count"}),
+        reason="invalid_redaction_outcome",
+    )
+    expected_redaction_count = sum(
+        item["redacted_values"] for item in result["observations"]
+    ) + sum(
+        item["redacted_values"] for item in result["lane_receipts"]
+    )
+    if (
+        type(redaction["applied"]) is not bool
+        or type(redaction["redacted_value_count"]) is not int
+        or redaction["redacted_value_count"] < 0
+        or redaction["redacted_value_count"] != expected_redaction_count
+        or redaction["applied"] is not (expected_redaction_count > 0)
+    ):
+        _fail("invalid_redaction_outcome")
+    if _canonical_digest(stable_projection(result)) != result["stable_projection_digest"]:
+        _fail("authoritative_digest_mismatch")
+    if _publication_state_digest(result) != result["publication_state_digest"]:
+        _fail("publication_state_digest_mismatch")
+    _validate_publication_attestation(
+        result, result["publication_attestation"],
+        publication_authority_key,
+    )
+
+
+
+def validate_authoritative_result(result, *, publication_authority_key=None):
+    """Validate one complete result through cohesive fail-fast validators."""
+    profile, embedded_profile, embedded_policy, compatibility = (
+        _validate_authoritative_structure(result)
+    )
+    tool_by_lane = _validate_authoritative_compatibility(
+        compatibility,
+        profile,
+        embedded_profile,
+    )
+    authoritative_observation_ids = _validate_authoritative_observations(result)
+    _validate_authoritative_receipts(
+        result,
+        tool_by_lane,
+        authoritative_observation_ids,
+    )
+    _validate_authoritative_replay(result, embedded_profile)
+    _validate_authoritative_invocation(
+        result,
+        embedded_profile,
+        embedded_policy,
+    )
+    _validate_authoritative_integrity(result, publication_authority_key)
+    return result
+
+
+def finalize_authoritative_result(
+    result, *, publication_status, baseline=None,
+    publication_authority_key=None, publication_repository_root=None,
+):
+    """Advance closed publication/trend lifecycle state and rebind the digest."""
+    current = validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
+    )
+    updated = json.loads(json.dumps(current, allow_nan=False))
+    allowed_transitions = {
+        "authoritative_json_ready": {
+            "authoritative_json_ready", "markdown_rendered",
+            "publication_failed",
+        },
+        "markdown_rendered": {
+            "markdown_rendered", "published", "publication_failed",
+        },
+        "published": {"published"},
+        "publication_failed": {"publication_failed"},
+    }
+    if publication_status not in allowed_transitions[
+        current["publication_status"]
+    ]:
+        _fail("invalid_publication_transition")
+    if publication_status != current["publication_status"]:
+        _verify_completed_publication_action(
+            current, publication_status, publication_repository_root,
+            publication_authority_key,
+        )
+    if baseline is None:
+        trend_result = current["trend_result"]
+        trend_baseline = current["trend_baseline"]
+    else:
+        if (
+            current["publication_status"] != "authoritative_json_ready"
+            or publication_status != "authoritative_json_ready"
+        ):
+            _fail("trend_after_render")
+        if current["trend_baseline"] is not None:
+            _fail("trend_already_bound")
+        if (
+            type(baseline) is dict
+            and type(baseline.get("schema_version")) is int
+            and baseline["schema_version"] != current["schema_version"]
+        ):
+            try:
+                encoded_baseline = json.dumps(
+                    baseline, allow_nan=False, sort_keys=True,
+                    separators=(",", ":"),
+                )
+            except (TypeError, ValueError):
+                _fail("invalid_trend_result")
+            if contains_high_confidence_secret(encoded_baseline):
+                _fail("invalid_trend_result")
+            trend_baseline = {
+                "schema_version": 1,
+                "authoritative_schema_version": baseline["schema_version"],
+                "authoritative_stable_projection_digest": (
+                    _canonical_digest(baseline)
+                ),
+                "compatibility_identity": {},
+                "observation_values": [],
+            }
+        else:
+            validate_authoritative_result(
+                baseline,
+                publication_authority_key=publication_authority_key,
+            )
+            trend_baseline = _trend_baseline_projection(baseline)
+        trend_result = _compare_trend_values(current, trend_baseline)
+    publication_status, trend_result = _validate_lifecycle(
+        publication_status, trend_result,
+    )
+    updated["publication_status"] = publication_status
+    updated["trend_result"] = trend_result
+    updated["trend_baseline"] = trend_baseline
+    updated["stable_projection_digest"] = _canonical_digest(
+        stable_projection(updated),
+    )
+    updated["publication_state_digest"] = _publication_state_digest(updated)
+    updated["publication_attestation"] = _issue_publication_attestation(
+        updated, publication_authority_key, current["publication_status"],
+    )
+    return validate_authoritative_result(
+        updated, publication_authority_key=publication_authority_key,
+    )
+
+
+def _verify_completed_publication_action(
+    current, target_status, repository_root, publication_authority_key,
+):
+    if (
+        target_status not in {"markdown_rendered", "published"}
+        or repository_root is None
+    ):
+        _fail("publication_action_not_verified")
+    root = _repository_root(repository_root)
+    markdown = render_markdown(
+        current, publication_authority_key=publication_authority_key,
+    ).encode("utf-8")
+    if target_status == "markdown_rendered":
+        _verify_exact_publication_output(
+            current, root, "markdown", markdown,
+        )
+        return
+    _verify_exact_publication_output(
+        current, root, "markdown", markdown,
+    )
+    _verify_exact_publication_output(
+        current, root, "authoritative_json",
+        authoritative_bytes(
+            current, publication_authority_key=publication_authority_key,
+        ),
+    )
+
+
+def _verify_exact_publication_output(current, root, output_key, expected):
+    relative = normalize_owned_path(
+        root, current["profile_snapshot"]["outputs"][output_key],
+        must_exist=True,
+    )
+    _verify_exact_publication_file(root / relative, expected)
+
+
+def _verify_exact_publication_file(
+    candidate, expected, *, require_read_only=False,
+):
+    if any(item.is_symlink() for item in (candidate, *candidate.parents)):
+        _fail("publication_action_not_verified")
+    try:
+        descriptor = os.open(
+            candidate, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_size != len(expected)
+                or (
+                    require_read_only
+                    and (
+                        stat.S_IMODE(before.st_mode) & 0o222
+                        or (
+                            hasattr(os, "getuid")
+                            and before.st_uid != os.getuid()
+                        )
+                    )
+                )
+            ):
+                _fail("publication_action_not_verified")
+            actual = os.read(descriptor, len(expected) + 1)
+            if os.read(descriptor, 1):
+                _fail("publication_action_not_verified")
+            after = os.fstat(descriptor)
+            entry = os.stat(candidate, follow_symlinks=False)
+            if (
+                actual != expected
+                or (
+                    before.st_dev, before.st_ino, before.st_size,
+                    before.st_mtime_ns, before.st_ctime_ns,
+                )
+                != (
+                    after.st_dev, after.st_ino, after.st_size,
+                    after.st_mtime_ns, after.st_ctime_ns,
+                )
+                or (after.st_dev, after.st_ino)
+                != (entry.st_dev, entry.st_ino)
+            ):
+                _fail("publication_action_not_verified")
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("publication_action_not_verified")
+
+
+def validate_published_outputs(
+    result, repository_root, *, publication_authority_key=None,
+):
+    current = validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
+    )
+    if current["publication_status"] != "published":
+        _fail("publication_action_not_verified")
+    root = _repository_root(repository_root)
+    bundle = (
+        root / ".inspection-publications" / current["inspection_id"]
+        / current["publication_state_digest"].removeprefix("sha256:")
+    )
+    try:
+        bundle_entry = os.stat(bundle, follow_symlinks=False)
+    except OSError:
+        _fail("publication_action_not_verified")
+    if (
+        not stat.S_ISDIR(bundle_entry.st_mode)
+        or bundle.is_symlink()
+        or stat.S_IMODE(bundle_entry.st_mode) & 0o222
+        or (
+            hasattr(os, "getuid")
+            and bundle_entry.st_uid != os.getuid()
+        )
+    ):
+        _fail("publication_action_not_verified")
+    _verify_exact_publication_file(
+        bundle / "report.md",
+        render_markdown(
+            current, publication_authority_key=publication_authority_key,
+        ).encode("utf-8"),
+        require_read_only=True,
+    )
+    _verify_exact_publication_file(
+        bundle / "authoritative.json",
+        authoritative_bytes(
+            current, publication_authority_key=publication_authority_key,
+        ),
+        require_read_only=True,
+    )
+    return current
+
+
+def authoritative_bytes(result, *, publication_authority_key=None):
+    return _canonical_bytes(validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
+    ))
+
+
+def _compare_trend_values(current, baseline):
+    if (
+        current["schema_version"]
+        != baseline["authoritative_schema_version"]
+    ):
+        return {
+            "schema_version": 1, "status": "baseline_discontinuity",
+            "reason_code": "incompatible_baseline",
+            "incompatible_identity_fields": ["schema_version"],
+            "deltas": [],
+        }
+    mismatches = []
+    for field in (
+        "profile", "result_policy", "metric_definitions", "tool_identities",
+    ):
+        current_value = current["compatibility_identity"].get(field)
+        baseline_value = baseline["compatibility_identity"].get(field)
+        if current_value != baseline_value:
+            mismatches.append(field)
+    if mismatches:
+        return {
+            "schema_version": 1, "status": "baseline_discontinuity",
+            "reason_code": "incompatible_baseline",
+            "incompatible_identity_fields": sorted(mismatches),
+            "deltas": [],
+        }
+    baseline_values = {
+        item["observation_id"]: item["value"]
+        for item in baseline["observation_values"]
+    }
+    deltas = []
+    for item in current["observations"]:
+        value = (
+            item["raw_telemetry"].get("value")
+            if type(item["raw_telemetry"]) is dict else None
+        )
+        prior = baseline_values.get(item["observation_id"])
+        if (
+            type(value) in {int, float} and type(value) is not bool
+            and type(prior) in {int, float} and type(prior) is not bool
+        ):
+            deltas.append({
+                "observation_id": item["observation_id"],
+                "current": value, "baseline": prior, "delta": value - prior,
+            })
+    return {
+        "schema_version": 1, "status": "compatible",
+        "reason_code": "comparable", "incompatible_identity_fields": [],
+        "deltas": sorted(deltas, key=lambda item: item["observation_id"]),
+    }
+
+
+def compare_trends(current, baseline, *, publication_authority_key=None):
+    validate_authoritative_result(
+        current, publication_authority_key=publication_authority_key,
+    )
+    if (
+        type(baseline) is dict
+        and type(baseline.get("schema_version")) is int
+        and baseline["schema_version"] != current["schema_version"]
+    ):
+        return {
+            "schema_version": 1, "status": "baseline_discontinuity",
+            "reason_code": "incompatible_baseline",
+            "incompatible_identity_fields": ["schema_version"],
+            "deltas": [],
+        }
+    validate_authoritative_result(
+        baseline, publication_authority_key=publication_authority_key,
+    )
+    return _compare_trend_values(current, _trend_baseline_projection(baseline))
+
+
+def render_markdown(result, *, publication_authority_key=None):
+    """Render validated authoritative JSON; Markdown is never an input authority."""
+    validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
+    )
+    lines = [
+        "# Inspection Result", "",
+        f"- Inspection: `{result['inspection_id']}`",
+        f"- Completion: `{result['completion_state']}`",
+        f"- Profile: `{result['profile']['profile_id']}` `{result['profile']['profile_version']}`",
+        f"- Commit: `{result['repository']['commit']}`",
+        f"- Dirty: `{str(result['repository']['dirty']).lower()}`",
+        f"- Stable digest: `{result['stable_projection_digest']}`",
+        "", "## Summary", "",
+    ]
+    counts = {"actionable": 0, "informational": 0, "unknown": 0}
+    for item in result["observations"]:
+        if item["classification"] == "unknown":
+            counts["unknown"] += 1
+        elif item["actionable"]:
+            counts["actionable"] += 1
+        else:
+            counts["informational"] += 1
+    for label in ("actionable", "informational", "unknown"):
+        lines.append(f"- {label.title()}: **{counts[label]}**")
+    lines.extend(("", "## Observations", ""))
+    for item in result["observations"]:
+        lines.append(
+            f"- `{item['observation_id']}`: **{item['classification']}** "
+            f"({item['confidence']}; {item['evidence_status']}; {item['reason_code']})"
+        )
+    lines.extend(("", "## Trend", ""))
+    trend = result["trend_result"]
+    lines.append(
+        f"- **{trend['status']}** (`{trend['reason_code']}`)"
+    )
+    for delta in trend["deltas"]:
+        lines.append(
+            f"- `{delta['observation_id']}`: {delta['baseline']} → "
+            f"{delta['current']} (Δ {delta['delta']})"
+        )
+    lines.extend(("", "## Coverage Gaps", ""))
+    if not result["coverage_gaps"]:
+        lines.append("- None.")
+    for gap in result["coverage_gaps"]:
+        lines.append(
+            f"- `{gap['lane_id']}`: **{gap['status']}** "
+            f"(`{gap['reason_code']}`)"
+        )
+    lines.extend(("", "## Blockers", ""))
+    if not result["blockers"]:
+        lines.append("- None.")
+    for blocker in result["blockers"]:
+        target = blocker["observation_id"] or blocker["lane_id"]
+        lines.append(
+            f"- `{target}`: **{blocker['blocker_type']}** "
+            f"(`{blocker['reason_code']}`)"
+        )
+    redaction = result["redaction"]
+    lines.extend((
+        "", "## Redaction", "",
+        f"- Applied: `{str(redaction['applied']).lower()}`",
+        f"- Redacted values: **{redaction['redacted_value_count']}**",
+    ))
+    lines.extend(("", "## Lane receipts", ""))
+    for receipt in result["lane_receipts"]:
+        lines.append(
+            f"- `{receipt['lane_id']}`: **{receipt['status']}** "
+            f"({receipt['reason_code']})"
+        )
+    return "\n".join(lines) + "\n"
+
+
+__all__ = [
+    "AUTHORITATIVE_SCHEMA_VERSION", "EVIDENCE_STATUSES", "FIXED_EXECUTION_ENV",
+    "InspectionError", "InspectionProfile", "InspectionResultPolicy",
+    "PROFILE_SCHEMA_VERSION", "authoritative_bytes", "compare_trends",
+    "finalize_authoritative_result", "load_inspection_profile",
+    "load_result_policy", "render_markdown", "validate_authoritative_result",
+    "validate_inspection_profile", "validate_result_policy",
+]

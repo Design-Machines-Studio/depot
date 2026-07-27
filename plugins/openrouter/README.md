@@ -1,6 +1,6 @@
 # openrouter
 
-OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked OpenRouter model slugs over a single OpenAI-compatible endpoint. The matrix includes GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4 model slugs, Kimi K3, and paid frontier fallbacks. ZDR is opt-in (`OPENROUTER_ZDR`; privacy demoted below quality/price/speed). Powers the pipeline cascade's OpenRouter rail, dm-review's generic `openrouter-agent-runner`, the bulk analyst, and the `openrouter-exec` agentic runner.
+OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked third-party OpenRouter model slugs over one endpoint. The matrix includes GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4, and Kimi K3. OpenAI and Anthropic are native-only: they run through Codex and Claude CLIs respectively, never through OpenRouter.
 
 ## What it routes
 
@@ -12,15 +12,17 @@ Task-to-model routing is governed by `plugins/pipeline/references/routing-policy
 
 ## Security boundary (non-negotiable)
 
-**Third-party models are bulk pattern reviewers, never security reviewers.**
+**Provider selection and disclosure classification are separate controls.**
 
-Third-party models selected through OpenRouter must NEVER see sensitive material. The canonical policy is `skills/openrouter-delegate/references/delegation-security-policy.json`; Pipeline carries a validated mirror for planning. Every delegation path must enforce it before invoking the wrapper:
+The canonical policy is `skills/openrouter-delegate/references/delegation-security-policy.json`; Pipeline carries a validated mirror for planning. Every delegation path enforces it before invoking the wrapper:
 
-- **Path exclusions -- route Codex-side.** A diff touching auth, federation, secret, deploy, or env paths is declined whole and returned to Codex-native review.
-- **Content redaction.** High-confidence credential material declines the whole chunk. An empty or still-sensitive result returns to Codex-native review.
+- **Threat/content classification.** High-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private values decline disclosure. Security-looking paths, vendors, nationalities, jurisdictions, and placeholder names do not.
+- **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist. The runner performs fixed structural Git validation and allowlist-only staging; executable project verification is deferred to native Codex review.
 - **Intended lanes.** Style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
 
-Security findings and auth/federation/secrets review are Codex-native. OpenRouter never fills that seat; Claude is non-coding-only.
+High-consequence security completion still requires independent Codex review. GLM, DeepSeek, Kimi, and other third-party models are not banned by nationality.
+
+Every live caller selects one coherent installed plugin root with workflow-kernel `resolve-plugin-bundle`, then derives its wrapper, policy, boundary, protocols, and templates from that root. Semantic version wins over mtime; the active host breaks only equal-version ties. Durable receipts keep the version, cache class, and reason, never the absolute home path.
 
 ## Requirements
 

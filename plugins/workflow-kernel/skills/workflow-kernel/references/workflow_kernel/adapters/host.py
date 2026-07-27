@@ -26,39 +26,36 @@ _HarnessProfilePath = Union[str, os.PathLike[str]]
 
 # One model-prefix vocabulary for both role validation and route derivation.
 _MODEL_PREFIXES = {
-    "anthropic": ("anthropic/",),
+    "anthropic": ("anthropic/", "opus", "sonnet", "haiku"),
     "openai": ("openai/", "gpt-"),
 }
 
 
 def _lists_models_for(provider: str, models: list) -> bool:
-    return any(model.startswith(_MODEL_PREFIXES[provider]) for model in models)
+    return any(
+        model.lower().startswith(_MODEL_PREFIXES[provider])
+        for model in models
+    )
 
 
-# (kind, probe) -> (forbidden model provider, unconditional route capability
-# tuples, model-conditional route capability tuples). Absent keys are invalid
+# (kind, probe) -> (forbidden model providers, unconditional route capability
+# tuples). Absent keys are invalid
 # kind/probe pairings. Every derived route's rail is the role's own kind.
 _NATIVE_CODEX_ROUTES = (
-    "anthropic",
+    ("anthropic",),
     (("openai", HostCapability.CODEX_EXECUTION),),
-    (),
 )
 _OPENROUTER_ROUTES = (
-    None,
+    ("anthropic", "openai"),
     (("openrouter", HostCapability.OPENROUTER_EXECUTION),),
-    (
-        ("anthropic", ("openrouter", HostCapability.CLAUDE_EXECUTION)),
-        ("openai", ("openrouter", HostCapability.CODEX_EXECUTION)),
-    ),
 )
 _ROLE_ROUTE_TABLE = {
     ("native", "claude"): (
-        "openai",
+        ("openai",),
         (
             ("anthropic", HostCapability.CLAUDE_EXECUTION),
             ("anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION),
         ),
-        (),
     ),
     ("native", "codex"): _NATIVE_CODEX_ROUTES,
     ("codex_companion", "codex"): _NATIVE_CODEX_ROUTES,
@@ -135,14 +132,14 @@ def capabilities_from_harness_profile(
             type(model) is not str or not model for model in models
         ):
             raise invalid_policy("invalid_harness_profile")
-        forbidden_provider, base_routes, model_routes = entry
-        if forbidden_provider is not None and _lists_models_for(forbidden_provider, models):
+        forbidden_providers, base_routes = entry
+        if any(
+            _lists_models_for(provider, models)
+            for provider in forbidden_providers
+        ):
             raise invalid_policy("invalid_harness_profile")
         for provider, capability in base_routes:
             routes.add(HostRoute(provider, capability, kind))
-        for model_provider, (provider, capability) in model_routes:
-            if _lists_models_for(model_provider, models):
-                routes.add(HostRoute(provider, capability, kind))
     return HostCapabilities(host_name, frozenset(), routes=frozenset(routes))
 
 

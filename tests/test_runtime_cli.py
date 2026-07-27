@@ -1251,7 +1251,7 @@ class RuntimeCliTests(unittest.TestCase):
             root = Path(directory); depot = root / "depot"; pipeline = depot / "plugins" / "pipeline"
             runtime = depot / "plugins" / "workflow-kernel"; refs = runtime / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
             refs.mkdir(parents=True); pipeline.mkdir(parents=True)
-            (runtime / ".claude-plugin").mkdir(); (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":"0.3.0"}))
+            (runtime / ".claude-plugin").mkdir(); (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":"0.4.0"}))
             (refs / "__main__.py").write_text("")
             forged = root / "target" / "workflow_kernel"; forged.mkdir(parents=True); (forged / "__main__.py").write_text("")
             self.assertEqual(resolve_workflow_kernel_runtime(pipeline, home=root / "home"), refs.parent.resolve())
@@ -1264,7 +1264,7 @@ class RuntimeCliTests(unittest.TestCase):
             root = Path(directory); pipeline = root / "depot" / "plugins" / "pipeline"
             pipeline.mkdir(parents=True)
             cache = root / "home" / ".claude" / "plugins" / "cache" / "depot" / "workflow-kernel"
-            for version in ("0.3.9", "0.3.10", "1.0.0"):
+            for version in ("0.4.9", "0.4.10", "1.0.0"):
                 runtime = cache / version
                 refs = runtime / "skills" / "workflow-kernel" / "references" / "workflow_kernel"
                 refs.mkdir(parents=True)
@@ -1272,7 +1272,186 @@ class RuntimeCliTests(unittest.TestCase):
                 (runtime / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name":"workflow-kernel","version":version}))
                 (refs / "__main__.py").write_text("")
             resolved = resolve_workflow_kernel_runtime(pipeline, home=root / "home")
-            self.assertEqual(resolved, (cache / "0.3.10" / "skills" / "workflow-kernel" / "references").resolve())
+            self.assertEqual(resolved, (cache / "0.4.10" / "skills" / "workflow-kernel" / "references").resolve())
+
+    def test_plugin_bundle_resolver_is_semver_coherent_and_active_host_only_breaks_ties(self):
+        from workflow_kernel.runtime_resolution import resolve_plugin_bundle
+
+        def install(home, host, version, *, manifest_version=None, assets=("skills/sample/SKILL.md",)):
+            root = home / f".{host}" / "plugins" / "cache" / "depot" / "sample" / version
+            marker = ".claude-plugin" if host == "claude" else ".codex-plugin"
+            (root / marker).mkdir(parents=True)
+            (root / marker / "plugin.json").write_text(json.dumps({
+                "name": "sample", "version": manifest_version or version,
+            }))
+            for asset in assets:
+                path = root / asset
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n")
+            return root
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            install(home, "claude", "1.9.0")
+            highest = install(home, "codex", "1.10.0")
+            malformed = install(
+                home, "claude", "1.11.0", manifest_version="1.10.0",
+            )
+            selected = resolve_plugin_bundle(
+                "sample", ["skills/sample/SKILL.md"], home=home,
+                minimum_version="1.0.0", active_host="claude",
+            )
+            self.assertEqual(selected.root, highest.resolve())
+            self.assertEqual(selected.reason, "highest_compatible_semver")
+            self.assertNotEqual(selected.root, malformed.resolve())
+
+            claude_tie = install(home, "claude", "1.10.0")
+            selected = resolve_plugin_bundle(
+                "sample", ["skills/sample/SKILL.md"], home=home,
+                minimum_version="1.0.0", active_host="claude",
+            )
+            self.assertEqual(selected.root, claude_tie.resolve())
+            self.assertEqual(selected.reason, "active_host_equal_version_tiebreak")
+            durable = selected.to_dict()
+            self.assertEqual(durable["cache_class"], "claude")
+            self.assertTrue(durable["selected_root"].startswith("~/.claude/"))
+            self.assertNotIn(str(home), json.dumps(durable))
+
+    def test_plugin_bundle_resolver_never_combines_assets_across_roots(self):
+        from workflow_kernel.runtime_resolution import resolve_plugin_bundle
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            for host, asset in (
+                ("claude", "skills/sample/SKILL.md"),
+                ("codex", "references/runtime.py"),
+            ):
+                root = (
+                    home / f".{host}" / "plugins" / "cache" / "depot"
+                    / "sample" / "2.0.0"
+                )
+                marker = ".claude-plugin" if host == "claude" else ".codex-plugin"
+                (root / marker).mkdir(parents=True)
+                (root / marker / "plugin.json").write_text(json.dumps({
+                    "name": "sample", "version": "2.0.0",
+                }))
+                path = root / asset
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n")
+            with self.assertRaises(FileNotFoundError):
+                resolve_plugin_bundle(
+                    "sample",
+                    ["skills/sample/SKILL.md", "references/runtime.py"],
+                    home=home,
+                )
+
+    def test_plugin_bundle_resolver_rejects_unreadable_assets(self):
+        from workflow_kernel.runtime_resolution import resolve_plugin_bundle
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            root = (
+                home / ".codex" / "plugins" / "cache" / "depot"
+                / "sample" / "1.6.0"
+            )
+            (root / ".codex-plugin").mkdir(parents=True)
+            (root / ".codex-plugin" / "plugin.json").write_text(json.dumps({
+                "name": "sample", "version": "1.6.0",
+            }))
+            asset = root / "references" / "policy.json"
+            asset.parent.mkdir(parents=True)
+            asset.write_text("{}\n")
+            asset.chmod(0)
+            with self.assertRaises(FileNotFoundError):
+                resolve_plugin_bundle(
+                    "sample", ["references/policy.json"], home=home,
+                    minimum_version="1.6.0",
+                )
+
+    def test_plugin_bundle_resolver_skips_non_executable_higher_bundle(self):
+        from workflow_kernel.runtime_resolution import resolve_plugin_bundle
+
+        def install(home, version, *, executable):
+            root = (
+                home / ".codex" / "plugins" / "cache" / "depot"
+                / "sample" / version
+            )
+            (root / ".codex-plugin").mkdir(parents=True)
+            (root / ".codex-plugin" / "plugin.json").write_text(json.dumps({
+                "name": "sample", "version": version,
+            }))
+            policy = root / "references" / "policy.json"
+            wrapper = root / "references" / "wrapper.sh"
+            policy.parent.mkdir(parents=True)
+            policy.write_text("{}\n")
+            wrapper.write_text("#!/bin/sh\nexit 0\n")
+            wrapper.chmod(0o755 if executable else 0o644)
+            return root
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            lower = install(home, "1.6.0", executable=True)
+            install(home, "1.7.0", executable=False)
+            selected = resolve_plugin_bundle(
+                "sample", ["references/policy.json"], home=home,
+                minimum_version="1.6.0",
+                required_executables=["references/wrapper.sh"],
+            )
+            self.assertEqual(selected.root, lower.resolve())
+            self.assertEqual(selected.version, "1.6.0")
+
+    def test_inspection_and_bundle_cli_surfaces_coexist_and_dispatch(self):
+        from workflow_kernel import cli
+        from workflow_kernel.runtime_resolution import PluginBundle
+
+        choices = next(
+            action.choices for action in cli.parser()._actions
+            if getattr(action, "choices", None)
+        )
+        for command in (
+            "inspection-validate", "inspection-classify", "inspection-trend",
+            "inspection-finalize", "inspection-render", "inspection-run",
+            "resolve-plugin-bundle",
+            "init", "plan-create",
+        ):
+            self.assertIn(command, choices)
+        self.assertIn(
+            "--required-executable",
+            choices["resolve-plugin-bundle"].format_help(),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "sample" / "1.0.0"
+            emitted = []
+            with mock.patch(
+                "workflow_kernel.cli.resolve_plugin_bundle",
+                return_value=PluginBundle(
+                    root, "codex", "1.0.0", "highest_compatible_semver",
+                ),
+            ) as resolver, mock.patch(
+                "workflow_kernel.cli._emit", side_effect=emitted.append,
+            ):
+                result = cli.command_resolve_plugin_bundle(SimpleNamespace(
+                    plugin="sample",
+                    required_asset=["skills/sample/SKILL.md"],
+                    required_executable=["references/wrapper.sh"],
+                    minimum_version=None, active_host=None,
+                ))
+            self.assertEqual(result, 0)
+            self.assertEqual(emitted[0]["version"], "1.0.0")
+            self.assertEqual(emitted[0]["cache_class"], "codex")
+            resolver.assert_called_once_with(
+                "sample", ["skills/sample/SKILL.md"],
+                active_host=None, minimum_version=None,
+                required_executables=["references/wrapper.sh"],
+            )
+        parsed = cli.parser().parse_args([
+            "resolve-plugin-bundle", "--plugin", "sample",
+            "--required-executable", "references/wrapper.sh",
+        ])
+        self.assertEqual(parsed.required_asset, [])
+        self.assertEqual(
+            parsed.required_executable, ["references/wrapper.sh"],
+        )
 
     def test_security_artifact_codecs_require_exact_versioned_shapes(self):
         from workflow_kernel.cli import _command_result, _creation_plan

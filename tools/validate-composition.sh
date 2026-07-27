@@ -389,7 +389,15 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}4/4: Composition Validation${RESET}\n"
+  printf "\n${BOLD}4/5: Quality-Pulse Conformance${RESET}\n"
+  printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+  if validate_quality_pulse; then
+    :
+  else
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}5/5: Composition Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if run_composition_checks --no-header; then
     :
@@ -410,6 +418,11 @@ run_all() {
 # it out of the default composition-only mode: --all is the release gate.
 validate_workflow_kernel() {
   "$SCRIPT_DIR/validate-workflow-kernel.py"
+}
+
+# Run the synthetic, offline consumer conformance suite once in the full gate.
+validate_quality_pulse() {
+  "$SCRIPT_DIR/validate-quality-pulse.sh"
 }
 
 # --------------------------------------------------------------------------
@@ -595,6 +608,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}Marketplace capability mappings:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-marketplace-capabilities.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}Dual compatibility:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-dual-compat.sh"; then
     any_failed=1
@@ -612,6 +630,16 @@ run_composition_checks() {
 
   printf "\n${BOLD}OpenRouter model cascade:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-cascade.sh"; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}OpenRouter coherent bundle resolution:${RESET}\n"
+  if ! "$SCRIPT_DIR/validate-openrouter-resolution.sh" --all; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Airlift OpenRouter boundary:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-airlift-openrouter-boundary.sh"; then
     any_failed=1
   fi
 

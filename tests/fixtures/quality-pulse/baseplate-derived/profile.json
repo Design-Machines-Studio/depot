@@ -1,0 +1,424 @@
+{
+  "schema_version": 1,
+  "profile_id": "baseplate-572-synthetic",
+  "profile_version": "1.0.0",
+  "repository": {
+    "scope_paths": [
+      "internal/baseplate/admin/pages/design_panel_sections.templ",
+      "internal/components/shell/design_panel.templ",
+      "public/js/design-panel.js",
+      "src/css/6_components/design-panel.css"
+    ]
+  },
+  "catalogs": [
+    {
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "schema_version": 1,
+      "catalog_version": "1.0.0",
+      "source_reference": "tests/fixtures/quality-pulse/baseplate-derived/profile.json",
+      "content_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215",
+      "rules": [
+        {
+          "rule_id": "bp-app-regression",
+          "definition": {
+            "category": "application-regression",
+            "issue": "#572",
+            "provenance": "minimal synthetic observation; no Baseplate source copied"
+          }
+        },
+        {
+          "rule_id": "bp-historical-wrapper",
+          "definition": {
+            "alternative_decisions": [
+              "compliant",
+              "exempt"
+            ],
+            "legacy_provenance": "internal/baseplate/admin/pages/design.templ:93",
+            "profile_decision": "exempt",
+            "stable_path": "internal/baseplate/admin/pages/design.templ",
+            "stable_signature": "design-theme-item-meta flex items-center"
+          }
+        },
+        {
+          "rule_id": "bp-js-source-count",
+          "definition": {
+            "category": "javascript-telemetry",
+            "issue": "#572",
+            "metric_definition_digest": "sha256:bd685a5b34591778f742ef968cc9c95ae2311464610ba971f4f5c8dad4563a15"
+          }
+        },
+        {
+          "rule_id": "bp-sensitive-surface",
+          "definition": {
+            "always_actionable_categories": [
+              "accessibility",
+              "authorization-default-deny",
+              "csp-injection",
+              "secret-leakage",
+              "style-leakage",
+              "transaction-event-ordering",
+              "unsafe-raw-rendering"
+            ],
+            "issue": "#572"
+          }
+        }
+      ],
+      "metrics": [
+        {
+          "metric_id": "app-regression-count",
+          "definition": {
+            "unit": "count",
+            "value_type": "integer"
+          }
+        },
+        {
+          "metric_id": "historical-wrapper-count",
+          "definition": {
+            "unit": "count",
+            "value_type": "integer"
+          }
+        },
+        {
+          "metric_id": "javascript-source-count",
+          "definition": {
+            "definition_id": "javascript-source-count-v1",
+            "javascript_files": [
+              "public/js/design-panel.js"
+            ],
+            "path_order": "ascending-lexicographic",
+            "templ_inline_script_scopes": [
+              "internal/baseplate/admin/pages/design_panel_sections.templ",
+              "internal/components/shell/design_panel.templ"
+            ],
+            "unit": "script-block-or-file",
+            "value_type": "integer"
+          }
+        },
+        {
+          "metric_id": "sensitive-finding-count",
+          "definition": {
+            "unit": "count",
+            "value_type": "integer"
+          }
+        }
+      ]
+    },
+    {
+      "catalog_id": "live-wires-quality-rules",
+      "schema_version": 1,
+      "catalog_version": "1.0.0",
+      "source_reference": "plugins/live-wires/references/quality-rules-v1.json",
+      "content_digest": "sha256:8719d6e5e2ba5b8a4f0022ff7b7d82b62e7f9d29c95b5396837a26d5a1bfd259",
+      "rules": [
+        {
+          "rule_id": "lw-logical-property",
+          "definition": {
+            "category": "accessibility",
+            "default_classification_guidance": {
+              "actionability": "informational",
+              "classification": "informational",
+              "profile_override": true
+            },
+            "description": "Flow-relative logical properties should replace physical directional properties so layouts remain adaptable to writing direction.",
+            "evaluation_type": "mechanical",
+            "observation_type": "occurrence-count",
+            "references": [
+              "css-reviewer#modern-css-requirements",
+              "lint-rules#lw-logical"
+            ],
+            "source_catalog_digest": "sha256:d674f80f25e2b12b72b8144c8b01ad27e67b164143c0d281c229e5090581ac94",
+            "source_rule_digest": "sha256:7a549755f6c92009301a4839a6ecd017c442ff7b5f739ddab7bdaf51a75a22b2"
+          }
+        },
+        {
+          "rule_id": "lw-raw-color",
+          "definition": {
+            "category": "tokens",
+            "default_classification_guidance": {
+              "actionability": "informational",
+              "classification": "informational",
+              "profile_override": true
+            },
+            "description": "Fixed color literals should use semantic color tokens or scheme classes unless the context provides a documented reason for a literal.",
+            "evaluation_type": "mechanical",
+            "observation_type": "occurrence-count",
+            "references": [
+              "css-reviewer#custom-properties-and-token-usage",
+              "lint-rules#lw-hardcoded-color"
+            ],
+            "source_catalog_digest": "sha256:d674f80f25e2b12b72b8144c8b01ad27e67b164143c0d281c229e5090581ac94",
+            "source_rule_digest": "sha256:38a978c47d3c1639f355c79b5fabb199a6ff26f8b237543df744b50eddef87dd"
+          }
+        }
+      ],
+      "metrics": [
+        {
+          "metric_id": "physical-property-observations",
+          "definition": {
+            "evaluation_type": "mechanical",
+            "observation_type": "occurrence-count",
+            "source_catalog_digest": "sha256:d674f80f25e2b12b72b8144c8b01ad27e67b164143c0d281c229e5090581ac94",
+            "source_rule_id": "lw-logical-property"
+          }
+        },
+        {
+          "metric_id": "raw-color-observations",
+          "definition": {
+            "evaluation_type": "mechanical",
+            "observation_type": "occurrence-count",
+            "source_catalog_digest": "sha256:d674f80f25e2b12b72b8144c8b01ad27e67b164143c0d281c229e5090581ac94",
+            "source_rule_id": "lw-raw-color"
+          }
+        }
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "surface_id": "baseplate-application",
+      "paths": [
+        "internal/baseplate/admin/pages/design_panel_sections.templ"
+      ]
+    },
+    {
+      "surface_id": "design-panel",
+      "paths": [
+        "internal/components/shell/design_panel.templ",
+        "public/js/design-panel.js",
+        "src/css/6_components/design-panel.css"
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "metric_id": "app-regression-count",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215"
+    },
+    {
+      "metric_id": "historical-wrapper-count",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215"
+    },
+    {
+      "metric_id": "javascript-source-count",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215"
+    },
+    {
+      "metric_id": "physical-property-observations",
+      "catalog_id": "live-wires-quality-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:8719d6e5e2ba5b8a4f0022ff7b7d82b62e7f9d29c95b5396837a26d5a1bfd259"
+    },
+    {
+      "metric_id": "raw-color-observations",
+      "catalog_id": "live-wires-quality-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:8719d6e5e2ba5b8a4f0022ff7b7d82b62e7f9d29c95b5396837a26d5a1bfd259"
+    },
+    {
+      "metric_id": "sensitive-finding-count",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "bp-app-regression",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215",
+      "metric_ids": [
+        "app-regression-count"
+      ],
+      "surface_ids": [
+        "baseplate-application"
+      ]
+    },
+    {
+      "rule_id": "bp-historical-wrapper",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215",
+      "metric_ids": [
+        "historical-wrapper-count"
+      ],
+      "surface_ids": [
+        "design-panel"
+      ]
+    },
+    {
+      "rule_id": "bp-js-source-count",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215",
+      "metric_ids": [
+        "javascript-source-count"
+      ],
+      "surface_ids": [
+        "design-panel"
+      ]
+    },
+    {
+      "rule_id": "bp-sensitive-surface",
+      "catalog_id": "baseplate-572-synthetic-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:84da2c650f2ba1373dfbc0673efc4024de1c1e80390aa2d828902996c4926215",
+      "metric_ids": [
+        "sensitive-finding-count"
+      ],
+      "surface_ids": [
+        "baseplate-application",
+        "design-panel"
+      ]
+    },
+    {
+      "rule_id": "lw-logical-property",
+      "catalog_id": "live-wires-quality-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:8719d6e5e2ba5b8a4f0022ff7b7d82b62e7f9d29c95b5396837a26d5a1bfd259",
+      "metric_ids": [
+        "physical-property-observations"
+      ],
+      "surface_ids": [
+        "baseplate-application",
+        "design-panel"
+      ]
+    },
+    {
+      "rule_id": "lw-raw-color",
+      "catalog_id": "live-wires-quality-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:8719d6e5e2ba5b8a4f0022ff7b7d82b62e7f9d29c95b5396837a26d5a1bfd259",
+      "metric_ids": [
+        "raw-color-observations"
+      ],
+      "surface_ids": [
+        "design-panel"
+      ]
+    }
+  ],
+  "lanes": [
+    {
+      "lane_id": "dead-code-lint-primary",
+      "execution_type": "docker",
+      "argv": [
+        "docker",
+        "run",
+        "--rm",
+        "--pull=never",
+        "ghcr.io/design-machines/quality-pulse-fixture@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      ],
+      "tool_identity": "docker:27.5.1",
+      "image_identity": "ghcr.io/design-machines/quality-pulse-fixture@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "service_identity": null,
+      "plugin_version": "0.4.0",
+      "timeout_seconds": 30,
+      "primary_lane_id": null,
+      "evidence_paths": [
+        "quality-pulse-evidence/dead-code-primary.json"
+      ]
+    },
+    {
+      "lane_id": "grep-fallback",
+      "execution_type": "docker",
+      "argv": [
+        "docker",
+        "run",
+        "--rm",
+        "--pull=never",
+        "ghcr.io/design-machines/quality-pulse-grep-fixture@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      ],
+      "tool_identity": "docker:27.5.1",
+      "image_identity": "ghcr.io/design-machines/quality-pulse-grep-fixture@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "service_identity": null,
+      "plugin_version": "0.4.0",
+      "timeout_seconds": 15,
+      "primary_lane_id": "dead-code-lint-primary",
+      "evidence_paths": [
+        "quality-pulse-evidence/grep-fallback.json"
+      ]
+    }
+  ],
+  "classifications": [
+    {
+      "classification_id": "baseplate_actionable",
+      "rule_ids": [
+        "bp-app-regression"
+      ],
+      "metric_ids": [
+        "app-regression-count"
+      ],
+      "surface_ids": [
+        "baseplate-application"
+      ],
+      "confidence": "high",
+      "actionability": "actionable"
+    },
+    {
+      "classification_id": "design_panel_actionable",
+      "rule_ids": [
+        "bp-sensitive-surface",
+        "lw-logical-property"
+      ],
+      "metric_ids": [
+        "physical-property-observations",
+        "sensitive-finding-count"
+      ],
+      "surface_ids": [
+        "baseplate-application",
+        "design-panel"
+      ],
+      "confidence": "high",
+      "actionability": "actionable"
+    },
+    {
+      "classification_id": "design_panel_informational",
+      "rule_ids": [
+        "bp-js-source-count",
+        "lw-raw-color"
+      ],
+      "metric_ids": [
+        "javascript-source-count",
+        "raw-color-observations"
+      ],
+      "surface_ids": [
+        "design-panel"
+      ],
+      "confidence": "low",
+      "actionability": "informational"
+    },
+    {
+      "classification_id": "legacy_wrapper_exempt",
+      "rule_ids": [
+        "bp-historical-wrapper"
+      ],
+      "metric_ids": [
+        "historical-wrapper-count"
+      ],
+      "surface_ids": [
+        "design-panel"
+      ],
+      "confidence": "high",
+      "actionability": "informational"
+    }
+  ],
+  "outputs": {
+    "authoritative_json": "quality-pulse-output/authoritative.json",
+    "markdown": "quality-pulse-output/report.md"
+  },
+  "trend_compatibility": {
+    "schema_version": 1,
+    "required_identity_fields": [
+      "profile",
+      "result_policy",
+      "metric_definitions",
+      "tool_identities"
+    ]
+  }
+}

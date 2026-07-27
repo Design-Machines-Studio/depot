@@ -1,0 +1,19 @@
+[
+  {
+    "schema_version": 1,
+    "observation_id": "editorial-bem-child-selector",
+    "surface_id": "editorial-theme",
+    "rule_id": "lw-bem-child-selector",
+    "metric_id": "bem-child-selector-observations",
+    "path": "site/styles/article.css",
+    "classification_id": "live_wires_actionable",
+    "evidence_status": "available",
+    "evidence_references": [
+      "quality-pulse-evidence/editorial-bem.json"
+    ],
+    "raw_telemetry": {
+      "selector": ".article__title",
+      "value": 1
+    }
+  }
+]

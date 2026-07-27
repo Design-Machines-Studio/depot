@@ -1,0 +1,258 @@
+{
+  "catalog_id": "live-wires-quality-rules",
+  "schema_version": 1,
+  "catalog_version": "1.0.0",
+  "canonical_projection": {
+    "projection_id": "catalog-content-v1",
+    "included_fields": [
+      "catalog_id",
+      "schema_version",
+      "catalog_version",
+      "canonical_projection",
+      "rules"
+    ],
+    "array_order": {
+      "rules": "ascending lexicographic order by rule_id",
+      "rules[].references": "ascending lexicographic order by value"
+    },
+    "serialization": "UTF-8 JSON with object keys sorted lexicographically, ensure_ascii=false, separators ',' and ':', and no trailing newline",
+    "digest": "SHA-256 over the serialized projection, encoded as lowercase hexadecimal and prefixed with 'sha256:'",
+    "digest_location": "consumer profile binding; the digest is not stored in this catalog"
+  },
+  "rules": [
+    {
+      "rule_id": "lw-bem-child-selector",
+      "metric_id": "bem-child-selector-observations",
+      "category": "naming",
+      "description": "BEM double-underscore child selectors are not part of Live Wires; use native nesting with short or semantic child selectors.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#cube-css-layer-mapping",
+        "lint-rules#lw-bem",
+        "livewires-skill#css-nesting-over-bem-child-selectors"
+      ]
+    },
+    {
+      "rule_id": "lw-cascade-layer",
+      "metric_id": "cascade-layer-placement-observations",
+      "category": "cascade",
+      "description": "CSS belongs in the canonical layer sequence tokens, reset, base, layouts, components, utilities, with each rule placed in the layer matching its role.",
+      "observation_type": "review-finding",
+      "evaluation_type": "judgment",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#cube-css-layer-mapping",
+        "css-reviewer#cascade-layer-compliance",
+        "lint-rules#lw-layer",
+        "livewires-skill#css-cascade-layers"
+      ]
+    },
+    {
+      "rule_id": "lw-component-variant",
+      "metric_id": "component-variant-naming-observations",
+      "category": "naming",
+      "description": "Component variants use a double dash, such as button--accent.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#cube-css-layer-mapping",
+        "css-reviewer#naming-conventions",
+        "lint-rules#lw-variant",
+        "livewires-skill#naming-conventions-must-follow"
+      ]
+    },
+    {
+      "rule_id": "lw-framework-class",
+      "metric_id": "framework-class-compliance-observations",
+      "category": "framework-compliance",
+      "description": "Classes should come from the documented Live Wires layouts, components, and utilities unless a genuinely reusable component is justified.",
+      "observation_type": "review-finding",
+      "evaluation_type": "judgment",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "css-reviewer#class-invention-detection",
+        "lint-rules#lw-invented",
+        "livewires-skill#do-not-create-new-css-classes"
+      ]
+    },
+    {
+      "rule_id": "lw-inline-style",
+      "metric_id": "inline-style-observations",
+      "category": "framework-compliance",
+      "description": "Inline style attributes bypass the shared cascade and should be replaced with semantic defaults, layout primitives, utilities, or tokens.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#avoid-inline-styles",
+        "lint-rules#lw-inline"
+      ]
+    },
+    {
+      "rule_id": "lw-layout-primitive",
+      "metric_id": "layout-primitive-usage-observations",
+      "category": "layout",
+      "description": "Layout and flow should use an appropriate documented primitive before custom component CSS or repeated spacing utilities are introduced.",
+      "observation_type": "review-finding",
+      "evaluation_type": "judgment",
+      "default_classification_guidance": {
+        "classification": "informational",
+        "actionability": "informational",
+        "profile_override": true
+      },
+      "references": [
+        "css-reviewer#class-invention-detection",
+        "livewires-skill#when-to-write-new-component-css"
+      ]
+    },
+    {
+      "rule_id": "lw-layout-variant",
+      "metric_id": "layout-variant-naming-observations",
+      "category": "naming",
+      "description": "Layout primitive variants use a single dash, such as stack-compact.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#cube-css-layer-mapping",
+        "css-reviewer#naming-conventions",
+        "lint-rules#lw-variant",
+        "livewires-skill#naming-conventions-must-follow"
+      ]
+    },
+    {
+      "rule_id": "lw-logical-property",
+      "metric_id": "physical-property-observations",
+      "category": "accessibility",
+      "description": "Flow-relative logical properties should replace physical directional properties so layouts remain adaptable to writing direction.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "informational",
+        "actionability": "informational",
+        "profile_override": true
+      },
+      "references": [
+        "css-reviewer#modern-css-requirements",
+        "lint-rules#lw-logical"
+      ]
+    },
+    {
+      "rule_id": "lw-raw-color",
+      "metric_id": "raw-color-observations",
+      "category": "tokens",
+      "description": "Fixed color literals should use semantic color tokens or scheme classes unless the context provides a documented reason for a literal.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "informational",
+        "actionability": "informational",
+        "profile_override": true
+      },
+      "references": [
+        "css-reviewer#custom-properties-and-token-usage",
+        "lint-rules#lw-hardcoded-color"
+      ]
+    },
+    {
+      "rule_id": "lw-raw-spacing",
+      "metric_id": "raw-spacing-observations",
+      "category": "tokens",
+      "description": "Spacing declarations should use the --line-* scale rather than fixed pixel, rem, or em values, except for documented fine-detail tokens.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "actionable",
+        "actionability": "actionable",
+        "profile_override": true
+      },
+      "references": [
+        "css-reviewer#the-sacred-baseline",
+        "lint-rules#lw-baseline",
+        "livewires-skill#the-sacred-baseline-system"
+      ]
+    },
+    {
+      "rule_id": "lw-state-attribute",
+      "metric_id": "state-class-observations",
+      "category": "state",
+      "description": "UI state uses data attributes rather than active, disabled, selected, or is-* styling classes.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "informational",
+        "actionability": "informational",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#state-with-data-attributes",
+        "css-reviewer#state-classes-are-an-anti-pattern",
+        "lint-rules#lw-state"
+      ]
+    },
+    {
+      "rule_id": "lw-token-usage",
+      "metric_id": "token-usage-observations",
+      "category": "tokens",
+      "description": "Framework tokens should be used directly and selected according to their semantic role instead of being bypassed or obscured by unnecessary component aliases.",
+      "observation_type": "review-finding",
+      "evaluation_type": "judgment",
+      "default_classification_guidance": {
+        "classification": "informational",
+        "actionability": "informational",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#prefer-token-variables-over-custom-properties",
+        "css-reviewer#custom-properties-and-token-usage",
+        "livewires-skill#best-practices"
+      ]
+    },
+    {
+      "rule_id": "lw-typography-triplet",
+      "metric_id": "typography-triplet-observations",
+      "category": "typography",
+      "description": "A --text-* font-size declaration is paired with the matching --line-height-* and --tracking-* declarations unless a text utility supplies the triplet.",
+      "observation_type": "occurrence-count",
+      "evaluation_type": "mechanical",
+      "default_classification_guidance": {
+        "classification": "informational",
+        "actionability": "informational",
+        "profile_override": true
+      },
+      "references": [
+        "code-style#typography-triplet",
+        "css-reviewer#the-typography-triplet",
+        "lint-rules#lw-triplet",
+        "livewires-skill#the-typography-triplet"
+      ]
+    }
+  ]
+}

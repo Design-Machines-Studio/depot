@@ -100,6 +100,12 @@ postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.
 manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
 verification_contract="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md"
 behavioral_schema="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/behavioral-verification-contract-schema.json"
+quality_pulse_command="$REPO_ROOT/plugins/dm-review/commands/dm-review-quality-pulse.md"
+quality_pulse_skill="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/SKILL.md"
+quality_pulse_profile="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/profile-contract.md"
+quality_pulse_output="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/output-contract.md"
+quality_pulse_trust="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/trust-boundary.md"
+quality_pulse_degradation="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/graceful-degradation.md"
 
 printf "Repository cleanup contract:\n"
 
@@ -335,6 +341,50 @@ require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records 
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
 require_absent "$pipeline_run" "shadow observation after each authoritative receipt" "pipeline-run avoids per-receipt observation"
 require_absent "$orchestrator" 'feed it to `observe-pipeline`' "orchestrator avoids intermediate observer invocations"
+
+# --------------------------------------------------------------------------
+# Group 6: dm-review quality-pulse contract
+# --------------------------------------------------------------------------
+
+printf "\ndm-review quality-pulse contract:\n"
+
+require_text "$quality_pulse_command" "name: dm-review-quality-pulse" "quality-pulse command is canonical"
+require_text "$quality_pulse_command" 'plugins/dm-review/skills/quality-pulse/SKILL.md' "quality-pulse command delegates to the shared skill"
+require_text "$quality_pulse_command" "Codex command-skill alias is generated" "quality-pulse keeps the generated-alias source boundary"
+require_text "$quality_pulse_skill" "name: quality-pulse" "quality-pulse skill frontmatter matches its folder"
+require_absent "$quality_pulse_skill" "Codex Command Alias" "primary quality-pulse skill is not a generated command alias"
+require_text "$quality_pulse_skill" '.dm-review/quality-pulse.json' "quality-pulse declares the canonical default profile"
+require_text "$quality_pulse_skill" 'resolve-plugin-bundle' "quality-pulse uses coherent plugin-bundle resolution"
+require_text "$quality_pulse_skill" 'inspection-validate' "quality-pulse delegates complete validation to the kernel"
+require_text "$quality_pulse_skill" 'inspection-run' "quality-pulse delegates contained lane execution to the kernel"
+require_text "$quality_pulse_skill" "Never invoke a fallback lane ID directly" "quality-pulse leaves fallback selection to the kernel"
+require_text "$quality_pulse_skill" "Consume the complete returned receipt set" "quality-pulse consumes kernel primary and fallback receipts"
+require_absent "$quality_pulse_skill" "and for a fallback only after" "quality-pulse never dispatches fallback lanes directly"
+require_text "$quality_pulse_skill" 'inspection-classify' "quality-pulse delegates classification mechanics to the kernel"
+require_text "$quality_pulse_skill" 'inspection-render' "quality-pulse renders only through kernel inputs"
+require_text "$quality_pulse_skill" 'inspection-trend' "quality-pulse delegates compatibility comparison to the kernel"
+require_text "$quality_pulse_skill" '"classification": "unknown"' "quality-pulse preserves unknown classification"
+require_text "$quality_pulse_skill" '"actionability": "actionable"' "quality-pulse makes unknown evidence actionable"
+require_text "$quality_pulse_skill" "A quality pulse is **not a merge recommendation**" "quality-pulse is separate from merge review"
+require_before "$quality_pulse_skill" "### 2. Complete preflight" "### 4. Run requested primary lanes and consume fallback receipts" "quality-pulse validates before lane execution"
+require_before "$quality_pulse_skill" "emit authoritative JSON" "render Markdown digest" "quality-pulse publishes JSON before Markdown"
+require_before "$quality_pulse_skill" "bind compatible trend or baseline discontinuity" "render Markdown digest" "quality-pulse binds trend before Markdown rendering"
+
+require_text "$quality_pulse_profile" "default: .dm-review/quality-pulse.json" "profile contract defines default discovery"
+require_text "$quality_pulse_profile" "untrusted PR profile: validate and report, never execute lanes" "profile contract blocks untrusted execution"
+require_text "$quality_pulse_profile" "catalog_id: live-wires-quality-rules" "profile contract binds the canonical catalog"
+require_text "$quality_pulse_profile" "content_digest" "profile contract requires a computed catalog digest"
+require_text "$quality_pulse_output" "Authoritative JSON is the sole source of truth" "output contract keeps Markdown non-authoritative"
+require_text "$quality_pulse_output" "requested, attempted, and actual lane/tool identities" "output contract keeps literal lane provenance"
+require_text "$quality_pulse_output" "baseline discontinuity" "output contract preserves incompatible trends"
+require_text "$quality_pulse_trust" "construct a separate kernel trust attestation outside the canonical" "trust contract requires host-derived external authority"
+require_text "$quality_pulse_trust" "No profile field, repository file" "trust contract rejects profile self-attestation"
+
+for state in available unavailable failed fallback skipped; do
+  require_text "$quality_pulse_degradation" "\`$state\`" "quality-pulse degradation distinguishes $state"
+done
+require_text "$quality_pulse_degradation" "Redaction refuses unsafe evidence" "quality-pulse reports redaction refusal"
+require_text "$quality_pulse_degradation" "Partial evidence cannot become" "quality-pulse prevents partial success"
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then

@@ -65,18 +65,74 @@ Then continue from the `Next steps` section in `HANDOFF.md`.
 
 ## Delegate resume paths
 
-For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name remains stable for compatibility, but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve the OpenRouter wrapper, pass the resume prompt as system context, and pipe the handoff as the user prompt:
+For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name remains stable for compatibility, but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve one coherent OpenRouter bundle, then screen both resume artifacts together immediately before wrapper use:
 
 ```bash
-WRAPPER=""
-for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER=$(ls -t "$CACHE"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER" ] && break
-done
-if [ -z "$WRAPPER" ] || [ ! -x "$WRAPPER" ]; then
-  echo "openrouter wrapper not found in plugin cache" >&2
-  exit 1
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.4.0 >/dev/null || {
+  echo "airlift-openrouter: kernel-incompatible" >&2; exit 1;
+}
+BUNDLE_DIR="${BUNDLE_DIR:-.airlift}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+resolve_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  fi
+}
+BUNDLE_JSON=$(resolve_bundle) || {
+    echo "airlift-openrouter: bundle-unavailable" >&2; exit 1;
+  }
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) echo "airlift-openrouter: bundle-invalid" >&2; exit 1;; esac
+WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+RESUME_FILE="$BUNDLE_DIR/RESUME_PROMPT.md"
+HANDOFF_FILE="$BUNDLE_DIR/HANDOFF.md"
+SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
+  echo "airlift-openrouter: snapshot-unavailable" >&2; exit 2;
+}
+trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
+RESUME_SNAPSHOT="$SNAPSHOT_DIR/RESUME_PROMPT.md"
+HANDOFF_SNAPSHOT="$SNAPSHOT_DIR/HANDOFF.md"
+"$WORKFLOW_KERNEL" snapshot-files \
+  --source-root "$BUNDLE_DIR" \
+  --destination-root "$SNAPSHOT_DIR" \
+  --name RESUME_PROMPT.md \
+  --name HANDOFF.md >/dev/null || {
+  echo "airlift-openrouter: snapshot-invalid" >&2; exit 2;
+}
+if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
+    --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"; then
+  :
+else
+  rc=$?
+  [ "$rc" -eq 3 ] && { echo "airlift-openrouter: disclosure-declined" >&2; exit 3; }
+  echo "airlift-openrouter: boundary-invalid" >&2
+  exit 2
 fi
-OPENROUTER_SYSTEM="$(cat .airlift/RESUME_PROMPT.md)" \
-  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < .airlift/HANDOFF.md
+OPENROUTER_SYSTEM="$(cat "$RESUME_SNAPSHOT")" \
+  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
 ```
+
+The trusted workflow-kernel snapshot command opens each bundle file
+descriptor-relatively with no-follow semantics, accepts only a stable,
+single-link regular file owned by the current account, and creates each private
+snapshot with mode `0600`. This makes the screened bytes exactly the bytes
+passed to the wrapper without allowing a bundle symlink or concurrent pathname
+swap to redirect disclosure. The boundary call is the final action before
+wrapper invocation. A decline, malformed boundary, missing coherent bundle, or
+snapshot failure stops before wrapper/network contact and remains a distinct
+receipt outcome.

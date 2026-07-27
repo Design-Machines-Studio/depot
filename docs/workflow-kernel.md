@@ -6,21 +6,23 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.3.0 retains observation-only shadow comparison and adds bounded
-authoritative mechanics for behavioral-contract binding and revision,
-validation-retry decisions, canonical review-contribution export, and guarded
-owned-resource cleanup. Those commands are authoritative only where the
+Version 0.4.0 retains observation-only workflow shadow comparison and adds
+trusted repository inspection profiles, digest-bound host authorization,
+contained Docker lanes, redaction, authoritative JSON, derived Markdown, and
+compatible trend mechanics. Those commands are authoritative only where the
 calling Markdown workflow explicitly delegates the mechanic; the kernel does
-not choose providers, findings, merge disposition, or cleanup policy.
+not choose repository policy, providers, findings, merge disposition, or
+cleanup policy.
 
 ## Runtime and state layout
 
 Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
 `references/` directory). The launcher resolves the runtime from the canonical
-Depot checkout or a compatible same-major `>=0.3.0` entry under the Claude
+Depot checkout or a compatible same-major `>=0.4.0` entry under the Claude
 cache, then the Codex cache, ordered by parsed semver (never mtime). Version
-0.3.0 is the minimum because authoritative consumers require the behavioral
-contract, validation-retry, and review-contribution command surface. The
+0.4.0 is the minimum for quality-pulse consumers because they require the
+inspection, behavioral-contract, validation-retry, and review-contribution
+command surface. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -285,7 +287,7 @@ Promotion is an evidence decision, not a mode flag.
 - `native_available -> native_default` is forbidden in this epic and returns
   `separate_human_approval_required`.
 
-Fixture evidence cannot masquerade as real-run evidence. Version 0.3.0 keeps
+Fixture evidence cannot masquerade as real-run evidence. Version 0.4.0 keeps
 `shadow` as the `init` default while exposing only the bounded authoritative
 commands named above. A caller must explicitly select an approved mode and
 delegate each mechanic; no release promotion makes the kernel an autonomous

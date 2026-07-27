@@ -690,20 +690,51 @@ strictly true or false and never a transition string or null. Never relabel the 
 replacement additionally records the prior attempt reference and why same-
 session resume was unavailable.
 
-**Step 3d.0 -- Cascade activation gate.** Resolve the decision engine from the pipeline plugin cache and decide whether the cascade is active:
+**Step 3d.0 -- Cascade activation gate.** Resolve `$WORKFLOW_KERNEL` once through its runtime-resolution contract. Select one coherent installed Pipeline bundle and derive the decision engine, runner, profiles, and probe from that root:
 
 ```bash
-CASCADE_DISPATCH=""
-for CACHE in "$HOME/.claude/plugins/cache/depot/pipeline" "$HOME/.codex/plugins/cache/depot/pipeline"; do
-  CASCADE_DISPATCH=$(ls -t "$CACHE"/*/references/cascade-dispatch.sh 2>/dev/null | head -1)
-  [ -n "$CASCADE_DISPATCH" ] && break
-done
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+resolve_pipeline_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
+      --minimum-version 1.33.0 --active-host "$ACTIVE_HOST" \
+      --required-executable references/cascade-dispatch.sh \
+      --required-executable references/openrouter-exec.sh \
+      --required-executable references/usage-probe.sh \
+      --required-asset references/harness-profile.json \
+      --required-asset references/model-cascade.json \
+      --required-asset references/routing-policy.json
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
+      --minimum-version 1.33.0 \
+      --required-executable references/cascade-dispatch.sh \
+      --required-executable references/openrouter-exec.sh \
+      --required-executable references/usage-probe.sh \
+      --required-asset references/harness-profile.json \
+      --required-asset references/model-cascade.json \
+      --required-asset references/routing-policy.json
+  fi
+}
+PIPELINE_BUNDLE_JSON=$(resolve_pipeline_bundle) || PIPELINE_BUNDLE_JSON=""
+PIPELINE_BUNDLE_REF=$(printf '%s' "$PIPELINE_BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$PIPELINE_BUNDLE_REF" in
+  "~/"*) PIPELINE_BUNDLE_ROOT="$HOME/${PIPELINE_BUNDLE_REF#\~/}" ;;
+  *) PIPELINE_BUNDLE_ROOT="" ;;
+esac
+CASCADE_DISPATCH="$PIPELINE_BUNDLE_ROOT/references/cascade-dispatch.sh"
+OPENROUTER_EXEC="$PIPELINE_BUNDLE_ROOT/references/openrouter-exec.sh"
+USAGE_PROBE="$PIPELINE_BUNDLE_ROOT/references/usage-probe.sh"
 CASCADE_ACTIVE=0
 if [ -n "$CASCADE_DISPATCH" ] && [ -x "$CASCADE_DISPATCH" ] \
    && { [ -n "${OPENROUTER_API_KEY:-}" ] || [ "${PIPELINE_CASCADE:-0}" = "1" ]; }; then
   CASCADE_ACTIVE=1
 fi
 ```
+
+Persist only Pipeline bundle `version`, `cache_class`, and `reason` in durable receipts. Never persist the absolute selected root. The cascade and OpenRouter runner must use the same selected Pipeline root; a caller-supplied path or independently resolved asset is invalid.
 
 `OPENROUTER_API_KEY` or `PIPELINE_CASCADE=1` activates the cascade. **If `CASCADE_ACTIVE=0`, normalize any legacy `executor: claude` value to `codex`; an unavailable OpenRouter executor falls back to Codex. If Codex is also unavailable, fail the chunk rather than dispatching coding work to Claude.**
 
@@ -772,7 +803,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 - `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR
 - a cheap second-opinion that does not become the implementation.
 
-For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex."` The agentic OpenRouter path is valid only when it writes files, verifies, commits, and emits an OpenRouter receipt.
+For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex."` The agentic OpenRouter path is valid only when it writes files, performs fixed structural Git validation, commits, and emits an OpenRouter receipt. Executable project verification is always performed later by native Codex review.
 
 After a valid Codex or OpenRouter path produces a commit, write a receipt with
 `requestedProvider`, `attemptedProvider`, `implementedBy: {codex|openrouter}`,
@@ -787,10 +818,10 @@ Step 3e.
 
 **When `executor: openrouter` (or derived from `kind: config` / docs / mechanical logic):**
 
-1. Resolve `plugins/pipeline/references/openrouter-exec.sh` via the dual-cache resolver.
+1. Use `$OPENROUTER_EXEC` derived from the same coherent Pipeline bundle selected in Step 3d.0.
 2. Export `OPENROUTER_EXEC_ALLOWED_PATHS` from the chunk's newline-delimited `filesToModify`, then pipe the full chunk prompt to the runner from the chunk worktree.
 3. Require a committed change and receipt with `implementedBy: openrouter`.
-4. Parse the runner receipt for files changed, verification result, and OpenRouter API `usage`.
+4. Parse the runner receipt for files changed, fixed structural-validation result, native-verification deferral, and OpenRouter API `usage`.
 5. On runner failure or quality failure, descend to Codex. If Codex is unavailable, fail the chunk.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**

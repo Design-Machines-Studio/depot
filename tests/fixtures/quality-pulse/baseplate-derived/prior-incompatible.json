@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "mutation": "profile_digest",
+  "replacement": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "expected_status": "baseline_discontinuity",
+  "expected_reason_code": "incompatible_baseline",
+  "expected_incompatible_identity_fields": [
+    "profile"
+  ]
+}
