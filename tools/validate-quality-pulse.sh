@@ -30,6 +30,18 @@ status=$?
 printf '%s\n' "$output"
 
 if [ "$status" -ne 0 ]; then
+  printf '%s\n' "$output" |
+    awk '
+      /^(FAIL|ERROR): test_QP_[A-Z0-9_]+/ {
+        kind = $1
+        sub(/:$/, "", kind)
+        case_id = $2
+        sub(/^test_/, "", case_id)
+        gsub(/_/, "-", case_id)
+        reason = kind == "FAIL" ? "assertion_failed" : "unexpected_error"
+        printf "QUALITY-PULSE case=%s status=failed reason=%s\n", case_id, reason
+      }
+    ' >&2
   printf 'QUALITY-PULSE status=failed reason=required_case_failed\n' >&2
   exit "$status"
 fi

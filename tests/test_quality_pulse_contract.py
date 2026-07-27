@@ -175,6 +175,7 @@ class QualityPulseContract(unittest.TestCase):
             commit=FIXED_COMMIT,
             dirty=False,
             purpose=FIXED_PURPOSE,
+            operator_authorization_event_id="approved-conformance",
             adapter=adapter,
             clock=lambda: FIXED_TIME,
             pre_admission_hook=mutate,
@@ -342,6 +343,45 @@ class QualityPulseContract(unittest.TestCase):
         )
         self.assertTrue(values[-1]["actionable"])
         self.assertEqual(values[-1]["raw_telemetry"]["retained"], "unknown fixture telemetry")
+        expected = load_json(FIXTURES / "baseplate-derived" / "expected.json")
+        self.assertEqual(
+            [
+                (
+                    "unknown_fail_closed"
+                    if item["classification"] == "unknown"
+                    else item["classification"]
+                )
+                for item in values
+            ],
+            expected["expected_bucket_order"],
+        )
+        by_id = {item["observation_id"]: item for item in values}
+        self.assertEqual(
+            by_id["design-panel-javascript-count"]["confidence"],
+            "low",
+        )
+        self.assertEqual(
+            by_id["bp-application-regression"]["confidence"],
+            "high",
+        )
+        base = self.observations()[0]
+        mutations = (
+            ("unknown_observation_schema", {"schema_version": 2}),
+            ("unknown_path", {"path": "outside/scope.txt"}),
+            ("unknown_metric", {"metric_id": "unknown-metric"}),
+            ("unknown_surface", {"surface_id": "unknown-surface"}),
+            ("unknown_classification", {"classification_id": "unknown-classification"}),
+        )
+        for reason, change in mutations:
+            raw = copy.deepcopy(base)
+            raw.update(change)
+            raw["raw_telemetry"] = {"retained": reason, "value": 1}
+            with self.subTest(reason=reason):
+                item = classify_observations(self.profile(), [raw])[0]
+                self.assertEqual(item["reason_code"], reason)
+                self.assertEqual(item["classification"], "unknown")
+                self.assertTrue(item["actionable"])
+                self.assertEqual(item["raw_telemetry"]["retained"], reason)
         sensitive_rule = next(
             item for item in self.document()["catalogs"][0]["rules"]
             if item["rule_id"] == "bp-sensitive-surface"
@@ -377,10 +417,14 @@ class QualityPulseContract(unittest.TestCase):
         for binding in value["metrics"] + value["rules"]:
             if binding["catalog_id"] == value["catalogs"][0]["catalog_id"]:
                 binding["catalog_digest"] = value["catalogs"][0]["content_digest"]
-        # The generic kernel remains domain-neutral; this consumer conformance
-        # preflight owns the Baseplate-specific wrapper decision.
-        with self.assertRaises(AssertionError):
-            self.assert_baseplate_fixture_policy(value)
+        self.assert_reason(
+            "missing_profile_decision",
+            lambda: validate_inspection_profile(
+                value,
+                self.repository,
+                profile_path=".dm-review/quality-pulse.json",
+            ),
+        )
 
     # Lane and trust cases -----------------------------------------------------
 
@@ -429,6 +473,7 @@ class QualityPulseContract(unittest.TestCase):
                 profile, [profile.to_dict()["lanes"][0]["lane_id"]],
                 self.attestation(profile), source="git", ref=FIXED_REF,
                 commit=FIXED_COMMIT, dirty=False, purpose=FIXED_PURPOSE,
+                operator_authorization_event_id="approved-conformance",
                 adapter=FakeAdapter([0]), clock=lambda: FIXED_TIME,
             ),
         )
@@ -452,7 +497,9 @@ class QualityPulseContract(unittest.TestCase):
             lambda: execute_inspection_lanes(
                 profile, [profile.to_dict()["lanes"][0]["lane_id"]], value,
                 source="git", ref=FIXED_REF, commit=FIXED_COMMIT, dirty=False,
-                purpose=FIXED_PURPOSE, adapter=adapter, clock=lambda: FIXED_TIME,
+                purpose=FIXED_PURPOSE,
+                operator_authorization_event_id="approved-conformance",
+                adapter=adapter, clock=lambda: FIXED_TIME,
             ),
         )
         self.assertEqual(adapter.calls, [])
@@ -463,6 +510,9 @@ class QualityPulseContract(unittest.TestCase):
             ("profile_digest", "sha256:" + "f" * 64),
             ("ref", "refs/heads/wrong"),
             ("commit", "b" * 40),
+            ("dirty", True),
+            ("purpose", "wrong-purpose"),
+            ("operator_authorization_event_id", "different-approval"),
         ):
             value = self.attestation(profile)
             value[field] = replacement
@@ -479,6 +529,7 @@ class QualityPulseContract(unittest.TestCase):
                     commit=FIXED_COMMIT,
                     dirty=False,
                     purpose=FIXED_PURPOSE,
+                    operator_authorization_event_id="approved-conformance",
                     adapter=adapter,
                     clock=lambda: FIXED_TIME,
                 )
@@ -493,6 +544,7 @@ class QualityPulseContract(unittest.TestCase):
                 profile, [profile.to_dict()["lanes"][0]["lane_id"]],
                 self.attestation(profile), source="git", ref=FIXED_REF,
                 commit=FIXED_COMMIT, dirty=False, purpose=FIXED_PURPOSE,
+                operator_authorization_event_id="approved-conformance",
                 adapter=adapter, clock=lambda: FIXED_TIME,
                 pre_admission_hook=lambda: path.write_text("{}"),
             ),
@@ -522,6 +574,18 @@ class QualityPulseContract(unittest.TestCase):
                 "delta": 1,
             }],
         )
+        baseline_by_id = {
+            item["observation_id"]: item for item in baseline["observations"]
+        }
+        current_by_id = {
+            item["observation_id"]: item for item in current["observations"]
+        }
+        for observation_id in sorted(baseline_by_id):
+            before = copy.deepcopy(baseline_by_id[observation_id])
+            after = copy.deepcopy(current_by_id[observation_id])
+            if observation_id == "design-panel-javascript-count":
+                before["raw_telemetry"]["value"] = after["raw_telemetry"]["value"]
+            self.assertEqual(after, before)
 
     def case_path_order(self):
         _profile, result = self.authoritative()
@@ -555,10 +619,13 @@ class QualityPulseContract(unittest.TestCase):
             self.assertEqual(status["incompatible_identity_fields"], ["schema_version"])
             return
         if field == "profile":
-            baseline["compatibility_identity"]["profile"]["profile_digest"] = (
-                "sha256:" + "f" * 64
+            fixture = load_json(
+                FIXTURES / "baseplate-derived" / "prior-incompatible.json",
             )
-            baseline["profile"]["profile_digest"] = "sha256:" + "f" * 64
+            baseline["compatibility_identity"]["profile"]["profile_digest"] = (
+                fixture["replacement"]
+            )
+            baseline["profile"]["profile_digest"] = fixture["replacement"]
         elif field == "metric_definitions":
             baseline["compatibility_identity"][field][0]["catalog_digest"] = (
                 "sha256:" + "f" * 64
@@ -574,6 +641,13 @@ class QualityPulseContract(unittest.TestCase):
         status = compare_trends(current, baseline)
         self.assertEqual(status["status"], "baseline_discontinuity")
         self.assertIn(field, status["incompatible_identity_fields"])
+        if field == "profile":
+            self.assertEqual(status["status"], fixture["expected_status"])
+            self.assertEqual(status["reason_code"], fixture["expected_reason_code"])
+            self.assertEqual(
+                status["incompatible_identity_fields"],
+                fixture["expected_incompatible_identity_fields"],
+            )
 
     def case_redaction(self, kind):
         raw = self.observations()[0]
@@ -586,9 +660,17 @@ class QualityPulseContract(unittest.TestCase):
             "token": secret,
             "safe_path": "quality-pulse-evidence/useful.json",
         }
-        item = classify_observations(self.profile(), [raw])[0]
-        self.assertNotIn(secret, json.dumps(item))
-        self.assertEqual(item["raw_telemetry"]["safe_path"], "quality-pulse-evidence/useful.json")
+        _profile, result = self.authoritative(observations=[raw])
+        authoritative = authoritative_bytes(result).decode()
+        markdown = render_markdown(result)
+        self.assertNotIn(secret, authoritative)
+        self.assertNotIn(secret, markdown)
+        item = result["observations"][0]
+        self.assertEqual(
+            item["raw_telemetry"]["safe_path"],
+            "quality-pulse-evidence/useful.json",
+        )
+        self.assertIn("quality-pulse-evidence/useful.json", authoritative)
 
     def case_render_valid(self):
         _profile, result = self.authoritative()
@@ -673,6 +755,29 @@ class QualityPulseContract(unittest.TestCase):
             result["stable_projection_digest"],
             expected["expected_stable_projection_digest"],
         )
+        self.assertEqual(
+            "sha256:" + hashlib.sha256(render_markdown(result).encode()).hexdigest(),
+            expected["expected_markdown_sha256"],
+        )
+        if family == "baseplate-derived":
+            self.assertIs(expected["real_run_evidence"], False)
+            self.assertEqual(expected["closure_authority"], "none")
+            self.assertNotIn("closure_authority", result)
+            self.assertEqual(
+                [item["status"] for item in result["lane_receipts"]],
+                expected["expected_lane_statuses"],
+            )
+            self.assertEqual(
+                [
+                    (
+                        "unknown_fail_closed"
+                        if item["classification"] == "unknown"
+                        else item["classification"]
+                    )
+                    for item in result["observations"]
+                ],
+                expected["expected_bucket_order"],
+            )
         validate_authoritative_result(result)
 
 
