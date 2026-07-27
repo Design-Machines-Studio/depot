@@ -128,11 +128,11 @@ fi
 
 The body becomes the selected OpenRouter model's system prompt.
 
-### Step 1.4: Security Boundary -- Granular Mechanical Review
+### Step 1.4: Threat/Content Boundary -- Mechanical Review
 
-**Third-party models are mechanical reviewers, never security reviewers.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode. The helper owns the immutable minimum denylist and computes `set(canon) | set(configured)` from `neverRouteToOpenRouter`, so policy drift can only make routing stricter. It removes complete diff sections for protected paths before disclosure while leaving the full diff for Codex security and architecture lanes.
+**Third-party models are mechanical reviewers, never the independent security reviewer.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode immediately before building the outgoing prompt. File names, security-looking directories, model nationality, and vendor jurisdiction do not classify content. The legacy `neverRouteToOpenRouter` path embargo and `set(canon) | set(configured)` hard-coded union MUST NOT be used.
 
-The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies paths against the unfiltered `changed_files` list, scans the filtered payload for credential values, and writes both a filtered diff and filtered path list. Exit 3 means either no safe review remainder or credential material remains; route the lane to Codex. Any other non-zero status is a fail-closed runner failure.
+The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies every path against the complete unfiltered `changed_files` list, checks physical containment, and scans the complete diff—including additions, context, and removed lines—for actual credentials, private keys, authenticated DSNs, access/session tokens, and classified private values. Safe auth, federation, deploy, security, and `.env.example` content remains eligible. Exit 3 means actual disclosure risk and routes the lane to Codex without reaching the wrapper. Any other non-zero status is malformed or unverifiable input and is a fail-closed runner failure.
 
 ```bash
 BOUNDARY_HELPER="$(dirname "$SECURITY_POLICY_RESOLVED")/delegation-boundary.sh"
@@ -157,10 +157,10 @@ else
     cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
-### RUNNER DECLINED -- SENSITIVE CONTENT OR NO SAFE REMAINDER
-The shared boundary could not produce a credential-free mechanical-review
-remainder. Route this chunk to the Codex-native reviewer instead; no diff
-content was sent to OpenRouter.
+### RUNNER DECLINED -- SENSITIVE CONTENT
+The shared boundary found actual disclosure risk in the mechanical-review
+payload. Route this chunk to the Codex-native reviewer instead; no diff
+content was sent to OpenRouter and the network wrapper was not reached.
 
 ### Critical (P1)
 ### Serious (P2)
@@ -175,6 +175,8 @@ fi
 FILTERED_DIFF=$(cat "$BOUNDARY_FILTERED")
 FILTERED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_PATHS")
 ```
+
+The historical `FILTERED_*` variable names are retained for compatibility; the threat-based gate returns the complete safe diff and complete touched-path list rather than removing sections by path name.
 
 ### Step 2: Build the Prompts
 
@@ -345,7 +347,8 @@ Normalize the response to the P1/P2/P3/Approved structure without dropping or re
 1. **Tag every finding** with `[openrouter/{model}/{agent}]`; the full model slug is part of the attribution.
 2. **Fail with the structured envelope.** Missing keys, wrapper failures, empty responses, and refusals produce `### RUNNER FAILURE` so dm-review retries the lane on Codex.
 3. **Preserve all findings verbatim.** Re-tag and normalize headings only.
-4. **Never bypass the security boundary.** Declined or fully redacted chunks return to Codex and cannot produce a clean OpenRouter receipt.
+4. **Never bypass the security boundary.** A disclosure decline returns to Codex and cannot produce a clean OpenRouter receipt.
+5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a Codex security sign-off even when non-secret implementation content was eligible for OpenRouter.
 
 ## Why This Architecture
 

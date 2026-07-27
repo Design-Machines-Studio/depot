@@ -15,6 +15,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 MODE="run"
 MODEL="${OPENROUTER_EXEC_MODEL:-z-ai/glm-5.2}"
+FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-180}"
 VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
@@ -42,28 +43,30 @@ JSON
   exit 0
 fi
 
-PROMPT="$(cat)"
-[ -n "$PROMPT" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 [ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || {
   echo "openrouter-exec: OPENROUTER_EXEC_ALLOWED_PATHS is required" >&2
   exit 2
 }
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WRAPPER=""
-for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1 || true)"
-  [ -n "$WRAPPER" ] && break
-done
+WRAPPER="${OPENROUTER_EXEC_WRAPPER_PATH:-}"
+if [ -z "$WRAPPER" ]; then
+  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+    WRAPPER="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1 || true)"
+    [ -n "$WRAPPER" ] && break
+  done
+fi
 [ -z "$WRAPPER" ] && WRAPPER="$DIR/../../openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 [ -x "$WRAPPER" ] || { echo "openrouter-exec: openrouter-wrapper.sh not found" >&2; exit 1; }
 
-POLICY=""
-for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  POLICY="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json 2>/dev/null | head -1 || true)"
-  [ -n "$POLICY" ] && break
-done
-[ -z "$POLICY" ] && POLICY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
+POLICY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
+if [ ! -f "$POLICY" ]; then
+  POLICY=""
+  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+    POLICY="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json 2>/dev/null | head -1 || true)"
+    [ -n "$POLICY" ] && break
+  done
+fi
 BOUNDARY="$(dirname "$POLICY")/delegation-boundary.sh"
 [ -f "$POLICY" ] && [ -x "$BOUNDARY" ] || {
   echo "openrouter-exec: delegation security boundary unavailable" >&2
@@ -76,8 +79,10 @@ PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.prompt")"
 ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.allowed")"
 PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.paths")"
 MSG_FILE=""
-trap 'rm -f "$PATCH_FILE" "$PROMPT_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$MSG_FILE"' EXIT
-printf '%s' "$PROMPT" > "$PROMPT_FILE"
+WRAPPER_STDERR="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.stderr")"
+trap 'rm -f "$PATCH_FILE" "$PROMPT_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$MSG_FILE" "$WRAPPER_STDERR"' EXIT
+cat > "$PROMPT_FILE"
+[ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
 if "$BOUNDARY" --policy "$POLICY" --changed-files "$ALLOWED_FILE" --content-file "$PROMPT_FILE"; then
   :
@@ -92,9 +97,23 @@ else
 fi
 
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
-RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-0}" "$WRAPPER" "$MODEL" "$PROMPT" "$TIMEOUT")"
+if RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-0}" \
+    "$WRAPPER" "$MODEL" - "$TIMEOUT" "$FALLBACK_MODEL" < "$PROMPT_FILE" 2>"$WRAPPER_STDERR")"; then
+  :
+else
+  rc=$?
+  echo "openrouter-exec: provider failure (wrapper exit $rc)" >&2
+  exit 1
+fi
+ACTUAL_MODEL="$MODEL"
+FALLBACK_USED=false
+if [ -n "$FALLBACK_MODEL" ] &&
+    grep -Fq "falling back to $FALLBACK_MODEL" "$WRAPPER_STDERR"; then
+  ACTUAL_MODEL="$FALLBACK_MODEL"
+  FALLBACK_USED=true
+fi
 
-printf '%s\n' "$RAW_OUT" | sed -n '/^diff --git /,$p' > "$PATCH_FILE"
+printf '%s\n' "$RAW_OUT" > "$PATCH_FILE"
 
 if [ ! -s "$PATCH_FILE" ]; then
   echo "openrouter-exec: model returned no unified diff" >&2
@@ -118,7 +137,7 @@ git apply --check "$PATCH_FILE"
 git apply "$PATCH_FILE"
 
 if [ -n "$VERIFY_CMD" ]; then
-  bash -lc "$VERIFY_CMD"
+  env PATH="$PATH" bash --noprofile --norc -c "$VERIFY_CMD"
   VERIFY_RESULT="passed: $VERIFY_CMD"
 else
   VERIFY_RESULT="skipped: no OPENROUTER_EXEC_VERIFY_CMD"
@@ -140,13 +159,20 @@ FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')
 # usage: the single-turn wrapper prints only model text (the diff), no usage envelope,
 # so exec-lane token spend is not measurable here. Emit null; the post-mortem treats the
 # OpenRouter exec bucket as best-effort/estimated (see run-postmortem-schema.md).
-cat <<JSON
-{
-  "implementedBy": "openrouter",
-  "status": "committed",
-  "commit": "$(git rev-parse --short HEAD)",
-  "filesChanged": "${FILES_CHANGED}",
-  "verification": "${VERIFY_RESULT}",
-  "usage": null
-}
-JSON
+python3 - "$(git rev-parse --short HEAD)" "$FILES_CHANGED" "$VERIFY_RESULT" \
+  "$MODEL" "$ACTUAL_MODEL" "$FALLBACK_USED" <<'PY'
+import json
+import sys
+
+print(json.dumps({
+    "implementedBy": "openrouter",
+    "status": "committed",
+    "commit": sys.argv[1],
+    "filesChanged": sys.argv[2],
+    "verification": sys.argv[3],
+    "requestedModel": sys.argv[4],
+    "actualModel": sys.argv[5],
+    "fallback": sys.argv[6] == "true",
+    "usage": None,
+}, indent=2))
+PY

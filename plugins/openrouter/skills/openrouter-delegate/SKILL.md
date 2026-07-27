@@ -32,16 +32,18 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 - Autonomous chunk implementation (single-turn; no file I/O or tool loop -- see above)
 - Tasks requiring Claude's conversation context (OpenRouter calls are stateless)
 - Tasks requiring MCP server access
-- Security-critical code analysis (keep on Codex-native review)
+- Security review judgment (keep the security-review lane on Codex)
 
 ### Security Boundary (hard rule)
 
-**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` before any delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
+**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never the independent security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
 
-- **Execution mode -- route Codex-side.** If a coding chunk touches auth, federation, secret, deploy, or env paths, decline the whole chunk and return it to Codex.
-- **Mechanical-review mode -- filter first.** Remove complete protected-file diff sections and delegate only a non-empty safe remainder. Codex security and architecture lanes still review the full diff.
-- **Artifact-review mode -- distinguish references from values.** Plans and prompt packs may name protected paths; credential values still decline before disclosure.
-- **Content redaction.** If sensitive values cannot be removed safely, return the chunk to Codex-native review.
+- **Threat/content boundary.** Inspect the exact bytes becoming OpenRouter system or user content. Decline high-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private or regulated values. Recognized placeholders such as `<token>`, `REDACTED`, `example`, and environment-variable references are safe.
+- **No identity or path embargo.** Model nationality, vendor jurisdiction, security-looking directories, `.env` references, header names, and environment-variable names are not disclosure evidence. Non-secret auth, federation, deploy, and security code may pass.
+- **Execution mode -- bounded diffs only.** Accept only a non-empty validated unified diff whose normalized paths are all in the caller's exact owned-path list. The model has no command or verification authority; apply checks, trusted verification, and allowlist-only staging remain local.
+- **Mechanical-review and artifact-review modes.** Scan the complete diff (including removed lines) or exact artifact bytes. Protected-path references are allowed; actual sensitive values decline with exit 3.
+- **Artifact-delegation mode.** Call `delegation-boundary.sh --mode artifact-delegation --policy POLICY --content-file FILE [--content-file FILE ...]` for arbitrary local text that will become OpenRouter content. Every explicit file is scanned byte-for-byte; the mode accepts no changed-file, diff, output-path, or execution authority.
+- **Independent sign-off.** High-consequence security work may use OpenRouter after these controls pass, but completion still requires independent Codex security approval.
 - **Intended lanes.** Style, duplication, pattern-recognition, large-diff triage, and doc consistency.
 
 ## Invocation Protocol
