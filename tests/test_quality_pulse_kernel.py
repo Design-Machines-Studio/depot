@@ -14,6 +14,7 @@ from unittest import mock
 from tests import KERNEL_REFERENCES
 
 from workflow_kernel import cli as kernel_cli
+from workflow_kernel import inspection as inspection_module
 from workflow_kernel.cli import command_inspection_publish
 from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
@@ -1463,6 +1464,88 @@ class QualityPulseKernelTests(unittest.TestCase):
                     "publication_action_not_verified",
                 )
             self.assertEqual(emitted, [])
+            self.assertEqual(
+                json.loads(authoritative_path.read_text())[
+                    "publication_status"
+                ],
+                "markdown_rendered",
+            )
+
+            write_count = 0
+
+            def corrupt_after_published_json(path, value):
+                nonlocal write_count
+                original_write_json(path, value)
+                write_count += 1
+                if write_count == 3:
+                    markdown_path.write_text("stale after published replace\n")
+
+            with (
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_host_publication_authority_key_path",
+                    return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.cli._write_json",
+                    side_effect=corrupt_after_published_json,
+                ),
+                mock.patch("workflow_kernel.cli._emit"),
+            ):
+                self.assert_reason(
+                    lambda: command_inspection_publish(SimpleNamespace(
+                        repository_root=str(repository),
+                        input=str(source),
+                    )),
+                    "publication_action_not_verified",
+                )
+            self.assertEqual(
+                json.loads(authoritative_path.read_text())[
+                    "publication_status"
+                ],
+                "markdown_rendered",
+            )
+
+            verify_count = 0
+            original_verify_output = (
+                inspection_module._verify_exact_publication_output
+            )
+
+            def corrupt_between_final_pair_checks(*args):
+                nonlocal verify_count
+                original_verify_output(*args)
+                verify_count += 1
+                if verify_count == 4:
+                    markdown_path.write_text(
+                        "stale between final pair checks\n",
+                    )
+
+            with (
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_host_publication_authority_key_path",
+                    return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_verify_exact_publication_output",
+                    side_effect=corrupt_between_final_pair_checks,
+                ),
+                mock.patch("workflow_kernel.cli._emit"),
+            ):
+                self.assert_reason(
+                    lambda: command_inspection_publish(SimpleNamespace(
+                        repository_root=str(repository),
+                        input=str(source),
+                    )),
+                    "publication_action_not_verified",
+                )
+            self.assertEqual(
+                json.loads(authoritative_path.read_text())[
+                    "publication_status"
+                ],
+                "markdown_rendered",
+            )
 
     def test_cli_help_and_invalid_inputs_have_stable_nonzero_exit(self):
         env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))

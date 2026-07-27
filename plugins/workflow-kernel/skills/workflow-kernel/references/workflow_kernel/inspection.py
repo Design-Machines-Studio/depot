@@ -2568,6 +2568,12 @@ def validate_published_outputs(
             current, publication_authority_key=publication_authority_key,
         ),
     )
+    _verify_exact_publication_output(
+        current, root, "markdown",
+        render_markdown(
+            current, publication_authority_key=publication_authority_key,
+        ).encode("utf-8"),
+    )
     return current
 
 

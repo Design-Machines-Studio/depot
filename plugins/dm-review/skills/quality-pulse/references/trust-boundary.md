@@ -57,9 +57,9 @@ byte-verifies the exact Markdown before the rendered transition, then durably
 writes and byte-verifies the exact rendered authoritative JSON before the
 published transition. Identical, symlink-aliased, hard-linked, or
 identity-changing destinations fail closed, and both final outputs revalidate
-immediately before emission. If the final envelope replacement fails, the
-durable artifact remains at `markdown_rendered`; no false published claim is
-emitted.
+immediately before emission, with Markdown checked again after JSON. If any
+post-replacement check fails, the exact rendered-state JSON is durably restored
+before the command returns an error; no durable false published claim is left.
 
 ## Untrusted Pull Requests
 

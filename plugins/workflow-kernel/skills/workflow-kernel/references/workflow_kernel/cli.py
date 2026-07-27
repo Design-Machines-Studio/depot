@@ -2862,12 +2862,18 @@ def command_inspection_publish(args):
         publication_authority_key=publication_key,
         publication_repository_root=args.repository_root,
     )
-    _write_json(authoritative_path, published)
-    revalidate_outputs()
-    validate_published_outputs(
-        published, repository_root,
-        publication_authority_key=publication_key,
-    )
+    try:
+        _write_json(authoritative_path, published)
+        revalidate_outputs()
+        validate_published_outputs(
+            published, repository_root,
+            publication_authority_key=publication_key,
+        )
+        revalidate_outputs()
+    except BaseException:
+        _write_json(authoritative_path, rendered)
+        revalidate_outputs()
+        raise
     _emit(published)
     return 0
 

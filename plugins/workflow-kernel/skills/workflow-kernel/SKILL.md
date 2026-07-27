@@ -434,7 +434,8 @@ file outside the repository.
 binding. `inspection-render` is a preview. Only `inspection-publish` may mint
 `markdown_rendered` and `published`, and it does so only after durable,
 byte-exact verification of distinct, non-aliased profile-declared outputs.
-Their parent and file identities remain guarded through final revalidation.
+Their parent and file identities remain guarded through final revalidation;
+post-replacement failure restores the rendered-state JSON before returning.
 
 Successful commands emit canonical JSON except `inspection-render`, which emits
 Markdown. Validation, trust, compatibility, or resolution failures emit stable

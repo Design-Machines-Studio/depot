@@ -80,7 +80,8 @@ pulse.
    before minting `markdown_rendered` and `published`; each transition replaces
    the keyed attestation and cannot be requested through generic finalize.
    The two destinations must remain physically distinct, and both exact final
-   files are revalidated before the published envelope is emitted.
+   files are revalidated before the published envelope is emitted. A
+   post-replacement mismatch durably restores the rendered-state JSON.
 
 Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an

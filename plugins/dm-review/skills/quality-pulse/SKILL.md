@@ -252,7 +252,9 @@ minting `published`, then atomically replaces the authoritative JSON with the
 published envelope. JSON and Markdown destinations must be distinct,
 non-aliased regular-file paths whose parent identities remain stable for the
 full transaction. Both final files are revalidated immediately before
-emission. A caller cannot request either transition directly.
+emission, including a second Markdown check after JSON. Any mismatch after the
+published replacement restores the exact rendered-state JSON before the
+command fails. A caller cannot request either transition directly.
 
 ### 7. Compare a compatible baseline
 
