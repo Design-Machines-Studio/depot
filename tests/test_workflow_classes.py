@@ -66,10 +66,14 @@ class WorkflowClassTests(unittest.TestCase):
         )
         self.assertIsNotNone(routing_policy, "canonical routing-policy.json not found")
         upstream = json.loads(routing_policy.read_text(encoding="utf-8"))
+        self.assertNotIn("neverRouteToOpenRouter", upstream["security"])
         self.assertEqual(
-            owned_globs,
-            upstream["security"]["neverRouteToOpenRouter"]["pathGlobs"],
-            "kernel-owned sensitive-path-policy.json drifted from routing-policy.json",
+            upstream["security"]["disclosureControls"]["onMatch"],
+            "decline-disclosure",
+        )
+        self.assertFalse(
+            upstream["security"]["reviewControls"]["pathNameEmbargo"],
+            "routing policy must classify outbound content, not path names",
         )
 
     def test_sensitive_routing_policy_uses_shared_json_boundaries(self):
@@ -382,6 +386,17 @@ class WorkflowClassTests(unittest.TestCase):
             "required_dispatch_capability"
         ] = "wrapper_dispatch"
         mutations.append(codex_wrapper)
+        codex_openrouter = json.loads(json.dumps(document))
+        codex_openrouter["classes"]["feature"]["nodes"][2][
+            "required_dispatch_capability"
+        ] = "openrouter_exec"
+        mutations.append(codex_openrouter)
+        claude_openrouter = json.loads(json.dumps(document))
+        claude_review = claude_openrouter["classes"]["feature"]["nodes"][4]
+        claude_review["executor"] = "claude"
+        claude_review["required_capability"] = "anthropic_native_execution"
+        claude_review["required_dispatch_capability"] = "openrouter_exec"
+        mutations.append(claude_openrouter)
         for payload in mutations:
             self.assertFalse(schema_matches(payload, schema))
             with tempfile.TemporaryDirectory() as directory:

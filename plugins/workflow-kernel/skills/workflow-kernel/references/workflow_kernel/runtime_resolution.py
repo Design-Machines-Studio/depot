@@ -12,6 +12,7 @@ import json
 import os
 import pwd
 import re
+import stat
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -68,7 +69,7 @@ class PluginBundle:
         }
 
 
-def _asset_path(root, relative):
+def _asset_path(root, relative, *, executable=False):
     if type(relative) is not str or not relative or "\\" in relative:
         return None
     path = Path(relative)
@@ -82,12 +83,22 @@ def _asset_path(root, relative):
         resolved = (root / path).resolve(strict=True)
     except (OSError, RuntimeError, ValueError):
         return None
+    try:
+        mode = resolved.stat().st_mode
+    except OSError:
+        return None
     if (
-        not resolved.is_file()
+        not stat.S_ISREG(mode)
         or not resolved.is_relative_to(root)
         or any(
             (root / Path(*path.parts[:index])).is_symlink()
             for index in range(1, len(path.parts) + 1)
+        )
+        or mode & (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH) == 0
+        or not os.access(resolved, os.R_OK)
+        or executable and (
+            mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH) == 0
+            or not os.access(resolved, os.X_OK)
         )
     ):
         return None
@@ -95,7 +106,8 @@ def _asset_path(root, relative):
 
 
 def _plugin_bundle_candidate(root, cache_boundary, plugin_name, version,
-                             cache_class, required_assets):
+                             cache_class, required_assets,
+                             required_executables):
     try:
         if root.is_symlink():
             return None
@@ -119,13 +131,19 @@ def _plugin_bundle_candidate(root, cache_boundary, plugin_name, version,
             return None
         if any(_asset_path(resolved, asset) is None for asset in required_assets):
             return None
+        if any(
+            _asset_path(resolved, asset, executable=True) is None
+            for asset in required_executables
+        ):
+            return None
         return resolved
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
         return None
 
 
-def resolve_plugin_bundle(plugin_name, required_assets, *, home=None,
-                          active_host=None, minimum_version=None):
+def resolve_plugin_bundle(plugin_name, required_assets=(), *, home=None,
+                          active_host=None, minimum_version=None,
+                          required_executables=()):
     """Select one highest compatible complete bundle across Claude/Codex caches.
 
     Compatibility is same-major at or above ``minimum_version`` when supplied.
@@ -133,7 +151,11 @@ def resolve_plugin_bundle(plugin_name, required_assets, *, home=None,
     """
     if type(plugin_name) is not str or _PLUGIN_NAME.fullmatch(plugin_name) is None:
         raise ValueError("invalid plugin name")
-    if type(required_assets) not in {tuple, list} or not required_assets:
+    if (
+        type(required_assets) not in {tuple, list}
+        or type(required_executables) not in {tuple, list}
+        or not required_assets and not required_executables
+    ):
         raise ValueError("required assets are missing")
     if active_host not in {None, "claude", "codex"}:
         raise ValueError("invalid active host")
@@ -160,7 +182,7 @@ def resolve_plugin_bundle(plugin_name, required_assets, *, home=None,
                 continue
             root = _plugin_bundle_candidate(
                 entry, cache, plugin_name, entry.name, cache_class,
-                required_assets,
+                required_assets, required_executables,
             )
             if root is not None:
                 candidates.append((version, cache_class, root, entry.name))

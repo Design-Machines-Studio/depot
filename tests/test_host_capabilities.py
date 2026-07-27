@@ -568,7 +568,6 @@ class HostCapabilityTests(unittest.TestCase):
             "generic": {
                 HostCapability.WRAPPER_DISPATCH,
                 HostCapability.OPENROUTER_EXEC,
-                HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
             },
         }
@@ -938,12 +937,46 @@ class HostCapabilityTests(unittest.TestCase):
             path = Path(directory) / "harness.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
             native = capabilities_from_harness_profile("renamed-claude", path)
-            wrapper = capabilities_from_harness_profile("wrapper-only", path)
+            with self.assertRaises(InvalidSchemaError):
+                capabilities_from_harness_profile("wrapper-only", path)
         self.assertIn(HostCapability.ANTHROPIC_NATIVE_EXECUTION,
                       native.capabilities)
-        self.assertNotIn(HostCapability.ANTHROPIC_NATIVE_EXECUTION,
-                         wrapper.capabilities)
-        self.assertIn(HostCapability.CLAUDE_EXECUTION, wrapper.capabilities)
+
+    def test_openrouter_roles_reject_native_vendor_primary_or_fallback_models(self):
+        for kind, models in (
+            ("wrapper", ["openai/gpt-5", "z-ai/glm-5.2"]),
+            ("wrapper", ["z-ai/glm-5.2", "anthropic/claude-opus"]),
+            ("openrouter_exec", ["anthropic/claude-opus"]),
+            ("openrouter_exec", ["z-ai/glm-5.2", "openai/gpt-5"]),
+        ):
+            payload = {"hosts": {"generic": {"roles": {"external": {
+                "kind": kind, "probe": "openrouter", "models": models,
+            }}}}}
+            with self.subTest(kind=kind, models=models), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / "harness.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.assertRaises(InvalidSchemaError):
+                    capabilities_from_harness_profile("generic", path)
+
+    def test_generic_third_party_openrouter_route_has_no_native_vendor_capability(self):
+        payload = {"hosts": {"generic": {"roles": {
+            "native_openai": {"kind": "none"},
+            "native_anthropic": {"kind": "none"},
+            "external": {
+                "kind": "wrapper", "probe": "openrouter",
+                "models": ["z-ai/glm-5.2", "deepseek/deepseek-v4-pro"],
+            },
+        }}}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "harness.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            capabilities = capabilities_from_harness_profile("generic", path)
+        self.assertIn(HostCapability.OPENROUTER_EXECUTION,
+                      capabilities.capabilities)
+        self.assertNotIn(HostCapability.CODEX_EXECUTION,
+                         capabilities.capabilities)
+        self.assertNotIn(HostCapability.CLAUDE_EXECUTION,
+                         capabilities.capabilities)
 
     def test_inconsistent_harness_role_fields_fail_closed(self):
         roles = (

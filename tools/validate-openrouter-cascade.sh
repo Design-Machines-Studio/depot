@@ -36,7 +36,10 @@ if [ ! -x "$cascade" ]; then
   fail "cascade-dispatch.sh is missing or not executable"
   any_failed=1
 else
-  out="$("$cascade" --kind logic --prompt test --host codex --dry-run --exhausted-rail codex 2>/dev/null || true)"
+  probe_fixture="$(mktemp "${TMPDIR:-/tmp}/openrouter-probe.XXXXXX.json")"
+  printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","remaining_pct":100}}' > "$probe_fixture"
+  out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind logic --prompt test --host codex \
+    --dry-run --probe-file "$probe_fixture" --exhausted-rail codex 2>/dev/null || true)"
   role="$(printf '%s' "$out" | jq -r '.role // empty' 2>/dev/null || true)"
   kind="$(printf '%s' "$out" | jq -r '.kind // empty' 2>/dev/null || true)"
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
@@ -48,7 +51,8 @@ else
     any_failed=1
   fi
 
-  ui_out="$("$cascade" --kind ui --prompt test --host codex --dry-run 2>/dev/null || true)"
+  ui_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind ui --prompt test --host codex \
+    --dry-run --probe-file "$probe_fixture" 2>/dev/null || true)"
   ui_role="$(printf '%s' "$ui_out" | jq -r '.role // empty' 2>/dev/null || true)"
   ui_kind="$(printf '%s' "$ui_out" | jq -r '.kind // empty' 2>/dev/null || true)"
   if [ "$ui_role" = "premium_sub" ] && [ "$ui_kind" = "native" ]; then
@@ -58,9 +62,20 @@ else
     any_failed=1
   fi
 
-  or_out="$("$cascade" --kind docs --prompt test --host codex --dry-run --exhausted-rail openrouter 2>/dev/null || true)"
+  or_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind docs --prompt test --host codex \
+    --dry-run --probe-file "$probe_fixture" --exhausted-rail openrouter 2>/dev/null || true)"
   or_role="$(printf '%s' "$or_out" | jq -r '.role // empty' 2>/dev/null || true)"
-  if [ "$or_role" = "premium_sub" ]; then
+  if [ "$or_role" = "premium_sub" ] &&
+     printf '%s' "$or_out" | jq -e '
+       .requestedProvider == "openrouter" and
+       .requestedModel == "moonshotai/kimi-k3" and
+       .attemptedProvider == "codex" and
+       .attemptedModel == "gpt-5.6-sol" and
+       .actualImplementer == "codex" and
+       .actualModel == "gpt-5.6-sol" and
+       .fallback == true and
+       .native_vendor_origin_invariant == "passed"
+     ' >/dev/null 2>&1; then
     pass "OpenRouter-primary coding returns to Codex when OpenRouter is exhausted"
   else
     fail "OpenRouter-primary coding must return to Codex, never Claude"
@@ -71,7 +86,8 @@ else
   # not trip the empty-array + set -u fatal. Exercise it under the system /bin/bash
   # (3.2 on macOS) explicitly -- env bash may be a modern build that hides the bug.
   if [ -x /bin/bash ]; then
-    base_out="$(/bin/bash "$cascade" --kind logic --prompt test --host codex --dry-run 2>/dev/null || true)"
+    base_out="$(CASCADE_EXHAUSTED_RAILS= /bin/bash "$cascade" --kind logic --prompt test \
+      --host codex --dry-run --probe-file "$probe_fixture" 2>/dev/null || true)"
     if printf '%s' "$base_out" | jq -e '.model' >/dev/null 2>&1; then
       pass "cascade-dispatch runs clean under system bash with no --exhausted-rail"
     else
@@ -79,6 +95,25 @@ else
       any_failed=1
     fi
   fi
+
+  malformed_profile="$(mktemp "${TMPDIR:-/tmp}/openrouter-profile.XXXXXX.json")"
+  jq '.hosts.codex.roles.openrouter_exec.kind = "unknown_rail"
+      | .hosts.codex.roles.openrouter_exec.probe = "none"' \
+    "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" > "$malformed_profile"
+  set +e
+  malformed_out="$(CASCADE_EXHAUSTED_RAILS= PROFILE_FILE="$malformed_profile" "$cascade" \
+    --class openrouter --prompt test --host codex --probe-file "$probe_fixture" 2>&1)"
+  malformed_rc=$?
+  set -e
+  rm -f "$malformed_profile"
+  if [ "$malformed_rc" -eq 2 ] &&
+     printf '%s' "$malformed_out" | grep -Fq "unknown rail kind 'unknown_rail'"; then
+    pass "unknown cascade rail kind fails closed"
+  else
+    fail "unknown cascade rail kind must fail closed with exit 2"
+    any_failed=1
+  fi
+  rm -f "$probe_fixture"
 fi
 
 if grep -q 'zdr: true' "$wrapper" && grep -q 'data_collection: "deny"' "$wrapper"; then
@@ -87,6 +122,118 @@ else
   fail "OPENROUTER_ZDR=1 must send provider.zdr=true as well as data_collection=deny"
   any_failed=1
 fi
+
+fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/openrouter-origin.XXXXXX")"
+server_pid=""
+cleanup() {
+  [ -z "$server_pid" ] || kill "$server_pid" >/dev/null 2>&1 || true
+  rm -rf "$fixture_root"
+}
+trap cleanup EXIT
+network_marker="$fixture_root/network.marker"
+fail_primary="$fixture_root/fail-primary"
+port_file="$fixture_root/port"
+cat > "$fixture_root/http-sentinel.py" <<'PY'
+import http.server
+import json
+import pathlib
+import sys
+
+marker = pathlib.Path(sys.argv[1])
+fail_primary = pathlib.Path(sys.argv[2])
+port_file = pathlib.Path(sys.argv[3])
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        document = json.loads(self.rfile.read(length))
+        model = document.get("model", "")
+        with marker.open("a", encoding="utf-8") as output:
+            output.write(model + "\n")
+        if fail_primary.exists() and model == "z-ai/glm-5.2":
+            status = 429
+            response = {"error": {"message": "capacity"}}
+        else:
+            status = 200
+            response = {"choices": [{"message": {"content": "controlled"}}]}
+        payload = json.dumps(response).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):
+        pass
+
+server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+port_file.write_text(str(server.server_port), encoding="utf-8")
+server.serve_forever()
+PY
+python3 "$fixture_root/http-sentinel.py" \
+  "$network_marker" "$fail_primary" "$port_file" &
+server_pid=$!
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  [ -s "$port_file" ] && break
+  sleep 0.1
+done
+[ -s "$port_file" ] || {
+  fail "controlled loopback network sentinel did not start"
+  exit 1
+}
+sentinel_base="http://127.0.0.1:$(cat "$port_file")"
+
+if grep -q 'OPENROUTER_CURL_CMD\|"\$CURL_CMD"' "$wrapper"; then
+  fail "wrapper must not accept a caller-selected curl command"
+  any_failed=1
+else
+  pass "wrapper retains fixed-path curl execution"
+fi
+
+forbidden_case() {
+  local label="$1" primary="$2" fallback="$3" rc
+  rm -f "$network_marker" "$fail_primary"
+  set +e
+  OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+    "$wrapper" "$primary" test 10 "$fallback" >/dev/null 2>&1
+  rc=$?
+  set -e
+  if [ "$rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+    pass "$label stops before network contact"
+  else
+    fail "$label must reject before network contact"
+    any_failed=1
+  fi
+}
+
+forbidden_case primary-openai openai/gpt-test ""
+forbidden_case fallback-openai z-ai/glm-5.2 openai/gpt-test
+forbidden_case primary-anthropic anthropic/claude-test ""
+forbidden_case fallback-anthropic z-ai/glm-5.2 anthropic/claude-test
+
+rm -f "$network_marker" "$fail_primary"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   "$wrapper" z-ai/glm-5.2 test 10 >/dev/null 2>&1 &&
+   grep -Fxq z-ai/glm-5.2 "$network_marker"; then
+  pass "allowed GLM reaches the controlled network sentinel"
+else
+  fail "allowed GLM must prove the sentinel is reachable"
+  any_failed=1
+fi
+
+rm -f "$network_marker"
+touch "$fail_primary"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   "$wrapper" z-ai/glm-5.2 test 10 deepseek/deepseek-v4-pro \
+   >/dev/null 2>&1 &&
+   [ "$(sed -n '1p' "$network_marker")" = "z-ai/glm-5.2" ] &&
+   [ "$(sed -n '2p' "$network_marker")" = "deepseek/deepseek-v4-pro" ]; then
+  pass "allowed DeepSeek fallback reaches the sentinel only after controlled primary failure"
+else
+  fail "allowed fallback sentinel sequence is invalid"
+  any_failed=1
+fi
+rm -f "$fail_primary"
 
 fallback_block="$(awk '/## Rate-Limit Fallback Chain/{flag=1; next} /## Privacy/{flag=0} flag' "$model_selection")"
 if printf '%s' "$fallback_block" | grep -q 'minimax/minimax-m3'; then

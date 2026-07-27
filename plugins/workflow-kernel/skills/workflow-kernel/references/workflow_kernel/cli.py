@@ -2769,6 +2769,7 @@ def command_resolve_plugin_bundle(args):
         bundle = resolve_plugin_bundle(
             args.plugin, args.required_asset,
             active_host=args.active_host, minimum_version=args.minimum_version,
+            required_executables=args.required_executable,
         )
     except (FileNotFoundError, ValueError):
         raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
@@ -3049,8 +3050,15 @@ def parser():
     )
     resolve_bundle.add_argument("--plugin", required=True)
     resolve_bundle.add_argument(
-        "--required-asset", action="append", required=True,
+        "--required-asset", action="append", default=[],
         help="required path relative to the selected plugin root; repeat as needed",
+    )
+    resolve_bundle.add_argument(
+        "--required-executable", action="append", default=[],
+        help=(
+            "required readable executable path relative to the selected plugin "
+            "root; repeat as needed"
+        ),
     )
     resolve_bundle.add_argument("--minimum-version")
     resolve_bundle.add_argument("--active-host", choices=("claude", "codex"))

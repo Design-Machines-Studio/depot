@@ -302,11 +302,32 @@ DIFF
 EOF
 chmod +x "$FIXTURE_ROOT"/wrapper-*.sh
 
+# Build one coherent fake installed OpenRouter bundle. Production consumers must
+# resolve the bundle as a unit, so fixtures replace only the wrapper inside that
+# unit instead of injecting caller-selected production asset paths.
+FAKE_HOME="$FIXTURE_ROOT/home"
+BUNDLE_ROOT="$FAKE_HOME/openrouter-bundle"
+BUNDLE_REFS="$BUNDLE_ROOT/skills/openrouter-delegate/references"
+mkdir -p "$BUNDLE_REFS"
+cp "$POLICY" "$BUNDLE_REFS/delegation-security-policy.json"
+cp "$BOUNDARY" "$BUNDLE_REFS/delegation-boundary.sh"
+chmod +x "$BUNDLE_REFS/delegation-boundary.sh"
+cat > "$FIXTURE_ROOT/fake-workflow-kernel.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[ "${1:-}" = "resolve-plugin-bundle" ] || exit 2
+cat <<'JSON'
+{"selected_root":"~/openrouter-bundle","version":"1.6.0","cache_class":"fixture","reason":"offline-test"}
+JSON
+EOF
+chmod +x "$FIXTURE_ROOT/fake-workflow-kernel.sh"
+
 printf '%s' 'Implement safe auth middleware; docs mention deploy/.env.example.' > "$FIXTURE_ROOT/expected.prompt"
+cp "$FIXTURE_ROOT/wrapper-safe.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 (
   cd "$FIXTURE_ROOT/exec-repo"
-  env OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    OPENROUTER_EXEC_WRAPPER_PATH="$FIXTURE_ROOT/wrapper-safe.sh" \
+  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
     OPENROUTER_EXEC_VERIFY_CMD='grep -Fq "new middleware" auth/session.go' \
     OPENROUTER_EXEC_COMMIT_MSG='test: bounded auth diff' \
     WRAPPER_PROMPT="$FIXTURE_ROOT/actual.prompt" \
@@ -334,10 +355,11 @@ diff --git a/auth/session.go b/auth/session.go
 DIFF
 EOF
 chmod +x "$FIXTURE_ROOT/wrapper-fallback.sh"
+cp "$FIXTURE_ROOT/wrapper-fallback.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 (
   cd "$FIXTURE_ROOT/exec-repo"
-  env OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    OPENROUTER_EXEC_WRAPPER_PATH="$FIXTURE_ROOT/wrapper-fallback.sh" \
+  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
     OPENROUTER_EXEC_FALLBACK_MODEL=deepseek/deepseek-v4-pro \
     OPENROUTER_EXEC_VERIFY_CMD='grep -Fq "fallback middleware" auth/session.go' \
     OPENROUTER_EXEC_COMMIT_MSG='test: fallback receipt' \
@@ -347,43 +369,42 @@ jq -e '.requestedModel == "z-ai/glm-5.2" and .actualModel == "deepseek/deepseek-
   "$FIXTURE_ROOT/fallback-receipt.json" >/dev/null
 
 printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' > "$FIXTURE_ROOT/secret.prompt"
+cp "$FIXTURE_ROOT/wrapper-safe.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 expect_rc 77 'delegation declined' 'exec prompt disclosure' \
-  env OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-  OPENROUTER_EXEC_WRAPPER_PATH="$FIXTURE_ROOT/wrapper-safe.sh" \
+  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
+  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
   WRAPPER_PROMPT="$FIXTURE_ROOT/secret-actual.prompt" \
   WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-secret" \
   "$EXEC_RUNNER" < "$FIXTURE_ROOT/secret.prompt"
 [ ! -e "$FIXTURE_ROOT/exec-network-secret" ]
 
+cp "$FIXTURE_ROOT/wrapper-provider-fail.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 expect_rc 1 'provider failure' 'provider receipt class' \
-  env OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-  OPENROUTER_EXEC_WRAPPER_PATH="$FIXTURE_ROOT/wrapper-provider-fail.sh" \
+  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
+  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
   WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-provider-fail" \
   "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 [ -e "$FIXTURE_ROOT/exec-network-provider-fail" ]
 
+cp "$FIXTURE_ROOT/wrapper-mismatch.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 expect_rc 2 'model patch could not be validated' 'malformed model output' \
-  env OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-  OPENROUTER_EXEC_WRAPPER_PATH="$FIXTURE_ROOT/wrapper-mismatch.sh" \
+  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
+  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
   WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-mismatch" \
   "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 [ -e "$FIXTURE_ROOT/exec-network-mismatch" ]
 
-cat > "$FIXTURE_ROOT/exec-77.sh" <<'EOF'
-#!/usr/bin/env bash
-exit 77
-EOF
 cat > "$FIXTURE_ROOT/cascade-sentinel.sh" <<'EOF'
 #!/usr/bin/env bash
 touch "$WRAPPER_SENTINEL"
 exit 99
 EOF
-chmod +x "$FIXTURE_ROOT/exec-77.sh" "$FIXTURE_ROOT/cascade-sentinel.sh"
+chmod +x "$FIXTURE_ROOT/cascade-sentinel.sh"
+cp "$FIXTURE_ROOT/cascade-sentinel.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 CASCADE="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
-CASCADE_OUT="$(printf '%s' test | env \
+CASCADE_OUT="$(printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' | env \
+  HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
   OPENROUTER_EXEC_ALLOWED_PATHS=plugins/openrouter/README.md \
-  OPENROUTER_EXEC_CMD="$FIXTURE_ROOT/exec-77.sh" \
-  WRAPPER_CMD="$FIXTURE_ROOT/cascade-sentinel.sh" \
   WRAPPER_SENTINEL="$FIXTURE_ROOT/cascade-wrapper-called" \
   "$CASCADE" --class openrouter --prompt - --host codex 2>/dev/null || true)"
 printf '%s' "$CASCADE_OUT" | jq -e '.dispatch == "native" and .role == "premium_sub"' >/dev/null

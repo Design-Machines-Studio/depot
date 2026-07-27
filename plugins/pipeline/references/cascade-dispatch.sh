@@ -32,7 +32,12 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASCADE="${CASCADE_FILE:-$DIR/model-cascade.json}"
 PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"
 PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
-# openrouter-wrapper is owned by the openrouter leaf plugin -- resolved at call time (resolve_wrapper)
+# OpenRouter assets are selected once from one coherent installed bundle.
+OPENROUTER_BUNDLE_STATE="unchecked"
+OPENROUTER_BUNDLE_ROOT=""
+OPENROUTER_BUNDLE_VERSION=""
+OPENROUTER_BUNDLE_CLASS=""
+OPENROUTER_BUNDLE_REASON=""
 
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="120"; DRYRUN=0; PROBE_FILE=""
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
@@ -90,27 +95,58 @@ dispatch_codex() {
   [ -z "$root" ] && return 127                       # Codex not installed -> unavailable
   node "${root}/scripts/codex-companion.mjs" task --write "$PROMPT" 2>&1
 }
-# openrouter-wrapper lives in the openrouter leaf plugin (dual-cache resolve, like CODEX_ROOT/airlift).
-resolve_wrapper() {
-  [ -n "${WRAPPER_CMD:-}" ] && { printf '%s' "$WRAPPER_CMD"; return; }
-  local w=""
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    w="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)"
-    [ -n "$w" ] && break
-  done
-  [ -z "$w" ] && [ -x "$DIR/openrouter-wrapper.sh" ] && w="$DIR/openrouter-wrapper.sh"   # dev fallback
-  printf '%s' "$w"
+resolve_openrouter_bundle() {
+  [ "$OPENROUTER_BUNDLE_STATE" = "ready" ] && return 0
+  [ "$OPENROUTER_BUNDLE_STATE" = "denied" ] && return 1
+  local kernel="${WORKFLOW_KERNEL:-}" active="" result="" selected=""
+  [ -n "$kernel" ] || kernel="$DIR/../../workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
+  [ -x "$kernel" ] || { OPENROUTER_BUNDLE_STATE="denied"; return 1; }
+  case "$HOST" in
+    claude-code) active="claude" ;;
+    codex) active="codex" ;;
+  esac
+  if [ -n "$active" ]; then
+    result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --active-host "$active" 2>/dev/null)" || {
+        OPENROUTER_BUNDLE_STATE="denied"; return 1;
+      }
+  else
+    result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      2>/dev/null)" || {
+        OPENROUTER_BUNDLE_STATE="denied"; return 1;
+      }
+  fi
+  selected="$(printf '%s' "$result" | jq -r '.selected_root // empty')"
+  case "$selected" in
+    "~/"*) OPENROUTER_BUNDLE_ROOT="$HOME/${selected#\~/}" ;;
+    *) OPENROUTER_BUNDLE_STATE="denied"; return 1 ;;
+  esac
+  OPENROUTER_BUNDLE_VERSION="$(printf '%s' "$result" | jq -r '.version // empty')"
+  OPENROUTER_BUNDLE_CLASS="$(printf '%s' "$result" | jq -r '.cache_class // empty')"
+  OPENROUTER_BUNDLE_REASON="$(printf '%s' "$result" | jq -r '.reason // empty')"
+  [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
+    [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh" ] &&
+    [ -r "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json" ] || {
+      OPENROUTER_BUNDLE_STATE="denied"; return 1;
+    }
+  OPENROUTER_BUNDLE_STATE="ready"
+  return 0
 }
-dispatch_wrapper() { local w; w="$(resolve_wrapper)"; [ -z "$w" ] && return 1; "$w" "$1" "$PROMPT" "$TIMEOUT" "${2:-}"; }
+dispatch_wrapper() {
+  resolve_openrouter_bundle || return 1
+  "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
+    "$1" "$PROMPT" "$TIMEOUT" "${2:-}"
+}
 resolve_openrouter_exec() {
-  [ -n "${OPENROUTER_EXEC_CMD:-}" ] && { printf '%s' "$OPENROUTER_EXEC_CMD"; return; }
-  local runner=""
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    runner="$(ls -t "$cache"/pipeline/*/references/openrouter-exec.sh 2>/dev/null | head -1)"
-    [ -n "$runner" ] && break
-  done
-  [ -z "$runner" ] && [ -x "$DIR/openrouter-exec.sh" ] && runner="$DIR/openrouter-exec.sh"
-  printf '%s' "$runner"
+  [ -x "$DIR/openrouter-exec.sh" ] && printf '%s' "$DIR/openrouter-exec.sh"
 }
 dispatch_openrouter_exec() {
   local runner; runner="$(resolve_openrouter_exec)"
@@ -131,12 +167,12 @@ openrouter_allowed() {
     return 1
   }
   local policy="" helper="" task_tmp_root prompt_file allowed_file rc
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    policy="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json 2>/dev/null | head -1 || true)"
-    [ -n "$policy" ] && break
-  done
-  [ -z "$policy" ] && policy="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
-  helper="$(dirname "$policy")/delegation-boundary.sh"
+  resolve_openrouter_bundle || {
+    OPENROUTER_GATE_STATE="denied"
+    return 1
+  }
+  policy="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+  helper="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
   [ -f "$policy" ] && [ -x "$helper" ] || {
     OPENROUTER_GATE_STATE="denied"
     return 1
@@ -168,6 +204,9 @@ PROBES="$(probe_json)"
 FLOOR="$(jq -r --arg c "$CLASS" '.cascades[$c].quality_floor // 0' "$CASCADE")"
 LADDER="$(jq -r --arg c "$CLASS" '.cascades[$c].ladder[]?' "$CASCADE")"
 [ -z "$LADDER" ] && { echo "cascade-dispatch: unknown class '$CLASS'" >&2; exit 2; }
+REQUESTED_ROLE="$(printf '%s\n' "$LADDER" | sed -n '1p')"
+REQUESTED_MODEL="$(jq -r --arg h "$HOST" --arg r "$REQUESTED_ROLE" \
+  '.hosts[$h].roles[$r].models[0] // empty' "$PROFILE")"
 THRESH="$(jq -r '.policy.headroom_threshold_pct // 8' "$CASCADE")"
 
 rail_is_exhausted() {
@@ -201,12 +240,29 @@ for role in $LADDER; do
   fi
   models="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].models[]?' "$PROFILE")"
   for model in $models; do
+    case "$kind:$model" in
+      wrapper:openai/*|wrapper:anthropic/*|openrouter_exec:openai/*|openrouter_exec:anthropic/*)
+        echo "cascade-dispatch: native-vendor-origin invariant rejected OpenRouter model '$model'" >&2
+        exit 2
+        ;;
+    esac
     q="$(jq -r --arg m "$model" '.quality_rank[$m] // 0' "$CASCADE")"
     [ "$q" -lt "$FLOOR" ] 2>/dev/null && continue
     if [ "$DRYRUN" = "1" ]; then
+      fallback=false
+      fallback_reason="none"
+      if [ "$CLASS" != "$prail" ]; then
+        fallback=true
+        fallback_reason="${CLASS}-unavailable-or-below-floor"
+      fi
       jq -n --arg c "$CLASS" --arg h "$HOST" --arg role "$role" --arg k "$kind" \
             --arg m "$model" --arg q "$q" --arg pr "$prail" \
-            '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr}'
+            --arg requested_model "$REQUESTED_MODEL" \
+            --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
+            '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr,
+              requestedProvider:$c,requestedModel:$requested_model,
+              attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
+              fallback:$fallback,fallbackReason:$fallback_reason,native_vendor_origin_invariant:"passed"}'
       exit 0
     fi
     # Traversal intent per rung kind: codex_companion is single-attempt per role
@@ -216,8 +272,19 @@ for role in $LADDER; do
     # -> `continue` to the next MODEL on a per-model error.
     case "$kind" in
       native)
+        fallback=false
+        fallback_reason="none"
+        if [ "$CLASS" != "$prail" ]; then
+          fallback=true
+          fallback_reason="${CLASS}-unavailable-or-below-floor"
+        fi
         jq -n --arg m "$model" --arg role "$role" --arg pr "$prail" \
-              '{dispatch:"native",model:$m,role:$role,probe_rail:$pr}'; exit 64;;
+              --arg requested_provider "$CLASS" --arg requested_model "$REQUESTED_MODEL" \
+              --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
+              '{dispatch:"native",model:$m,role:$role,probe_rail:$pr,
+                requestedProvider:$requested_provider,requestedModel:$requested_model,
+                attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
+                fallback:$fallback,fallbackReason:$fallback_reason,nativeVendorOriginInvariant:"passed"}'; exit 64;;
       codex_companion)
         out="$(dispatch_codex)"; rc=$?
         [ $rc -eq 127 ] && break                       # Codex absent -> next role
@@ -240,6 +307,9 @@ for role in $LADDER; do
           break                                    # skip every later OpenRouter role
         fi
         continue;;
+      *)
+        echo "cascade-dispatch: unknown rail kind '$kind'" >&2
+        exit 2;;
     esac
   done
 done

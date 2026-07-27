@@ -17,20 +17,44 @@ openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 - `[timeout_s]` -- per-attempt timeout in seconds (default `90`)
 - `[fallback-slug]` -- a second model to try if the primary returns HTTP 429/503
 
+Both model arguments must be third-party OpenRouter slugs. `openai/*` and `anthropic/*` are rejected before network contact; use native Codex and Claude CLIs for those vendors.
+
 **Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- stdout is the answer.
 
 ## Resolve the Wrapper Path
 
-Resolve via the plugin cache so this works from any CWD (pipeline runs in worktrees outside the depot where depot-relative paths fail):
+Resolve `WORKFLOW_KERNEL` once through workflow-kernel's runtime-resolution contract, request the complete asset set needed by the caller in one `resolve-plugin-bundle` call, and derive every asset from the returned root:
 
 ```bash
-WRAPPER_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER_PATH" ] && break
-done
-[ -n "$WRAPPER_PATH" ] && [ -x "$WRAPPER_PATH" ] || { echo "openrouter wrapper not found in plugin cache" >&2; exit 1; }
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+resolve_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  fi
+}
+BUNDLE_JSON=$(resolve_bundle)
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
+WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+SECURITY_POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+BOUNDARY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+[ -x "$WRAPPER_PATH" ] && [ -r "$SECURITY_POLICY_PATH" ] && [ -x "$BOUNDARY_PATH" ] || exit 1
 ```
+
+Persist only `version`, `cache_class`, and `reason` from the resolver receipt. `selected_root` is for immediate local use and must not enter public durable receipts.
 
 ## How to Invoke
 
@@ -87,6 +111,6 @@ POST https://openrouter.ai/api/v1/chat/completions
 | `0` | Success | stdout is the model's text content. |
 | `28` | Timeout | Report timeout, proceed without OpenRouter input. Do not retry. |
 | `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` to stderr. Skip gracefully. |
-| `2` | Bad args | Missing model or prompt. |
+| `2` | Bad args / origin rejection | Missing arguments or an `openai/*` / `anthropic/*` primary or fallback. |
 
 Internally, HTTP 429/503 on the primary triggers the `[fallback-slug]` model if provided; if the fallback also fails, the wrapper returns `1`. Automated review runners convert failures into `### RUNNER FAILURE` so dm-review can retry the coding lane on Codex. Direct `/openrouter` calls report failure to the user.

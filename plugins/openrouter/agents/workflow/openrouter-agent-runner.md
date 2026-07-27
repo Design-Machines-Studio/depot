@@ -24,7 +24,8 @@ The caller passes you these inputs in the prompt body:
 - `target_model` -- full OpenRouter model slug such as `z-ai/glm-5.2` or `deepseek/deepseek-v4-pro`
 - `fallback_model` -- optional full OpenRouter model slug tried by the wrapper on HTTP 429/503
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
-- `security_policy_path` -- absolute path to OpenRouter's installed `delegation-security-policy.json`
+- `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
+- `openrouter_bundle_version` and `cache_class` -- expected resolver identity
 - `diff_content` -- the diff to review
 - `changed_files` -- newline-delimited, normalized, unfiltered list of every changed file path
 - `project_context` -- stack info (for example, `Plugin Marketplace (Markdown+JSON)`)
@@ -70,11 +71,23 @@ validate_model_slug "$target_model" || {
   echo "ERROR: invalid target_model (expected full OpenRouter slug): $target_model" >&2
   exit 2
 }
+case "$target_model" in
+  openai/*|anthropic/*)
+    echo "ERROR: native-vendor-origin invariant rejected target_model: $target_model" >&2
+    exit 2
+    ;;
+esac
 if [ -n "${fallback_model:-}" ]; then
   validate_model_slug "$fallback_model" || {
     echo "ERROR: invalid fallback_model (expected full OpenRouter slug): $fallback_model" >&2
     exit 2
   }
+  case "$fallback_model" in
+    openai/*|anthropic/*)
+      echo "ERROR: native-vendor-origin invariant rejected fallback_model: $fallback_model" >&2
+      exit 2
+      ;;
+  esac
 fi
 
 [[ "$target_timeout" =~ ^[1-9][0-9]*$ ]] || {
@@ -104,20 +117,47 @@ case "$RESOLVED" in
   *) echo "ERROR: target_agent_path outside trusted depot roots: $target_agent_path" >&2; exit 2 ;;
 esac
 
-SECURITY_POLICY_RESOLVED=$(python3 - "$security_policy_path" <<'PY'
-import os, sys
-path = os.path.realpath(sys.argv[1])
-if not os.path.isfile(path):
-    raise SystemExit(2)
-print(path)
-PY
-) || { echo "ERROR: OpenRouter delegation security policy is unavailable" >&2; exit 2; }
-case "$SECURITY_POLICY_RESOLVED" in
-  "$DEPOT_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"|\
-  "$HOME"/.claude/plugins/cache/depot/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json|\
-  "$HOME"/.codex/plugins/cache/depot/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json) ;;
-  *) echo "ERROR: security_policy_path is not the trusted OpenRouter policy" >&2; exit 2 ;;
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+resolve_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --required-asset agents/workflow/openrouter-agent-runner.md \
+      --required-asset agents/review/openrouter-bulk-analyst.md \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-asset skills/openrouter-delegate/references/prompt-templates.md
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-asset agents/workflow/openrouter-agent-runner.md \
+      --required-asset agents/review/openrouter-bulk-analyst.md \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-asset skills/openrouter-delegate/references/prompt-templates.md
+  fi
+}
+BUNDLE_JSON=$(resolve_bundle)
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("selected_root",""))')
+RESOLVED_VERSION=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))')
+RESOLVED_CLASS=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("cache_class",""))')
+[ "$BUNDLE_REF" = "$openrouter_bundle_ref" ] &&
+  [ "$RESOLVED_VERSION" = "$openrouter_bundle_version" ] &&
+  [ "$RESOLVED_CLASS" = "$cache_class" ] || {
+    echo "ERROR: coherent OpenRouter bundle changed after runner selection" >&2
+    exit 2
+  }
+case "$BUNDLE_REF" in
+  "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}" ;;
+  *) echo "ERROR: coherent OpenRouter bundle unavailable" >&2; exit 2 ;;
 esac
+SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+[ -r "$SECURITY_POLICY_RESOLVED" ] || { echo "ERROR: OpenRouter delegation security policy is unavailable" >&2; exit 2; }
 
 TARGET_BODY=$(awk 'BEGIN{fm=0} /^---$/{fm++; next} fm>=2{print}' "$RESOLVED")
 if [ -z "$TARGET_BODY" ]; then
@@ -125,6 +165,10 @@ if [ -z "$TARGET_BODY" ]; then
   exit 2
 fi
 ```
+
+`openrouter_bundle_ref` is process-local binding data. Do not include it in
+review output or durable receipts; only version, cache class, and resolution
+reason are durable.
 
 The body becomes the selected OpenRouter model's system prompt.
 
@@ -203,15 +247,11 @@ Follow the review criteria in your system prompt exactly. Report findings using 
 
 ### Step 3: Invoke the OpenRouter Wrapper
 
-Resolve the wrapper through the supported plugin caches. Pass the user prompt on stdin and the target body through `OPENROUTER_SYSTEM`; both variables remain quoted and are never re-evaluated by the shell. The wrapper prints model text directly on stdout.
+Use the coherent OpenRouter bundle resolved in Step 1. Pass the user prompt on stdin and the target body through `OPENROUTER_SYSTEM`; both variables remain quoted and are never re-evaluated by the shell. The wrapper prints model text directly on stdout.
 
 ```bash
-WRAPPER_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER_PATH" ] && break
-done
-if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
+WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+if [ ! -x "$WRAPPER_PATH" ]; then
   cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 

@@ -384,8 +384,9 @@ workflow-kernel-launcher.sh inspection-run \
   --commit <sha> --dirty <true|false> --purpose <purpose> \
   [--observations <json>]
 workflow-kernel-launcher.sh resolve-plugin-bundle \
-  --plugin <name> --required-asset <relative-path> \
-  [--required-asset <relative-path> ...] \
+  --plugin <name> \
+  [--required-asset <readable-relative-path> ...] \
+  [--required-executable <executable-relative-path> ...] \
   [--minimum-version <semver>] [--active-host <claude|codex>]
 ```
 
@@ -395,7 +396,12 @@ safe JSON on stderr and return a non-zero status. `resolve-plugin-bundle`
 selects the highest compatible strict semantic version across Claude and Codex
 caches, uses the active host only for an equal-version tie, validates the
 cache-specific manifest and complete relative asset set, and returns one
-home-relative root from which callers derive every asset.
+home-relative root from which callers derive every asset. At least one required
+asset or executable is mandatory. Ordinary assets must be contained,
+non-symlink readable regular files. Required executables must additionally
+carry an executable mode and pass the host executable-access check. A broken
+higher version is incomplete and is skipped before selecting the next
+compatible complete bundle.
 
 ## Reference Runtime
 

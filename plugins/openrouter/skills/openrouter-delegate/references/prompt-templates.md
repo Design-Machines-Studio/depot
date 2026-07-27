@@ -8,6 +8,8 @@ Structured prompt patterns for each OpenRouter delegation type. Every prompt mus
 2. **Output format specified.** Tell the model exactly what structure to return.
 3. **Constraints explicit.** If findings should be P1/P2/P3, define what each severity means.
 4. **System via env, task via prompt.** The wrapper takes the system prompt from `OPENROUTER_SYSTEM`; the task content is the prompt argument (or stdin).
+5. **Provider origin.** Templates name only third-party OpenRouter slugs. `openai/*` and `anthropic/*` are invalid as either primary or fallback; those vendors use their native CLIs.
+6. **Coherent assets.** The caller resolves one installed OpenRouter root with workflow-kernel `resolve-plugin-bundle` and loads the wrapper, policy, boundary, and this template only from that root.
 
 ---
 

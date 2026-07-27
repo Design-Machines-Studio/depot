@@ -1345,6 +1345,61 @@ class RuntimeCliTests(unittest.TestCase):
                     home=home,
                 )
 
+    def test_plugin_bundle_resolver_rejects_unreadable_assets(self):
+        from workflow_kernel.runtime_resolution import resolve_plugin_bundle
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            root = (
+                home / ".codex" / "plugins" / "cache" / "depot"
+                / "sample" / "1.6.0"
+            )
+            (root / ".codex-plugin").mkdir(parents=True)
+            (root / ".codex-plugin" / "plugin.json").write_text(json.dumps({
+                "name": "sample", "version": "1.6.0",
+            }))
+            asset = root / "references" / "policy.json"
+            asset.parent.mkdir(parents=True)
+            asset.write_text("{}\n")
+            asset.chmod(0)
+            with self.assertRaises(FileNotFoundError):
+                resolve_plugin_bundle(
+                    "sample", ["references/policy.json"], home=home,
+                    minimum_version="1.6.0",
+                )
+
+    def test_plugin_bundle_resolver_skips_non_executable_higher_bundle(self):
+        from workflow_kernel.runtime_resolution import resolve_plugin_bundle
+
+        def install(home, version, *, executable):
+            root = (
+                home / ".codex" / "plugins" / "cache" / "depot"
+                / "sample" / version
+            )
+            (root / ".codex-plugin").mkdir(parents=True)
+            (root / ".codex-plugin" / "plugin.json").write_text(json.dumps({
+                "name": "sample", "version": version,
+            }))
+            policy = root / "references" / "policy.json"
+            wrapper = root / "references" / "wrapper.sh"
+            policy.parent.mkdir(parents=True)
+            policy.write_text("{}\n")
+            wrapper.write_text("#!/bin/sh\nexit 0\n")
+            wrapper.chmod(0o755 if executable else 0o644)
+            return root
+
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            lower = install(home, "1.6.0", executable=True)
+            install(home, "1.7.0", executable=False)
+            selected = resolve_plugin_bundle(
+                "sample", ["references/policy.json"], home=home,
+                minimum_version="1.6.0",
+                required_executables=["references/wrapper.sh"],
+            )
+            self.assertEqual(selected.root, lower.resolve())
+            self.assertEqual(selected.version, "1.6.0")
+
     def test_inspection_and_bundle_cli_surfaces_coexist_and_dispatch(self):
         from workflow_kernel import cli
         from workflow_kernel.runtime_resolution import PluginBundle
@@ -1359,6 +1414,10 @@ class RuntimeCliTests(unittest.TestCase):
             "init", "plan-create",
         ):
             self.assertIn(command, choices)
+        self.assertIn(
+            "--required-executable",
+            choices["resolve-plugin-bundle"].format_help(),
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "sample" / "1.0.0"
             emitted = []
@@ -1367,15 +1426,31 @@ class RuntimeCliTests(unittest.TestCase):
                 return_value=PluginBundle(
                     root, "codex", "1.0.0", "highest_compatible_semver",
                 ),
-            ), mock.patch("workflow_kernel.cli._emit", side_effect=emitted.append):
+            ) as resolver, mock.patch(
+                "workflow_kernel.cli._emit", side_effect=emitted.append,
+            ):
                 result = cli.command_resolve_plugin_bundle(SimpleNamespace(
                     plugin="sample",
                     required_asset=["skills/sample/SKILL.md"],
+                    required_executable=["references/wrapper.sh"],
                     minimum_version=None, active_host=None,
                 ))
             self.assertEqual(result, 0)
             self.assertEqual(emitted[0]["version"], "1.0.0")
             self.assertEqual(emitted[0]["cache_class"], "codex")
+            resolver.assert_called_once_with(
+                "sample", ["skills/sample/SKILL.md"],
+                active_host=None, minimum_version=None,
+                required_executables=["references/wrapper.sh"],
+            )
+        parsed = cli.parser().parse_args([
+            "resolve-plugin-bundle", "--plugin", "sample",
+            "--required-executable", "references/wrapper.sh",
+        ])
+        self.assertEqual(parsed.required_asset, [])
+        self.assertEqual(
+            parsed.required_executable, ["references/wrapper.sh"],
+        )
 
     def test_security_artifact_codecs_require_exact_versioned_shapes(self):
         from workflow_kernel.cli import _command_result, _creation_plan

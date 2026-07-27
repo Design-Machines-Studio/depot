@@ -33,9 +33,10 @@
     "executor_constraint": {
       "allOf": [
         {"if": {"required": ["executor"], "properties": {"executor": {"const": null}}}, "then": {"properties": {"required_capability": {"const": null}, "required_dispatch_capability": {"const": null}}}},
-        {"if": {"required": ["executor"], "properties": {"executor": {"const": "codex"}}}, "then": {"properties": {"required_capability": {"const": "codex_execution"}, "required_dispatch_capability": {"enum": [null, "native_dispatch", "companion_dispatch", "openrouter_exec"]}}}},
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": "codex"}}}, "then": {"properties": {"required_capability": {"const": "codex_execution"}, "required_dispatch_capability": {"enum": [null, "native_dispatch", "companion_dispatch"]}}}},
         {"if": {"required": ["executor"], "properties": {"executor": {"const": "openrouter"}}}, "then": {"properties": {"required_capability": {"const": "openrouter_execution"}, "required_dispatch_capability": {"enum": [null, "openrouter_exec"]}}}},
-        {"if": {"required": ["executor"], "properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}, "required_dispatch_capability": {"enum": [null, "native_dispatch", "openrouter_exec"]}}}},
+        {"if": {"required": ["executor"], "properties": {"executor": {"const": "claude"}}}, "then": {"properties": {"required_capability": {"enum": ["claude_execution", "anthropic_native_execution"]}, "required_dispatch_capability": {"enum": [null, "native_dispatch"]}}}},
+        {"if": {"required": ["required_dispatch_capability"], "properties": {"required_dispatch_capability": {"const": "openrouter_exec"}}}, "then": {"properties": {"executor": {"const": "openrouter"}, "required_capability": {"const": "openrouter_execution"}}}},
         {"if": {"required": ["required_capability"], "properties": {"required_capability": {"const": "anthropic_native_execution"}}}, "then": {"properties": {"executor": {"const": "claude"}, "required_dispatch_capability": {"const": "native_dispatch"}}}}
       ]
     },

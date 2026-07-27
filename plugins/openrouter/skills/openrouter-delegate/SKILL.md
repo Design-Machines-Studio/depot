@@ -58,6 +58,8 @@ Load the decision table from `${CLAUDE_SKILL_DIR}/references/model-selection.md`
 
 **Default model:** `z-ai/glm-5.2` (GLM-5.2, 1M context). **Alternate / fallback:** `deepseek/deepseek-v4-pro`.
 
+**Provider-origin invariant:** OpenRouter primary and fallback slugs must never begin with `openai/` or `anthropic/`. OpenAI runs only through native Codex CLI capability; Anthropic runs only through native Claude CLI capability. This is an operational provenance boundary, not a nationality or jurisdiction embargo.
+
 ## Prompt Engineering
 
 Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key principles:
@@ -80,16 +82,25 @@ OpenRouter API key must be set:
 ```bash
 export OPENROUTER_API_KEY="sk-or-..."
 
-# Resolve the wrapper via the plugin cache (works from any CWD, incl. worktrees)
-WRAPPER_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  [ -n "$WRAPPER_PATH" ] && break
-done
-if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ]; then
-  echo "openrouter wrapper not found in plugin cache" >&2
-  exit 1
+# Resolve WORKFLOW_KERNEL once per caller using workflow-kernel's
+# runtime-resolution contract, then select one coherent OpenRouter bundle.
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+if [ -n "$ACTIVE_HOST" ]; then
+  BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+    --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh)
+else
+  BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+    --minimum-version 1.6.0 \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh)
 fi
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
+WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+[ -x "$WRAPPER_PATH" ] || exit 1
 
 # Verify authentication (privacy-pinned)
 OPENROUTER_ZDR=1 bash "$WRAPPER_PATH" "z-ai/glm-5.2" "test" 30

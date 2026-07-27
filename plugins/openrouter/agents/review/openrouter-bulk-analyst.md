@@ -23,15 +23,7 @@ You run IN ADDITION to the core review agents that receive the truncated diff. Y
 
 ## Security Boundary (check FIRST, every run)
 
-**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Before preparing the diff, gate changed paths against the installed OpenRouter `skills/openrouter-delegate/references/delegation-security-policy.json`. The list below is an immutable minimum; union policy additions onto it, and fail closed if the installed policy cannot be read:
-
-```
-internal/auth/**      internal/federation/**      **/secretbox*
-**/destructive_confirmation*      internal/baseplate/email/settings*
-deploy/**      *.env*
-```
-
-Protected files stay on Codex, but their presence does not discard safe mechanical-review work. Filter complete protected-file diff sections, then delegate only the safe remainder. If no safe remainder exists, emit `RUNNER DECLINED -- SECURITY BOUNDARY` and return the lane to the Codex-native reviewer. If credential material remains in the safe remainder, decline the entire OpenRouter lane.
+**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never security reviewers.** Before preparing the diff, validate the exact outbound bytes with the installed OpenRouter `skills/openrouter-delegate/references/delegation-security-policy.json`. File paths, security-related names, provider nationality, and vendor jurisdiction are not disclosure evidence and must not create an embargo. Safe auth, federation, deploy, and `.env.example` content remains eligible. Actual credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private values decline the entire lane and return it to Codex.
 
 Use the shipped executable gate rather than reimplementing these checks. Resolve `delegation-boundary.sh` beside `delegation-security-policy.json`, write the caller-provided unfiltered newline-delimited changed-file list and full diff to temporary files, then run:
 
@@ -74,17 +66,40 @@ Determine the project type to inject into the prompt:
 
 ### Step 3: Invoke OpenRouter
 
-Resolve the wrapper and templates via the plugin cache (works from any CWD), then load the **Diff Analysis Template** from `$TEMPLATES_PATH`:
+Resolve `WORKFLOW_KERNEL` through its runtime-resolution contract, select one coherent OpenRouter bundle, and derive the wrapper, template, boundary, and policy from that root. Then load the **Diff Analysis Template** from `$TEMPLATES_PATH`:
 
 ```bash
-WRAPPER_PATH=""
-TEMPLATES_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  WRAPPER_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1)
-  TEMPLATES_PATH=$(ls -t "$CACHE_ROOT"/openrouter/*/skills/openrouter-delegate/references/prompt-templates.md 2>/dev/null | head -1)
-  [ -n "$WRAPPER_PATH" ] && [ -n "$TEMPLATES_PATH" ] && break
-done
-if [ -z "$WRAPPER_PATH" ] || [ ! -x "$WRAPPER_PATH" ] || [ -z "$TEMPLATES_PATH" ] || [ ! -f "$TEMPLATES_PATH" ]; then
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
+resolve_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --required-asset agents/review/openrouter-bulk-analyst.md \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/prompt-templates.md \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.6.0 \
+      --required-asset agents/review/openrouter-bulk-analyst.md \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/prompt-templates.md \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  fi
+}
+BUNDLE_JSON=$(resolve_bundle)
+BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
+WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+TEMPLATES_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/prompt-templates.md"
+SECURITY_POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+BOUNDARY_HELPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+if [ ! -x "$WRAPPER_PATH" ] || [ ! -f "$TEMPLATES_PATH" ] || [ ! -r "$SECURITY_POLICY_PATH" ] || [ ! -x "$BOUNDARY_HELPER" ]; then
   cat <<EOF
 ## OpenRouter Bulk Analyst (z-ai/glm-5.2)
 
@@ -99,6 +114,8 @@ EOF
   exit 0
 fi
 ```
+
+Primary and fallback slugs beginning with `openai/` or `anthropic/` are invalid and must return the lane to native Codex before invoking the wrapper.
 
 Fill the `{PROJECT_TYPE}`, `{KEY_CONVENTIONS}`, and `{FULL_DIFF_CONTENT}` placeholders from `$TEMPLATES_PATH`, using only `FILTERED_DIFF_FILE` for the diff content. Then invoke the wrapper, piping the filled prompt via stdin (diffs exceed shell argument limits). ZDR is opt-in (privacy demoted: Quality > Price > Speed > Provider privacy) -- omit `OPENROUTER_ZDR` unless the safe remainder is still operationally sensitive:
 

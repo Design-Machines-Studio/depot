@@ -24,10 +24,21 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) MODE="dry-run"; shift;;
     --model) MODEL="$2"; shift 2;;
+    --fallback-model) FALLBACK_MODEL="$2"; shift 2;;
     --timeout) TIMEOUT="$2"; shift 2;;
     --verify-cmd) VERIFY_CMD="$2"; shift 2;;
     --commit-message) COMMIT_MSG="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
+  esac
+done
+
+for candidate in "$MODEL" "$FALLBACK_MODEL"; do
+  [ -z "$candidate" ] && continue
+  case "$candidate" in
+    openai/*|anthropic/*)
+      echo "openrouter-exec: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
+      exit 2
+      ;;
   esac
 done
 
@@ -49,25 +60,47 @@ fi
 }
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WRAPPER="${OPENROUTER_EXEC_WRAPPER_PATH:-}"
-if [ -z "$WRAPPER" ]; then
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    WRAPPER="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/openrouter-wrapper.sh 2>/dev/null | head -1 || true)"
-    [ -n "$WRAPPER" ] && break
-  done
+KERNEL="${WORKFLOW_KERNEL:-$DIR/../../workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh}"
+[ -x "$KERNEL" ] || { echo "openrouter-exec: workflow-kernel resolver unavailable" >&2; exit 2; }
+ACTIVE_HOST=""
+if [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ]; then
+  ACTIVE_HOST="claude"
+elif [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ]; then
+  ACTIVE_HOST="codex"
 fi
-[ -z "$WRAPPER" ] && WRAPPER="$DIR/../../openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
-[ -x "$WRAPPER" ] || { echo "openrouter-exec: openrouter-wrapper.sh not found" >&2; exit 1; }
-
-POLICY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
-if [ ! -f "$POLICY" ]; then
-  POLICY=""
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    POLICY="$(ls -t "$cache"/openrouter/*/skills/openrouter-delegate/references/delegation-security-policy.json 2>/dev/null | head -1 || true)"
-    [ -n "$POLICY" ] && break
-  done
+if [ -n "$ACTIVE_HOST" ]; then
+  BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
+    --minimum-version 1.6.0 \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+    --active-host "$ACTIVE_HOST" 2>/dev/null)" || {
+      echo "openrouter-exec: coherent OpenRouter bundle unavailable" >&2
+      exit 2
+    }
+else
+  BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
+    --minimum-version 1.6.0 \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+    2>/dev/null)" || {
+      echo "openrouter-exec: coherent OpenRouter bundle unavailable" >&2
+      exit 2
+    }
 fi
-BOUNDARY="$(dirname "$POLICY")/delegation-boundary.sh"
+BUNDLE_REF="$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("selected_root",""))' 2>/dev/null)"
+BUNDLE_VERSION="$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))' 2>/dev/null)"
+BUNDLE_CLASS="$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("cache_class",""))' 2>/dev/null)"
+BUNDLE_REASON="$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reason",""))' 2>/dev/null)"
+case "$BUNDLE_REF" in
+  "~/"*) BUNDLE_ROOT="$HOME/${BUNDLE_REF#\~/}" ;;
+  *) echo "openrouter-exec: invalid coherent bundle receipt" >&2; exit 2 ;;
+esac
+WRAPPER="$BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+POLICY="$BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+BOUNDARY="$BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+[ -x "$WRAPPER" ] || { echo "openrouter-exec: coherent wrapper unavailable" >&2; exit 2; }
 [ -f "$POLICY" ] && [ -x "$BOUNDARY" ] || {
   echo "openrouter-exec: delegation security boundary unavailable" >&2
   exit 2
@@ -160,11 +193,20 @@ FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')
 # so exec-lane token spend is not measurable here. Emit null; the post-mortem treats the
 # OpenRouter exec bucket as best-effort/estimated (see run-postmortem-schema.md).
 python3 - "$(git rev-parse --short HEAD)" "$FILES_CHANGED" "$VERIFY_RESULT" \
-  "$MODEL" "$ACTUAL_MODEL" "$FALLBACK_USED" <<'PY'
+  "$MODEL" "$ACTUAL_MODEL" "$FALLBACK_USED" "$BUNDLE_VERSION" \
+  "$BUNDLE_CLASS" "$BUNDLE_REASON" <<'PY'
 import json
 import sys
 
 print(json.dumps({
+    "requestedProvider": "openrouter",
+    "attemptedProvider": "openrouter",
+    "attemptedModels": (
+        [sys.argv[4], sys.argv[5]]
+        if sys.argv[6] == "true"
+        else [sys.argv[4]]
+    ),
+    "actualImplementer": "openrouter",
     "implementedBy": "openrouter",
     "status": "committed",
     "commit": sys.argv[1],
@@ -173,6 +215,13 @@ print(json.dumps({
     "requestedModel": sys.argv[4],
     "actualModel": sys.argv[5],
     "fallback": sys.argv[6] == "true",
+    "fallbackReason": "primary-capacity" if sys.argv[6] == "true" else "none",
+    "nativeVendorOriginInvariant": "passed",
+    "bundleResolution": {
+        "version": sys.argv[7],
+        "cacheClass": sys.argv[8],
+        "reason": sys.argv[9],
+    },
     "usage": None,
 }, indent=2))
 PY
