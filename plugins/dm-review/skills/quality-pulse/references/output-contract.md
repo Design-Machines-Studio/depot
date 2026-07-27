@@ -68,11 +68,16 @@ pulse.
 2. validate its complete schema and closed vocabularies;
 3. recompute and verify the stable projection digest;
 4. run redaction checks;
-5. bind the compatible trend result or baseline discontinuity with
-   `inspection-finalize`;
+5. pass the authoritative baseline to `inspection-finalize`, which computes
+   and binds the compatible trend result or baseline discontinuity;
 6. render Markdown from that validated JSON;
 7. bind `markdown_rendered`, then `published` only after each host action
-   succeeds.
+    succeeds.
+
+Trend comparison must be bound before rendering. Publication status is an
+operational envelope excluded from the content stable projection and rendered
+Markdown; `publication_state_digest` binds the operational status to the
+content digest without making publication transitions stale the Markdown.
 
 Any failure in steps 1-5 prevents Markdown publication. A stale prior digest
 must not be relabeled as current.

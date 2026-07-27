@@ -921,6 +921,16 @@ class QualityPulseKernelTests(unittest.TestCase):
                     "deltas": [],
                 },
             )
+            secret_baseline = copy.deepcopy(incompatible_schema)
+            secret_baseline["credential"] = "ghp_fixtureSecret1234567890"
+            self.assert_reason(
+                lambda: finalize_authoritative_result(
+                    current,
+                    publication_status="authoritative_json_ready",
+                    baseline=secret_baseline,
+                ),
+                "invalid_trend_result",
+            )
 
             rendered = render_markdown(current)
             self.assertIn("# Inspection Result", rendered)
@@ -961,16 +971,67 @@ class QualityPulseKernelTests(unittest.TestCase):
                 current["publication_status"], "authoritative_json_ready",
             )
             self.assertEqual(current["trend_result"]["status"], "not_compared")
-            finalized = finalize_authoritative_result(
+            compared = finalize_authoritative_result(
                 current,
-                publication_status="published",
-                trend_result=compare_trends(current, current),
+                publication_status="authoritative_json_ready",
+                baseline=current,
+            )
+            compared_markdown = render_markdown(compared)
+            compared_stable_digest = compared["stable_projection_digest"]
+            compared_publication_digest = compared["publication_state_digest"]
+            rendered = finalize_authoritative_result(
+                compared, publication_status="markdown_rendered",
+            )
+            finalized = finalize_authoritative_result(
+                rendered, publication_status="published",
             )
             self.assertEqual(finalized["publication_status"], "published")
             self.assertEqual(finalized["trend_result"]["status"], "compatible")
             self.assertNotEqual(
                 finalized["stable_projection_digest"],
                 current["stable_projection_digest"],
+            )
+            self.assertEqual(
+                finalized["stable_projection_digest"], compared_stable_digest,
+            )
+            self.assertEqual(render_markdown(finalized), compared_markdown)
+            self.assertNotEqual(
+                finalized["publication_state_digest"],
+                compared_publication_digest,
+            )
+            self.assert_reason(
+                lambda: finalize_authoritative_result(
+                    finalized,
+                    publication_status="authoritative_json_ready",
+                ),
+                "invalid_publication_transition",
+            )
+            self.assert_reason(
+                lambda: finalize_authoritative_result(
+                    rendered,
+                    publication_status="published",
+                    baseline=current,
+                ),
+                "trend_after_render",
+            )
+            forged_publication = copy.deepcopy(finalized)
+            forged_publication["publication_status"] = "markdown_rendered"
+            self.assert_reason(
+                lambda: validate_authoritative_result(forged_publication),
+                "publication_state_digest_mismatch",
+            )
+            forged_trend = copy.deepcopy(finalized)
+            forged_trend["trend_result"]["deltas"][0].update({
+                "current": 999, "baseline": 1, "delta": 998,
+            })
+            forged_trend["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(forged_trend))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(forged_trend),
+                "invalid_trend_result",
             )
 
             actionable_document = profile_document()
@@ -1009,6 +1070,42 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertEqual(
                 failed_evidence["blockers"][0]["reason_code"],
                 "evidence_failed",
+            )
+            skipped_raw = [observation(evidence_status="skipped")]
+            skipped_evidence = build_authoritative_result(
+                profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, observations=skipped_raw,
+                lane_receipts=[receipt_for_observations(skipped_raw)],
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:01Z",
+                    "operator_authorization_event_id": "operator-event-1",
+                    "purpose": "scheduled-quality-pulse",
+                    "selected_lane_ids": ["primary"],
+                },
+            )
+            self.assertEqual(skipped_evidence["completion_state"], "blocked")
+            self.assertEqual(
+                skipped_evidence["blockers"][0]["reason_code"],
+                "evidence_skipped",
+            )
+            fabricated_fallback = [observation(evidence_status="fallback")]
+            self.assert_reason(
+                lambda: build_authoritative_result(
+                    profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                    dirty=False, observations=fabricated_fallback,
+                    lane_receipts=[
+                        receipt_for_observations(fabricated_fallback),
+                    ],
+                    invocation={
+                        "started_at": "2026-07-27T00:00:00Z",
+                        "finished_at": "2026-07-27T00:00:01Z",
+                        "operator_authorization_event_id": "operator-event-1",
+                        "purpose": "scheduled-quality-pulse",
+                        "selected_lane_ids": ["primary"],
+                    },
+                ),
+                "unbound_lane_evidence",
             )
 
             forged_receipt = copy.deepcopy(current)

@@ -1109,8 +1109,25 @@ def stable_projection(result):
         "actual_identities": result["actual_identities"],
         "coverage_gaps": result["coverage_gaps"],
         "blockers": result["blockers"],
-        "publication_status": result["publication_status"],
         "trend_result": result["trend_result"],
+        "trend_baseline_digest": (
+            None
+            if result["trend_baseline"] is None
+            else (
+                result["trend_baseline"].get("stable_projection_digest")
+                if (
+                    type(result["trend_baseline"]) is dict
+                    and result["trend_baseline"].get("schema_version")
+                    == AUTHORITATIVE_SCHEMA_VERSION
+                    and type(
+                        result["trend_baseline"].get(
+                            "stable_projection_digest",
+                        )
+                    ) is str
+                )
+                else _canonical_digest(result["trend_baseline"])
+            )
+        ),
         "invocation": {
             "operator_authorization_event_id": (
                 result["invocation"]["operator_authorization_event_id"]
@@ -1122,6 +1139,14 @@ def stable_projection(result):
         "lane_receipts": receipts,
         "redaction": result["redaction"],
     }
+
+
+def _publication_state_digest(result):
+    return _canonical_digest({
+        "schema_version": 1,
+        "stable_projection_digest": result["stable_projection_digest"],
+        "publication_status": result["publication_status"],
+    })
 
 
 def _bind_observation_provenance(classified, lane_receipts):
@@ -1143,14 +1168,16 @@ def _bind_observation_provenance(classified, lane_receipts):
             observation["lane_id"] = receipt["lane_id"]
             observation["primary_lane_id"] = receipt["primary_lane_id"]
             observation["lane_status"] = receipt["status"]
+            if (
+                observation["evidence_status"] == "fallback"
+                and receipt["status"] != "fallback"
+            ):
+                _fail("unbound_lane_evidence")
             if observation["evidence_status"] in {
                 "unavailable", "failed", "skipped",
             }:
                 observation["evidence_confidence"] = "unavailable"
-            elif (
-                receipt["status"] == "fallback"
-                or observation["evidence_status"] == "fallback"
-            ):
+            elif receipt["status"] == "fallback":
                 observation["evidence_confidence"] = "fallback"
                 observation["confidence"] = confidence_fallback[
                     observation["confidence"]
@@ -1233,7 +1260,7 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
                 "observation_id": item["observation_id"],
                 "reason_code": item["reason_code"],
             })
-        elif item["evidence_status"] in {"unavailable", "failed"}:
+        elif item["evidence_status"] in {"unavailable", "failed", "skipped"}:
             blockers.append({
                 "blocker_type": "observation",
                 "lane_id": item["lane_id"],
@@ -1336,9 +1363,7 @@ def _validate_lifecycle(publication_status, trend_result):
 
 
 def build_authoritative_result(profile, *, source, ref, commit, dirty,
-                               observations, lane_receipts, invocation,
-                               publication_status="authoritative_json_ready",
-                               trend_result=None):
+                               observations, lane_receipts, invocation):
     if type(profile) is not InspectionProfile:
         _fail("validated_profile_required")
     if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
@@ -1453,8 +1478,7 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     redacted_count = sum(item["redacted_values"] for item in classified)
     redacted_count += sum(item.get("redacted_values", 0) for item in lane_receipts)
     publication_status, trend_result = _validate_lifecycle(
-        publication_status,
-        _default_trend_result() if trend_result is None else trend_result,
+        "authoritative_json_ready", _default_trend_result(),
     )
     result = {
         "schema_version": AUTHORITATIVE_SCHEMA_VERSION,
@@ -1473,6 +1497,7 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         **_derive_pulse_state(profile, lane_receipts, classified, invocation),
         "publication_status": publication_status,
         "trend_result": trend_result,
+        "trend_baseline": None,
         "observations": classified,
         "lane_receipts": lane_receipts,
         "invocation": invocation,
@@ -1482,6 +1507,7 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         },
     }
     result["stable_projection_digest"] = _canonical_digest(stable_projection(result))
+    result["publication_state_digest"] = _publication_state_digest(result)
     return validate_authoritative_result(result)
 
 
@@ -1491,8 +1517,9 @@ def validate_authoritative_result(result):
         "profile_snapshot", "compatibility_identity", "pulse_id",
         "completion_state", "requested_identities", "attempted_identities",
         "actual_identities", "coverage_gaps", "blockers",
-        "publication_status", "trend_result", "observations",
+        "publication_status", "trend_result", "trend_baseline", "observations",
         "lane_receipts", "invocation", "redaction", "stable_projection_digest",
+        "publication_state_digest",
     })
     _exact_object(result, fields, reason="invalid_authoritative_result")
     if (
@@ -1661,6 +1688,10 @@ def validate_authoritative_result(result):
                     "unavailable", "failed", "skipped",
                 }
                 and observation["evidence_confidence"] != "fallback"
+            )
+            or (
+                observation["evidence_status"] == "fallback"
+                and observation["lane_status"] != "fallback"
             )
             or type(observation["actionable"]) is not bool
             or type(observation["source_observation_digest"]) is not str
@@ -2007,6 +2038,41 @@ def validate_authoritative_result(result):
     } != expected_pulse:
         _fail("invalid_pulse_state")
     _validate_lifecycle(result["publication_status"], result["trend_result"])
+    baseline = result["trend_baseline"]
+    if result["trend_result"]["status"] == "not_compared":
+        if baseline is not None:
+            _fail("invalid_trend_result")
+    else:
+        if type(baseline) is not dict:
+            _fail("invalid_trend_result")
+        try:
+            if json.loads(
+                json.dumps(baseline, allow_nan=False),
+            ) != baseline:
+                _fail("invalid_trend_result")
+        except (TypeError, ValueError):
+            _fail("invalid_trend_result")
+        if (
+            type(baseline.get("schema_version")) is int
+            and baseline["schema_version"] != result["schema_version"]
+        ):
+            safe_baseline, leaked = _redact_durable(baseline)
+            if safe_baseline != baseline or leaked:
+                _fail("invalid_trend_result")
+            expected_trend = {
+                "schema_version": 1,
+                "status": "baseline_discontinuity",
+                "reason_code": "incompatible_baseline",
+                "incompatible_identity_fields": ["schema_version"],
+                "deltas": [],
+            }
+        else:
+            if baseline.get("trend_baseline") is not None:
+                _fail("invalid_trend_result")
+            validate_authoritative_result(baseline)
+            expected_trend = _compare_trend_values(result, baseline)
+        if result["trend_result"] != expected_trend:
+            _fail("invalid_trend_result")
     redaction = _exact_object(
         result["redaction"], frozenset({"applied", "redacted_value_count"}),
         reason="invalid_redaction_outcome",
@@ -2026,22 +2092,53 @@ def validate_authoritative_result(result):
         _fail("invalid_redaction_outcome")
     if _canonical_digest(stable_projection(result)) != result["stable_projection_digest"]:
         _fail("authoritative_digest_mismatch")
+    if _publication_state_digest(result) != result["publication_state_digest"]:
+        _fail("publication_state_digest_mismatch")
     return result
 
 
-def finalize_authoritative_result(result, *, publication_status, trend_result=None):
+def finalize_authoritative_result(result, *, publication_status, baseline=None):
     """Advance closed publication/trend lifecycle state and rebind the digest."""
     current = validate_authoritative_result(result)
     updated = json.loads(json.dumps(current, allow_nan=False))
+    allowed_transitions = {
+        "authoritative_json_ready": {
+            "authoritative_json_ready", "markdown_rendered",
+            "publication_failed",
+        },
+        "markdown_rendered": {
+            "markdown_rendered", "published", "publication_failed",
+        },
+        "published": {"published"},
+        "publication_failed": {"publication_failed"},
+    }
+    if publication_status not in allowed_transitions[
+        current["publication_status"]
+    ]:
+        _fail("invalid_publication_transition")
+    if baseline is None:
+        trend_result = current["trend_result"]
+        trend_baseline = current["trend_baseline"]
+    else:
+        if (
+            current["publication_status"] != "authoritative_json_ready"
+            or publication_status != "authoritative_json_ready"
+        ):
+            _fail("trend_after_render")
+        if current["trend_baseline"] is not None:
+            _fail("trend_already_bound")
+        trend_baseline = json.loads(json.dumps(baseline, allow_nan=False))
+        trend_result = compare_trends(current, trend_baseline)
     publication_status, trend_result = _validate_lifecycle(
-        publication_status,
-        current["trend_result"] if trend_result is None else trend_result,
+        publication_status, trend_result,
     )
     updated["publication_status"] = publication_status
     updated["trend_result"] = trend_result
+    updated["trend_baseline"] = trend_baseline
     updated["stable_projection_digest"] = _canonical_digest(
         stable_projection(updated),
     )
+    updated["publication_state_digest"] = _publication_state_digest(updated)
     return validate_authoritative_result(updated)
 
 
@@ -2049,20 +2146,7 @@ def authoritative_bytes(result):
     return _canonical_bytes(validate_authoritative_result(result))
 
 
-def compare_trends(current, baseline):
-    validate_authoritative_result(current)
-    if (
-        type(baseline) is dict
-        and type(baseline.get("schema_version")) is int
-        and baseline["schema_version"] != current["schema_version"]
-    ):
-        return {
-            "schema_version": 1, "status": "baseline_discontinuity",
-            "reason_code": "incompatible_baseline",
-            "incompatible_identity_fields": ["schema_version"],
-            "deltas": [],
-        }
-    validate_authoritative_result(baseline)
+def _compare_trend_values(current, baseline):
     mismatches = []
     for field in (
         "schema_version", "profile", "metric_definitions", "tool_identities",
@@ -2113,6 +2197,23 @@ def compare_trends(current, baseline):
     }
 
 
+def compare_trends(current, baseline):
+    validate_authoritative_result(current)
+    if (
+        type(baseline) is dict
+        and type(baseline.get("schema_version")) is int
+        and baseline["schema_version"] != current["schema_version"]
+    ):
+        return {
+            "schema_version": 1, "status": "baseline_discontinuity",
+            "reason_code": "incompatible_baseline",
+            "incompatible_identity_fields": ["schema_version"],
+            "deltas": [],
+        }
+    validate_authoritative_result(baseline)
+    return _compare_trend_values(current, baseline)
+
+
 def render_markdown(result):
     """Render validated authoritative JSON; Markdown is never an input authority."""
     validate_authoritative_result(result)
@@ -2120,7 +2221,6 @@ def render_markdown(result):
         "# Inspection Result", "",
         f"- Pulse: `{result['pulse_id']}`",
         f"- Completion: `{result['completion_state']}`",
-        f"- Publication: `{result['publication_status']}`",
         f"- Profile: `{result['profile']['profile_id']}` `{result['profile']['profile_version']}`",
         f"- Commit: `{result['repository']['commit']}`",
         f"- Dirty: `{str(result['repository']['dirty']).lower()}`",

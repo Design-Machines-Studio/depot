@@ -2729,11 +2729,11 @@ def command_inspection_trend(args):
 def command_inspection_finalize(args):
     from .inspection import finalize_authoritative_result
 
-    trend = None if args.trend is None else _inspection_json(args.trend)
+    baseline = None if args.baseline is None else _inspection_json(args.baseline)
     _emit(finalize_authoritative_result(
         _inspection_json(args.input),
         publication_status=args.publication_status,
-        trend_result=trend,
+        baseline=baseline,
     ))
     return 0
 
@@ -3031,7 +3031,13 @@ def parser():
         ),
         required=True,
     )
-    inspection_finalize.add_argument("--trend")
+    inspection_finalize.add_argument(
+        "--baseline",
+        help=(
+            "authoritative baseline JSON; the kernel computes and binds the "
+            "trend result rather than accepting caller-supplied deltas"
+        ),
+    )
     inspection_finalize.set_defaults(handler=command_inspection_finalize)
 
     inspection_render = commands.add_parser(

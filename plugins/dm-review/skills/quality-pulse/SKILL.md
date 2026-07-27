@@ -213,7 +213,7 @@ the closed lifecycle state and emits a re-digested artifact:
 "$WORKFLOW_KERNEL" inspection-finalize \
   --input "$AUTHORITATIVE_JSON" \
   --publication-status authoritative_json_ready \
-  [--trend "$TREND_RESULT"]
+  [--baseline "$COMPATIBLE_BASELINE"]
 ```
 
 Only after that succeeds may `inspection-render` produce the Markdown digest:
@@ -239,8 +239,12 @@ calculate a misleading delta.
   --baseline "$COMPATIBLE_BASELINE"
 ```
 
-Pass that JSON result back through `inspection-finalize --trend`. After
-Markdown is durably written, finalize with `--publication-status
+Pass the authoritative baseline directly to `inspection-finalize --baseline`;
+the kernel computes and binds the result, so caller-supplied deltas are never
+trusted. Bind the trend before rendering. The stable projection and Markdown
+exclude publication status; a separate `publication_state_digest` binds that
+operational envelope without invalidating rendered content. After Markdown is
+durably written, finalize with `--publication-status
 markdown_rendered`; after the host publication succeeds, finalize once more
 with `--publication-status published`. Never relabel publication without the
 corresponding completed host action.

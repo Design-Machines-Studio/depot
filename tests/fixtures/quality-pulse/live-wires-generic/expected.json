@@ -2,6 +2,6 @@
   "schema_version": 1,
   "fixture": "editorial-site-live-wires",
   "expected_classification": "live_wires_actionable",
-  "expected_stable_projection_digest": "sha256:4a74e145d8510d4e94e9434a7c849857f5b1001a6d9fd1d6a2c2281bbccd2cfe",
-  "expected_markdown_sha256": "sha256:04dbfadb6f2d6e4e8f4068989ad7bc213fc02199615639d4c86ec4a30aff4f22"
+  "expected_stable_projection_digest": "sha256:2de27269df84c7710c7ac91eb7733dede21e8753450d7187958d86776143174d",
+  "expected_markdown_sha256": "sha256:32b85beb4824daa2b733c090d36902fd9d652a7c269b65813717ac20f15beb6c"
 }
