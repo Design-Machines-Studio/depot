@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/inspection-profile-schema.json",
+  "title": "Neutral Inspection Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "profile_id",
+    "profile_version",
+    "repository",
+    "catalogs",
+    "surfaces",
+    "metrics",
+    "rules",
+    "lanes",
+    "classifications",
+    "outputs",
+    "trend_compatibility"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {"$ref": "#/$defs/id"},
+    "profile_version": {"$ref": "#/$defs/semver"},
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope_paths"],
+      "properties": {
+        "scope_paths": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/path"}
+        }
+      }
+    },
+    "catalogs": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/catalog"}
+    },
+    "surfaces": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/surface"}
+    },
+    "metrics": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/metric_binding"}
+    },
+    "rules": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/rule_binding"}
+    },
+    "lanes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/lane"}
+    },
+    "classifications": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/classification"}
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authoritative_json", "markdown"],
+      "properties": {
+        "authoritative_json": {"$ref": "#/$defs/path"},
+        "markdown": {"$ref": "#/$defs/path"}
+      }
+    },
+    "trend_compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "required_identity_fields"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "required_identity_fields": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["profile", "metric_definitions", "tool_identities"]
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)(?!.*\\u0000)[^/]+(?:/[^/]+)*$"
+    },
+    "catalog_rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "definition"],
+      "properties": {
+        "rule_id": {"$ref": "#/$defs/id"},
+        "definition": {"type": "object"}
+      }
+    },
+    "catalog_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "definition"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/id"},
+        "definition": {"type": "object"}
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_id",
+        "schema_version",
+        "catalog_version",
+        "source_reference",
+        "content_digest",
+        "rules",
+        "metrics"
+      ],
+      "properties": {
+        "catalog_id": {"$ref": "#/$defs/id"},
+        "schema_version": {"const": 1},
+        "catalog_version": {"$ref": "#/$defs/semver"},
+        "source_reference": {"type": "string", "minLength": 1},
+        "content_digest": {"$ref": "#/$defs/digest"},
+        "rules": {"type": "array", "items": {"$ref": "#/$defs/catalog_rule"}},
+        "metrics": {"type": "array", "items": {"$ref": "#/$defs/catalog_metric"}}
+      }
+    },
+    "surface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface_id", "paths"],
+      "properties": {
+        "surface_id": {"$ref": "#/$defs/id"},
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/path"}
+        }
+      }
+    },
+    "metric_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric_id", "catalog_id", "catalog_version", "catalog_digest"],
+      "properties": {
+        "metric_id": {"$ref": "#/$defs/id"},
+        "catalog_id": {"$ref": "#/$defs/id"},
+        "catalog_version": {"$ref": "#/$defs/semver"},
+        "catalog_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "rule_binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "catalog_id",
+        "catalog_version",
+        "catalog_digest",
+        "metric_ids",
+        "surface_ids"
+      ],
+      "properties": {
+        "rule_id": {"$ref": "#/$defs/id"},
+        "catalog_id": {"$ref": "#/$defs/id"},
+        "catalog_version": {"$ref": "#/$defs/semver"},
+        "catalog_digest": {"$ref": "#/$defs/digest"},
+        "metric_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "surface_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        }
+      }
+    },
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lane_id",
+        "execution_type",
+        "argv",
+        "tool_identity",
+        "image_identity",
+        "service_identity",
+        "plugin_version",
+        "timeout_seconds",
+        "primary_lane_id",
+        "evidence_paths"
+      ],
+      "properties": {
+        "lane_id": {"$ref": "#/$defs/id"},
+        "execution_type": {"enum": ["docker", "compose"]},
+        "argv": {
+          "type": "array",
+          "minItems": 2,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "tool_identity": {"type": "string", "minLength": 1},
+        "image_identity": {"type": ["string", "null"]},
+        "service_identity": {"type": ["string", "null"]},
+        "plugin_version": {"$ref": "#/$defs/semver"},
+        "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+        "primary_lane_id": {
+          "anyOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]
+        },
+        "evidence_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/path"}
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification_id",
+        "rule_ids",
+        "metric_ids",
+        "surface_ids",
+        "confidence"
+      ],
+      "properties": {
+        "classification_id": {"$ref": "#/$defs/id"},
+        "rule_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "metric_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "surface_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/id"}
+        },
+        "confidence": {"enum": ["high", "medium", "low", "unknown"]}
+      }
+    }
+  }
+}

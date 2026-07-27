@@ -17,10 +17,11 @@ from pathlib import Path
 
 from ._files import PinnedDirectory, _OwnedResourceScope, bind_durable_path
 from .events import EventStore
+from .inspection import InspectionError
 from .repository_scope import repository_scope as _repository_scope
 from .runtime_resolution import (
     KERNEL_VERSION_FLOOR, compatible_kernel_version,
-    resolve_workflow_kernel_runtime,
+    resolve_plugin_bundle, resolve_workflow_kernel_runtime,
 )
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
@@ -2679,6 +2680,104 @@ def command_record_cleanup(args):
     return _cleanup_receipt_status(receipt)
 
 
+def _inspection_json(path):
+    from .inspection import decode_json_bytes
+
+    try:
+        return decode_json_bytes(Path(path).read_bytes())
+    except OSError:
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "input_read_failed",
+        }) from None
+
+
+def command_inspection_validate(args):
+    from .inspection import load_inspection_profile
+
+    profile = load_inspection_profile(args.profile, args.repository_root)
+    _emit({
+        "schema_version": 1, "status": "validated",
+        "profile_id": profile.document["profile_id"],
+        "profile_version": profile.document["profile_version"],
+        "profile_path": profile.profile_path,
+        "profile_digest": profile.digest,
+    })
+    return 0
+
+
+def command_inspection_classify(args):
+    from .inspection import classify_observations, load_inspection_profile
+
+    profile = load_inspection_profile(args.profile, args.repository_root)
+    observations = _inspection_json(args.observations)
+    _emit({
+        "schema_version": 1,
+        "classifications": classify_observations(profile, observations),
+    })
+    return 0
+
+
+def command_inspection_trend(args):
+    from .inspection import compare_trends
+
+    _emit(compare_trends(
+        _inspection_json(args.current), _inspection_json(args.baseline),
+    ))
+    return 0
+
+
+def command_inspection_render(args):
+    from .inspection import render_markdown
+
+    sys.stdout.write(render_markdown(_inspection_json(args.input)))
+    return 0
+
+
+def command_inspection_run(args):
+    from .inspection import (
+        build_authoritative_result, execute_inspection_lanes,
+        load_host_attestation, load_inspection_profile,
+    )
+
+    started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    profile = load_inspection_profile(args.profile, args.repository_root)
+    attestation = load_host_attestation(args.attestation, profile.repository_root)
+    dirty = args.dirty == "true"
+    receipts = execute_inspection_lanes(
+        profile, args.lane_id, attestation,
+        source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
+        purpose=args.purpose,
+    )
+    observations = [] if args.observations is None else _inspection_json(args.observations)
+    finished_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    _emit(build_authoritative_result(
+        profile, source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
+        observations=observations, lane_receipts=receipts,
+        invocation={
+            "started_at": started_at, "finished_at": finished_at,
+            "operator_authorization_event_id": attestation[
+                "operator_authorization_event_id"
+            ],
+            "purpose": args.purpose, "selected_lane_ids": sorted(args.lane_id),
+        },
+    ))
+    return 0
+
+
+def command_resolve_plugin_bundle(args):
+    try:
+        bundle = resolve_plugin_bundle(
+            args.plugin, args.required_asset,
+            active_host=args.active_host, minimum_version=args.minimum_version,
+        )
+    except (FileNotFoundError, ValueError):
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "plugin_bundle_unavailable",
+        }) from None
+    _emit(bundle.to_dict())
+    return 0
+
+
 def parser():
     result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
     commands = result.add_subparsers(dest="command", required=True)
@@ -2862,6 +2961,100 @@ def parser():
     reconcile.add_argument("--node-statuses")
     reconcile.add_argument("--output", required=True)
     reconcile.set_defaults(handler=command_plan_reconcile)
+
+    inspection_validate = commands.add_parser(
+        "inspection-validate",
+        help="validate a complete inspection profile and emit its canonical digest",
+        description=(
+            "Validate one closed inspection profile before lane admission. "
+            "Failures are structured JSON on stderr with a non-zero exit."
+        ),
+    )
+    inspection_validate.add_argument("--repository-root", required=True)
+    inspection_validate.add_argument("--profile", required=True)
+    inspection_validate.set_defaults(handler=command_inspection_validate)
+
+    inspection_classify = commands.add_parser(
+        "inspection-classify",
+        help="classify observations against closed validated profile IDs",
+        description=(
+            "Emit deterministic JSON classifications; unknown inputs are actionable "
+            "fail-closed results. Invalid inputs exit non-zero."
+        ),
+    )
+    inspection_classify.add_argument("--repository-root", required=True)
+    inspection_classify.add_argument("--profile", required=True)
+    inspection_classify.add_argument("--observations", required=True)
+    inspection_classify.set_defaults(handler=command_inspection_classify)
+
+    inspection_trend = commands.add_parser(
+        "inspection-trend",
+        help="compare compatible authoritative inspection results",
+        description=(
+            "Emit JSON deltas or a baseline_discontinuity. Invalid authoritative "
+            "JSON exits non-zero."
+        ),
+    )
+    inspection_trend.add_argument("--current", required=True)
+    inspection_trend.add_argument("--baseline", required=True)
+    inspection_trend.set_defaults(handler=command_inspection_trend)
+
+    inspection_render = commands.add_parser(
+        "inspection-render",
+        help="render Markdown from validated authoritative inspection JSON",
+        description=(
+            "Accept only validated authoritative JSON and emit Markdown. Prose or "
+            "digest-mismatched JSON exits non-zero."
+        ),
+    )
+    inspection_render.add_argument("--input", required=True)
+    inspection_render.set_defaults(handler=command_inspection_render)
+
+    inspection_run = commands.add_parser(
+        "inspection-run",
+        help="run attested Docker-backed lanes from an immutable profile snapshot",
+        description=(
+            "Validate and freeze a profile, verify a host-issued attestation outside "
+            "the repository, execute selected declared primary lanes without a "
+            "shell, and emit authoritative JSON. Any admission failure exits "
+            "non-zero before subprocess execution."
+        ),
+    )
+    inspection_run.add_argument("--repository-root", required=True)
+    inspection_run.add_argument("--profile", required=True)
+    inspection_run.add_argument(
+        "--lane-id", action="append", required=True,
+        help="declared primary lane ID; repeat for multiple lanes",
+    )
+    inspection_run.add_argument(
+        "--attestation", required=True,
+        help="host-issued attestation file outside the repository",
+    )
+    inspection_run.add_argument("--source", choices=("git",), required=True)
+    inspection_run.add_argument("--ref", required=True)
+    inspection_run.add_argument("--commit", required=True)
+    inspection_run.add_argument("--dirty", choices=("true", "false"), required=True)
+    inspection_run.add_argument("--purpose", required=True)
+    inspection_run.add_argument("--observations")
+    inspection_run.set_defaults(handler=command_inspection_run)
+
+    resolve_bundle = commands.add_parser(
+        "resolve-plugin-bundle",
+        help="select one coherent installed-plugin bundle across host caches",
+        description=(
+            "Emit one home-relative selected root, cache class, semantic version, "
+            "and selection reason. Malformed, incompatible, or incomplete bundles "
+            "exit non-zero."
+        ),
+    )
+    resolve_bundle.add_argument("--plugin", required=True)
+    resolve_bundle.add_argument(
+        "--required-asset", action="append", required=True,
+        help="required path relative to the selected plugin root; repeat as needed",
+    )
+    resolve_bundle.add_argument("--minimum-version")
+    resolve_bundle.add_argument("--active-host", choices=("claude", "codex"))
+    resolve_bundle.set_defaults(handler=command_resolve_plugin_bundle)
     return result
 
 
@@ -2869,6 +3062,15 @@ def main(argv=None):
     try:
         args = parser().parse_args(argv)
         return args.handler(args)
+    except InspectionError as exc:
+        _emit({
+            "error": {
+                "code": "inspection_error",
+                "message": "inspection input rejected",
+                "details": {"reason_code": exc.reason_code},
+            },
+        }, sys.stderr)
+        return EXIT_INVALID
     except KernelError as exc:
         _emit(serialize_kernel_error(exc), sys.stderr)
         if exc.code in {"sequence_conflict", "revision_conflict", "lease_conflict"}:

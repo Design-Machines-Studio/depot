@@ -323,6 +323,80 @@ Use only the Python standard library. Add no daemon, database, service, package
 installer, or external API call. Keep JSON deterministic, UTF-8 encoded, and
 newline terminated so Claude, Codex, and generic hosts consume identical bytes.
 
+## Neutral Inspection Contract
+
+Inspection profiles use
+`references/inspection-profile-schema.json` and schema version 1. They contain
+only stable IDs and repository-owned declarations. Validate the complete
+profile, catalogs, references, paths, Docker/Compose argv, evidence outputs,
+classifications, and trend identities before treating any lane as admissible.
+Catalog `content_digest` is SHA-256 over the canonical newline-terminated JSON
+projection containing `catalog_id`, `schema_version`, `catalog_version`,
+`source_reference`, `rules`, and `metrics`; the digest field itself is excluded.
+
+Profiles never grant execution trust. `inspection-run` requires a host-issued
+attestation from a path outside the canonical repository root. The attestation
+binds the repository root, normalized repository-relative profile path,
+canonical validated profile digest, verified Git source/ref and commit, dirty
+state, operator authorization event ID, and execution purpose. The kernel
+freezes the validated snapshot, compares every binding, revalidates the source
+file identity, and then executes only that snapshot. Missing, repository-held,
+self-asserted, stale, or mismatched authority fails before subprocess
+invocation.
+
+Admitted lanes are exact `docker run` or `docker compose` argv arrays. The
+kernel never invokes a shell, inherits arbitrary environment values, accepts
+mutable `latest` identities, or writes undeclared output paths. It uses the
+canonical repository root, the declared timeout, and exactly:
+
+```text
+PATH=/usr/bin:/bin
+LANG=C
+LC_ALL=C
+TZ=UTC
+```
+
+Primary `available`, `unavailable`, and `failed` receipts remain distinct.
+Fallback success is `fallback` with its `primary_lane_id`; an unused fallback is
+`skipped`. Unknown observation schema, path, surface, metric, rule,
+classification, or evidence state produces an actionable fail-closed
+classification while retaining redacted raw telemetry.
+
+Authoritative inspection JSON includes volatile invocation provenance and an
+explicit stable-projection digest. Compare trends only when schema, profile,
+metric-definition, and lane tool/image/plugin identities match. Render
+Markdown only from authoritative JSON that revalidates and whose stable digest
+recomputes; never parse Markdown into authority.
+
+The stable CLI surface is:
+
+```sh
+workflow-kernel-launcher.sh inspection-validate \
+  --repository-root <root> --profile <repository-relative-profile>
+workflow-kernel-launcher.sh inspection-classify \
+  --repository-root <root> --profile <profile> --observations <json>
+workflow-kernel-launcher.sh inspection-trend \
+  --current <authoritative-json> --baseline <authoritative-json>
+workflow-kernel-launcher.sh inspection-render --input <authoritative-json>
+workflow-kernel-launcher.sh inspection-run \
+  --repository-root <root> --profile <profile> --lane-id <primary-id> \
+  --attestation <host-path-outside-repository> --source git --ref <ref> \
+  --commit <sha> --dirty <true|false> --purpose <purpose> \
+  [--observations <json>]
+workflow-kernel-launcher.sh resolve-plugin-bundle \
+  --plugin <name> --required-asset <relative-path> \
+  [--required-asset <relative-path> ...] \
+  [--minimum-version <semver>] [--active-host <claude|codex>]
+```
+
+Successful commands emit canonical JSON except `inspection-render`, which emits
+Markdown. Validation, trust, compatibility, or resolution failures emit stable
+safe JSON on stderr and return a non-zero status. `resolve-plugin-bundle`
+selects the highest compatible strict semantic version across Claude and Codex
+caches, uses the active host only for an equal-version tie, validates the
+cache-specific manifest and complete relative asset set, and returns one
+home-relative root from which callers derive every asset.
+
 ## Reference Runtime
 
 Import the package from `references/workflow_kernel/`. The test suite is a

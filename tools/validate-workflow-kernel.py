@@ -152,7 +152,8 @@ def check_documents(context):
     from workflow_kernel.workflows import WorkflowTemplates
     schemas = sorted(REFERENCES.glob("*-schema.json"))
     require(
-        {path.name for path in schemas} == SCHEMA_DOCUMENTS,
+        {path.name for path in schemas}
+        == SCHEMA_DOCUMENTS | {"inspection-profile-schema.json"},
         "schema document set changed",
     )
     for path in schemas:
@@ -405,13 +406,22 @@ def check_cli(context):
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
+        "inspection-validate", "inspection-classify", "inspection-trend",
+        "inspection-render", "inspection-run", "resolve-plugin-bundle",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
         if getattr(action, "choices", None)
     )
     require(set(choices) == expected, "runtime command set changed")
-    require(set(BEHAVIORAL_CLI_CASES) == expected, "behavioral CLI cases incomplete")
+    inspection_commands = {
+        "inspection-validate", "inspection-classify", "inspection-trend",
+        "inspection-render", "inspection-run", "resolve-plugin-bundle",
+    }
+    require(
+        set(BEHAVIORAL_CLI_CASES) == expected - inspection_commands,
+        "behavioral CLI cases incomplete",
+    )
     outcomes = {}
     with tempfile.TemporaryDirectory(prefix=".workflow-kernel-validator-", dir=ROOT) as directory:
         root = Path(directory)
@@ -776,6 +786,15 @@ def check_cli(context):
             result = unittest.TestResult()
             case(method).run(result)
             require(result.wasSuccessful(), f"CLI hostile case failed: {label}")
+        for method in (
+            "test_cli_help_and_invalid_inputs_have_stable_nonzero_exit",
+            "test_exact_execution_boundary_and_fallback_receipts",
+            "test_post_validation_mutation_is_detected_without_adapter_call",
+        ):
+            from tests.test_quality_pulse_kernel import QualityPulseKernelTests
+            result = unittest.TestResult()
+            QualityPulseKernelTests(method).run(result)
+            require(result.wasSuccessful(), f"inspection CLI case failed: {method}")
         require(set(outcomes) == SUCCESSFUL_CLI_COMMANDS, "successful CLI coverage incomplete")
     invalid = run([sys.executable, "-m", "workflow_kernel", "not-a-command"])
     require(invalid.returncode == cli.EXIT_INVALID, "invalid CLI exit code changed")
