@@ -573,6 +573,19 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertEqual(discontinuity["status"], "baseline_discontinuity")
             self.assertIn("profile", discontinuity["incompatible_identity_fields"])
 
+            incompatible_schema = copy.deepcopy(current)
+            incompatible_schema["schema_version"] = 2
+            self.assertEqual(
+                compare_trends(current, incompatible_schema),
+                {
+                    "schema_version": 1,
+                    "status": "baseline_discontinuity",
+                    "reason_code": "incompatible_baseline",
+                    "incompatible_identity_fields": ["schema_version"],
+                    "deltas": [],
+                },
+            )
+
             rendered = render_markdown(current)
             self.assertIn("# Inspection Result", rendered)
             self.assertIn("observation-1", rendered)

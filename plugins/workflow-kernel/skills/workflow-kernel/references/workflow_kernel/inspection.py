@@ -1264,6 +1264,17 @@ def authoritative_bytes(result):
 
 def compare_trends(current, baseline):
     validate_authoritative_result(current)
+    if (
+        type(baseline) is dict
+        and type(baseline.get("schema_version")) is int
+        and baseline["schema_version"] != current["schema_version"]
+    ):
+        return {
+            "schema_version": 1, "status": "baseline_discontinuity",
+            "reason_code": "incompatible_baseline",
+            "incompatible_identity_fields": ["schema_version"],
+            "deltas": [],
+        }
     validate_authoritative_result(baseline)
     mismatches = []
     for field in ("schema_version", "profile", "metric_definitions", "tool_identities"):
