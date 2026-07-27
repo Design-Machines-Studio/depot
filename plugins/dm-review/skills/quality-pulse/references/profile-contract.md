@@ -35,14 +35,19 @@ owns:
 - authoritative JSON and Markdown output locations;
 - trend compatibility identities.
 
+dm-review separately owns `result-policy-v1.json`: completion labels, lane
+gap/blocker statuses, observation evidence blockers, and the classified reason
+code. The repository profile cannot replace or weaken this policy. The kernel
+validates and digest-binds both inputs, then applies the policy mechanically.
+
 Complete validation must finish before any declared repository command, lane,
 evidence output, authoritative JSON write, or Markdown rendering.
 
 Evidence paths are durable logical references, not mount authority. The kernel
 alone supplies `/workspace` read-only and a fresh
-`/quality-pulse-evidence` output mount. A lane emits its schema-1,
+`/inspection-evidence` output mount. A lane emits its schema-1,
 lane-ID-bound observation envelope at the fixed
-`/quality-pulse-evidence/observations.json` path.
+`/inspection-evidence/observations.json` path.
 
 Schema v1 accepts pinned `docker run` lanes only. It rejects Compose because a
 referenced Compose file is a mutable authority source outside the attested

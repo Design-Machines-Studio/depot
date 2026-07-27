@@ -22,6 +22,7 @@ zero-deferral ledger.
 
 - Default profile: `.dm-review/quality-pulse.json`
 - Optional override: `--profile <repository-relative-or-explicit-local-path>`
+- Result policy: trusted dm-review asset `references/result-policy-v1.json`
 - Authority: a local operator acting in a trusted checkout
 
 The override chooses a profile; it does not grant execution authority. A
@@ -45,6 +46,9 @@ dependency root and the kernel's canonical
 selected plugin root and verify it is executable. Reuse that launcher for the
 entire pulse. Do not use an independent cache glob, mtime-first lookup, PATH
 search, or a mixture of assets from different workflow-kernel versions.
+Resolve `RESULT_POLICY_PATH` from the same installed dm-review bundle as this
+skill and require `references/result-policy-v1.json`; repository content cannot
+override that path.
 
 Use the selected launcher's `resolve-plugin-bundle` command to resolve the
 declared Live Wires bundle coherently. Require
@@ -78,8 +82,9 @@ normalize observations
 classify against closed profile IDs
 emit authoritative JSON
 validate authoritative JSON
-render Markdown digest
 compare compatible trend or emit discontinuity
+bind compatible trend or baseline discontinuity
+render Markdown digest
 ```
 
 ### 1. Discover and authorize
@@ -98,7 +103,8 @@ invocation, evidence write, authoritative output, or digest rendering:
 ```sh
 "$WORKFLOW_KERNEL" inspection-validate \
   --repository-root "$REPOSITORY_ROOT" \
-  --profile "$PROFILE_PATH"
+  --profile "$PROFILE_PATH" \
+  --result-policy "$RESULT_POLICY_PATH"
 ```
 
 Validation covers the entire profile, catalog bindings, closed IDs, paths,
@@ -127,6 +133,7 @@ Invoke `inspection-run` with requested primary lane IDs only. Repeat
 "$WORKFLOW_KERNEL" inspection-run \
   --repository-root "$REPOSITORY_ROOT" \
   --profile "$PROFILE_PATH" \
+  --result-policy "$RESULT_POLICY_PATH" \
   --lane-id "$PRIMARY_LANE_ID" \
   [--lane-id "$ANOTHER_PRIMARY_LANE_ID"] \
   --attestation "$HOST_ATTESTATION" \
@@ -145,7 +152,7 @@ Consume the complete returned receipt set, including the primary receipt and
 every `fallback` or `skipped` receipt.
 
 Each successful lane must write this envelope to the kernel-owned fixed path
-`/quality-pulse-evidence/observations.json`:
+`/inspection-evidence/observations.json`:
 
 ```json
 {"schema_version":1,"lane_id":"<declared-lane-id>","observations":[]}
@@ -211,7 +218,7 @@ the closed lifecycle state and emits a re-digested artifact. The kernel embeds
 a keyed host attestation for the exact result before authoritative JSON crosses
 the process boundary. Every publication command loads the key from the fixed
 OS-account path
-`~/.config/design-machines/quality-pulse/publication-authority.key`; `~` here
+`~/.config/design-machines/workflow-kernel/inspection-publication-authority.key`; `~` here
 means the account-database home, not caller-controlled `$HOME`. The host must
 provision that current-user-owned, single-link, mode-`0600` file before a pulse.
 There is deliberately no CLI or profile key-path override:
@@ -251,7 +258,7 @@ snapshot. It durably writes the exact rendered Markdown before minting
 minting `published`, then creates the signed JSON and Markdown read-only from
 birth inside an unguessable staging directory. It atomically promotes that
 directory to
-`.quality-pulse-publications/<pulse-id>/<publication-state-digest>/` before
+`.inspection-publications/<inspection-id>/<publication-state-digest>/` before
 emitting success. JSON and Markdown profile destinations must be distinct,
 non-aliased regular-file paths whose parent identities remain stable for the
 rendered transition. The signed JSON is the published authority; validation

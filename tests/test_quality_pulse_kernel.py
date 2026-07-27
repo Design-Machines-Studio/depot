@@ -15,6 +15,7 @@ from unittest import mock
 from tests import KERNEL_REFERENCES
 
 from workflow_kernel import cli as kernel_cli
+from workflow_kernel import publication as kernel_publication
 from workflow_kernel.cli import command_inspection_publish
 from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
@@ -24,6 +25,7 @@ from workflow_kernel.inspection import (
     normalize_owned_path,
     render_markdown, stable_projection, validate_authoritative_result,
     validate_inspection_profile, validate_published_outputs,
+    validate_result_policy,
 )
 from workflow_kernel.receipts import _canonical_bytes
 COMMIT = "a" * 40
@@ -32,8 +34,32 @@ ATTACKER_KEY = b"attacker-controlled-publication-key-v1"
 _build_authoritative_result = build_authoritative_result
 
 
+def result_policy_document():
+    return {
+        "schema_version": 1,
+        "policy_id": "dm-review-quality-pulse",
+        "policy_version": "1.0.0",
+        "completion_labels": {
+            "blocked": "blocked",
+            "gaps": "complete_with_gaps",
+            "findings": "complete_with_findings",
+            "clean": "complete",
+        },
+        "lane_gap_statuses": ["unavailable", "failed"],
+        "lane_blocker_statuses": ["unavailable", "failed"],
+        "observation_blocker_evidence_statuses": [
+            "unavailable", "failed", "skipped",
+        ],
+        "classified_reason_code": "classified",
+    }
+
+
 def build_authoritative_result(*args, **kwargs):
     kwargs.setdefault("publication_authority_key", PUBLICATION_KEY)
+    if len(args) < 2 and "result_policy" not in kwargs:
+        kwargs["result_policy"] = validate_result_policy(
+            result_policy_document(),
+        )
     return _build_authoritative_result(*args, **kwargs)
 
 
@@ -130,7 +156,8 @@ def profile_document():
         "trend_compatibility": {
             "schema_version": 1,
             "required_identity_fields": [
-                "profile", "metric_definitions", "tool_identities",
+                "profile", "result_policy", "metric_definitions",
+                "tool_identities",
             ],
         },
     }
@@ -202,7 +229,7 @@ class FakeAdapter:
             mount = next(
                 item for item in argv
                 if item.startswith("type=bind,source=")
-                and item.endswith(",target=/quality-pulse-evidence")
+                and item.endswith(",target=/inspection-evidence")
             )
             evidence_root = mount.split(",target=", 1)[0].split("source=", 1)[1]
             Path(evidence_root, "observations.json").write_text(json.dumps({
@@ -954,10 +981,18 @@ class QualityPulseKernelTests(unittest.TestCase):
                 ["fallback"],
             )
 
-    def result(self, profile, value=4, publication_key=PUBLICATION_KEY):
+    def result(
+        self,
+        profile,
+        value=4,
+        publication_key=PUBLICATION_KEY,
+        result_policy=None,
+    ):
         raw = [observation(raw_telemetry={"value": value})]
         return _build_authoritative_result(
-            profile, source="git", ref="refs/heads/test", commit=COMMIT,
+            profile,
+            result_policy or validate_result_policy(result_policy_document()),
+            source="git", ref="refs/heads/test", commit=COMMIT,
             dirty=False, observations=raw,
             lane_receipts=[receipt_for_observations(raw)], invocation={
                 "started_at": "2026-07-27T00:00:00Z",
@@ -1007,6 +1042,25 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertEqual(discontinuity["status"], "baseline_discontinuity")
             self.assertIn("profile", discontinuity["incompatible_identity_fields"])
 
+            changed_policy_document = result_policy_document()
+            changed_policy_document["policy_version"] = "1.1.0"
+            changed_policy_baseline = self.result(
+                profile,
+                4,
+                result_policy=validate_result_policy(
+                    changed_policy_document,
+                ),
+            )
+            policy_discontinuity = compare_trends(
+                current,
+                changed_policy_baseline,
+                publication_authority_key=PUBLICATION_KEY,
+            )
+            self.assertEqual(
+                policy_discontinuity["incompatible_identity_fields"],
+                ["result_policy"],
+            )
+
             incompatible_schema = copy.deepcopy(current)
             incompatible_schema["schema_version"] = 2
             self.assertEqual(
@@ -1049,6 +1103,16 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
             self.assertIn("# Inspection Result", rendered)
             self.assertIn("observation-1", rendered)
+            for section in (
+                "## Summary",
+                "## Trend",
+                "## Coverage Gaps",
+                "## Blockers",
+                "## Redaction",
+            ):
+                self.assertIn(section, rendered)
+            self.assertIn("- Informational: **1**", rendered)
+            self.assertIn("- None.", rendered)
             with self.assertRaises(InspectionError):
                 render_markdown(
                     {"markdown": "# forged"},
@@ -1086,7 +1150,9 @@ class QualityPulseKernelTests(unittest.TestCase):
             repository = self.repository(Path(directory))
             profile = validate_inspection_profile(profile_document(), repository)
             current = self.result(profile)
-            self.assertEqual(current["pulse_id"], "scheduled-quality-pulse")
+            self.assertEqual(
+                current["inspection_id"], "scheduled-quality-pulse",
+            )
             self.assertEqual(current["completion_state"], "complete")
             self.assertEqual(
                 current["publication_status"], "authoritative_json_ready",
@@ -1406,7 +1472,7 @@ class QualityPulseKernelTests(unittest.TestCase):
             emitted = []
             snapshot_reopen_denied = []
             original_snapshot_write = (
-                kernel_cli._write_publication_snapshot_file
+                kernel_publication._write_snapshot_file
             )
 
             def write_and_probe_snapshot_file(path, encoded):
@@ -1426,8 +1492,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                     return_value=publication_key.resolve(),
                 ),
                 mock.patch(
-                    "workflow_kernel.cli."
-                    "_write_publication_snapshot_file",
+                    "workflow_kernel.publication._write_snapshot_file",
                     side_effect=write_and_probe_snapshot_file,
                 ),
                 mock.patch(
@@ -1454,8 +1519,8 @@ class QualityPulseKernelTests(unittest.TestCase):
                 snapshot_reopen_denied, ["authoritative.json", "report.md"],
             )
             bundle = (
-                repository / ".quality-pulse-publications"
-                / published["pulse_id"]
+                repository / ".inspection-publications"
+                / published["inspection_id"]
                 / published["publication_state_digest"].removeprefix(
                     "sha256:",
                 )
@@ -1532,7 +1597,7 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertEqual(markdown_path.read_bytes(), bundle_markdown_before)
 
             write_count = 0
-            original_write_json = kernel_cli._write_json
+            original_write_json = kernel_publication._replace_json
 
             def corrupt_after_rendered_json(path, value):
                 nonlocal write_count
@@ -1549,7 +1614,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                     return_value=publication_key.resolve(),
                 ),
                 mock.patch(
-                    "workflow_kernel.cli._write_json",
+                    "workflow_kernel.publication._replace_json",
                     side_effect=corrupt_after_rendered_json,
                 ),
                 mock.patch(
@@ -1611,7 +1676,7 @@ class QualityPulseKernelTests(unittest.TestCase):
         for command in (
             "inspection-validate", "inspection-classify", "inspection-trend",
             "inspection-finalize", "inspection-publish", "inspection-render",
-            "inspection-run", "resolve-plugin-bundle",
+            "inspection-run", "kernel-info", "resolve-plugin-bundle",
         ):
             self.assertIn(command, help_result.stdout)
             detail = subprocess.run(
@@ -1631,6 +1696,7 @@ class QualityPulseKernelTests(unittest.TestCase):
             [
                 sys.executable, "-m", "workflow_kernel", "inspection-run",
                 "--repository-root", "/missing", "--profile", "profile.json",
+                "--result-policy", "/missing-policy.json",
                 "--lane-id", "primary", "--attestation", "/missing-attestation",
                 "--source", "git", "--ref", "refs/heads/test",
                 "--commit", COMMIT, "--dirty", "false",

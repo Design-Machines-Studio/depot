@@ -331,7 +331,10 @@ Inspection profiles use
 `references/inspection-profile-schema.json` and schema version 1. They contain
 only stable IDs and repository-owned declarations. Validate the complete
 profile, catalogs, references, paths, Docker/Compose argv, evidence outputs,
-classifications, and trend identities before treating any lane as admissible.
+classifications, a separately supplied workflow-owned result policy, and trend
+identities before treating any lane as admissible. The kernel digest-binds and
+applies the closed result policy mechanically; it does not invent product
+completion labels or blocker sets.
 Catalog `content_digest` is SHA-256 over the canonical newline-terminated JSON
 projection containing `catalog_id`, `schema_version`, `catalog_version`,
 `source_reference`, `rules`, and `metrics`; the digest field itself is excluded.
@@ -354,11 +357,12 @@ is rejected because mutable external Compose configuration is not covered by
 the profile attestation. The profile cannot declare host mounts. The kernel
 synthesizes a fixed read-only
 mount of the attested repository at `/workspace` and a unique empty read-write
-evidence mount at `/quality-pulse-evidence`; direct Docker lanes also receive
-`--network=none` and a read-only container filesystem, and all lanes use the
-host operator's numeric user/group identity. A successful lane must
+evidence mount at `/inspection-evidence`; direct Docker lanes also receive
+`--network=none`, a read-only container filesystem, PID/memory/CPU ceilings,
+all capabilities dropped, and `no-new-privileges`; all lanes use the host
+operator's numeric user/group identity. A successful lane must
 write a lane-bound schema-1 observation envelope to
-`/quality-pulse-evidence/observations.json`. The kernel never invokes a shell,
+`/inspection-evidence/observations.json`. The kernel never invokes a shell,
 inherits arbitrary environment values, accepts mutable `latest` identities,
 or accepts exit-zero without fresh digest-bound evidence. It uses the canonical
 repository root, the declared timeout, and exactly:
@@ -424,7 +428,7 @@ workflow-kernel-launcher.sh resolve-plugin-bundle \
 
 Publication commands load their HMAC authority only from the current OS
 account's fixed
-`~/.config/design-machines/quality-pulse/publication-authority.key`. The
+`~/.config/design-machines/workflow-kernel/inspection-publication-authority.key`. The
 account home is resolved from the OS account database rather than `$HOME`.
 Profiles and command arguments cannot select or override the key path; the
 host provisions it as a current-user-owned, single-link, mode-`0600` regular

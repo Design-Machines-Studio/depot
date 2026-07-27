@@ -13,7 +13,7 @@ Depot has been released or installed, or that issue #572 can close.
 | dm-review | 1.46.0 | `dm-review-v1.46.0` |
 | openrouter | 1.6.0 | `openrouter-v1.6.0` |
 | pipeline | 1.33.0 | `pipeline-v1.33.0` |
-| airlift | 1.3.0 | `airlift-v1.3.0` |
+| airlift | 1.3.1 | `airlift-v1.3.1` |
 
 Before editing Baseplate, prove every intended tag with a retained provenance
 receipt containing:
@@ -115,7 +115,7 @@ the synthetic conformance image is not a production pin.
 
 Each image must read the attested checkout from the kernel-owned read-only
 `/workspace` mount and write exactly one schema-1 observation envelope to
-`/quality-pulse-evidence/observations.json`. It must not request its own host
+`/inspection-evidence/observations.json`. It must not request its own host
 mount. The envelope lane ID must match the declared lane; missing or mismatched
 evidence turns exit zero into `failed`.
 

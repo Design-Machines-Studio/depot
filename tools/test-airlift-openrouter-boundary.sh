@@ -45,7 +45,20 @@ chmod +x "$REFS/openrouter-wrapper.sh"
 cat > "$FIXTURE/kernel" <<'EOF'
 #!/usr/bin/env bash
 [ "${FAKE_KERNEL_FAIL:-0}" = "0" ] || exit 4
-printf '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.6.0","cache_class":"codex","version":"1.6.0","reason":"highest_compatible_semver"}\n'
+case "${1:-}" in
+  kernel-info)
+    exec "$REAL_WORKFLOW_KERNEL" "$@"
+    ;;
+  resolve-plugin-bundle)
+    printf '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.6.0","cache_class":"codex","version":"1.6.0","reason":"highest_compatible_semver"}\n'
+    ;;
+  snapshot-files)
+    exec "$REAL_WORKFLOW_KERNEL" "$@"
+    ;;
+  *)
+    exit 4
+    ;;
+esac
 EOF
 chmod +x "$FIXTURE/kernel"
 
@@ -63,6 +76,7 @@ run_expect() {
   shift 2
   set +e
   output="$(HOME="$HOME_FIXTURE" WORKFLOW_KERNEL="$FIXTURE/kernel" \
+    REAL_WORKFLOW_KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh" \
     BUNDLE_DIR="$FIXTURE/bundle" AIRLIFT_WRAPPER_SENTINEL="$FIXTURE/sentinel" \
     AIRLIFT_WRAPPER_CAPTURE="$FIXTURE/captured" \
     "$@" "$FIXTURE/resume" 2>&1)"
@@ -92,7 +106,16 @@ if grep -Eq 'sk-or-v1|PRIVATE KEY' "$FIXTURE"/captured.*; then
   exit 1
 fi
 
+printf 'private text outside the handoff\n' > "$FIXTURE/private.txt"
+rm -f "$FIXTURE/bundle/HANDOFF.md"
+ln -s "$FIXTURE/private.txt" "$FIXTURE/bundle/HANDOFF.md"
+rm -f "$FIXTURE/sentinel"
+run_expect 2 "symlink handoff is rejected before disclosure screening" env
+[ ! -e "$FIXTURE/sentinel" ]
+rm -f "$FIXTURE/bundle/HANDOFF.md"
+
 printf 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890\n' > "$FIXTURE/bundle/RESUME_PROMPT.md"
+printf 'Objective: validate the handoff.\n' > "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel"
 run_expect 3 "resume prompt disclosure declines distinctly" env
 [ ! -e "$FIXTURE/sentinel" ]

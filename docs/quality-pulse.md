@@ -39,7 +39,10 @@ profile is `.dm-review/quality-pulse.json`.
 The repository profile uses inspection schema version 1. It declares stable
 repository-relative paths, surfaces, catalog identities and digests, rules,
 metrics, classifications, immutable primary/fallback lane identities, evidence
-paths, outputs, and trend compatibility fields.
+paths, outputs, and trend compatibility fields. dm-review separately owns the
+versioned `result-policy-v1.json` completion and blocker semantics. The kernel
+validates and digest-binds both inputs, then applies the closed policy
+mechanically.
 
 Profile content is policy, not authority. Lane execution requires a
 host-issued attestation stored outside the canonical repository root. That
@@ -52,10 +55,10 @@ An explicit `--profile` override is a local operator choice. It still passes
 the same complete validation and trust checks.
 
 The kernel supplies the attested checkout to lanes at `/workspace` read-only
-and supplies a fresh empty evidence mount at `/quality-pulse-evidence`.
+and supplies a fresh empty evidence mount at `/inspection-evidence`.
 Profiles cannot nominate host mounts. A successful lane writes a lane-bound
 schema-1 observation envelope to the fixed
-`/quality-pulse-evidence/observations.json` path. The kernel snapshots it with
+`/inspection-evidence/observations.json` path. The kernel snapshots it with
 no-link file handling and binds its digest and observation IDs into the lane
 receipt; `inspection-run` does not accept a separate observations file.
 
@@ -94,7 +97,7 @@ Publication order is fixed:
 
 The published source of truth is the host-keyed authoritative JSON. A
 content-addressed, read-only JSON/Markdown snapshot is stored under
-`.quality-pulse-publications/<pulse-id>/<state-digest>/`; consumers revalidate
+`.inspection-publications/<inspection-id>/<state-digest>/`; consumers revalidate
 its HMAC and regenerate the derived Markdown rather than trusting a pathname.
 Profile-declared paths are replaceable reader views and never feed
 classification or trend comparison. The host process and OS account are

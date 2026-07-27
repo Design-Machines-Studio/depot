@@ -1,8 +1,9 @@
 """Neutral, deterministic inspection mechanics for repository-owned profiles.
 
-Policy stays in profiles and their catalogs.  This module validates and freezes
-that input, admits only digest-bound host-authorized Docker execution, and
-produces canonical redacted data from which human-readable output is rendered.
+Domain policy stays in the owning workflow plugin.  This module validates and
+freezes repository profiles and separately supplied policy, admits only
+digest-bound host-authorized Docker execution, and produces canonical redacted
+data from which human-readable output is rendered.
 """
 
 from __future__ import annotations
@@ -48,12 +49,12 @@ _COMPOSE_IDENTITY = re.compile(r"([a-z0-9][a-z0-9._-]{0,127})@sha256:[0-9a-f]{64
 _IMAGE_IDENTITY = re.compile(r"[^@\s]+@sha256:[0-9a-f]{64}\Z")
 _SHELL_TOKEN = re.compile(r"(?:\$\(|`|[;&|<>]|\r|\n)")
 _LANE_REPOSITORY_TARGET = "/workspace"
-_LANE_EVIDENCE_TARGET = "/quality-pulse-evidence"
+_LANE_EVIDENCE_TARGET = "/inspection-evidence"
 _LANE_EVIDENCE_NAME = "observations.json"
 _MAX_LANE_EVIDENCE_BYTES = 16 * 1024 * 1024
 _HOST_PUBLICATION_AUTHORITY_KEY_PARTS = (
-    ".config", "design-machines", "quality-pulse",
-    "publication-authority.key",
+    ".config", "design-machines", "workflow-kernel",
+    "inspection-publication-authority.key",
 )
 _PROFILE_FIELDS = frozenset({
     "schema_version", "profile_id", "profile_version", "repository",
@@ -66,7 +67,7 @@ _ATTESTATION_FIELDS = frozenset({
     "purpose",
 })
 _PUBLICATION_ATTESTATION_FIELDS = frozenset({
-    "schema_version", "pulse_id", "stable_projection_digest",
+    "schema_version", "inspection_id", "stable_projection_digest",
     "prior_publication_status", "prior_publication_state_digest",
     "publication_status", "publication_state_digest", "host_action",
     "operator_authorization_event_id", "authority_key_id", "signature",
@@ -366,6 +367,8 @@ def _execution_argv(lane, repository_root, evidence_root):
         declared[:image_index]
         + [
             "--network=none", "--read-only",
+            "--pids-limit=256", "--memory=1g", "--cpus=2",
+            "--cap-drop=ALL", "--security-opt=no-new-privileges",
             "--user", f"{os.getuid()}:{os.getgid()}",
             "--mount", repository_mount,
             "--mount", evidence_mount,
@@ -392,9 +395,190 @@ def _execution_policy_digest(lane):
         },
         "network": "none",
         "root_filesystem": "read-only",
+        "pids_limit": 256,
+        "memory": "1g",
+        "cpus": "2",
+        "capabilities": "drop_all",
+        "no_new_privileges": True,
         "user": "host_numeric_uid_gid",
         "environment": dict(FIXED_EXECUTION_ENV),
     })
+
+
+def _validate_snapshot_names(names):
+    if (
+        type(names) not in {list, tuple}
+        or not names
+        or any(
+            type(name) is not str
+            or not name
+            or name in {".", ".."}
+            or "/" in name
+            or "\\" in name
+            or "\x00" in name
+            for name in names
+        )
+        or len(names) != len(set(names))
+    ):
+        _fail("snapshot_request_invalid")
+    return tuple(names)
+
+
+def _open_snapshot_directory(path):
+    directory_flags = (
+        os.O_RDONLY
+        | getattr(os, "O_DIRECTORY", 0)
+        | getattr(os, "O_CLOEXEC", 0)
+        | getattr(os, "O_NOFOLLOW", 0)
+    )
+    try:
+        return os.open(Path(path), directory_flags)
+    except OSError:
+        _fail("snapshot_directory_invalid")
+
+
+def _read_snapshot_source(source_fd, name, current_uid):
+    try:
+        source_file = os.open(
+            name,
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=source_fd,
+        )
+    except OSError:
+        _fail("snapshot_source_invalid")
+    try:
+        opened = os.fstat(source_file)
+        named = os.stat(name, dir_fd=source_fd, follow_symlinks=False)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or not stat.S_ISREG(named.st_mode)
+            or opened.st_nlink != 1
+            or (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino)
+            or (
+                current_uid is not None
+                and opened.st_uid != current_uid
+            )
+            or opened.st_size > _MAX_LANE_EVIDENCE_BYTES
+        ):
+            _fail("snapshot_source_invalid")
+        chunks = []
+        length = 0
+        while True:
+            chunk = os.read(source_file, 65536)
+            if not chunk:
+                break
+            length += len(chunk)
+            if length > _MAX_LANE_EVIDENCE_BYTES:
+                _fail("snapshot_source_invalid")
+            chunks.append(chunk)
+        after = os.fstat(source_file)
+        if (
+            (
+                after.st_dev,
+                after.st_ino,
+                after.st_mode,
+                after.st_nlink,
+                after.st_uid,
+                after.st_size,
+                after.st_mtime_ns,
+            )
+            != (
+                opened.st_dev,
+                opened.st_ino,
+                opened.st_mode,
+                opened.st_nlink,
+                opened.st_uid,
+                opened.st_size,
+                opened.st_mtime_ns,
+            )
+        ):
+            _fail("snapshot_source_changed")
+        return b"".join(chunks)
+    finally:
+        os.close(source_file)
+
+
+def _write_snapshot_destination(destination_fd, name, payload):
+    try:
+        target = os.open(
+            name,
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+            dir_fd=destination_fd,
+        )
+    except OSError:
+        _fail("snapshot_destination_invalid")
+    try:
+        offset = 0
+        while offset < len(payload):
+            written = os.write(target, payload[offset:])
+            if written <= 0:
+                _fail("snapshot_destination_invalid")
+            offset += written
+        os.fsync(target)
+    finally:
+        os.close(target)
+
+
+def snapshot_regular_files(source_root, destination_root, names):
+    """Copy exact regular-file bytes without following source or target links."""
+    names = _validate_snapshot_names(names)
+    source_fd = _open_snapshot_directory(source_root)
+    try:
+        destination_fd = _open_snapshot_directory(destination_root)
+    except BaseException:
+        os.close(source_fd)
+        raise
+    try:
+        source_directory = os.fstat(source_fd)
+        destination_directory = os.fstat(destination_fd)
+        current_uid = os.geteuid() if hasattr(os, "geteuid") else None
+        if (
+            not stat.S_ISDIR(source_directory.st_mode)
+            or not stat.S_ISDIR(destination_directory.st_mode)
+            or (
+                current_uid is not None
+                and (
+                    source_directory.st_uid != current_uid
+                    or destination_directory.st_uid != current_uid
+                )
+            )
+            or stat.S_IMODE(destination_directory.st_mode) & 0o077
+        ):
+            _fail("snapshot_directory_invalid")
+        copied = []
+        for name in names:
+            payload = _read_snapshot_source(source_fd, name, current_uid)
+            _write_snapshot_destination(destination_fd, name, payload)
+            copied.append({
+                "name": name,
+                "size": len(payload),
+                "digest": "sha256:" + hashlib.sha256(payload).hexdigest(),
+            })
+        if (
+            (
+                os.fstat(source_fd).st_dev,
+                os.fstat(source_fd).st_ino,
+            )
+            != (source_directory.st_dev, source_directory.st_ino)
+            or (
+                os.fstat(destination_fd).st_dev,
+                os.fstat(destination_fd).st_ino,
+            )
+            != (destination_directory.st_dev, destination_directory.st_ino)
+        ):
+            _fail("snapshot_directory_changed")
+        os.fsync(destination_fd)
+        return copied
+    finally:
+        os.close(destination_fd)
+        os.close(source_fd)
 
 
 def _read_lane_evidence(evidence_root, lane_id):
@@ -591,7 +775,9 @@ def _validate_profile_document(document, repository_root):
     required = set(_exact_list(
         trend["required_identity_fields"], field="trend_compatibility.required_identity_fields",
     ))
-    mandatory = {"profile", "metric_definitions", "tool_identities"}
+    mandatory = {
+        "profile", "result_policy", "metric_definitions", "tool_identities",
+    }
     if required != mandatory:
         _fail("incomplete_trend_identity")
 
@@ -616,6 +802,123 @@ class InspectionProfile:
 
     def to_dict(self):
         return _thaw(self.document)
+
+
+@dataclass(frozen=True, slots=True)
+class InspectionResultPolicy:
+    """One immutable workflow-owned result-policy snapshot."""
+
+    document: Mapping
+    canonical_bytes: bytes
+    digest: str
+
+    def to_dict(self):
+        return _thaw(self.document)
+
+
+def validate_result_policy(document):
+    if type(document) is not dict:
+        _fail("invalid_result_policy")
+    try:
+        policy = json.loads(json.dumps(document, allow_nan=False))
+    except (TypeError, ValueError):
+        _fail("invalid_result_policy")
+    _exact_object(
+        policy,
+        frozenset({
+            "schema_version", "policy_id", "policy_version",
+            "completion_labels", "lane_gap_statuses",
+            "lane_blocker_statuses", "observation_blocker_evidence_statuses",
+            "classified_reason_code",
+        }),
+        reason="invalid_result_policy",
+    )
+    if policy["schema_version"] != 1:
+        _fail("invalid_result_policy")
+    _string(policy["policy_id"], field="policy_id", identifier=True)
+    if (
+        type(policy["policy_version"]) is not str
+        or _SEMVER.fullmatch(policy["policy_version"]) is None
+    ):
+        _fail("invalid_result_policy")
+    completion_labels = _exact_object(
+        policy["completion_labels"],
+        frozenset({"blocked", "gaps", "findings", "clean"}),
+        reason="invalid_result_policy",
+    )
+    for field, value in completion_labels.items():
+        _string(value, field=field, identifier=True)
+    if len(set(completion_labels.values())) != len(completion_labels):
+        _fail("invalid_result_policy")
+    for field in (
+        "lane_gap_statuses",
+        "lane_blocker_statuses",
+        "observation_blocker_evidence_statuses",
+    ):
+        statuses = _exact_list(policy[field], field=field)
+        if (
+            any(status not in EVIDENCE_STATUSES for status in statuses)
+            or len(statuses) != len(set(statuses))
+        ):
+            _fail("invalid_result_policy")
+        policy[field] = sorted(statuses)
+    if not set(policy["lane_blocker_statuses"]) <= set(
+        policy["lane_gap_statuses"]
+    ):
+        _fail("invalid_result_policy")
+    _string(
+        policy["classified_reason_code"],
+        field="classified_reason_code",
+        identifier=True,
+    )
+    canonical = _canonical_bytes(policy)
+    return InspectionResultPolicy(
+        _freeze(policy),
+        canonical,
+        "sha256:" + hashlib.sha256(canonical).hexdigest(),
+    )
+
+
+def load_result_policy(policy_path):
+    try:
+        path = Path(policy_path)
+        descriptor = os.open(
+            path,
+            os.O_RDONLY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = os.fstat(descriptor)
+            raw = b""
+            while True:
+                chunk = os.read(descriptor, 65536)
+                if not chunk:
+                    break
+                raw += chunk
+                if len(raw) > 1024 * 1024:
+                    _fail("invalid_result_policy")
+            after = os.fstat(descriptor)
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except (OSError, TypeError, ValueError):
+        _fail("invalid_result_policy")
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or (
+            before.st_dev, before.st_ino, before.st_mode, before.st_nlink,
+            before.st_uid, before.st_size, before.st_mtime_ns,
+        )
+        != (
+            after.st_dev, after.st_ino, after.st_mode, after.st_nlink,
+            after.st_uid, after.st_size, after.st_mtime_ns,
+        )
+    ):
+        _fail("invalid_result_policy")
+    return validate_result_policy(decode_json_bytes(raw))
 
 
 def validate_inspection_profile(document, repository_root, *, profile_path="profile.json"):
@@ -987,7 +1290,7 @@ def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
     observations = []
     observation_ids = []
     evidence_digest = None
-    with tempfile.TemporaryDirectory(prefix="quality-pulse-evidence-") as evidence_root:
+    with tempfile.TemporaryDirectory(prefix="inspection-evidence-") as evidence_root:
         try:
             completed = adapter.run(
                 tuple(_execution_argv(lane, root, evidence_root)),
@@ -1147,7 +1450,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
     return receipts
 
 
-def _compatibility_identity(profile):
+def _compatibility_identity(profile, result_policy):
     document = profile.to_dict()
     return {
         "schema_version": AUTHORITATIVE_SCHEMA_VERSION,
@@ -1155,6 +1458,11 @@ def _compatibility_identity(profile):
             "profile_id": document["profile_id"],
             "profile_version": document["profile_version"],
             "profile_digest": profile.digest,
+        },
+        "result_policy": {
+            "policy_id": result_policy.document["policy_id"],
+            "policy_version": result_policy.document["policy_version"],
+            "policy_digest": result_policy.digest,
         },
         "metric_definitions": [
             {
@@ -1192,8 +1500,10 @@ def stable_projection(result):
         "repository": result["repository"],
         "profile": result["profile"],
         "profile_snapshot": result["profile_snapshot"],
+        "result_policy": result["result_policy"],
+        "result_policy_snapshot": result["result_policy_snapshot"],
         "compatibility_identity": result["compatibility_identity"],
-        "pulse_id": result["pulse_id"],
+        "inspection_id": result["inspection_id"],
         "completion_state": result["completion_state"],
         "requested_identities": result["requested_identities"],
         "attempted_identities": result["attempted_identities"],
@@ -1293,7 +1603,7 @@ def _issue_publication_attestation(result, key, prior_status):
     key = _validate_publication_authority_key(key)
     attestation = {
         "schema_version": 1,
-        "pulse_id": result["pulse_id"],
+        "inspection_id": result["inspection_id"],
         "stable_projection_digest": result["stable_projection_digest"],
         "prior_publication_status": prior_status,
         "prior_publication_state_digest": _publication_state_digest_for(
@@ -1322,7 +1632,7 @@ def _validate_publication_attestation(result, attestation, key):
         reason="invalid_publication_attestation",
     )
     for field in (
-        "pulse_id", "host_action", "operator_authorization_event_id",
+        "inspection_id", "host_action", "operator_authorization_event_id",
     ):
         if (
             type(attestation[field]) is not str
@@ -1352,7 +1662,7 @@ def _validate_publication_attestation(result, attestation, key):
         prior_status, result["publication_status"],
     )
     if (
-        attestation["pulse_id"] != result["pulse_id"]
+        attestation["inspection_id"] != result["inspection_id"]
         or attestation["stable_projection_digest"]
         != result["stable_projection_digest"]
         or attestation["prior_publication_status"] != prior_status
@@ -1489,7 +1799,7 @@ def _bind_observation_provenance(classified, lane_receipts):
     return sorted(by_id.values(), key=lambda item: item["observation_id"])
 
 
-def _pulse_lane_identity(lane):
+def _inspection_lane_identity(lane):
     return {
         "lane_id": lane["lane_id"],
         "tool_identity": lane["tool_identity"],
@@ -1500,11 +1810,15 @@ def _pulse_lane_identity(lane):
     }
 
 
-def _derive_pulse_state(profile, lane_receipts, observations, invocation):
-    """Derive the complete reader-facing pulse state from authoritative evidence."""
-    lanes = {
-        item["lane_id"]: item for item in profile.to_dict()["lanes"]
-    }
+def _derive_result_state(
+    profile, result_policy, lane_receipts, observations, invocation,
+):
+    """Apply separately validated workflow policy to inspection evidence."""
+    profile_document = profile.to_dict()
+    lanes = {item["lane_id"]: item for item in profile_document["lanes"]}
+    if type(result_policy) is not InspectionResultPolicy:
+        _fail("validated_result_policy_required")
+    policy = result_policy.to_dict()
     selected = invocation.get("selected_lane_ids")
     if (
         type(selected) is not list
@@ -1516,13 +1830,15 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
         )
     ):
         _fail("invalid_invocation")
-    requested = [_pulse_lane_identity(lanes[lane_id]) for lane_id in selected]
+    requested = [
+        _inspection_lane_identity(lanes[lane_id]) for lane_id in selected
+    ]
     attempted = [
-        _pulse_lane_identity(lanes[item["lane_id"]])
+        _inspection_lane_identity(lanes[item["lane_id"]])
         for item in lane_receipts if item["started_at"] is not None
     ]
     actual = [
-        _pulse_lane_identity(lanes[item["lane_id"]])
+        _inspection_lane_identity(lanes[item["lane_id"]])
         for item in lane_receipts if item["status"] in {"available", "fallback"}
     ]
     gaps = [
@@ -1532,7 +1848,8 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
             "reason_code": item["reason_code"],
             "primary_lane_id": item["primary_lane_id"],
         }
-        for item in lane_receipts if item["status"] in {"unavailable", "failed"}
+        for item in lane_receipts
+        if item["status"] in policy["lane_gap_statuses"]
     ]
     fallback_covered = {
         item["primary_lane_id"] for item in lane_receipts
@@ -1548,19 +1865,21 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
         for item in lane_receipts
         if (
             item["lane_id"] in selected
-            and item["status"] in {"unavailable", "failed"}
+            and item["status"] in policy["lane_blocker_statuses"]
             and item["lane_id"] not in fallback_covered
         )
     ]
     for item in observations:
-        if item["reason_code"] != "classified":
+        if item["reason_code"] != policy["classified_reason_code"]:
             blockers.append({
                 "blocker_type": "observation",
                 "lane_id": item["lane_id"],
                 "observation_id": item["observation_id"],
                 "reason_code": item["reason_code"],
             })
-        elif item["evidence_status"] in {"unavailable", "failed", "skipped"}:
+        elif item["evidence_status"] in policy[
+            "observation_blocker_evidence_statuses"
+        ]:
             blockers.append({
                 "blocker_type": "observation",
                 "lane_id": item["lane_id"],
@@ -1572,16 +1891,17 @@ def _derive_pulse_state(profile, lane_receipts, observations, invocation):
         item["observation_id"] or "", item["reason_code"],
     ))
     gaps.sort(key=lambda item: item["lane_id"])
+    labels = policy["completion_labels"]
     if blockers:
-        completion_state = "blocked"
+        completion_state = labels["blocked"]
     elif gaps:
-        completion_state = "complete_with_gaps"
+        completion_state = labels["gaps"]
     elif any(item["actionable"] for item in observations):
-        completion_state = "complete_with_findings"
+        completion_state = labels["findings"]
     else:
-        completion_state = "complete"
+        completion_state = labels["clean"]
     return {
-        "pulse_id": invocation.get("purpose"),
+        "inspection_id": invocation.get("purpose"),
         "completion_state": completion_state,
         "requested_identities": requested,
         "attempted_identities": attempted,
@@ -1662,7 +1982,7 @@ def _validate_lifecycle(publication_status, trend_result):
     return publication_status, trend
 
 
-def build_authoritative_result(profile, *, source, ref, commit, dirty,
+def build_authoritative_result(profile, result_policy, *, source, ref, commit, dirty,
                                observations, lane_receipts, invocation,
                                publication_authority_key):
     publication_authority_key = _validate_publication_authority_key(
@@ -1670,6 +1990,8 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     )
     if type(profile) is not InspectionProfile:
         _fail("validated_profile_required")
+    if type(result_policy) is not InspectionResultPolicy:
+        _fail("validated_result_policy_required")
     if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
         _fail("invalid_repository_provenance")
     lanes_by_id = {
@@ -1797,8 +2119,22 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
             "profile_path": profile.profile_path,
         },
         "profile_snapshot": profile.to_dict(),
-        "compatibility_identity": _compatibility_identity(profile),
-        **_derive_pulse_state(profile, lane_receipts, classified, invocation),
+        "result_policy": {
+            "policy_id": result_policy.document["policy_id"],
+            "policy_version": result_policy.document["policy_version"],
+            "policy_digest": result_policy.digest,
+        },
+        "result_policy_snapshot": result_policy.to_dict(),
+        "compatibility_identity": _compatibility_identity(
+            profile, result_policy,
+        ),
+        **_derive_result_state(
+            profile,
+            result_policy,
+            lane_receipts,
+            classified,
+            invocation,
+        ),
         "publication_status": publication_status,
         "trend_result": trend_result,
         "trend_baseline": None,
@@ -1820,10 +2156,11 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     )
 
 
-def validate_authoritative_result(result, *, publication_authority_key=None):
+def _validate_authoritative_structure(result):
     fields = frozenset({
         "schema_version", "result_type", "repository", "profile",
-        "profile_snapshot", "compatibility_identity", "pulse_id",
+        "profile_snapshot", "result_policy", "result_policy_snapshot",
+        "compatibility_identity", "inspection_id",
         "completion_state", "requested_identities", "attempted_identities",
         "actual_identities", "coverage_gaps", "blockers",
         "publication_status", "trend_result", "trend_baseline", "observations",
@@ -1881,9 +2218,29 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
         or embedded_profile.document["profile_version"] != profile["profile_version"]
     ):
         _fail("invalid_authoritative_profile")
+    try:
+        embedded_policy = validate_result_policy(
+            result["result_policy_snapshot"],
+        )
+    except InspectionError:
+        _fail("invalid_authoritative_result_policy")
+    result_policy = _exact_object(
+        result["result_policy"],
+        frozenset({"policy_id", "policy_version", "policy_digest"}),
+        reason="invalid_authoritative_result_policy",
+    )
+    if result_policy != {
+        "policy_id": embedded_policy.document["policy_id"],
+        "policy_version": embedded_policy.document["policy_version"],
+        "policy_digest": embedded_policy.digest,
+    }:
+        _fail("invalid_authoritative_result_policy")
     compatibility = _exact_object(
         result["compatibility_identity"],
-        frozenset({"schema_version", "profile", "metric_definitions", "tool_identities"}),
+        frozenset({
+            "schema_version", "profile", "result_policy",
+            "metric_definitions", "tool_identities",
+        }),
         reason="invalid_compatibility_identity",
     )
     if (
@@ -1902,8 +2259,17 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
         "profile_digest": profile["profile_digest"],
     }:
         _fail("invalid_compatibility_identity")
-    if compatibility != _compatibility_identity(embedded_profile):
+    if compatibility != _compatibility_identity(
+        embedded_profile,
+        embedded_policy,
+    ):
         _fail("invalid_compatibility_identity")
+    return profile, embedded_profile, embedded_policy, compatibility
+
+
+def _validate_authoritative_compatibility(
+    compatibility, profile, embedded_profile,
+):
     metric_fields = frozenset({
         "metric_id", "catalog_id", "catalog_version", "catalog_digest",
     })
@@ -1957,6 +2323,10 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
     tool_by_lane = {
         item["lane_id"]: item for item in compatibility["tool_identities"]
     }
+    return tool_by_lane
+
+
+def _validate_authoritative_observations(result):
     observation_fields = frozenset({
         "observation_id", "surface_id", "rule_id", "metric_id",
         "classification", "confidence", "actionable", "reason_code",
@@ -2042,6 +2412,206 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
         safe_telemetry, leaked = _redact_durable(observation["raw_telemetry"])
         if safe_telemetry != observation["raw_telemetry"] or leaked:
             _fail("invalid_authoritative_observation")
+    return authoritative_observation_ids
+
+
+def _validate_lane_receipt_metadata(receipt, receipt_fields, tool_by_lane):
+    _exact_object(receipt, receipt_fields, reason="invalid_lane_receipt")
+    if (
+        receipt["status"] not in EVIDENCE_STATUSES
+        or type(receipt["timeout_seconds"]) is not int
+        or receipt["timeout_seconds"] < 1
+        or type(receipt["redacted_values"]) is not int
+        or receipt["redacted_values"] < 0
+        or (
+            receipt["exit_code"] is not None
+            and type(receipt["exit_code"]) is not int
+        )
+    ):
+        _fail("invalid_lane_receipt")
+    _string(receipt["lane_id"], field="lane_id", identifier=True)
+    _string(receipt["reason_code"], field="reason_code", identifier=True)
+    if receipt["primary_lane_id"] is not None:
+        _string(
+            receipt["primary_lane_id"], field="primary_lane_id", identifier=True,
+        )
+    if (
+        type(receipt["argv_identity"]) is not str
+        or _DIGEST.fullmatch(receipt["argv_identity"]) is None
+        or type(receipt["execution_policy_digest"]) is not str
+        or _DIGEST.fullmatch(receipt["execution_policy_digest"]) is None
+        or type(receipt["tool_identity"]) is not str
+        or not receipt["tool_identity"].startswith("docker:")
+        or _SEMVER.fullmatch(receipt["tool_identity"][7:]) is None
+        or type(receipt["plugin_version"]) is not str
+        or _SEMVER.fullmatch(receipt["plugin_version"]) is None
+        or type(receipt["stdout"]) is not str
+        or type(receipt["stderr"]) is not str
+        or contains_high_confidence_secret(receipt["stdout"])
+        or contains_high_confidence_secret(receipt["stderr"])
+    ):
+        _fail("invalid_lane_receipt")
+    declared_tool = tool_by_lane.get(receipt["lane_id"])
+    if declared_tool is None or any(
+        receipt[field] != declared_tool[field]
+        for field in (
+            "tool_identity", "image_identity", "service_identity",
+            "plugin_version", "execution_policy_digest",
+        )
+    ):
+        _fail("invalid_lane_receipt")
+    if (
+        receipt["status"] in {"fallback", "skipped"}
+        and receipt["primary_lane_id"] is None
+    ):
+        _fail("invalid_lane_receipt")
+    for field in ("started_at", "finished_at"):
+        if receipt[field] is not None:
+            normalize_durable_string(receipt[field])
+    _validate_lane_receipt_status(receipt)
+
+
+def _validate_lane_receipt_status(receipt):
+    has_times = (
+        receipt["started_at"] is not None
+        and receipt["finished_at"] is not None
+    )
+    evidence_failure_reasons = {
+        "missing_lane_evidence", "invalid_lane_evidence", "invalid_json",
+        "duplicate_json_key", "duplicate_id", "missing_field",
+        "unknown_key", "wrong_type", "invalid_identifier",
+        "invalid_collection_item",
+    }
+    if receipt["status"] == "available":
+        valid_semantics = (
+            receipt["exit_code"] == 0
+            and receipt["reason_code"] == "completed"
+            and receipt["primary_lane_id"] is None
+            and has_times
+        )
+    elif receipt["status"] == "fallback":
+        valid_semantics = (
+            receipt["exit_code"] == 0
+            and receipt["reason_code"] in {
+                "primary_unavailable", "primary_failed",
+            }
+            and receipt["primary_lane_id"] is not None
+            and has_times
+        )
+    elif receipt["status"] == "unavailable":
+        valid_semantics = (
+            receipt["exit_code"] in {None, 125, 126, 127}
+            and receipt["reason_code"] == "runtime_unavailable"
+            and has_times
+        )
+    elif receipt["status"] == "failed":
+        valid_semantics = has_times and (
+            (
+                receipt["reason_code"] == "nonzero_exit"
+                and type(receipt["exit_code"]) is int
+                and receipt["exit_code"] not in {0, 125, 126, 127}
+            )
+            or (
+                receipt["reason_code"] in evidence_failure_reasons
+                and receipt["exit_code"] == 0
+            )
+        )
+    else:
+        valid_semantics = (
+            receipt["exit_code"] is None
+            and receipt["reason_code"] in {
+                "primary_available", "earlier_fallback_available",
+            }
+            and receipt["primary_lane_id"] is not None
+            and receipt["started_at"] is None
+            and receipt["finished_at"] is None
+            and receipt["stdout"] == ""
+            and receipt["stderr"] == ""
+            and receipt["redacted_values"] == 0
+        )
+    if not valid_semantics:
+        _fail("invalid_lane_receipt")
+
+
+
+def _validate_lane_receipt_evidence(receipt):
+    for reference in _exact_list(
+        receipt["evidence_references"], field="evidence_references",
+    ):
+        if (
+            type(reference) is not str
+            or normalize_evidence_reference(reference) != reference
+        ):
+            _fail("invalid_lane_receipt")
+    observation_ids = _exact_list(
+        receipt["observation_ids"], field="observation_ids",
+    )
+    evidence_snapshot = _exact_list(
+        receipt["evidence_snapshot"], field="evidence_snapshot",
+    )
+    if (
+        any(
+            type(item) is not str or _IDENTIFIER.fullmatch(item) is None
+            for item in observation_ids
+        )
+        or len(observation_ids) != len(set(observation_ids))
+    ):
+        _fail("invalid_lane_receipt")
+    if receipt["status"] in {"available", "fallback"}:
+        if (
+            type(receipt["evidence_digest"]) is not str
+            or _DIGEST.fullmatch(receipt["evidence_digest"]) is None
+            or type(receipt["classified_observations_digest"]) is not str
+            or _DIGEST.fullmatch(
+                receipt["classified_observations_digest"],
+            ) is None
+        ):
+            _fail("invalid_lane_receipt")
+        try:
+            snapshot_bytes = json.dumps(
+                evidence_snapshot, allow_nan=False,
+            )
+            snapshot_round_trip = json.loads(snapshot_bytes)
+        except (TypeError, ValueError):
+            _fail("invalid_lane_receipt")
+        safe_snapshot, leaked = _redact_durable(evidence_snapshot)
+        if (
+            snapshot_round_trip != evidence_snapshot
+            or safe_snapshot != evidence_snapshot
+            or leaked
+        ):
+            _fail("invalid_lane_receipt")
+        snapshot_ids = []
+        for source_observation in evidence_snapshot:
+            if type(source_observation) is not dict:
+                _fail("invalid_lane_receipt")
+            snapshot_ids.append(_string(
+                source_observation.get("observation_id"),
+                field="observation_id", identifier=True,
+            ))
+        if snapshot_ids != observation_ids:
+            _fail("unbound_lane_evidence")
+        evidence_envelope = {
+            "schema_version": 1,
+            "lane_id": receipt["lane_id"],
+            "observations": evidence_snapshot,
+        }
+        if _canonical_digest(evidence_envelope) != receipt["evidence_digest"]:
+            _fail("unbound_lane_evidence")
+        return observation_ids
+    elif (
+        receipt["evidence_digest"] is not None
+        or receipt["classified_observations_digest"] is not None
+        or evidence_snapshot
+        or observation_ids
+    ):
+        _fail("invalid_lane_receipt")
+    return []
+
+
+def _validate_authoritative_receipts(
+    result, tool_by_lane, authoritative_observation_ids,
+):
     receipt_fields = frozenset({
         "lane_id", "status", "reason_code", "primary_lane_id", "argv_identity",
         "execution_policy_digest",
@@ -2055,189 +2625,11 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
     bound_observation_ids = []
     receipt_lane_ids = []
     for receipt in _exact_list(result["lane_receipts"], field="lane_receipts"):
-        _exact_object(receipt, receipt_fields, reason="invalid_lane_receipt")
-        if (
-            receipt["status"] not in EVIDENCE_STATUSES
-            or type(receipt["timeout_seconds"]) is not int
-            or receipt["timeout_seconds"] < 1
-            or type(receipt["redacted_values"]) is not int
-            or receipt["redacted_values"] < 0
-            or (
-                receipt["exit_code"] is not None
-                and type(receipt["exit_code"]) is not int
-            )
-        ):
-            _fail("invalid_lane_receipt")
-        _string(receipt["lane_id"], field="lane_id", identifier=True)
+        _validate_lane_receipt_metadata(receipt, receipt_fields, tool_by_lane)
         receipt_lane_ids.append(receipt["lane_id"])
-        _string(receipt["reason_code"], field="reason_code", identifier=True)
-        if receipt["primary_lane_id"] is not None:
-            _string(
-                receipt["primary_lane_id"], field="primary_lane_id", identifier=True,
-            )
-        if (
-            type(receipt["argv_identity"]) is not str
-            or _DIGEST.fullmatch(receipt["argv_identity"]) is None
-            or type(receipt["execution_policy_digest"]) is not str
-            or _DIGEST.fullmatch(receipt["execution_policy_digest"]) is None
-            or type(receipt["tool_identity"]) is not str
-            or not receipt["tool_identity"].startswith("docker:")
-            or _SEMVER.fullmatch(receipt["tool_identity"][7:]) is None
-            or type(receipt["plugin_version"]) is not str
-            or _SEMVER.fullmatch(receipt["plugin_version"]) is None
-            or type(receipt["stdout"]) is not str
-            or type(receipt["stderr"]) is not str
-            or contains_high_confidence_secret(receipt["stdout"])
-            or contains_high_confidence_secret(receipt["stderr"])
-        ):
-            _fail("invalid_lane_receipt")
-        declared_tool = tool_by_lane.get(receipt["lane_id"])
-        if declared_tool is None or any(
-            receipt[field] != declared_tool[field]
-            for field in (
-                "tool_identity", "image_identity", "service_identity",
-                "plugin_version", "execution_policy_digest",
-            )
-        ):
-            _fail("invalid_lane_receipt")
-        if (
-            receipt["status"] in {"fallback", "skipped"}
-            and receipt["primary_lane_id"] is None
-        ):
-            _fail("invalid_lane_receipt")
-        for field in ("started_at", "finished_at"):
-            if receipt[field] is not None:
-                normalize_durable_string(receipt[field])
-        has_times = (
-            receipt["started_at"] is not None
-            and receipt["finished_at"] is not None
+        bound_observation_ids.extend(
+            _validate_lane_receipt_evidence(receipt)
         )
-        evidence_failure_reasons = {
-            "missing_lane_evidence", "invalid_lane_evidence", "invalid_json",
-            "duplicate_json_key", "duplicate_id", "missing_field",
-            "unknown_key", "wrong_type", "invalid_identifier",
-            "invalid_collection_item",
-        }
-        if receipt["status"] == "available":
-            valid_semantics = (
-                receipt["exit_code"] == 0
-                and receipt["reason_code"] == "completed"
-                and receipt["primary_lane_id"] is None
-                and has_times
-            )
-        elif receipt["status"] == "fallback":
-            valid_semantics = (
-                receipt["exit_code"] == 0
-                and receipt["reason_code"] in {
-                    "primary_unavailable", "primary_failed",
-                }
-                and receipt["primary_lane_id"] is not None
-                and has_times
-            )
-        elif receipt["status"] == "unavailable":
-            valid_semantics = (
-                receipt["exit_code"] in {None, 125, 126, 127}
-                and receipt["reason_code"] == "runtime_unavailable"
-                and has_times
-            )
-        elif receipt["status"] == "failed":
-            valid_semantics = has_times and (
-                (
-                    receipt["reason_code"] == "nonzero_exit"
-                    and type(receipt["exit_code"]) is int
-                    and receipt["exit_code"] not in {0, 125, 126, 127}
-                )
-                or (
-                    receipt["reason_code"] in evidence_failure_reasons
-                    and receipt["exit_code"] == 0
-                )
-            )
-        else:
-            valid_semantics = (
-                receipt["exit_code"] is None
-                and receipt["reason_code"] in {
-                    "primary_available", "earlier_fallback_available",
-                }
-                and receipt["primary_lane_id"] is not None
-                and receipt["started_at"] is None
-                and receipt["finished_at"] is None
-                and receipt["stdout"] == ""
-                and receipt["stderr"] == ""
-                and receipt["redacted_values"] == 0
-            )
-        if not valid_semantics:
-            _fail("invalid_lane_receipt")
-        for reference in _exact_list(
-            receipt["evidence_references"], field="evidence_references",
-        ):
-            if (
-                type(reference) is not str
-                or normalize_evidence_reference(reference) != reference
-            ):
-                _fail("invalid_lane_receipt")
-        observation_ids = _exact_list(
-            receipt["observation_ids"], field="observation_ids",
-        )
-        evidence_snapshot = _exact_list(
-            receipt["evidence_snapshot"], field="evidence_snapshot",
-        )
-        if (
-            any(
-                type(item) is not str or _IDENTIFIER.fullmatch(item) is None
-                for item in observation_ids
-            )
-            or len(observation_ids) != len(set(observation_ids))
-        ):
-            _fail("invalid_lane_receipt")
-        if receipt["status"] in {"available", "fallback"}:
-            if (
-                type(receipt["evidence_digest"]) is not str
-                or _DIGEST.fullmatch(receipt["evidence_digest"]) is None
-                or type(receipt["classified_observations_digest"]) is not str
-                or _DIGEST.fullmatch(
-                    receipt["classified_observations_digest"],
-                ) is None
-            ):
-                _fail("invalid_lane_receipt")
-            try:
-                snapshot_bytes = json.dumps(
-                    evidence_snapshot, allow_nan=False,
-                )
-                snapshot_round_trip = json.loads(snapshot_bytes)
-            except (TypeError, ValueError):
-                _fail("invalid_lane_receipt")
-            safe_snapshot, leaked = _redact_durable(evidence_snapshot)
-            if (
-                snapshot_round_trip != evidence_snapshot
-                or safe_snapshot != evidence_snapshot
-                or leaked
-            ):
-                _fail("invalid_lane_receipt")
-            snapshot_ids = []
-            for source_observation in evidence_snapshot:
-                if type(source_observation) is not dict:
-                    _fail("invalid_lane_receipt")
-                snapshot_ids.append(_string(
-                    source_observation.get("observation_id"),
-                    field="observation_id", identifier=True,
-                ))
-            if snapshot_ids != observation_ids:
-                _fail("unbound_lane_evidence")
-            evidence_envelope = {
-                "schema_version": 1,
-                "lane_id": receipt["lane_id"],
-                "observations": evidence_snapshot,
-            }
-            if _canonical_digest(evidence_envelope) != receipt["evidence_digest"]:
-                _fail("unbound_lane_evidence")
-            bound_observation_ids.extend(observation_ids)
-        elif (
-            receipt["evidence_digest"] is not None
-            or receipt["classified_observations_digest"] is not None
-            or evidence_snapshot
-            or observation_ids
-        ):
-            _fail("invalid_lane_receipt")
     if len(receipt_lane_ids) != len(set(receipt_lane_ids)):
         _fail("invalid_lane_receipt")
     if (
@@ -2246,6 +2638,9 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
         or sorted(authoritative_observation_ids) != sorted(bound_observation_ids)
     ):
         _fail("unbound_lane_evidence")
+
+
+def _validate_authoritative_replay(result, embedded_profile):
     authoritative_by_id = {
         item["observation_id"]: item for item in result["observations"]
     }
@@ -2294,6 +2689,12 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
                 in zip(classified_projection, expected_projection, strict=True)
             ):
                 _fail("unbound_lane_evidence")
+
+
+
+def _validate_authoritative_invocation(
+    result, embedded_profile, embedded_policy,
+):
     invocation = _exact_object(
         result["invocation"],
         frozenset({
@@ -2333,20 +2734,26 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
         or not fallback_primary_ids.issubset(set(selected))
     ):
         _fail("invalid_invocation")
-    pulse_fields = frozenset({
-        "pulse_id", "completion_state", "requested_identities",
+    result_fields = frozenset({
+        "inspection_id", "completion_state", "requested_identities",
         "attempted_identities", "actual_identities", "coverage_gaps",
         "blockers",
     })
-    expected_pulse = _derive_pulse_state(
-        embedded_profile, result["lane_receipts"],
+    expected_result = _derive_result_state(
+        embedded_profile, embedded_policy, result["lane_receipts"],
         result["observations"], invocation,
     )
     if {
-        field: result[field] for field in pulse_fields
-    } != expected_pulse:
-        _fail("invalid_pulse_state")
+        field: result[field] for field in result_fields
+    } != expected_result:
+        _fail("invalid_result_state")
     _validate_lifecycle(result["publication_status"], result["trend_result"])
+
+
+
+def _validate_authoritative_integrity(
+    result, publication_authority_key,
+):
     baseline = result["trend_baseline"]
     if result["trend_result"]["status"] == "not_compared":
         if baseline is not None:
@@ -2381,6 +2788,32 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
         result, result["publication_attestation"],
         publication_authority_key,
     )
+
+
+
+def validate_authoritative_result(result, *, publication_authority_key=None):
+    """Validate one complete result through cohesive fail-fast validators."""
+    profile, embedded_profile, embedded_policy, compatibility = (
+        _validate_authoritative_structure(result)
+    )
+    tool_by_lane = _validate_authoritative_compatibility(
+        compatibility,
+        profile,
+        embedded_profile,
+    )
+    authoritative_observation_ids = _validate_authoritative_observations(result)
+    _validate_authoritative_receipts(
+        result,
+        tool_by_lane,
+        authoritative_observation_ids,
+    )
+    _validate_authoritative_replay(result, embedded_profile)
+    _validate_authoritative_invocation(
+        result,
+        embedded_profile,
+        embedded_policy,
+    )
+    _validate_authoritative_integrity(result, publication_authority_key)
     return result
 
 
@@ -2572,7 +3005,7 @@ def validate_published_outputs(
         _fail("publication_action_not_verified")
     root = _repository_root(repository_root)
     bundle = (
-        root / ".quality-pulse-publications" / current["pulse_id"]
+        root / ".inspection-publications" / current["inspection_id"]
         / current["publication_state_digest"].removeprefix("sha256:")
     )
     try:
@@ -2624,7 +3057,9 @@ def _compare_trend_values(current, baseline):
             "deltas": [],
         }
     mismatches = []
-    for field in ("profile", "metric_definitions", "tool_identities"):
+    for field in (
+        "profile", "result_policy", "metric_definitions", "tool_identities",
+    ):
         current_value = current["compatibility_identity"].get(field)
         baseline_value = baseline["compatibility_identity"].get(field)
         if current_value != baseline_value:
@@ -2690,19 +3125,63 @@ def render_markdown(result, *, publication_authority_key=None):
     )
     lines = [
         "# Inspection Result", "",
-        f"- Pulse: `{result['pulse_id']}`",
+        f"- Inspection: `{result['inspection_id']}`",
         f"- Completion: `{result['completion_state']}`",
         f"- Profile: `{result['profile']['profile_id']}` `{result['profile']['profile_version']}`",
         f"- Commit: `{result['repository']['commit']}`",
         f"- Dirty: `{str(result['repository']['dirty']).lower()}`",
         f"- Stable digest: `{result['stable_projection_digest']}`",
-        "", "## Observations", "",
+        "", "## Summary", "",
     ]
+    counts = {"actionable": 0, "informational": 0, "unknown": 0}
+    for item in result["observations"]:
+        if item["classification"] == "unknown":
+            counts["unknown"] += 1
+        elif item["actionable"]:
+            counts["actionable"] += 1
+        else:
+            counts["informational"] += 1
+    for label in ("actionable", "informational", "unknown"):
+        lines.append(f"- {label.title()}: **{counts[label]}**")
+    lines.extend(("", "## Observations", ""))
     for item in result["observations"]:
         lines.append(
             f"- `{item['observation_id']}`: **{item['classification']}** "
             f"({item['confidence']}; {item['evidence_status']}; {item['reason_code']})"
         )
+    lines.extend(("", "## Trend", ""))
+    trend = result["trend_result"]
+    lines.append(
+        f"- **{trend['status']}** (`{trend['reason_code']}`)"
+    )
+    for delta in trend["deltas"]:
+        lines.append(
+            f"- `{delta['observation_id']}`: {delta['baseline']} → "
+            f"{delta['current']} (Δ {delta['delta']})"
+        )
+    lines.extend(("", "## Coverage Gaps", ""))
+    if not result["coverage_gaps"]:
+        lines.append("- None.")
+    for gap in result["coverage_gaps"]:
+        lines.append(
+            f"- `{gap['lane_id']}`: **{gap['status']}** "
+            f"(`{gap['reason_code']}`)"
+        )
+    lines.extend(("", "## Blockers", ""))
+    if not result["blockers"]:
+        lines.append("- None.")
+    for blocker in result["blockers"]:
+        target = blocker["observation_id"] or blocker["lane_id"]
+        lines.append(
+            f"- `{target}`: **{blocker['blocker_type']}** "
+            f"(`{blocker['reason_code']}`)"
+        )
+    redaction = result["redaction"]
+    lines.extend((
+        "", "## Redaction", "",
+        f"- Applied: `{str(redaction['applied']).lower()}`",
+        f"- Redacted values: **{redaction['redacted_value_count']}**",
+    ))
     lines.extend(("", "## Lane receipts", ""))
     for receipt in result["lane_receipts"]:
         lines.append(
@@ -2714,13 +3193,9 @@ def render_markdown(result, *, publication_authority_key=None):
 
 __all__ = [
     "AUTHORITATIVE_SCHEMA_VERSION", "EVIDENCE_STATUSES", "FIXED_EXECUTION_ENV",
-    "InspectionError", "InspectionProfile", "PROFILE_SCHEMA_VERSION", "SubprocessAdapter",
-    "authoritative_bytes", "build_authoritative_result", "classify_observations",
-    "compare_trends", "decode_json_bytes", "execute_inspection_lanes",
-    "finalize_authoritative_result",
-    "load_host_attestation", "load_inspection_profile",
-    "load_host_publication_authority_key", "normalize_owned_path",
-    "render_markdown", "stable_projection", "validate_authoritative_result",
-    "validate_published_outputs",
-    "validate_host_attestation", "validate_inspection_profile",
+    "InspectionError", "InspectionProfile", "InspectionResultPolicy",
+    "PROFILE_SCHEMA_VERSION", "authoritative_bytes", "compare_trends",
+    "finalize_authoritative_result", "load_inspection_profile",
+    "load_result_policy", "render_markdown", "validate_authoritative_result",
+    "validate_inspection_profile", "validate_result_policy",
 ]

@@ -37,7 +37,7 @@ mismatched attestation fails before subprocess invocation.
 
 Publication transitions use a second host-derived authority: an HMAC key
 loaded only from the fixed OS-account path
-`~/.config/design-machines/quality-pulse/publication-authority.key`. The
+`~/.config/design-machines/workflow-kernel/inspection-publication-authority.key`. The
 account home comes from the OS account database, not `$HOME`; there is no
 profile, environment, or CLI key-path override. The key file must be a
 single-link regular file owned by the current user with no group/world
@@ -60,7 +60,7 @@ identity-changing profile destinations fail closed. The published authority is
 the host-keyed JSON envelope, not any pathname: the kernel creates the exact
 signed JSON and derived Markdown read-only from birth inside an unguessable
 staging directory and atomically promotes that directory to a
-content-addressed path under `.quality-pulse-publications/`. Validation derives
+content-addressed path under `.inspection-publications/`. Validation derives
 that path from the pulse ID and signed publication-state digest, then
 revalidates the HMAC and exact Markdown. The profile JSON and Markdown are
 replaceable views, so a descriptor opened against an older view cannot mutate
@@ -90,11 +90,11 @@ schema v1. Compose is rejected because its external service configuration is
 not bound by the profile attestation. Profiles cannot supply mounts. The
 kernel synthesizes a fixed read-only mount
 of the attested checkout at `/workspace` and a fresh empty read-write evidence
-mount at `/quality-pulse-evidence`; direct Docker lanes also run with networking
+mount at `/inspection-evidence`; direct Docker lanes also run with networking
 disabled and a read-only container filesystem, and all lanes run as the host
 operator's numeric user/group identity. The lane must write one
 schema-1 envelope containing its exact lane ID and observations to
-`/quality-pulse-evidence/observations.json`.
+`/inspection-evidence/observations.json`.
 
 The kernel invokes no shell, accepts no mutable `latest` identity, inherits no
 arbitrary environment values, and opens the fresh envelope with `O_NOFOLLOW`.

@@ -368,6 +368,7 @@ require_text "$quality_pulse_skill" '"actionability": "actionable"' "quality-pul
 require_text "$quality_pulse_skill" "A quality pulse is **not a merge recommendation**" "quality-pulse is separate from merge review"
 require_before "$quality_pulse_skill" "### 2. Complete preflight" "### 4. Run requested primary lanes and consume fallback receipts" "quality-pulse validates before lane execution"
 require_before "$quality_pulse_skill" "emit authoritative JSON" "render Markdown digest" "quality-pulse publishes JSON before Markdown"
+require_before "$quality_pulse_skill" "bind compatible trend or baseline discontinuity" "render Markdown digest" "quality-pulse binds trend before Markdown rendering"
 
 require_text "$quality_pulse_profile" "default: .dm-review/quality-pulse.json" "profile contract defines default discovery"
 require_text "$quality_pulse_profile" "untrusted PR profile: validate and report, never execute lanes" "profile contract blocks untrusted execution"

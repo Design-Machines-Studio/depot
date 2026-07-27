@@ -38,6 +38,9 @@ For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name rem
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.4.0 >/dev/null || {
+  echo "airlift-openrouter: kernel-incompatible" >&2; exit 1;
+}
 BUNDLE_DIR="${BUNDLE_DIR:-.airlift}"
 ACTIVE_HOST=""
 [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
@@ -73,10 +76,13 @@ SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
 trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
 RESUME_SNAPSHOT="$SNAPSHOT_DIR/RESUME_PROMPT.md"
 HANDOFF_SNAPSHOT="$SNAPSHOT_DIR/HANDOFF.md"
-cp "$RESUME_FILE" "$RESUME_SNAPSHOT" && cp "$HANDOFF_FILE" "$HANDOFF_SNAPSHOT" || {
+"$WORKFLOW_KERNEL" snapshot-files \
+  --source-root "$BUNDLE_DIR" \
+  --destination-root "$SNAPSHOT_DIR" \
+  --name RESUME_PROMPT.md \
+  --name HANDOFF.md >/dev/null || {
   echo "airlift-openrouter: snapshot-invalid" >&2; exit 2;
 }
-chmod 600 "$RESUME_SNAPSHOT" "$HANDOFF_SNAPSHOT"
 if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
     --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"; then
   :

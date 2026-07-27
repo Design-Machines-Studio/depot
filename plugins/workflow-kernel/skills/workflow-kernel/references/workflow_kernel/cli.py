@@ -22,7 +22,7 @@ from .inspection import InspectionError
 from .repository_scope import repository_scope as _repository_scope
 from .runtime_resolution import (
     KERNEL_VERSION_FLOOR, compatible_kernel_version,
-    resolve_plugin_bundle, resolve_workflow_kernel_runtime,
+    resolve_plugin_bundle, resolve_workflow_kernel_runtime, semantic_version,
 )
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
@@ -364,196 +364,6 @@ def _write_text(path, value):
         directory.replace(temporary, binding.path.name)
         owned.disown_temporary()
         directory.fsync()
-
-
-def _publication_output_guard(repository_root, authoritative_path, markdown_path):
-    root = Path(repository_root).resolve(strict=True)
-    authoritative_path = Path(authoritative_path)
-    markdown_path = Path(markdown_path)
-    if (
-        authoritative_path == markdown_path
-        or authoritative_path.resolve(strict=False)
-        == markdown_path.resolve(strict=False)
-    ):
-        raise InspectionError("invalid_publication_outputs")
-    for destination in (authoritative_path, markdown_path):
-        if (
-            not destination.resolve(strict=False).is_relative_to(root)
-            or any(
-                item.is_symlink()
-                for item in (destination, *destination.parents)
-            )
-        ):
-            raise InspectionError("invalid_publication_outputs")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-    parent_identities = {}
-    for path in (authoritative_path, markdown_path):
-        entry = os.stat(path.parent, follow_symlinks=False)
-        parent_identities[path.parent] = (entry.st_dev, entry.st_ino)
-
-    def revalidate():
-        for parent, identity in parent_identities.items():
-            current = os.stat(parent, follow_symlinks=False)
-            if (
-                not stat.S_ISDIR(current.st_mode)
-                or (current.st_dev, current.st_ino) != identity
-            ):
-                raise InspectionError("publication_outputs_changed")
-        for destination in (authoritative_path, markdown_path):
-            try:
-                entry = os.stat(destination, follow_symlinks=False)
-            except FileNotFoundError:
-                continue
-            if not stat.S_ISREG(entry.st_mode):
-                raise InspectionError("invalid_publication_outputs")
-        if authoritative_path.exists() and markdown_path.exists():
-            if os.path.samefile(authoritative_path, markdown_path):
-                raise InspectionError("invalid_publication_outputs")
-
-    revalidate()
-    return revalidate
-
-
-def _write_publication_snapshot_file(path, encoded):
-    destination = Path(path)
-    descriptor = None
-    created_identity = None
-    try:
-        descriptor = os.open(
-            destination,
-            os.O_CREAT | os.O_EXCL | os.O_WRONLY
-            | getattr(os, "O_NOFOLLOW", 0),
-            0o400,
-        )
-        opened = os.fstat(descriptor)
-        created_identity = (opened.st_dev, opened.st_ino)
-        pending = encoded
-        while pending:
-            count = os.write(descriptor, pending)
-            if count <= 0:
-                raise OSError("publication snapshot write made no progress")
-            pending = pending[count:]
-        os.fsync(descriptor)
-        opened = os.fstat(descriptor)
-        entry = os.stat(destination, follow_symlinks=False)
-        if (
-            not stat.S_ISREG(opened.st_mode)
-            or opened.st_nlink != 1
-            or stat.S_IMODE(opened.st_mode) != 0o400
-            or opened.st_size != len(encoded)
-            or created_identity != (entry.st_dev, entry.st_ino)
-        ):
-            raise InspectionError("publication_action_not_verified")
-    except BaseException:
-        if descriptor is not None:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-            descriptor = None
-        if created_identity is not None:
-            try:
-                entry = os.stat(destination, follow_symlinks=False)
-                if (
-                    stat.S_ISREG(entry.st_mode)
-                    and (entry.st_dev, entry.st_ino) == created_identity
-                ):
-                    destination.unlink()
-            except OSError:
-                pass
-        raise
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-
-
-def _fsync_directory(path):
-    descriptor = os.open(
-        path,
-        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_NOFOLLOW", 0),
-    )
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
-
-
-def _discard_publication_stage(path):
-    stage = Path(path)
-    try:
-        os.chmod(stage, 0o700)
-    except OSError:
-        return
-    for name in ("authoritative.json", "report.md"):
-        try:
-            (stage / name).unlink()
-        except FileNotFoundError:
-            pass
-    stage.rmdir()
-
-
-def _commit_publication_snapshot(
-    repository_root, published, markdown, publication_key,
-):
-    from .inspection import authoritative_bytes
-
-    root = Path(repository_root).resolve(strict=True)
-    publications = root / ".quality-pulse-publications"
-    pulse_root = publications / published["pulse_id"]
-    for directory in (publications, pulse_root):
-        created = False
-        try:
-            directory.mkdir(mode=0o700)
-            created = True
-        except FileExistsError:
-            pass
-        entry = os.stat(directory, follow_symlinks=False)
-        if (
-            not stat.S_ISDIR(entry.st_mode)
-            or directory.is_symlink()
-            or (
-                hasattr(os, "getuid")
-                and entry.st_uid != os.getuid()
-            )
-            or stat.S_IMODE(entry.st_mode) & 0o022
-        ):
-            raise InspectionError("invalid_publication_outputs") from None
-        if created:
-            _fsync_directory(directory.parent)
-    digest = published["publication_state_digest"].removeprefix("sha256:")
-    destination = pulse_root / digest
-    stage = Path(tempfile.mkdtemp(prefix=".staging-", dir=pulse_root))
-    os.chmod(stage, 0o700)
-    try:
-        _write_publication_snapshot_file(
-            stage / "authoritative.json",
-            authoritative_bytes(
-                published, publication_authority_key=publication_key,
-            ),
-        )
-        _write_publication_snapshot_file(
-            stage / "report.md", markdown.encode("utf-8"),
-        )
-        os.chmod(stage, 0o500)
-        _fsync_directory(stage)
-        try:
-            os.rename(stage, destination)
-        except OSError:
-            _discard_publication_stage(stage)
-            if not destination.is_dir() or destination.is_symlink():
-                raise InspectionError(
-                    "publication_action_not_verified",
-                ) from None
-        _fsync_directory(pulse_root)
-    except BaseException:
-        if stage.exists():
-            try:
-                _discard_publication_stage(stage)
-            except OSError:
-                pass
-        raise
-    return destination
 
 
 def _write_json_once(path, value):
@@ -2909,15 +2719,57 @@ def _inspection_json(path):
 
 
 def command_inspection_validate(args):
-    from .inspection import load_inspection_profile
+    from .inspection import load_inspection_profile, load_result_policy
 
     profile = load_inspection_profile(args.profile, args.repository_root)
+    result_policy = load_result_policy(args.result_policy)
     _emit({
         "schema_version": 1, "status": "validated",
         "profile_id": profile.document["profile_id"],
         "profile_version": profile.document["profile_version"],
         "profile_path": profile.profile_path,
         "profile_digest": profile.digest,
+        "result_policy_id": result_policy.document["policy_id"],
+        "result_policy_version": result_policy.document["policy_version"],
+        "result_policy_digest": result_policy.digest,
+    })
+    return 0
+
+
+def command_snapshot_files(args):
+    from .inspection import snapshot_regular_files
+
+    _emit({
+        "schema_version": 1,
+        "status": "snapshotted",
+        "files": snapshot_regular_files(
+            args.source_root,
+            args.destination_root,
+            args.name,
+        ),
+    })
+    return 0
+
+
+def command_kernel_info(args):
+    version = ".".join(str(item) for item in KERNEL_VERSION_FLOOR)
+    requested = (
+        semantic_version(args.minimum_version)
+        if args.minimum_version
+        else KERNEL_VERSION_FLOOR
+    )
+    if (
+        requested is None
+        or requested[0] != KERNEL_VERSION_FLOOR[0]
+        or KERNEL_VERSION_FLOOR < requested
+    ):
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "kernel_version_incompatible",
+        })
+    _emit({
+        "schema_version": 1,
+        "kernel_version": version,
+        "status": "compatible",
     })
     return 0
 
@@ -2962,66 +2814,12 @@ def command_inspection_finalize(args):
 
 
 def command_inspection_publish(args):
-    from .inspection import (
-        finalize_authoritative_result, load_host_publication_authority_key,
-        normalize_owned_path, render_markdown, validate_authoritative_result,
-        validate_published_outputs,
-    )
+    from .publication import publish_authoritative_result
 
-    publication_key = load_host_publication_authority_key(args.repository_root)
-    current = validate_authoritative_result(
+    _emit(publish_authoritative_result(
         _inspection_json(args.input),
-        publication_authority_key=publication_key,
-    )
-    if current["publication_status"] != "authoritative_json_ready":
-        raise InspectionError("invalid_publication_transition")
-    outputs = current["profile_snapshot"]["outputs"]
-    repository_root = Path(args.repository_root).resolve(strict=True)
-    markdown_path = repository_root / normalize_owned_path(
-        args.repository_root, outputs["markdown"],
-    )
-    authoritative_path = repository_root / normalize_owned_path(
-        args.repository_root, outputs["authoritative_json"],
-    )
-    revalidate_outputs = _publication_output_guard(
-        repository_root, authoritative_path, markdown_path,
-    )
-    markdown = render_markdown(
-        current, publication_authority_key=publication_key,
-    )
-    _write_json(authoritative_path, current)
-    revalidate_outputs()
-    _write_text(markdown_path, markdown)
-    revalidate_outputs()
-    rendered = finalize_authoritative_result(
-        current, publication_status="markdown_rendered",
-        publication_authority_key=publication_key,
-        publication_repository_root=args.repository_root,
-    )
-    _write_json(authoritative_path, rendered)
-    revalidate_outputs()
-    published = finalize_authoritative_result(
-        rendered, publication_status="published",
-        publication_authority_key=publication_key,
-        publication_repository_root=args.repository_root,
-    )
-    try:
-        _commit_publication_snapshot(
-            repository_root, published, markdown, publication_key,
-        )
-        validate_published_outputs(
-            published, repository_root,
-            publication_authority_key=publication_key,
-        )
-        _write_text(markdown_path, markdown)
-        revalidate_outputs()
-        _write_json(authoritative_path, published)
-        revalidate_outputs()
-        _emit(published)
-    except BaseException as error:
-        if isinstance(error, InspectionError):
-            raise
-        raise InspectionError("publication_action_not_verified") from None
+        args.repository_root,
+    ))
     return 0
 
 
@@ -3040,11 +2838,12 @@ def command_inspection_run(args):
     from .inspection import (
         build_authoritative_result, execute_inspection_lanes,
         load_host_attestation, load_inspection_profile,
-        load_host_publication_authority_key,
+        load_host_publication_authority_key, load_result_policy,
     )
 
     started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     profile = load_inspection_profile(args.profile, args.repository_root)
+    result_policy = load_result_policy(args.result_policy)
     attestation = load_host_attestation(args.attestation, profile.repository_root)
     publication_key = load_host_publication_authority_key(
         profile.repository_root,
@@ -3059,7 +2858,8 @@ def command_inspection_run(args):
     )
     finished_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     _emit(build_authoritative_result(
-        profile, source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
+        profile, result_policy,
+        source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
         observations=observations, lane_receipts=receipts,
         invocation={
             "started_at": started_at, "finished_at": finished_at,
@@ -3272,6 +3072,30 @@ def parser():
     reconcile.add_argument("--output", required=True)
     reconcile.set_defaults(handler=command_plan_reconcile)
 
+    snapshot_files = commands.add_parser(
+        "snapshot-files",
+        help="copy owned regular files without following links",
+        description=(
+            "Read source files descriptor-relatively with no-follow identity "
+            "checks and create private destination files with exact bytes."
+        ),
+    )
+    snapshot_files.add_argument("--source-root", required=True)
+    snapshot_files.add_argument("--destination-root", required=True)
+    snapshot_files.add_argument("--name", action="append", required=True)
+    snapshot_files.set_defaults(handler=command_snapshot_files)
+
+    kernel_info = commands.add_parser(
+        "kernel-info",
+        help="report and validate the workflow-kernel runtime version",
+        description=(
+            "Emit the runtime version and fail non-zero when it is incompatible "
+            "with an optional semantic-version floor."
+        ),
+    )
+    kernel_info.add_argument("--minimum-version")
+    kernel_info.set_defaults(handler=command_kernel_info)
+
     inspection_validate = commands.add_parser(
         "inspection-validate",
         help="validate a complete inspection profile and emit its canonical digest",
@@ -3282,6 +3106,7 @@ def parser():
     )
     inspection_validate.add_argument("--repository-root", required=True)
     inspection_validate.add_argument("--profile", required=True)
+    inspection_validate.add_argument("--result-policy", required=True)
     inspection_validate.set_defaults(handler=command_inspection_validate)
 
     inspection_classify = commands.add_parser(
@@ -3373,6 +3198,11 @@ def parser():
     )
     inspection_run.add_argument("--repository-root", required=True)
     inspection_run.add_argument("--profile", required=True)
+    inspection_run.add_argument(
+        "--result-policy",
+        required=True,
+        help="trusted workflow-owned result-policy JSON",
+    )
     inspection_run.add_argument(
         "--lane-id", action="append", required=True,
         help="declared primary lane ID; repeat for multiple lanes",

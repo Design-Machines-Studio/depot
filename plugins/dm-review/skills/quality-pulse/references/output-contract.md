@@ -10,13 +10,15 @@ classification or trend comparison.
 
 The JSON artifact records at least:
 
-- `schema_version`, `pulse_id`, invocation time, `completion_state`, and stable
+- `schema_version`, `inspection_id`, invocation time, `completion_state`, and stable
   projection digest;
 - canonical repository root identity, verified ref/source, commit, and dirty
   state;
 - profile path, schema version, profile version, and canonical validated
   profile digest, plus the normalized profile snapshot needed to replay
   classification without repository I/O;
+- dm-review result-policy ID, semantic version, canonical digest, and immutable
+  snapshot, bound separately from the repository profile;
 - catalog ID, schema version, catalog version, computed content digest, and
   selected rule/metric IDs;
 - dm-review, workflow-kernel, catalog-plugin, tool, service, and immutable image
@@ -70,7 +72,7 @@ pulse.
 ## Publication Order
 
 1. load the host-owned publication authority key from the fixed OS-account
-   path `~/.config/design-machines/quality-pulse/publication-authority.key`,
+   path `~/.config/design-machines/workflow-kernel/inspection-publication-authority.key`,
    with no profile, environment, or CLI path override;
 2. build the ready JSON, validate its complete schema and redaction outcome,
    and embed an HMAC attestation before serialization;
@@ -86,7 +88,7 @@ pulse.
    emitting the published envelope, the kernel creates `authoritative.json`
    and `report.md` read-only from birth in an unguessable staging directory,
    then atomically promotes that directory to
-   `.quality-pulse-publications/<pulse-id>/<publication-state-digest>/`.
+   `.inspection-publications/<inspection-id>/<publication-state-digest>/`.
    Validation follows this content-addressed, read-only snapshot and
    revalidates its keyed JSON envelope plus exact derived Markdown. The
    profile-declared JSON and Markdown are replaceable reader views and never
@@ -98,7 +100,7 @@ Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an
 operational envelope excluded from the content stable projection and rendered
 Markdown; `publication_state_digest` binds the operational status to the
-content digest without making publication transitions stale the Markdown.
+content digest without making the Markdown stale when publication status changes.
 Every serialized state, including initial readiness, embeds a matching
 host-keyed transition attestation. The HMAC covers the pulse, exact content and
 state digests, prior and target states, completed host action, authorization

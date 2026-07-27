@@ -75,17 +75,29 @@
         "schema_version": {"const": 1},
         "required_identity_fields": {
           "type": "array",
-          "minItems": 3,
-          "maxItems": 3,
+          "minItems": 4,
+          "maxItems": 4,
           "uniqueItems": true,
           "items": {
-            "enum": ["profile", "metric_definitions", "tool_identities"]
+            "enum": [
+              "profile",
+              "result_policy",
+              "metric_definitions",
+              "tool_identities"
+            ]
           }
         }
       }
     }
   },
   "$defs": {
+    "evidence_statuses": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": ["available", "unavailable", "failed", "fallback", "skipped"]
+      }
+    },
     "id": {
       "type": "string",
       "minLength": 1,

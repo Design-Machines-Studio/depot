@@ -31,6 +31,7 @@ from workflow_kernel.inspection import (
     stable_projection,
     validate_authoritative_result,
     validate_inspection_profile,
+    validate_result_policy,
 )
 
 
@@ -47,6 +48,12 @@ _build_authoritative_result = build_authoritative_result
 
 def build_authoritative_result(*args, **kwargs):
     kwargs.setdefault("publication_authority_key", PUBLICATION_KEY)
+    if len(args) < 2 and "result_policy" not in kwargs:
+        from tests.test_quality_pulse_kernel import result_policy_document
+
+        kwargs["result_policy"] = validate_result_policy(
+            result_policy_document(),
+        )
     return _build_authoritative_result(*args, **kwargs)
 
 
@@ -97,7 +104,7 @@ class FakeAdapter:
             mount = next(
                 item for item in argv
                 if item.startswith("type=bind,source=")
-                and item.endswith(",target=/quality-pulse-evidence")
+                and item.endswith(",target=/inspection-evidence")
             )
             evidence_root = mount.split(",target=", 1)[0].split("source=", 1)[1]
             lane_id = (

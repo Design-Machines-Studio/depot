@@ -69,6 +69,9 @@ For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name rem
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
+"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.4.0 >/dev/null || {
+  echo "airlift-openrouter: kernel-incompatible" >&2; exit 1;
+}
 BUNDLE_DIR="${BUNDLE_DIR:-.airlift}"
 ACTIVE_HOST=""
 [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
@@ -104,10 +107,13 @@ SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
 trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
 RESUME_SNAPSHOT="$SNAPSHOT_DIR/RESUME_PROMPT.md"
 HANDOFF_SNAPSHOT="$SNAPSHOT_DIR/HANDOFF.md"
-cp "$RESUME_FILE" "$RESUME_SNAPSHOT" && cp "$HANDOFF_FILE" "$HANDOFF_SNAPSHOT" || {
+"$WORKFLOW_KERNEL" snapshot-files \
+  --source-root "$BUNDLE_DIR" \
+  --destination-root "$SNAPSHOT_DIR" \
+  --name RESUME_PROMPT.md \
+  --name HANDOFF.md >/dev/null || {
   echo "airlift-openrouter: snapshot-invalid" >&2; exit 2;
 }
-chmod 600 "$RESUME_SNAPSHOT" "$HANDOFF_SNAPSHOT"
 if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
     --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"; then
   :
@@ -121,8 +127,12 @@ OPENROUTER_SYSTEM="$(cat "$RESUME_SNAPSHOT")" \
   bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
 ```
 
-Private snapshots make the screened bytes exactly the bytes passed to the
-wrapper if the source bundle changes concurrently. The boundary call is the
-final action before wrapper invocation. A decline, malformed boundary, missing
-coherent bundle, or snapshot failure stops before wrapper/network contact and
-remains a distinct receipt outcome.
+The trusted workflow-kernel snapshot command opens each bundle file
+descriptor-relatively with no-follow semantics, accepts only a stable,
+single-link regular file owned by the current account, and creates each private
+snapshot with mode `0600`. This makes the screened bytes exactly the bytes
+passed to the wrapper without allowing a bundle symlink or concurrent pathname
+swap to redirect disclosure. The boundary call is the final action before
+wrapper invocation. A decline, malformed boundary, missing coherent bundle, or
+snapshot failure stops before wrapper/network contact and remains a distinct
+receipt outcome.

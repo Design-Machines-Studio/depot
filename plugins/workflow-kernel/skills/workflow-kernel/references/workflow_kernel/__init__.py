@@ -3,13 +3,13 @@
 from .events import EventStore, MAX_LEDGER_BYTES, MAX_RECORD_BYTES
 from .inspection import (
     AUTHORITATIVE_SCHEMA_VERSION, EVIDENCE_STATUSES, FIXED_EXECUTION_ENV,
-    PROFILE_SCHEMA_VERSION, InspectionError, InspectionProfile, SubprocessAdapter,
-    authoritative_bytes, build_authoritative_result, classify_observations,
-    compare_trends, execute_inspection_lanes, load_host_attestation,
-    finalize_authoritative_result, load_inspection_profile,
-    normalize_owned_path, render_markdown,
-    stable_projection, validate_authoritative_result,
-    validate_host_attestation, validate_inspection_profile,
+    PROFILE_SCHEMA_VERSION, InspectionError, InspectionProfile,
+    InspectionResultPolicy,
+    authoritative_bytes, compare_trends,
+    finalize_authoritative_result, load_inspection_profile, load_result_policy,
+    render_markdown,
+    validate_authoritative_result, validate_inspection_profile,
+    validate_result_policy,
 )
 from .redaction import (
     MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
@@ -47,12 +47,11 @@ __all__ = [
     "MAX_RECORD_BYTES", "MAX_LEDGER_BYTES", "MAX_STATE_BYTES",
     "PROFILE_SCHEMA_VERSION", "AUTHORITATIVE_SCHEMA_VERSION",
     "EVIDENCE_STATUSES", "FIXED_EXECUTION_ENV", "InspectionProfile",
-    "InspectionError", "SubprocessAdapter", "validate_inspection_profile",
-    "load_inspection_profile", "normalize_owned_path",
-    "validate_host_attestation", "load_host_attestation",
-    "execute_inspection_lanes", "classify_observations",
-    "build_authoritative_result", "validate_authoritative_result",
-    "authoritative_bytes", "stable_projection", "compare_trends",
+    "InspectionResultPolicy",
+    "InspectionError", "validate_inspection_profile",
+    "load_inspection_profile", "validate_result_policy", "load_result_policy",
+    "validate_authoritative_result",
+    "authoritative_bytes", "compare_trends",
     "finalize_authoritative_result",
     "render_markdown",
 ]
