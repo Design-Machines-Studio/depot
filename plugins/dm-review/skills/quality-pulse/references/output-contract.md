@@ -81,7 +81,9 @@ pulse.
    the keyed attestation and cannot be requested through generic finalize.
    The two destinations must remain physically distinct, and both exact final
    files are revalidated before the published envelope is emitted. A
-   post-replacement mismatch durably restores the rendered-state JSON.
+   post-replacement mismatch durably restores the rendered-state JSON. The
+   final validation and emission occur while both files and parent directories
+   are host-sealed against writes.
 
 Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an

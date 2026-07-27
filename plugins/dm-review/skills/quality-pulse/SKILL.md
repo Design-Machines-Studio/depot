@@ -254,7 +254,9 @@ non-aliased regular-file paths whose parent identities remain stable for the
 full transaction. Both final files are revalidated immediately before
 emission, including a second Markdown check after JSON. Any mismatch after the
 published replacement restores the exact rendered-state JSON before the
-command fails. A caller cannot request either transition directly.
+command fails. Both output files and their parent directories are temporarily
+sealed read-only across final validation and emission, then their original
+modes are restored. A caller cannot request either transition directly.
 
 ### 7. Compare a compatible baseline
 

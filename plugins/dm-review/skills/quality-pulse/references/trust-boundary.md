@@ -60,6 +60,9 @@ identity-changing destinations fail closed, and both final outputs revalidate
 immediately before emission, with Markdown checked again after JSON. If any
 post-replacement check fails, the exact rendered-state JSON is durably restored
 before the command returns an error; no durable false published claim is left.
+Both outputs and their parent directories are temporarily made read-only for
+the final validation-and-emission interval, preventing either pathname from
+being replaced between the pair checks and the success boundary.
 
 ## Untrusted Pull Requests
 

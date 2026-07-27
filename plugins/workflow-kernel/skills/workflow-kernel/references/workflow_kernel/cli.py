@@ -413,6 +413,37 @@ def _publication_output_guard(repository_root, authoritative_path, markdown_path
     return revalidate
 
 
+def _seal_publication_outputs(authoritative_path, markdown_path):
+    paths = (Path(authoritative_path), Path(markdown_path))
+    original_modes = {}
+    try:
+        for path in paths:
+            entry = os.stat(path, follow_symlinks=False)
+            if not stat.S_ISREG(entry.st_mode):
+                raise InspectionError("invalid_publication_outputs")
+            original_modes[path] = stat.S_IMODE(entry.st_mode)
+            os.chmod(path, original_modes[path] & ~0o222)
+        for parent in dict.fromkeys(path.parent for path in paths):
+            entry = os.stat(parent, follow_symlinks=False)
+            if not stat.S_ISDIR(entry.st_mode):
+                raise InspectionError("invalid_publication_outputs")
+            original_modes[parent] = stat.S_IMODE(entry.st_mode)
+            os.chmod(parent, original_modes[parent] & ~0o222)
+    except BaseException:
+        for path, mode in reversed(tuple(original_modes.items())):
+            try:
+                os.chmod(path, mode)
+            except OSError:
+                pass
+        raise
+
+    def restore():
+        for path, mode in reversed(tuple(original_modes.items())):
+            os.chmod(path, mode)
+
+    return restore
+
+
 def _write_json_once(path, value):
     """Atomically claim an immutable artifact pathname without replacement."""
     destination = Path(path)
@@ -2862,19 +2893,28 @@ def command_inspection_publish(args):
         publication_authority_key=publication_key,
         publication_repository_root=args.repository_root,
     )
+    restore_seal = None
     try:
         _write_json(authoritative_path, published)
         revalidate_outputs()
+        restore_seal = _seal_publication_outputs(
+            authoritative_path, markdown_path,
+        )
         validate_published_outputs(
             published, repository_root,
             publication_authority_key=publication_key,
         )
         revalidate_outputs()
-    except BaseException:
+        _emit(published)
+    except BaseException as error:
+        if restore_seal is not None:
+            restore_seal()
         _write_json(authoritative_path, rendered)
         revalidate_outputs()
-        raise
-    _emit(published)
+        if isinstance(error, InspectionError):
+            raise
+        raise InspectionError("publication_action_not_verified") from None
+    restore_seal()
     return 0
 
 

@@ -1432,6 +1432,9 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
             write_count = 0
             original_write_json = kernel_cli._write_json
+            original_verify_output = (
+                inspection_module._verify_exact_publication_output
+            )
 
             def corrupt_after_rendered_json(path, value):
                 nonlocal write_count
@@ -1464,6 +1467,42 @@ class QualityPulseKernelTests(unittest.TestCase):
                     "publication_action_not_verified",
                 )
             self.assertEqual(emitted, [])
+            self.assertEqual(
+                json.loads(authoritative_path.read_text())[
+                    "publication_status"
+                ],
+                "markdown_rendered",
+            )
+
+            verify_count = 0
+
+            def corrupt_json_after_final_comparison(*args):
+                nonlocal verify_count
+                original_verify_output(*args)
+                verify_count += 1
+                if verify_count == 5:
+                    authoritative_path.write_text('{"stale":true}\n')
+
+            with (
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_host_publication_authority_key_path",
+                    return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_verify_exact_publication_output",
+                    side_effect=corrupt_json_after_final_comparison,
+                ),
+                mock.patch("workflow_kernel.cli._emit"),
+            ):
+                self.assert_reason(
+                    lambda: command_inspection_publish(SimpleNamespace(
+                        repository_root=str(repository),
+                        input=str(source),
+                    )),
+                    "publication_action_not_verified",
+                )
             self.assertEqual(
                 json.loads(authoritative_path.read_text())[
                     "publication_status"
@@ -1507,10 +1546,6 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
 
             verify_count = 0
-            original_verify_output = (
-                inspection_module._verify_exact_publication_output
-            )
-
             def corrupt_between_final_pair_checks(*args):
                 nonlocal verify_count
                 original_verify_output(*args)

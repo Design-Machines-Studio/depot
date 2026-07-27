@@ -436,6 +436,8 @@ binding. `inspection-render` is a preview. Only `inspection-publish` may mint
 byte-exact verification of distinct, non-aliased profile-declared outputs.
 Their parent and file identities remain guarded through final revalidation;
 post-replacement failure restores the rendered-state JSON before returning.
+The host seals both files and their parents read-only across final validation
+and success emission.
 
 Successful commands emit canonical JSON except `inspection-render`, which emits
 Markdown. Validation, trust, compatibility, or resolution failures emit stable
