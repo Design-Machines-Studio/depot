@@ -945,9 +945,12 @@ class HostCapabilityTests(unittest.TestCase):
     def test_openrouter_roles_reject_native_vendor_primary_or_fallback_models(self):
         for kind, models in (
             ("wrapper", ["openai/gpt-5", "z-ai/glm-5.2"]),
+            ("wrapper", ["OpenAI/gpt-5", "z-ai/glm-5.2"]),
             ("wrapper", ["z-ai/glm-5.2", "anthropic/claude-opus"]),
+            ("wrapper", ["z-ai/glm-5.2", "Anthropic/claude-opus"]),
             ("openrouter_exec", ["anthropic/claude-opus"]),
             ("openrouter_exec", ["z-ai/glm-5.2", "openai/gpt-5"]),
+            ("openrouter_exec", ["z-ai/glm-5.2", "OpenAI/gpt-5"]),
         ):
             payload = {"hosts": {"generic": {"roles": {"external": {
                 "kind": kind, "probe": "openrouter", "models": models,

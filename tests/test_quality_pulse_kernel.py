@@ -754,6 +754,22 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "unbound_lane_evidence",
             )
 
+            forged_baseline = copy.deepcopy(authoritative)
+            replacement_digest = "sha256:" + "f" * 64
+            forged_baseline["profile"]["profile_digest"] = replacement_digest
+            forged_baseline["compatibility_identity"]["profile"][
+                "profile_digest"
+            ] = replacement_digest
+            forged_baseline["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(forged_baseline))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: compare_trends(authoritative, forged_baseline),
+                "invalid_authoritative_profile",
+            )
+
     def test_oserror_receipt_and_later_fallback_skip_are_structured(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -255,8 +255,10 @@ class QualityPulseContract(unittest.TestCase):
             })
         return values
 
-    def authoritative(self, family="baseplate-derived", observations=None):
-        profile = self.profile(family)
+    def authoritative(
+        self, family="baseplate-derived", observations=None, profile=None,
+    ):
+        profile = self.profile(family) if profile is None else profile
         observations = observations or self.observations(family)
         result = build_authoritative_result(
             profile,
@@ -650,33 +652,42 @@ class QualityPulseContract(unittest.TestCase):
 
     def case_trend_discontinuity(self, field):
         _profile, current = self.authoritative()
-        baseline = copy.deepcopy(current)
         if field == "schema_version":
+            baseline = copy.deepcopy(current)
             baseline["schema_version"] = 2
             status = compare_trends(current, baseline)
             self.assertEqual(status["status"], "baseline_discontinuity")
             self.assertEqual(status["incompatible_identity_fields"], ["schema_version"])
             return
+        document = self.document()
         if field == "profile":
             fixture = load_json(
                 FIXTURES / "baseplate-derived" / "prior-incompatible.json",
             )
-            baseline["compatibility_identity"]["profile"]["profile_digest"] = (
-                fixture["replacement"]
-            )
-            baseline["profile"]["profile_digest"] = fixture["replacement"]
+            document["profile_version"] = "1.0.1"
         elif field == "metric_definitions":
-            baseline["compatibility_identity"][field][0]["catalog_digest"] = (
-                "sha256:" + "f" * 64
-            )
+            catalog = document["catalogs"][0]
+            catalog["catalog_version"] = "1.0.1"
+            catalog["content_digest"] = digest({
+                key: catalog[key] for key in (
+                    "catalog_id", "schema_version", "catalog_version",
+                    "source_reference", "rules", "metrics",
+                )
+            })
+            for binding in document["metrics"] + document["rules"]:
+                if binding["catalog_id"] == catalog["catalog_id"]:
+                    binding["catalog_version"] = catalog["catalog_version"]
+                    binding["catalog_digest"] = catalog["content_digest"]
         else:
-            baseline["compatibility_identity"][field][0]["image_identity"] = (
-                "fixture.example/tool@sha256:" + "f" * 64
-            )
-            baseline["lane_receipts"][0]["image_identity"] = (
-                "fixture.example/tool@sha256:" + "f" * 64
-            )
-        baseline["stable_projection_digest"] = digest(stable_projection(baseline))
+            lane = document["lanes"][0]
+            prior_image = lane["image_identity"]
+            lane["image_identity"] = "fixture.example/tool@sha256:" + "f" * 64
+            lane["argv"] = [
+                lane["image_identity"] if item == prior_image else item
+                for item in lane["argv"]
+            ]
+        alternate_profile = self.profile(document=document)
+        _profile, baseline = self.authoritative(profile=alternate_profile)
         status = compare_trends(current, baseline)
         self.assertEqual(status["status"], "baseline_discontinuity")
         self.assertIn(field, status["incompatible_identity_fields"])

@@ -1661,24 +1661,21 @@ def compare_trends(current, baseline):
             "incompatible_identity_fields": ["schema_version"],
             "deltas": [],
         }
+    validate_authoritative_result(baseline)
     mismatches = []
-    if type(baseline) is dict:
-        baseline_compatibility = baseline.get("compatibility_identity")
-        if type(baseline_compatibility) is dict:
-            for field in (
-                "schema_version", "profile", "metric_definitions",
-                "tool_identities",
-            ):
-                current_value = (
-                    current["compatibility_identity"].get(field)
-                    if field != "schema_version" else current["schema_version"]
-                )
-                baseline_value = (
-                    baseline_compatibility.get(field)
-                    if field != "schema_version" else baseline.get("schema_version")
-                )
-                if current_value != baseline_value:
-                    mismatches.append(field)
+    for field in (
+        "schema_version", "profile", "metric_definitions", "tool_identities",
+    ):
+        current_value = (
+            current["compatibility_identity"].get(field)
+            if field != "schema_version" else current["schema_version"]
+        )
+        baseline_value = (
+            baseline["compatibility_identity"].get(field)
+            if field != "schema_version" else baseline["schema_version"]
+        )
+        if current_value != baseline_value:
+            mismatches.append(field)
     if mismatches:
         return {
             "schema_version": 1, "status": "baseline_discontinuity",
@@ -1686,7 +1683,6 @@ def compare_trends(current, baseline):
             "incompatible_identity_fields": sorted(mismatches),
             "deltas": [],
         }
-    validate_authoritative_result(baseline)
     baseline_values = {
         item["observation_id"]: item["raw_telemetry"].get("value")
         for item in baseline["observations"]

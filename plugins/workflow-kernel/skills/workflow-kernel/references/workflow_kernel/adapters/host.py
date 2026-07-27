@@ -32,7 +32,10 @@ _MODEL_PREFIXES = {
 
 
 def _lists_models_for(provider: str, models: list) -> bool:
-    return any(model.startswith(_MODEL_PREFIXES[provider]) for model in models)
+    return any(
+        model.lower().startswith(_MODEL_PREFIXES[provider])
+        for model in models
+    )
 
 
 # (kind, probe) -> (forbidden model providers, unconditional route capability
