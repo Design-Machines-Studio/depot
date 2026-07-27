@@ -110,6 +110,14 @@ diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
 -old
 +Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.real-session-token-1234567890
 EOF
+cat > "$FIXTURE_ROOT/access-key.diff" <<'EOF'
+diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
+--- a/plugins/openrouter/README.md
++++ b/plugins/openrouter/README.md
+@@ -1 +1 @@
+-old
++AWS_SECRET_ACCESS_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/==
+EOF
 cat > "$FIXTURE_ROOT/private-key.diff" <<'EOF'
 diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
 --- a/plugins/openrouter/README.md
@@ -217,6 +225,8 @@ expect_rc 3 'disclosure-declined:high-confidence-credential' 'removed secret' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/removed-secret.diff"
 expect_rc 3 'disclosure-declined:access-token' 'real bearer token' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/token.diff"
+expect_rc 3 'disclosure-declined:high-confidence-credential' 'AWS secret access key diff' \
+  "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/access-key.diff"
 expect_rc 3 'disclosure-declined:private-key' 'private key' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/private-key.diff"
 expect_rc 3 'disclosure-declined:authenticated-dsn' 'authenticated DSN' \
@@ -259,6 +269,9 @@ EOF
 cat > "$FIXTURE_ROOT/artifact-token.txt" <<'EOF'
 session_secret=r4nd0m-session-secret-value-123456789
 EOF
+cat > "$FIXTURE_ROOT/artifact-access-key.txt" <<'EOF'
+AWS_SECRET_ACCESS_KEY=AbCdEfGhIjKlMnOpQrStUvWxYz0123456789+/==
+EOF
 cat > "$FIXTURE_ROOT/artifact-classified.txt" <<'EOF'
 data_classification=regulated
 customer_record=real private content
@@ -271,6 +284,9 @@ EOF
 expect_rc 3 'disclosure-declined:high-confidence-credential' 'artifact token' \
   "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
   --content-file "$FIXTURE_ROOT/artifact-a.md" --content-file "$FIXTURE_ROOT/artifact-token.txt"
+expect_rc 3 'disclosure-declined:high-confidence-credential' 'artifact AWS secret access key' \
+  "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
+  --content-file "$FIXTURE_ROOT/artifact-access-key.txt"
 expect_rc 3 'disclosure-declined:classified-private-data' 'classified artifact' \
   "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
   --content-file "$FIXTURE_ROOT/artifact-classified.txt"
@@ -357,15 +373,18 @@ cp "$FIXTURE_ROOT/wrapper-safe.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
   cd "$FIXTURE_ROOT/exec-repo"
   env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
     OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    OPENROUTER_EXEC_VERIFY_CMD='grep -Fq "new middleware" auth/session.go' \
+    OPENROUTER_EXEC_VERIFY_CMD="touch $FIXTURE_ROOT/untrusted-verifier-ran" \
     OPENROUTER_EXEC_COMMIT_MSG='test: bounded auth diff' \
     WRAPPER_PROMPT="$FIXTURE_ROOT/actual.prompt" \
     WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-safe" \
     "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt" > "$FIXTURE_ROOT/exec-receipt.json"
 )
 [ -e "$FIXTURE_ROOT/exec-network-safe" ]
+[ ! -e "$FIXTURE_ROOT/untrusted-verifier-ran" ]
 cmp "$FIXTURE_ROOT/expected.prompt" "$FIXTURE_ROOT/actual.prompt"
-jq -e '.implementedBy == "openrouter" and .status == "committed"' "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
+jq -e '.implementedBy == "openrouter" and .status == "committed"
+  and (.verification | startswith("deferred_to_native_reviewer:"))' \
+  "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
 jq -e '.requestedModel == "z-ai/glm-5.2" and .actualModel == "z-ai/glm-5.2" and .fallback == false' \
   "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
 git -C "$FIXTURE_ROOT/exec-repo" diff --quiet

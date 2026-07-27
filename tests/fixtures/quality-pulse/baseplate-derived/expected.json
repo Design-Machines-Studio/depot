@@ -14,6 +14,6 @@
     "unavailable",
     "fallback"
   ],
-  "expected_stable_projection_digest": "sha256:c0233b9e5de6063150b621a53c95b05c928a391e6e36c4c287b6ee913de9ec68",
-  "expected_markdown_sha256": "sha256:b4411a67add17363355be8aad14865558e6313d070ab7cfe858606e94cb5b382"
+  "expected_stable_projection_digest": "sha256:133ccd3d0f5e69904c3c962c0f186a1f03fddb79914e3d8e0239d5cc2cf65ffc",
+  "expected_markdown_sha256": "sha256:857191e4250faabe8a7cfa904c09d66dfe1f7b21610801e79a6279e0656bef1e"
 }

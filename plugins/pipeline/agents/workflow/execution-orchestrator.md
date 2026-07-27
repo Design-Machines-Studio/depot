@@ -803,7 +803,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 - `kind: config` or `kind: doc` chunks that are pure content generation (the orchestrator writes the returned text to the target file(s), then commits in the worktree itself), OR
 - a cheap second-opinion that does not become the implementation.
 
-For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex."` The agentic OpenRouter path is valid only when it writes files, verifies, commits, and emits an OpenRouter receipt.
+For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-turn wrapper rung MUST fast-fail. Log `"Wrapper rung invalid for agentic chunk [id]; descending to Codex."` The agentic OpenRouter path is valid only when it writes files, performs fixed structural Git validation, commits, and emits an OpenRouter receipt. Executable project verification is always performed later by native Codex review.
 
 After a valid Codex or OpenRouter path produces a commit, write a receipt with
 `requestedProvider`, `attemptedProvider`, `implementedBy: {codex|openrouter}`,
@@ -821,7 +821,7 @@ Step 3e.
 1. Use `$OPENROUTER_EXEC` derived from the same coherent Pipeline bundle selected in Step 3d.0.
 2. Export `OPENROUTER_EXEC_ALLOWED_PATHS` from the chunk's newline-delimited `filesToModify`, then pipe the full chunk prompt to the runner from the chunk worktree.
 3. Require a committed change and receipt with `implementedBy: openrouter`.
-4. Parse the runner receipt for files changed, verification result, and OpenRouter API `usage`.
+4. Parse the runner receipt for files changed, fixed structural-validation result, native-verification deferral, and OpenRouter API `usage`.
 5. On runner failure or quality failure, descend to Codex. If Codex is unavailable, fail the chunk.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**

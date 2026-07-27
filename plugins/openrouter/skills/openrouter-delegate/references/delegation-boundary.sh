@@ -219,9 +219,9 @@ def scan_disclosure(text):
         r"""(?ix)
         ["']?
         (
-          [A-Z0-9_]*(?:API[_-]?KEY|ACCESS[_-]?TOKEN|SESSION[_-]?(?:ID|TOKEN|SECRET)|
-          TOKEN|SECRET|PASSWORD|PRIVATE[_-]?VALUE)
-          |api[_-]?key|access[_-]?token|session[_-]?(?:token|secret)|
+          [A-Z0-9_]*(?:API[_-]?KEY|ACCESS[_-]?(?:KEY|TOKEN)|
+          SESSION[_-]?(?:ID|TOKEN|SECRET)|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?VALUE)
+          |api[_-]?key|access[_-]?(?:key|token)|session[_-]?(?:token|secret)|
           session[_-]?id|client[_-]?secret|token|password
         )
         ["']?\s*[:=]\s*["']?([^\s"',;#}]+)

@@ -848,6 +848,9 @@ def classify_observations(profile, observations):
                 if type(raw) is dict and raw.get("evidence_status") in EVIDENCE_STATUSES
                 else "failed"
             ),
+            "evidence_confidence": "unavailable",
+            "lane_id": None,
+            "primary_lane_id": None,
             "evidence_references": normalized_evidence,
             "raw_telemetry": (
                 safe_raw.get("raw_telemetry", {})
@@ -1091,9 +1094,157 @@ def stable_projection(result):
         "profile": result["profile"],
         "profile_snapshot": result["profile_snapshot"],
         "compatibility_identity": result["compatibility_identity"],
+        "pulse_id": result["pulse_id"],
+        "completion_state": result["completion_state"],
+        "requested_identities": result["requested_identities"],
+        "attempted_identities": result["attempted_identities"],
+        "actual_identities": result["actual_identities"],
+        "coverage_gaps": result["coverage_gaps"],
+        "blockers": result["blockers"],
+        "publication_status": result["publication_status"],
+        "trend_result": result["trend_result"],
+        "invocation": {
+            "operator_authorization_event_id": (
+                result["invocation"]["operator_authorization_event_id"]
+            ),
+            "purpose": result["invocation"]["purpose"],
+            "selected_lane_ids": result["invocation"]["selected_lane_ids"],
+        },
         "observations": result["observations"],
         "lane_receipts": receipts,
         "redaction": result["redaction"],
+    }
+
+
+def _bind_observation_provenance(classified, lane_receipts):
+    """Bind each finding to the lane that produced it and degrade fallback confidence."""
+    by_id = {
+        item["observation_id"]: dict(item) for item in classified
+    }
+    confidence_fallback = {
+        "high": "medium", "medium": "low", "low": "unknown",
+        "unknown": "unknown",
+    }
+    for receipt in lane_receipts:
+        if receipt["status"] not in {"available", "fallback"}:
+            continue
+        for observation_id in receipt["observation_ids"]:
+            observation = by_id.get(observation_id)
+            if observation is None or observation["lane_id"] is not None:
+                _fail("unbound_lane_evidence")
+            observation["lane_id"] = receipt["lane_id"]
+            observation["primary_lane_id"] = receipt["primary_lane_id"]
+            observation["evidence_status"] = receipt["status"]
+            if receipt["status"] == "fallback":
+                observation["evidence_confidence"] = "fallback"
+                observation["confidence"] = confidence_fallback[
+                    observation["confidence"]
+                ]
+            else:
+                observation["evidence_confidence"] = "primary"
+    if any(item["lane_id"] is None for item in by_id.values()):
+        _fail("unbound_lane_evidence")
+    return sorted(by_id.values(), key=lambda item: item["observation_id"])
+
+
+def _pulse_lane_identity(lane):
+    return {
+        "lane_id": lane["lane_id"],
+        "tool_identity": lane["tool_identity"],
+        "image_identity": lane["image_identity"],
+        "service_identity": lane["service_identity"],
+        "plugin_version": lane["plugin_version"],
+        "execution_policy_digest": _execution_policy_digest(lane),
+    }
+
+
+def _derive_pulse_state(profile, lane_receipts, observations, invocation):
+    """Derive the complete reader-facing pulse state from authoritative evidence."""
+    lanes = {
+        item["lane_id"]: item for item in profile.to_dict()["lanes"]
+    }
+    selected = invocation.get("selected_lane_ids")
+    if (
+        type(selected) is not list
+        or any(
+            type(lane_id) is not str
+            or lane_id not in lanes
+            or lanes[lane_id]["primary_lane_id"] is not None
+            for lane_id in selected
+        )
+    ):
+        _fail("invalid_invocation")
+    requested = [_pulse_lane_identity(lanes[lane_id]) for lane_id in selected]
+    attempted = [
+        _pulse_lane_identity(lanes[item["lane_id"]])
+        for item in lane_receipts if item["started_at"] is not None
+    ]
+    actual = [
+        _pulse_lane_identity(lanes[item["lane_id"]])
+        for item in lane_receipts if item["status"] in {"available", "fallback"}
+    ]
+    gaps = [
+        {
+            "lane_id": item["lane_id"],
+            "status": item["status"],
+            "reason_code": item["reason_code"],
+            "primary_lane_id": item["primary_lane_id"],
+        }
+        for item in lane_receipts if item["status"] in {"unavailable", "failed"}
+    ]
+    fallback_covered = {
+        item["primary_lane_id"] for item in lane_receipts
+        if item["status"] == "fallback"
+    }
+    blockers = [
+        {
+            "blocker_type": "lane",
+            "lane_id": item["lane_id"],
+            "observation_id": None,
+            "reason_code": item["reason_code"],
+        }
+        for item in lane_receipts
+        if (
+            item["lane_id"] in selected
+            and item["status"] in {"unavailable", "failed"}
+            and item["lane_id"] not in fallback_covered
+        )
+    ]
+    blockers.extend({
+        "blocker_type": "observation",
+        "lane_id": item["lane_id"],
+        "observation_id": item["observation_id"],
+        "reason_code": item["reason_code"],
+    } for item in observations if item["reason_code"] != "classified")
+    blockers.sort(key=lambda item: (
+        item["blocker_type"], item["lane_id"] or "",
+        item["observation_id"] or "", item["reason_code"],
+    ))
+    gaps.sort(key=lambda item: item["lane_id"])
+    if blockers:
+        completion_state = "blocked"
+    elif gaps:
+        completion_state = "complete_with_gaps"
+    elif any(item["actionable"] for item in observations):
+        completion_state = "complete_with_findings"
+    else:
+        completion_state = "complete"
+    return {
+        "pulse_id": invocation.get("purpose"),
+        "completion_state": completion_state,
+        "requested_identities": requested,
+        "attempted_identities": attempted,
+        "actual_identities": actual,
+        "coverage_gaps": gaps,
+        "blockers": blockers,
+        "publication_status": "authoritative_json_ready",
+        "trend_result": {
+            "schema_version": 1,
+            "status": "not_compared",
+            "reason_code": "baseline_not_supplied",
+            "incompatible_identity_fields": [],
+            "deltas": [],
+        },
     }
 
 
@@ -1174,7 +1325,9 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     if sorted(bound_ids) != sorted(raw_ids) or len(bound_ids) != len(set(bound_ids)):
         _fail("unbound_lane_evidence")
 
-    classified = classify_observations(profile, raw_observations)
+    classified = _bind_observation_provenance(
+        classify_observations(profile, raw_observations), lane_receipts,
+    )
     classified_by_id = {
         item["observation_id"]: item for item in classified
     }
@@ -1224,6 +1377,7 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         },
         "profile_snapshot": profile.to_dict(),
         "compatibility_identity": _compatibility_identity(profile),
+        **_derive_pulse_state(profile, lane_receipts, classified, invocation),
         "observations": classified,
         "lane_receipts": lane_receipts,
         "invocation": invocation,
@@ -1239,7 +1393,10 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
 def validate_authoritative_result(result):
     fields = frozenset({
         "schema_version", "result_type", "repository", "profile",
-        "profile_snapshot", "compatibility_identity", "observations",
+        "profile_snapshot", "compatibility_identity", "pulse_id",
+        "completion_state", "requested_identities", "attempted_identities",
+        "actual_identities", "coverage_gaps", "blockers",
+        "publication_status", "trend_result", "observations",
         "lane_receipts", "invocation", "redaction", "stable_projection_digest",
     })
     _exact_object(result, fields, reason="invalid_authoritative_result")
@@ -1372,7 +1529,8 @@ def validate_authoritative_result(result):
     observation_fields = frozenset({
         "observation_id", "surface_id", "rule_id", "metric_id",
         "classification", "confidence", "actionable", "reason_code",
-        "evidence_status", "evidence_references", "raw_telemetry",
+        "evidence_status", "evidence_confidence", "lane_id", "primary_lane_id",
+        "evidence_references", "raw_telemetry",
         "source_observation_digest", "redacted_values",
     })
     authoritative_observation_ids = []
@@ -1383,6 +1541,9 @@ def validate_authoritative_result(result):
         )
         if (
             observation["evidence_status"] not in EVIDENCE_STATUSES
+            or observation["evidence_confidence"] not in {
+                "primary", "fallback", "unavailable",
+            }
             or type(observation["actionable"]) is not bool
             or type(observation["source_observation_digest"]) is not str
             or _DIGEST.fullmatch(
@@ -1395,7 +1556,9 @@ def validate_authoritative_result(result):
             observation["observation_id"],
             field="observation_id", identifier=True,
         ))
-        for field in ("surface_id", "rule_id", "metric_id"):
+        for field in (
+            "surface_id", "rule_id", "metric_id", "lane_id", "primary_lane_id",
+        ):
             if observation[field] is not None:
                 _string(observation[field], field=field, identifier=True)
         _string(observation["classification"], field="classification", identifier=True)
@@ -1432,6 +1595,7 @@ def validate_authoritative_result(result):
         "stdout", "stderr", "redacted_values",
     })
     bound_observation_ids = []
+    receipt_lane_ids = []
     for receipt in _exact_list(result["lane_receipts"], field="lane_receipts"):
         _exact_object(receipt, receipt_fields, reason="invalid_lane_receipt")
         if (
@@ -1447,6 +1611,7 @@ def validate_authoritative_result(result):
         ):
             _fail("invalid_lane_receipt")
         _string(receipt["lane_id"], field="lane_id", identifier=True)
+        receipt_lane_ids.append(receipt["lane_id"])
         _string(receipt["reason_code"], field="reason_code", identifier=True)
         if receipt["primary_lane_id"] is not None:
             _string(
@@ -1485,6 +1650,65 @@ def validate_authoritative_result(result):
         for field in ("started_at", "finished_at"):
             if receipt[field] is not None:
                 normalize_durable_string(receipt[field])
+        has_times = (
+            receipt["started_at"] is not None
+            and receipt["finished_at"] is not None
+        )
+        evidence_failure_reasons = {
+            "missing_lane_evidence", "invalid_lane_evidence", "invalid_json",
+            "duplicate_json_key", "duplicate_id", "missing_field",
+            "unknown_key", "wrong_type", "invalid_identifier",
+            "invalid_collection_item",
+        }
+        if receipt["status"] == "available":
+            valid_semantics = (
+                receipt["exit_code"] == 0
+                and receipt["reason_code"] == "completed"
+                and receipt["primary_lane_id"] is None
+                and has_times
+            )
+        elif receipt["status"] == "fallback":
+            valid_semantics = (
+                receipt["exit_code"] == 0
+                and receipt["reason_code"] in {
+                    "primary_unavailable", "primary_failed",
+                }
+                and receipt["primary_lane_id"] is not None
+                and has_times
+            )
+        elif receipt["status"] == "unavailable":
+            valid_semantics = (
+                receipt["exit_code"] in {None, 125, 126, 127}
+                and receipt["reason_code"] == "runtime_unavailable"
+                and has_times
+            )
+        elif receipt["status"] == "failed":
+            valid_semantics = has_times and (
+                (
+                    receipt["reason_code"] == "nonzero_exit"
+                    and type(receipt["exit_code"]) is int
+                    and receipt["exit_code"] not in {0, 125, 126, 127}
+                )
+                or (
+                    receipt["reason_code"] in evidence_failure_reasons
+                    and receipt["exit_code"] == 0
+                )
+            )
+        else:
+            valid_semantics = (
+                receipt["exit_code"] is None
+                and receipt["reason_code"] in {
+                    "primary_available", "earlier_fallback_available",
+                }
+                and receipt["primary_lane_id"] is not None
+                and receipt["started_at"] is None
+                and receipt["finished_at"] is None
+                and receipt["stdout"] == ""
+                and receipt["stderr"] == ""
+                and receipt["redacted_values"] == 0
+            )
+        if not valid_semantics:
+            _fail("invalid_lane_receipt")
         for reference in _exact_list(
             receipt["evidence_references"], field="evidence_references",
         ):
@@ -1556,6 +1780,8 @@ def validate_authoritative_result(result):
             or observation_ids
         ):
             _fail("invalid_lane_receipt")
+    if len(receipt_lane_ids) != len(set(receipt_lane_ids)):
+        _fail("invalid_lane_receipt")
     if (
         len(authoritative_observation_ids) != len(set(authoritative_observation_ids))
         or len(bound_observation_ids) != len(set(bound_observation_ids))
@@ -1564,6 +1790,19 @@ def validate_authoritative_result(result):
         _fail("unbound_lane_evidence")
     authoritative_by_id = {
         item["observation_id"]: item for item in result["observations"]
+    }
+    replay_sources = [
+        source
+        for receipt in result["lane_receipts"]
+        if receipt["status"] in {"available", "fallback"}
+        for source in receipt["evidence_snapshot"]
+    ]
+    expected_authoritative = {
+        item["observation_id"]: item
+        for item in _bind_observation_provenance(
+            classify_observations(embedded_profile, replay_sources),
+            result["lane_receipts"],
+        )
     }
     for receipt in result["lane_receipts"]:
         if receipt["status"] in {"available", "fallback"}:
@@ -1581,14 +1820,8 @@ def validate_authoritative_result(result):
             }
             if len(source_by_id) != len(receipt["evidence_snapshot"]):
                 _fail("unbound_lane_evidence")
-            expected_by_id = {
-                item["observation_id"]: item
-                for item in classify_observations(
-                    embedded_profile, receipt["evidence_snapshot"],
-                )
-            }
             expected_projection = [
-                expected_by_id[item] for item in receipt["observation_ids"]
+                expected_authoritative[item] for item in receipt["observation_ids"]
             ]
             if any(
                 {
@@ -1629,14 +1862,47 @@ def validate_authoritative_result(result):
         or len(set(selected)) != len(selected)
     ):
         _fail("invalid_invocation")
+    primary_receipt_ids = {
+        receipt["lane_id"] for receipt in result["lane_receipts"]
+        if receipt["primary_lane_id"] is None
+    }
+    fallback_primary_ids = {
+        receipt["primary_lane_id"] for receipt in result["lane_receipts"]
+        if receipt["primary_lane_id"] is not None
+    }
+    if (
+        primary_receipt_ids != set(selected)
+        or not fallback_primary_ids.issubset(set(selected))
+    ):
+        _fail("invalid_invocation")
+    pulse_fields = frozenset({
+        "pulse_id", "completion_state", "requested_identities",
+        "attempted_identities", "actual_identities", "coverage_gaps",
+        "blockers", "publication_status", "trend_result",
+    })
+    expected_pulse = _derive_pulse_state(
+        embedded_profile, result["lane_receipts"],
+        result["observations"], invocation,
+    )
+    if {
+        field: result[field] for field in pulse_fields
+    } != expected_pulse:
+        _fail("invalid_pulse_state")
     redaction = _exact_object(
         result["redaction"], frozenset({"applied", "redacted_value_count"}),
         reason="invalid_redaction_outcome",
+    )
+    expected_redaction_count = sum(
+        item["redacted_values"] for item in result["observations"]
+    ) + sum(
+        item["redacted_values"] for item in result["lane_receipts"]
     )
     if (
         type(redaction["applied"]) is not bool
         or type(redaction["redacted_value_count"]) is not int
         or redaction["redacted_value_count"] < 0
+        or redaction["redacted_value_count"] != expected_redaction_count
+        or redaction["applied"] is not (expected_redaction_count > 0)
     ):
         _fail("invalid_redaction_outcome")
     if _canonical_digest(stable_projection(result)) != result["stable_projection_digest"]:
@@ -1717,6 +1983,9 @@ def render_markdown(result):
     validate_authoritative_result(result)
     lines = [
         "# Inspection Result", "",
+        f"- Pulse: `{result['pulse_id']}`",
+        f"- Completion: `{result['completion_state']}`",
+        f"- Publication: `{result['publication_status']}`",
         f"- Profile: `{result['profile']['profile_id']}` `{result['profile']['profile_version']}`",
         f"- Commit: `{result['repository']['commit']}`",
         f"- Dirty: `{str(result['repository']['dirty']).lower()}`",

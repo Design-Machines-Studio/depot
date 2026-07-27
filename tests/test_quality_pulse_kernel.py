@@ -398,7 +398,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                     "finished_at": "2026-07-27T00:00:00Z",
                     "operator_authorization_event_id": "approved",
                     "purpose": "quality-pulse",
-                    "selected_lane_ids": [],
+                    "selected_lane_ids": ["primary"],
                 },
             )
             encoded = authoritative_bytes(authoritative).decode()
@@ -819,6 +819,56 @@ class QualityPulseKernelTests(unittest.TestCase):
                 receipts[2]["reason_code"], "earlier_fallback_available",
             )
 
+    def test_fallback_findings_retain_lane_provenance_and_lower_confidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _repository, _path, profile = self.load_profile(root)
+            raw = [observation()]
+            fake = FakeAdapter([125, 0], observations=raw)
+            ticks = iter([
+                "2026-07-27T00:00:00Z", "2026-07-27T00:00:01Z",
+                "2026-07-27T00:00:02Z", "2026-07-27T00:00:03Z",
+            ])
+            receipts, captured = execute_inspection_lanes(
+                profile, ["primary"], attestation(profile),
+                source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
+                adapter=fake, clock=lambda: next(ticks),
+                return_observations=True,
+            )
+            result = build_authoritative_result(
+                profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, observations=captured, lane_receipts=receipts,
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:03Z",
+                    "operator_authorization_event_id": "operator-event-1",
+                    "purpose": "scheduled-quality-pulse",
+                    "selected_lane_ids": ["primary"],
+                },
+            )
+            finding = result["observations"][0]
+            self.assertEqual(finding["lane_id"], "fallback")
+            self.assertEqual(finding["primary_lane_id"], "primary")
+            self.assertEqual(finding["evidence_status"], "fallback")
+            self.assertEqual(finding["evidence_confidence"], "fallback")
+            self.assertEqual(finding["confidence"], "medium")
+            self.assertEqual(result["completion_state"], "complete_with_gaps")
+            self.assertEqual(result["blockers"], [])
+            self.assertEqual(
+                [item["lane_id"] for item in result["coverage_gaps"]],
+                ["primary"],
+            )
+            self.assertEqual(
+                [item["lane_id"] for item in result["requested_identities"]],
+                ["primary"],
+            )
+            self.assertEqual(
+                [item["lane_id"] for item in result["actual_identities"]],
+                ["fallback"],
+            )
+
     def result(self, profile, value=4):
         raw = [observation(raw_telemetry={"value": value})]
         return build_authoritative_result(
@@ -896,6 +946,67 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
             with self.assertRaises(InspectionError):
                 render_markdown(forged)
+
+    def test_authoritative_receipt_redaction_and_authorization_semantics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = self.repository(Path(directory))
+            profile = validate_inspection_profile(profile_document(), repository)
+            current = self.result(profile)
+            self.assertEqual(current["pulse_id"], "scheduled-quality-pulse")
+            self.assertEqual(current["completion_state"], "complete")
+            self.assertEqual(
+                current["publication_status"], "authoritative_json_ready",
+            )
+            self.assertEqual(current["trend_result"]["status"], "not_compared")
+
+            forged_receipt = copy.deepcopy(current)
+            forged_receipt["lane_receipts"][0]["exit_code"] = 42
+            forged_receipt["lane_receipts"][0]["reason_code"] = "fabricated"
+            forged_receipt["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(forged_receipt))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(forged_receipt),
+                "invalid_lane_receipt",
+            )
+
+            forged_redaction = copy.deepcopy(current)
+            forged_redaction["redaction"] = {
+                "applied": True, "redacted_value_count": 999,
+            }
+            forged_redaction["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(forged_redaction))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(forged_redaction),
+                "invalid_redaction_outcome",
+            )
+
+            forged_authorization = copy.deepcopy(current)
+            forged_authorization["invocation"][
+                "operator_authorization_event_id"
+            ] = "forged-approval"
+            self.assert_reason(
+                lambda: validate_authoritative_result(forged_authorization),
+                "authoritative_digest_mismatch",
+            )
+
+            forged_selection = copy.deepcopy(current)
+            forged_selection["invocation"]["selected_lane_ids"] = []
+            forged_selection["requested_identities"] = []
+            forged_selection["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(forged_selection))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(forged_selection),
+                "invalid_invocation",
+            )
 
     def test_cli_help_and_invalid_inputs_have_stable_nonzero_exit(self):
         env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))

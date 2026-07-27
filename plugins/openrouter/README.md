@@ -17,7 +17,7 @@ Task-to-model routing is governed by `plugins/pipeline/references/routing-policy
 The canonical policy is `skills/openrouter-delegate/references/delegation-security-policy.json`; Pipeline carries a validated mirror for planning. Every delegation path enforces it before invoking the wrapper:
 
 - **Threat/content classification.** High-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private values decline disclosure. Security-looking paths, vendors, nationalities, jurisdictions, and placeholder names do not.
-- **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist; local trusted verification and allowlist-only staging remain authoritative.
+- **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist. The runner performs fixed structural Git validation and allowlist-only staging; executable project verification is deferred to native Codex review.
 - **Intended lanes.** Style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
 
 High-consequence security completion still requires independent Codex review. GLM, DeepSeek, Kimi, and other third-party models are not banned by nationality.

@@ -7,7 +7,7 @@ derived view and never becomes an input to classification or trend comparison.
 
 The JSON artifact records at least:
 
-- schema version, pulse ID, invocation time, completion state, and stable
+- `schema_version`, `pulse_id`, invocation time, `completion_state`, and stable
   projection digest;
 - canonical repository root identity, verified ref/source, commit, and dirty
   state;
@@ -18,7 +18,8 @@ The JSON artifact records at least:
   selected rule/metric IDs;
 - dm-review, workflow-kernel, catalog-plugin, tool, service, and immutable image
   versions/identities;
-- requested, attempted, and actual lane/tool identities;
+- requested, attempted, and actual lane/tool identities, represented by
+  `requested_identities`, `attempted_identities`, and `actual_identities`;
 - one lane receipt per requested primary and fallback, including
   `available|unavailable|failed|fallback|skipped`, evidence references,
   declared argv identity, synthesized execution-policy digest, redacted source
@@ -29,8 +30,9 @@ The JSON artifact records at least:
   observation bound to the digest of its exact source object;
 - each finding's stable identity, closed surface, rule and metric IDs,
   classification, actionability, confidence, and raw observation reference;
-- coverage gaps, blockers, redaction outcome, and publication status;
-- trend identity, compatible comparison result, or baseline discontinuity.
+- `coverage_gaps`, `blockers`, redaction outcome, and `publication_status`;
+- `trend_result`, initially `not_compared` when no baseline was supplied, or a
+  compatible comparison/baseline discontinuity returned by trend comparison.
 
 Volatile invocation data is retained outside the stable projection. The kernel
 computes the stable projection digest from the declared stable fields so
@@ -44,11 +46,13 @@ evidence.status: available | unavailable | failed | fallback | skipped
 finding.classification: actionable | informational | unknown
 finding.actionability: actionable | informational
 finding.surface: repository-profile-defined closed ID
-finding.confidence: primary | fallback | inferred | unavailable
+finding.confidence: high | medium | low | unknown
+finding.evidence_confidence: primary | fallback | unavailable
 ```
 
-Fallback evidence names its unavailable or failed primary and remains
-lower-confidence. Evidence failure does not manufacture a finding
+Fallback evidence names its unavailable or failed primary, records both
+`lane_id` and `primary_lane_id`, and downgrades classification confidence by one
+level in addition to `evidence_confidence: fallback`. Evidence failure does not manufacture a finding
 classification. Conversely, a finding classification does not erase its
 evidence state.
 

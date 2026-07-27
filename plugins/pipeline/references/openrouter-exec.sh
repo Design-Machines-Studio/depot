@@ -2,7 +2,7 @@
 # openrouter-exec.sh -- agentic OpenRouter runner for bounded pipeline chunks.
 #
 # The runner accepts a chunk prompt on stdin, asks OpenRouter for a unified diff,
-# applies it to the current worktree, runs a project verification command, commits
+# applies it to the current worktree, performs fixed structural validation, commits
 # the result, and emits a receipt shape consumed by the execution-orchestrator:
 # implementedBy: openrouter
 # It is intended for config/docs/mechanical-logic chunks, not UI/integration.
@@ -17,7 +17,7 @@ MODE="run"
 MODEL="${OPENROUTER_EXEC_MODEL:-z-ai/glm-5.2}"
 FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-180}"
-VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
+DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
 
 while [ $# -gt 0 ]; do
@@ -26,7 +26,7 @@ while [ $# -gt 0 ]; do
     --model) MODEL="$2"; shift 2;;
     --fallback-model) FALLBACK_MODEL="$2"; shift 2;;
     --timeout) TIMEOUT="$2"; shift 2;;
-    --verify-cmd) VERIFY_CMD="$2"; shift 2;;
+    --verify-cmd) DEFERRED_VERIFY_CMD="$2"; shift 2;;
     --commit-message) COMMIT_MSG="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -170,13 +170,6 @@ fi
 git apply --check "$PATCH_FILE"
 git apply "$PATCH_FILE"
 
-if [ -n "$VERIFY_CMD" ]; then
-  env PATH="$PATH" bash --noprofile --norc -c "$VERIFY_CMD"
-  VERIFY_RESULT="passed: $VERIFY_CMD"
-else
-  VERIFY_RESULT="skipped: no OPENROUTER_EXEC_VERIFY_CMD"
-fi
-
 # Stage only the paths the model patch touched, not the whole tree -- an
 # incidental/pre-existing worktree change must not be folded into this commit.
 git add --pathspec-from-file="$PATCH_PATHS_FILE" --pathspec-file-nul
@@ -184,9 +177,17 @@ if git diff --cached --quiet; then
   echo "openrouter-exec: patch produced no staged changes" >&2
   exit 1
 fi
+git diff --check --cached
+
+if [ -n "$DEFERRED_VERIFY_CMD" ]; then
+  VERIFY_RESULT="deferred_to_native_reviewer: requested command not executed"
+else
+  VERIFY_RESULT="deferred_to_native_reviewer: no command supplied"
+fi
 
 MSG_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.msg.XXXXXX")"
-printf '%s\n\nImplementedBy: openrouter\nVerification: %s\n' "$COMMIT_MSG" "$VERIFY_RESULT" > "$MSG_FILE"
+printf '%s\n\nImplementedBy: openrouter\nStructuralValidation: git diff --check --cached\nVerification: %s\n' \
+  "$COMMIT_MSG" "$VERIFY_RESULT" > "$MSG_FILE"
 git commit -F "$MSG_FILE" >/dev/null
 
 FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')"

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3.12
 """Offline behavioral validator for the neutral workflow kernel."""
 
 from __future__ import annotations
