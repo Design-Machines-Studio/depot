@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "profile_id": "editorial-site-live-wires",
+  "profile_version": "1.0.0",
+  "repository": {
+    "scope_paths": [
+      "site/styles/article.css",
+      "site/templates/article.html"
+    ]
+  },
+  "catalogs": [
+    {
+      "catalog_id": "live-wires-quality-rules",
+      "schema_version": 1,
+      "catalog_version": "1.0.0",
+      "source_reference": "plugins/live-wires/references/quality-rules-v1.json",
+      "content_digest": "sha256:938d9048e0e9b0750ec93e6ab52c627af8929f5830b5a0717be6042c969dae2d",
+      "rules": [
+        {
+          "rule_id": "lw-bem-child-selector",
+          "definition": {
+            "category": "naming",
+            "default_classification_guidance": {
+              "actionability": "actionable",
+              "classification": "actionable",
+              "profile_override": true
+            },
+            "description": "BEM double-underscore child selectors are not part of Live Wires; use native nesting with short or semantic child selectors.",
+            "evaluation_type": "mechanical",
+            "observation_type": "occurrence-count",
+            "references": [
+              "code-style#cube-css-layer-mapping",
+              "lint-rules#lw-bem",
+              "livewires-skill#css-nesting-over-bem-child-selectors"
+            ],
+            "source_catalog_digest": "sha256:d674f80f25e2b12b72b8144c8b01ad27e67b164143c0d281c229e5090581ac94",
+            "source_rule_digest": "sha256:f9adc89bb23cfa8e94499427a13bc2e8bd88e8351ee376278ceee4a1441dbce7"
+          }
+        }
+      ],
+      "metrics": [
+        {
+          "metric_id": "bem-child-selector-observations",
+          "definition": {
+            "evaluation_type": "mechanical",
+            "observation_type": "occurrence-count",
+            "source_catalog_digest": "sha256:d674f80f25e2b12b72b8144c8b01ad27e67b164143c0d281c229e5090581ac94",
+            "source_rule_id": "lw-bem-child-selector"
+          }
+        }
+      ]
+    }
+  ],
+  "surfaces": [
+    {
+      "surface_id": "editorial-theme",
+      "paths": [
+        "site/styles/article.css",
+        "site/templates/article.html"
+      ]
+    }
+  ],
+  "metrics": [
+    {
+      "metric_id": "bem-child-selector-observations",
+      "catalog_id": "live-wires-quality-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:938d9048e0e9b0750ec93e6ab52c627af8929f5830b5a0717be6042c969dae2d"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "lw-bem-child-selector",
+      "catalog_id": "live-wires-quality-rules",
+      "catalog_version": "1.0.0",
+      "catalog_digest": "sha256:938d9048e0e9b0750ec93e6ab52c627af8929f5830b5a0717be6042c969dae2d",
+      "metric_ids": [
+        "bem-child-selector-observations"
+      ],
+      "surface_ids": [
+        "editorial-theme"
+      ]
+    }
+  ],
+  "lanes": [
+    {
+      "lane_id": "live-wires-lint",
+      "execution_type": "docker",
+      "argv": [
+        "docker",
+        "run",
+        "--rm",
+        "--pull=never",
+        "ghcr.io/design-machines/live-wires-lint-fixture@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      ],
+      "tool_identity": "docker:27.5.1",
+      "image_identity": "ghcr.io/design-machines/live-wires-lint-fixture@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "service_identity": null,
+      "plugin_version": "0.4.0",
+      "timeout_seconds": 20,
+      "primary_lane_id": null,
+      "evidence_paths": [
+        "quality-pulse-evidence/live-wires-lint.json"
+      ]
+    }
+  ],
+  "classifications": [
+    {
+      "classification_id": "live_wires_actionable",
+      "rule_ids": [
+        "lw-bem-child-selector"
+      ],
+      "metric_ids": [
+        "bem-child-selector-observations"
+      ],
+      "surface_ids": [
+        "editorial-theme"
+      ],
+      "confidence": "high"
+    }
+  ],
+  "outputs": {
+    "authoritative_json": "quality-pulse-output/authoritative.json",
+    "markdown": "quality-pulse-output/report.md"
+  },
+  "trend_compatibility": {
+    "schema_version": 1,
+    "required_identity_fields": [
+      "profile",
+      "metric_definitions",
+      "tool_identities"
+    ]
+  }
+}
