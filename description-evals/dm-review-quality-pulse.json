@@ -1,0 +1,50 @@
+[
+  {
+    "query": "run the scheduled repository quality pulse",
+    "should_trigger": true
+  },
+  {
+    "query": "produce this week's code quality digest from our repository profile",
+    "should_trigger": true
+  },
+  {
+    "query": "audit repository quality using .dm-review/quality-pulse.json",
+    "should_trigger": true
+  },
+  {
+    "query": "compare today's quality pulse with the last compatible baseline",
+    "should_trigger": true
+  },
+  {
+    "query": "run a local quality pulse with --profile configs/local-pulse.json",
+    "should_trigger": true
+  },
+  {
+    "query": "schedule a recurring repository health and quality audit",
+    "should_trigger": true
+  },
+  {
+    "query": "review PR 47 before I merge it",
+    "should_trigger": false
+  },
+  {
+    "query": "run the full dm-review on my current branch",
+    "should_trigger": false
+  },
+  {
+    "query": "test this page visually in Chrome and Firefox",
+    "should_trigger": false
+  },
+  {
+    "query": "take screenshots and check the responsive layout",
+    "should_trigger": false
+  },
+  {
+    "query": "run the pipeline to implement a new quality dashboard",
+    "should_trigger": false
+  },
+  {
+    "query": "build this feature from the approved implementation plan",
+    "should_trigger": false
+  }
+]
