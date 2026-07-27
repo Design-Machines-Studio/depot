@@ -16,7 +16,7 @@ from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
     classify_observations, compare_trends, execute_inspection_lanes,
     finalize_authoritative_result, load_host_attestation,
-    load_inspection_profile, normalize_owned_path,
+    load_inspection_profile, load_publication_attestation, normalize_owned_path,
     render_markdown, stable_projection, validate_authoritative_result,
     validate_inspection_profile,
 )
@@ -403,8 +403,17 @@ class QualityPulseKernelTests(unittest.TestCase):
                     "selected_lane_ids": ["primary"],
                 },
             )
-            encoded = authoritative_bytes(authoritative).decode()
-            markdown = render_markdown(authoritative)
+            publication_attestation = self.publication_attestation(
+                authoritative, "uninitialized", "authoritative_json_ready",
+            )
+            encoded = authoritative_bytes(
+                authoritative,
+                publication_attestation=publication_attestation,
+            ).decode()
+            markdown = render_markdown(
+                authoritative,
+                publication_attestation=publication_attestation,
+            )
             self.assertNotIn("ghp_fixtureSecret123", encoded)
             self.assertNotIn("ghp_fixtureSecret123", markdown)
             self.assertIn("output/primary.json", encoded)
@@ -473,6 +482,10 @@ class QualityPulseKernelTests(unittest.TestCase):
             host_file.write_text(json.dumps(attestation(profile)))
             self.assert_reason(
                 lambda: load_host_attestation(host_file, repository),
+                "repository_controlled_attestation",
+            )
+            self.assert_reason(
+                lambda: load_publication_attestation(host_file, repository),
                 "repository_controlled_attestation",
             )
             value = profile_document()
@@ -768,7 +781,13 @@ class QualityPulseKernelTests(unittest.TestCase):
                 ).hexdigest()
             )
             self.assert_reason(
-                lambda: compare_trends(authoritative, forged_baseline),
+                lambda: compare_trends(
+                    authoritative, forged_baseline,
+                    current_publication_attestation=self.publication_attestation(
+                        authoritative, "uninitialized",
+                        "authoritative_json_ready",
+                    ),
+                ),
                 "invalid_authoritative_profile",
             )
 
@@ -886,33 +905,92 @@ class QualityPulseKernelTests(unittest.TestCase):
             },
         )
 
+    def publication_attestation(self, result, prior_status, status):
+        state_digest = "sha256:" + hashlib.sha256(_canonical_bytes({
+            "schema_version": 1,
+            "stable_projection_digest": result["stable_projection_digest"],
+            "publication_status": status,
+        })).hexdigest()
+        prior_digest = "sha256:" + hashlib.sha256(_canonical_bytes({
+            "schema_version": 1,
+            "stable_projection_digest": result["stable_projection_digest"],
+            "publication_status": prior_status,
+        })).hexdigest()
+        return {
+            "schema_version": 1,
+            "pulse_id": result["pulse_id"],
+            "stable_projection_digest": result["stable_projection_digest"],
+            "prior_publication_status": prior_status,
+            "prior_publication_state_digest": prior_digest,
+            "publication_status": status,
+            "publication_state_digest": state_digest,
+            "host_action": {
+                "authoritative_json_ready": "authoritative_json_completed",
+                "markdown_rendered": "markdown_write_completed",
+                "published": "publication_completed",
+                "publication_failed": "publication_failed",
+            }[status],
+            "operator_authorization_event_id": result["invocation"][
+                "operator_authorization_event_id"
+            ],
+        }
+
     def test_authoritative_stability_trends_and_markdown_authority(self):
         with tempfile.TemporaryDirectory() as directory:
             repository = self.repository(Path(directory))
             profile = validate_inspection_profile(profile_document(), repository)
             current = self.result(profile, 7)
+            current_attestation = self.publication_attestation(
+                current, "uninitialized", "authoritative_json_ready",
+            )
             replay = copy.deepcopy(current)
             replay["invocation"]["started_at"] = "2026-07-28T00:00:00Z"
             self.assertEqual(
                 current["stable_projection_digest"],
                 replay["stable_projection_digest"],
             )
-            self.assertEqual(authoritative_bytes(current), authoritative_bytes(current))
-            trend = compare_trends(current, self.result(profile, 4))
+            self.assertEqual(
+                authoritative_bytes(
+                    current, publication_attestation=current_attestation,
+                ),
+                authoritative_bytes(
+                    current, publication_attestation=current_attestation,
+                ),
+            )
+            baseline = self.result(profile, 4)
+            baseline_attestation = self.publication_attestation(
+                baseline, "uninitialized", "authoritative_json_ready",
+            )
+            trend = compare_trends(
+                current, baseline,
+                current_publication_attestation=current_attestation,
+                baseline_publication_attestation=baseline_attestation,
+            )
             self.assertEqual(trend["status"], "compatible")
             self.assertEqual(trend["deltas"][0]["delta"], 3)
 
             changed = profile_document()
             changed["profile_version"] = "1.1.0"
             changed_profile = validate_inspection_profile(changed, repository)
-            discontinuity = compare_trends(current, self.result(changed_profile, 4))
+            changed_baseline = self.result(changed_profile, 4)
+            discontinuity = compare_trends(
+                current, changed_baseline,
+                current_publication_attestation=current_attestation,
+                baseline_publication_attestation=self.publication_attestation(
+                    changed_baseline, "uninitialized",
+                    "authoritative_json_ready",
+                ),
+            )
             self.assertEqual(discontinuity["status"], "baseline_discontinuity")
             self.assertIn("profile", discontinuity["incompatible_identity_fields"])
 
             incompatible_schema = copy.deepcopy(current)
             incompatible_schema["schema_version"] = 2
             self.assertEqual(
-                compare_trends(current, incompatible_schema),
+                compare_trends(
+                    current, incompatible_schema,
+                    current_publication_attestation=current_attestation,
+                ),
                 {
                     "schema_version": 1,
                     "status": "baseline_discontinuity",
@@ -921,6 +999,16 @@ class QualityPulseKernelTests(unittest.TestCase):
                     "deltas": [],
                 },
             )
+            incompatible_draft = finalize_authoritative_result(
+                current,
+                publication_status="authoritative_json_ready",
+                baseline=incompatible_schema,
+                current_publication_attestation=current_attestation,
+            )
+            self.assertEqual(
+                incompatible_draft["trend_result"]["status"],
+                "baseline_discontinuity",
+            )
             secret_baseline = copy.deepcopy(incompatible_schema)
             secret_baseline["credential"] = "ghp_fixtureSecret1234567890"
             self.assert_reason(
@@ -928,11 +1016,14 @@ class QualityPulseKernelTests(unittest.TestCase):
                     current,
                     publication_status="authoritative_json_ready",
                     baseline=secret_baseline,
+                    current_publication_attestation=current_attestation,
                 ),
                 "invalid_trend_result",
             )
 
-            rendered = render_markdown(current)
+            rendered = render_markdown(
+                current, publication_attestation=current_attestation,
+            )
             self.assertIn("# Inspection Result", rendered)
             self.assertIn("observation-1", rendered)
             with self.assertRaises(InspectionError):
@@ -940,7 +1031,9 @@ class QualityPulseKernelTests(unittest.TestCase):
             tampered = copy.deepcopy(current)
             tampered["repository"]["commit"] = "b" * 40
             with self.assertRaises(InspectionError):
-                validate_authoritative_result(tampered)
+                validate_authoritative_result(
+                    tampered, publication_attestation=current_attestation,
+                )
             forged = copy.deepcopy(current)
             forged["observations"][0]["evidence_status"] = "invented"
             forged["stable_projection_digest"] = (
@@ -965,6 +1058,9 @@ class QualityPulseKernelTests(unittest.TestCase):
             repository = self.repository(Path(directory))
             profile = validate_inspection_profile(profile_document(), repository)
             current = self.result(profile)
+            current_attestation = self.publication_attestation(
+                current, "uninitialized", "authoritative_json_ready",
+            )
             self.assertEqual(current["pulse_id"], "scheduled-quality-pulse")
             self.assertEqual(current["completion_state"], "complete")
             self.assertEqual(
@@ -975,15 +1071,34 @@ class QualityPulseKernelTests(unittest.TestCase):
                 current,
                 publication_status="authoritative_json_ready",
                 baseline=current,
+                current_publication_attestation=current_attestation,
+                baseline_publication_attestation=current_attestation,
             )
-            compared_markdown = render_markdown(compared)
+            compared_attestation = self.publication_attestation(
+                compared, "uninitialized", "authoritative_json_ready",
+            )
+            compared_markdown = render_markdown(
+                compared, publication_attestation=compared_attestation,
+            )
             compared_stable_digest = compared["stable_projection_digest"]
             compared_publication_digest = compared["publication_state_digest"]
             rendered = finalize_authoritative_result(
                 compared, publication_status="markdown_rendered",
+                current_publication_attestation=compared_attestation,
+                publication_attestation=self.publication_attestation(
+                    compared, "authoritative_json_ready", "markdown_rendered",
+                ),
+            )
+            markdown_attestation = self.publication_attestation(
+                compared, "authoritative_json_ready", "markdown_rendered",
+            )
+            published_attestation = self.publication_attestation(
+                rendered, "markdown_rendered", "published",
             )
             finalized = finalize_authoritative_result(
                 rendered, publication_status="published",
+                current_publication_attestation=markdown_attestation,
+                publication_attestation=published_attestation,
             )
             self.assertEqual(finalized["publication_status"], "published")
             self.assertEqual(finalized["trend_result"]["status"], "compatible")
@@ -994,7 +1109,13 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertEqual(
                 finalized["stable_projection_digest"], compared_stable_digest,
             )
-            self.assertEqual(render_markdown(finalized), compared_markdown)
+            self.assertEqual(
+                render_markdown(
+                    finalized,
+                    publication_attestation=published_attestation,
+                ),
+                compared_markdown,
+            )
             self.assertNotEqual(
                 finalized["publication_state_digest"],
                 compared_publication_digest,
@@ -1003,6 +1124,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 lambda: finalize_authoritative_result(
                     finalized,
                     publication_status="authoritative_json_ready",
+                    current_publication_attestation=published_attestation,
                 ),
                 "invalid_publication_transition",
             )
@@ -1011,14 +1133,51 @@ class QualityPulseKernelTests(unittest.TestCase):
                     rendered,
                     publication_status="published",
                     baseline=current,
+                    current_publication_attestation=markdown_attestation,
                 ),
                 "trend_after_render",
             )
             forged_publication = copy.deepcopy(finalized)
             forged_publication["publication_status"] = "markdown_rendered"
+            forged_publication["publication_state_digest"] = (
+                self.publication_attestation(
+                    forged_publication, "authoritative_json_ready",
+                    "markdown_rendered",
+                )["publication_state_digest"]
+            )
             self.assert_reason(
                 lambda: validate_authoritative_result(forged_publication),
-                "publication_state_digest_mismatch",
+                "publication_attestation_required",
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(
+                    forged_publication,
+                    publication_attestation=published_attestation,
+                ),
+                "publication_attestation_binding_mismatch",
+            )
+            rolled_back = copy.deepcopy(finalized)
+            rolled_back["publication_status"] = "authoritative_json_ready"
+            rolled_back["publication_state_digest"] = (
+                self.publication_attestation(
+                    rolled_back, "uninitialized",
+                    "authoritative_json_ready",
+                )["publication_state_digest"]
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(rolled_back),
+                "publication_attestation_required",
+            )
+            direct_jump = copy.deepcopy(current)
+            direct_jump["publication_status"] = "published"
+            direct_jump["publication_state_digest"] = (
+                self.publication_attestation(
+                    direct_jump, "markdown_rendered", "published",
+                )["publication_state_digest"]
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(direct_jump),
+                "publication_attestation_required",
             )
             forged_trend = copy.deepcopy(finalized)
             forged_trend["trend_result"]["deltas"][0].update({
@@ -1033,6 +1192,19 @@ class QualityPulseKernelTests(unittest.TestCase):
                 lambda: validate_authoritative_result(forged_trend),
                 "invalid_trend_result",
             )
+            week_three = self.result(profile, 9)
+            week_three_attestation = self.publication_attestation(
+                week_three, "uninitialized", "authoritative_json_ready",
+            )
+            week_three = finalize_authoritative_result(
+                week_three,
+                publication_status="authoritative_json_ready",
+                baseline=compared,
+                current_publication_attestation=week_three_attestation,
+                baseline_publication_attestation=compared_attestation,
+            )
+            self.assertEqual(week_three["trend_result"]["status"], "compatible")
+            self.assertEqual(week_three["trend_result"]["deltas"][0]["delta"], 5)
 
             actionable_document = profile_document()
             actionable_document["classifications"][0][

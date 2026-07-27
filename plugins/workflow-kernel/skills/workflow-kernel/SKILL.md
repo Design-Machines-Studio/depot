@@ -403,8 +403,13 @@ workflow-kernel-launcher.sh inspection-validate \
 workflow-kernel-launcher.sh inspection-classify \
   --repository-root <root> --profile <profile> --observations <json>
 workflow-kernel-launcher.sh inspection-trend \
-  --current <authoritative-json> --baseline <authoritative-json>
-workflow-kernel-launcher.sh inspection-render --input <authoritative-json>
+  --repository-root <root> \
+  --current <authoritative-json> --baseline <authoritative-json> \
+  --current-publication-attestation <external-host-json> \
+  --baseline-publication-attestation <external-host-json>
+workflow-kernel-launcher.sh inspection-render \
+  --repository-root <root> --input <authoritative-json> \
+  --publication-attestation <external-host-json>
 workflow-kernel-launcher.sh inspection-run \
   --repository-root <root> --profile <profile> --lane-id <primary-id> \
   --attestation <host-path-outside-repository> --source git --ref <ref> \

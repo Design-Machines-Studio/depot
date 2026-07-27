@@ -44,7 +44,7 @@ quality changes.
 ```text
 evidence.status: available | unavailable | failed | fallback | skipped
 lane.status: available | fallback
-finding.classification: actionable | informational | unknown
+finding.classification: repository-profile-defined closed ID | unknown
 finding.actionability: actionable | informational
 finding.surface: repository-profile-defined closed ID
 finding.confidence: high | medium | low | unknown
@@ -64,20 +64,27 @@ pulse.
 
 ## Publication Order
 
-1. emit authoritative JSON;
-2. validate its complete schema and closed vocabularies;
-3. recompute and verify the stable projection digest;
-4. run redaction checks;
-5. pass the authoritative baseline to `inspection-finalize`, which computes
+1. build the in-memory ready JSON draft;
+2. pass the authoritative baseline to `inspection-finalize`, which computes
    and binds the compatible trend result or baseline discontinuity;
-6. render Markdown from that validated JSON;
-7. bind `markdown_rendered`, then `published` only after each host action
-    succeeds.
+3. issue a host ready-state attestation outside the repository for that exact
+   content and state digest;
+4. validate its complete schema and closed vocabularies, recompute its stable
+   projection digest, and run redaction checks with that external context;
+5. render Markdown from the validated JSON;
+6. bind `markdown_rendered`, then `published` only after each host action
+   succeeds and supplies its own matching attestation.
 
-Trend comparison must be bound before rendering. Publication status is an
+Trend comparison must be bound before ready-state attestation and rendering.
+Publication status is an
 operational envelope excluded from the content stable projection and rendered
 Markdown; `publication_state_digest` binds the operational status to the
 content digest without making publication transitions stale the Markdown.
+Every serialized state, including initial readiness, requires a matching
+host-issued transition attestation loaded from outside the repository. The
+builder's in-memory ready result is a draft until that binding occurs.
+Validation without external context fails closed, even when a caller recomputes
+the public state digest.
 
 Any failure in steps 1-5 prevents Markdown publication. A stale prior digest
 must not be relabeled as current.
@@ -93,4 +100,6 @@ Compare trends only when all of these identities are compatible:
 
 If any required identity differs or is unavailable, emit a baseline
 discontinuity naming the mismatched fields. Do not calculate or display deltas
-across the discontinuity.
+across the discontinuity. Bind only a validated nonrecursive projection of the
+prior pulse identity, stable digest, and numeric observation values; this keeps
+week N comparable to week N-1 without recursively embedding older history.

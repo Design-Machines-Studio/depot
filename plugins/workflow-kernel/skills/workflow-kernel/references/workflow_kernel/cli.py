@@ -2718,30 +2718,70 @@ def command_inspection_classify(args):
 
 
 def command_inspection_trend(args):
-    from .inspection import compare_trends
+    from .inspection import compare_trends, load_publication_attestation
 
     _emit(compare_trends(
         _inspection_json(args.current), _inspection_json(args.baseline),
+        current_publication_attestation=(
+            None if args.current_publication_attestation is None
+            else load_publication_attestation(
+                args.current_publication_attestation, args.repository_root,
+            )
+        ),
+        baseline_publication_attestation=(
+            None if args.baseline_publication_attestation is None
+            else load_publication_attestation(
+                args.baseline_publication_attestation, args.repository_root,
+            )
+        ),
     ))
     return 0
 
 
 def command_inspection_finalize(args):
-    from .inspection import finalize_authoritative_result
+    from .inspection import (
+        finalize_authoritative_result, load_publication_attestation,
+    )
 
     baseline = None if args.baseline is None else _inspection_json(args.baseline)
     _emit(finalize_authoritative_result(
         _inspection_json(args.input),
         publication_status=args.publication_status,
         baseline=baseline,
+        current_publication_attestation=(
+            None if args.current_publication_attestation is None
+            else load_publication_attestation(
+                args.current_publication_attestation, args.repository_root,
+            )
+        ),
+        publication_attestation=(
+            None if args.publication_attestation is None
+            else load_publication_attestation(
+                args.publication_attestation, args.repository_root,
+            )
+        ),
+        baseline_publication_attestation=(
+            None if args.baseline_publication_attestation is None
+            else load_publication_attestation(
+                args.baseline_publication_attestation, args.repository_root,
+            )
+        ),
     ))
     return 0
 
 
 def command_inspection_render(args):
-    from .inspection import render_markdown
+    from .inspection import render_markdown, load_publication_attestation
 
-    sys.stdout.write(render_markdown(_inspection_json(args.input)))
+    sys.stdout.write(render_markdown(
+        _inspection_json(args.input),
+        publication_attestation=(
+            None if args.publication_attestation is None
+            else load_publication_attestation(
+                args.publication_attestation, args.repository_root,
+            )
+        ),
+    ))
     return 0
 
 
@@ -3011,18 +3051,23 @@ def parser():
     )
     inspection_trend.add_argument("--current", required=True)
     inspection_trend.add_argument("--baseline", required=True)
+    inspection_trend.add_argument("--repository-root", required=True)
+    inspection_trend.add_argument("--current-publication-attestation")
+    inspection_trend.add_argument("--baseline-publication-attestation")
     inspection_trend.set_defaults(handler=command_inspection_trend)
 
     inspection_finalize = commands.add_parser(
         "inspection-finalize",
         help="advance authoritative inspection publication and trend lifecycle",
         description=(
-            "Validate authoritative JSON, bind a closed publication status and "
-            "optional inspection-trend result, then emit a re-digested artifact. "
-            "Invalid lifecycle input exits non-zero."
+            "Validate authoritative JSON, compute an optional baseline trend, "
+            "and bind a host-attested closed publication transition before "
+            "emitting a re-digested artifact. Invalid lifecycle input exits "
+            "non-zero."
         ),
     )
     inspection_finalize.add_argument("--input", required=True)
+    inspection_finalize.add_argument("--repository-root", required=True)
     inspection_finalize.add_argument(
         "--publication-status",
         choices=(
@@ -3038,6 +3083,9 @@ def parser():
             "trend result rather than accepting caller-supplied deltas"
         ),
     )
+    inspection_finalize.add_argument("--current-publication-attestation")
+    inspection_finalize.add_argument("--publication-attestation")
+    inspection_finalize.add_argument("--baseline-publication-attestation")
     inspection_finalize.set_defaults(handler=command_inspection_finalize)
 
     inspection_render = commands.add_parser(
@@ -3049,6 +3097,8 @@ def parser():
         ),
     )
     inspection_render.add_argument("--input", required=True)
+    inspection_render.add_argument("--repository-root", required=True)
+    inspection_render.add_argument("--publication-attestation")
     inspection_render.set_defaults(handler=command_inspection_render)
 
     inspection_run = commands.add_parser(

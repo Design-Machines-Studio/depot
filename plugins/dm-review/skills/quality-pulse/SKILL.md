@@ -207,19 +207,28 @@ Any such unknown fails the pulse. Never coerce `unknown` to informational.
 Emit the authoritative JSON contract in `output-contract.md`, then validate it
 and recompute its stable projection digest. Bind an optional trend result and
 each publication transition with `inspection-finalize`; the command validates
-the closed lifecycle state and emits a re-digested artifact:
+the closed lifecycle state and emits a re-digested artifact. Binding a baseline
+first emits an unattested ready draft; the host must issue a new ready-state
+attestation for that exact digest before validation or rendering:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-finalize \
+  --repository-root "$REPOSITORY_ROOT" \
   --input "$AUTHORITATIVE_JSON" \
   --publication-status authoritative_json_ready \
-  [--baseline "$COMPATIBLE_BASELINE"]
+  --current-publication-attestation "$CURRENT_READY_ATTESTATION" \
+  [--baseline "$COMPATIBLE_BASELINE"] \
+  [--baseline-publication-attestation "$BASELINE_ATTESTATION"]
 ```
 
-Only after that succeeds may `inspection-render` produce the Markdown digest:
+Only after host attestation and validation may `inspection-render` produce the
+Markdown digest:
 
 ```sh
-"$WORKFLOW_KERNEL" inspection-render --input "$AUTHORITATIVE_JSON"
+"$WORKFLOW_KERNEL" inspection-render \
+  --repository-root "$REPOSITORY_ROOT" \
+  --input "$AUTHORITATIVE_JSON" \
+  --publication-attestation "$READY_ATTESTATION"
 ```
 
 If JSON emission, validation, redaction, stable-digest verification, or render
@@ -235,19 +244,27 @@ calculate a misleading delta.
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-trend \
+  --repository-root "$REPOSITORY_ROOT" \
   --current "$AUTHORITATIVE_JSON" \
-  --baseline "$COMPATIBLE_BASELINE"
+  --baseline "$COMPATIBLE_BASELINE" \
+  --current-publication-attestation "$CURRENT_READY_ATTESTATION" \
+  --baseline-publication-attestation "$BASELINE_ATTESTATION"
 ```
 
 Pass the authoritative baseline directly to `inspection-finalize --baseline`;
 the kernel computes and binds the result, so caller-supplied deltas are never
 trusted. Bind the trend before rendering. The stable projection and Markdown
 exclude publication status; a separate `publication_state_digest` binds that
-operational envelope without invalidating rendered content. After Markdown is
-durably written, finalize with `--publication-status
-markdown_rendered`; after the host publication succeeds, finalize once more
-with `--publication-status published`. Never relabel publication without the
-corresponding completed host action.
+operational envelope without invalidating rendered content. Every serialized
+state—including the initial ready state—requires a matching host-issued
+publication attestation loaded from outside the repository. After Markdown is
+durably written, finalize with
+`--publication-status markdown_rendered --publication-attestation
+"$MARKDOWN_ATTESTATION"`; after the host publication succeeds, finalize once
+more with the prior attestation as `--current-publication-attestation` and the
+new host receipt as `--publication-attestation "$PUBLISHED_ATTESTATION"`.
+Standalone validation rejects every state without this external context.
+Never relabel publication without the corresponding completed host action.
 
 ## Invocation Guidance
 
