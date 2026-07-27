@@ -223,7 +223,10 @@
           "items": {"type": "string", "minLength": 1}
         },
         "tool_identity": {"type": "string", "minLength": 1},
-        "image_identity": {"type": ["string", "null"]},
+        "image_identity": {
+          "type": "string",
+          "pattern": "^[^@\\\\s]+@sha256:[0-9a-f]{64}$"
+        },
         "service_identity": {"type": ["string", "null"]},
         "plugin_version": {"$ref": "#/$defs/semver"},
         "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 86400},

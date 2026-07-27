@@ -12,7 +12,8 @@ The JSON artifact records at least:
 - canonical repository root identity, verified ref/source, commit, and dirty
   state;
 - profile path, schema version, profile version, and canonical validated
-  profile digest;
+  profile digest, plus the normalized profile snapshot needed to replay
+  classification without repository I/O;
 - catalog ID, schema version, catalog version, computed content digest, and
   selected rule/metric IDs;
 - dm-review, workflow-kernel, catalog-plugin, tool, service, and immutable image

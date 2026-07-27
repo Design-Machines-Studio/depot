@@ -29,7 +29,7 @@ from .redaction import (
 PROFILE_SCHEMA_VERSION = 1
 AUTHORITATIVE_SCHEMA_VERSION = 1
 FIXED_EXECUTION_ENV = MappingProxyType({
-    "PATH": "/usr/bin:/bin",
+    "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
     "LANG": "C",
     "LC_ALL": "C",
     "TZ": "UTC",
@@ -381,6 +381,7 @@ def _execution_policy_digest(lane):
         "network": "none",
         "root_filesystem": "read-only",
         "user": "host_numeric_uid_gid",
+        "environment": dict(FIXED_EXECUTION_ENV),
     })
 
 
@@ -515,9 +516,7 @@ def _validate_profile_document(document, repository_root):
             if lane[field] is not None and type(lane[field]) is not str:
                 _fail("wrong_type", field=field)
         image = _string(lane["image_identity"], field="image_identity")
-        if "@sha256:" not in image and (
-            ":" not in image or image.endswith(":latest")
-        ):
+        if _IMAGE_IDENTITY.fullmatch(image) is None:
             _fail("unpinned_image_identity", field=lane["lane_id"])
         if lane["service_identity"] is not None:
             _fail("invalid_lane_identity", field=lane["lane_id"])
@@ -1090,6 +1089,7 @@ def stable_projection(result):
         "result_type": result["result_type"],
         "repository": result["repository"],
         "profile": result["profile"],
+        "profile_snapshot": result["profile_snapshot"],
         "compatibility_identity": result["compatibility_identity"],
         "observations": result["observations"],
         "lane_receipts": receipts,
@@ -1222,6 +1222,7 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
             "profile_digest": profile.digest,
             "profile_path": profile.profile_path,
         },
+        "profile_snapshot": profile.to_dict(),
         "compatibility_identity": _compatibility_identity(profile),
         "observations": classified,
         "lane_receipts": lane_receipts,
@@ -1238,8 +1239,8 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
 def validate_authoritative_result(result):
     fields = frozenset({
         "schema_version", "result_type", "repository", "profile",
-        "compatibility_identity", "observations", "lane_receipts", "invocation",
-        "redaction", "stable_projection_digest",
+        "profile_snapshot", "compatibility_identity", "observations",
+        "lane_receipts", "invocation", "redaction", "stable_projection_digest",
     })
     _exact_object(result, fields, reason="invalid_authoritative_result")
     if (
@@ -1278,6 +1279,20 @@ def validate_authoritative_result(result):
         _validate_repository_relative_path(profile["profile_path"])
     except InspectionError:
         _fail("invalid_authoritative_profile")
+    try:
+        embedded_profile = validate_inspection_profile(
+            result["profile_snapshot"], Path("/"),
+            profile_path=profile["profile_path"],
+        )
+    except InspectionError:
+        _fail("invalid_authoritative_profile")
+    if (
+        embedded_profile.to_dict() != result["profile_snapshot"]
+        or embedded_profile.digest != profile["profile_digest"]
+        or embedded_profile.document["profile_id"] != profile["profile_id"]
+        or embedded_profile.document["profile_version"] != profile["profile_version"]
+    ):
+        _fail("invalid_authoritative_profile")
     compatibility = _exact_object(
         result["compatibility_identity"],
         frozenset({"schema_version", "profile", "metric_definitions", "tool_identities"}),
@@ -1298,6 +1313,8 @@ def validate_authoritative_result(result):
         "profile_version": profile["profile_version"],
         "profile_digest": profile["profile_digest"],
     }:
+        _fail("invalid_compatibility_identity")
+    if compatibility != _compatibility_identity(embedded_profile):
         _fail("invalid_compatibility_identity")
     metric_fields = frozenset({
         "metric_id", "catalog_id", "catalog_version", "catalog_digest",
@@ -1564,46 +1581,28 @@ def validate_authoritative_result(result):
             }
             if len(source_by_id) != len(receipt["evidence_snapshot"]):
                 _fail("unbound_lane_evidence")
-            for observation in classified_projection:
-                source_observation = source_by_id[observation["observation_id"]]
-                expected_telemetry = source_observation.get("raw_telemetry", {})
-                expected_evidence_status = (
-                    source_observation.get("evidence_status")
-                    if source_observation.get("evidence_status") in EVIDENCE_STATUSES
-                    else "failed"
+            expected_by_id = {
+                item["observation_id"]: item
+                for item in classify_observations(
+                    embedded_profile, receipt["evidence_snapshot"],
                 )
-                if (
-                    observation["source_observation_digest"]
-                    != _canonical_digest(source_observation)
-                    or observation["surface_id"]
-                    != source_observation.get("surface_id")
-                    or observation["rule_id"] != source_observation.get("rule_id")
-                    or observation["metric_id"] != source_observation.get("metric_id")
-                    or observation["raw_telemetry"] != expected_telemetry
-                    or observation["evidence_status"] != expected_evidence_status
-                ):
-                    _fail("unbound_lane_evidence")
-                if observation["reason_code"] == "classified":
-                    source_references = source_observation.get(
-                        "evidence_references",
-                    )
-                    if (
-                        observation["classification"]
-                        != source_observation.get("classification_id")
-                        or observation["actionable"]
-                        or type(source_references) is not list
-                        or observation["evidence_references"] != [
-                            normalize_evidence_reference(reference)
-                            for reference in source_references
-                        ]
-                    ):
-                        _fail("unbound_lane_evidence")
-                elif (
-                    observation["classification"] != "unknown"
-                    or observation["confidence"] != "unknown"
-                    or not observation["actionable"]
-                ):
-                    _fail("unbound_lane_evidence")
+            }
+            expected_projection = [
+                expected_by_id[item] for item in receipt["observation_ids"]
+            ]
+            if any(
+                {
+                    key: value for key, value in actual.items()
+                    if key != "redacted_values"
+                }
+                != {
+                    key: value for key, value in expected.items()
+                    if key != "redacted_values"
+                }
+                for actual, expected
+                in zip(classified_projection, expected_projection, strict=True)
+            ):
+                _fail("unbound_lane_evidence")
     invocation = _exact_object(
         result["invocation"],
         frozenset({
@@ -1662,19 +1661,24 @@ def compare_trends(current, baseline):
             "incompatible_identity_fields": ["schema_version"],
             "deltas": [],
         }
-    validate_authoritative_result(baseline)
     mismatches = []
-    for field in ("schema_version", "profile", "metric_definitions", "tool_identities"):
-        current_value = (
-            current["compatibility_identity"].get(field)
-            if field != "schema_version" else current["schema_version"]
-        )
-        baseline_value = (
-            baseline["compatibility_identity"].get(field)
-            if field != "schema_version" else baseline["schema_version"]
-        )
-        if current_value != baseline_value:
-            mismatches.append(field)
+    if type(baseline) is dict:
+        baseline_compatibility = baseline.get("compatibility_identity")
+        if type(baseline_compatibility) is dict:
+            for field in (
+                "schema_version", "profile", "metric_definitions",
+                "tool_identities",
+            ):
+                current_value = (
+                    current["compatibility_identity"].get(field)
+                    if field != "schema_version" else current["schema_version"]
+                )
+                baseline_value = (
+                    baseline_compatibility.get(field)
+                    if field != "schema_version" else baseline.get("schema_version")
+                )
+                if current_value != baseline_value:
+                    mismatches.append(field)
     if mismatches:
         return {
             "schema_version": 1, "status": "baseline_discontinuity",
@@ -1682,6 +1686,7 @@ def compare_trends(current, baseline):
             "incompatible_identity_fields": sorted(mismatches),
             "deltas": [],
         }
+    validate_authoritative_result(baseline)
     baseline_values = {
         item["observation_id"]: item["raw_telemetry"].get("value")
         for item in baseline["observations"]

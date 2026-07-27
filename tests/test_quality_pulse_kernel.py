@@ -313,11 +313,12 @@ class QualityPulseKernelTests(unittest.TestCase):
                 (["docker", "run", "--device=/dev/null", "image:1"], "shell_or_environment_authority"),
                 (["docker", "run", "--entrypoint=/bin/true", "image:1"], "shell_or_environment_authority"),
                 (["docker", "run", "image:latest"], "unpinned_image_identity"),
+                (["docker", "run", "image:1.2.3"], "unpinned_image_identity"),
             ):
                 value = profile_document()
                 value["lanes"][0]["argv"] = argv
                 if reason == "unpinned_image_identity":
-                    value["lanes"][0]["image_identity"] = "image:latest"
+                    value["lanes"][0]["image_identity"] = argv[-1]
                 self.assert_reason(
                     lambda value=value: validate_inspection_profile(value, repository),
                     reason,
@@ -596,6 +597,10 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertEqual(len(fake.calls), 2)
             self.assertEqual(fake.calls[0]["cwd"], repository.resolve())
             self.assertEqual(fake.calls[0]["env"], FIXED_EXECUTION_ENV)
+            self.assertEqual(
+                fake.calls[0]["env"]["PATH"],
+                "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin",
+            )
             self.assertEqual(fake.calls[0]["timeout"], 30)
             self.assertEqual(fake.calls[0]["argv"][:2], ("docker", "run"))
 
@@ -709,6 +714,43 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
             self.assert_reason(
                 lambda: validate_authoritative_result(substituted),
+                "unbound_lane_evidence",
+            )
+
+            unknown_raw = [observation(metric_id="not-declared")]
+            relabeled = build_authoritative_result(
+                profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, observations=unknown_raw,
+                lane_receipts=[receipt_for_observations(unknown_raw)],
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:01Z",
+                    "operator_authorization_event_id": "operator-event-1",
+                    "purpose": "scheduled-quality-pulse",
+                    "selected_lane_ids": ["primary"],
+                },
+            )
+            relabeled["observations"][0].update({
+                "classification": "within-limit",
+                "confidence": "high",
+                "actionable": False,
+                "reason_code": "classified",
+                "evidence_references": ["output/primary.json"],
+            })
+            relabeled["lane_receipts"][0][
+                "classified_observations_digest"
+            ] = (
+                "sha256:" + hashlib.sha256(_canonical_bytes(
+                    relabeled["observations"],
+                )).hexdigest()
+            )
+            relabeled["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(relabeled))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(relabeled),
                 "unbound_lane_evidence",
             )
 
