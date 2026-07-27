@@ -1,8 +1,18 @@
 # Live Wires Lint Rules
 
-These rules are consumed by the pipeline execution-orchestrator's livewires-lint step. Hard-fail rules block chunk commits. Warning rules are reported but don't block.
+The canonical generic rule definitions are in
+[`quality-rules-v1.json`](quality-rules-v1.json). This document supplies linter
+implementation hints for those stable IDs; it does not redefine their
+semantics. Hard-fail and warning labels describe the current lint step only.
+Repository quality-pulse profiles own scope, thresholds, exemptions, and final
+classification.
 
 The css-reviewer agent stays for nuanced cases the linter can't catch (layout choice evaluation, contextual token selection, whether a component is the right abstraction for the context, etc.).
+
+Consumer profiles must bind `live-wires-quality-rules`, schema version `1`,
+catalog version `1.0.0`, and the externally computed canonical content digest.
+They reference catalog rule and metric IDs rather than copying or silently
+redefining catalog entries.
 
 ---
 
@@ -10,6 +20,7 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-INLINE
 
+**Catalog rule:** `lw-inline-style`
 **Severity:** hard-fail
 **Applies to:** `.html`, `.templ`, `.twig`
 **Detection:** `grep -n 'style="' <files>`
@@ -18,34 +29,38 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-BASELINE
 
+**Catalog rule:** `lw-raw-spacing`
 **Severity:** hard-fail
 **Applies to:** `.css`
 **Detection:** `grep -nE '(margin|padding|gap):\s*[0-9]+(px|rem|em)' <files> | grep -vE ':\s*1px'`
-**What it catches:** Raw numeric spacing values instead of `--line-*` tokens. The `1px` exclusion allows border widths. All spacing (margin, padding, gap) must use baseline rhythm tokens (`var(--line-half)`, `var(--line-1)`, `var(--line-2)`, etc.).
+**What it catches:** Raw numeric spacing values instead of `--line-*` tokens. The `1px` exclusion allows border widths. All spacing (margin, padding, gap) must use baseline rhythm tokens (`var(--line-05)`, `var(--line-1)`, `var(--line-2)`, etc.).
 **QA shortcode:** LW-BASELINE
 
 ### LW-INVENTED
 
+**Catalog rule:** `lw-framework-class`
 **Severity:** hard-fail
 **Applies to:** `.css`, `.html`, `.templ`, `.twig`
-**Detection:** Manual check -- extract class names from changed files and compare against the canonical inventory in `layouts.md`, `utilities.md`, and `components.md`. Classes not in the inventory are invented.
+**Detection:** Judgment review -- inventory comparison can produce candidates, but dynamic class construction and justified components require context.
 **What it catches:** Ad-hoc class names that bypass the Live Wires design system. Use existing layout primitives (`.stack`, `.grid`, `.cluster`, `.sidebar`, `.center`, `.section`, `.box`, `.cover`, `.reel`), utility classes, or component classes. If a pattern repeats 3+ times, propose a new component through the proper channel.
 **QA shortcode:** LW-INVENTED
 
 ### LW-BEM
 
+**Catalog rule:** `lw-bem-child-selector`
 **Severity:** hard-fail
 **Applies to:** `.css`, `.html`, `.templ`, `.twig`
 **Detection:** `grep -nE '__' <files>`
-**What it catches:** BEM double-underscore naming (`block__element`). Live Wires uses single-dash modifiers for components (`button-accent`) and double-dash modifiers for layout primitives (`stack--compact`). BEM naming is not part of the system.
+**What it catches:** BEM double-underscore naming (`block__element`). Live Wires uses native CSS nesting for child elements. Layout primitive variants use a single dash (`stack-compact`), while component variants use a double dash (`button--accent`).
 **QA shortcode:** LW-BEM
 
 ### LW-LAYER
 
+**Catalog rule:** `lw-cascade-layer`
 **Severity:** hard-fail
 **Applies to:** `.css`
-**Detection:** Check for CSS rules outside `@layer` blocks. Rules at the top level of a CSS file (not inside any `@layer`) violate the cascade layer architecture.
-**What it catches:** CSS rules outside the cascade layer system. All CSS must be placed in the appropriate `@layer` (settings, generic, elements, blocks, utilities, overrides). Unlayered CSS has unpredictable specificity.
+**Detection:** CSS-aware review for unlayered rules and role/layer mismatches; line-oriented searches may identify candidates but do not prove nesting.
+**What it catches:** CSS outside the cascade layer system or in a layer that does not match its role. The canonical sequence is `tokens`, `reset`, `base`, `layouts`, `components`, `utilities`.
 **QA shortcode:** LW-LAYER
 
 ---
@@ -54,6 +69,7 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-STATE
 
+**Catalog rule:** `lw-state-attribute`
 **Severity:** warning
 **Applies to:** `.css`, `.html`, `.templ`, `.twig`
 **Detection:** `grep -nE '\.(is-|active|disabled)' <files>`
@@ -62,6 +78,7 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-HARDCODED-COLOR
 
+**Catalog rule:** `lw-raw-color`
 **Severity:** warning
 **Applies to:** `.css`
 **Detection:** `grep -nE '#[0-9a-fA-F]{3,8}|rgb\(|rgba\(|hsl\(|hsla\(' <files>`
@@ -70,6 +87,7 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-TRIPLET
 
+**Catalog rule:** `lw-typography-triplet`
 **Severity:** warning
 **Applies to:** `.css`
 **Detection:** Check for `font-size` declarations without matching `line-height` and `letter-spacing` (tracking) declarations in the same rule block.
@@ -78,6 +96,7 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-LOGICAL
 
+**Catalog rule:** `lw-logical-property`
 **Severity:** warning
 **Applies to:** `.css`
 **Detection:** `grep -nE '(margin|padding|border)-(top|bottom|left|right):' <files>`
@@ -86,8 +105,11 @@ The css-reviewer agent stays for nuanced cases the linter can't catch (layout ch
 
 ### LW-VARIANT
 
+**Catalog rules:** `lw-layout-variant`, `lw-component-variant`
 **Severity:** warning
 **Applies to:** `.css`, `.html`, `.templ`, `.twig`
-**Detection:** Check modifier naming convention -- layout primitives use double-dash (`stack--compact`, `grid--3`), components use single-dash (`button-accent`, `card-flush`). Mismatched conventions are flagged.
-**What it catches:** Wrong modifier convention. Double-dash for layout primitive variants, single-dash for component variants. Mixing conventions makes the system harder to read.
+**Detection:** Check modifier naming convention. Layout primitives use a single dash (`stack-compact`, `grid-columns-3`).
+Components use a double dash (`button--accent`, `card--flush`). Mismatched conventions are flagged.
+**What it catches:** Wrong modifier convention. Layout variants use a single dash.
+Component variants use a double dash, keeping composition and block naming distinct.
 **QA shortcode:** LW-VARIANT

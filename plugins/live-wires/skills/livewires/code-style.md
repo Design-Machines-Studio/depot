@@ -1,6 +1,17 @@
 # Code Style Guidelines
 
+## Catalog Authority
+
+The canonical generic rule metadata lives in
+[`quality-rules-v1.json`](../../references/quality-rules-v1.json). The examples
+below explain those rules; they do not replace the stable catalog IDs. Reviews
+and quality-pulse observations cite the catalog IDs, while repository profiles
+own scope, thresholds, exemptions, and classification.
+
 ## CUBE CSS Layer Mapping
+
+Catalog rules: `lw-cascade-layer`, `lw-layout-variant`,
+`lw-component-variant`.
 
 Live Wires uses [CUBE CSS](https://cube.fyi/) by Andy Bell. Every class and rule belongs in a specific layer:
 
@@ -17,6 +28,8 @@ Live Wires uses [CUBE CSS](https://cube.fyi/) by Andy Bell. Every class and rule
 Most styling is handled by defaults and utilities. Components should be minimal.
 
 ## State with Data Attributes
+
+Catalog rule: `lw-state-attribute`.
 
 State changes use `data-*` attributes, NOT CSS classes. This is the Exception layer in CUBE CSS.
 
@@ -83,6 +96,8 @@ For consistency, order attributes as:
 ```
 
 ## Avoid Inline Styles
+
+Catalog rule: `lw-inline-style`.
 
 Always check if a utility class exists before adding inline styles. Live Wires has comprehensive utilities:
 
@@ -180,6 +195,8 @@ Format: `https://placehold.co/{width}x{height}/{bg-color}/{text-color}?text={lab
 
 ## Typography Triplet
 
+Catalog rule: `lw-typography-triplet`.
+
 When setting `font-size` with a `--text-*` token in CSS, always include the matching line-height and tracking:
 
 ```css
@@ -193,6 +210,8 @@ When setting `font-size` with a `--text-*` token in CSS, always include the matc
 The suffixes match across all three scales (`xs` through `9xl`). If you only need to set font size in HTML, use the `.text-*` utility class instead -- it bundles all three properties.
 
 ## Prefer Token Variables Over Custom Properties
+
+Catalog rule: `lw-token-usage`.
 
 Use existing token variables directly in component CSS:
 

@@ -158,6 +158,21 @@ For detailed reference, see these files in the same directory:
 
 ---
 
+## Canonical Quality Rule Catalog
+
+The machine-readable authority for generic Live Wires compliance observations is
+[`quality-rules-v1.json`](../../references/quality-rules-v1.json). Load it when
+producing a quality pulse, machine-readable observation, or rule-scoped review.
+Use its stable `rule_id` and `metric_id` values; the prose in this skill explains
+the framework but does not define a second executable catalog.
+
+Repository profiles may select rule IDs and supply their own path scopes,
+thresholds, exemptions, and classifications. A profile must bind the catalog
+ID, schema version, catalog version, and externally computed canonical content
+digest. It must not copy or silently redefine catalog rules.
+
+---
+
 ## Typographic Foundations
 
 Live Wires' typography system implements principles from the Design Machines `typography` skill -- fluid scaling, modular scales, progressive line-height, and vertical rhythm rooted in Müller-Brockmann, Bringhurst, Brown, and Latin. For the **why** behind these decisions (measure rules, typeface selection, evaluation frameworks), load the `typography` skill from the `design-practice` plugin.
@@ -198,11 +213,17 @@ All spacing derives from `--line`. Use `--line-*` tokens for spacing:
 
 Live Wires uses **[CUBE CSS](https://cube.fyi/)** by Andy Bell -- a methodology that embraces the cascade rather than fighting it.
 
-**CUBE** stands for **Composition, Utility, Block, Exception**. Compositions are layout primitives (single-dash variants). Blocks are components (double-dash variants). Utilities are single-purpose classes. Exceptions are state changes via `data-*` attributes. See [code-style.md](code-style.md) for the full layer mapping table.
+**CUBE** stands for **Composition, Utility, Block, Exception**. Compositions are
+layout primitives (single-dash variants).
+Blocks use double-dash variants.
+Utilities are single-purpose classes. Exceptions are state changes via `data-*`
+attributes. See [code-style.md](code-style.md) for the full layer mapping table.
 
 **The key insight:** Most styling is handled by global defaults and utilities. By the time you reach "blocks" (components), there's minimal work left. This is why inventing new component classes is almost always wrong -- the answer is usually a layout primitive, a utility, or a scheme.
 
 ## CSS Cascade Layers
+
+Catalog rule: `lw-cascade-layer`.
 
 ```css
 @layer tokens, reset, base, layouts, components, utilities;
@@ -217,6 +238,8 @@ Live Wires uses native CSS only -- no preprocessors. Key features: cascade layer
 ---
 
 ## CSS Nesting Over BEM Child Selectors
+
+Catalog rule: `lw-bem-child-selector`.
 
 **BEM `__` child element selectors are an anti-pattern in Live Wires.** Native CSS nesting makes them unnecessary.
 
@@ -381,8 +404,8 @@ All paths are relative to the livewires repo root unless noted.
 
 ### Naming Conventions (MUST follow):
 
-- Layout modifiers: **single-dash** (`stack-compact`, `box-tight`, `sidebar-reverse`)
-- Component modifiers: **double-dash** (`button--red`, `badge--success`)
+- Layout modifiers: **single-dash** (`stack-compact`, `box-tight`, `sidebar-reverse`) -- `lw-layout-variant`
+- Component modifiers: **double-dash** (`button--red`, `badge--success`) -- `lw-component-variant`
 - Spacing tokens: `--line-*` pattern
 - Typography: Tailwind-style (`text-xs`, `text-sm`, `text-lg`, `text-2xl`, etc.)
 

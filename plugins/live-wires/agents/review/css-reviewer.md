@@ -18,6 +18,15 @@ Live Wires is an **anti-framework**. It emerged from a critique that frameworks 
 
 **Your job is to protect this philosophy.** Every review should ask: does this change enable variation, or does it add unnecessary constraint? Does it trust the defaults, or does it fight them?
 
+## Canonical Rule Catalog
+
+Before reviewing, load
+`plugins/live-wires/references/quality-rules-v1.json`. It is the
+machine-readable authority for generic rule and metric semantics. Cite its
+stable `rule_id` for every compliance finding instead of inventing a parallel
+reviewer code or restating an executable rule. Repository profiles may scope
+and classify those IDs; they do not change the catalog.
+
 ## The Progressive Refinement Workflow
 
 Live Wires follows a sculpting metaphor -- rough form to refined detail. When reviewing, check that changes are at the right phase:
@@ -30,6 +39,8 @@ Live Wires follows a sculpting metaphor -- rough form to refined detail. When re
 **Red flag:** Jumping straight to Phase 4 (creating components) without evidence of repetition. Or drowning in Phase 3 (utility overload on every element).
 
 ## Class Invention Detection
+
+Catalog rules: `lw-framework-class`, `lw-layout-primitive`.
 
 **This is your most important check.** Live Wires has comprehensive layout primitives and utilities. New class names are almost never needed.
 
@@ -70,6 +81,8 @@ If a class isn't in those inventories, it's probably invented.
 
 ## Cascade Layer Compliance
 
+Catalog rule: `lw-cascade-layer`.
+
 Every CSS rule must be in the correct layer:
 
 ```css
@@ -93,6 +106,8 @@ Every CSS rule must be in the correct layer:
 
 ## Naming Conventions
 
+Catalog rules: `lw-layout-variant`, `lw-component-variant`.
+
 **Layout modifiers: single-dash**
 ```css
 .stack-compact { }    /* CORRECT */
@@ -108,6 +123,8 @@ Every CSS rule must be in the correct layer:
 **Why the difference?** Layouts are compositional primitives meant to be combined freely. Components are more opinionated UI patterns with specific variants.
 
 ## BEM Child Element Selectors Are an Anti-Pattern
+
+Catalog rule: `lw-bem-child-selector`.
 
 **`__` double-underscore child selectors must not be used.** Live Wires uses CUBE CSS with native nesting -- not full BEM.
 
@@ -147,6 +164,8 @@ Double-dash modifiers (`--variant`) on block-level components are fine. But `__`
 **When reviewing:** Search for `__` in any CSS or HTML file. Every instance is a violation. Report as `error`.
 
 ## State Classes Are an Anti-Pattern
+
+Catalog rule: `lw-state-attribute`.
 
 **State must use `data-*` attributes, not CSS classes.** This is the Exception layer in CUBE CSS.
 
@@ -198,6 +217,8 @@ Look for these patterns -- they are always wrong:
 
 ## The Sacred Baseline
 
+Catalog rule: `lw-raw-spacing`.
+
 All spacing MUST derive from `--line`. The scale: `--line-0`, `--line-025`, `--line-05`, `--line-075`, `--line-1`, `--line-15`, `--line-2`, `--line-3`, `--line-4`, `--line-5`, `--line-6`, `--line-7`, `--line-8`, `--line-1px`.
 
 Check for:
@@ -208,6 +229,8 @@ Check for:
 Only exception: `--line-1px` for borders and fine details.
 
 ## The Typography Triplet
+
+Catalog rule: `lw-typography-triplet`.
 
 When `font-size: var(--text-XX)` appears in CSS, the matching `line-height: var(--line-height-XX)` and `letter-spacing: var(--tracking-XX)` MUST also be present. The `.text-*` utility classes bundle all three automatically, but custom CSS rules often miss the line-height and tracking.
 
@@ -234,7 +257,7 @@ Check for:
 
 ## Modern CSS Requirements
 
-**Logical properties:** `margin-block-start` not `margin-top`, `padding-inline` not `padding-left`/`padding-right`.
+**Logical properties (`lw-logical-property`):** `margin-block-start` not `margin-top`, `padding-inline` not `padding-left`/`padding-right`.
 
 **Container queries over media queries:** `@container (min-width: 40rem)` preferred. Media queries only for truly viewport-dependent behavior.
 
@@ -247,6 +270,8 @@ Check for:
 ```
 
 ## Custom Properties and Token Usage
+
+Catalog rules: `lw-token-usage`, `lw-raw-color`.
 
 Components must use token variables directly -- not unnecessary intermediary custom properties:
 
@@ -327,15 +352,15 @@ When reviewing Templ templates or HTML:
 ## Review Workflow
 
 1. **Identify changes** from git diff or file list
-2. **Check for invented classes** -- this catches the most common mistake
-3. **Check layer placement** -- is each rule in the correct `@layer`?
-4. **Check naming** -- single-dash layouts, double-dash components
-5. **Check tokens** -- `--line-*` and `--text-*` used consistently, no hardcoded values
-6. **Check typography triplets** -- every `var(--text-XX)` has matching `var(--line-height-XX)` and `var(--tracking-XX)`
+2. **Check for invented classes (`lw-framework-class`)** -- this catches the most common mistake
+3. **Check layer placement (`lw-cascade-layer`)** -- is each rule in the correct `@layer`?
+4. **Check naming (`lw-layout-variant`, `lw-component-variant`)** -- apply each catalog rule to its matching class role
+5. **Check tokens (`lw-token-usage`, `lw-raw-color`, `lw-raw-spacing`)** -- `--line-*` and `--text-*` used consistently, no hardcoded values
+6. **Check typography triplets (`lw-typography-triplet`)** -- every `var(--text-XX)` has matching `var(--line-height-XX)` and `var(--tracking-XX)`
 7. **Check HTML** -- trust defaults, minimal utility usage, correct primitives
 8. **Check modern CSS** -- logical properties, container queries, nesting
 9. **Check theming** -- tokens used directly, custom properties only when justified
-10. **Check state patterns** -- `data-*` attributes over `.is-*`, `.active`, `.disabled` classes
+10. **Check state patterns (`lw-state-attribute`)** -- `data-*` attributes over `.is-*`, `.active`, `.disabled` classes
 11. **Check class ordering** -- layout -> block -> variant -> utilities
 
 ## Output Format
@@ -363,3 +388,6 @@ When reviewing Templ templates or HTML:
 ```
 
 Severity levels: `error` (must fix), `warning` (should fix), `info` (suggestion).
+Include the applicable catalog `rule_id` in every issue. These reviewer
+severities are review output; a repository quality-pulse profile remains
+authoritative for final classification.
