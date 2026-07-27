@@ -14,15 +14,24 @@ Apply these checks after agent selection (Phase 3) and before agent launch (Phas
 
 **Action:** Truncate the diff. Pass each agent the file list plus the first 200 lines per file. Add a note to the agent prompt: "Diff truncated to 200 lines per file. Focus on the visible code; flag areas where truncation may hide issues."
 
-### Sensitive File Filter
+### Content-Based Disclosure Filter
 
-**Pattern:** `.env`, `*credentials*`, `*secret*`, `*.key`, `*.pem`
+File names such as `.env`, `*credentials*`, `*secret*`, `*.key`, and `*.pem`
+are risk signals, not disclosure evidence. Do not strip content by path name.
+The local Codex-native security auditor receives the complete diff.
 
-**Action:** Strip matching files from the diff before dispatching to all agents EXCEPT security-auditor. The security-auditor receives the full diff -- its job is to catch committed secrets. All other agents get the stripped version.
+Immediately before any OpenRouter mechanical lane, run the installed
+OpenRouter delegation boundary over the exact immutable diff snapshot. A safe
+documentation placeholder, test fixture, variable name, or non-secret security
+implementation remains eligible regardless of its path. A high-confidence
+credential, complete private-key block, authenticated DSN, classified private
+data, malformed diff, symlink diff, or prohibited execution authority declines
+that OpenRouter disclosure while local review continues.
 
-Log exclusions:
-```
-Stripped 2 sensitive files from non-security agents: .env, config/secrets.yml
+Log the content decision and stable reason, never a filename embargo:
+
+```text
+OpenRouter disclosure: declined (high-confidence-credential); local security review continued
 ```
 
 ### Per-Agent Token Budget

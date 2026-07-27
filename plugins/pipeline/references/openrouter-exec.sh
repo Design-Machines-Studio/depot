@@ -34,7 +34,8 @@ done
 
 for candidate in "$MODEL" "$FALLBACK_MODEL"; do
   [ -z "$candidate" ] && continue
-  case "$candidate" in
+  candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
+  case "$candidate_origin" in
     openai/*|anthropic/*)
       echo "openrouter-exec: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
       exit 2
@@ -107,12 +108,12 @@ BOUNDARY="$BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary
 }
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
-PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.patch")"
-PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.prompt")"
-ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.allowed")"
-PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.paths")"
+PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.patch.XXXXXX")"
+PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.prompt.XXXXXX")"
+ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.allowed.XXXXXX")"
+PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.paths.XXXXXX")"
 MSG_FILE=""
-WRAPPER_STDERR="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.stderr")"
+WRAPPER_STDERR="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.stderr.XXXXXX")"
 trap 'rm -f "$PATCH_FILE" "$PROMPT_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$MSG_FILE" "$WRAPPER_STDERR"' EXIT
 cat > "$PROMPT_FILE"
 [ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
@@ -184,7 +185,7 @@ if git diff --cached --quiet; then
   exit 1
 fi
 
-MSG_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.XXXXXX.msg")"
+MSG_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.msg.XXXXXX")"
 printf '%s\n\nImplementedBy: openrouter\nVerification: %s\n' "$COMMIT_MSG" "$VERIFY_RESULT" > "$MSG_FILE"
 git commit -F "$MSG_FILE" >/dev/null
 

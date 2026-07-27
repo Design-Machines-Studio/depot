@@ -349,8 +349,10 @@ file identity, and then executes only that snapshot. Missing, repository-held,
 self-asserted, stale, or mismatched authority fails before subprocess
 invocation.
 
-Admitted lanes are exact `docker run` or `docker compose` argv arrays. The
-profile cannot declare host mounts. The kernel synthesizes a fixed read-only
+Inspection-profile v1 admits exact pinned `docker run` argv arrays only. Compose
+is rejected because mutable external Compose configuration is not covered by
+the profile attestation. The profile cannot declare host mounts. The kernel
+synthesizes a fixed read-only
 mount of the attested repository at `/workspace` and a unique empty read-write
 evidence mount at `/quality-pulse-evidence`; direct Docker lanes also receive
 `--network=none` and a read-only container filesystem, and all lanes use the
@@ -373,6 +375,12 @@ Fallback success is `fallback` with its `primary_lane_id`; an unused fallback is
 `skipped`. Unknown observation schema, path, surface, metric, rule,
 classification, or evidence state produces an actionable fail-closed
 classification while retaining redacted raw telemetry.
+
+Receipts retain separate identities for the profile-declared argv and the
+kernel-synthesized execution policy (network, root filesystem, user, and fixed
+mount semantics). They bind both the raw lane-envelope digest and the
+classified-observation projection digest so durable validation detects
+same-ID content substitution.
 
 Authoritative inspection JSON includes volatile invocation provenance and an
 explicit stable-projection digest. Compare trends only when schema, profile,

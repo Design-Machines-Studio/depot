@@ -192,8 +192,17 @@ def high_confidence(value):
 
 
 def scan_disclosure(text):
-    if re.search(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----", text):
-        fail(3, "private-key")
+    key_block = re.compile(
+        r"(?m)^[ +\-]?-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----\r?\n"
+        r"((?:[ +\-]?[A-Za-z0-9+/=]+\r?\n)+)"
+        r"[ +\-]?-----END \1-----$",
+    )
+    for match in key_block.finditer(text):
+        body = "".join(
+            line.lstrip(" +-") for line in match.group(2).splitlines()
+        )
+        if len(body) >= 32:
+            fail(3, "private-key")
 
     for match in re.finditer(
         r"(?<![A-Za-z0-9])(?:sk-or-v1-|sk-ant-|ghp_|github_pat_|AKIA)([A-Za-z0-9_./+=:-]{16,})",
@@ -284,7 +293,11 @@ def parse_diff(text):
 
         if any(
             line.startswith(("GIT binary patch", "Binary files "))
-            or line.startswith(("new file mode 120000", "old mode 120000", "new mode 160000"))
+            or line.startswith((
+                "new file mode 120000", "old mode 120000",
+                "deleted file mode 120000", "new mode 160000",
+            ))
+            or re.match(r"^index \S+ 120000(?:\r?\n)?$", line)
             for line in section
         ):
             fail(2, "binary-or-symlink-diff")

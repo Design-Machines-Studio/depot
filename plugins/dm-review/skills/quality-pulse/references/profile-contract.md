@@ -43,6 +43,10 @@ alone supplies `/workspace` read-only and a fresh
 lane-ID-bound observation envelope at the fixed
 `/quality-pulse-evidence/observations.json` path.
 
+Schema v1 accepts pinned `docker run` lanes only. It rejects Compose because a
+referenced Compose file is a mutable authority source outside the attested
+profile bytes.
+
 ## Canonical Catalog Binding
 
 The canonical generic catalog is the selected Live Wires bundle asset:

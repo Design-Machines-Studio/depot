@@ -25,7 +25,10 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ "${MUTATE_AFTER_SCAN:-0}" = "1" ]; then
   printf 'OPENROUTER_API_KEY=sk-or-v1-mutated-after-scan-1234567890\n' \
     > "$BUNDLE_DIR/RESUME_PROMPT.md"
-  printf '%s\n' '-----BEGIN PRIVATE KEY-----' > "$BUNDLE_DIR/HANDOFF.md"
+  printf '%s\n' \
+    '-----BEGIN PRIVATE KEY-----' \
+    'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0123456789abcd' \
+    '-----END PRIVATE KEY-----' > "$BUNDLE_DIR/HANDOFF.md"
 fi
 EOF
 chmod +x "$REFS/delegation-boundary.sh" "$REFS/delegation-boundary.real.sh"
@@ -95,7 +98,10 @@ run_expect 3 "resume prompt disclosure declines distinctly" env
 [ ! -e "$FIXTURE/sentinel" ]
 
 printf 'Continue safely.\n' > "$FIXTURE/bundle/RESUME_PROMPT.md"
-printf '%s\n' '-----BEGIN PRIVATE KEY-----' > "$FIXTURE/bundle/HANDOFF.md"
+printf '%s\n' \
+  '-----BEGIN PRIVATE KEY-----' \
+  'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0123456789abcd' \
+  '-----END PRIVATE KEY-----' > "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel"
 run_expect 3 "handoff disclosure declines distinctly" env
 [ ! -e "$FIXTURE/sentinel" ]

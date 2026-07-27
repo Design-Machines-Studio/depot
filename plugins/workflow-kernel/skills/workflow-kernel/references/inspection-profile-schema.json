@@ -216,7 +216,7 @@
       ],
       "properties": {
         "lane_id": {"$ref": "#/$defs/id"},
-        "execution_type": {"enum": ["docker", "compose"]},
+        "execution_type": {"const": "docker"},
         "argv": {
           "type": "array",
           "minItems": 2,

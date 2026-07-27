@@ -112,7 +112,7 @@ Capture the repository commit, dirty state, verified ref/source, profile
 schema/version/digest, catalog identity/digest, selected plugin versions, tool
 and immutable image identities, and invocation time before running lanes.
 
-Admit only profile-declared Docker or Compose argv arrays that passed kernel
+Admit only profile-declared pinned `docker run` argv arrays that passed kernel
 validation. dm-review decides which declared lanes are requested and preserves
 coverage; it does not rewrite argv or execute a shell. The kernel, not the
 profile, synthesizes a fixed read-only mount of the attested checkout and a

@@ -101,6 +101,19 @@ grep -Fq 'openai/*|anthropic/*' \
     echo "  FAIL  final wrapper lacks native-vendor pre-network rejection"
     failures=1
   }
+for origin_guard in \
+  "plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh:candidate_origin=" \
+  "plugins/openrouter/agents/workflow/openrouter-agent-runner.md:target_model_origin=" \
+  "plugins/pipeline/references/openrouter-exec.sh:candidate_origin=" \
+  "plugins/pipeline/references/cascade-dispatch.sh:model_origin="
+do
+  origin_file="${origin_guard%%:*}"
+  origin_marker="${origin_guard#*:}"
+  grep -Fq "$origin_marker" "$ROOT/$origin_file" || {
+    echo "  FAIL  provider-origin guard is not case-normalized: $origin_file"
+    failures=1
+  }
+done
 grep -Fq -- '--plugin <name>' \
   "$ROOT/plugins/workflow-kernel/skills/workflow-kernel/SKILL.md" || {
     echo "  FAIL  workflow-kernel resolver is not neutral across plugin names"

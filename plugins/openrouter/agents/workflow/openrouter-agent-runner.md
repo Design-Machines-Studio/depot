@@ -71,7 +71,8 @@ validate_model_slug "$target_model" || {
   echo "ERROR: invalid target_model (expected full OpenRouter slug): $target_model" >&2
   exit 2
 }
-case "$target_model" in
+target_model_origin="$(printf '%s' "$target_model" | tr '[:upper:]' '[:lower:]')"
+case "$target_model_origin" in
   openai/*|anthropic/*)
     echo "ERROR: native-vendor-origin invariant rejected target_model: $target_model" >&2
     exit 2
@@ -82,7 +83,8 @@ if [ -n "${fallback_model:-}" ]; then
     echo "ERROR: invalid fallback_model (expected full OpenRouter slug): $fallback_model" >&2
     exit 2
   }
-  case "$fallback_model" in
+  fallback_model_origin="$(printf '%s' "$fallback_model" | tr '[:upper:]' '[:lower:]')"
+  case "$fallback_model_origin" in
     openai/*|anthropic/*)
       echo "ERROR: native-vendor-origin invariant rejected fallback_model: $fallback_model" >&2
       exit 2

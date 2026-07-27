@@ -312,8 +312,7 @@ def _validate_lane_argv(lane, repository_root):
         _fail("invalid_lane_argv", field=lane["lane_id"])
     if argv[0] != "docker":
         _fail("untrusted_executable", field=lane["lane_id"])
-    expected = ["docker", "run"] if lane["execution_type"] == "docker" else ["docker", "compose"]
-    if argv[:2] != expected:
+    if argv[:2] != ["docker", "run"]:
         _fail("invalid_lane_argv", field=lane["lane_id"])
     prohibited = {
         "sh", "bash", "zsh", "-c", "--env", "--env-file", "-e",
@@ -332,28 +331,12 @@ def _validate_lane_argv(lane, repository_root):
         for arg in argv
     ):
         _fail("shell_or_environment_authority", field=lane["lane_id"])
-    if lane["execution_type"] == "docker":
-        index = 2
-        allowed_flags = {"--rm", "--pull=never", "--read-only", "--no-healthcheck"}
-        while index < len(argv) and argv[index] in allowed_flags:
-            index += 1
-        if index >= len(argv) or argv[index] != lane["image_identity"]:
-            _fail("lane_identity_mismatch", field=lane["lane_id"])
-    else:
-        index = 2
-        while index < len(argv) and argv[index] in {"-f", "--file"}:
-            if index + 1 >= len(argv):
-                _fail("invalid_lane_argv", field=lane["lane_id"])
-            normalize_owned_path(repository_root, argv[index + 1], must_exist=True)
-            index += 2
-        if index >= len(argv) or argv[index] != "run":
-            _fail("invalid_lane_argv", field=lane["lane_id"])
+    index = 2
+    allowed_flags = {"--rm", "--pull=never", "--read-only", "--no-healthcheck"}
+    while index < len(argv) and argv[index] in allowed_flags:
         index += 1
-        while index < len(argv) and argv[index] in {"--rm", "--no-deps"}:
-            index += 1
-        match = _COMPOSE_IDENTITY.fullmatch(lane["service_identity"])
-        if match is None or index >= len(argv) or argv[index] != match.group(1):
-            _fail("lane_identity_mismatch", field=lane["lane_id"])
+    if index >= len(argv) or argv[index] != lane["image_identity"]:
+        _fail("lane_identity_mismatch", field=lane["lane_id"])
 
 
 def _execution_argv(lane, repository_root, evidence_root):
@@ -366,32 +349,39 @@ def _execution_argv(lane, repository_root, evidence_root):
     evidence_mount = (
         f"type=bind,source={evidence_root},target={_LANE_EVIDENCE_TARGET}"
     )
-    if lane["execution_type"] == "docker":
-        image_index = declared.index(lane["image_identity"])
-        return (
-            declared[:image_index]
-            + [
-                "--network=none", "--read-only",
-                "--user", f"{os.getuid()}:{os.getgid()}",
-                "--mount", repository_mount,
-                "--mount", evidence_mount,
-            ]
-            + declared[image_index:]
-        )
-
-    run_index = declared.index("run", 2)
-    service = lane["service_identity"].split("@", 1)[0]
-    service_index = declared.index(service, run_index + 1)
+    image_index = declared.index(lane["image_identity"])
     return (
-        declared[:service_index]
+        declared[:image_index]
         + [
-            "--no-deps",
+            "--network=none", "--read-only",
             "--user", f"{os.getuid()}:{os.getgid()}",
-            "--volume", f"{repository_root}:{_LANE_REPOSITORY_TARGET}:ro",
-            "--volume", f"{evidence_root}:{_LANE_EVIDENCE_TARGET}:rw",
+            "--mount", repository_mount,
+            "--mount", evidence_mount,
         ]
-        + declared[service_index:]
+        + declared[image_index:]
     )
+
+
+def _execution_policy_digest(lane):
+    """Stable identity for kernel-synthesized execution controls."""
+    return _canonical_digest({
+        "schema_version": 1,
+        "declared_argv": lane["argv"],
+        "repository_mount": {
+            "source": "attested_repository_root",
+            "target": _LANE_REPOSITORY_TARGET,
+            "mode": "read-only",
+        },
+        "evidence_mount": {
+            "source": "fresh_kernel_temporary_directory",
+            "target": _LANE_EVIDENCE_TARGET,
+            "mode": "read-write",
+            "file": _LANE_EVIDENCE_NAME,
+        },
+        "network": "none",
+        "root_filesystem": "read-only",
+        "user": "host_numeric_uid_gid",
+    })
 
 
 def _read_lane_evidence(evidence_root, lane_id):
@@ -516,7 +506,7 @@ def _validate_profile_document(document, repository_root):
     lane_ids = _unique_by_id(lanes, "lane_id", field="lanes")
     for lane in lanes:
         _exact_object(lane, lane_fields, reason="invalid_lane")
-        if lane["execution_type"] not in {"docker", "compose"}:
+        if lane["execution_type"] != "docker":
             _fail("unknown_execution_type", field=lane["lane_id"])
         identity = _string(lane["tool_identity"], field="tool_identity")
         if not identity.startswith("docker:") or _SEMVER.fullmatch(identity[7:]) is None:
@@ -524,20 +514,13 @@ def _validate_profile_document(document, repository_root):
         for field in ("image_identity", "service_identity"):
             if lane[field] is not None and type(lane[field]) is not str:
                 _fail("wrong_type", field=field)
-        if lane["execution_type"] == "docker":
-            image = _string(lane["image_identity"], field="image_identity")
-            if "@sha256:" not in image and (
-                ":" not in image or image.endswith(":latest")
-            ):
-                _fail("unpinned_image_identity", field=lane["lane_id"])
-            if lane["service_identity"] is not None:
-                _fail("invalid_lane_identity", field=lane["lane_id"])
-        else:
-            service = _string(lane["service_identity"], field="service_identity")
-            if _COMPOSE_IDENTITY.fullmatch(service) is None:
-                _fail("unpinned_service_identity", field=lane["lane_id"])
-            if lane["image_identity"] is not None:
-                _fail("invalid_lane_identity", field=lane["lane_id"])
+        image = _string(lane["image_identity"], field="image_identity")
+        if "@sha256:" not in image and (
+            ":" not in image or image.endswith(":latest")
+        ):
+            _fail("unpinned_image_identity", field=lane["lane_id"])
+        if lane["service_identity"] is not None:
+            _fail("invalid_lane_identity", field=lane["lane_id"])
         plugin_version = _string(lane["plugin_version"], field="plugin_version")
         if _SEMVER.fullmatch(plugin_version) is None:
             _fail("invalid_plugin_version", field=lane["lane_id"])
@@ -940,6 +923,7 @@ def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
         "reason_code": reason,
         "primary_lane_id": lane["primary_lane_id"],
         "argv_identity": _canonical_digest({"argv": lane["argv"]}),
+        "execution_policy_digest": _execution_policy_digest(lane),
         "tool_identity": lane["tool_identity"],
         "image_identity": lane["image_identity"],
         "service_identity": lane["service_identity"],
@@ -951,6 +935,7 @@ def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
         "evidence_references": list(lane["evidence_paths"]),
         "evidence_digest": evidence_digest,
         "observation_ids": observation_ids,
+        "classified_observations_digest": None,
         "stdout": stdout,
         "stderr": stderr,
         "redacted_values": stdout_redacted + stderr_redacted,
@@ -1008,6 +993,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
                     "lane_id": fallback["lane_id"], "status": "skipped",
                     "reason_code": "primary_available", "primary_lane_id": lane_id,
                     "argv_identity": _canonical_digest({"argv": fallback["argv"]}),
+                    "execution_policy_digest": _execution_policy_digest(fallback),
                     "tool_identity": fallback["tool_identity"],
                     "image_identity": fallback["image_identity"],
                     "service_identity": fallback["service_identity"],
@@ -1016,6 +1002,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
                     "started_at": None, "finished_at": None, "exit_code": None,
                     "evidence_references": list(fallback["evidence_paths"]),
                     "evidence_digest": None, "observation_ids": [],
+                    "classified_observations_digest": None,
                     "stdout": "", "stderr": "", "redacted_values": 0,
                 })
             continue
@@ -1031,6 +1018,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
                     "reason_code": "earlier_fallback_available",
                     "primary_lane_id": lane_id,
                     "argv_identity": _canonical_digest({"argv": fallback["argv"]}),
+                    "execution_policy_digest": _execution_policy_digest(fallback),
                     "tool_identity": fallback["tool_identity"],
                     "image_identity": fallback["image_identity"],
                     "service_identity": fallback["service_identity"],
@@ -1039,6 +1027,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
                     "started_at": None, "finished_at": None, "exit_code": None,
                     "evidence_references": list(fallback["evidence_paths"]),
                     "evidence_digest": None, "observation_ids": [],
+                    "classified_observations_digest": None,
                     "stdout": "", "stderr": "", "redacted_values": 0,
                 })
                 continue
@@ -1080,6 +1069,7 @@ def _compatibility_identity(profile):
                 "image_identity": item["image_identity"],
                 "service_identity": item["service_identity"],
                 "plugin_version": item["plugin_version"],
+                "execution_policy_digest": _execution_policy_digest(item),
             }
             for item in document["lanes"]
         ],
@@ -1111,6 +1101,28 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         _fail("validated_profile_required")
     if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
         _fail("invalid_repository_provenance")
+    lanes_by_id = {
+        item["lane_id"]: item for item in profile.to_dict()["lanes"]
+    }
+    normalized_receipts = []
+    for receipt in _exact_list(lane_receipts, field="lane_receipts"):
+        if type(receipt) is not dict:
+            _fail("invalid_lane_receipt")
+        lane = lanes_by_id.get(receipt.get("lane_id"))
+        if lane is None:
+            _fail("invalid_lane_receipt")
+        expected_policy_digest = _execution_policy_digest(lane)
+        supplied_policy_digest = receipt.get("execution_policy_digest")
+        if (
+            supplied_policy_digest is not None
+            and supplied_policy_digest != expected_policy_digest
+        ):
+            _fail("invalid_lane_receipt")
+        normalized = dict(receipt)
+        normalized["execution_policy_digest"] = expected_policy_digest
+        normalized_receipts.append(normalized)
+    lane_receipts = normalized_receipts
+
     raw_observations = _exact_list(observations, field="observations")
     raw_ids = []
     for observation in raw_observations:
@@ -1161,6 +1173,20 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         _fail("unbound_lane_evidence")
 
     classified = classify_observations(profile, raw_observations)
+    classified_by_id = {
+        item["observation_id"]: item for item in classified
+    }
+    bound_receipts = []
+    for receipt in lane_receipts:
+        bound_receipt = dict(receipt)
+        if receipt["status"] in {"available", "fallback"}:
+            bound_receipt["classified_observations_digest"] = _canonical_digest([
+                classified_by_id[item] for item in receipt["observation_ids"]
+            ])
+        else:
+            bound_receipt["classified_observations_digest"] = None
+        bound_receipts.append(bound_receipt)
+    lane_receipts = bound_receipts
     redacted_count = sum(item["redacted_values"] for item in classified)
     redacted_count += sum(item.get("redacted_values", 0) for item in lane_receipts)
     result = {
@@ -1274,7 +1300,7 @@ def validate_authoritative_result(result):
             _fail("invalid_compatibility_identity")
     tool_fields = frozenset({
         "lane_id", "tool_identity", "image_identity", "service_identity",
-        "plugin_version",
+        "plugin_version", "execution_policy_digest",
     })
     lane_ids = set()
     for tool in _exact_list(
@@ -1291,18 +1317,15 @@ def validate_authoritative_result(result):
             or _SEMVER.fullmatch(tool["tool_identity"][7:]) is None
             or type(tool["plugin_version"]) is not str
             or _SEMVER.fullmatch(tool["plugin_version"]) is None
+            or type(tool["execution_policy_digest"]) is not str
+            or _DIGEST.fullmatch(tool["execution_policy_digest"]) is None
         ):
             _fail("invalid_compatibility_identity")
         image, service = tool["image_identity"], tool["service_identity"]
         if not (
-            (
-                type(image) is str and service is None
-                and _IMAGE_IDENTITY.fullmatch(image) is not None
-            )
-            or (
-                image is None and type(service) is str
-                and _COMPOSE_IDENTITY.fullmatch(service) is not None
-            )
+            type(image) is str
+            and service is None
+            and _IMAGE_IDENTITY.fullmatch(image) is not None
         ):
             _fail("invalid_compatibility_identity")
     tool_by_lane = {
@@ -1358,9 +1381,11 @@ def validate_authoritative_result(result):
             _fail("invalid_authoritative_observation")
     receipt_fields = frozenset({
         "lane_id", "status", "reason_code", "primary_lane_id", "argv_identity",
+        "execution_policy_digest",
         "tool_identity", "image_identity", "service_identity", "plugin_version",
         "timeout_seconds", "started_at", "finished_at", "exit_code",
         "evidence_references", "evidence_digest", "observation_ids",
+        "classified_observations_digest",
         "stdout", "stderr", "redacted_values",
     })
     bound_observation_ids = []
@@ -1387,6 +1412,8 @@ def validate_authoritative_result(result):
         if (
             type(receipt["argv_identity"]) is not str
             or _DIGEST.fullmatch(receipt["argv_identity"]) is None
+            or type(receipt["execution_policy_digest"]) is not str
+            or _DIGEST.fullmatch(receipt["execution_policy_digest"]) is None
             or type(receipt["tool_identity"]) is not str
             or not receipt["tool_identity"].startswith("docker:")
             or _SEMVER.fullmatch(receipt["tool_identity"][7:]) is None
@@ -1403,7 +1430,7 @@ def validate_authoritative_result(result):
             receipt[field] != declared_tool[field]
             for field in (
                 "tool_identity", "image_identity", "service_identity",
-                "plugin_version",
+                "plugin_version", "execution_policy_digest",
             )
         ):
             _fail("invalid_lane_receipt")
@@ -1438,10 +1465,18 @@ def validate_authoritative_result(result):
             if (
                 type(receipt["evidence_digest"]) is not str
                 or _DIGEST.fullmatch(receipt["evidence_digest"]) is None
+                or type(receipt["classified_observations_digest"]) is not str
+                or _DIGEST.fullmatch(
+                    receipt["classified_observations_digest"],
+                ) is None
             ):
                 _fail("invalid_lane_receipt")
             bound_observation_ids.extend(observation_ids)
-        elif receipt["evidence_digest"] is not None or observation_ids:
+        elif (
+            receipt["evidence_digest"] is not None
+            or receipt["classified_observations_digest"] is not None
+            or observation_ids
+        ):
             _fail("invalid_lane_receipt")
     if (
         len(authoritative_observation_ids) != len(set(authoritative_observation_ids))
@@ -1449,6 +1484,19 @@ def validate_authoritative_result(result):
         or sorted(authoritative_observation_ids) != sorted(bound_observation_ids)
     ):
         _fail("unbound_lane_evidence")
+    authoritative_by_id = {
+        item["observation_id"]: item for item in result["observations"]
+    }
+    for receipt in result["lane_receipts"]:
+        if receipt["status"] in {"available", "fallback"}:
+            classified_projection = [
+                authoritative_by_id[item] for item in receipt["observation_ids"]
+            ]
+            if (
+                _canonical_digest(classified_projection)
+                != receipt["classified_observations_digest"]
+            ):
+                _fail("unbound_lane_evidence")
     invocation = _exact_object(
         result["invocation"],
         frozenset({

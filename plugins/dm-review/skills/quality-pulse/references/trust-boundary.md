@@ -39,7 +39,7 @@ mismatched attestation fails before subprocess invocation.
 
 A profile introduced or modified by an untrusted pull request may be schema-
 validated and reported for operator review. It cannot produce a valid host
-attestation and its Docker/Compose lanes must not execute.
+attestation and its Docker lanes must not execute.
 
 An explicit `--profile` override is trusted only because a local operator chose
 it in a trusted checkout and the host recorded that authorization. The string
@@ -47,8 +47,10 @@ itself carries no permission.
 
 ## Docker and Compose Lanes
 
-Only exact, prevalidated `docker run` or `docker compose` argv arrays may run.
-Profiles cannot supply mounts. The kernel synthesizes a fixed read-only mount
+Only exact, prevalidated pinned `docker run` argv arrays may run in profile
+schema v1. Compose is rejected because its external service configuration is
+not bound by the profile attestation. Profiles cannot supply mounts. The
+kernel synthesizes a fixed read-only mount
 of the attested checkout at `/workspace` and a fresh empty read-write evidence
 mount at `/quality-pulse-evidence`; direct Docker lanes also run with networking
 disabled and a read-only container filesystem, and all lanes run as the host
@@ -59,8 +61,10 @@ schema-1 envelope containing its exact lane ID and observations to
 The kernel invokes no shell, accepts no mutable `latest` identity, inherits no
 arbitrary environment values, and opens the fresh envelope with `O_NOFOLLOW`.
 It snapshots the canonical bytes and binds their digest, lane ID, observation
-IDs, and declared evidence reference into the receipt. Exit zero with missing,
-linked, malformed, stale, or lane-mismatched evidence is `failed`, never
-`available`. `inspection-run` accepts no separate caller observations file.
+IDs, classified-observation projection digest, declared argv identity,
+synthesized execution-policy digest, and declared evidence reference into the
+receipt. Exit zero with missing, linked, malformed, stale, lane-mismatched, or
+post-classification-substituted evidence is `failed`, never `available`.
+`inspection-run` accepts no separate caller observations file.
 
 Profile, trust, or catalog preflight failure starts zero subprocesses.

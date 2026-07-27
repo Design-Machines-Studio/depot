@@ -9,6 +9,7 @@ POLICY="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/dele
 RUNNER="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 EXEC_RUNNER="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 BOUNDARY="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
+WRAPPER="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 
 FIXTURE_ROOT="$(mktemp -d)"
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
@@ -35,6 +36,11 @@ expect_rc() {
     exit 1
   fi
 }
+
+expect_rc 2 'native-vendor-origin invariant' 'mixed-case wrapper origin' \
+  env OPENROUTER_API_KEY=fixture "$WRAPPER" OpenAI/gpt-test prompt
+expect_rc 2 'native-vendor-origin invariant' 'mixed-case exec origin' \
+  "$EXEC_RUNNER" --dry-run --model Anthropic/claude-test
 
 printf '%s\n' 'plugins/openrouter/README.md' > "$FIXTURE_ROOT/safe-files"
 printf '%s\n' 'auth/session.go' 'federation/trust.go' 'deploy/app.service' > "$FIXTURE_ROOT/security-files"
@@ -108,9 +114,28 @@ cat > "$FIXTURE_ROOT/private-key.diff" <<'EOF'
 diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
 --- a/plugins/openrouter/README.md
 +++ b/plugins/openrouter/README.md
+@@ -1 +1,3 @@
+-old
++-----BEGIN PRIVATE KEY-----
++QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0123456789abcd
++-----END PRIVATE KEY-----
+EOF
+cat > "$FIXTURE_ROOT/private-key-header.diff" <<'EOF'
+diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
+--- a/plugins/openrouter/README.md
++++ b/plugins/openrouter/README.md
 @@ -1 +1 @@
 -old
 +-----BEGIN PRIVATE KEY-----
+EOF
+cat > "$FIXTURE_ROOT/symlink-retarget.diff" <<'EOF'
+diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
+index 1111111..2222222 120000
+--- a/plugins/openrouter/README.md
++++ b/plugins/openrouter/README.md
+@@ -1 +1 @@
+-safe-target
++../../../../tmp/outside-target
 EOF
 cat > "$FIXTURE_ROOT/dsn.diff" <<'EOF'
 diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
@@ -179,6 +204,8 @@ printf '%s\n' '+new without a diff header' > "$FIXTURE_ROOT/headerless.diff"
     --diff-file "$FIXTURE_ROOT/quoted.diff"
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" \
     --diff-file "$FIXTURE_ROOT/placeholder.diff"
+  "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" \
+    --diff-file "$FIXTURE_ROOT/private-key-header.diff"
 )
 cmp "$FIXTURE_ROOT/security.diff" "$FIXTURE_ROOT/security.out.diff"
 python3 - "$FIXTURE_ROOT/safe.paths" <<'PY'
@@ -206,6 +233,8 @@ expect_rc 2 'input-invalid:undeclared-output-path' 'undeclared output' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/outside.diff"
 expect_rc 2 'input-invalid:binary-or-symlink-diff' 'binary diff' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/binary.diff"
+expect_rc 2 'input-invalid:binary-or-symlink-diff' 'existing symlink retarget' \
+  "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/symlink-retarget.diff"
 expect_rc 2 'input-invalid:hunk-count-mismatch' 'malformed hunk' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/bad-count.diff"
 expect_rc 2 'input-invalid:missing-argument' 'missing option value' \

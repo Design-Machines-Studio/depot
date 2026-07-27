@@ -16,7 +16,8 @@ from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
     classify_observations, compare_trends, execute_inspection_lanes,
     load_host_attestation, load_inspection_profile, normalize_owned_path,
-    render_markdown, validate_authoritative_result, validate_inspection_profile,
+    render_markdown, stable_projection, validate_authoritative_result,
+    validate_inspection_profile,
 )
 from workflow_kernel.receipts import _canonical_bytes
 COMMIT = "a" * 40
@@ -350,7 +351,7 @@ class QualityPulseKernelTests(unittest.TestCase):
             })
             self.assert_reason(
                 lambda: validate_inspection_profile(value, repository),
-                "lane_identity_mismatch",
+                "unknown_execution_type",
             )
             value = profile_document()
             value["catalogs"] = [True]
@@ -678,6 +679,29 @@ class QualityPulseKernelTests(unittest.TestCase):
                         "selected_lane_ids": ["primary"],
                     },
                 ),
+                "unbound_lane_evidence",
+            )
+
+            authoritative = build_authoritative_result(
+                profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, observations=raw, lane_receipts=receipts,
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:01Z",
+                    "operator_authorization_event_id": "operator-event-1",
+                    "purpose": "scheduled-quality-pulse",
+                    "selected_lane_ids": ["primary"],
+                },
+            )
+            substituted = copy.deepcopy(authoritative)
+            substituted["observations"][0]["raw_telemetry"]["value"] = 999
+            substituted["stable_projection_digest"] = (
+                "sha256:" + hashlib.sha256(
+                    _canonical_bytes(stable_projection(substituted))
+                ).hexdigest()
+            )
+            self.assert_reason(
+                lambda: validate_authoritative_result(substituted),
                 "unbound_lane_evidence",
             )
 

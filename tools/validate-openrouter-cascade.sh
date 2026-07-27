@@ -36,7 +36,7 @@ if [ ! -x "$cascade" ]; then
   fail "cascade-dispatch.sh is missing or not executable"
   any_failed=1
 else
-  probe_fixture="$(mktemp "${TMPDIR:-/tmp}/openrouter-probe.XXXXXX.json")"
+  probe_fixture="$(mktemp "${TMPDIR:-/tmp}/openrouter-probe.json.XXXXXX")"
   printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","remaining_pct":100}}' > "$probe_fixture"
   out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind logic --prompt test --host codex \
     --dry-run --probe-file "$probe_fixture" --exhausted-rail codex 2>/dev/null || true)"
@@ -96,7 +96,7 @@ else
     fi
   fi
 
-  malformed_profile="$(mktemp "${TMPDIR:-/tmp}/openrouter-profile.XXXXXX.json")"
+  malformed_profile="$(mktemp "${TMPDIR:-/tmp}/openrouter-profile.json.XXXXXX")"
   jq '.hosts.codex.roles.openrouter_exec.kind = "unknown_rail"
       | .hosts.codex.roles.openrouter_exec.probe = "none"' \
     "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" > "$malformed_profile"
@@ -112,6 +112,32 @@ else
   else
     fail "unknown cascade rail kind must fail closed with exit 2"
     any_failed=1
+  fi
+
+  origin_profile="$(mktemp "${TMPDIR:-/tmp}/openrouter-origin-profile.json.XXXXXX")"
+  jq '.hosts.codex.roles.openrouter_exec.models = ["OpenAI/gpt-test"]' \
+    "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" > "$origin_profile"
+  set +e
+  origin_out="$(CASCADE_EXHAUSTED_RAILS= PROFILE_FILE="$origin_profile" "$cascade" \
+    --class openrouter --prompt test --host codex --dry-run \
+    --probe-file "$probe_fixture" 2>&1)"
+  origin_rc=$?
+  set -e
+  rm -f "$origin_profile"
+  if [ "$origin_rc" -eq 2 ] &&
+     printf '%s' "$origin_out" | grep -Fq "native-vendor-origin invariant"; then
+    pass "mixed-case OpenAI/Anthropic origins fail before OpenRouter dispatch"
+  else
+    fail "mixed-case native-vendor origins must be rejected on the cascade path"
+    any_failed=1
+  fi
+
+  if grep -Eq 'mktemp .*XXXXXX\.' \
+      "$cascade" "$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"; then
+    fail "OpenRouter runners use BSD-incompatible mktemp suffix templates"
+    any_failed=1
+  else
+    pass "OpenRouter runner temp templates end in XXXXXX for BSD portability"
   fi
   rm -f "$probe_fixture"
 fi

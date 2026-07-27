@@ -27,7 +27,8 @@ fi
 
 for candidate in "$MODEL" "$FALLBACK"; do
   [ -z "$candidate" ] && continue
-  case "$candidate" in
+  candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
+  case "$candidate_origin" in
     openai/*|anthropic/*)
       echo "### RUNNER FAILURE: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
       exit 2

@@ -178,8 +178,8 @@ openrouter_allowed() {
     return 1
   }
   task_tmp_root="${TMPDIR:-/tmp}"
-  prompt_file="$(mktemp "$task_tmp_root/cascade-boundary.XXXXXX.prompt")" || return 1
-  allowed_file="$(mktemp "$task_tmp_root/cascade-boundary.XXXXXX.allowed")" || {
+  prompt_file="$(mktemp "$task_tmp_root/cascade-boundary.prompt.XXXXXX")" || return 1
+  allowed_file="$(mktemp "$task_tmp_root/cascade-boundary.allowed.XXXXXX")" || {
     rm -f "$prompt_file"
     return 1
   }
@@ -240,7 +240,8 @@ for role in $LADDER; do
   fi
   models="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].models[]?' "$PROFILE")"
   for model in $models; do
-    case "$kind:$model" in
+    model_origin="$(printf '%s' "$model" | tr '[:upper:]' '[:lower:]')"
+    case "$kind:$model_origin" in
       wrapper:openai/*|wrapper:anthropic/*|openrouter_exec:openai/*|openrouter_exec:anthropic/*)
         echo "cascade-dispatch: native-vendor-origin invariant rejected OpenRouter model '$model'" >&2
         exit 2
