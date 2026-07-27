@@ -30,7 +30,9 @@ The JSON artifact records at least:
   observation bound to the digest of its exact source object;
 - each finding's stable identity, closed surface, rule and metric IDs,
   classification, actionability, confidence, and raw observation reference;
-- `coverage_gaps`, `blockers`, redaction outcome, and `publication_status`;
+- `coverage_gaps`, `blockers`, redaction outcome, `publication_status`,
+  `publication_state_digest`, and the embedded keyed
+  `publication_attestation`;
 - `trend_result`, initially `not_compared` when no baseline was supplied, or a
   compatible comparison/baseline discontinuity returned by trend comparison.
 
@@ -64,27 +66,26 @@ pulse.
 
 ## Publication Order
 
-1. build the in-memory ready JSON draft;
-2. pass the authoritative baseline to `inspection-finalize`, which computes
-   and binds the compatible trend result or baseline discontinuity;
-3. issue a host ready-state attestation outside the repository for that exact
-   content and state digest;
-4. validate its complete schema and closed vocabularies, recompute its stable
-   projection digest, and run redaction checks with that external context;
-5. render Markdown from the validated JSON;
-6. bind `markdown_rendered`, then `published` only after each host action
-   succeeds and supplies its own matching attestation.
+1. load the host-owned publication authority key from outside the repository;
+2. build the ready JSON, validate its complete schema and redaction outcome,
+   and embed an HMAC attestation before serialization;
+3. pass an authoritative baseline to `inspection-finalize`, which computes
+   the trend and replaces the attestation for the new exact content digest;
+4. render Markdown only after revalidating the embedded attestation with the
+   host key;
+5. bind `markdown_rendered`, then `published` only after each host action
+   succeeds; each transition replaces the keyed attestation.
 
 Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an
 operational envelope excluded from the content stable projection and rendered
 Markdown; `publication_state_digest` binds the operational status to the
 content digest without making publication transitions stale the Markdown.
-Every serialized state, including initial readiness, requires a matching
-host-issued transition attestation loaded from outside the repository. The
-builder's in-memory ready result is a draft until that binding occurs.
-Validation without external context fails closed, even when a caller recomputes
-the public state digest.
+Every serialized state, including initial readiness, embeds a matching
+host-keyed transition attestation. The HMAC covers the pulse, exact content and
+state digests, prior and target states, completed host action, authorization
+event, and authority-key ID. Validation without the correct host key fails
+closed, even when a caller recomputes all public fields and hashes.
 
 Any failure in steps 1-5 prevents Markdown publication. A stale prior digest
 must not be relabeled as current.

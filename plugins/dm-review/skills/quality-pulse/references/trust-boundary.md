@@ -35,14 +35,16 @@ authorization event ID—revalidates the profile source identity, and executes
 only the frozen snapshot. A missing, repository-held, self-asserted, stale, or
 mismatched attestation fails before subprocess invocation.
 
-Publication transitions use a second host-derived attestation channel outside
-the repository. Each receipt binds the pulse and content digest, prior and
-target publication states and state digests, completed host action, and the
-original operator authorization event. Authoritative-result validation accepts
-any serialized publication state only when the caller supplies that matching
-external attestation. The initial in-memory ready result is an unattested draft
-until the host binds it. A repository caller cannot authorize a transition or
-rollback by editing JSON and recomputing its public digest.
+Publication transitions use a second host-derived authority: an HMAC key
+loaded from a host-supplied file outside the repository. The key file must be a
+single-link regular file owned by the current user with no group/world
+permissions; profiles cannot nominate it. Each embedded receipt binds the pulse
+and content digest, prior and target publication states and state digests,
+completed host action, original operator authorization event, and authority-key
+ID. Authoritative-result validation requires the correct key and verifies the
+MAC with constant-time comparison. A repository caller cannot authorize a
+transition or rollback by editing JSON, moving a file to `/tmp`, or recomputing
+public hashes.
 
 ## Untrusted Pull Requests
 

@@ -41,6 +41,13 @@ FIXED_COMMIT = "a" * 40
 FIXED_REF = "refs/heads/conformance"
 FIXED_PURPOSE = "quality-pulse"
 FIXED_TIME = "2026-07-27T00:00:00Z"
+PUBLICATION_KEY = b"quality-pulse-fixture-publication-key-v1"
+_build_authoritative_result = build_authoritative_result
+
+
+def build_authoritative_result(*args, **kwargs):
+    kwargs.setdefault("publication_authority_key", PUBLICATION_KEY)
+    return _build_authoritative_result(*args, **kwargs)
 
 
 def canonical_bytes(value):
@@ -177,38 +184,10 @@ class QualityPulseContract(unittest.TestCase):
             "purpose": FIXED_PURPOSE,
         }
 
-    def publication_attestation(self, result):
-        status = "authoritative_json_ready"
-        prior = "uninitialized"
-        return {
-            "schema_version": 1,
-            "pulse_id": result["pulse_id"],
-            "stable_projection_digest": result["stable_projection_digest"],
-            "prior_publication_status": prior,
-            "prior_publication_state_digest": digest({
-                "schema_version": 1,
-                "stable_projection_digest": result["stable_projection_digest"],
-                "publication_status": prior,
-            }),
-            "publication_status": status,
-            "publication_state_digest": result["publication_state_digest"],
-            "host_action": "authoritative_json_completed",
-            "operator_authorization_event_id": result["invocation"][
-                "operator_authorization_event_id"
-            ],
-        }
-
     def compare(self, current, baseline):
         return compare_trends(
             current, baseline,
-            current_publication_attestation=self.publication_attestation(
-                current,
-            ),
-            baseline_publication_attestation=(
-                None
-                if baseline.get("schema_version") != current["schema_version"]
-                else self.publication_attestation(baseline)
-            ),
+            publication_authority_key=PUBLICATION_KEY,
         )
 
     def run_lanes(self, returncodes, family="baseplate-derived", mutate=None):
@@ -630,12 +609,10 @@ class QualityPulseContract(unittest.TestCase):
         _profile, second = self.authoritative()
         self.assertEqual(
             authoritative_bytes(
-                first,
-                publication_attestation=self.publication_attestation(first),
+                first, publication_authority_key=PUBLICATION_KEY,
             ),
             authoritative_bytes(
-                second,
-                publication_attestation=self.publication_attestation(second),
+                second, publication_authority_key=PUBLICATION_KEY,
             ),
         )
 
@@ -754,12 +731,11 @@ class QualityPulseContract(unittest.TestCase):
             "safe_path": "quality-pulse-evidence/useful.json",
         }
         _profile, result = self.authoritative(observations=[raw])
-        publication_attestation = self.publication_attestation(result)
         authoritative = authoritative_bytes(
-            result, publication_attestation=publication_attestation,
+            result, publication_authority_key=PUBLICATION_KEY,
         ).decode()
         markdown = render_markdown(
-            result, publication_attestation=publication_attestation,
+            result, publication_authority_key=PUBLICATION_KEY,
         )
         self.assertNotIn(secret, authoritative)
         self.assertNotIn(secret, markdown)
@@ -774,7 +750,7 @@ class QualityPulseContract(unittest.TestCase):
         _profile, result = self.authoritative()
         markdown = render_markdown(
             result,
-            publication_attestation=self.publication_attestation(result),
+            publication_authority_key=PUBLICATION_KEY,
         )
         self.assertTrue(markdown.startswith("# Inspection Result\n"))
         expected = load_json(FIXTURES / "baseplate-derived" / "expected.json")
@@ -785,12 +761,11 @@ class QualityPulseContract(unittest.TestCase):
 
     def case_render_invalid(self):
         _profile, result = self.authoritative()
-        publication_attestation = self.publication_attestation(result)
         result["stable_projection_digest"] = "sha256:" + "0" * 64
         self.assert_reason(
             "authoritative_digest_mismatch",
             lambda: render_markdown(
-                result, publication_attestation=publication_attestation,
+                result, publication_authority_key=PUBLICATION_KEY,
             ),
         )
 
@@ -798,7 +773,7 @@ class QualityPulseContract(unittest.TestCase):
         _profile, result = self.authoritative()
         markdown = render_markdown(
             result,
-            publication_attestation=self.publication_attestation(result),
+            publication_authority_key=PUBLICATION_KEY,
         )
         positions = [markdown.index(f"`{x['observation_id']}`") for x in result["observations"]]
         self.assertEqual(positions, sorted(positions))
@@ -868,7 +843,7 @@ class QualityPulseContract(unittest.TestCase):
         self.assertEqual(
             "sha256:" + hashlib.sha256(render_markdown(
                 result,
-                publication_attestation=self.publication_attestation(result),
+                publication_authority_key=PUBLICATION_KEY,
             ).encode()).hexdigest(),
             expected["expected_markdown_sha256"],
         )
@@ -893,7 +868,7 @@ class QualityPulseContract(unittest.TestCase):
             )
         validate_authoritative_result(
             result,
-            publication_attestation=self.publication_attestation(result),
+            publication_authority_key=PUBLICATION_KEY,
         )
 
 

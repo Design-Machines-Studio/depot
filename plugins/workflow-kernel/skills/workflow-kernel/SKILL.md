@@ -405,14 +405,15 @@ workflow-kernel-launcher.sh inspection-classify \
 workflow-kernel-launcher.sh inspection-trend \
   --repository-root <root> \
   --current <authoritative-json> --baseline <authoritative-json> \
-  --current-publication-attestation <external-host-json> \
-  --baseline-publication-attestation <external-host-json>
+  --publication-authority-key <host-mode-0600-key>
 workflow-kernel-launcher.sh inspection-render \
   --repository-root <root> --input <authoritative-json> \
-  --publication-attestation <external-host-json>
+  --publication-authority-key <host-mode-0600-key>
 workflow-kernel-launcher.sh inspection-run \
   --repository-root <root> --profile <profile> --lane-id <primary-id> \
-  --attestation <host-path-outside-repository> --source git --ref <ref> \
+  --attestation <host-path-outside-repository> \
+  --publication-authority-key <host-mode-0600-key> \
+  --source git --ref <ref> \
   --commit <sha> --dirty <true|false> --purpose <purpose> \
   --authorization-event-id <host-observed-event-id>
 workflow-kernel-launcher.sh resolve-plugin-bundle \

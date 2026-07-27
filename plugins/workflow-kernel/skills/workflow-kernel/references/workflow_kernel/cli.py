@@ -2718,69 +2718,45 @@ def command_inspection_classify(args):
 
 
 def command_inspection_trend(args):
-    from .inspection import compare_trends, load_publication_attestation
+    from .inspection import compare_trends, load_publication_authority_key
 
+    publication_key = load_publication_authority_key(
+        args.publication_authority_key, args.repository_root,
+    )
     _emit(compare_trends(
         _inspection_json(args.current), _inspection_json(args.baseline),
-        current_publication_attestation=(
-            None if args.current_publication_attestation is None
-            else load_publication_attestation(
-                args.current_publication_attestation, args.repository_root,
-            )
-        ),
-        baseline_publication_attestation=(
-            None if args.baseline_publication_attestation is None
-            else load_publication_attestation(
-                args.baseline_publication_attestation, args.repository_root,
-            )
-        ),
+        publication_authority_key=publication_key,
     ))
     return 0
 
 
 def command_inspection_finalize(args):
     from .inspection import (
-        finalize_authoritative_result, load_publication_attestation,
+        finalize_authoritative_result, load_publication_authority_key,
     )
 
     baseline = None if args.baseline is None else _inspection_json(args.baseline)
+    publication_key = load_publication_authority_key(
+        args.publication_authority_key, args.repository_root,
+    )
     _emit(finalize_authoritative_result(
         _inspection_json(args.input),
         publication_status=args.publication_status,
         baseline=baseline,
-        current_publication_attestation=(
-            None if args.current_publication_attestation is None
-            else load_publication_attestation(
-                args.current_publication_attestation, args.repository_root,
-            )
-        ),
-        publication_attestation=(
-            None if args.publication_attestation is None
-            else load_publication_attestation(
-                args.publication_attestation, args.repository_root,
-            )
-        ),
-        baseline_publication_attestation=(
-            None if args.baseline_publication_attestation is None
-            else load_publication_attestation(
-                args.baseline_publication_attestation, args.repository_root,
-            )
-        ),
+        publication_authority_key=publication_key,
     ))
     return 0
 
 
 def command_inspection_render(args):
-    from .inspection import render_markdown, load_publication_attestation
+    from .inspection import render_markdown, load_publication_authority_key
 
+    publication_key = load_publication_authority_key(
+        args.publication_authority_key, args.repository_root,
+    )
     sys.stdout.write(render_markdown(
         _inspection_json(args.input),
-        publication_attestation=(
-            None if args.publication_attestation is None
-            else load_publication_attestation(
-                args.publication_attestation, args.repository_root,
-            )
-        ),
+        publication_authority_key=publication_key,
     ))
     return 0
 
@@ -2789,11 +2765,15 @@ def command_inspection_run(args):
     from .inspection import (
         build_authoritative_result, execute_inspection_lanes,
         load_host_attestation, load_inspection_profile,
+        load_publication_authority_key,
     )
 
     started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     profile = load_inspection_profile(args.profile, args.repository_root)
     attestation = load_host_attestation(args.attestation, profile.repository_root)
+    publication_key = load_publication_authority_key(
+        args.publication_authority_key, profile.repository_root,
+    )
     dirty = args.dirty == "true"
     receipts, observations = execute_inspection_lanes(
         profile, args.lane_id, attestation,
@@ -2813,6 +2793,7 @@ def command_inspection_run(args):
             ],
             "purpose": args.purpose, "selected_lane_ids": sorted(args.lane_id),
         },
+        publication_authority_key=publication_key,
     ))
     return 0
 
@@ -3052,8 +3033,7 @@ def parser():
     inspection_trend.add_argument("--current", required=True)
     inspection_trend.add_argument("--baseline", required=True)
     inspection_trend.add_argument("--repository-root", required=True)
-    inspection_trend.add_argument("--current-publication-attestation")
-    inspection_trend.add_argument("--baseline-publication-attestation")
+    inspection_trend.add_argument("--publication-authority-key", required=True)
     inspection_trend.set_defaults(handler=command_inspection_trend)
 
     inspection_finalize = commands.add_parser(
@@ -3083,9 +3063,7 @@ def parser():
             "trend result rather than accepting caller-supplied deltas"
         ),
     )
-    inspection_finalize.add_argument("--current-publication-attestation")
-    inspection_finalize.add_argument("--publication-attestation")
-    inspection_finalize.add_argument("--baseline-publication-attestation")
+    inspection_finalize.add_argument("--publication-authority-key", required=True)
     inspection_finalize.set_defaults(handler=command_inspection_finalize)
 
     inspection_render = commands.add_parser(
@@ -3098,7 +3076,7 @@ def parser():
     )
     inspection_render.add_argument("--input", required=True)
     inspection_render.add_argument("--repository-root", required=True)
-    inspection_render.add_argument("--publication-attestation")
+    inspection_render.add_argument("--publication-authority-key", required=True)
     inspection_render.set_defaults(handler=command_inspection_render)
 
     inspection_run = commands.add_parser(
@@ -3120,6 +3098,13 @@ def parser():
     inspection_run.add_argument(
         "--attestation", required=True,
         help="host-issued attestation file outside the repository",
+    )
+    inspection_run.add_argument(
+        "--publication-authority-key", required=True,
+        help=(
+            "host-owned mode-0600 HMAC key outside the repository; profiles "
+            "cannot nominate this path"
+        ),
     )
     inspection_run.add_argument("--source", choices=("git",), required=True)
     inspection_run.add_argument("--ref", required=True)

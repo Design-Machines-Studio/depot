@@ -8,6 +8,7 @@ produces canonical redacted data from which human-readable output is rendered.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -63,7 +64,7 @@ _PUBLICATION_ATTESTATION_FIELDS = frozenset({
     "schema_version", "pulse_id", "stable_projection_digest",
     "prior_publication_status", "prior_publication_state_digest",
     "publication_status", "publication_state_digest", "host_action",
-    "operator_authorization_event_id",
+    "operator_authorization_event_id", "authority_key_id", "signature",
 })
 
 
@@ -739,8 +740,55 @@ def load_host_attestation(path, repository_root):
     return _load_external_attestation(path, repository_root)
 
 
-def load_publication_attestation(path, repository_root):
-    return _load_external_attestation(path, repository_root)
+def load_publication_authority_key(path, repository_root):
+    root = _repository_root(repository_root)
+    candidate = Path(path)
+    if (
+        not candidate.is_absolute()
+        or any(item.is_symlink() for item in (candidate, *candidate.parents))
+    ):
+        _fail("untrusted_publication_authority_key")
+    try:
+        resolved = candidate.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        _fail("publication_authority_key_read_failed")
+    if resolved.is_relative_to(root):
+        _fail("untrusted_publication_authority_key")
+    try:
+        expected = os.stat(resolved, follow_symlinks=False)
+        descriptor = os.open(
+            candidate, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = os.fstat(descriptor)
+            if (
+                (before.st_dev, before.st_ino)
+                != (expected.st_dev, expected.st_ino)
+                or not stat.S_ISREG(before.st_mode)
+                or before.st_uid != os.getuid()
+                or before.st_nlink != 1
+                or before.st_mode & 0o077
+            ):
+                _fail("untrusted_publication_authority_key")
+            key = os.read(descriptor, 4097)
+            if os.read(descriptor, 1):
+                _fail("invalid_publication_authority_key")
+            after = os.fstat(descriptor)
+            if (
+                before.st_dev, before.st_ino, before.st_size,
+                before.st_mtime_ns, before.st_ctime_ns,
+            ) != (
+                after.st_dev, after.st_ino, after.st_size,
+                after.st_mtime_ns, after.st_ctime_ns,
+            ):
+                _fail("publication_authority_key_changed")
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("publication_authority_key_read_failed")
+    return _validate_publication_authority_key(key)
 
 
 def _load_external_attestation(path, repository_root):
@@ -1156,7 +1204,90 @@ def _publication_state_digest(result):
     )
 
 
-def _validate_publication_attestation(result, attestation):
+def _validate_publication_authority_key(key):
+    if (
+        type(key) is not bytes
+        or len(key) < 32
+        or len(key) > 4096
+    ):
+        _fail("invalid_publication_authority_key")
+    return key
+
+
+def _publication_attestation_payload(attestation):
+    return {
+        key: value for key, value in attestation.items()
+        if key != "signature"
+    }
+
+
+def _publication_attestation_signature(attestation, key):
+    return "hmac-sha256:" + hmac.new(
+        _validate_publication_authority_key(key),
+        _canonical_bytes(_publication_attestation_payload(attestation)),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _publication_key_id(key):
+    return "sha256:" + hashlib.sha256(
+        _validate_publication_authority_key(key),
+    ).hexdigest()
+
+
+def _publication_transition(prior_status, publication_status):
+    expected = {
+        ("uninitialized", "authoritative_json_ready"): (
+            "authoritative_json_completed"
+        ),
+        ("authoritative_json_ready", "authoritative_json_ready"): (
+            "authoritative_json_completed"
+        ),
+        ("authoritative_json_ready", "markdown_rendered"): (
+            "markdown_write_completed"
+        ),
+        ("markdown_rendered", "published"): "publication_completed",
+        ("authoritative_json_ready", "publication_failed"): (
+            "publication_failed"
+        ),
+        ("markdown_rendered", "publication_failed"): "publication_failed",
+        ("published", "published"): "publication_completed",
+        ("publication_failed", "publication_failed"): "publication_failed",
+    }
+    action = expected.get((prior_status, publication_status))
+    if action is None:
+        _fail("invalid_publication_transition")
+    return action
+
+
+def _issue_publication_attestation(result, key, prior_status):
+    key = _validate_publication_authority_key(key)
+    attestation = {
+        "schema_version": 1,
+        "pulse_id": result["pulse_id"],
+        "stable_projection_digest": result["stable_projection_digest"],
+        "prior_publication_status": prior_status,
+        "prior_publication_state_digest": _publication_state_digest_for(
+            result["stable_projection_digest"], prior_status,
+        ),
+        "publication_status": result["publication_status"],
+        "publication_state_digest": result["publication_state_digest"],
+        "host_action": _publication_transition(
+            prior_status, result["publication_status"],
+        ),
+        "operator_authorization_event_id": result["invocation"][
+            "operator_authorization_event_id"
+        ],
+        "authority_key_id": _publication_key_id(key),
+    }
+    attestation["signature"] = _publication_attestation_signature(
+        attestation, key,
+    )
+    return attestation
+
+
+def _validate_publication_attestation(result, attestation, key):
+    key = _validate_publication_authority_key(key)
     _exact_object(
         attestation, _PUBLICATION_ATTESTATION_FIELDS,
         reason="invalid_publication_attestation",
@@ -1171,35 +1302,26 @@ def _validate_publication_attestation(result, attestation):
             _fail("invalid_publication_attestation")
     for field in (
         "stable_projection_digest", "prior_publication_state_digest",
-        "publication_state_digest",
+        "publication_state_digest", "authority_key_id",
     ):
         if (
             type(attestation[field]) is not str
             or _DIGEST.fullmatch(attestation[field]) is None
         ):
             _fail("invalid_publication_attestation")
-    expected_prior = {
-        "authoritative_json_ready": (
-            "uninitialized", "authoritative_json_completed",
-        ),
-        "markdown_rendered": (
-            "authoritative_json_ready", "markdown_write_completed",
-        ),
-        "published": ("markdown_rendered", "publication_completed"),
-        "publication_failed": (
-            attestation["prior_publication_status"], "publication_failed",
-        ),
-    }
     if (
         type(attestation["schema_version"]) is not int
         or attestation["schema_version"] != 1
-        or result["publication_status"] not in expected_prior
+        or type(attestation["signature"]) is not str
+        or re.fullmatch(
+            r"hmac-sha256:[0-9a-f]{64}", attestation["signature"],
+        ) is None
     ):
         _fail("invalid_publication_attestation")
-    prior_status, host_action = expected_prior[result["publication_status"]]
-    if result["publication_status"] == "publication_failed":
-        if prior_status not in {"authoritative_json_ready", "markdown_rendered"}:
-            _fail("invalid_publication_attestation")
+    prior_status = attestation["prior_publication_status"]
+    host_action = _publication_transition(
+        prior_status, result["publication_status"],
+    )
     if (
         attestation["pulse_id"] != result["pulse_id"]
         or attestation["stable_projection_digest"]
@@ -1215,6 +1337,11 @@ def _validate_publication_attestation(result, attestation):
         or attestation["host_action"] != host_action
         or attestation["operator_authorization_event_id"]
         != result["invocation"]["operator_authorization_event_id"]
+        or attestation["authority_key_id"] != _publication_key_id(key)
+        or not hmac.compare_digest(
+            attestation["signature"],
+            _publication_attestation_signature(attestation, key),
+        )
     ):
         _fail("publication_attestation_binding_mismatch")
     return attestation
@@ -1507,7 +1634,11 @@ def _validate_lifecycle(publication_status, trend_result):
 
 
 def build_authoritative_result(profile, *, source, ref, commit, dirty,
-                               observations, lane_receipts, invocation):
+                               observations, lane_receipts, invocation,
+                               publication_authority_key):
+    publication_authority_key = _validate_publication_authority_key(
+        publication_authority_key,
+    )
     if type(profile) is not InspectionProfile:
         _fail("validated_profile_required")
     if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
@@ -1652,14 +1783,15 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     }
     result["stable_projection_digest"] = _canonical_digest(stable_projection(result))
     result["publication_state_digest"] = _publication_state_digest(result)
-    return _validate_authoritative_result(
-        result, allow_unattested_ready=True,
+    result["publication_attestation"] = _issue_publication_attestation(
+        result, publication_authority_key, "uninitialized",
+    )
+    return validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
     )
 
 
-def _validate_authoritative_result(
-    result, *, publication_attestation=None, allow_unattested_ready=False,
-):
+def validate_authoritative_result(result, *, publication_authority_key=None):
     fields = frozenset({
         "schema_version", "result_type", "repository", "profile",
         "profile_snapshot", "compatibility_identity", "pulse_id",
@@ -1667,7 +1799,7 @@ def _validate_authoritative_result(
         "actual_identities", "coverage_gaps", "blockers",
         "publication_status", "trend_result", "trend_baseline", "observations",
         "lane_receipts", "invocation", "redaction", "stable_projection_digest",
-        "publication_state_digest",
+        "publication_state_digest", "publication_attestation",
     })
     _exact_object(result, fields, reason="invalid_authoritative_result")
     if (
@@ -2216,31 +2348,20 @@ def _validate_authoritative_result(
         _fail("authoritative_digest_mismatch")
     if _publication_state_digest(result) != result["publication_state_digest"]:
         _fail("publication_state_digest_mismatch")
-    if publication_attestation is None:
-        if not (
-            allow_unattested_ready
-            and result["publication_status"] == "authoritative_json_ready"
-        ):
-            _fail("publication_attestation_required")
-    else:
-        _validate_publication_attestation(result, publication_attestation)
-    return result
-
-
-def validate_authoritative_result(result, *, publication_attestation=None):
-    return _validate_authoritative_result(
-        result, publication_attestation=publication_attestation,
+    _validate_publication_attestation(
+        result, result["publication_attestation"],
+        publication_authority_key,
     )
+    return result
 
 
 def finalize_authoritative_result(
     result, *, publication_status, baseline=None,
-    current_publication_attestation=None, publication_attestation=None,
-    baseline_publication_attestation=None,
+    publication_authority_key=None,
 ):
     """Advance closed publication/trend lifecycle state and rebind the digest."""
     current = validate_authoritative_result(
-        result, publication_attestation=current_publication_attestation,
+        result, publication_authority_key=publication_authority_key,
     )
     updated = json.loads(json.dumps(current, allow_nan=False))
     allowed_transitions = {
@@ -2295,7 +2416,7 @@ def finalize_authoritative_result(
         else:
             validate_authoritative_result(
                 baseline,
-                publication_attestation=baseline_publication_attestation,
+                publication_authority_key=publication_authority_key,
             )
             trend_baseline = _trend_baseline_projection(baseline)
         trend_result = _compare_trend_values(current, trend_baseline)
@@ -2309,22 +2430,17 @@ def finalize_authoritative_result(
         stable_projection(updated),
     )
     updated["publication_state_digest"] = _publication_state_digest(updated)
-    if (
-        baseline is not None
-        and publication_status == "authoritative_json_ready"
-        and publication_attestation is None
-    ):
-        return _validate_authoritative_result(
-            updated, allow_unattested_ready=True,
-        )
+    updated["publication_attestation"] = _issue_publication_attestation(
+        updated, publication_authority_key, current["publication_status"],
+    )
     return validate_authoritative_result(
-        updated, publication_attestation=publication_attestation,
+        updated, publication_authority_key=publication_authority_key,
     )
 
 
-def authoritative_bytes(result, *, publication_attestation=None):
+def authoritative_bytes(result, *, publication_authority_key=None):
     return _canonical_bytes(validate_authoritative_result(
-        result, publication_attestation=publication_attestation,
+        result, publication_authority_key=publication_authority_key,
     ))
 
 
@@ -2378,12 +2494,9 @@ def _compare_trend_values(current, baseline):
     }
 
 
-def compare_trends(
-    current, baseline, *, current_publication_attestation=None,
-    baseline_publication_attestation=None,
-):
+def compare_trends(current, baseline, *, publication_authority_key=None):
     validate_authoritative_result(
-        current, publication_attestation=current_publication_attestation,
+        current, publication_authority_key=publication_authority_key,
     )
     if (
         type(baseline) is dict
@@ -2397,15 +2510,15 @@ def compare_trends(
             "deltas": [],
         }
     validate_authoritative_result(
-        baseline, publication_attestation=baseline_publication_attestation,
+        baseline, publication_authority_key=publication_authority_key,
     )
     return _compare_trend_values(current, _trend_baseline_projection(baseline))
 
 
-def render_markdown(result, *, publication_attestation=None):
+def render_markdown(result, *, publication_authority_key=None):
     """Render validated authoritative JSON; Markdown is never an input authority."""
     validate_authoritative_result(
-        result, publication_attestation=publication_attestation,
+        result, publication_authority_key=publication_authority_key,
     )
     lines = [
         "# Inspection Result", "",
@@ -2438,7 +2551,7 @@ __all__ = [
     "compare_trends", "decode_json_bytes", "execute_inspection_lanes",
     "finalize_authoritative_result",
     "load_host_attestation", "load_inspection_profile",
-    "load_publication_attestation", "normalize_owned_path",
+    "load_publication_authority_key", "normalize_owned_path",
     "render_markdown", "stable_projection", "validate_authoritative_result",
     "validate_host_attestation", "validate_inspection_profile",
 ]

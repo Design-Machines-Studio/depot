@@ -130,6 +130,7 @@ Invoke `inspection-run` with requested primary lane IDs only. Repeat
   --lane-id "$PRIMARY_LANE_ID" \
   [--lane-id "$ANOTHER_PRIMARY_LANE_ID"] \
   --attestation "$HOST_ATTESTATION" \
+  --publication-authority-key "$HOST_PUBLICATION_KEY" \
   --source git \
   --ref "$VERIFIED_REF" \
   --commit "$VERIFIED_COMMIT" \
@@ -207,28 +208,27 @@ Any such unknown fails the pulse. Never coerce `unknown` to informational.
 Emit the authoritative JSON contract in `output-contract.md`, then validate it
 and recompute its stable projection digest. Bind an optional trend result and
 each publication transition with `inspection-finalize`; the command validates
-the closed lifecycle state and emits a re-digested artifact. Binding a baseline
-first emits an unattested ready draft; the host must issue a new ready-state
-attestation for that exact digest before validation or rendering:
+the closed lifecycle state and emits a re-digested artifact. The kernel embeds
+a keyed host attestation for the exact result before authoritative JSON crosses
+the process boundary:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-finalize \
   --repository-root "$REPOSITORY_ROOT" \
   --input "$AUTHORITATIVE_JSON" \
   --publication-status authoritative_json_ready \
-  --current-publication-attestation "$CURRENT_READY_ATTESTATION" \
-  [--baseline "$COMPATIBLE_BASELINE"] \
-  [--baseline-publication-attestation "$BASELINE_ATTESTATION"]
+  --publication-authority-key "$HOST_PUBLICATION_KEY" \
+  [--baseline "$COMPATIBLE_BASELINE"]
 ```
 
-Only after host attestation and validation may `inspection-render` produce the
+Only after keyed attestation validation may `inspection-render` produce the
 Markdown digest:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-render \
   --repository-root "$REPOSITORY_ROOT" \
   --input "$AUTHORITATIVE_JSON" \
-  --publication-attestation "$READY_ATTESTATION"
+  --publication-authority-key "$HOST_PUBLICATION_KEY"
 ```
 
 If JSON emission, validation, redaction, stable-digest verification, or render
@@ -247,8 +247,7 @@ calculate a misleading delta.
   --repository-root "$REPOSITORY_ROOT" \
   --current "$AUTHORITATIVE_JSON" \
   --baseline "$COMPATIBLE_BASELINE" \
-  --current-publication-attestation "$CURRENT_READY_ATTESTATION" \
-  --baseline-publication-attestation "$BASELINE_ATTESTATION"
+  --publication-authority-key "$HOST_PUBLICATION_KEY"
 ```
 
 Pass the authoritative baseline directly to `inspection-finalize --baseline`;
@@ -256,15 +255,15 @@ the kernel computes and binds the result, so caller-supplied deltas are never
 trusted. Bind the trend before rendering. The stable projection and Markdown
 exclude publication status; a separate `publication_state_digest` binds that
 operational envelope without invalidating rendered content. Every serialized
-state—including the initial ready state—requires a matching host-issued
-publication attestation loaded from outside the repository. After Markdown is
-durably written, finalize with
-`--publication-status markdown_rendered --publication-attestation
-"$MARKDOWN_ATTESTATION"`; after the host publication succeeds, finalize once
-more with the prior attestation as `--current-publication-attestation` and the
-new host receipt as `--publication-attestation "$PUBLISHED_ATTESTATION"`.
-Standalone validation rejects every state without this external context.
-Never relabel publication without the corresponding completed host action.
+state—including the initial ready state—carries an HMAC attestation bound to
+the host-owned publication key. The key is supplied only by the host, must be
+outside the repository, owned by the current user, mode `0600`, and cannot be
+nominated by a profile. After Markdown is durably written, finalize with
+`--publication-status markdown_rendered --publication-authority-key
+"$HOST_PUBLICATION_KEY"`; after host publication succeeds, finalize once more
+with `--publication-status published` and the same key. Validation with a
+missing, wrong, or attacker-selected key fails. Never relabel publication
+without the corresponding completed host action.
 
 ## Invocation Guidance
 
