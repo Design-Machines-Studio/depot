@@ -658,7 +658,8 @@ def _redact_durable(value):
         for key, item in value.items():
             if type(key) is str and is_secret_key(key):
                 result[key] = REDACTED
-                redacted += 1
+                if item != REDACTED:
+                    redacted += 1
             else:
                 result[key], count = _redact_durable(item)
                 redacted += count

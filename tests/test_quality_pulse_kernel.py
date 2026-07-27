@@ -326,6 +326,32 @@ class QualityPulseKernelTests(unittest.TestCase):
             )])[0]
             self.assertTrue(malformed["actionable"])
             self.assertEqual(malformed["evidence_references"], [])
+            authoritative = build_authoritative_result(
+                profile,
+                source="git",
+                ref="refs/heads/conformance",
+                commit=COMMIT,
+                dirty=False,
+                observations=[observation(
+                    raw_telemetry={
+                        "token": "ghp_fixtureSecret123",
+                        "safe_path": "output/primary.json",
+                    },
+                )],
+                lane_receipts=[],
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:00Z",
+                    "operator_authorization_event_id": "approved",
+                    "purpose": "quality-pulse",
+                    "selected_lane_ids": [],
+                },
+            )
+            encoded = authoritative_bytes(authoritative).decode()
+            markdown = render_markdown(authoritative)
+            self.assertNotIn("ghp_fixtureSecret123", encoded)
+            self.assertNotIn("ghp_fixtureSecret123", markdown)
+            self.assertIn("output/primary.json", encoded)
 
     def test_authoritative_profile_path_uses_repository_path_grammar(self):
         with tempfile.TemporaryDirectory() as directory:
