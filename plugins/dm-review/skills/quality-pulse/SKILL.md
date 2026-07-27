@@ -249,7 +249,10 @@ Publish only through the operation-coupled command:
 snapshot. It durably writes the exact rendered Markdown before minting
 `markdown_rendered`, durably writes that exact authoritative JSON before
 minting `published`, then atomically replaces the authoritative JSON with the
-published envelope. A caller cannot request either transition directly.
+published envelope. JSON and Markdown destinations must be distinct,
+non-aliased regular-file paths whose parent identities remain stable for the
+full transaction. Both final files are revalidated immediately before
+emission. A caller cannot request either transition directly.
 
 ### 7. Compare a compatible baseline
 

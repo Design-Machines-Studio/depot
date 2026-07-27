@@ -579,6 +579,8 @@ def _validate_profile_document(document, repository_root):
         repository_root, outputs["authoritative_json"],
     )
     outputs["markdown"] = normalize_owned_path(repository_root, outputs["markdown"])
+    if outputs["authoritative_json"] == outputs["markdown"]:
+        _fail("invalid_outputs")
     trend = _exact_object(
         document["trend_compatibility"],
         frozenset({"schema_version", "required_identity_fields"}),
@@ -2479,10 +2481,26 @@ def _verify_completed_publication_action(
     ):
         _fail("publication_action_not_verified")
     root = _repository_root(repository_root)
-    output_key = (
-        "markdown" if target_status == "markdown_rendered"
-        else "authoritative_json"
+    markdown = render_markdown(
+        current, publication_authority_key=publication_authority_key,
+    ).encode("utf-8")
+    if target_status == "markdown_rendered":
+        _verify_exact_publication_output(
+            current, root, "markdown", markdown,
+        )
+        return
+    _verify_exact_publication_output(
+        current, root, "markdown", markdown,
     )
+    _verify_exact_publication_output(
+        current, root, "authoritative_json",
+        authoritative_bytes(
+            current, publication_authority_key=publication_authority_key,
+        ),
+    )
+
+
+def _verify_exact_publication_output(current, root, output_key, expected):
     relative = normalize_owned_path(
         root, current["profile_snapshot"]["outputs"][output_key],
         must_exist=True,
@@ -2490,15 +2508,6 @@ def _verify_completed_publication_action(
     candidate = root / relative
     if any(item.is_symlink() for item in (candidate, *candidate.parents)):
         _fail("publication_action_not_verified")
-    expected = (
-        render_markdown(
-            current, publication_authority_key=publication_authority_key,
-        ).encode("utf-8")
-        if target_status == "markdown_rendered"
-        else authoritative_bytes(
-            current, publication_authority_key=publication_authority_key,
-        )
-    )
     try:
         descriptor = os.open(
             candidate, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
@@ -2536,6 +2545,30 @@ def _verify_completed_publication_action(
         raise
     except OSError:
         _fail("publication_action_not_verified")
+
+
+def validate_published_outputs(
+    result, repository_root, *, publication_authority_key=None,
+):
+    current = validate_authoritative_result(
+        result, publication_authority_key=publication_authority_key,
+    )
+    if current["publication_status"] != "published":
+        _fail("publication_action_not_verified")
+    root = _repository_root(repository_root)
+    _verify_exact_publication_output(
+        current, root, "markdown",
+        render_markdown(
+            current, publication_authority_key=publication_authority_key,
+        ).encode("utf-8"),
+    )
+    _verify_exact_publication_output(
+        current, root, "authoritative_json",
+        authoritative_bytes(
+            current, publication_authority_key=publication_authority_key,
+        ),
+    )
+    return current
 
 
 def authoritative_bytes(result, *, publication_authority_key=None):
@@ -2653,5 +2686,6 @@ __all__ = [
     "load_host_attestation", "load_inspection_profile",
     "load_host_publication_authority_key", "normalize_owned_path",
     "render_markdown", "stable_projection", "validate_authoritative_result",
+    "validate_published_outputs",
     "validate_host_attestation", "validate_inspection_profile",
 ]

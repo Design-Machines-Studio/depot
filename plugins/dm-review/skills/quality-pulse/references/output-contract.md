@@ -79,6 +79,8 @@ pulse.
    profile-declared Markdown, then the rendered-state authoritative JSON,
    before minting `markdown_rendered` and `published`; each transition replaces
    the keyed attestation and cannot be requested through generic finalize.
+   The two destinations must remain physically distinct, and both exact final
+   files are revalidated before the published envelope is emitted.
 
 Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an

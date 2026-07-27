@@ -55,8 +55,11 @@ process-boundary path for `markdown_rendered` and `published`: the kernel
 derives the output paths from the validated profile, durably writes and
 byte-verifies the exact Markdown before the rendered transition, then durably
 writes and byte-verifies the exact rendered authoritative JSON before the
-published transition. If the final envelope replacement fails, the durable
-artifact remains at `markdown_rendered`; no false published claim is emitted.
+published transition. Identical, symlink-aliased, hard-linked, or
+identity-changing destinations fail closed, and both final outputs revalidate
+immediately before emission. If the final envelope replacement fails, the
+durable artifact remains at `markdown_rendered`; no false published claim is
+emitted.
 
 ## Untrusted Pull Requests
 

@@ -433,7 +433,8 @@ file outside the repository.
 `inspection-finalize` accepts only the ready state for deterministic trend
 binding. `inspection-render` is a preview. Only `inspection-publish` may mint
 `markdown_rendered` and `published`, and it does so only after durable,
-byte-exact verification of the corresponding profile-declared outputs.
+byte-exact verification of distinct, non-aliased profile-declared outputs.
+Their parent and file identities remain guarded through final revalidation.
 
 Successful commands emit canonical JSON except `inspection-render`, which emits
 Markdown. Validation, trust, compatibility, or resolution failures emit stable

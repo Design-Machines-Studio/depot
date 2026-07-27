@@ -365,6 +365,54 @@ def _write_text(path, value):
         directory.fsync()
 
 
+def _publication_output_guard(repository_root, authoritative_path, markdown_path):
+    root = Path(repository_root).resolve(strict=True)
+    authoritative_path = Path(authoritative_path)
+    markdown_path = Path(markdown_path)
+    if (
+        authoritative_path == markdown_path
+        or authoritative_path.resolve(strict=False)
+        == markdown_path.resolve(strict=False)
+    ):
+        raise InspectionError("invalid_publication_outputs")
+    for destination in (authoritative_path, markdown_path):
+        if (
+            not destination.resolve(strict=False).is_relative_to(root)
+            or any(
+                item.is_symlink()
+                for item in (destination, *destination.parents)
+            )
+        ):
+            raise InspectionError("invalid_publication_outputs")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+    parent_identities = {}
+    for path in (authoritative_path, markdown_path):
+        entry = os.stat(path.parent, follow_symlinks=False)
+        parent_identities[path.parent] = (entry.st_dev, entry.st_ino)
+
+    def revalidate():
+        for parent, identity in parent_identities.items():
+            current = os.stat(parent, follow_symlinks=False)
+            if (
+                not stat.S_ISDIR(current.st_mode)
+                or (current.st_dev, current.st_ino) != identity
+            ):
+                raise InspectionError("publication_outputs_changed")
+        for destination in (authoritative_path, markdown_path):
+            try:
+                entry = os.stat(destination, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if not stat.S_ISREG(entry.st_mode):
+                raise InspectionError("invalid_publication_outputs")
+        if authoritative_path.exists() and markdown_path.exists():
+            if os.path.samefile(authoritative_path, markdown_path):
+                raise InspectionError("invalid_publication_outputs")
+
+    revalidate()
+    return revalidate
+
+
 def _write_json_once(path, value):
     """Atomically claim an immutable artifact pathname without replacement."""
     destination = Path(path)
@@ -2774,6 +2822,7 @@ def command_inspection_publish(args):
     from .inspection import (
         finalize_authoritative_result, load_host_publication_authority_key,
         normalize_owned_path, render_markdown, validate_authoritative_result,
+        validate_published_outputs,
     )
 
     publication_key = load_host_publication_authority_key(args.repository_root)
@@ -2784,29 +2833,41 @@ def command_inspection_publish(args):
     if current["publication_status"] != "authoritative_json_ready":
         raise InspectionError("invalid_publication_transition")
     outputs = current["profile_snapshot"]["outputs"]
-    markdown_path = Path(args.repository_root) / normalize_owned_path(
+    repository_root = Path(args.repository_root).resolve(strict=True)
+    markdown_path = repository_root / normalize_owned_path(
         args.repository_root, outputs["markdown"],
     )
-    authoritative_path = Path(args.repository_root) / normalize_owned_path(
+    authoritative_path = repository_root / normalize_owned_path(
         args.repository_root, outputs["authoritative_json"],
+    )
+    revalidate_outputs = _publication_output_guard(
+        repository_root, authoritative_path, markdown_path,
     )
     markdown = render_markdown(
         current, publication_authority_key=publication_key,
     )
     _write_json(authoritative_path, current)
+    revalidate_outputs()
     _write_text(markdown_path, markdown)
+    revalidate_outputs()
     rendered = finalize_authoritative_result(
         current, publication_status="markdown_rendered",
         publication_authority_key=publication_key,
         publication_repository_root=args.repository_root,
     )
     _write_json(authoritative_path, rendered)
+    revalidate_outputs()
     published = finalize_authoritative_result(
         rendered, publication_status="published",
         publication_authority_key=publication_key,
         publication_repository_root=args.repository_root,
     )
     _write_json(authoritative_path, published)
+    revalidate_outputs()
+    validate_published_outputs(
+        published, repository_root,
+        publication_authority_key=publication_key,
+    )
     _emit(published)
     return 0
 

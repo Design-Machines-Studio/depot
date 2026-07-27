@@ -13,6 +13,7 @@ from unittest import mock
 
 from tests import KERNEL_REFERENCES
 
+from workflow_kernel import cli as kernel_cli
 from workflow_kernel.cli import command_inspection_publish
 from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
@@ -286,6 +287,16 @@ class QualityPulseKernelTests(unittest.TestCase):
                     ),
                     reason,
                 )
+            aliased_outputs = profile_document()
+            aliased_outputs["outputs"]["markdown"] = (
+                aliased_outputs["outputs"]["authoritative_json"]
+            )
+            self.assert_reason(
+                lambda: validate_inspection_profile(
+                    aliased_outputs, repository,
+                ),
+                "invalid_outputs",
+            )
 
     def test_duplicate_json_key_and_owned_path_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1418,6 +1429,40 @@ class QualityPulseKernelTests(unittest.TestCase):
             validate_authoritative_result(
                 published, publication_authority_key=PUBLICATION_KEY,
             )
+            write_count = 0
+            original_write_json = kernel_cli._write_json
+
+            def corrupt_after_rendered_json(path, value):
+                nonlocal write_count
+                original_write_json(path, value)
+                write_count += 1
+                if write_count == 2:
+                    markdown_path.write_text("stale after rendered signing\n")
+
+            emitted.clear()
+            with (
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_host_publication_authority_key_path",
+                    return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.cli._write_json",
+                    side_effect=corrupt_after_rendered_json,
+                ),
+                mock.patch(
+                    "workflow_kernel.cli._emit",
+                    side_effect=lambda value: emitted.append(value),
+                ),
+            ):
+                self.assert_reason(
+                    lambda: command_inspection_publish(SimpleNamespace(
+                        repository_root=str(repository),
+                        input=str(source),
+                    )),
+                    "publication_action_not_verified",
+                )
+            self.assertEqual(emitted, [])
 
     def test_cli_help_and_invalid_inputs_have_stable_nonzero_exit(self):
         env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))
