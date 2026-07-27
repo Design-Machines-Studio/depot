@@ -317,7 +317,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 raw_telemetry={"value": 7, "token": "ghp_fixtureSecret123"},
             )])[0]
             self.assertTrue(result["actionable"])
-            self.assertEqual(result["classification"], "fail_closed")
+            self.assertEqual(result["classification"], "unknown")
             self.assertEqual(result["reason_code"], "unknown_surface")
             self.assertEqual(result["raw_telemetry"]["token"], "[REDACTED]")
             self.assertEqual(result["evidence_status"], "available")

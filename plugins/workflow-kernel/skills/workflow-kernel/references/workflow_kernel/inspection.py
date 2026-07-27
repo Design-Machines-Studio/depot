@@ -714,7 +714,7 @@ def classify_observations(profile, observations):
             "surface_id": raw.get("surface_id") if type(raw) is dict else None,
             "rule_id": raw.get("rule_id") if type(raw) is dict else None,
             "metric_id": raw.get("metric_id") if type(raw) is dict else None,
-            "classification": "fail_closed" if reason else raw["classification_id"],
+            "classification": "unknown" if reason else raw["classification_id"],
             "confidence": "unknown" if reason else classifications[
                 raw["classification_id"]
             ]["confidence"],
