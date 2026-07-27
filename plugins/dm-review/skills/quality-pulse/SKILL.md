@@ -224,8 +224,8 @@ There is deliberately no CLI or profile key-path override:
   [--baseline "$COMPATIBLE_BASELINE"]
 ```
 
-Only after keyed attestation validation may `inspection-render` produce the
-Markdown digest:
+Only after keyed attestation validation may `inspection-render` produce a
+non-publishing Markdown preview:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-render \
@@ -236,6 +236,20 @@ Markdown digest:
 If JSON emission, validation, redaction, stable-digest verification, or render
 input validation fails, do not publish or retain a new Markdown digest as
 authority. Markdown is a view and is never parsed back into evidence.
+
+Publish only through the operation-coupled command:
+
+```sh
+"$WORKFLOW_KERNEL" inspection-publish \
+  --repository-root "$REPOSITORY_ROOT" \
+  --input "$AUTHORITATIVE_JSON"
+```
+
+`inspection-publish` derives both destinations from the validated profile
+snapshot. It durably writes the exact rendered Markdown before minting
+`markdown_rendered`, durably writes that exact authoritative JSON before
+minting `published`, then atomically replaces the authoritative JSON with the
+published envelope. A caller cannot request either transition directly.
 
 ### 7. Compare a compatible baseline
 
@@ -260,11 +274,10 @@ state—including the initial ready state—carries an HMAC attestation bound to
 the host-owned publication key. The key is supplied only by the host, must be
 outside the repository at the fixed OS-account path, owned by the current
 user, mode `0600`, and cannot be nominated by a profile or command argument.
-After Markdown is durably written, finalize with `--publication-status
-markdown_rendered`; after host publication succeeds, finalize once more with
-`--publication-status published`. Validation with a missing, wrong, or
-replaced key fails. Never relabel publication without the corresponding
-completed host action.
+`inspection-finalize` accepts only `authoritative_json_ready`; rendered and
+published attestations are coupled to the exact durable outputs verified by
+`inspection-publish`. Validation with a missing, wrong, or replaced key fails.
+Never relabel publication without the corresponding completed host action.
 
 ## Invocation Guidance
 

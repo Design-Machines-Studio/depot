@@ -13,6 +13,7 @@ from unittest import mock
 
 from tests import KERNEL_REFERENCES
 
+from workflow_kernel.cli import command_inspection_publish
 from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
     classify_observations, compare_trends, execute_inspection_lanes,
@@ -1090,13 +1091,39 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
             compared_stable_digest = compared["stable_projection_digest"]
             compared_publication_digest = compared["publication_state_digest"]
+            self.assert_reason(
+                lambda: finalize_authoritative_result(
+                    compared, publication_status="markdown_rendered",
+                    publication_authority_key=PUBLICATION_KEY,
+                ),
+                "publication_action_not_verified",
+            )
+            output_directory = repository / "output"
+            output_directory.mkdir()
+            (output_directory / "result.md").write_text("forged\n")
+            self.assert_reason(
+                lambda: finalize_authoritative_result(
+                    compared, publication_status="markdown_rendered",
+                    publication_authority_key=PUBLICATION_KEY,
+                    publication_repository_root=repository,
+                ),
+                "publication_action_not_verified",
+            )
+            (output_directory / "result.md").write_text(compared_markdown)
             rendered = finalize_authoritative_result(
                 compared, publication_status="markdown_rendered",
                 publication_authority_key=PUBLICATION_KEY,
+                publication_repository_root=repository,
+            )
+            (output_directory / "result.json").write_bytes(
+                authoritative_bytes(
+                    rendered, publication_authority_key=PUBLICATION_KEY,
+                ),
             )
             finalized = finalize_authoritative_result(
                 rendered, publication_status="published",
                 publication_authority_key=PUBLICATION_KEY,
+                publication_repository_root=repository,
             )
             self.assertEqual(finalized["publication_status"], "published")
             self.assertEqual(finalized["trend_result"]["status"], "compatible")
@@ -1132,6 +1159,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                     publication_status="published",
                     baseline=current,
                     publication_authority_key=PUBLICATION_KEY,
+                    publication_repository_root=repository,
                 ),
                 "trend_after_render",
             )
@@ -1178,15 +1206,26 @@ class QualityPulseKernelTests(unittest.TestCase):
             attacker_result = self.result(
                 profile, publication_key=ATTACKER_KEY,
             )
+            (output_directory / "result.md").write_text(render_markdown(
+                attacker_result, publication_authority_key=ATTACKER_KEY,
+            ))
             attacker_result = finalize_authoritative_result(
                 attacker_result,
                 publication_status="markdown_rendered",
                 publication_authority_key=ATTACKER_KEY,
+                publication_repository_root=repository,
+            )
+            (output_directory / "result.json").write_bytes(
+                authoritative_bytes(
+                    attacker_result,
+                    publication_authority_key=ATTACKER_KEY,
+                ),
             )
             attacker_result = finalize_authoritative_result(
                 attacker_result,
                 publication_status="published",
                 publication_authority_key=ATTACKER_KEY,
+                publication_repository_root=repository,
             )
             self.assert_reason(
                 lambda: validate_authoritative_result(
@@ -1343,6 +1382,43 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "invalid_invocation",
             )
 
+    def test_cli_publish_couples_attestation_to_durable_profile_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository, _path, profile = self.load_profile(root)
+            publication_key = root / "publication-authority.key"
+            publication_key.write_bytes(PUBLICATION_KEY)
+            publication_key.chmod(0o600)
+            source = repository / "ready.json"
+            source.write_text(json.dumps(self.result(profile)))
+            emitted = []
+            with (
+                mock.patch(
+                    "workflow_kernel.inspection."
+                    "_host_publication_authority_key_path",
+                    return_value=publication_key.resolve(),
+                ),
+                mock.patch(
+                    "workflow_kernel.cli._emit",
+                    side_effect=lambda value: emitted.append(value),
+                ),
+            ):
+                self.assertEqual(command_inspection_publish(SimpleNamespace(
+                    repository_root=str(repository),
+                    input=str(source),
+                )), 0)
+            self.assertEqual(emitted[0]["publication_status"], "published")
+            markdown_path = repository / "output" / "result.md"
+            authoritative_path = repository / "output" / "result.json"
+            self.assertTrue(markdown_path.read_text().startswith(
+                "# Inspection Result\n",
+            ))
+            published = json.loads(authoritative_path.read_text())
+            self.assertEqual(published, emitted[0])
+            validate_authoritative_result(
+                published, publication_authority_key=PUBLICATION_KEY,
+            )
+
     def test_cli_help_and_invalid_inputs_have_stable_nonzero_exit(self):
         env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))
         help_result = subprocess.run(
@@ -1352,8 +1428,8 @@ class QualityPulseKernelTests(unittest.TestCase):
         self.assertEqual(help_result.returncode, 0)
         for command in (
             "inspection-validate", "inspection-classify", "inspection-trend",
-            "inspection-finalize", "inspection-render", "inspection-run",
-            "resolve-plugin-bundle",
+            "inspection-finalize", "inspection-publish", "inspection-render",
+            "inspection-run", "resolve-plugin-bundle",
         ):
             self.assertIn(command, help_result.stdout)
             detail = subprocess.run(
@@ -1385,6 +1461,16 @@ class QualityPulseKernelTests(unittest.TestCase):
         self.assertEqual(
             json.loads(rejected.stderr)["error"]["code"], "inspection_error",
         )
+        signing_oracle = subprocess.run(
+            [
+                sys.executable, "-m", "workflow_kernel",
+                "inspection-finalize", "--repository-root", "/missing",
+                "--input", "/missing", "--publication-status", "published",
+            ],
+            text=True, capture_output=True, env=env, check=False,
+        )
+        self.assertEqual(signing_oracle.returncode, 2)
+        self.assertNotIn("published", signing_oracle.stdout)
 
 
 if __name__ == "__main__":

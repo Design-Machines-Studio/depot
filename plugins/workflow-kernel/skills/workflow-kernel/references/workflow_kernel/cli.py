@@ -339,6 +339,32 @@ def _write_json(path, value):
         directory.fsync()
 
 
+def _write_text(path, value):
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    encoded = value.encode("utf-8")
+    binding = bind_durable_path(destination)
+    with _OwnedResourceScope() as owned:
+        directory = owned.pin(binding)
+        directory.revalidate()
+        directory.regular_exists(binding.path.name)
+        descriptor, temporary = directory.create_temporary(
+            binding.path.name + ".tmp-", ".md",
+        )
+        owned.own_temporary(descriptor, temporary)
+        pending = encoded
+        while pending:
+            count = os.write(descriptor, pending)
+            if count <= 0:
+                raise OSError("text write made no progress")
+            pending = pending[count:]
+        os.fsync(descriptor)
+        directory.require_identity(descriptor, temporary)
+        directory.replace(temporary, binding.path.name)
+        owned.disown_temporary()
+        directory.fsync()
+
+
 def _write_json_once(path, value):
     """Atomically claim an immutable artifact pathname without replacement."""
     destination = Path(path)
@@ -2744,6 +2770,47 @@ def command_inspection_finalize(args):
     return 0
 
 
+def command_inspection_publish(args):
+    from .inspection import (
+        finalize_authoritative_result, load_host_publication_authority_key,
+        normalize_owned_path, render_markdown, validate_authoritative_result,
+    )
+
+    publication_key = load_host_publication_authority_key(args.repository_root)
+    current = validate_authoritative_result(
+        _inspection_json(args.input),
+        publication_authority_key=publication_key,
+    )
+    if current["publication_status"] != "authoritative_json_ready":
+        raise InspectionError("invalid_publication_transition")
+    outputs = current["profile_snapshot"]["outputs"]
+    markdown_path = Path(args.repository_root) / normalize_owned_path(
+        args.repository_root, outputs["markdown"],
+    )
+    authoritative_path = Path(args.repository_root) / normalize_owned_path(
+        args.repository_root, outputs["authoritative_json"],
+    )
+    markdown = render_markdown(
+        current, publication_authority_key=publication_key,
+    )
+    _write_json(authoritative_path, current)
+    _write_text(markdown_path, markdown)
+    rendered = finalize_authoritative_result(
+        current, publication_status="markdown_rendered",
+        publication_authority_key=publication_key,
+        publication_repository_root=args.repository_root,
+    )
+    _write_json(authoritative_path, rendered)
+    published = finalize_authoritative_result(
+        rendered, publication_status="published",
+        publication_authority_key=publication_key,
+        publication_repository_root=args.repository_root,
+    )
+    _write_json(authoritative_path, published)
+    _emit(published)
+    return 0
+
+
 def command_inspection_render(args):
     from .inspection import render_markdown, load_host_publication_authority_key
 
@@ -3034,19 +3101,16 @@ def parser():
         help="advance authoritative inspection publication and trend lifecycle",
         description=(
             "Validate authoritative JSON, compute an optional baseline trend, "
-            "and bind a host-attested closed publication transition before "
-            "emitting a re-digested artifact. Invalid lifecycle input exits "
-            "non-zero."
+            "and rebind the ready-state attestation before emitting a re-digested "
+            "artifact. Rendered and published transitions are available only "
+            "through inspection-publish. Invalid lifecycle input exits non-zero."
         ),
     )
     inspection_finalize.add_argument("--input", required=True)
     inspection_finalize.add_argument("--repository-root", required=True)
     inspection_finalize.add_argument(
         "--publication-status",
-        choices=(
-            "authoritative_json_ready", "markdown_rendered",
-            "published", "publication_failed",
-        ),
+        choices=("authoritative_json_ready",),
         required=True,
     )
     inspection_finalize.add_argument(
@@ -3057,6 +3121,19 @@ def parser():
         ),
     )
     inspection_finalize.set_defaults(handler=command_inspection_finalize)
+
+    inspection_publish = commands.add_parser(
+        "inspection-publish",
+        help="durably publish profile-declared Markdown and authoritative JSON",
+        description=(
+            "Render and durably replace the validated profile-declared Markdown "
+            "and authoritative JSON outputs, minting lifecycle attestations only "
+            "after the corresponding writes. Failures exit non-zero."
+        ),
+    )
+    inspection_publish.add_argument("--input", required=True)
+    inspection_publish.add_argument("--repository-root", required=True)
+    inspection_publish.set_defaults(handler=command_inspection_publish)
 
     inspection_render = commands.add_parser(
         "inspection-render",

@@ -182,7 +182,7 @@ def _canonical_digest(value):
 def _repository_root(value):
     try:
         root = Path(value).resolve(strict=True)
-    except (OSError, RuntimeError, ValueError):
+    except (OSError, RuntimeError, TypeError, ValueError):
         _fail("invalid_repository_root")
     if not root.is_dir():
         _fail("invalid_repository_root")
@@ -781,8 +781,16 @@ def load_host_publication_authority_key(repository_root):
         try:
             before = os.fstat(descriptor)
             if (
-                (before.st_dev, before.st_ino)
-                != (expected.st_dev, expected.st_ino)
+                (
+                    before.st_dev, before.st_ino, before.st_mode,
+                    before.st_uid, before.st_nlink, before.st_size,
+                    before.st_mtime_ns, before.st_ctime_ns,
+                )
+                != (
+                    expected.st_dev, expected.st_ino, expected.st_mode,
+                    expected.st_uid, expected.st_nlink, expected.st_size,
+                    expected.st_mtime_ns, expected.st_ctime_ns,
+                )
                 or not stat.S_ISREG(before.st_mode)
                 or before.st_uid != os.getuid()
                 or before.st_nlink != 1
@@ -2376,7 +2384,7 @@ def validate_authoritative_result(result, *, publication_authority_key=None):
 
 def finalize_authoritative_result(
     result, *, publication_status, baseline=None,
-    publication_authority_key=None,
+    publication_authority_key=None, publication_repository_root=None,
 ):
     """Advance closed publication/trend lifecycle state and rebind the digest."""
     current = validate_authoritative_result(
@@ -2398,6 +2406,11 @@ def finalize_authoritative_result(
         current["publication_status"]
     ]:
         _fail("invalid_publication_transition")
+    if publication_status != current["publication_status"]:
+        _verify_completed_publication_action(
+            current, publication_status, publication_repository_root,
+            publication_authority_key,
+        )
     if baseline is None:
         trend_result = current["trend_result"]
         trend_baseline = current["trend_baseline"]
@@ -2455,6 +2468,74 @@ def finalize_authoritative_result(
     return validate_authoritative_result(
         updated, publication_authority_key=publication_authority_key,
     )
+
+
+def _verify_completed_publication_action(
+    current, target_status, repository_root, publication_authority_key,
+):
+    if (
+        target_status not in {"markdown_rendered", "published"}
+        or repository_root is None
+    ):
+        _fail("publication_action_not_verified")
+    root = _repository_root(repository_root)
+    output_key = (
+        "markdown" if target_status == "markdown_rendered"
+        else "authoritative_json"
+    )
+    relative = normalize_owned_path(
+        root, current["profile_snapshot"]["outputs"][output_key],
+        must_exist=True,
+    )
+    candidate = root / relative
+    if any(item.is_symlink() for item in (candidate, *candidate.parents)):
+        _fail("publication_action_not_verified")
+    expected = (
+        render_markdown(
+            current, publication_authority_key=publication_authority_key,
+        ).encode("utf-8")
+        if target_status == "markdown_rendered"
+        else authoritative_bytes(
+            current, publication_authority_key=publication_authority_key,
+        )
+    )
+    try:
+        descriptor = os.open(
+            candidate, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            before = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(before.st_mode)
+                or before.st_nlink != 1
+                or before.st_size != len(expected)
+            ):
+                _fail("publication_action_not_verified")
+            actual = os.read(descriptor, len(expected) + 1)
+            if os.read(descriptor, 1):
+                _fail("publication_action_not_verified")
+            after = os.fstat(descriptor)
+            entry = os.stat(candidate, follow_symlinks=False)
+            if (
+                actual != expected
+                or (
+                    before.st_dev, before.st_ino, before.st_size,
+                    before.st_mtime_ns, before.st_ctime_ns,
+                )
+                != (
+                    after.st_dev, after.st_ino, after.st_size,
+                    after.st_mtime_ns, after.st_ctime_ns,
+                )
+                or (after.st_dev, after.st_ino)
+                != (entry.st_dev, entry.st_ino)
+            ):
+                _fail("publication_action_not_verified")
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("publication_action_not_verified")
 
 
 def authoritative_bytes(result, *, publication_authority_key=None):

@@ -73,10 +73,12 @@ pulse.
    and embed an HMAC attestation before serialization;
 3. pass an authoritative baseline to `inspection-finalize`, which computes
    the trend and replaces the attestation for the new exact content digest;
-4. render Markdown only after revalidating the embedded attestation with the
+4. preview Markdown only after revalidating the embedded attestation with the
    host key;
-5. bind `markdown_rendered`, then `published` only after each host action
-   succeeds; each transition replaces the keyed attestation.
+5. use `inspection-publish` to durably write and byte-verify the
+   profile-declared Markdown, then the rendered-state authoritative JSON,
+   before minting `markdown_rendered` and `published`; each transition replaces
+   the keyed attestation and cannot be requested through generic finalize.
 
 Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an

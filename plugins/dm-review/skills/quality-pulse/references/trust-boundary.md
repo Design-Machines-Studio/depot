@@ -49,6 +49,15 @@ the MAC with constant-time comparison. A repository caller cannot authorize a
 transition or rollback by choosing an attacker key, editing JSON, moving a file
 to `/tmp`, or recomputing public hashes.
 
+The key is not a generic signing oracle. `inspection-finalize` may only rebind
+the ready state while computing a trend. `inspection-publish` is the sole
+process-boundary path for `markdown_rendered` and `published`: the kernel
+derives the output paths from the validated profile, durably writes and
+byte-verifies the exact Markdown before the rendered transition, then durably
+writes and byte-verifies the exact rendered authoritative JSON before the
+published transition. If the final envelope replacement fails, the durable
+artifact remains at `markdown_rendered`; no false published claim is emitted.
+
 ## Untrusted Pull Requests
 
 A profile introduced or modified by an untrusted pull request may be schema-

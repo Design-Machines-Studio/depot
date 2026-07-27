@@ -407,6 +407,8 @@ workflow-kernel-launcher.sh inspection-trend \
   --current <authoritative-json> --baseline <authoritative-json>
 workflow-kernel-launcher.sh inspection-render \
   --repository-root <root> --input <authoritative-json>
+workflow-kernel-launcher.sh inspection-publish \
+  --repository-root <root> --input <authoritative-json>
 workflow-kernel-launcher.sh inspection-run \
   --repository-root <root> --profile <profile> --lane-id <primary-id> \
   --attestation <host-path-outside-repository> \
@@ -427,6 +429,11 @@ account home is resolved from the OS account database rather than `$HOME`.
 Profiles and command arguments cannot select or override the key path; the
 host provisions it as a current-user-owned, single-link, mode-`0600` regular
 file outside the repository.
+
+`inspection-finalize` accepts only the ready state for deterministic trend
+binding. `inspection-render` is a preview. Only `inspection-publish` may mint
+`markdown_rendered` and `published`, and it does so only after durable,
+byte-exact verification of the corresponding profile-declared outputs.
 
 Successful commands emit canonical JSON except `inspection-render`, which emits
 Markdown. Validation, trust, compatibility, or resolution failures emit stable
