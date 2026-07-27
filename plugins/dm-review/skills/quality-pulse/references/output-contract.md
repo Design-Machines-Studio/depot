@@ -66,7 +66,9 @@ pulse.
 
 ## Publication Order
 
-1. load the host-owned publication authority key from outside the repository;
+1. load the host-owned publication authority key from the fixed OS-account
+   path `~/.config/design-machines/quality-pulse/publication-authority.key`,
+   with no profile, environment, or CLI path override;
 2. build the ready JSON, validate its complete schema and redaction outcome,
    and embed an HMAC attestation before serialization;
 3. pass an authoritative baseline to `inspection-finalize`, which computes

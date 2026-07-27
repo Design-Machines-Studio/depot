@@ -130,7 +130,6 @@ Invoke `inspection-run` with requested primary lane IDs only. Repeat
   --lane-id "$PRIMARY_LANE_ID" \
   [--lane-id "$ANOTHER_PRIMARY_LANE_ID"] \
   --attestation "$HOST_ATTESTATION" \
-  --publication-authority-key "$HOST_PUBLICATION_KEY" \
   --source git \
   --ref "$VERIFIED_REF" \
   --commit "$VERIFIED_COMMIT" \
@@ -210,14 +209,18 @@ and recompute its stable projection digest. Bind an optional trend result and
 each publication transition with `inspection-finalize`; the command validates
 the closed lifecycle state and emits a re-digested artifact. The kernel embeds
 a keyed host attestation for the exact result before authoritative JSON crosses
-the process boundary:
+the process boundary. Every publication command loads the key from the fixed
+OS-account path
+`~/.config/design-machines/quality-pulse/publication-authority.key`; `~` here
+means the account-database home, not caller-controlled `$HOME`. The host must
+provision that current-user-owned, single-link, mode-`0600` file before a pulse.
+There is deliberately no CLI or profile key-path override:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-finalize \
   --repository-root "$REPOSITORY_ROOT" \
   --input "$AUTHORITATIVE_JSON" \
   --publication-status authoritative_json_ready \
-  --publication-authority-key "$HOST_PUBLICATION_KEY" \
   [--baseline "$COMPATIBLE_BASELINE"]
 ```
 
@@ -227,8 +230,7 @@ Markdown digest:
 ```sh
 "$WORKFLOW_KERNEL" inspection-render \
   --repository-root "$REPOSITORY_ROOT" \
-  --input "$AUTHORITATIVE_JSON" \
-  --publication-authority-key "$HOST_PUBLICATION_KEY"
+  --input "$AUTHORITATIVE_JSON"
 ```
 
 If JSON emission, validation, redaction, stable-digest verification, or render
@@ -246,8 +248,7 @@ calculate a misleading delta.
 "$WORKFLOW_KERNEL" inspection-trend \
   --repository-root "$REPOSITORY_ROOT" \
   --current "$AUTHORITATIVE_JSON" \
-  --baseline "$COMPATIBLE_BASELINE" \
-  --publication-authority-key "$HOST_PUBLICATION_KEY"
+  --baseline "$COMPATIBLE_BASELINE"
 ```
 
 Pass the authoritative baseline directly to `inspection-finalize --baseline`;
@@ -257,13 +258,13 @@ exclude publication status; a separate `publication_state_digest` binds that
 operational envelope without invalidating rendered content. Every serialized
 state—including the initial ready state—carries an HMAC attestation bound to
 the host-owned publication key. The key is supplied only by the host, must be
-outside the repository, owned by the current user, mode `0600`, and cannot be
-nominated by a profile. After Markdown is durably written, finalize with
-`--publication-status markdown_rendered --publication-authority-key
-"$HOST_PUBLICATION_KEY"`; after host publication succeeds, finalize once more
-with `--publication-status published` and the same key. Validation with a
-missing, wrong, or attacker-selected key fails. Never relabel publication
-without the corresponding completed host action.
+outside the repository at the fixed OS-account path, owned by the current
+user, mode `0600`, and cannot be nominated by a profile or command argument.
+After Markdown is durably written, finalize with `--publication-status
+markdown_rendered`; after host publication succeeds, finalize once more with
+`--publication-status published`. Validation with a missing, wrong, or
+replaced key fails. Never relabel publication without the corresponding
+completed host action.
 
 ## Invocation Guidance
 

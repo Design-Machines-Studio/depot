@@ -9,6 +9,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from tests import KERNEL_REFERENCES
 
@@ -16,7 +17,8 @@ from workflow_kernel.inspection import (
     FIXED_EXECUTION_ENV, InspectionError, authoritative_bytes, build_authoritative_result,
     classify_observations, compare_trends, execute_inspection_lanes,
     finalize_authoritative_result, load_host_attestation,
-    load_inspection_profile, load_publication_authority_key, normalize_owned_path,
+    load_host_publication_authority_key, load_inspection_profile,
+    normalize_owned_path,
     render_markdown, stable_projection, validate_authoritative_result,
     validate_inspection_profile,
 )
@@ -497,34 +499,48 @@ class QualityPulseKernelTests(unittest.TestCase):
                 lambda: load_host_attestation(host_file, repository),
                 "repository_controlled_attestation",
             )
-            self.assert_reason(
-                lambda: load_publication_authority_key(host_file, repository),
-                "untrusted_publication_authority_key",
-            )
+            with mock.patch(
+                "workflow_kernel.inspection."
+                "_host_publication_authority_key_path",
+                return_value=host_file.resolve(),
+            ):
+                self.assert_reason(
+                    lambda: load_host_publication_authority_key(repository),
+                    "untrusted_publication_authority_key",
+                )
             publication_key = root / "publication.key"
             publication_key.write_bytes(PUBLICATION_KEY)
             publication_key.chmod(0o600)
-            self.assertEqual(
-                load_publication_authority_key(
-                    publication_key.resolve(), repository,
-                ),
-                PUBLICATION_KEY,
-            )
+            with mock.patch(
+                "workflow_kernel.inspection."
+                "_host_publication_authority_key_path",
+                return_value=publication_key.resolve(),
+            ):
+                self.assertEqual(
+                    load_host_publication_authority_key(repository),
+                    PUBLICATION_KEY,
+                )
             publication_key_link = root / "publication-link.key"
             publication_key_link.symlink_to(publication_key)
-            self.assert_reason(
-                lambda: load_publication_authority_key(
-                    publication_key_link, repository,
-                ),
-                "untrusted_publication_authority_key",
-            )
+            with mock.patch(
+                "workflow_kernel.inspection."
+                "_host_publication_authority_key_path",
+                return_value=publication_key_link,
+            ):
+                self.assert_reason(
+                    lambda: load_host_publication_authority_key(repository),
+                    "untrusted_publication_authority_key",
+                )
             publication_key.chmod(0o644)
-            self.assert_reason(
-                lambda: load_publication_authority_key(
-                    publication_key.resolve(), repository,
-                ),
-                "untrusted_publication_authority_key",
-            )
+            with mock.patch(
+                "workflow_kernel.inspection."
+                "_host_publication_authority_key_path",
+                return_value=publication_key.resolve(),
+            ):
+                self.assert_reason(
+                    lambda: load_host_publication_authority_key(repository),
+                    "untrusted_publication_authority_key",
+                )
             value = profile_document()
             value["trusted"] = True
             self.assert_reason(
@@ -1349,6 +1365,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "non- zero", "non-zero",
             )
             self.assertIn("non-zero", normalized_help)
+            self.assertNotIn("--publication-authority-key", detail.stdout)
             if command == "inspection-run":
                 self.assertNotIn("--observations", detail.stdout)
 
@@ -1357,7 +1374,6 @@ class QualityPulseKernelTests(unittest.TestCase):
                 sys.executable, "-m", "workflow_kernel", "inspection-run",
                 "--repository-root", "/missing", "--profile", "profile.json",
                 "--lane-id", "primary", "--attestation", "/missing-attestation",
-                "--publication-authority-key", "/missing-key",
                 "--source", "git", "--ref", "refs/heads/test",
                 "--commit", COMMIT, "--dirty", "false",
                 "--authorization-event-id", "operator-event-1",

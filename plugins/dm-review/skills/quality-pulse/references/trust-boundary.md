@@ -36,15 +36,18 @@ only the frozen snapshot. A missing, repository-held, self-asserted, stale, or
 mismatched attestation fails before subprocess invocation.
 
 Publication transitions use a second host-derived authority: an HMAC key
-loaded from a host-supplied file outside the repository. The key file must be a
+loaded only from the fixed OS-account path
+`~/.config/design-machines/quality-pulse/publication-authority.key`. The
+account home comes from the OS account database, not `$HOME`; there is no
+profile, environment, or CLI key-path override. The key file must be a
 single-link regular file owned by the current user with no group/world
-permissions; profiles cannot nominate it. Each embedded receipt binds the pulse
-and content digest, prior and target publication states and state digests,
-completed host action, original operator authorization event, and authority-key
-ID. Authoritative-result validation requires the correct key and verifies the
-MAC with constant-time comparison. A repository caller cannot authorize a
-transition or rollback by editing JSON, moving a file to `/tmp`, or recomputing
-public hashes.
+permissions. Each embedded receipt binds the pulse and content digest, prior
+and target publication states and state digests, completed host action,
+original operator authorization event, and authority-key ID.
+Authoritative-result validation requires that host-selected key and verifies
+the MAC with constant-time comparison. A repository caller cannot authorize a
+transition or rollback by choosing an attacker key, editing JSON, moving a file
+to `/tmp`, or recomputing public hashes.
 
 ## Untrusted Pull Requests
 

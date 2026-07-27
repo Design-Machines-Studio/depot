@@ -11,6 +11,7 @@ import hashlib
 import hmac
 import json
 import os
+import pwd
 import re
 import stat
 import subprocess
@@ -50,6 +51,10 @@ _LANE_REPOSITORY_TARGET = "/workspace"
 _LANE_EVIDENCE_TARGET = "/quality-pulse-evidence"
 _LANE_EVIDENCE_NAME = "observations.json"
 _MAX_LANE_EVIDENCE_BYTES = 16 * 1024 * 1024
+_HOST_PUBLICATION_AUTHORITY_KEY_PARTS = (
+    ".config", "design-machines", "quality-pulse",
+    "publication-authority.key",
+)
 _PROFILE_FIELDS = frozenset({
     "schema_version", "profile_id", "profile_version", "repository",
     "catalogs", "surfaces", "metrics", "rules", "lanes", "classifications",
@@ -740,7 +745,21 @@ def load_host_attestation(path, repository_root):
     return _load_external_attestation(path, repository_root)
 
 
-def load_publication_authority_key(path, repository_root):
+def _host_publication_authority_key_path():
+    try:
+        account_home = pwd.getpwuid(os.getuid()).pw_dir
+    except (KeyError, OSError):
+        _fail("publication_authority_key_read_failed")
+    if type(account_home) is not str or not account_home:
+        _fail("publication_authority_key_read_failed")
+    home = Path(account_home)
+    if not home.is_absolute():
+        _fail("publication_authority_key_read_failed")
+    return home.joinpath(*_HOST_PUBLICATION_AUTHORITY_KEY_PARTS)
+
+
+def load_host_publication_authority_key(repository_root):
+    path = _host_publication_authority_key_path()
     root = _repository_root(repository_root)
     candidate = Path(path)
     if (
@@ -2551,7 +2570,7 @@ __all__ = [
     "compare_trends", "decode_json_bytes", "execute_inspection_lanes",
     "finalize_authoritative_result",
     "load_host_attestation", "load_inspection_profile",
-    "load_publication_authority_key", "normalize_owned_path",
+    "load_host_publication_authority_key", "normalize_owned_path",
     "render_markdown", "stable_projection", "validate_authoritative_result",
     "validate_host_attestation", "validate_inspection_profile",
 ]

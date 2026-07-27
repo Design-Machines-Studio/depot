@@ -404,15 +404,12 @@ workflow-kernel-launcher.sh inspection-classify \
   --repository-root <root> --profile <profile> --observations <json>
 workflow-kernel-launcher.sh inspection-trend \
   --repository-root <root> \
-  --current <authoritative-json> --baseline <authoritative-json> \
-  --publication-authority-key <host-mode-0600-key>
+  --current <authoritative-json> --baseline <authoritative-json>
 workflow-kernel-launcher.sh inspection-render \
-  --repository-root <root> --input <authoritative-json> \
-  --publication-authority-key <host-mode-0600-key>
+  --repository-root <root> --input <authoritative-json>
 workflow-kernel-launcher.sh inspection-run \
   --repository-root <root> --profile <profile> --lane-id <primary-id> \
   --attestation <host-path-outside-repository> \
-  --publication-authority-key <host-mode-0600-key> \
   --source git --ref <ref> \
   --commit <sha> --dirty <true|false> --purpose <purpose> \
   --authorization-event-id <host-observed-event-id>
@@ -422,6 +419,14 @@ workflow-kernel-launcher.sh resolve-plugin-bundle \
   [--required-executable <executable-relative-path> ...] \
   [--minimum-version <semver>] [--active-host <claude|codex>]
 ```
+
+Publication commands load their HMAC authority only from the current OS
+account's fixed
+`~/.config/design-machines/quality-pulse/publication-authority.key`. The
+account home is resolved from the OS account database rather than `$HOME`.
+Profiles and command arguments cannot select or override the key path; the
+host provisions it as a current-user-owned, single-link, mode-`0600` regular
+file outside the repository.
 
 Successful commands emit canonical JSON except `inspection-render`, which emits
 Markdown. Validation, trust, compatibility, or resolution failures emit stable
