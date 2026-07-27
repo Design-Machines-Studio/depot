@@ -621,6 +621,9 @@ class QualityPulseContract(unittest.TestCase):
             after = copy.deepcopy(current_by_id[observation_id])
             if observation_id == "design-panel-javascript-count":
                 before["raw_telemetry"]["value"] = after["raw_telemetry"]["value"]
+                before["source_observation_digest"] = (
+                    after["source_observation_digest"]
+                )
             self.assertEqual(after, before)
 
     def case_path_order(self):

@@ -378,9 +378,13 @@ classification while retaining redacted raw telemetry.
 
 Receipts retain separate identities for the profile-declared argv and the
 kernel-synthesized execution policy (network, root filesystem, user, and fixed
-mount semantics). They bind both the raw lane-envelope digest and the
-classified-observation projection digest so durable validation detects
-same-ID content substitution.
+mount semantics). After verifying the fresh raw lane envelope, the authoritative
+receipt retains a redacted source-evidence snapshot and its digest. Every
+classified observation carries the digest of its exact redacted source object,
+and durable validation checks the source-derived fields plus the complete
+classified-observation projection digest. This detects same-ID content
+substitution even when an attacker recomputes the classified and stable
+projection digests.
 
 Authoritative inspection JSON includes volatile invocation provenance and an
 explicit stable-projection digest. Compare trends only when schema, profile,

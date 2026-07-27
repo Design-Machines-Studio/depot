@@ -780,6 +780,7 @@ def classify_observations(profile, observations):
     results = []
     for index, raw in enumerate(observations):
         safe_raw, redacted = _redact_durable(raw)
+        source_observation_digest = _canonical_digest(safe_raw)
         reason = None
         normalized_evidence = []
         if type(raw) is not dict or raw.get("schema_version") != 1:
@@ -853,6 +854,7 @@ def classify_observations(profile, observations):
                 safe_raw.get("raw_telemetry", {})
                 if type(safe_raw) is dict else safe_raw
             ),
+            "source_observation_digest": source_observation_digest,
             "redacted_values": redacted,
         })
     return sorted(results, key=lambda item: item["observation_id"])
@@ -1180,10 +1182,29 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
     for receipt in lane_receipts:
         bound_receipt = dict(receipt)
         if receipt["status"] in {"available", "fallback"}:
+            source_observations = [
+                raw_by_id[item] for item in receipt["observation_ids"]
+            ]
+            evidence_snapshot = []
+            snapshot_redactions = 0
+            for source_observation in source_observations:
+                safe_source, redacted = _redact_durable(source_observation)
+                evidence_snapshot.append(safe_source)
+                snapshot_redactions += redacted
+            bound_receipt["evidence_snapshot"] = evidence_snapshot
+            bound_receipt["evidence_digest"] = _canonical_digest({
+                "schema_version": 1,
+                "lane_id": receipt["lane_id"],
+                "observations": evidence_snapshot,
+            })
             bound_receipt["classified_observations_digest"] = _canonical_digest([
                 classified_by_id[item] for item in receipt["observation_ids"]
             ])
+            bound_receipt["redacted_values"] = (
+                bound_receipt.get("redacted_values", 0) + snapshot_redactions
+            )
         else:
+            bound_receipt["evidence_snapshot"] = []
             bound_receipt["classified_observations_digest"] = None
         bound_receipts.append(bound_receipt)
     lane_receipts = bound_receipts
@@ -1335,7 +1356,7 @@ def validate_authoritative_result(result):
         "observation_id", "surface_id", "rule_id", "metric_id",
         "classification", "confidence", "actionable", "reason_code",
         "evidence_status", "evidence_references", "raw_telemetry",
-        "redacted_values",
+        "source_observation_digest", "redacted_values",
     })
     authoritative_observation_ids = []
     for observation in _exact_list(result["observations"], field="observations"):
@@ -1346,6 +1367,10 @@ def validate_authoritative_result(result):
         if (
             observation["evidence_status"] not in EVIDENCE_STATUSES
             or type(observation["actionable"]) is not bool
+            or type(observation["source_observation_digest"]) is not str
+            or _DIGEST.fullmatch(
+                observation["source_observation_digest"],
+            ) is None
             or type(observation["redacted_values"]) is not int
         ):
             _fail("invalid_authoritative_observation")
@@ -1384,7 +1409,8 @@ def validate_authoritative_result(result):
         "execution_policy_digest",
         "tool_identity", "image_identity", "service_identity", "plugin_version",
         "timeout_seconds", "started_at", "finished_at", "exit_code",
-        "evidence_references", "evidence_digest", "observation_ids",
+        "evidence_references", "evidence_digest", "evidence_snapshot",
+        "observation_ids",
         "classified_observations_digest",
         "stdout", "stderr", "redacted_values",
     })
@@ -1453,6 +1479,9 @@ def validate_authoritative_result(result):
         observation_ids = _exact_list(
             receipt["observation_ids"], field="observation_ids",
         )
+        evidence_snapshot = _exact_list(
+            receipt["evidence_snapshot"], field="evidence_snapshot",
+        )
         if (
             any(
                 type(item) is not str or _IDENTIFIER.fullmatch(item) is None
@@ -1471,10 +1500,42 @@ def validate_authoritative_result(result):
                 ) is None
             ):
                 _fail("invalid_lane_receipt")
+            try:
+                snapshot_bytes = json.dumps(
+                    evidence_snapshot, allow_nan=False,
+                )
+                snapshot_round_trip = json.loads(snapshot_bytes)
+            except (TypeError, ValueError):
+                _fail("invalid_lane_receipt")
+            safe_snapshot, leaked = _redact_durable(evidence_snapshot)
+            if (
+                snapshot_round_trip != evidence_snapshot
+                or safe_snapshot != evidence_snapshot
+                or leaked
+            ):
+                _fail("invalid_lane_receipt")
+            snapshot_ids = []
+            for source_observation in evidence_snapshot:
+                if type(source_observation) is not dict:
+                    _fail("invalid_lane_receipt")
+                snapshot_ids.append(_string(
+                    source_observation.get("observation_id"),
+                    field="observation_id", identifier=True,
+                ))
+            if snapshot_ids != observation_ids:
+                _fail("unbound_lane_evidence")
+            evidence_envelope = {
+                "schema_version": 1,
+                "lane_id": receipt["lane_id"],
+                "observations": evidence_snapshot,
+            }
+            if _canonical_digest(evidence_envelope) != receipt["evidence_digest"]:
+                _fail("unbound_lane_evidence")
             bound_observation_ids.extend(observation_ids)
         elif (
             receipt["evidence_digest"] is not None
             or receipt["classified_observations_digest"] is not None
+            or evidence_snapshot
             or observation_ids
         ):
             _fail("invalid_lane_receipt")
@@ -1497,6 +1558,52 @@ def validate_authoritative_result(result):
                 != receipt["classified_observations_digest"]
             ):
                 _fail("unbound_lane_evidence")
+            source_by_id = {
+                item["observation_id"]: item
+                for item in receipt["evidence_snapshot"]
+            }
+            if len(source_by_id) != len(receipt["evidence_snapshot"]):
+                _fail("unbound_lane_evidence")
+            for observation in classified_projection:
+                source_observation = source_by_id[observation["observation_id"]]
+                expected_telemetry = source_observation.get("raw_telemetry", {})
+                expected_evidence_status = (
+                    source_observation.get("evidence_status")
+                    if source_observation.get("evidence_status") in EVIDENCE_STATUSES
+                    else "failed"
+                )
+                if (
+                    observation["source_observation_digest"]
+                    != _canonical_digest(source_observation)
+                    or observation["surface_id"]
+                    != source_observation.get("surface_id")
+                    or observation["rule_id"] != source_observation.get("rule_id")
+                    or observation["metric_id"] != source_observation.get("metric_id")
+                    or observation["raw_telemetry"] != expected_telemetry
+                    or observation["evidence_status"] != expected_evidence_status
+                ):
+                    _fail("unbound_lane_evidence")
+                if observation["reason_code"] == "classified":
+                    source_references = source_observation.get(
+                        "evidence_references",
+                    )
+                    if (
+                        observation["classification"]
+                        != source_observation.get("classification_id")
+                        or observation["actionable"]
+                        or type(source_references) is not list
+                        or observation["evidence_references"] != [
+                            normalize_evidence_reference(reference)
+                            for reference in source_references
+                        ]
+                    ):
+                        _fail("unbound_lane_evidence")
+                elif (
+                    observation["classification"] != "unknown"
+                    or observation["confidence"] != "unknown"
+                    or not observation["actionable"]
+                ):
+                    _fail("unbound_lane_evidence")
     invocation = _exact_object(
         result["invocation"],
         frozenset({

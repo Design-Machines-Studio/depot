@@ -20,10 +20,12 @@ The JSON artifact records at least:
 - requested, attempted, and actual lane/tool identities;
 - one lane receipt per requested primary and fallback, including
   `available|unavailable|failed|fallback|skipped`, evidence references,
-  declared argv identity, synthesized execution-policy digest, raw evidence
-  digest, bound observation IDs, classified-observation digest, fallback
-  reason, and `primary_lane_id` when applicable;
-- redacted raw evidence and normalized observations;
+  declared argv identity, synthesized execution-policy digest, redacted source
+  evidence snapshot and digest, bound observation IDs,
+  classified-observation digest, fallback reason, and `primary_lane_id` when
+  applicable;
+- redacted source evidence and normalized observations, with each normalized
+  observation bound to the digest of its exact source object;
 - each finding's stable identity, closed surface, rule and metric IDs,
   classification, actionability, confidence, and raw observation reference;
 - coverage gaps, blockers, redaction outcome, and publication status;

@@ -695,6 +695,13 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
             substituted = copy.deepcopy(authoritative)
             substituted["observations"][0]["raw_telemetry"]["value"] = 999
+            substituted["lane_receipts"][0][
+                "classified_observations_digest"
+            ] = (
+                "sha256:" + hashlib.sha256(_canonical_bytes(
+                    substituted["observations"],
+                )).hexdigest()
+            )
             substituted["stable_projection_digest"] = (
                 "sha256:" + hashlib.sha256(
                     _canonical_bytes(stable_projection(substituted))
