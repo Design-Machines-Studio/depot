@@ -189,6 +189,20 @@ def normalize_owned_path(repository_root, value, *, must_exist=False):
     return normalized.as_posix()
 
 
+def _validate_repository_relative_path(value):
+    if (
+        type(value) is not str
+        or not value
+        or len(value) > 2048
+        or value.startswith("/")
+        or "\\" in value
+        or "\0" in value
+        or any(segment in {"", ".", ".."} for segment in value.split("/"))
+    ):
+        _fail("invalid_repository_path")
+    return value
+
+
 def _validate_catalogs(catalogs):
     fields = frozenset({
         "catalog_id", "schema_version", "catalog_version", "source_reference",
@@ -1014,9 +1028,8 @@ def validate_authoritative_result(result):
     ):
         _fail("invalid_authoritative_profile")
     try:
-        if normalize_evidence_reference(profile["profile_path"]) != profile["profile_path"]:
-            _fail("invalid_authoritative_profile")
-    except (TypeError, ValueError):
+        _validate_repository_relative_path(profile["profile_path"])
+    except InspectionError:
         _fail("invalid_authoritative_profile")
     compatibility = _exact_object(
         result["compatibility_identity"],

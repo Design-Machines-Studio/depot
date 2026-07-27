@@ -327,6 +327,35 @@ class QualityPulseKernelTests(unittest.TestCase):
             self.assertTrue(malformed["actionable"])
             self.assertEqual(malformed["evidence_references"], [])
 
+    def test_authoritative_profile_path_uses_repository_path_grammar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = self.repository(Path(directory))
+            profile = validate_inspection_profile(
+                profile_document(),
+                repository,
+                profile_path=".dm-review/quality-pulse.json",
+            )
+            result = build_authoritative_result(
+                profile,
+                source="git",
+                ref="refs/heads/conformance",
+                commit="a" * 40,
+                dirty=False,
+                observations=[],
+                lane_receipts=[],
+                invocation={
+                    "started_at": "2026-07-27T00:00:00Z",
+                    "finished_at": "2026-07-27T00:00:00Z",
+                    "operator_authorization_event_id": "approved",
+                    "purpose": "quality-pulse",
+                    "selected_lane_ids": [],
+                },
+            )
+            self.assertEqual(
+                result["profile"]["profile_path"],
+                ".dm-review/quality-pulse.json",
+            )
+
     def test_every_attestation_binding_and_repository_control_fail_before_adapter(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
