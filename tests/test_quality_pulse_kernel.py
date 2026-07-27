@@ -1404,20 +1404,20 @@ class QualityPulseKernelTests(unittest.TestCase):
             source = repository / "ready.json"
             source.write_text(json.dumps(self.result(profile)))
             emitted = []
-            immutable_reopen_denied = []
-            original_immutable_write = (
-                kernel_cli._write_immutable_publication_file
+            snapshot_reopen_denied = []
+            original_snapshot_write = (
+                kernel_cli._write_publication_snapshot_file
             )
 
-            def write_and_probe_immutable_file(path, encoded):
-                original_immutable_write(path, encoded)
+            def write_and_probe_snapshot_file(path, encoded):
+                original_snapshot_write(path, encoded)
                 try:
                     descriptor = os.open(path, os.O_WRONLY)
                 except PermissionError:
-                    immutable_reopen_denied.append(Path(path).name)
+                    snapshot_reopen_denied.append(Path(path).name)
                 else:
                     os.close(descriptor)
-                    self.fail("sealed publication file reopened writable")
+                    self.fail("read-only snapshot file reopened writable")
 
             with (
                 mock.patch(
@@ -1427,8 +1427,8 @@ class QualityPulseKernelTests(unittest.TestCase):
                 ),
                 mock.patch(
                     "workflow_kernel.cli."
-                    "_write_immutable_publication_file",
-                    side_effect=write_and_probe_immutable_file,
+                    "_write_publication_snapshot_file",
+                    side_effect=write_and_probe_snapshot_file,
                 ),
                 mock.patch(
                     "workflow_kernel.cli._emit",
@@ -1451,7 +1451,7 @@ class QualityPulseKernelTests(unittest.TestCase):
                 published, publication_authority_key=PUBLICATION_KEY,
             )
             self.assertCountEqual(
-                immutable_reopen_denied, ["authoritative.json", "report.md"],
+                snapshot_reopen_denied, ["authoritative.json", "report.md"],
             )
             bundle = (
                 repository / ".quality-pulse-publications"
@@ -1484,6 +1484,19 @@ class QualityPulseKernelTests(unittest.TestCase):
 
             bundle_json_before = bundle_json.read_bytes()
             bundle_markdown_before = bundle_markdown.read_bytes()
+            os.chmod(bundle_markdown, 0o600)
+            bundle_markdown.write_text("same-account mutation\n")
+            os.chmod(bundle_markdown, 0o400)
+            self.assert_reason(
+                lambda: validate_published_outputs(
+                    published, repository,
+                    publication_authority_key=PUBLICATION_KEY,
+                ),
+                "publication_action_not_verified",
+            )
+            os.chmod(bundle_markdown, 0o600)
+            bundle_markdown.write_bytes(bundle_markdown_before)
+            os.chmod(bundle_markdown, 0o400)
             markdown_path.write_text("mutable profile view changed\n")
             authoritative_path.write_text('{"mutable":"view"}\n')
             self.assertEqual(

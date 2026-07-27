@@ -57,13 +57,21 @@ byte-verifies the exact Markdown before the rendered transition, then durably
 writes and byte-verifies the exact rendered authoritative JSON before the
 published transition. Identical, symlink-aliased, hard-linked, or
 identity-changing profile destinations fail closed. The published authority is
-not either mutable profile pathname: the kernel creates the exact signed JSON
-and Markdown read-only from birth inside an unguessable staging directory and
-atomically promotes that directory to a content-addressed path under
-`.quality-pulse-publications/`. Validation derives that path from the pulse ID
-and signed publication-state digest. The profile JSON and Markdown are
+the host-keyed JSON envelope, not any pathname: the kernel creates the exact
+signed JSON and derived Markdown read-only from birth inside an unguessable
+staging directory and atomically promotes that directory to a
+content-addressed path under `.quality-pulse-publications/`. Validation derives
+that path from the pulse ID and signed publication-state digest, then
+revalidates the HMAC and exact Markdown. The profile JSON and Markdown are
 replaceable views, so a descriptor opened against an older view cannot mutate
-the sealed publication bundle or change what `published` means.
+the snapshot.
+
+The trusted computing base includes the host process and its OS account. A
+same-account process can read the `0600` publication key and forge an
+attestation, so it is explicitly outside this boundary; file modes are not
+misrepresented as protection from that actor. Repository content, lane output,
+and delegated-provider output remain untrusted data and gain no execution or
+publication authority.
 
 ## Untrusted Pull Requests
 

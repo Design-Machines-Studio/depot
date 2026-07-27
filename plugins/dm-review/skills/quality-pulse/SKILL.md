@@ -254,11 +254,13 @@ directory to
 `.quality-pulse-publications/<pulse-id>/<publication-state-digest>/` before
 emitting success. JSON and Markdown profile destinations must be distinct,
 non-aliased regular-file paths whose parent identities remain stable for the
-rendered transition. The sealed bundle is the published authority; validation
-derives its path from the signed envelope and checks exact bytes, ownership,
-link count, and read-only modes. Profile JSON and Markdown are replaceable
-views, so an older open descriptor cannot alter the bundle. A caller cannot
-request either transition directly.
+rendered transition. The signed JSON is the published authority; validation
+derives the snapshot path from that envelope and checks its HMAC, exact derived
+Markdown, bytes, ownership, link count, and read-only modes. Profile JSON and
+Markdown are replaceable views. The host process and OS account are trusted
+because that account can read the publication key; mode bits are accidental
+write protection, not same-account isolation. A caller cannot request either
+transition directly.
 
 ### 7. Compare a compatible baseline
 

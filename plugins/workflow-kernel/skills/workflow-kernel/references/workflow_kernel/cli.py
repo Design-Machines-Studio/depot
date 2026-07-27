@@ -414,7 +414,7 @@ def _publication_output_guard(repository_root, authoritative_path, markdown_path
     return revalidate
 
 
-def _write_immutable_publication_file(path, encoded):
+def _write_publication_snapshot_file(path, encoded):
     destination = Path(path)
     descriptor = None
     created_identity = None
@@ -431,7 +431,7 @@ def _write_immutable_publication_file(path, encoded):
         while pending:
             count = os.write(descriptor, pending)
             if count <= 0:
-                raise OSError("immutable publication write made no progress")
+                raise OSError("publication snapshot write made no progress")
             pending = pending[count:]
         os.fsync(descriptor)
         opened = os.fstat(descriptor)
@@ -493,7 +493,7 @@ def _discard_publication_stage(path):
     stage.rmdir()
 
 
-def _commit_publication_bundle(
+def _commit_publication_snapshot(
     repository_root, published, markdown, publication_key,
 ):
     from .inspection import authoritative_bytes
@@ -526,13 +526,13 @@ def _commit_publication_bundle(
     stage = Path(tempfile.mkdtemp(prefix=".staging-", dir=pulse_root))
     os.chmod(stage, 0o700)
     try:
-        _write_immutable_publication_file(
+        _write_publication_snapshot_file(
             stage / "authoritative.json",
             authoritative_bytes(
                 published, publication_authority_key=publication_key,
             ),
         )
-        _write_immutable_publication_file(
+        _write_publication_snapshot_file(
             stage / "report.md", markdown.encode("utf-8"),
         )
         os.chmod(stage, 0o500)
@@ -3006,7 +3006,7 @@ def command_inspection_publish(args):
         publication_repository_root=args.repository_root,
     )
     try:
-        _commit_publication_bundle(
+        _commit_publication_snapshot(
             repository_root, published, markdown, publication_key,
         )
         validate_published_outputs(

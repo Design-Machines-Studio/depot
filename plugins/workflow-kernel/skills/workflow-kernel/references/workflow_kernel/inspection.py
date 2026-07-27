@@ -2508,7 +2508,9 @@ def _verify_exact_publication_output(current, root, output_key, expected):
     _verify_exact_publication_file(root / relative, expected)
 
 
-def _verify_exact_publication_file(candidate, expected, *, require_sealed=False):
+def _verify_exact_publication_file(
+    candidate, expected, *, require_read_only=False,
+):
     if any(item.is_symlink() for item in (candidate, *candidate.parents)):
         _fail("publication_action_not_verified")
     try:
@@ -2522,7 +2524,7 @@ def _verify_exact_publication_file(candidate, expected, *, require_sealed=False)
                 or before.st_nlink != 1
                 or before.st_size != len(expected)
                 or (
-                    require_sealed
+                    require_read_only
                     and (
                         stat.S_IMODE(before.st_mode) & 0o222
                         or (
@@ -2592,14 +2594,14 @@ def validate_published_outputs(
         render_markdown(
             current, publication_authority_key=publication_authority_key,
         ).encode("utf-8"),
-        require_sealed=True,
+        require_read_only=True,
     )
     _verify_exact_publication_file(
         bundle / "authoritative.json",
         authoritative_bytes(
             current, publication_authority_key=publication_authority_key,
         ),
-        require_sealed=True,
+        require_read_only=True,
     )
     return current
 

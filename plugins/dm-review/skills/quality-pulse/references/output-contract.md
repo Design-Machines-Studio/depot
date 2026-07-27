@@ -1,9 +1,10 @@
 # Quality-Pulse Output Contract
 
-The authoritative source of a published pulse is its sealed,
-content-addressed JSON/Markdown bundle. Profile-declared JSON and Markdown are
-validated, replaceable views and never become inputs to classification or
-trend comparison.
+The signed authoritative JSON is the source of truth. Its content-addressed
+JSON/Markdown snapshot and profile-declared JSON/Markdown files are durable,
+validated views; no pathname is trusted without revalidating the HMAC and
+exact derived Markdown. They never become inputs to classification or trend
+comparison.
 
 ## Required Authoritative Evidence
 
@@ -86,9 +87,12 @@ pulse.
    and `report.md` read-only from birth in an unguessable staging directory,
    then atomically promotes that directory to
    `.quality-pulse-publications/<pulse-id>/<publication-state-digest>/`.
-   Validation follows this content-addressed sealed bundle. The
+   Validation follows this content-addressed, read-only snapshot and
+   revalidates its keyed JSON envelope plus exact derived Markdown. The
    profile-declared JSON and Markdown are replaceable reader views and never
-   carry publication authority.
+   carry publication authority. The host process and its OS account are the
+   publication authority; mode bits protect against ordinary accidental
+   writes, not a hostile process running as that same account.
 
 Trend comparison must be bound before ready-state attestation and rendering.
 Publication status is an
