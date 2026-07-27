@@ -114,7 +114,9 @@ and immutable image identities, and invocation time before running lanes.
 
 Admit only profile-declared Docker or Compose argv arrays that passed kernel
 validation. dm-review decides which declared lanes are requested and preserves
-coverage; it does not rewrite argv or execute a shell.
+coverage; it does not rewrite argv or execute a shell. The kernel, not the
+profile, synthesizes a fixed read-only mount of the attested checkout and a
+fresh empty read-write evidence mount. Profile-supplied mounts remain invalid.
 
 ### 4. Run requested primary lanes and consume fallback receipts
 
@@ -142,6 +144,18 @@ primary's declared fallbacks from the same immutable validated snapshot.
 Consume the complete returned receipt set, including the primary receipt and
 every `fallback` or `skipped` receipt.
 
+Each successful lane must write this envelope to the kernel-owned fixed path
+`/quality-pulse-evidence/observations.json`:
+
+```json
+{"schema_version":1,"lane_id":"<declared-lane-id>","observations":[]}
+```
+
+The kernel opens that fresh file without following links, snapshots and
+digests it, and binds the lane ID, declared evidence reference, observation
+IDs, and digest into the receipt. Exit zero without valid bound evidence is
+`failed`, never `available`.
+
 Record requested, attempted, and actual lane/tool identities from those
 receipts for every lane. Primary `available`, `unavailable`, and `failed`
 states remain distinct. Fallback success is `fallback`, names
@@ -151,9 +165,12 @@ primary-equivalent.
 
 ### 5. Normalize and classify
 
-Normalize observations without discarding their redacted raw form, then invoke
-the kernel's `inspection-classify` mechanics against the validated profile.
-dm-review applies the user-facing classification contract:
+`inspection-run` classifies only the immutable observations returned by its
+successful lane envelopes. A caller cannot supply a second observations file.
+For non-authoritative profile development, normalize observations without
+discarding their redacted raw form, then invoke the kernel's standalone
+`inspection-classify` mechanics. dm-review applies the user-facing
+classification contract:
 
 ```sh
 "$WORKFLOW_KERNEL" inspection-classify \

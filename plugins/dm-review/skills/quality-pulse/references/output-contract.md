@@ -20,7 +20,8 @@ The JSON artifact records at least:
 - requested, attempted, and actual lane/tool identities;
 - one lane receipt per requested primary and fallback, including
   `available|unavailable|failed|fallback|skipped`, evidence references,
-  fallback reason, and `primary_lane_id` when applicable;
+  evidence digest, bound observation IDs, fallback reason, and
+  `primary_lane_id` when applicable;
 - redacted raw evidence and normalized observations;
 - each finding's stable identity, closed surface, rule and metric IDs,
   classification, actionability, confidence, and raw observation reference;

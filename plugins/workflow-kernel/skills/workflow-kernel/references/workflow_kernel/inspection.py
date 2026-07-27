@@ -11,7 +11,9 @@ import hashlib
 import json
 import os
 import re
+import stat
 import subprocess
+import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -43,6 +45,10 @@ _GIT_REF = re.compile(r"refs/(?:heads|tags)/[A-Za-z0-9][A-Za-z0-9._/-]{0,254}\Z"
 _COMPOSE_IDENTITY = re.compile(r"([a-z0-9][a-z0-9._-]{0,127})@sha256:[0-9a-f]{64}\Z")
 _IMAGE_IDENTITY = re.compile(r"[^@\s]+@sha256:[0-9a-f]{64}\Z")
 _SHELL_TOKEN = re.compile(r"(?:\$\(|`|[;&|<>]|\r|\n)")
+_LANE_REPOSITORY_TARGET = "/workspace"
+_LANE_EVIDENCE_TARGET = "/quality-pulse-evidence"
+_LANE_EVIDENCE_NAME = "observations.json"
+_MAX_LANE_EVIDENCE_BYTES = 16 * 1024 * 1024
 _PROFILE_FIELDS = frozenset({
     "schema_version", "profile_id", "profile_version", "repository",
     "catalogs", "surfaces", "metrics", "rules", "lanes", "classifications",
@@ -348,6 +354,106 @@ def _validate_lane_argv(lane, repository_root):
         match = _COMPOSE_IDENTITY.fullmatch(lane["service_identity"])
         if match is None or index >= len(argv) or argv[index] != match.group(1):
             _fail("lane_identity_mismatch", field=lane["lane_id"])
+
+
+def _execution_argv(lane, repository_root, evidence_root):
+    """Add fixed host-owned mounts without granting the profile mount authority."""
+    declared = list(lane["argv"])
+    repository_mount = (
+        f"type=bind,source={repository_root},"
+        f"target={_LANE_REPOSITORY_TARGET},readonly"
+    )
+    evidence_mount = (
+        f"type=bind,source={evidence_root},target={_LANE_EVIDENCE_TARGET}"
+    )
+    if lane["execution_type"] == "docker":
+        image_index = declared.index(lane["image_identity"])
+        return (
+            declared[:image_index]
+            + [
+                "--network=none", "--read-only",
+                "--user", f"{os.getuid()}:{os.getgid()}",
+                "--mount", repository_mount,
+                "--mount", evidence_mount,
+            ]
+            + declared[image_index:]
+        )
+
+    run_index = declared.index("run", 2)
+    service = lane["service_identity"].split("@", 1)[0]
+    service_index = declared.index(service, run_index + 1)
+    return (
+        declared[:service_index]
+        + [
+            "--no-deps",
+            "--user", f"{os.getuid()}:{os.getgid()}",
+            "--volume", f"{repository_root}:{_LANE_REPOSITORY_TARGET}:ro",
+            "--volume", f"{evidence_root}:{_LANE_EVIDENCE_TARGET}:rw",
+        ]
+        + declared[service_index:]
+    )
+
+
+def _read_lane_evidence(evidence_root, lane_id):
+    """Read one fresh lane-bound observation envelope without following links."""
+    path = Path(evidence_root) / _LANE_EVIDENCE_NAME
+    try:
+        descriptor = os.open(
+            path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+        )
+        try:
+            opened = os.fstat(descriptor)
+            entry = os.lstat(path)
+            if (
+                not stat.S_ISREG(opened.st_mode)
+                or stat.S_ISLNK(entry.st_mode)
+                or opened.st_nlink != 1
+                or (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino)
+                or opened.st_size > _MAX_LANE_EVIDENCE_BYTES
+            ):
+                _fail("invalid_lane_evidence")
+            raw = b""
+            while True:
+                chunk = os.read(descriptor, 65536)
+                if not chunk:
+                    break
+                raw += chunk
+                if len(raw) > _MAX_LANE_EVIDENCE_BYTES:
+                    _fail("invalid_lane_evidence")
+        finally:
+            os.close(descriptor)
+    except InspectionError:
+        raise
+    except OSError:
+        _fail("missing_lane_evidence")
+
+    envelope = decode_json_bytes(raw)
+    _exact_object(
+        envelope,
+        frozenset({"schema_version", "lane_id", "observations"}),
+        reason="invalid_lane_evidence",
+    )
+    if envelope["schema_version"] != 1 or envelope["lane_id"] != lane_id:
+        _fail("invalid_lane_evidence")
+    observations = _exact_list(
+        envelope["observations"], field="lane_evidence.observations",
+    )
+    observation_ids = []
+    for observation in observations:
+        if type(observation) is not dict:
+            _fail("invalid_lane_evidence")
+        observation_ids.append(_string(
+            observation.get("observation_id"),
+            field="observation_id", identifier=True,
+        ))
+    if len(observation_ids) != len(set(observation_ids)):
+        _fail("duplicate_id")
+    canonical = _canonical_bytes(envelope)
+    return (
+        observations,
+        observation_ids,
+        "sha256:" + hashlib.sha256(canonical).hexdigest(),
+    )
 
 
 def _validate_profile_document(document, repository_root):
@@ -792,29 +898,41 @@ def _timestamp(clock):
 def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
     started = _timestamp(clock)
     reason = "completed"
-    try:
-        completed = adapter.run(
-            tuple(lane["argv"]), cwd=root, env=FIXED_EXECUTION_ENV,
-            timeout=lane["timeout_seconds"],
-        )
-        exit_code = completed.returncode
-        if type(exit_code) is not int:
-            _fail("invalid_adapter_result")
-        if exit_code == 0:
-            status = "fallback" if fallback_reason else "available"
-            reason = fallback_reason or "completed"
-        elif exit_code in {125, 126, 127}:
-            status, reason = "unavailable", "runtime_unavailable"
-        else:
-            status, reason = "failed", "nonzero_exit"
-        stdout, stdout_redacted = _redact_durable(completed.stdout)
-        stderr, stderr_redacted = _redact_durable(completed.stderr)
-    except (OSError, subprocess.TimeoutExpired):
-        status = "unavailable"
-        reason = "runtime_unavailable"
-        exit_code = None
-        stdout = stderr = ""
-        stdout_redacted = stderr_redacted = 0
+    observations = []
+    observation_ids = []
+    evidence_digest = None
+    with tempfile.TemporaryDirectory(prefix="quality-pulse-evidence-") as evidence_root:
+        try:
+            completed = adapter.run(
+                tuple(_execution_argv(lane, root, evidence_root)),
+                cwd=root, env=FIXED_EXECUTION_ENV,
+                timeout=lane["timeout_seconds"],
+            )
+            exit_code = completed.returncode
+            if type(exit_code) is not int:
+                _fail("invalid_adapter_result")
+            if exit_code == 0:
+                try:
+                    observations, observation_ids, evidence_digest = (
+                        _read_lane_evidence(evidence_root, lane["lane_id"])
+                    )
+                except InspectionError as error:
+                    status, reason = "failed", error.reason_code
+                else:
+                    status = "fallback" if fallback_reason else "available"
+                    reason = fallback_reason or "completed"
+            elif exit_code in {125, 126, 127}:
+                status, reason = "unavailable", "runtime_unavailable"
+            else:
+                status, reason = "failed", "nonzero_exit"
+            stdout, stdout_redacted = _redact_durable(completed.stdout)
+            stderr, stderr_redacted = _redact_durable(completed.stderr)
+        except (OSError, subprocess.TimeoutExpired):
+            status = "unavailable"
+            reason = "runtime_unavailable"
+            exit_code = None
+            stdout = stderr = ""
+            stdout_redacted = stderr_redacted = 0
     finished = _timestamp(clock)
     return {
         "lane_id": lane["lane_id"],
@@ -831,16 +949,18 @@ def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
         "finished_at": finished,
         "exit_code": exit_code,
         "evidence_references": list(lane["evidence_paths"]),
+        "evidence_digest": evidence_digest,
+        "observation_ids": observation_ids,
         "stdout": stdout,
         "stderr": stderr,
         "redacted_values": stdout_redacted + stderr_redacted,
-    }
+    }, observations
 
 
 def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, commit,
                              dirty, purpose, operator_authorization_event_id,
                              adapter=None, clock=None,
-                             pre_admission_hook=None):
+                             pre_admission_hook=None, return_observations=False):
     """Admit and execute selected primary lanes from one immutable snapshot."""
     if type(profile) is not InspectionProfile or not profile.source_identity:
         _fail("loaded_profile_required")
@@ -873,10 +993,14 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
         if lane["primary_lane_id"] is not None:
             fallbacks.setdefault(lane["primary_lane_id"], []).append(lane)
     receipts = []
+    observations = []
     for lane_id in lane_ids:
         primary = lanes[lane_id]
-        receipt = _attempt(primary, adapter, profile.repository_root, clock)
+        receipt, lane_observations = _attempt(
+            primary, adapter, profile.repository_root, clock,
+        )
         receipts.append(receipt)
+        observations.extend(lane_observations)
         candidates = sorted(fallbacks.get(lane_id, ()), key=lambda item: item["lane_id"])
         if receipt["status"] == "available":
             for fallback in candidates:
@@ -891,6 +1015,7 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
                     "timeout_seconds": fallback["timeout_seconds"],
                     "started_at": None, "finished_at": None, "exit_code": None,
                     "evidence_references": list(fallback["evidence_paths"]),
+                    "evidence_digest": None, "observation_ids": [],
                     "stdout": "", "stderr": "", "redacted_values": 0,
                 })
             continue
@@ -913,16 +1038,20 @@ def execute_inspection_lanes(profile, lane_ids, attestation, *, source, ref, com
                     "timeout_seconds": fallback["timeout_seconds"],
                     "started_at": None, "finished_at": None, "exit_code": None,
                     "evidence_references": list(fallback["evidence_paths"]),
+                    "evidence_digest": None, "observation_ids": [],
                     "stdout": "", "stderr": "", "redacted_values": 0,
                 })
                 continue
-            fallback_receipt = _attempt(
+            fallback_receipt, fallback_observations = _attempt(
                 fallback, adapter, profile.repository_root, clock,
                 fallback_reason=fallback_reason,
             )
             receipts.append(fallback_receipt)
             if fallback_receipt["status"] == "fallback":
                 fallback_succeeded = True
+                observations.extend(fallback_observations)
+    if return_observations:
+        return receipts, observations
     return receipts
 
 
@@ -982,7 +1111,56 @@ def build_authoritative_result(profile, *, source, ref, commit, dirty,
         _fail("validated_profile_required")
     if type(dirty) is not bool or type(commit) is not str or _COMMIT.fullmatch(commit) is None:
         _fail("invalid_repository_provenance")
-    classified = classify_observations(profile, observations)
+    raw_observations = _exact_list(observations, field="observations")
+    raw_ids = []
+    for observation in raw_observations:
+        if type(observation) is not dict:
+            _fail("invalid_lane_evidence")
+        raw_ids.append(_string(
+            observation.get("observation_id"),
+            field="observation_id", identifier=True,
+        ))
+    if len(raw_ids) != len(set(raw_ids)):
+        _fail("duplicate_id")
+    raw_by_id = {
+        item["observation_id"]: item for item in raw_observations
+    }
+
+    bound_ids = []
+    for receipt in _exact_list(lane_receipts, field="lane_receipts"):
+        if type(receipt) is not dict:
+            _fail("invalid_lane_receipt")
+        receipt_ids = _exact_list(
+            receipt.get("observation_ids"), field="observation_ids",
+        )
+        digest = receipt.get("evidence_digest")
+        if receipt.get("status") in {"available", "fallback"}:
+            if (
+                type(digest) is not str
+                or _DIGEST.fullmatch(digest) is None
+                or any(type(item) is not str for item in receipt_ids)
+            ):
+                _fail("unbound_lane_evidence")
+            try:
+                bound_observations = [
+                    raw_by_id[item] for item in receipt_ids
+                ]
+            except KeyError:
+                _fail("unbound_lane_evidence")
+            envelope = {
+                "schema_version": 1,
+                "lane_id": receipt.get("lane_id"),
+                "observations": bound_observations,
+            }
+            if _canonical_digest(envelope) != digest:
+                _fail("unbound_lane_evidence")
+            bound_ids.extend(receipt_ids)
+        elif digest is not None or receipt_ids:
+            _fail("unbound_lane_evidence")
+    if sorted(bound_ids) != sorted(raw_ids) or len(bound_ids) != len(set(bound_ids)):
+        _fail("unbound_lane_evidence")
+
+    classified = classify_observations(profile, raw_observations)
     redacted_count = sum(item["redacted_values"] for item in classified)
     redacted_count += sum(item.get("redacted_values", 0) for item in lane_receipts)
     result = {
@@ -1136,6 +1314,7 @@ def validate_authoritative_result(result):
         "evidence_status", "evidence_references", "raw_telemetry",
         "redacted_values",
     })
+    authoritative_observation_ids = []
     for observation in _exact_list(result["observations"], field="observations"):
         _exact_object(
             observation, observation_fields,
@@ -1147,7 +1326,10 @@ def validate_authoritative_result(result):
             or type(observation["redacted_values"]) is not int
         ):
             _fail("invalid_authoritative_observation")
-        _string(observation["observation_id"], field="observation_id", identifier=True)
+        authoritative_observation_ids.append(_string(
+            observation["observation_id"],
+            field="observation_id", identifier=True,
+        ))
         for field in ("surface_id", "rule_id", "metric_id"):
             if observation[field] is not None:
                 _string(observation[field], field=field, identifier=True)
@@ -1178,8 +1360,10 @@ def validate_authoritative_result(result):
         "lane_id", "status", "reason_code", "primary_lane_id", "argv_identity",
         "tool_identity", "image_identity", "service_identity", "plugin_version",
         "timeout_seconds", "started_at", "finished_at", "exit_code",
-        "evidence_references", "stdout", "stderr", "redacted_values",
+        "evidence_references", "evidence_digest", "observation_ids",
+        "stdout", "stderr", "redacted_values",
     })
+    bound_observation_ids = []
     for receipt in _exact_list(result["lane_receipts"], field="lane_receipts"):
         _exact_object(receipt, receipt_fields, reason="invalid_lane_receipt")
         if (
@@ -1239,6 +1423,32 @@ def validate_authoritative_result(result):
                 or normalize_evidence_reference(reference) != reference
             ):
                 _fail("invalid_lane_receipt")
+        observation_ids = _exact_list(
+            receipt["observation_ids"], field="observation_ids",
+        )
+        if (
+            any(
+                type(item) is not str or _IDENTIFIER.fullmatch(item) is None
+                for item in observation_ids
+            )
+            or len(observation_ids) != len(set(observation_ids))
+        ):
+            _fail("invalid_lane_receipt")
+        if receipt["status"] in {"available", "fallback"}:
+            if (
+                type(receipt["evidence_digest"]) is not str
+                or _DIGEST.fullmatch(receipt["evidence_digest"]) is None
+            ):
+                _fail("invalid_lane_receipt")
+            bound_observation_ids.extend(observation_ids)
+        elif receipt["evidence_digest"] is not None or observation_ids:
+            _fail("invalid_lane_receipt")
+    if (
+        len(authoritative_observation_ids) != len(set(authoritative_observation_ids))
+        or len(bound_observation_ids) != len(set(bound_observation_ids))
+        or sorted(authoritative_observation_ids) != sorted(bound_observation_ids)
+    ):
+        _fail("unbound_lane_evidence")
     invocation = _exact_object(
         result["invocation"],
         frozenset({

@@ -113,6 +113,12 @@ identity and one bounded fallback. The Baseplate session must validate the
 actual image, argv, timeout, output path, and tool version against current main;
 the synthetic conformance image is not a production pin.
 
+Each image must read the attested checkout from the kernel-owned read-only
+`/workspace` mount and write exactly one schema-1 observation envelope to
+`/quality-pulse-evidence/observations.json`. It must not request its own host
+mount. The envelope lane ID must match the declared lane; missing or mismatched
+evidence turns exit zero into `failed`.
+
 Preserve:
 
 ```text

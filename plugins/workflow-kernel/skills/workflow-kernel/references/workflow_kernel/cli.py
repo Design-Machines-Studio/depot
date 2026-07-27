@@ -2743,13 +2743,13 @@ def command_inspection_run(args):
     profile = load_inspection_profile(args.profile, args.repository_root)
     attestation = load_host_attestation(args.attestation, profile.repository_root)
     dirty = args.dirty == "true"
-    receipts = execute_inspection_lanes(
+    receipts, observations = execute_inspection_lanes(
         profile, args.lane_id, attestation,
         source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
         purpose=args.purpose,
         operator_authorization_event_id=args.authorization_event_id,
+        return_observations=True,
     )
-    observations = [] if args.observations is None else _inspection_json(args.observations)
     finished_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     _emit(build_authoritative_result(
         profile, source=args.source, ref=args.ref, commit=args.commit, dirty=dirty,
@@ -3041,7 +3041,6 @@ def parser():
         "--authorization-event-id", required=True,
         help="host-observed operator authorization event bound by the attestation",
     )
-    inspection_run.add_argument("--observations")
     inspection_run.set_defaults(handler=command_inspection_run)
 
     resolve_bundle = commands.add_parser(

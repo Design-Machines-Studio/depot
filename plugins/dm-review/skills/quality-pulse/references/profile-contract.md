@@ -37,6 +37,12 @@ owns:
 Complete validation must finish before any declared repository command, lane,
 evidence output, authoritative JSON write, or Markdown rendering.
 
+Evidence paths are durable logical references, not mount authority. The kernel
+alone supplies `/workspace` read-only and a fresh
+`/quality-pulse-evidence` output mount. A lane emits its schema-1,
+lane-ID-bound observation envelope at the fixed
+`/quality-pulse-evidence/observations.json` path.
+
 ## Canonical Catalog Binding
 
 The canonical generic catalog is the selected Live Wires bundle asset:

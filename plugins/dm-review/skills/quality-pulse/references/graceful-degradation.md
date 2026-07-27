@@ -25,6 +25,7 @@ case. Missing lanes are coverage gaps, never implicit clean evidence.
 | Trust attestation absent, repository-held, stale, self-asserted, or mismatched | Blocked authority; no lane execution. |
 | Kernel/runtime unavailable or incompatible | Pulse unavailable; report safe reason and start no lanes. |
 | Primary unavailable/failed, declared fallback succeeds | Partial evidence with `fallback` status and fallback confidence. |
+| Lane exits zero without a fresh valid lane-bound observation envelope | `failed` with a stable evidence reason; never `available`. |
 | Primary and fallback unavailable/failed | Partial report blocker; preserve both receipts and fail the pulse. |
 | Redaction refuses unsafe evidence | Preserve a refusal receipt, omit unsafe bytes, and fail the pulse. |
 | Observation uses unknown schema/path/surface/metric/rule/classification/evidence state | Retain redacted raw telemetry, classify `unknown`, set actionability `actionable`, and fail the pulse. |

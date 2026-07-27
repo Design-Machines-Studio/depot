@@ -51,6 +51,14 @@ profile cannot authorize subprocess execution.
 An explicit `--profile` override is a local operator choice. It still passes
 the same complete validation and trust checks.
 
+The kernel supplies the attested checkout to lanes at `/workspace` read-only
+and supplies a fresh empty evidence mount at `/quality-pulse-evidence`.
+Profiles cannot nominate host mounts. A successful lane writes a lane-bound
+schema-1 observation envelope to the fixed
+`/quality-pulse-evidence/observations.json` path. The kernel snapshots it with
+no-link file handling and binds its digest and observation IDs into the lane
+receipt; `inspection-run` does not accept a separate observations file.
+
 ## Evidence Lifecycle
 
 Every declared lane has one literal state:

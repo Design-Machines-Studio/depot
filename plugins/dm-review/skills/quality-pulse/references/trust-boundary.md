@@ -48,9 +48,19 @@ itself carries no permission.
 ## Docker and Compose Lanes
 
 Only exact, prevalidated `docker run` or `docker compose` argv arrays may run.
+Profiles cannot supply mounts. The kernel synthesizes a fixed read-only mount
+of the attested checkout at `/workspace` and a fresh empty read-write evidence
+mount at `/quality-pulse-evidence`; direct Docker lanes also run with networking
+disabled and a read-only container filesystem, and all lanes run as the host
+operator's numeric user/group identity. The lane must write one
+schema-1 envelope containing its exact lane ID and observations to
+`/quality-pulse-evidence/observations.json`.
+
 The kernel invokes no shell, accepts no mutable `latest` identity, inherits no
-arbitrary environment values, and writes no undeclared evidence or output
-path. dm-review records the declared lane, attempted lane, actual tool/image,
-and result without rewriting the argv.
+arbitrary environment values, and opens the fresh envelope with `O_NOFOLLOW`.
+It snapshots the canonical bytes and binds their digest, lane ID, observation
+IDs, and declared evidence reference into the receipt. Exit zero with missing,
+linked, malformed, stale, or lane-mismatched evidence is `failed`, never
+`available`. `inspection-run` accepts no separate caller observations file.
 
 Profile, trust, or catalog preflight failure starts zero subprocesses.

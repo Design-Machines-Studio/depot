@@ -350,9 +350,16 @@ self-asserted, stale, or mismatched authority fails before subprocess
 invocation.
 
 Admitted lanes are exact `docker run` or `docker compose` argv arrays. The
-kernel never invokes a shell, inherits arbitrary environment values, accepts
-mutable `latest` identities, or writes undeclared output paths. It uses the
-canonical repository root, the declared timeout, and exactly:
+profile cannot declare host mounts. The kernel synthesizes a fixed read-only
+mount of the attested repository at `/workspace` and a unique empty read-write
+evidence mount at `/quality-pulse-evidence`; direct Docker lanes also receive
+`--network=none` and a read-only container filesystem, and all lanes use the
+host operator's numeric user/group identity. A successful lane must
+write a lane-bound schema-1 observation envelope to
+`/quality-pulse-evidence/observations.json`. The kernel never invokes a shell,
+inherits arbitrary environment values, accepts mutable `latest` identities,
+or accepts exit-zero without fresh digest-bound evidence. It uses the canonical
+repository root, the declared timeout, and exactly:
 
 ```text
 PATH=/usr/bin:/bin
@@ -387,8 +394,7 @@ workflow-kernel-launcher.sh inspection-run \
   --repository-root <root> --profile <profile> --lane-id <primary-id> \
   --attestation <host-path-outside-repository> --source git --ref <ref> \
   --commit <sha> --dirty <true|false> --purpose <purpose> \
-  --authorization-event-id <host-observed-event-id> \
-  [--observations <json>]
+  --authorization-event-id <host-observed-event-id>
 workflow-kernel-launcher.sh resolve-plugin-bundle \
   --plugin <name> \
   [--required-asset <readable-relative-path> ...] \

@@ -125,6 +125,30 @@ def observation(**changes):
     return value
 
 
+def receipt_for_observations(observations):
+    envelope = {
+        "schema_version": 1, "lane_id": "primary",
+        "observations": observations,
+    }
+    return {
+        "lane_id": "primary", "status": "available",
+        "reason_code": "completed", "primary_lane_id": None,
+        "argv_identity": "sha256:" + "1" * 64,
+        "tool_identity": "docker:27.5.1",
+        "image_identity": "example/tool@sha256:" + "1" * 64,
+        "service_identity": None, "plugin_version": "1.2.0",
+        "timeout_seconds": 30,
+        "started_at": "2026-07-27T00:00:00Z",
+        "finished_at": "2026-07-27T00:00:01Z",
+        "exit_code": 0, "evidence_references": ["output/primary.json"],
+        "evidence_digest": (
+            "sha256:" + hashlib.sha256(_canonical_bytes(envelope)).hexdigest()
+        ),
+        "observation_ids": [item["observation_id"] for item in observations],
+        "stdout": "", "stderr": "", "redacted_values": 0,
+    }
+
+
 def attestation(profile, **changes):
     value = {
         "schema_version": 1,
@@ -140,17 +164,44 @@ def attestation(profile, **changes):
 
 
 class FakeAdapter:
-    def __init__(self, returncodes):
+    def __init__(self, returncodes, observations=None):
         self.returncodes = list(returncodes)
+        self.observations = [] if observations is None else observations
         self.calls = []
 
     def run(self, argv, *, cwd, env, timeout):
         self.calls.append({
             "argv": argv, "cwd": cwd, "env": env, "timeout": timeout,
         })
-        return SimpleNamespace(
-            returncode=self.returncodes.pop(0), stdout="", stderr="",
-        )
+        returncode = self.returncodes.pop(0)
+        if returncode == 0:
+            mount = next(
+                item for item in argv
+                if item.startswith("type=bind,source=")
+                and item.endswith(",target=/quality-pulse-evidence")
+            )
+            evidence_root = mount.split(",target=", 1)[0].split("source=", 1)[1]
+            Path(evidence_root, "observations.json").write_text(json.dumps({
+                "schema_version": 1,
+                "lane_id": (
+                    "fallback" if "example/fallback@" in " ".join(argv)
+                    else "fallback-later" if "example/later@" in " ".join(argv)
+                    else "primary"
+                ),
+                "observations": self.observations,
+            }))
+        return SimpleNamespace(returncode=returncode, stdout="", stderr="")
+
+
+class NoEvidenceAdapter:
+    def __init__(self):
+        self.calls = []
+
+    def run(self, argv, *, cwd, env, timeout):
+        self.calls.append({
+            "argv": argv, "cwd": cwd, "env": env, "timeout": timeout,
+        })
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
 
 
 class RaisingAdapter:
@@ -326,19 +377,20 @@ class QualityPulseKernelTests(unittest.TestCase):
             )])[0]
             self.assertTrue(malformed["actionable"])
             self.assertEqual(malformed["evidence_references"], [])
+            raw_observations = [observation(
+                raw_telemetry={
+                    "token": "ghp_fixtureSecret123",
+                    "safe_path": "output/primary.json",
+                },
+            )]
             authoritative = build_authoritative_result(
                 profile,
                 source="git",
                 ref="refs/heads/conformance",
                 commit=COMMIT,
                 dirty=False,
-                observations=[observation(
-                    raw_telemetry={
-                        "token": "ghp_fixtureSecret123",
-                        "safe_path": "output/primary.json",
-                    },
-                )],
-                lane_receipts=[],
+                observations=raw_observations,
+                lane_receipts=[receipt_for_observations(raw_observations)],
                 invocation={
                     "started_at": "2026-07-27T00:00:00Z",
                     "finished_at": "2026-07-27T00:00:00Z",
@@ -563,6 +615,72 @@ class QualityPulseKernelTests(unittest.TestCase):
             ])
             self.assertEqual(len(successful.calls), 1)
 
+    def test_lane_success_requires_fresh_bound_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository, _path, profile = self.load_profile(root)
+            missing = NoEvidenceAdapter()
+            ticks = iter([
+                "2026-07-27T00:00:00Z", "2026-07-27T00:00:01Z",
+                "2026-07-27T00:00:02Z", "2026-07-27T00:00:03Z",
+            ])
+            receipts = execute_inspection_lanes(
+                profile, ["primary"], attestation(profile),
+                source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
+                adapter=missing, clock=lambda: next(ticks),
+            )
+            self.assertEqual(receipts[0]["status"], "failed")
+            self.assertEqual(
+                receipts[0]["reason_code"], "missing_lane_evidence",
+            )
+            actual_argv = missing.calls[0]["argv"]
+            self.assertIn("--network=none", actual_argv)
+            self.assertIn("--read-only", actual_argv)
+            self.assertTrue(any(
+                item.startswith(
+                    f"type=bind,source={repository.resolve()},"
+                    "target=/workspace,readonly"
+                )
+                for item in actual_argv
+            ))
+
+            raw = [observation(raw_telemetry={"value": 9})]
+            producing = FakeAdapter([0], observations=raw)
+            ticks = iter([
+                "2026-07-27T00:00:00Z", "2026-07-27T00:00:01Z",
+                "2026-07-27T00:00:02Z", "2026-07-27T00:00:03Z",
+            ])
+            receipts, captured = execute_inspection_lanes(
+                profile, ["primary"], attestation(profile),
+                source="git", ref="refs/heads/test", commit=COMMIT,
+                dirty=False, purpose="scheduled-quality-pulse",
+                operator_authorization_event_id="operator-event-1",
+                adapter=producing, clock=lambda: next(ticks),
+                return_observations=True,
+            )
+            self.assertEqual(captured, raw)
+            self.assertEqual(receipts[0]["observation_ids"], ["observation-1"])
+            self.assertRegex(receipts[0]["evidence_digest"], r"^sha256:[0-9a-f]{64}$")
+
+            forged = copy.deepcopy(raw)
+            forged[0]["raw_telemetry"]["value"] = 999
+            self.assert_reason(
+                lambda: build_authoritative_result(
+                    profile, source="git", ref="refs/heads/test", commit=COMMIT,
+                    dirty=False, observations=forged, lane_receipts=receipts,
+                    invocation={
+                        "started_at": "2026-07-27T00:00:00Z",
+                        "finished_at": "2026-07-27T00:00:01Z",
+                        "operator_authorization_event_id": "operator-event-1",
+                        "purpose": "scheduled-quality-pulse",
+                        "selected_lane_ids": ["primary"],
+                    },
+                ),
+                "unbound_lane_evidence",
+            )
+
     def test_oserror_receipt_and_later_fallback_skip_are_structured(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -613,12 +731,11 @@ class QualityPulseKernelTests(unittest.TestCase):
             )
 
     def result(self, profile, value=4):
+        raw = [observation(raw_telemetry={"value": value})]
         return build_authoritative_result(
             profile, source="git", ref="refs/heads/test", commit=COMMIT,
-            dirty=False, observations=[observation(
-                raw_telemetry={"value": value},
-            )],
-            lane_receipts=[], invocation={
+            dirty=False, observations=raw,
+            lane_receipts=[receipt_for_observations(raw)], invocation={
                 "started_at": "2026-07-27T00:00:00Z",
                 "finished_at": "2026-07-27T00:00:01Z",
                 "operator_authorization_event_id": "operator-event-1",
@@ -712,6 +829,8 @@ class QualityPulseKernelTests(unittest.TestCase):
                 "non- zero", "non-zero",
             )
             self.assertIn("non-zero", normalized_help)
+            if command == "inspection-run":
+                self.assertNotIn("--observations", detail.stdout)
 
         rejected = subprocess.run(
             [

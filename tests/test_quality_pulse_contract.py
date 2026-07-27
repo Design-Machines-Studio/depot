@@ -85,9 +85,23 @@ class FakeAdapter:
 
     def run(self, argv, *, cwd, env, timeout):
         self.calls.append((tuple(argv), Path(cwd), dict(env), timeout))
-        return SimpleNamespace(
-            returncode=next(self.returncodes), stdout="", stderr="",
-        )
+        returncode = next(self.returncodes)
+        if returncode == 0:
+            mount = next(
+                item for item in argv
+                if item.startswith("type=bind,source=")
+                and item.endswith(",target=/quality-pulse-evidence")
+            )
+            evidence_root = mount.split(",target=", 1)[0].split("source=", 1)[1]
+            lane_id = (
+                "grep-fallback"
+                if "quality-pulse-grep-fixture@" in " ".join(argv)
+                else "dead-code-lint-primary"
+            )
+            Path(evidence_root, "observations.json").write_text(json.dumps({
+                "schema_version": 1, "lane_id": lane_id, "observations": [],
+            }))
+        return SimpleNamespace(returncode=returncode, stdout="", stderr="")
 
 
 class QualityPulseContract(unittest.TestCase):
@@ -182,12 +196,14 @@ class QualityPulseContract(unittest.TestCase):
         )
         return profile, receipts, adapter
 
-    def receipts(self, profile, statuses=None):
+    def receipts(self, profile, statuses=None, observations=None):
         lanes = profile.to_dict()["lanes"]
+        observations = [] if observations is None else observations
         statuses = statuses or (
             ["unavailable", "fallback"] if len(lanes) == 2 else ["available"]
         )
         values = []
+        bound = False
         for lane, status in zip(lanes, statuses):
             reason = {
                 "available": "completed",
@@ -196,6 +212,18 @@ class QualityPulseContract(unittest.TestCase):
                 "fallback": "primary_unavailable",
                 "skipped": "primary_available",
             }[status]
+            lane_observations = (
+                observations
+                if status in {"available", "fallback"} and not bound
+                else []
+            )
+            if lane_observations:
+                bound = True
+            envelope = {
+                "schema_version": 1,
+                "lane_id": lane["lane_id"],
+                "observations": lane_observations,
+            }
             values.append({
                 "lane_id": lane["lane_id"],
                 "status": status,
@@ -214,6 +242,13 @@ class QualityPulseContract(unittest.TestCase):
                     (0 if status in {"available", "fallback"} else 1)
                 ),
                 "evidence_references": lane["evidence_paths"],
+                "evidence_digest": (
+                    digest(envelope)
+                    if status in {"available", "fallback"} else None
+                ),
+                "observation_ids": [
+                    item["observation_id"] for item in lane_observations
+                ],
                 "stdout": "",
                 "stderr": "",
                 "redacted_values": 0,
@@ -222,14 +257,15 @@ class QualityPulseContract(unittest.TestCase):
 
     def authoritative(self, family="baseplate-derived", observations=None):
         profile = self.profile(family)
+        observations = observations or self.observations(family)
         result = build_authoritative_result(
             profile,
             source="git",
             ref=FIXED_REF,
             commit=FIXED_COMMIT,
             dirty=False,
-            observations=observations or self.observations(family),
-            lane_receipts=self.receipts(profile),
+            observations=observations,
+            lane_receipts=self.receipts(profile, observations=observations),
             invocation={
                 "started_at": FIXED_TIME,
                 "finished_at": FIXED_TIME,
