@@ -1,13 +1,13 @@
 ---
 name: openrouter-delegate
-description: Delegate policy-selected review, second-opinion analysis, config/doc generation, and bounded execution to quality- and cost-ranked OpenRouter model slugs. GLM-5.2 (z-ai/glm-5.2, 1M context) is the mechanical default. Powers the pipeline cascade's OpenRouter rail, generic review-agent runner, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.
+description: Delegate policy-selected review, security analysis, second-opinion analysis, config/doc generation, and bounded execution to quality- and cost-ranked OpenRouter model slugs. Kimi K3 is the quality-first default and GLM-5.2 is the economical fallback. Powers the pipeline cascade's OpenRouter rail, generic review-agent runner, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.
 ---
 
 # OpenRouter Delegation
 
 Invoke OpenRouter for coding tasks where model quality, cost, or large context make it the right rail. Coding uses Codex and OpenRouter; Claude is reserved for non-coding work.
 
-OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin pins **GLM-5.2** (`z-ai/glm-5.2`) as the default quality-per-dollar model, with **DeepSeek V4** (`deepseek/deepseek-v4-pro`) as the alternate. Both carry 1M-token context.
+OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin pins **Kimi K3** (`moonshotai/kimi-k3`) as the quality-first default and security-analysis head, with **GLM-5.2** (`z-ai/glm-5.2`) as its immediate capacity fallback. Both carry 1M-token context.
 
 ## One-Shot vs Agentic (read first)
 
@@ -22,8 +22,8 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 
 | Advantage | Use Case | Why OpenRouter |
 |-----------|----------|----------------|
-| **Quality-per-dollar** | Big-diff review, pattern analysis, second opinions | GLM-5.2 supplies inexpensive large-context analysis while Codex remains the native coding authority. |
-| **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. GLM-5.2 and DeepSeek V4 both hold large context. |
+| **Quality-first analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi K3 leads eligible OpenRouter analysis while independent Codex review remains the consequential sign-off. |
+| **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. Kimi K3 and GLM-5.2 both hold large context. |
 | **Provider routing** | Privacy / throughput control | Per-request provider preferences (`OPENROUTER_ZDR=1` for no-train/no-retain providers). |
 | **Capacity relief** | Pipeline / review runs burning Codex quota | Every eligible token routed to OpenRouter preserves Codex subscription headroom. |
 
@@ -32,19 +32,19 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 - Autonomous chunk implementation (single-turn; no file I/O or tool loop -- see above)
 - Tasks requiring Claude's conversation context (OpenRouter calls are stateless)
 - Tasks requiring MCP server access
-- Security review judgment (keep the security-review lane on Codex)
+- Sole-provider security completion (Kimi may lead analysis, but Codex sign-off remains mandatory)
 
 ### Security Boundary (hard rule)
 
-**Third-party models (GLM-5.2, DeepSeek V4) are bulk pattern reviewers, never the independent security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
+**Kimi K3 may lead security analysis, but never replaces the independent Codex security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
 
 - **Threat/content boundary.** Inspect the exact bytes becoming OpenRouter system or user content. Decline high-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private or regulated values. Recognized placeholders such as `<token>`, `REDACTED`, `example`, and environment-variable references are safe.
 - **No identity or path embargo.** Model nationality, vendor jurisdiction, security-looking directories, `.env` references, header names, and environment-variable names are not disclosure evidence. Non-secret auth, federation, deploy, and security code may pass.
 - **Execution mode -- bounded diffs only.** Accept only a non-empty validated unified diff whose normalized paths are all in the caller's exact owned-path list. The model has no command or verification authority. The runner performs only fixed structural Git checks; project build/test commands are deferred to the native Codex reviewer.
-- **Mechanical-review and artifact-review modes.** Scan the complete diff (including removed lines) or exact artifact bytes. Protected-path references are allowed; actual sensitive values decline with exit 3.
+- **Mechanical-review and artifact-review modes.** Mechanical review scans complete per-file diff sections (including removed lines), emits eligible sections, and returns declined path names for local Codex coverage. Artifact review scans exact bytes and remains all-or-nothing.
 - **Artifact-delegation mode.** Call `delegation-boundary.sh --mode artifact-delegation --policy POLICY --content-file FILE [--content-file FILE ...]` for arbitrary local text that will become OpenRouter content. Every explicit file is scanned byte-for-byte; the mode accepts no changed-file, diff, output-path, or execution authority.
 - **Independent sign-off.** High-consequence security work may use OpenRouter after these controls pass, but completion still requires independent Codex security approval.
-- **Intended lanes.** Style, duplication, pattern-recognition, large-diff triage, and doc consistency.
+- **Intended lanes.** Security analysis with independent Codex sign-off, style, duplication, pattern-recognition, large-diff triage, and doc consistency.
 
 ## Invocation Protocol
 
@@ -56,9 +56,22 @@ Key rules: always set a timeout, always use the wrapper for automated flows, pip
 
 Load the decision table from `${CLAUDE_SKILL_DIR}/references/model-selection.md`. It maps task types to model slugs, timeouts, and the fallback chain.
 
-**Default model:** `z-ai/glm-5.2` (GLM-5.2, 1M context). **Alternate / fallback:** `deepseek/deepseek-v4-pro`.
+**Default model:** `moonshotai/kimi-k3` (Kimi K3, 1M context). **Immediate fallback:** `z-ai/glm-5.2`.
 
 **Provider-origin invariant:** OpenRouter primary and fallback slugs must never begin with `openai/` or `anthropic/`. OpenAI runs only through native Codex CLI capability; Anthropic runs only through native Claude CLI capability. This is an operational provenance boundary, not a nationality or jurisdiction embargo.
+
+## MCP Control Plane
+
+When the official OpenRouter MCP is available, load
+`${CLAUDE_SKILL_DIR}/references/mcp-control-plane.md`. Use its read-only tools to
+refresh model identity, endpoints, provider slugs, benchmarks, credits, and
+documentation before changing the durable Matrix.
+
+The MCP is discovery/observability only for automated workflows. Do not replace
+the direct API runner with `send-message`: the runner owns the team key,
+payload-specific disclosure boundary, timeouts, provider controls, fallback
+chain, and content-free receipts. MCP absence never silently changes the
+selected model.
 
 ## Prompt Engineering
 
@@ -73,7 +86,7 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 | Agent | File | Purpose |
 |-------|------|---------|
 | **openrouter-agent-runner** | `plugins/openrouter/agents/workflow/openrouter-agent-runner.md` | Runs any eligible review-agent criteria through a policy-selected full OpenRouter model slug |
-| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Full-diff review using GLM-5.2 with a DeepSeek V4 OpenRouter model fallback |
+| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Eligible full-diff-section review using Kimi K3 with a GLM-5.2 OpenRouter fallback |
 
 ## Prerequisites
 
@@ -90,12 +103,14 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh)
+    --minimum-version 1.7.0 --active-host "$ACTIVE_HOST" \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.6.0 \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh)
+    --minimum-version 1.7.0 \
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md)
 fi
 BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac

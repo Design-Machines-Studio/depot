@@ -143,6 +143,8 @@ runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 bulk_runner="$REPO_ROOT/plugins/openrouter/agents/review/openrouter-bulk-analyst.md"
 delegation_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
+wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+mcp_control="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/mcp-control-plane.md"
 dm_review="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
 dm_review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
 kernel_metrics="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/metrics.py"
@@ -158,7 +160,13 @@ ledger="$REPO_ROOT/docs/pipeline-metrics/ledger.md"
 if [ -f "$routing" ]; then
   jq -e '.chunkKind.config.provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps config chunks to OpenRouter\n"; failures=1; }
   jq -e '.chunkKind.ui.provider == "codex" and .chunkKind.integration.provider == "codex"' "$routing" >/dev/null || { printf "  FAIL  UI and integration coding route to Codex\n"; failures=1; }
-  jq -e '.agentType["security-auditor"].provider == "codex" and .agentType["architecture-reviewer"].provider == "codex"' "$routing" >/dev/null || { printf "  FAIL  security and architecture code review route to Codex\n"; failures=1; }
+  jq -e '
+    .agentType["security-auditor"] as $security
+    | $security.provider == "openrouter"
+      and $security.model == "moonshotai/kimi-k3"
+      and $security.independentSignoff == {"provider":"codex","required":true}
+      and .agentType["architecture-reviewer"].provider == "codex"
+  ' "$routing" >/dev/null || { printf "  FAIL  Kimi leads security analysis with independent Codex sign-off; architecture stays on Codex\n"; failures=1; }
   jq -e '.agentType["doc-sync-reviewer"].provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps doc-sync-reviewer to OpenRouter\n"; failures=1; }
   jq -e '[.agentType["pattern-recognition-specialist"], .agentType["code-simplicity-reviewer"], .agentType["doc-sync-reviewer"], .agentType["test-coverage-reviewer"]] | all(.provider == "openrouter")' "$routing" >/dev/null || { printf "  FAIL  all mechanical reviewers route through OpenRouter\n"; failures=1; }
   jq -e '
@@ -303,6 +311,11 @@ fi
 
 require_text "$runner" "implementedBy: openrouter" "OpenRouter exec runner emits implementedBy receipt"
 require_text "$runner" "usage" "OpenRouter exec runner preserves usage information"
+require_text "$runner" "generationId" "OpenRouter exec runner preserves the provider generation ID"
+require_text "$wrapper" 'PROVIDER_SORT="exacto"' "Kimi direct calls default to live quality-first provider routing"
+require_text "$wrapper" "OPENROUTER_RECEIPT_FILE" "OpenRouter wrapper emits content-free provider receipts"
+require_text "$mcp_control" "direct API runner remains authoritative" "MCP remains a control plane rather than the execution transport"
+require_text "$mcp_control" "does not expose an authenticated workspace" "MCP workspace attribution gap is explicit"
 require_text "$dm_review" "routing-policy.json" "dm-review reads shared routing policy"
 require_absent "$dm_review" "Diff >5000 lines AND openrouter" "dm-review no longer gates OpenRouter on >5000 diff lines"
 require_text "$dm_review" "OPENROUTER_API_KEY" "dm-review default-routes external reviewers when keys are set"
@@ -317,9 +330,10 @@ require_text "$dm_review_cmd" "observation-only economics evidence" "contributio
 require_text "$kernel_metrics" '"observation_only": True' "kernel economics output is observation-only"
 require_text "$agent_runner" 'File names, security-looking directories' "OpenRouter runner forbids path-name disclosure classification"
 require_text "$agent_runner" "RUNNER DECLINED -- SENSITIVE CONTENT" "OpenRouter runner declines high-confidence secrets in added lines"
+require_text "$agent_runner" "Generation receipt:" "OpenRouter review lanes preserve generation provenance"
 require_absent "$bulk_runner" 'internal/auth/**' "OpenRouter bulk runner has no hard-coded path embargo"
 require_absent "$bulk_runner" 'Protected files stay on Codex' "OpenRouter bulk runner does not filter by path name"
-require_text "$bulk_runner" 'Actual credentials, private keys' "OpenRouter bulk runner classifies exact outbound content"
+require_text "$bulk_runner" 'actual credentials, private keys' "OpenRouter bulk runner classifies exact outbound content"
 require_text "$agent_runner" "Codex" "OpenRouter runner returns sensitive work to Codex"
 require_text "$pipeline_cmd" "Codex + OpenRouter" "Phase 5 defaults to Codex plus OpenRouter lenses"
 require_text "$pipeline_cmd" "PIPELINE_CLAUDE_ADVERSARY=1" "Claude adversary is optional third lens"

@@ -36,18 +36,17 @@ Match the review depth to the moment. Running full multi-round review on every c
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 5 core agents (+ ui-standards-reviewer when UI files changed). No memory capture, no conditional agents beyond file-type triggers. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
-| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. The exact diff is content-scanned immediately before disclosure; actual secrets/private data are declined, while safe security-related content remains eligible. Security judgment stays on Codex. |
+| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Kimi-led security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes independent Codex sign-off. |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
 **Escalation exception:** when a chunk touches auth, federation, or
 security-related paths (`internal/auth/**`, `internal/federation/**`,
 `**/secretbox*`, `**/destructive_confirmation*`,
 `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick
-tier and run the full Codex-native `security-auditor` lane. That security
-judgment never goes to OpenRouter. The same diff may still reach supplementary
-OpenRouter mechanical lanes when the immediate content boundary finds no
-actual secret, private data, or prohibited execution authority; path names
-alone never decline disclosure.
+tier and run both the Kimi-led `security-auditor` analysis (for eligible file
+sections) and the full-diff Codex security sign-off. File sections containing
+actual secret/private data stay on Codex; path names alone never decline
+disclosure.
 
 ## Shadow Workflow Kernel Contract
 
@@ -212,7 +211,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.6.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.7.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -221,7 +220,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.6.0 \
+        --minimum-version 1.7.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -251,21 +250,23 @@ OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RU
 
 #### Quick mode with `lightweight` classification (diff < 100 lines)
 
-Run only these 3 agents:
+Run only these 3 agent criteria:
 
-1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex** (security judgment, never OpenRouter)
+1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Kimi K3 through OpenRouter when available, plus required independent Codex full-diff sign-off**
 2. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 3. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
-Skip architecture-reviewer and doc-sync-reviewer. Net: 1 Codex agent + 2 OpenRouter-routed agents, or 3 Codex agents when OpenRouter is unavailable.
+Skip architecture-reviewer and doc-sync-reviewer. With OpenRouter available,
+this is 3 OpenRouter analyses plus the independent Codex security sign-off; if
+OpenRouter is unavailable, all 3 criteria run on Codex.
 
 Skip to Phase 4 with these 3 agents.
 
 #### Always-Run Agents (quick `standard`/`extended`, or full mode)
 
-These 5 agents always run in standard+ quick mode and all full-mode reviews:
+These 5 agent criteria always run in standard+ quick mode and all full-mode reviews:
 
-1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex** (never OpenRouter)
+1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Kimi K3 through OpenRouter when available, plus required independent Codex full-diff sign-off**
 2. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Codex**
 3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
@@ -395,10 +396,12 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 90s |
-| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 90s |
-| `doc-sync-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 60s |
-| `test-coverage-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 60s |
+| `security-auditor` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 120s |
+| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 90s |
+| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 90s |
+| `doc-sync-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 60s |
+| `test-coverage-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 60s |
+| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 120-180s |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -406,10 +409,27 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}):
-- N agents -> OpenRouter (pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
-- N coding agents -> Codex (security, architecture, visual/UI, unavailable-provider fallbacks)
+- N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
+- N coding/sign-off agents -> Codex (required security sign-off, architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
+
+#### Host approval batching
+
+The host may require payload-specific disclosure approval even when the user has
+given general OpenRouter permission. Before the first OpenRouter dispatch:
+
+1. Materialize each exact outbound system prompt and user prompt in private
+   temporary files after the boundary has emitted its eligible remainder.
+2. Compute SHA-256 for each file and present one approval request covering the
+   complete batch of exact files and their hashes.
+3. Reuse that approval only while every outbound byte and hash is unchanged.
+   Any mutation requires a new approval for the changed payload.
+4. If the host declines, do not retry around it. Record `host_disclosure_declined`
+   and use the Codex fallback.
+
+This batches repeated prompts without turning a general user statement into
+blanket disclosure authority.
 
 ---
 
@@ -424,8 +444,8 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
 **A0. If the agent is `openrouter-bulk-analyst`:**
 
 1. Read its installed agent definition directly; do not nest it inside `openrouter-agent-runner`. The bulk agent is already a wrapper-orchestration contract, while the generic runner expects pure review criteria plus an explicit target model.
-2. Build its prompt with the unfiltered changed-file list, the full untruncated diff, project context, and `$OPENROUTER_SECURITY_POLICY_PATH`. Its first action MUST run `delegation-boundary.sh --mode mechanical-review` and use only the emitted filtered paths and filtered diff. A decline means no safe remainder or credential-bearing content and returns the lane to Codex. The parallel security and architecture lanes still receive the full diff on Codex.
-3. On a Codex host, launch a native Codex subagent with the combined prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -` so large diffs never cross the process argument limit. The Codex process performs deterministic orchestration; GLM-5.2/DeepSeek V4 performs the external analysis. Never launch this coding-review lane through a Claude `Agent` call.
+2. Build its prompt with the unfiltered changed-file list, the full untruncated diff, project context, and `$OPENROUTER_SECURITY_POLICY_PATH`. Its first action MUST run `delegation-boundary.sh --mode mechanical-review` and use only the emitted filtered paths and filtered diff. A decline means no safe remainder and returns the lane to Codex. A partial result emits `### CODEX PARTIAL COVERAGE REQUIRED` with path names; Phase 4.5 completes those exact paths locally. The independent security sign-off and architecture lanes receive the full diff on Codex.
+3. On a Codex host, launch a native Codex subagent with the combined prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -` so large diffs never cross the process argument limit. The Codex process performs deterministic orchestration; Kimi K3/GLM-5.2 performs the external analysis. Never launch this coding-review lane through a Claude `Agent` call.
 
 **A. If the agent is routed to OpenRouter** (in the model table and `OPENROUTER_AVAILABLE=true`):
 
@@ -445,6 +465,10 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
 3. **Launch without Claude coding execution:** on a Codex host, use a native Codex subagent with the combined runner prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. The runner performs mechanical orchestration and OpenRouter performs the review judgment; a Claude `Agent` call is not a valid Branch A launcher.
+4. **For `security-auditor`, launch an independent Branch B Codex pass in
+   parallel with the full unfiltered diff.** It uses the same agent definition,
+   is tagged `[codex-signoff/security-auditor]`, and is required even when Kimi
+   succeeds. Neither output substitutes for the other.
 
 **B. Otherwise, dispatch coding review on Codex:**
 
@@ -481,7 +505,7 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
 5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
-**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. Do not mark the run clean until the retry completes.
+**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. If it emits `### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same criteria locally for the named paths. Do not mark the run clean until the required local work completes.
 
 **Example prompt structure for each agent:**
 
@@ -571,14 +595,16 @@ A **lane** is a review path with its own provider and absence mode: Codex, OpenR
 | Lane | Failure signal | Resolution |
 |------|----------------|------------|
 | OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Codex (procedure below) |
+| OpenRouter partial | `### CODEX PARTIAL COVERAGE REQUIRED` in agent output | Run the same agent criteria on Codex for the named locally held paths |
 | Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
 | Codex-native coding agent | Agent errored or timed out | No Claude retry; apply guardrails immediately |
 
-Coding fallback moves between OpenRouter and Codex only. Security judgment
-starts on Codex and has no external lane to fall back from. Supplementary
-mechanical lanes remain content-gated: actual secret/private content declines
-OpenRouter, while safe security-related content is eligible regardless of path.
+Coding fallback moves between OpenRouter and Codex only. Security analysis
+starts on Kimi when eligible and always has an independent full-diff Codex
+sign-off. OpenRouter lanes remain content-gated: file sections containing actual
+secret/private content stay local, while safe sections remain eligible
+regardless of path.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
 
@@ -586,7 +612,10 @@ Every lane receipt records `requestedProvider`, `attemptedProvider`, `implemente
 
 #### When the external-LLM retry triggers
 
-Only applies to agents routed through OpenRouter. Codex-native agents that fail are classified immediately.
+Applies to agents routed through OpenRouter. `RUNNER FAILURE` triggers a full
+Codex retry; `CODEX PARTIAL COVERAGE REQUIRED` triggers a bounded Codex
+completion for the named paths. Codex-native agents that fail are classified
+immediately.
 
 #### Retry procedure
 
@@ -595,6 +624,17 @@ For each agent whose output contains `### RUNNER FAILURE`:
 1. **Re-dispatch using Phase 4 Branch B** on Codex with the same agent definition, diff, and project context.
 2. **Tag fallback findings** with `[codex-fallback/{agent-name}]` for traceability.
 3. **Timeout:** Use the same 120s ceiling from guardrails.md. The fallback is a single retry, not a retry loop.
+
+For each agent whose output contains `### CODEX PARTIAL COVERAGE REQUIRED`:
+
+1. Parse only normalized path names from the marker; never recover or forward
+   the declined bytes through OpenRouter.
+2. Re-dispatch the same agent definition on Codex with the full local diff
+   sections for those paths and the same project context.
+3. Tag findings `[codex-sensitive-section/{agent-name}]` and record both the
+   OpenRouter eligible-content receipt and Codex held-content receipt.
+4. Treat failure of this local completion exactly like failure of the original
+   agent lane.
 
 #### If fallback also fails
 
@@ -610,6 +650,8 @@ Report the fallback in the Agent Summary table:
 |-------|----------|--------|
 | pattern-recognition-specialist | OpenRouter `z-ai/glm-5.2` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
+| security-auditor | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
+| security-auditor | Codex (independent sign-off) | Completed (full diff) |
 
 Summarize: "pattern-recognition-specialist: OpenRouter failed -> Codex fallback succeeded"
 

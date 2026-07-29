@@ -126,7 +126,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.7.0 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -135,7 +135,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 \
+      --minimum-version 1.7.0 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -176,9 +176,9 @@ The body becomes the selected OpenRouter model's system prompt.
 
 ### Step 1.4: Threat/Content Boundary -- Mechanical Review
 
-**Third-party models are mechanical reviewers, never the independent security reviewer.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode immediately before building the outgoing prompt. File names, security-looking directories, model nationality, and vendor jurisdiction do not classify content. The legacy `neverRouteToOpenRouter` path embargo and `set(canon) | set(configured)` hard-coded union MUST NOT be used.
+**Third-party models may analyze security, but never replace the independent Codex security sign-off.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode immediately before building the outgoing prompt. File names, security-looking directories, model nationality, and vendor jurisdiction do not classify content. The legacy `neverRouteToOpenRouter` path embargo and `set(canon) | set(configured)` hard-coded union MUST NOT be used.
 
-The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies every path against the complete unfiltered `changed_files` list, checks physical containment, and scans the complete diff—including additions, context, and removed lines—for actual credentials, private keys, authenticated DSNs, access/session tokens, and classified private values. Safe auth, federation, deploy, security, and `.env.example` content remains eligible. Exit 3 means actual disclosure risk and routes the lane to Codex without reaching the wrapper. Any other non-zero status is malformed or unverifiable input and is a fail-closed runner failure.
+The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies every path against the complete unfiltered `changed_files` list, checks physical containment, and scans each complete file-diff section—including additions, context, and removed lines—for actual credentials, private keys, authenticated DSNs, access/session tokens, and classified private values. Safe sections remain eligible even when a different file section is declined. Exit 3 means no safe review remainder and routes the whole lane to Codex without reaching the wrapper. Any other non-zero status is malformed or unverifiable input and is a fail-closed runner failure.
 
 ```bash
 BOUNDARY_HELPER="$(dirname "$SECURITY_POLICY_RESOLVED")/delegation-boundary.sh"
@@ -187,7 +187,8 @@ BOUNDARY_DIFF=$(mktemp)
 BOUNDARY_CHANGED=$(mktemp)
 BOUNDARY_FILTERED=$(mktemp)
 BOUNDARY_PATHS=$(mktemp)
-trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "${SYS_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}"' EXIT
+BOUNDARY_DECLINED_PATHS=$(mktemp)
+trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "${SYS_FILE:-/dev/null}" "${USER_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}" "${WRAPPER_RECEIPT:-/dev/null}"' EXIT
 printf '%s' "$diff_content" > "$BOUNDARY_DIFF"
 printf '%s\n' "$changed_files" > "$BOUNDARY_CHANGED"
 if "$BOUNDARY_HELPER" --mode mechanical-review \
@@ -195,7 +196,8 @@ if "$BOUNDARY_HELPER" --mode mechanical-review \
     --changed-files "$BOUNDARY_CHANGED" \
     --diff-file "$BOUNDARY_DIFF" \
     --output-diff "$BOUNDARY_FILTERED" \
-    --output-paths "$BOUNDARY_PATHS"; then
+    --output-paths "$BOUNDARY_PATHS" \
+    --output-declined-paths "$BOUNDARY_DECLINED_PATHS"; then
   :
 else
   BOUNDARY_RC=$?
@@ -220,9 +222,10 @@ EOF
 fi
 FILTERED_DIFF=$(cat "$BOUNDARY_FILTERED")
 FILTERED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_PATHS")
+DECLINED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_DECLINED_PATHS")
 ```
 
-The historical `FILTERED_*` variable names are retained for compatibility; the threat-based gate returns the complete safe diff and complete touched-path list rather than removing sections by path name.
+The historical `FILTERED_*` variable names are retained for compatibility. They contain only the exact eligible file-diff sections and their paths. `DECLINED_CHANGED_FILES` contains path names only; never read, print, or transmit the declined sections through OpenRouter.
 
 ### Step 2: Build the Prompts
 
@@ -249,7 +252,11 @@ Follow the review criteria in your system prompt exactly. Report findings using 
 
 ### Step 3: Invoke the OpenRouter Wrapper
 
-Use the coherent OpenRouter bundle resolved in Step 1. Pass the user prompt on stdin and the target body through `OPENROUTER_SYSTEM`; both variables remain quoted and are never re-evaluated by the shell. The wrapper prints model text directly on stdout.
+Use the coherent OpenRouter bundle resolved in Step 1. Materialize the exact
+system and user payload bytes, run the artifact-delegation boundary over both,
+and only then pass the user prompt on stdin and the target body through
+`OPENROUTER_SYSTEM`. The files remain private and are never re-evaluated by the
+shell. The wrapper prints model text directly on stdout.
 
 ```bash
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
@@ -269,18 +276,59 @@ EOF
 fi
 
 SYS_FILE=$(mktemp)
+USER_FILE=$(mktemp)
 WRAPPER_STDERR=$(mktemp)
+WRAPPER_RECEIPT=$(mktemp)
 printf '%s' "$TARGET_BODY" > "$SYS_FILE"
+printf '%s' "$USER_PROMPT" > "$USER_FILE"
 
-RESULT=$(printf '%s' "$USER_PROMPT" | \
+if "$BOUNDARY_HELPER" --mode artifact-delegation \
+    --policy "$SECURITY_POLICY_RESOLVED" \
+    --content-file "$SYS_FILE" \
+    --content-file "$USER_FILE"; then
+  :
+else
+  BOUNDARY_RC=$?
+  if [ "$BOUNDARY_RC" -eq 3 ]; then
+    cat <<EOF
+## ${target_agent_name} Review (via OpenRouter ${target_model})
+
+### RUNNER DECLINED -- SENSITIVE CONTENT
+The exact outbound system/user payload failed the disclosure boundary. No
+payload bytes were sent to OpenRouter. Route this lane to Codex.
+
+### Critical (P1)
+### Serious (P2)
+### Moderate (P3)
+### Approved
+EOF
+    exit 0
+  fi
+  echo "RUNNER FAILURE: exact outbound payload could not be validated" >&2
+  exit 2
+fi
+
+RESULT=$( \
   OPENROUTER_SYSTEM="$(cat "$SYS_FILE")" \
+  OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
   bash "$WRAPPER_PATH" "$target_model" - "$target_timeout" "${fallback_model:-}" \
+  < "$USER_FILE" \
   2>"$WRAPPER_STDERR")
 EXIT_CODE=$?
 
 ACTUAL_MODEL="$target_model"
+FALLBACK_USED=false
 if grep -Fq "falling back to ${fallback_model:-__no_fallback__}" "$WRAPPER_STDERR" 2>/dev/null; then
   ACTUAL_MODEL="$fallback_model"
+  FALLBACK_USED=true
+fi
+GENERATION_ID=""
+SERVING_PROVIDER=""
+if [ -s "$WRAPPER_RECEIPT" ]; then
+  RECEIPT_MODEL=$(jq -r '.responseModel // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)
+  GENERATION_ID=$(jq -r '.generationId // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)
+  SERVING_PROVIDER=$(jq -r '.servingProvider // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)
+  [ -z "$RECEIPT_MODEL" ] || ACTUAL_MODEL="$RECEIPT_MODEL"
 fi
 ```
 
@@ -368,8 +416,11 @@ Normalize the response to the P1/P2/P3/Approved structure without dropping or re
 ```markdown
 ## {target_agent_name} Review (via OpenRouter {ACTUAL_MODEL})
 
-[If ACTUAL_MODEL differs from target_model:]
+[If FALLBACK_USED is true:]
 > **Note:** Requested {target_model}, but OpenRouter fell back to {ACTUAL_MODEL} after a provider capacity response.
+
+Generation receipt: `{GENERATION_ID or not_reported}`;
+serving provider: `{SERVING_PROVIDER or not_reported}`.
 
 ### Critical (P1)
 [findings tagged [openrouter/{ACTUAL_MODEL}/{target_agent_name}]]
@@ -382,6 +433,13 @@ Normalize the response to the P1/P2/P3/Approved structure without dropping or re
 
 ### Approved
 [approvals from the model response]
+
+[If DECLINED_CHANGED_FILES is non-empty:]
+### CODEX PARTIAL COVERAGE REQUIRED
+OpenRouter reviewed only the eligible file sections. Re-dispatch the same
+target agent on Codex for these locally held paths before treating the lane as
+complete:
+{declined_changed_files}
 ```
 
 ## Rules
@@ -391,6 +449,8 @@ Normalize the response to the P1/P2/P3/Approved structure without dropping or re
 3. **Preserve all findings verbatim.** Re-tag and normalize headings only.
 4. **Never bypass the security boundary.** A disclosure decline returns to Codex and cannot produce a clean OpenRouter receipt.
 5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a Codex security sign-off even when non-secret implementation content was eligible for OpenRouter.
+6. **Partial coverage is not full coverage.** When `DECLINED_CHANGED_FILES` is non-empty, emit `### CODEX PARTIAL COVERAGE REQUIRED` with path names only. dm-review must complete that same agent criteria locally for those paths.
+7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving provider when returned. Never include prompt or completion content in the receipt metadata.
 
 ## Why This Architecture
 

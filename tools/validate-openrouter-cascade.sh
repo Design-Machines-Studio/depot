@@ -159,6 +159,7 @@ trap cleanup EXIT
 network_marker="$fixture_root/network.marker"
 fail_primary="$fixture_root/fail-primary"
 port_file="$fixture_root/port"
+request_file="$fixture_root/request.json"
 cat > "$fixture_root/http-sentinel.py" <<'PY'
 import http.server
 import json
@@ -168,12 +169,14 @@ import sys
 marker = pathlib.Path(sys.argv[1])
 fail_primary = pathlib.Path(sys.argv[2])
 port_file = pathlib.Path(sys.argv[3])
+request_file = pathlib.Path(sys.argv[4])
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         document = json.loads(self.rfile.read(length))
         model = document.get("model", "")
+        request_file.write_text(json.dumps(document), encoding="utf-8")
         with marker.open("a", encoding="utf-8") as output:
             output.write(model + "\n")
         if fail_primary.exists() and model == "z-ai/glm-5.2":
@@ -181,7 +184,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             response = {"error": {"message": "capacity"}}
         else:
             status = 200
-            response = {"choices": [{"message": {"content": "controlled"}}]}
+            response = {
+                "id": "gen-fixture",
+                "created": 1785210000,
+                "model": model + "-canonical",
+                "provider": "FixtureProvider",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+                "choices": [{"message": {"content": "controlled"}}],
+            }
         payload = json.dumps(response).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -197,7 +211,7 @@ port_file.write_text(str(server.server_port), encoding="utf-8")
 server.serve_forever()
 PY
 python3 "$fixture_root/http-sentinel.py" \
-  "$network_marker" "$fail_primary" "$port_file" &
+  "$network_marker" "$fail_primary" "$port_file" "$request_file" &
 server_pid=$!
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   [ -s "$port_file" ] && break
@@ -244,6 +258,56 @@ if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
   pass "allowed GLM reaches the controlled network sentinel"
 else
   fail "allowed GLM must prove the sentinel is reachable"
+  any_failed=1
+fi
+
+receipt_file="$fixture_root/kimi-receipt.json"
+rm -f "$network_marker" "$request_file" "$receipt_file"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_RECEIPT_FILE="$receipt_file" \
+   "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1 &&
+   jq -e '.provider.sort == "exacto" and (.provider | has("order") | not)' \
+     "$request_file" >/dev/null &&
+   jq -e '
+     .generationId == "gen-fixture"
+     and .requestedModel == "moonshotai/kimi-k3"
+     and .responseModel == "moonshotai/kimi-k3-canonical"
+     and .servingProvider == "FixtureProvider"
+     and .usage.total_tokens == 15
+   ' "$receipt_file" >/dev/null; then
+  pass "Kimi defaults to live quality-first Exacto routing and emits a content-free receipt"
+else
+  fail "Kimi must use Exacto by default and preserve generation/provider/usage evidence"
+  any_failed=1
+fi
+
+rm -f "$network_marker" "$request_file"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_PROVIDER_ORDER=baseten/fp8,moonshotai/mxfp4 \
+   OPENROUTER_ALLOW_FALLBACKS=0 \
+   "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1 &&
+   jq -e '
+     .provider.order == ["baseten/fp8", "moonshotai/mxfp4"]
+     and .provider.allow_fallbacks == false
+     and (.provider | has("sort") | not)
+   ' "$request_file" >/dev/null; then
+  pass "explicit endpoint order overrides dynamic sorting for reproducible Kimi calls"
+else
+  fail "explicit Kimi endpoint order must be preserved without an ambiguous sort"
+  any_failed=1
+fi
+
+rm -f "$network_marker"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_PROVIDER_SORT=unknown \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+invalid_sort_rc=$?
+set -e
+if [ "$invalid_sort_rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+  pass "invalid provider sort fails before network contact"
+else
+  fail "invalid provider sort must fail closed before network contact"
   any_failed=1
 fi
 

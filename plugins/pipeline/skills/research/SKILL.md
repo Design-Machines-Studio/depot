@@ -45,6 +45,16 @@ Launch all available research agents simultaneously. Each agent gets the feature
 
 **Executor routing:** Read `plugins/pipeline/references/routing-policy.json`. Set `RESEARCH_EXECUTOR` from the environment when present; otherwise default to `openrouter` when `OPENROUTER_API_KEY` is set, else `claude`. Use this executor for read-heavy research fan-out. Keep Phase 4 consolidation/synthesis on Claude because it feeds planning gates.
 
+**Payload-specific host approval:** General user permission does not override a
+host that asks to approve exact outbound content. Before OpenRouter research
+fan-out, run the installed `delegation-boundary.sh --mode
+artifact-delegation` over every exact outbound prompt file, compute each
+file's SHA-256, and request one approval for the complete unchanged batch.
+Reuse the authorization only while all hashes remain identical. If the host
+declines, record `host_disclosure_declined` and continue through the local
+research fallback; never repeatedly ask for the same payload or route around
+the decision.
+
 **Agent 1: ai-memory Researcher**
 
 Search the knowledge graph for everything related to the feature area:

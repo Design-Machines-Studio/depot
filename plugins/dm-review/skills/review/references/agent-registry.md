@@ -11,7 +11,7 @@ These 5 agents run on every review regardless of file types changed.
 | # | Agent | Source | Coding provider | What it reviews |
 |---|-------|--------|-----------------|-----------------|
 | 1 | code-simplicity-reviewer | dm-review | OpenRouter, then Codex | Complexity, redundancy, dead code, over-engineering, naming clarity |
-| 2 | security-auditor | dm-review | Codex only | SQL injection, XSS, CSRF, auth, input validation, data exposure |
+| 2 | security-auditor | dm-review | Kimi K3 primary when eligible + independent Codex sign-off | SQL injection, XSS, CSRF, auth, input validation, data exposure |
 | 3 | pattern-recognition-specialist | dm-review | OpenRouter, then Codex | Anti-patterns, naming conventions, duplication, magic values |
 | 4 | architecture-reviewer | dm-review | Codex only | Component boundaries, SOLID, coupling, layer violations |
 | 5 | doc-sync-reviewer | dm-review | OpenRouter, then Codex | CLAUDE.md, README, manual pages, docs, references, CHANGELOG |

@@ -12,14 +12,14 @@ Run a fast code review using the core agents plus ui-standards-reviewer for UI f
 
 Quick mode scales agent count by diff size:
 
-- **< 100 lines (lightweight):** 3 agents -- security-auditor, pattern-recognition-specialist, code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. With OpenRouter available, this is 1 Codex + 2 OpenRouter-routed agents; otherwise all 3 run on Codex.
+- **< 100 lines (lightweight):** 3 agent criteria -- security-auditor, pattern-recognition-specialist, code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. With OpenRouter available, Kimi performs the primary security analysis and Codex performs the required independent security sign-off; otherwise all 3 criteria run on Codex.
 - **100-500 lines (standard):** 5 core agents (all below).
 - **> 500 lines (extended):** 5 core + applicable classification-aware agents.
 
 ## Core Agents (standard+ mode)
 
 1. code-simplicity-reviewer
-2. security-auditor
+2. security-auditor (Kimi primary when eligible + independent Codex sign-off)
 3. pattern-recognition-specialist
 4. architecture-reviewer
 5. doc-sync-reviewer

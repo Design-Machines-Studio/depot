@@ -18,7 +18,9 @@ Apply these checks after agent selection (Phase 3) and before agent launch (Phas
 
 File names such as `.env`, `*credentials*`, `*secret*`, `*.key`, and `*.pem`
 are risk signals, not disclosure evidence. Do not strip content by path name.
-The local Codex-native security auditor receives the complete diff.
+The independent local Codex security sign-off receives the complete diff.
+Kimi K3 receives only the file sections emitted by the OpenRouter disclosure
+boundary; any declined sections receive additional same-agent Codex coverage.
 
 Immediately before any OpenRouter mechanical lane, run the installed
 OpenRouter delegation boundary over the exact immutable diff snapshot. A safe

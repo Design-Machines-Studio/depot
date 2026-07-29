@@ -107,7 +107,7 @@ resolve_openrouter_bundle() {
   esac
   if [ -n "$active" ]; then
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 \
+      --minimum-version 1.7.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -116,7 +116,7 @@ resolve_openrouter_bundle() {
       }
   else
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 \
+      --minimum-version 1.7.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \

@@ -53,9 +53,13 @@ for relative in "${consumers[@]}"; do
   fi
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
-    floor_calls="$(grep -Fc -- '--minimum-version 1.6.0' "$file" || true)"
+    openrouter_floor="1.7.0"
+    case "$relative" in
+      plugins/airlift/*) openrouter_floor="1.6.0" ;;
+    esac
+    floor_calls="$(grep -Fc -- "--minimum-version $openrouter_floor" "$file" || true)"
     if [ "$floor_calls" -ne "$openrouter_calls" ]; then
-      echo "  FAIL  every OpenRouter resolver call must require exact floor 1.6.0: $relative"
+      echo "  FAIL  every OpenRouter resolver call must require exact floor $openrouter_floor: $relative"
       failures=1
     fi
   fi

@@ -14,6 +14,14 @@
 #   OPENROUTER_SYSTEM    optional system prompt (default: terse coding assistant)
 #   OPENROUTER_BASE      optional, default https://openrouter.ai/api/v1
 #   OPENROUTER_ZDR       1 -> no-train/no-retain providers (data_collection: deny)
+#   OPENROUTER_PROVIDER_SORT
+#                       price|throughput|latency|exacto; Kimi defaults to exacto
+#   OPENROUTER_PROVIDER_ORDER
+#                       optional comma-separated provider/endpoint slugs
+#   OPENROUTER_ALLOW_FALLBACKS
+#                       0|1 when provider order is set (default 1)
+#   OPENROUTER_RECEIPT_FILE
+#                       optional content-free JSON generation receipt path
 #
 # Exit codes:
 #   0  success   28 timeout   1 exhausted/error   2 bad args
@@ -39,6 +47,35 @@ done
 
 BASE="${OPENROUTER_BASE:-https://openrouter.ai/api/v1}"
 SYSTEM="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
+PROVIDER_ORDER="${OPENROUTER_PROVIDER_ORDER:-}"
+PROVIDER_SORT="${OPENROUTER_PROVIDER_SORT:-}"
+ALLOW_FALLBACKS="${OPENROUTER_ALLOW_FALLBACKS:-1}"
+
+case "$ALLOW_FALLBACKS" in
+  0|1) ;;
+  *) echo "### RUNNER FAILURE: OPENROUTER_ALLOW_FALLBACKS must be 0 or 1" >&2; exit 2 ;;
+esac
+case "$PROVIDER_SORT" in
+  ""|price|throughput|latency|exacto) ;;
+  *) echo "### RUNNER FAILURE: invalid OPENROUTER_PROVIDER_SORT" >&2; exit 2 ;;
+esac
+if [ -n "$PROVIDER_ORDER" ]; then
+  case "$PROVIDER_ORDER" in
+    *".."*|,*|*,|*,,*|*[!A-Za-z0-9._,/-]*)
+      echo "### RUNNER FAILURE: invalid OPENROUTER_PROVIDER_ORDER" >&2
+      exit 2
+      ;;
+  esac
+elif [ -z "$PROVIDER_SORT" ]; then
+  case "$MODEL" in
+    moonshotai/kimi-k3|moonshotai/kimi-k3-*|moonshotai/kimi-k3:*)
+      # OpenRouter's Exacto strategy continuously reorders providers using live
+      # quality signals. Explicit OPENROUTER_PROVIDER_ORDER remains available
+      # for reproducible evals and incident replay.
+      PROVIDER_SORT="exacto"
+      ;;
+  esac
+fi
 
 if [ "$PROMPT_ARG" = "-" ]; then PROMPT="$(cat)"; else PROMPT="$PROMPT_ARG"; fi
 
@@ -50,18 +87,51 @@ TO=""; command -v gtimeout >/dev/null 2>&1 && TO="gtimeout ${TIMEOUT}s"
 #   OPENROUTER_REQUIRE_PARAMS=1 (default) -> skip providers that don't support the
 #       requested params (e.g. tool calling) so agentic calls don't silently degrade.
 #   OPENROUTER_ZDR=1 -> only providers that do NOT train on / retain data (privacy).
-#   OPENROUTER_PROVIDER_SORT=throughput|latency|price -> bias provider choice.
+#   OPENROUTER_PROVIDER_SORT=throughput|latency|price|exacto -> bias provider choice.
+#   OPENROUTER_PROVIDER_ORDER=slug,slug -> deterministic preference order.
 build_provider() {
   jq -n \
     --argjson req "$([ "${OPENROUTER_REQUIRE_PARAMS:-1}" = "1" ] && echo true || echo false)" \
     --arg zdr "${OPENROUTER_ZDR:-0}" \
-    --arg sort "${OPENROUTER_PROVIDER_SORT:-}" '
+    --arg sort "$PROVIDER_SORT" \
+    --arg order "$PROVIDER_ORDER" \
+    --argjson allow "$([ "$ALLOW_FALLBACKS" = "1" ] && echo true || echo false)" '
     {require_parameters: $req}
     + (if $zdr == "1" then {data_collection: "deny", zdr: true} else {} end)
-    + (if $sort != "" then {sort: $sort} else {} end)'
+    + (if $order != ""
+       then {order: ($order | split(",")), allow_fallbacks: $allow}
+       elif $sort != ""
+       then {sort: $sort}
+       else {}
+       end)'
 }
 
 PROVIDER="$(build_provider)"   # provider prefs depend only on env -- compute once, reuse across primary + fallback
+
+write_receipt() {
+  local response_body="$1" requested_model="$2" receipt_tmp
+  [ -z "${OPENROUTER_RECEIPT_FILE:-}" ] && return 0
+  receipt_tmp="${OPENROUTER_RECEIPT_FILE}.tmp.$$"
+  (
+    umask 077
+    printf '%s' "$response_body" | jq \
+      --arg requested "$requested_model" '
+      {
+        schemaVersion: 1,
+        generationId: (.id // null),
+        created: (.created // null),
+        requestedModel: $requested,
+        responseModel: (.model // $requested),
+        servingProvider: (.provider // null),
+        usage: (.usage // null)
+      }' > "$receipt_tmp"
+  ) || {
+    rm -f "$receipt_tmp"
+    echo "### RUNNER FAILURE: could not write OpenRouter receipt" >&2
+    return 1
+  }
+  mv "$receipt_tmp" "$OPENROUTER_RECEIPT_FILE"
+}
 
 call() {
   local model="$1" body resp http rc
@@ -82,6 +152,7 @@ call() {
     echo "### RUNNER FAILURE ($model, HTTP $http): $(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null)" >&2
     return 1
   fi
+  write_receipt "$body" "$model" || return 1
   printf '%s' "$body" | jq -r '.choices[0].message.content // empty'
 }
 

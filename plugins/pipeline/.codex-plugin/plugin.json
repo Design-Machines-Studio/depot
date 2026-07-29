@@ -1,6 +1,6 @@
 {
   "name": "pipeline",
-  "version": "1.33.0",
+  "version": "1.34.0",
   "description": "Autonomous feature development pipeline with approved decision-depth profiles, bound behavioral verification contracts, bounded validation feedback, browser recovery, risk-tiered review, and isolated worktree execution",
   "author": {
     "name": "Design Machines",
@@ -163,7 +163,7 @@
     ]
   },
   "pluginDependencies": {
-    "dm-review": ">=1.46.0",
+    "dm-review": ">=1.47.0",
     "ned": ">=1.4.0",
     "workflow-kernel": ">=0.4.0"
   },
@@ -176,7 +176,7 @@
     "ghostwriter": ">=3.7.0",
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.6.0"
+    "openrouter": ">=1.7.0"
   },
   "interface": {
     "displayName": "Pipeline",

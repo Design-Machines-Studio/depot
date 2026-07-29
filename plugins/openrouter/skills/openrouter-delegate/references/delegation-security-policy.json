@@ -40,7 +40,9 @@
       "outputAuthority": "validated-unified-diff-within-owned-paths"
     },
     "mechanical-review": {
-      "contentValidation": "complete-diff-including-removed-lines",
+      "contentValidation": "complete-diff-partitioned-by-file-section-including-removed-lines",
+      "sensitiveSectionAction": "exclude-section-and-require-codex-coverage",
+      "emptyRemainder": "decline-disclosure",
       "outputAuthority": "review-text-only"
     },
     "artifact-review": {
@@ -64,6 +66,7 @@
   },
   "positiveRouting": {
     "intendedLanes": [
+      "security analysis with independent Codex sign-off",
       "style / formatting",
       "duplication",
       "pattern-recognition",

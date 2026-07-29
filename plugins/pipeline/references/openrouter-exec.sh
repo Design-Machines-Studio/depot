@@ -14,8 +14,8 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 MODE="run"
-MODEL="${OPENROUTER_EXEC_MODEL:-z-ai/glm-5.2}"
-FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
+MODEL="${OPENROUTER_EXEC_MODEL:-moonshotai/kimi-k3}"
+FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-z-ai/glm-5.2}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-180}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
@@ -71,7 +71,7 @@ elif [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ]; then
 fi
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.6.0 \
+    --minimum-version 1.7.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -81,7 +81,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     }
 else
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.6.0 \
+    --minimum-version 1.7.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -114,7 +114,8 @@ ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.allowed.XXXXXX")"
 PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.paths.XXXXXX")"
 MSG_FILE=""
 WRAPPER_STDERR="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.stderr.XXXXXX")"
-trap 'rm -f "$PATCH_FILE" "$PROMPT_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$MSG_FILE" "$WRAPPER_STDERR"' EXIT
+WRAPPER_RECEIPT="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.receipt.XXXXXX")"
+trap 'rm -f "$PATCH_FILE" "$PROMPT_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$MSG_FILE" "$WRAPPER_STDERR" "$WRAPPER_RECEIPT"' EXIT
 cat > "$PROMPT_FILE"
 [ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
@@ -132,6 +133,7 @@ fi
 
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
 if RAW_OUT="$(OPENROUTER_SYSTEM="$SYSTEM" OPENROUTER_ZDR="${OPENROUTER_ZDR:-0}" \
+    OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
     "$WRAPPER" "$MODEL" - "$TIMEOUT" "$FALLBACK_MODEL" < "$PROMPT_FILE" 2>"$WRAPPER_STDERR")"; then
   :
 else
@@ -145,6 +147,10 @@ if [ -n "$FALLBACK_MODEL" ] &&
     grep -Fq "falling back to $FALLBACK_MODEL" "$WRAPPER_STDERR"; then
   ACTUAL_MODEL="$FALLBACK_MODEL"
   FALLBACK_USED=true
+fi
+if [ -s "$WRAPPER_RECEIPT" ]; then
+  RECEIPT_MODEL="$(jq -r '.responseModel // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)"
+  [ -z "$RECEIPT_MODEL" ] || ACTUAL_MODEL="$RECEIPT_MODEL"
 fi
 
 printf '%s\n' "$RAW_OUT" > "$PATCH_FILE"
@@ -191,14 +197,18 @@ printf '%s\n\nImplementedBy: openrouter\nStructuralValidation: git diff --check 
 git commit -F "$MSG_FILE" >/dev/null
 
 FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')"
-# usage: the single-turn wrapper prints only model text (the diff), no usage envelope,
-# so exec-lane token spend is not measurable here. Emit null; the post-mortem treats the
-# OpenRouter exec bucket as best-effort/estimated (see run-postmortem-schema.md).
 python3 - "$(git rev-parse --short HEAD)" "$FILES_CHANGED" "$VERIFY_RESULT" \
   "$MODEL" "$ACTUAL_MODEL" "$FALLBACK_USED" "$BUNDLE_VERSION" \
-  "$BUNDLE_CLASS" "$BUNDLE_REASON" <<'PY'
+  "$BUNDLE_CLASS" "$BUNDLE_REASON" "$WRAPPER_RECEIPT" <<'PY'
 import json
 import sys
+
+provider_receipt = {}
+try:
+    with open(sys.argv[10], encoding="utf-8") as handle:
+        provider_receipt = json.load(handle)
+except (OSError, json.JSONDecodeError):
+    pass
 
 print(json.dumps({
     "requestedProvider": "openrouter",
@@ -218,12 +228,14 @@ print(json.dumps({
     "actualModel": sys.argv[5],
     "fallback": sys.argv[6] == "true",
     "fallbackReason": "primary-capacity" if sys.argv[6] == "true" else "none",
+    "generationId": provider_receipt.get("generationId"),
+    "servingProvider": provider_receipt.get("servingProvider"),
     "nativeVendorOriginInvariant": "passed",
     "bundleResolution": {
         "version": sys.argv[7],
         "cacheClass": sys.argv[8],
         "reason": sys.argv[9],
     },
-    "usage": None,
+    "usage": provider_receipt.get("usage"),
 }, indent=2))
 PY

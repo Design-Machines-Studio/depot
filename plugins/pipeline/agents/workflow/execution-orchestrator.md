@@ -122,7 +122,13 @@ These lanes are never focused-only and are never delegated to OpenRouter (see th
 
 ### Why this matters for OpenRouter routing
 
-The four mechanical review lanes (pattern-recognition, code-simplicity, doc-sync, test-coverage) route through OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is set. DeepSeek V4 is a model fallback inside that OpenRouter rail, not a separate plugin or credential. If you skip the skill invocation, the routing never engages. You MUST invoke the skill.
+The four mechanical review lanes (pattern-recognition, code-simplicity,
+doc-sync, test-coverage) plus Kimi-led security analysis route through
+OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is
+set. Kimi security analysis always pairs with independent Codex full-diff
+sign-off. GLM-5.2 and DeepSeek V4 are model fallbacks inside the OpenRouter
+rail, not separate plugins or credentials. If you skip the skill invocation,
+the routing never engages. You MUST invoke the skill.
 
 ## Codex Native Adapter Parity
 

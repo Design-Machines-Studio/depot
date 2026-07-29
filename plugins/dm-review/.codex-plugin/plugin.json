@@ -1,6 +1,6 @@
 {
   "name": "dm-review",
-  "version": "1.46.0",
+  "version": "1.47.0",
   "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
   "author": {
     "name": "Design Machines",
@@ -318,7 +318,7 @@
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.6.0"
+    "openrouter": ">=1.7.0"
   },
   "interface": {
     "displayName": "DM Review",

@@ -12,6 +12,7 @@ CONTENT_COUNT=0
 DIFF_FILE=""
 OUTPUT_PATHS=""
 OUTPUT_DIFF=""
+OUTPUT_DECLINED_PATHS=""
 MODE="execution"
 
 while [ $# -gt 0 ]; do
@@ -34,6 +35,9 @@ while [ $# -gt 0 ]; do
     --output-diff)
       [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
       OUTPUT_DIFF="$2"; shift 2;;
+    --output-declined-paths)
+      [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
+      OUTPUT_DECLINED_PATHS="$2"; shift 2;;
     --mode)
       [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
       MODE="$2"; shift 2;;
@@ -67,7 +71,8 @@ if [ "$MODE" = "artifact-delegation" ]; then
     [ -z "$CHANGED_FILES" ] &&
     [ -z "$DIFF_FILE" ] &&
     [ -z "$OUTPUT_PATHS" ] &&
-    [ -z "$OUTPUT_DIFF" ] || {
+    [ -z "$OUTPUT_DIFF" ] &&
+    [ -z "$OUTPUT_DECLINED_PATHS" ] || {
       echo "delegation-boundary: input-invalid:artifact-delegation-authority" >&2
       exit 2
     }
@@ -79,7 +84,8 @@ else
 fi
 
 python3 - "$POLICY" "$CHANGED_FILES" "$DIFF_FILE" "$OUTPUT_PATHS" \
-  "$OUTPUT_DIFF" "$MODE" ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
+  "$OUTPUT_DIFF" "$OUTPUT_DECLINED_PATHS" "$MODE" \
+  ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
 import collections
 import json
 import math
@@ -89,7 +95,16 @@ import shlex
 import sys
 from pathlib import Path, PurePosixPath
 
-policy_path, changed_path, diff_path, output_path, output_diff_path, mode, *content_paths = sys.argv[1:]
+(
+    policy_path,
+    changed_path,
+    diff_path,
+    output_path,
+    output_diff_path,
+    output_declined_path,
+    mode,
+    *content_paths,
+) = sys.argv[1:]
 
 
 def fail(code, reason):
@@ -191,7 +206,7 @@ def high_confidence(value):
     return classes >= 2 or entropy(value) >= 3.5
 
 
-def scan_disclosure(text):
+def disclosure_reason(text):
     key_block = re.compile(
         r"(?m)^[ +\-]?-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----\r?\n"
         r"((?:[ +\-]?[A-Za-z0-9+/=]+\r?\n)+)"
@@ -202,18 +217,18 @@ def scan_disclosure(text):
             line.lstrip(" +-") for line in match.group(2).splitlines()
         )
         if len(body) >= 32:
-            fail(3, "private-key")
+            return "private-key"
 
     for match in re.finditer(
         r"(?<![A-Za-z0-9])(?:sk-or-v1-|sk-ant-|ghp_|github_pat_|AKIA)([A-Za-z0-9_./+=:-]{16,})",
         text,
     ):
         if not placeholder(match.group(0)):
-            fail(3, "high-confidence-credential")
+            return "high-confidence-credential"
 
     for match in re.finditer(r"\bAuthorization\s*:\s*Bearer\s+([^\s,;]+)", text, re.I):
         if high_confidence(match.group(1)):
-            fail(3, "access-token")
+            return "access-token"
 
     assignment = re.compile(
         r"""(?ix)
@@ -229,7 +244,7 @@ def scan_disclosure(text):
     )
     for match in assignment.finditer(text):
         if high_confidence(match.group(2)):
-            fail(3, "high-confidence-credential")
+            return "high-confidence-credential"
 
     for match in re.finditer(
         r"\b[a-z][a-z0-9+.-]*://([^/\s:@]+):([^/\s@]*)@([^/\s]+)",
@@ -238,14 +253,21 @@ def scan_disclosure(text):
     ):
         password = match.group(2)
         if password and not placeholder(password):
-            fail(3, "authenticated-dsn")
+            return "authenticated-dsn"
 
     if re.search(
         r"(?im)^\s*(?:data[_ -]?classification|classification|privacy[_ -]?class)"
         r"\s*[:=]\s*(?:private|regulated)\b",
         text,
     ):
-        fail(3, "classified-private-data")
+        return "classified-private-data"
+    return None
+
+
+def scan_disclosure(text):
+    reason = disclosure_reason(text)
+    if reason:
+        fail(3, reason)
 
 
 def parse_header_path(line, prefix):
@@ -275,6 +297,7 @@ def parse_diff(text):
         fail(2, "headerless-diff")
 
     parsed = set()
+    sections = []
     for position, start in enumerate(starts):
         end = starts[position + 1] if position + 1 < len(starts) else len(lines)
         section = lines[start:end]
@@ -343,8 +366,10 @@ def parse_diff(text):
                 fail(2, "hunk-count-mismatch")
         if not changed_lines:
             fail(2, "empty-diff")
-        parsed.update((git_old, git_new))
-    return parsed
+        section_paths = {git_old, git_new}
+        parsed.update(section_paths)
+        sections.append((section_paths, "".join(section)))
+    return parsed, sections
 
 
 if mode == "artifact-delegation":
@@ -367,10 +392,12 @@ for path in changed:
     check_containment(path)
 
 parsed = set()
+sections = []
+declined_paths = set()
 diff_text = ""
 if diff_path:
     diff_text = read_text(diff_path, "diff-unreadable")
-    parsed = parse_diff(diff_text)
+    parsed, sections = parse_diff(diff_text)
     if not parsed.issubset(changed):
         fail(2, "undeclared-output-path")
 elif mode == "mechanical-review":
@@ -379,8 +406,24 @@ elif mode == "mechanical-review":
 for content_path in content_paths:
     scan_disclosure(read_text(content_path, "content-unreadable"))
 if diff_text:
-    # Scan the complete unified diff, including removed lines and context.
-    scan_disclosure(diff_text)
+    if mode == "mechanical-review":
+        safe_sections = []
+        safe_paths = set()
+        for section_paths, section_text in sections:
+            if disclosure_reason(section_text):
+                declined_paths.update(section_paths)
+                continue
+            safe_sections.append(section_text)
+            safe_paths.update(section_paths)
+        if not safe_sections:
+            fail(3, "no-safe-review-remainder")
+        diff_text = "".join(safe_sections)
+        parsed = safe_paths
+        # Defense in depth: the exact emitted remainder must independently pass.
+        scan_disclosure(diff_text)
+    else:
+        # Scan the complete unified diff, including removed lines and context.
+        scan_disclosure(diff_text)
 
 if output_path:
     try:
@@ -396,4 +439,13 @@ if output_diff_path:
         Path(output_diff_path).write_text(diff_text, encoding="utf-8")
     except OSError:
         fail(2, "output-diff")
+if output_declined_path:
+    if mode != "mechanical-review":
+        fail(2, "declined-paths-mode")
+    try:
+        with open(output_declined_path, "wb") as output:
+            for path in sorted(declined_paths):
+                output.write(path.encode("utf-8") + b"\0")
+    except OSError:
+        fail(2, "output-declined-paths")
 PY

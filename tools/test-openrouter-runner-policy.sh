@@ -43,6 +43,7 @@ expect_rc 2 'native-vendor-origin invariant' 'mixed-case exec origin' \
   "$EXEC_RUNNER" --dry-run --model Anthropic/claude-test
 
 printf '%s\n' 'plugins/openrouter/README.md' > "$FIXTURE_ROOT/safe-files"
+printf '%s\n' 'plugins/openrouter/README.md' '.airlift/uncommitted.patch' > "$FIXTURE_ROOT/mixed-files"
 printf '%s\n' 'auth/session.go' 'federation/trust.go' 'deploy/app.service' > "$FIXTURE_ROOT/security-files"
 printf '%s\n' 'plugins/openrouter/file with spaces.md' > "$FIXTURE_ROOT/quoted-files"
 printf '%s\n' 'docs/outside.md' > "$FIXTURE_ROOT/outside-files"
@@ -101,6 +102,20 @@ diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
 @@ -1 +1 @@
 -OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnop1234567890
 +OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+EOF
+cat > "$FIXTURE_ROOT/mixed-secret.diff" <<'EOF'
+diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
+--- a/plugins/openrouter/README.md
++++ b/plugins/openrouter/README.md
+@@ -1 +1 @@
+-old
++safe documentation change
+diff --git a/.airlift/uncommitted.patch b/.airlift/uncommitted.patch
+--- a/.airlift/uncommitted.patch
++++ b/.airlift/uncommitted.patch
+@@ -1 +1 @@
+-old snapshot
++OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnop1234567890
 EOF
 cat > "$FIXTURE_ROOT/token.diff" <<'EOF'
 diff --git a/plugins/openrouter/README.md b/plugins/openrouter/README.md
@@ -214,15 +229,35 @@ printf '%s\n' '+new without a diff header' > "$FIXTURE_ROOT/headerless.diff"
     --diff-file "$FIXTURE_ROOT/placeholder.diff"
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" \
     --diff-file "$FIXTURE_ROOT/private-key-header.diff"
+  "$BOUNDARY" --mode mechanical-review --policy "$POLICY" \
+    --changed-files "$FIXTURE_ROOT/mixed-files" \
+    --diff-file "$FIXTURE_ROOT/mixed-secret.diff" \
+    --output-paths "$FIXTURE_ROOT/mixed.paths" \
+    --output-diff "$FIXTURE_ROOT/mixed.out.diff" \
+    --output-declined-paths "$FIXTURE_ROOT/mixed.declined.paths"
 )
 cmp "$FIXTURE_ROOT/security.diff" "$FIXTURE_ROOT/security.out.diff"
 python3 - "$FIXTURE_ROOT/safe.paths" <<'PY'
 import sys
 assert open(sys.argv[1], "rb").read() == b"plugins/openrouter/README.md\0"
 PY
+python3 - "$FIXTURE_ROOT/mixed.paths" "$FIXTURE_ROOT/mixed.declined.paths" "$FIXTURE_ROOT/mixed.out.diff" <<'PY'
+import sys
+from pathlib import Path
+
+assert Path(sys.argv[1]).read_bytes() == b"plugins/openrouter/README.md\0"
+assert Path(sys.argv[2]).read_bytes() == b".airlift/uncommitted.patch\0"
+outbound = Path(sys.argv[3]).read_text(encoding="utf-8")
+assert "safe documentation change" in outbound
+assert ".airlift/uncommitted.patch" not in outbound
+assert "sk-or-v1-" not in outbound
+PY
 
 expect_rc 3 'disclosure-declined:high-confidence-credential' 'removed secret' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/removed-secret.diff"
+expect_rc 3 'disclosure-declined:no-safe-review-remainder' 'all-sensitive mechanical review' \
+  "$BOUNDARY" --mode mechanical-review --policy "$POLICY" \
+  --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/removed-secret.diff"
 expect_rc 3 'disclosure-declined:access-token' 'real bearer token' \
   "$BOUNDARY" --policy "$POLICY" --changed-files "$FIXTURE_ROOT/safe-files" --diff-file "$FIXTURE_ROOT/token.diff"
 expect_rc 3 'disclosure-declined:high-confidence-credential' 'AWS secret access key diff' \
@@ -362,7 +397,7 @@ cat > "$FIXTURE_ROOT/fake-workflow-kernel.sh" <<'EOF'
 set -euo pipefail
 [ "${1:-}" = "resolve-plugin-bundle" ] || exit 2
 cat <<'JSON'
-{"selected_root":"~/openrouter-bundle","version":"1.6.0","cache_class":"fixture","reason":"offline-test"}
+{"selected_root":"~/openrouter-bundle","version":"1.7.0","cache_class":"fixture","reason":"offline-test"}
 JSON
 EOF
 chmod +x "$FIXTURE_ROOT/fake-workflow-kernel.sh"
@@ -385,14 +420,14 @@ cmp "$FIXTURE_ROOT/expected.prompt" "$FIXTURE_ROOT/actual.prompt"
 jq -e '.implementedBy == "openrouter" and .status == "committed"
   and (.verification | startswith("deferred_to_native_reviewer:"))' \
   "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
-jq -e '.requestedModel == "z-ai/glm-5.2" and .actualModel == "z-ai/glm-5.2" and .fallback == false' \
+jq -e '.requestedModel == "moonshotai/kimi-k3" and .actualModel == "moonshotai/kimi-k3" and .fallback == false' \
   "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
 git -C "$FIXTURE_ROOT/exec-repo" diff --quiet
 
 cat > "$FIXTURE_ROOT/wrapper-fallback.sh" <<'EOF'
 #!/usr/bin/env bash
 cat >/dev/null
-printf '%s\n' 'provider capacity; falling back to deepseek/deepseek-v4-pro' >&2
+printf '%s\n' 'provider capacity; falling back to z-ai/glm-5.2' >&2
 cat <<'DIFF'
 diff --git a/auth/session.go b/auth/session.go
 --- a/auth/session.go
@@ -408,12 +443,12 @@ cp "$FIXTURE_ROOT/wrapper-fallback.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
   cd "$FIXTURE_ROOT/exec-repo"
   env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
     OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    OPENROUTER_EXEC_FALLBACK_MODEL=deepseek/deepseek-v4-pro \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
     OPENROUTER_EXEC_VERIFY_CMD='grep -Fq "fallback middleware" auth/session.go' \
     OPENROUTER_EXEC_COMMIT_MSG='test: fallback receipt' \
     "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt" > "$FIXTURE_ROOT/fallback-receipt.json"
 )
-jq -e '.requestedModel == "z-ai/glm-5.2" and .actualModel == "deepseek/deepseek-v4-pro" and .fallback == true' \
+jq -e '.requestedModel == "moonshotai/kimi-k3" and .actualModel == "z-ai/glm-5.2" and .fallback == true' \
   "$FIXTURE_ROOT/fallback-receipt.json" >/dev/null
 
 printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' > "$FIXTURE_ROOT/secret.prompt"
@@ -462,6 +497,8 @@ grep -Fq 'os.path.realpath(sys.argv[1])' "$RUNNER"
 grep -Fq 'delegation-boundary.sh' "$RUNNER"
 grep -Fq 'RUNNER DECLINED -- SENSITIVE CONTENT' "$RUNNER"
 grep -Fq 'independent Codex security' "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
+grep -Fq 'mcp-control-plane.md' "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
+grep -Fq 'OPENROUTER_RECEIPT_FILE' "$WRAPPER"
 grep -Fq 'export PATH=' "$BOUNDARY"
 grep -Fq 'artifact-delegation' "$BOUNDARY"
 grep -Fq 'git apply --check' "$EXEC_RUNNER"
