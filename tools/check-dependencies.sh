@@ -262,8 +262,8 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
     errors.append("workflow-kernel must remain a leaf with no dependencies")
 
 consumer_floors = {
-    "pipeline": ">=0.4.0",
-    "dm-review": ">=0.4.0",
+    "pipeline": ">=0.5.0",
+    "dm-review": ">=0.5.0",
 }
 for consumer, expected in consumer_floors.items():
     manifest = manifests.get(consumer)

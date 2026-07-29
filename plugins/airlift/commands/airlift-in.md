@@ -55,7 +55,7 @@ For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name rem
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
-"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.4.0 >/dev/null || {
+"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.5.0 >/dev/null || {
   echo "airlift-openrouter: kernel-incompatible" >&2; exit 1;
 }
 BUNDLE_DIR="${BUNDLE_DIR:-.airlift}"
