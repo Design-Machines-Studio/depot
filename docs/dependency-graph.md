@@ -47,7 +47,7 @@ graph LR
 
 | Consumer | Dependency | Type | Required floor |
 |---|---|---|---|
-| airlift | openrouter | optional | `>=1.6.0` |
+| airlift | openrouter | optional | `>=1.7.0` |
 | airlift | workflow-kernel | optional | `>=0.4.0` |
 | assembly | council | optional | `>=1.5.0` |
 | assembly | design-machines | optional | `>=1.3.0` |
@@ -61,10 +61,10 @@ graph LR
 | dm-review | workflow-kernel | required | `>=0.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |
-| dm-review | openrouter | optional | `>=1.6.0` |
+| dm-review | openrouter | optional | `>=1.7.0` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.46.0` |
+| pipeline | dm-review | required | `>=1.47.0` |
 | pipeline | ned | required | `>=1.4.0` |
 | pipeline | workflow-kernel | required | `>=0.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
@@ -75,7 +75,7 @@ graph LR
 | pipeline | ghostwriter | optional | `>=3.7.0` |
 | pipeline | superpowers | optional | `>=1.0.0` |
 | pipeline | airlift | optional | `>=1.0.0` |
-| pipeline | openrouter | optional | `>=1.6.0` |
+| pipeline | openrouter | optional | `>=1.7.0` |
 | project-manager | ned | required | `>=1.4.0` |
 | project-manager | design-machines | required | `>=1.3.0` |
 | project-manager | ghostwriter | required | `>=3.7.0` |

@@ -239,9 +239,9 @@ A task benefits from provider diversity, large context, or better quality-per-do
 ### How it works
 
 1. A lightweight runner is dispatched as part of a normal Multi-Agent Dispatch.
-2. It applies the OpenRouter-owned path and content security policy, then constructs a self-contained prompt.
-3. It invokes `openrouter-wrapper.sh`, which calls the OpenRouter HTTP API with a timeout and optional single fallback model.
-4. The wrapper extracts `.choices[0].message.content`; the runner validates that text directly and formats it for the consolidator.
+2. It applies the OpenRouter-owned content boundary, constructs a self-contained prompt, and snapshots the exact ordered payload bytes.
+3. After the user approves that payload digest and an immediate unchanged-byte verification succeeds, it invokes `openrouter-wrapper.sh` with a timeout and optional single fallback model.
+4. The wrapper requires response model provenance, extracts `.choices[0].message.content`, and writes a content-free receipt; the runner validates and formats the text.
 5. On timeout, refusal, empty output, or API failure, the lane reports a structured failure and follows its native fallback policy.
 
 ### Key constraint
@@ -252,7 +252,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 `plugins/openrouter/` wraps external model APIs behind one provider and credential. Agents using this pattern:
 
-- **openrouter-bulk-analyst** -- sends the full untruncated diff to GLM-5.2 with a DeepSeek V4 model fallback whenever policy selects the OpenRouter bulk lane.
+- **openrouter-bulk-analyst** -- supplies large-context criteria to the generic runner, which sends eligible full-diff sections to Kimi K3 with a GLM-5.2 capacity fallback whenever policy selects the bulk lane.
 - **openrouter-agent-runner** -- routes dm-review's mechanical agents through OpenRouter models when `OPENROUTER_API_KEY` is set.
 - The pipeline cascade (`cascade-dispatch.sh`) drives the OpenRouter wrapper as a one-shot rung for config/doc generation and second-opinion analysis.
 
@@ -263,7 +263,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 | API or wrapper timeout | Report a structured timeout and invoke the lane fallback |
 | Primary model HTTP 429/503 | Retry the configured single fallback model; the pipeline cascade owns any longer ladder |
 | Empty output or refusal | Report `RUNNER FAILURE`; never issue a clean review receipt |
-| Key, wrapper, runner, or security policy unavailable | Mark OpenRouter unavailable at source detection and run the native fallback |
+| Key, wrapper, runner, content boundary, or payload-authorization helper unavailable | Mark OpenRouter unavailable at source detection and run the native fallback |
 
 ---
 

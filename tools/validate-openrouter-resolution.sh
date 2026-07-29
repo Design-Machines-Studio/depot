@@ -17,13 +17,13 @@ consumers=(
   plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md
   plugins/openrouter/skills/openrouter-delegate/references/prompt-templates.md
   plugins/openrouter/agents/workflow/openrouter-agent-runner.md
-  plugins/openrouter/agents/review/openrouter-bulk-analyst.md
   plugins/dm-review/skills/review/SKILL.md
   plugins/airlift/commands/airlift-in.md
   plugins/airlift/prompts/airlift-in.md
   plugins/pipeline/references/cascade-dispatch.sh
   plugins/pipeline/references/openrouter-exec.sh
   plugins/pipeline/agents/workflow/execution-orchestrator.md
+  plugins/pipeline/references/openrouter-authorization-contract.md
 )
 
 if [ "$MODE" = "--all" ]; then
@@ -54,9 +54,6 @@ for relative in "${consumers[@]}"; do
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
     openrouter_floor="1.7.0"
-    case "$relative" in
-      plugins/airlift/*) openrouter_floor="1.6.0" ;;
-    esac
     floor_calls="$(grep -Fc -- "--minimum-version $openrouter_floor" "$file" || true)"
     if [ "$floor_calls" -ne "$openrouter_calls" ]; then
       echo "  FAIL  every OpenRouter resolver call must require exact floor $openrouter_floor: $relative"
@@ -85,6 +82,13 @@ for relative in "${consumers[@]}"; do
       failures=1
     }
   fi
+  if grep -Fq 'skills/openrouter-delegate/references/payload-authorization.sh' "$file"; then
+    grep -Fq -- '--required-executable skills/openrouter-delegate/references/payload-authorization.sh' "$file" &&
+    ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/payload-authorization.sh' "$file" || {
+      echo "  FAIL  OpenRouter payload authorization is not declared executable-only: $relative"
+      failures=1
+    }
+  fi
   if [ "$pipeline_calls" -gt 0 ]; then
     for executable in \
       references/cascade-dispatch.sh \
@@ -97,6 +101,61 @@ for relative in "${consumers[@]}"; do
         failures=1
       }
     done
+  fi
+done
+
+for relative in \
+  plugins/pipeline/commands/pipeline.md \
+  plugins/pipeline/skills/research/SKILL.md \
+  plugins/pipeline/skills/assess/SKILL.md
+do
+  file="$ROOT/$relative"
+  grep -Fq -- '--plugin pipeline' "$file" &&
+  grep -Fq -- '--minimum-version 1.34.0' "$file" &&
+  grep -Fq -- '--required-asset' "$file" &&
+  grep -Fq 'references/openrouter-authorization-contract.md' "$file" &&
+  grep -Fq -- '--active-host' "$file" &&
+  grep -Fq 'PAYLOAD APPROVAL REQUIRED' "$file" &&
+  ! grep -Fq 'plugins/pipeline/references/openrouter-authorization-contract.md' "$file" &&
+  ! grep -Fq 'compute each file'\''s SHA-256' "$file" || {
+    echo "  FAIL  automated Pipeline OpenRouter caller lacks the shared two-pass contract: $relative"
+    failures=1
+  }
+done
+
+bulk_criteria="$ROOT/plugins/openrouter/agents/review/openrouter-bulk-analyst.md"
+grep -Fq 'generic `openrouter-agent-runner` is the only execution path' "$bulk_criteria" &&
+! grep -Fq 'resolve-plugin-bundle' "$bulk_criteria" &&
+! grep -Fq 'openrouter-wrapper.sh' "$bulk_criteria" || {
+  echo "  FAIL  OpenRouter bulk analyst must remain criteria-only"
+  failures=1
+}
+
+for relative in \
+  plugins/openrouter/commands/openrouter.md \
+  plugins/openrouter/agents/workflow/openrouter-agent-runner.md \
+  plugins/pipeline/references/cascade-dispatch.sh \
+  plugins/pipeline/references/openrouter-exec.sh \
+  plugins/airlift/commands/airlift-in.md \
+  plugins/airlift/prompts/airlift-in.md
+do
+  file="$ROOT/$relative"
+  grep -Fq 'payload-authorization.sh' "$file" &&
+  grep -Fq ' verify ' "$file" || {
+    echo "  FAIL  wrapper consumer lacks byte-bound authorization: $relative"
+    failures=1
+  }
+done
+for relative in \
+  plugins/openrouter/skills/openrouter-delegate/SKILL.md \
+  plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md \
+  plugins/openrouter/skills/openrouter-delegate/references/prompt-templates.md \
+  plugins/openrouter/skills/openrouter-delegate/references/model-selection.md
+do
+  file="$ROOT/$relative"
+  if grep -Eq 'bash +"\$WRAPPER(_PATH)?"' "$file"; then
+    echo "  FAIL  documentation teaches an unauthorized raw-wrapper call: $relative"
+    failures=1
   fi
 done
 

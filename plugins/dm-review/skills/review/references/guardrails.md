@@ -58,7 +58,10 @@ Each agent runs in its own context. They don't share a budget.
 10. a11y-html-reviewer (HIGH -- legal compliance)
 11. go-build-verifier (HIGH -- catches compilation failures)
 
-Core agents (NEVER dropped): security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer.
+Core criteria are never dropped. Required logical lanes are
+security-auditor-codex-signoff; security-auditor-openrouter when selected;
+architecture-reviewer; code-simplicity-reviewer;
+pattern-recognition-specialist; and doc-sync-reviewer.
 
 ---
 

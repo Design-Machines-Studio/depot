@@ -65,16 +65,18 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.7.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 \
+      --minimum-version 1.7.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
   fi
 }
 BUNDLE_JSON=$(resolve_bundle) || {
@@ -85,6 +87,7 @@ case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) echo
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+AUTHORIZATION="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 RESUME_FILE="$BUNDLE_DIR/RESUME_PROMPT.md"
 HANDOFF_FILE="$BUNDLE_DIR/HANDOFF.md"
 SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
@@ -93,6 +96,7 @@ SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
 trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
 RESUME_SNAPSHOT="$SNAPSHOT_DIR/RESUME_PROMPT.md"
 HANDOFF_SNAPSHOT="$SNAPSHOT_DIR/HANDOFF.md"
+AUTHORIZATION_RECEIPT="$SNAPSHOT_DIR/payload-authorization.json"
 "$WORKFLOW_KERNEL" snapshot-files \
   --source-root "$BUNDLE_DIR" \
   --destination-root "$SNAPSHOT_DIR" \
@@ -109,6 +113,21 @@ else
   echo "airlift-openrouter: boundary-invalid" >&2
   exit 2
 fi
+PAYLOAD_SHA256=$("$AUTHORIZATION" snapshot \
+  --output "$AUTHORIZATION_RECEIPT" \
+  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT")
+```
+
+Pause and ask the user to authorize disclosure of the exact ordered resume
+payload identified by `PAYLOAD_SHA256`. Set `approved_payload_sha256` only from
+that response. If the user declines, record
+`airlift-openrouter: host-disclosure-declined` and continue locally.
+Immediately before network contact:
+
+```bash
+"$AUTHORIZATION" verify --manifest "$AUTHORIZATION_RECEIPT" \
+  --approved-sha256 "$approved_payload_sha256" \
+  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"
 OPENROUTER_SYSTEM="$(cat "$RESUME_SNAPSHOT")" \
   bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
 ```
@@ -118,7 +137,7 @@ descriptor-relatively with no-follow semantics, accepts only a stable,
 single-link regular file owned by the current account, and creates each private
 snapshot with mode `0600`. This makes the screened bytes exactly the bytes
 passed to the wrapper without allowing a bundle symlink or concurrent pathname
-swap to redirect disclosure. The boundary call is the final action before
-wrapper invocation. A decline, malformed boundary, missing coherent bundle, or
-snapshot failure stops before wrapper/network contact and remains a distinct
-receipt outcome.
+swap to redirect disclosure. The unchanged-byte authorization verification is
+the final action before wrapper invocation. A user decline, boundary decline,
+malformed input, missing coherent bundle, or snapshot failure stops before
+wrapper/network contact and remains a distinct receipt outcome.

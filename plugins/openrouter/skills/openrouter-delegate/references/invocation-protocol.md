@@ -37,6 +37,7 @@ resolve_bundle() {
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
@@ -44,6 +45,7 @@ resolve_bundle() {
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   fi
 }
@@ -53,22 +55,27 @@ case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 SECURITY_POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-[ -x "$WRAPPER_PATH" ] && [ -r "$SECURITY_POLICY_PATH" ] && [ -x "$BOUNDARY_PATH" ] || exit 1
+AUTHORIZATION_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
+[ -x "$WRAPPER_PATH" ] && [ -r "$SECURITY_POLICY_PATH" ] &&
+  [ -x "$BOUNDARY_PATH" ] && [ -x "$AUTHORIZATION_PATH" ] || exit 1
 ```
 
 Persist only `version`, `cache_class`, and `reason` from the resolver receipt. `selected_root` is for immediate local use and must not enter public durable receipts.
 
 ## How to Invoke
 
-```bash
-# Kimi K3, explicit 120s timeout, GLM-5.2 rate-limit fallback (wrapper default timeout is 90s)
-bash "$WRAPPER_PATH" "moonshotai/kimi-k3" "your prompt" 120 "z-ai/glm-5.2"
+Use the canonical `/openrouter` workflow, which applies the content boundary,
+exact-payload user approval, unchanged-byte verification, and receipt handling
+before it reaches this low-level wrapper:
 
-# Custom system prompt (env), opt-in ZDR, prompt via stdin (large content)
-echo "large diff content" | OPENROUTER_ZDR=1 \
-  OPENROUTER_SYSTEM="You are a senior code reviewer." \
-  bash "$WRAPPER_PATH" "moonshotai/kimi-k3" - 180 "z-ai/glm-5.2"
+```text
+/openrouter --model moonshotai/kimi-k3 your prompt
+/openrouter --model z-ai/glm-5.2 analyze this bounded mechanical change
 ```
+
+The positional wrapper syntax above is an implementation interface, not an
+authorization boundary. New callers must implement the full protocol in
+Payload-Specific Host Authorization before invoking it.
 
 ## Environment Variables
 
@@ -79,8 +86,9 @@ echo "large diff content" | OPENROUTER_ZDR=1 \
 - `OPENROUTER_REQUIRE_PARAMS` (default `1`): skip providers that do not support the requested params (keeps agentic calls from silently degrading).
 - `OPENROUTER_PROVIDER_SORT` (`throughput|latency|price|exacto`): bias provider selection. Kimi defaults to `exacto` when neither sort nor order is supplied.
 - `OPENROUTER_PROVIDER_ORDER`: optional comma-separated provider or exact endpoint slugs. When present, it overrides sort.
+- `OPENROUTER_FALLBACK_PROVIDER_ORDER`: optional provider/endpoint order for a different fallback model. The primary order is never inherited across model identities.
 - `OPENROUTER_ALLOW_FALLBACKS` (`0|1`, default `1`): whether an explicit provider order may fall through to other eligible providers.
-- `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON receipt containing generation ID, response model, serving provider when returned, and usage. Prompt and completion content are never written to this receipt.
+- `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON receipt containing generation ID, requested/attempted/response models, fallback use, serving-provider provenance, and usage. Prompt and completion content are never written to this receipt.
 
 ## Security Hardening
 
@@ -96,16 +104,16 @@ the direct API key's workspace.
 
 ## Payload-Specific Host Authorization
 
-Some hosts require disclosure approval for the exact outbound payload even
-after the user has granted general OpenRouter permission. Treat that as a
-separate host control:
+Every workflow requires user disclosure approval for the exact outbound
+payload. Treat it as byte-bound authority, separate from network permission:
 
 1. Run `delegation-boundary.sh` first and materialize the exact eligible system
    and user prompt bytes in private temporary files.
-2. Compute SHA-256 for each file and request approval for the complete batch of
-   exact files and hashes in one prompt.
-3. Reuse the approval only while those hashes remain unchanged. A regenerated
-   or modified payload needs fresh authorization.
+2. Run `payload-authorization.sh snapshot` over the ordered files and request
+   approval for its content-free combined `payloadSha256`.
+3. Immediately before transmission, run `payload-authorization.sh verify` with
+   the user-approved digest and the same ordered files. Any mutation,
+   reordering, or membership change requires fresh authorization.
 4. Never retry around a denial or broaden a file-specific authorization. Record
    `host_disclosure_declined` and fall back to Codex.
 
@@ -141,7 +149,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 ```json
 {
   "model": "moonshotai/kimi-k3",
-  "provider": { "require_parameters": true, "data_collection": "deny" },
+  "provider": { "require_parameters": true, "sort": "exacto" },
   "messages": [
     {"role": "system", "content": "..."},
     {"role": "user", "content": "..."}

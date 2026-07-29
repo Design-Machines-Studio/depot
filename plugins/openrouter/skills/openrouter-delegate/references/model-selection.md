@@ -4,13 +4,16 @@ Decision table for choosing the right OpenRouter model for each delegation task.
 
 ## Available Models
 
-Prices are the live OpenRouter catalog snapshot from 2026-07-28, in USD per million input/output tokens; re-check before long paid runs.
+Prices below are a checked-in planning snapshot from 2026-07-28, in USD per
+million input/output tokens; they are not current telemetry. Before a paid or
+policy-changing run, obtain a live MCP receipt with `observedAt` and `expiresAt`
+no more than 15 minutes apart and use it only before expiry.
 
 | Slug | Name | Input / output | Context | Quality and role |
 |------|------|----------------|---------|------------------|
 | `moonshotai/kimi-k3` | Kimi K3 | $3 / $15; $0.30 cache read | 1,048,576 | AA intelligence 57.1 / coding 76.2 / agentic 50.1; quality-first security and bulk-analysis head; reasoning efforts low/high/max |
 | `x-ai/grok-4.5` | Grok 4.5 | $2 / $6 | 500K | AA 54; near-frontier value fallback |
-| `z-ai/glm-5.2` | GLM-5.2 | about $0.91 / $2.86 | 1M | AA 51; mechanical and bulk quality-per-dollar default |
+| `z-ai/glm-5.2` | GLM-5.2 | about $0.91 / $2.86 | 1M | AA 51; lightweight mechanical default and Kimi capacity fallback |
 | `meta/muse-spark-1.1` | Muse Spark 1.1 | $1.25 / $4.25 | 1M | AA 51; multimodal frontier value |
 | `google/gemini-3.5-flash` | Gemini 3.5 Flash | $1.50 / $9 | 1M | AA 50; multimodal frontier tail |
 | `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro | $0.435 / $0.87 | 1M | AA 44; cheap code-analysis fallback through OpenRouter |
@@ -60,14 +63,15 @@ reproducible eval or incident replay, set an explicit endpoint order:
 ```bash
 OPENROUTER_PROVIDER_ORDER=baseten/fp8,moonshotai/mxfp4 \
 OPENROUTER_ALLOW_FALLBACKS=0 \
-bash "$WRAPPER_PATH" moonshotai/kimi-k3 - 180
+/openrouter --model moonshotai/kimi-k3 "<approved evaluation prompt>"
 ```
 
 `baseten/fp8` and `moonshotai/mxfp4` were the strongest-uptime standard-price
 routes in the inspected snapshot; they are examples, not timeless defaults.
 Refresh `list-model-endpoints` and `list-providers` before changing a durable
-order. An explicit order applies to every candidate in one wrapper invocation;
-omit a model fallback when its providers are not compatible with that order.
+order. A primary-specific order is not reused for a different fallback model;
+set `OPENROUTER_FALLBACK_PROVIDER_ORDER` when a reproducible fallback endpoint
+order is also required.
 The response model, serving provider, generation ID, and usage belong in
 the call receipt so an alias such as `moonshotai/kimi-k3` remains reproducible
 after its canonical dated slug advances.

@@ -105,20 +105,23 @@ if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
     --minimum-version 1.7.0 --active-host "$ACTIVE_HOST" \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md)
+    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
+    --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
     --minimum-version 1.7.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md)
+    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
+    --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
 fi
 BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 [ -x "$WRAPPER_PATH" ] || exit 1
 
-# Verify authentication (privacy-pinned)
-OPENROUTER_ZDR=1 bash "$WRAPPER_PATH" "z-ai/glm-5.2" "test" 30
+# Verify the installed low-level assets without transmitting data. Use the
+# canonical /openrouter workflow for an authorized live authentication probe.
+test -x "$WRAPPER_PATH"
 ```
 
 The invoking session must have Bash permissions for `curl`. If the first invocation is blocked by permissions, report to the user and skip gracefully. Never commit `OPENROUTER_API_KEY` -- keep it in environment or settings only.

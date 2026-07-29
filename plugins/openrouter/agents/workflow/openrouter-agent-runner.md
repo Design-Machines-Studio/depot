@@ -25,7 +25,9 @@ The caller passes you these inputs in the prompt body:
 - `fallback_model` -- optional full OpenRouter model slug tried by the wrapper on HTTP 429/503
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
 - `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
-- `openrouter_bundle_version` and `cache_class` -- expected resolver identity
+- `openrouter_bundle_version`, `cache_class`, and `resolution_reason` -- expected resolver identity
+- `approved_payload_sha256` -- optional exact digest copied from the user's
+  approval response; empty on the preparation pass
 - `diff_content` -- the diff to review
 - `changed_files` -- newline-delimited, normalized, unfiltered list of every changed file path
 - `project_context` -- stack info (for example, `Plugin Marketplace (Markdown+JSON)`)
@@ -132,6 +134,7 @@ resolve_bundle() {
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
@@ -141,6 +144,7 @@ resolve_bundle() {
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   fi
 }
@@ -148,9 +152,11 @@ BUNDLE_JSON=$(resolve_bundle)
 BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("selected_root",""))')
 RESOLVED_VERSION=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("version",""))')
 RESOLVED_CLASS=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("cache_class",""))')
+RESOLVED_REASON=$(printf '%s' "$BUNDLE_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("reason",""))')
 [ "$BUNDLE_REF" = "$openrouter_bundle_ref" ] &&
   [ "$RESOLVED_VERSION" = "$openrouter_bundle_version" ] &&
-  [ "$RESOLVED_CLASS" = "$cache_class" ] || {
+  [ "$RESOLVED_CLASS" = "$cache_class" ] &&
+  [ "$RESOLVED_REASON" = "$resolution_reason" ] || {
     echo "ERROR: coherent OpenRouter bundle changed after runner selection" >&2
     exit 2
   }
@@ -188,7 +194,7 @@ BOUNDARY_CHANGED=$(mktemp)
 BOUNDARY_FILTERED=$(mktemp)
 BOUNDARY_PATHS=$(mktemp)
 BOUNDARY_DECLINED_PATHS=$(mktemp)
-trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "${SYS_FILE:-/dev/null}" "${USER_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}" "${WRAPPER_RECEIPT:-/dev/null}"' EXIT
+trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "${SYS_FILE:-/dev/null}" "${USER_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}" "${WRAPPER_RECEIPT:-/dev/null}" "${AUTHORIZATION_RECEIPT:-/dev/null}"' EXIT
 printf '%s' "$diff_content" > "$BOUNDARY_DIFF"
 printf '%s\n' "$changed_files" > "$BOUNDARY_CHANGED"
 if "$BOUNDARY_HELPER" --mode mechanical-review \
@@ -260,7 +266,8 @@ shell. The wrapper prints model text directly on stdout.
 
 ```bash
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
-if [ ! -x "$WRAPPER_PATH" ]; then
+AUTHORIZATION_HELPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
+if [ ! -x "$WRAPPER_PATH" ] || [ ! -x "$AUTHORIZATION_HELPER" ]; then
   cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
@@ -279,6 +286,7 @@ SYS_FILE=$(mktemp)
 USER_FILE=$(mktemp)
 WRAPPER_STDERR=$(mktemp)
 WRAPPER_RECEIPT=$(mktemp)
+AUTHORIZATION_RECEIPT=$(mktemp)
 printf '%s' "$TARGET_BODY" > "$SYS_FILE"
 printf '%s' "$USER_PROMPT" > "$USER_FILE"
 
@@ -308,6 +316,53 @@ EOF
   exit 2
 fi
 
+PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot \
+  --output "$AUTHORIZATION_RECEIPT" \
+  --content-file "$SYS_FILE" \
+  --content-file "$USER_FILE")
+
+if [ -z "${approved_payload_sha256:-}" ]; then
+  cat <<EOF
+### PAYLOAD APPROVAL REQUIRED
+lane: \`${target_agent_name}\`
+requestedModel: \`${target_model}\`
+fallbackModel: \`${fallback_model:-none}\`
+payloadSha256: \`${PAYLOAD_SHA256}\`
+authorizationScope: \`exact-ordered-content-bytes\`
+EOF
+  exit 0
+fi
+```
+
+The empty-approval branch above returns this structured preparation result
+without invoking the wrapper:
+
+```markdown
+### PAYLOAD APPROVAL REQUIRED
+lane: `{target_agent_name}`
+requestedModel: `{target_model}`
+fallbackModel: `{fallback_model|none}`
+payloadSha256: `{PAYLOAD_SHA256}`
+authorizationScope: `exact-ordered-content-bytes`
+```
+
+The root orchestrator collects every such lane result, asks the user to approve
+the exact digests as one batch, and re-dispatches each unchanged runner input
+with that lane's approved digest. A child runner never asks the user or copies
+its own digest into the approval input. General OpenRouter permission, a prior
+payload approval, or orchestrator judgment is not authority for these bytes.
+If the user declines, the orchestrator records `host_disclosure_declined` and
+returns the lane to Codex.
+
+Immediately before the network call, verify that neither file changed:
+
+```bash
+"$AUTHORIZATION_HELPER" verify \
+  --manifest "$AUTHORIZATION_RECEIPT" \
+  --approved-sha256 "$approved_payload_sha256" \
+  --content-file "$SYS_FILE" \
+  --content-file "$USER_FILE"
+
 RESULT=$( \
   OPENROUTER_SYSTEM="$(cat "$SYS_FILE")" \
   OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
@@ -316,19 +371,19 @@ RESULT=$( \
   2>"$WRAPPER_STDERR")
 EXIT_CODE=$?
 
-ACTUAL_MODEL="$target_model"
+ACTUAL_MODEL=""
 FALLBACK_USED=false
-if grep -Fq "falling back to ${fallback_model:-__no_fallback__}" "$WRAPPER_STDERR" 2>/dev/null; then
-  ACTUAL_MODEL="$fallback_model"
-  FALLBACK_USED=true
-fi
 GENERATION_ID=""
 SERVING_PROVIDER=""
-if [ -s "$WRAPPER_RECEIPT" ]; then
-  RECEIPT_MODEL=$(jq -r '.responseModel // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)
-  GENERATION_ID=$(jq -r '.generationId // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)
-  SERVING_PROVIDER=$(jq -r '.servingProvider // empty' "$WRAPPER_RECEIPT" 2>/dev/null || true)
-  [ -z "$RECEIPT_MODEL" ] || ACTUAL_MODEL="$RECEIPT_MODEL"
+SERVING_PROVIDER_PROVENANCE=""
+if [ "$EXIT_CODE" -eq 0 ] && [ -s "$WRAPPER_RECEIPT" ]; then
+  ACTUAL_MODEL=$(jq -er '.responseModel' "$WRAPPER_RECEIPT")
+  FALLBACK_USED=$(jq -er '.fallbackUsed' "$WRAPPER_RECEIPT")
+  GENERATION_ID=$(jq -r '.generationId // empty' "$WRAPPER_RECEIPT")
+  SERVING_PROVIDER=$(jq -r '.servingProvider // empty' "$WRAPPER_RECEIPT")
+  SERVING_PROVIDER_PROVENANCE=$(jq -er '.servingProviderProvenance' "$WRAPPER_RECEIPT")
+elif [ "$EXIT_CODE" -eq 0 ]; then
+  EXIT_CODE=1
 fi
 ```
 
@@ -419,8 +474,9 @@ Normalize the response to the P1/P2/P3/Approved structure without dropping or re
 [If FALLBACK_USED is true:]
 > **Note:** Requested {target_model}, but OpenRouter fell back to {ACTUAL_MODEL} after a provider capacity response.
 
-Generation receipt: `{GENERATION_ID or not_reported}`;
-serving provider: `{SERVING_PROVIDER or not_reported}`.
+Generation receipt: `{GENERATION_ID}`;
+serving provider: `{SERVING_PROVIDER or not_reported_by_completion}`
+(`{SERVING_PROVIDER_PROVENANCE}`).
 
 ### Critical (P1)
 [findings tagged [openrouter/{ACTUAL_MODEL}/{target_agent_name}]]
@@ -450,7 +506,8 @@ complete:
 4. **Never bypass the security boundary.** A disclosure decline returns to Codex and cannot produce a clean OpenRouter receipt.
 5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a Codex security sign-off even when non-secret implementation content was eligible for OpenRouter.
 6. **Partial coverage is not full coverage.** When `DECLINED_CHANGED_FILES` is non-empty, emit `### CODEX PARTIAL COVERAGE REQUIRED` with path names only. dm-review must complete that same agent criteria locally for those paths.
-7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving provider when returned. Never include prompt or completion content in the receipt metadata.
+7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving-provider provenance. A missing provider field is `not_reported_by_completion`, never evidence of a verified provider. Never include prompt or completion content in receipt metadata.
+8. **Bind disclosure approval to bytes.** Invoke the wrapper only after the user approves the exact `payloadSha256` and the authorization helper verifies the unchanged payload immediately before transmission.
 
 ## Why This Architecture
 

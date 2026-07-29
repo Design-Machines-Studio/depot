@@ -294,7 +294,7 @@
       {
         "id": "dm-review-quick",
         "name": "Quick Review",
-        "description": "Quick code review with 5 core agents, plus ui-standards-reviewer when UI files changed",
+        "description": "Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer when UI files changed",
         "argumentHint": "[optional: PR number, branch name, or file path]"
       },
       {

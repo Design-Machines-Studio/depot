@@ -1,6 +1,6 @@
 ---
 name: dm-review-quick
-description: Quick code review with 5 core agents, plus ui-standards-reviewer when UI files changed -- no other conditional agents, no memory capture
+description: Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer for UI changes
 argument-hint: "[optional: PR number, branch name, or file path]"
 ---
 
@@ -12,14 +12,14 @@ Run a fast code review using the core agents plus ui-standards-reviewer for UI f
 
 Quick mode scales agent count by diff size:
 
-- **< 100 lines (lightweight):** 3 agent criteria -- security-auditor, pattern-recognition-specialist, code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. With OpenRouter available, Kimi performs the primary security analysis and Codex performs the required independent security sign-off; otherwise all 3 criteria run on Codex.
-- **100-500 lines (standard):** 5 core agents (all below).
-- **> 500 lines (extended):** 5 core + applicable classification-aware agents.
+- **< 100 lines (lightweight):** 3 review criteria plus explicit security-lane separation -- `security-auditor-codex-signoff` always reviews the full diff, `security-auditor-openrouter` reviews eligible sections when available, plus pattern-recognition-specialist and code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. When OpenRouter is unavailable, the external security lane is not selected and all three criteria run on Codex.
+- **100-500 lines (standard):** 5 core criteria: 6 logical lanes with OpenRouter, 5 without.
+- **> 500 lines (extended):** the same core logical lanes + applicable classification-aware agents.
 
 ## Core Agents (standard+ mode)
 
 1. code-simplicity-reviewer
-2. security-auditor (Kimi primary when eligible + independent Codex sign-off)
+2. security-auditor-codex-signoff (required full-diff Codex lane) plus security-auditor-openrouter when available (eligible sections only)
 3. pattern-recognition-specialist
 4. architecture-reviewer
 5. doc-sync-reviewer

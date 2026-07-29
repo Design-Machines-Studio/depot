@@ -131,16 +131,18 @@
       "fallbackProvider": "codex",
       "rationale": "Bulk/large-context analysis is Kimi K3 primary whenever OPENROUTER_API_KEY is present, with GLM-5.2 then Codex as capacity fallbacks."
     },
-    "security-auditor": {
+    "security-auditor-openrouter": {
       "provider": "openrouter",
       "model": "moonshotai/kimi-k3",
       "fallbackModel": "z-ai/glm-5.2",
       "fallbackProvider": "codex",
-      "independentSignoff": {
-        "provider": "codex",
-        "required": true
-      },
-      "rationale": "Kimi K3 is the primary security-analysis lens when the exact payload passes disclosure controls; consequential findings still require an independent Codex sign-off."
+      "rationale": "Kimi K3 analyzes only content-boundary-eligible sections; full or partial declines are completed under this same logical lane on Codex."
+    },
+    "security-auditor-codex-signoff": {
+      "provider": "codex",
+      "required": true,
+      "inputScope": "full-diff",
+      "rationale": "Independent full-diff security completion is mandatory and cannot be satisfied by the external security lens."
     },
     "architecture-reviewer": {
       "provider": "codex",

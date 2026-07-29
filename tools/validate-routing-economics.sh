@@ -161,12 +161,19 @@ if [ -f "$routing" ]; then
   jq -e '.chunkKind.config.provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps config chunks to OpenRouter\n"; failures=1; }
   jq -e '.chunkKind.ui.provider == "codex" and .chunkKind.integration.provider == "codex"' "$routing" >/dev/null || { printf "  FAIL  UI and integration coding route to Codex\n"; failures=1; }
   jq -e '
-    .agentType["security-auditor"] as $security
-    | $security.provider == "openrouter"
-      and $security.model == "moonshotai/kimi-k3"
-      and $security.independentSignoff == {"provider":"codex","required":true}
+    .agentType["security-auditor-openrouter"] as $external
+    | .agentType["security-auditor-codex-signoff"] as $signoff
+    | $external.provider == "openrouter"
+      and $external.model == "moonshotai/kimi-k3"
+      and $external.fallbackProvider == "codex"
+      and $signoff == {
+        "provider":"codex",
+        "required":true,
+        "inputScope":"full-diff",
+        "rationale":"Independent full-diff security completion is mandatory and cannot be satisfied by the external security lens."
+      }
       and .agentType["architecture-reviewer"].provider == "codex"
-  ' "$routing" >/dev/null || { printf "  FAIL  Kimi leads security analysis with independent Codex sign-off; architecture stays on Codex\n"; failures=1; }
+  ' "$routing" >/dev/null || { printf "  FAIL  external security analysis and independent Codex sign-off have separate lane identities\n"; failures=1; }
   jq -e '.agentType["doc-sync-reviewer"].provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps doc-sync-reviewer to OpenRouter\n"; failures=1; }
   jq -e '[.agentType["pattern-recognition-specialist"], .agentType["code-simplicity-reviewer"], .agentType["doc-sync-reviewer"], .agentType["test-coverage-reviewer"]] | all(.provider == "openrouter")' "$routing" >/dev/null || { printf "  FAIL  all mechanical reviewers route through OpenRouter\n"; failures=1; }
   jq -e '
@@ -312,17 +319,25 @@ fi
 require_text "$runner" "implementedBy: openrouter" "OpenRouter exec runner emits implementedBy receipt"
 require_text "$runner" "usage" "OpenRouter exec runner preserves usage information"
 require_text "$runner" "generationId" "OpenRouter exec runner preserves the provider generation ID"
-require_text "$wrapper" 'PROVIDER_SORT="exacto"' "Kimi direct calls default to live quality-first provider routing"
+require_text "$runner" 'FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"' "OpenRouter exec leaves cascade fallback ownership to its caller"
+require_absent "$runner" 'grep -Fq "falling back to' "OpenRouter exec reads fallback provenance from the wrapper receipt"
+require_text "$cascade" 'out="$(dispatch_wrapper "$model")"' "pipeline cascade owns wrapper-model descent"
+require_absent "$cascade" 'dispatch_wrapper "$model" "$fb"' "pipeline cascade does not retry the same model through two fallback owners"
+require_text "$cascade" 'payload-authorization.sh' "pipeline wrapper rungs require byte-bound user approval"
+require_text "$wrapper" 'effective_sort="exacto"' "Kimi attempts default to live quality-first provider routing"
 require_text "$wrapper" "OPENROUTER_RECEIPT_FILE" "OpenRouter wrapper emits content-free provider receipts"
+require_text "$wrapper" "servingProviderProvenance" "OpenRouter wrapper distinguishes absent provider identity from verified provenance"
+require_text "$wrapper" "response omitted required generation provenance" "OpenRouter wrapper fails closed when model provenance is absent"
 require_text "$mcp_control" "direct API runner remains authoritative" "MCP remains a control plane rather than the execution transport"
 require_text "$mcp_control" "does not expose an authenticated workspace" "MCP workspace attribution gap is explicit"
+require_text "$mcp_control" "observedAt" "MCP catalog freshness has a bounded observation contract"
 require_text "$dm_review" "routing-policy.json" "dm-review reads shared routing policy"
 require_absent "$dm_review" "Diff >5000 lines AND openrouter" "dm-review no longer gates OpenRouter on >5000 diff lines"
 require_text "$dm_review" "OPENROUTER_API_KEY" "dm-review default-routes external reviewers when keys are set"
 require_text "$dm_review" "OPENROUTER_SECURITY_POLICY_PATH" "dm-review resolves the installed OpenRouter security policy"
 require_absent "$dm_review" "DEEPSEEK_API_KEY" "dm-review has no standalone DeepSeek credential path"
-require_text "$dm_review" '**A0. If the agent is `openrouter-bulk-analyst`:**' "dm-review special-cases the bulk wrapper agent"
-require_text "$dm_review" "Never launch this coding-review lane through a Claude" "dm-review keeps bulk review off Claude execution"
+require_absent "$dm_review" '**A0. If the agent is `openrouter-bulk-analyst`:**' "dm-review does not duplicate bulk wrapper orchestration"
+require_text "$dm_review" 'review criteria only; the generic runner is the single boundary,' "dm-review routes bulk criteria through the generic runner"
 require_text "$dm_review" 'a Claude `Agent` call is not a valid Branch A launcher' "dm-review keeps generic OpenRouter review off Claude execution"
 require_text "$dm_review" '--mode mechanical-review' "dm-review delegates the safe remainder of mixed diffs"
 require_text "$dm_review_cmd" "contribution receipts" "dm-review exposes finding contribution receipts"
@@ -331,13 +346,15 @@ require_text "$kernel_metrics" '"observation_only": True' "kernel economics outp
 require_text "$agent_runner" 'File names, security-looking directories' "OpenRouter runner forbids path-name disclosure classification"
 require_text "$agent_runner" "RUNNER DECLINED -- SENSITIVE CONTENT" "OpenRouter runner declines high-confidence secrets in added lines"
 require_text "$agent_runner" "Generation receipt:" "OpenRouter review lanes preserve generation provenance"
-require_absent "$bulk_runner" 'internal/auth/**' "OpenRouter bulk runner has no hard-coded path embargo"
-require_absent "$bulk_runner" 'Protected files stay on Codex' "OpenRouter bulk runner does not filter by path name"
-require_text "$bulk_runner" 'actual credentials, private keys' "OpenRouter bulk runner classifies exact outbound content"
+require_absent "$bulk_runner" 'resolve-plugin-bundle' "bulk analyst does not duplicate coherent bundle resolution"
+require_absent "$bulk_runner" 'openrouter-wrapper.sh' "bulk analyst does not invoke the wrapper independently"
+require_text "$bulk_runner" 'generic `openrouter-agent-runner` is the only execution path' "bulk analyst delegates all execution controls to the generic runner"
 require_text "$agent_runner" "Codex" "OpenRouter runner returns sensitive work to Codex"
+require_text "$agent_runner" "payload-authorization.sh" "OpenRouter runner binds user approval to exact payload bytes"
 require_text "$pipeline_cmd" "Codex + OpenRouter" "Phase 5 defaults to Codex plus OpenRouter lenses"
 require_text "$pipeline_cmd" "PIPELINE_CLAUDE_ADVERSARY=1" "Claude adversary is optional third lens"
-require_text "$pipeline_cmd" '--mode artifact-review' "Phase 5 allows safe sensitive-path references in review artifacts"
+require_text "$pipeline_cmd" '--mode artifact-delegation' "Phase 5 screens exact adversarial-review payload bytes"
+require_text "$pipeline_cmd" 'openrouter-authorization-contract.md' "Phase 5 requires byte-bound user approval"
 require_text "$assess" "ASSESS_EXECUTOR" "assess supports non-Claude executor knob"
 require_text "$research" "RESEARCH_EXECUTOR" "research supports non-Claude executor knob"
 require_text "$postmortem_schema" "providerSplit" "run postmortem schema documents providerSplit"
@@ -346,6 +363,13 @@ require_text "$postmortem_schema" "routingExclusions" "run postmortem schema rec
 require_text "$postmortem_schema" "routingVariance" "run postmortem schema explains target variance"
 require_text "$ledger" "providerSplit" "rolling metrics ledger exists"
 require_text "$ledger" "eligibleProviderSplit" "rolling ledger tracks eligible OpenRouter utilization"
+
+if grep -R -n 'send-message' "$REPO_ROOT/plugins/dm-review" "$REPO_ROOT/plugins/pipeline" >/dev/null; then
+  printf "  FAIL  automated review/pipeline paths must not invoke MCP send-message\n"
+  failures=1
+else
+  printf "  OK    automated review/pipeline paths keep MCP control-plane access read-only\n"
+fi
 
 if [ -x "$runner" ]; then
   if "$runner" --dry-run >/dev/null; then

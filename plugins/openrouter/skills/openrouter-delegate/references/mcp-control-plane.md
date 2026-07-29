@@ -54,7 +54,7 @@ equivalent to the team's direct API key.
 
 ## Workflow Preflight
 
-Before a major OpenRouter review or routing-policy refresh:
+Before a routing-policy refresh or any claim about current catalog state:
 
 1. `ping`.
 2. Find the policy model by stable alias.
@@ -63,20 +63,23 @@ Before a major OpenRouter review or routing-policy refresh:
 4. Inspect current endpoints and provider slugs.
 5. Consult benchmarks as a separate snapshot; do not overwrite catalog pricing
    with benchmark-run pricing.
-6. Record the observation timestamp and continue with the direct API runner.
+6. Record `observedAt` and `expiresAt` in UTC. The default freshness window is
+   15 minutes; a stricter workflow-specific window may shorten it.
 
-MCP unavailability is an evidence gap, not permission to replace the requested
-model silently. Continue with the checked-in matrix only when it is still within
-its stated freshness window; otherwise return the lane to Codex and record
-`live_catalog_unavailable`.
+MCP unavailability is an evidence gap, not permission to make a current catalog
+claim or mutate routing policy. A live catalog receipt is usable only when both
+timestamps are present and current time is no later than `expiresAt`. Normal
+execution follows the reviewed checked-in routing policy and records its
+version; it does not pretend that policy is live telemetry. A policy-refresh
+workflow without current evidence stops and records `live_catalog_unavailable`.
 
 ## `send-message` Boundary
 
 `send-message` is suitable for an explicit, small, ad-hoc comparison. Automated
 pipeline and dm-review payloads continue through the direct runner.
 
-If a workflow ever opts into `send-message`, it must apply the same exact
-artifact-delegation boundary first, send only the approved payload bytes, record
-the generation ID, and retain independent Codex sign-off for consequential
-security work. General permission to use OpenRouter is not payload-specific
-authorization.
+Automated workflows MUST NOT call `send-message`; validators enforce that
+dm-review and pipeline contain no such invocation. For a user-requested ad-hoc
+comparison, first apply the same artifact-delegation boundary and byte-bound
+user authorization, send only the approved payload, record the generation ID,
+and retain independent Codex sign-off for consequential security work.

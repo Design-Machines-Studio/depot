@@ -95,7 +95,6 @@ Output only the file content.
 
 The wrapper prints the model's text content directly (it already extracts `.choices[0].message.content`). There is no JSON envelope to parse -- capture stdout as the answer:
 
-```bash
-RESULT=$(bash "$WRAPPER_PATH" "moonshotai/kimi-k3" "$PROMPT" 120 "z-ai/glm-5.2")
-# $RESULT is the model's text directly
-```
+The authorized generic runner supplies the filled prompt to the wrapper and
+captures stdout as `RESULT`. Templates are prompt content only; they never
+invoke the network wrapper directly.
