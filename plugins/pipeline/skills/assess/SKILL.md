@@ -41,6 +41,19 @@ Launch two agents simultaneously:
 
 **Executor routing:** Read `plugins/pipeline/references/routing-policy.json`. Set `ASSESS_EXECUTOR` from the environment when present; otherwise default to `openrouter` when `OPENROUTER_API_KEY` is set, else `claude`. Use this executor for read-heavy assessment fan-out. Keep Phase 3 consolidation/synthesis on Claude because it feeds pipeline gates.
 
+**OpenRouter authorization:** Executor selection does not authorize disclosure.
+Before either assessment lane contacts OpenRouter, resolve the coherent
+installed Pipeline bundle through workflow-kernel with `--plugin pipeline
+--minimum-version 1.34.0 --required-asset
+references/openrouter-authorization-contract.md --active-host
+<claude|codex>`, then read that reference from the selected root. Never use a
+target-repository-relative contract path. Prepare the
+exact ordered system/user payload for each lane, disclosure-screen and snapshot
+it, return `PAYLOAD APPROVAL REQUIRED`, and let the root collect the distinct
+digests for one user decision. Only an unchanged second pass with that lane's
+user-approved digest may verify immediately before network contact. On decline,
+record `host_disclosure_declined` and run the trusted local assessment fallback.
+
 **Agent 1: Code Assessment**
 
 Read the `references/code-assessment-protocol.md` for the full protocol. In summary:

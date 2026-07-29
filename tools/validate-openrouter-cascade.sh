@@ -158,7 +158,12 @@ cleanup() {
 trap cleanup EXIT
 network_marker="$fixture_root/network.marker"
 fail_primary="$fixture_root/fail-primary"
+missing_model="$fixture_root/missing-model"
+missing_provider="$fixture_root/missing-provider"
+malformed_model="$fixture_root/malformed-model"
+substituted_model="$fixture_root/substituted-model"
 port_file="$fixture_root/port"
+request_file="$fixture_root/request.json"
 cat > "$fixture_root/http-sentinel.py" <<'PY'
 import http.server
 import json
@@ -168,12 +173,18 @@ import sys
 marker = pathlib.Path(sys.argv[1])
 fail_primary = pathlib.Path(sys.argv[2])
 port_file = pathlib.Path(sys.argv[3])
+request_file = pathlib.Path(sys.argv[4])
+missing_model = pathlib.Path(sys.argv[5])
+missing_provider = pathlib.Path(sys.argv[6])
+malformed_model = pathlib.Path(sys.argv[7])
+substituted_model = pathlib.Path(sys.argv[8])
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         document = json.loads(self.rfile.read(length))
         model = document.get("model", "")
+        request_file.write_text(json.dumps(document), encoding="utf-8")
         with marker.open("a", encoding="utf-8") as output:
             output.write(model + "\n")
         if fail_primary.exists() and model == "z-ai/glm-5.2":
@@ -181,7 +192,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
             response = {"error": {"message": "capacity"}}
         else:
             status = 200
-            response = {"choices": [{"message": {"content": "controlled"}}]}
+            response = {
+                "id": "gen-fixture",
+                "created": 1785210000,
+                "model": model + "-canonical",
+                "provider": "FixtureProvider",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+                "choices": [{"message": {"content": "controlled"}}],
+            }
+            if missing_model.exists():
+                response.pop("model")
+            if missing_provider.exists():
+                response.pop("provider")
+            if malformed_model.exists():
+                response["model"] = "unqualified-model"
+            if substituted_model.exists():
+                response["model"] = "z-ai/glm-5.2"
         payload = json.dumps(response).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -197,7 +227,8 @@ port_file.write_text(str(server.server_port), encoding="utf-8")
 server.serve_forever()
 PY
 python3 "$fixture_root/http-sentinel.py" \
-  "$network_marker" "$fail_primary" "$port_file" &
+  "$network_marker" "$fail_primary" "$port_file" "$request_file" \
+  "$missing_model" "$missing_provider" "$malformed_model" "$substituted_model" &
 server_pid=$!
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   [ -s "$port_file" ] && break
@@ -247,16 +278,176 @@ else
   any_failed=1
 fi
 
+receipt_file="$fixture_root/kimi-receipt.json"
+rm -f "$network_marker" "$request_file" "$receipt_file"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_RECEIPT_FILE="$receipt_file" \
+   "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1 &&
+   jq -e '.provider.sort == "exacto" and (.provider | has("order") | not)' \
+     "$request_file" >/dev/null &&
+   jq -e '
+     .generationId == "gen-fixture"
+     and .requestedModel == "moonshotai/kimi-k3"
+     and .attemptedModel == "moonshotai/kimi-k3"
+     and .attemptedModels == ["moonshotai/kimi-k3"]
+     and .fallbackUsed == false
+     and .responseModel == "moonshotai/kimi-k3-canonical"
+     and .responseModelProvenance == "response"
+     and .servingProvider == "FixtureProvider"
+     and .servingProviderProvenance == "response"
+     and .usage.total_tokens == 15
+   ' "$receipt_file" >/dev/null; then
+  pass "Kimi defaults to live quality-first Exacto routing and emits a content-free receipt"
+else
+  fail "Kimi must use Exacto by default and preserve generation/provider/usage evidence"
+  any_failed=1
+fi
+
+missing_model_receipt="$fixture_root/missing-model-receipt.json"
+rm -f "$network_marker" "$missing_model_receipt"
+touch "$missing_model"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_RECEIPT_FILE="$missing_model_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+missing_model_rc=$?
+set -e
+rm -f "$missing_model"
+if [ "$missing_model_rc" -eq 1 ] && [ ! -e "$missing_model_receipt" ]; then
+  pass "a successful HTTP response without model provenance fails closed"
+else
+  fail "missing response.model must not become a successful or inferred receipt"
+  any_failed=1
+fi
+
+missing_provider_receipt="$fixture_root/missing-provider-receipt.json"
+rm -f "$network_marker" "$missing_provider_receipt"
+touch "$missing_provider"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_RECEIPT_FILE="$missing_provider_receipt" \
+   "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1 &&
+   jq -e '
+     .servingProvider == null
+     and .servingProviderProvenance == "not_reported_by_completion"
+     and .responseModel == "moonshotai/kimi-k3-canonical"
+   ' "$missing_provider_receipt" >/dev/null; then
+  pass "an omitted provider is recorded as not reported, not inferred"
+else
+  fail "missing provider identity must remain explicit provenance uncertainty"
+  any_failed=1
+fi
+rm -f "$missing_provider"
+
+malformed_model_receipt="$fixture_root/malformed-model-receipt.json"
+rm -f "$network_marker" "$malformed_model_receipt"
+touch "$malformed_model"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_RECEIPT_FILE="$malformed_model_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+malformed_model_rc=$?
+set -e
+rm -f "$malformed_model"
+if [ "$malformed_model_rc" -eq 1 ] && [ ! -e "$malformed_model_receipt" ]; then
+  pass "an unqualified response model fails provenance validation"
+else
+  fail "response model must retain canonical provider/model origin"
+  any_failed=1
+fi
+
+substituted_model_receipt="$fixture_root/substituted-model-receipt.json"
+rm -f "$network_marker" "$substituted_model_receipt"
+touch "$substituted_model"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_RECEIPT_FILE="$substituted_model_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+substituted_model_rc=$?
+set -e
+rm -f "$substituted_model"
+if [ "$substituted_model_rc" -eq 1 ] && [ ! -e "$substituted_model_receipt" ]; then
+  pass "an unrelated served model fails attempted-family validation"
+else
+  fail "served model provenance must match the attempted model family"
+  any_failed=1
+fi
+
+rm -f "$network_marker" "$request_file"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_PROVIDER_ORDER=baseten/fp8,moonshotai/mxfp4 \
+   OPENROUTER_ALLOW_FALLBACKS=0 \
+   "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1 &&
+   jq -e '
+     .provider.order == ["baseten/fp8", "moonshotai/mxfp4"]
+     and .provider.allow_fallbacks == false
+     and (.provider | has("sort") | not)
+   ' "$request_file" >/dev/null; then
+  pass "explicit endpoint order overrides dynamic sorting for reproducible Kimi calls"
+else
+  fail "explicit Kimi endpoint order must be preserved without an ambiguous sort"
+  any_failed=1
+fi
+
 rm -f "$network_marker"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_PROVIDER_SORT=unknown \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+invalid_sort_rc=$?
+set -e
+if [ "$invalid_sort_rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+  pass "invalid provider sort fails before network contact"
+else
+  fail "invalid provider sort must fail closed before network contact"
+  any_failed=1
+fi
+
+fallback_receipt="$fixture_root/fallback-receipt.json"
+rm -f "$network_marker" "$fallback_receipt"
 touch "$fail_primary"
 if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_RECEIPT_FILE="$fallback_receipt" \
+   OPENROUTER_PROVIDER_ORDER=fixture/primary,fixture/fallback \
+   OPENROUTER_FALLBACK_PROVIDER_ORDER=fixture/fallback-a,fixture/fallback-b \
+   OPENROUTER_ALLOW_FALLBACKS=0 \
    "$wrapper" z-ai/glm-5.2 test 10 deepseek/deepseek-v4-pro \
    >/dev/null 2>&1 &&
    [ "$(sed -n '1p' "$network_marker")" = "z-ai/glm-5.2" ] &&
-   [ "$(sed -n '2p' "$network_marker")" = "deepseek/deepseek-v4-pro" ]; then
-  pass "allowed DeepSeek fallback reaches the sentinel only after controlled primary failure"
+   [ "$(sed -n '2p' "$network_marker")" = "deepseek/deepseek-v4-pro" ] &&
+   jq -e '
+     .requestedModel == "z-ai/glm-5.2"
+     and .attemptedModel == "deepseek/deepseek-v4-pro"
+     and .attemptedModels == ["z-ai/glm-5.2", "deepseek/deepseek-v4-pro"]
+     and .fallbackUsed == true
+     and .responseModel == "deepseek/deepseek-v4-pro-canonical"
+   ' "$fallback_receipt" >/dev/null &&
+   jq -e '
+     .provider.order == ["fixture/fallback-a", "fixture/fallback-b"]
+     and .provider.allow_fallbacks == false
+   ' "$request_file" >/dev/null; then
+  pass "fallback preserves explicit endpoint order and reports the actual served model"
 else
-  fail "allowed fallback sentinel sequence is invalid"
+  fail "fallback sentinel sequence, provider order, or provenance receipt is invalid"
+  any_failed=1
+fi
+rm -f "$fail_primary"
+
+kimi_fallback_receipt="$fixture_root/kimi-fallback-receipt.json"
+rm -f "$network_marker" "$request_file" "$kimi_fallback_receipt"
+touch "$fail_primary"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_RECEIPT_FILE="$kimi_fallback_receipt" \
+   "$wrapper" z-ai/glm-5.2 test 10 moonshotai/kimi-k3 \
+   >/dev/null 2>&1 &&
+   jq -e '.provider.sort == "exacto" and (.provider | has("order") | not)' \
+     "$request_file" >/dev/null &&
+   jq -e '
+     .attemptedModels == ["z-ai/glm-5.2", "moonshotai/kimi-k3"]
+     and .fallbackUsed == true
+   ' "$kimi_fallback_receipt" >/dev/null; then
+  pass "GLM-to-Kimi fallback recomputes Kimi's Exacto provider default"
+else
+  fail "fallback provider preferences must be derived from the attempted model"
   any_failed=1
 fi
 rm -f "$fail_primary"

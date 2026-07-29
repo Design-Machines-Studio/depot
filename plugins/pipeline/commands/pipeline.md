@@ -403,9 +403,31 @@ Present the manifest summary: chunk count, parallel groups, overlap risk, requir
 
 ## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
-Default to two non-Claude lenses: Codex + OpenRouter. Run `/codex:adversarial-review` and an OpenRouter adversarial-review prompt in parallel on the same plan, prompts, manifest, and `original-prompt.md`. This is a quality gate, not a fallback ladder.
+Default to two non-Claude lenses: Codex + OpenRouter. Start
+`/codex:adversarial-review` and OpenRouter payload preparation concurrently on
+the same plan, prompts, manifest, and `original-prompt.md`. The OpenRouter
+network lens runs only after the byte-bound user gate below; it may therefore
+complete after Codex. This is a quality gate, not a fallback ladder.
 
-Before the OpenRouter lens, resolve the installed OpenRouter `delegation-boundary.sh` and security policy through the standard Claude-first/Codex-fallback cache loop. Concatenate the review artifacts into a temporary content file, write their repository-relative artifact paths to a changed-files file, and run `delegation-boundary.sh --mode artifact-review --policy <policy> --changed-files <paths> --content-file <pack>`. In this mode, prose that merely names `internal/auth/**`, `internal/federation/**`, `deploy/**`, or other protected paths is allowed; high-confidence credential values still decline the OpenRouter lens before disclosure. Exit 3 records `openrouter-perspective: declined-sensitive-content` while Codex continues. Malformed/unverifiable input is a fail-closed OpenRouter runner failure, not a clean review.
+Before the OpenRouter lens, resolve the coherent installed Pipeline bundle
+through workflow-kernel with `--plugin pipeline --minimum-version 1.34.0
+--required-asset references/openrouter-authorization-contract.md
+--active-host <claude|codex>`, then read and apply
+`references/openrouter-authorization-contract.md` from that selected root.
+Never read the contract from a target-repository-relative `plugins/pipeline`
+path.
+Concatenate the review artifacts into the exact user-prompt pack and materialize
+the exact adversary system prompt. Screen both with
+`delegation-boundary.sh --mode artifact-delegation`, snapshot them in send
+order with `payload-authorization.sh`, and stop at `PAYLOAD APPROVAL REQUIRED`
+until the root obtains the user's exact combined digest. After approval,
+rebuild and verify the same ordered files immediately before wrapper contact.
+Do not use `artifact-review` as authorization and do not copy the generated
+digest into the approval input. High-confidence credential values decline the
+OpenRouter lens before disclosure. A user decline records
+`openrouter-perspective: host_disclosure_declined` while Codex continues.
+Malformed/unverifiable input is a fail-closed OpenRouter runner failure, not a
+clean review.
 
 Claude `plan-adversary` is an optional third lens/tiebreak only when `PIPELINE_CLAUDE_ADVERSARY=1` or when both non-Claude lenses disagree on a blocker. If Codex is unavailable, continue with OpenRouter and record `codex-perspective: unavailable`. If OpenRouter is unavailable, continue with Codex and record `openrouter-perspective: unavailable`. If both are unavailable, block or explicitly enable `PIPELINE_CLAUDE_ADVERSARY=1`.
 

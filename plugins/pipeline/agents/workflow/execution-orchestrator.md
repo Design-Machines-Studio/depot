@@ -108,7 +108,7 @@ one repair/recheck pass. Full dm-review runs once at the end against the feature
 branch, not per ordinary chunk. Do not dispatch the 5-agent quick dm-review
 suite for an ordinary chunk.
 
-**Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so the Codex-native `security-auditor` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
+**Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so `security-auditor-codex-signoff` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
 
 ```
 internal/auth/**            internal/federation/**
@@ -118,11 +118,22 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These lanes are never focused-only and are never delegated to OpenRouter (see the OpenRouter routing policy). A chunk that touches auth/federation/secrets and did not receive full dm-review is a run-postmortem miss.
+These chunks are never focused-only. Their mandatory full-diff Codex security
+signoff is never delegated to OpenRouter. After the content boundary holds any
+disclosure-risk sections locally, an eligible remainder may receive the
+supplementary Kimi security lens, but that external analysis cannot replace the
+Codex signoff. A chunk that touches auth/federation/secrets and did not receive
+full dm-review is a run-postmortem miss.
 
 ### Why this matters for OpenRouter routing
 
-The four mechanical review lanes (pattern-recognition, code-simplicity, doc-sync, test-coverage) route through OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is set. DeepSeek V4 is a model fallback inside that OpenRouter rail, not a separate plugin or credential. If you skip the skill invocation, the routing never engages. You MUST invoke the skill.
+The four mechanical review lanes (pattern-recognition, code-simplicity,
+doc-sync, test-coverage) plus Kimi-led security analysis route through
+OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is
+set. Kimi security analysis always pairs with independent Codex full-diff
+sign-off. GLM-5.2 and DeepSeek V4 are model fallbacks inside the OpenRouter
+rail, not separate plugins or credentials. If you skip the skill invocation,
+the routing never engages. You MUST invoke the skill.
 
 ## Codex Native Adapter Parity
 
@@ -748,7 +759,14 @@ Persist only Pipeline bundle `version`, `cache_class`, and `reason` in durable r
 
 You may consult `usage-probe.sh` (resolved from the same pipeline cache dir) to skip a known-capped primary; otherwise proceed to 3d.2 and let a cap error trigger descent. `cascade-dispatch.sh` re-probes internally, so an orchestrator-level probe is an optimization, not a requirement.
 
-**Step 3d.2 -- Primary rail has headroom.** Dispatch Codex or OpenRouter using the compatibility block below. Legacy `executor: claude` values normalize to Codex. On success, proceed to Step 3e. On cap or provider unavailability, consult the cascade. On a non-cap quality failure, flag the chunk failed; do not change models to hide a bad implementation.
+**Step 3d.2 -- Primary rail has headroom.** Dispatch Codex natively. Dispatch
+an OpenRouter primary through the same authorization-aware cascade function
+used by Step 3d.3, with no exhausted rail. Do not enter the legacy direct
+`$OPENROUTER_EXEC` block while `CASCADE_ACTIVE=1`; that would bypass the
+approval-required state. Legacy `executor: claude` values normalize to Codex.
+On success, proceed to Step 3e. On cap or provider unavailability, consult the
+cascade. On a non-cap quality failure, flag the chunk failed; do not change
+models to hide a bad implementation.
 
 **Step 3d.3 -- Cap/unavailable: consult the cascade.** Log `"Primary rail capped for chunk [id]; consulting cascade."` then invoke the decision engine with the chunk's kind and prompt on stdin. The Airlift Tier-1 checkpoint on cap is fired INSIDE `cascade-dispatch.sh` (guarded resolve, no model budget) -- do not call Airlift directly here.
 
@@ -767,13 +785,57 @@ case "<executor>" in
     *) PRIMARY_RAIL="codex" ;;
   esac ;;
 esac
+PRIMARY_RAIL_STATUS="ready"
+# Set this closed state only after a live cap/unavailability result or a current
+# proactive probe proves the selected primary cannot run.
+# PRIMARY_RAIL_STATUS="capped-or-unavailable"
 OPENROUTER_EXEC_ALLOWED_PATHS="$CHUNK_FILES_TO_MODIFY_NEWLINE"
 export OPENROUTER_EXEC_ALLOWED_PATHS
-CASCADE_OUT=$(printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-  --kind "<kind>" --prompt - --phase execute --timeout 120 \
-  --exhausted-rail "$PRIMARY_RAIL")
+run_cascade() {
+  local exhausted_rail="${1:-}"
+  if [ -n "$exhausted_rail" ]; then
+    printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
+      --kind "<kind>" --prompt - --phase execute --timeout 120 \
+      --exhausted-rail "$exhausted_rail"
+  else
+    printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
+      --kind "<kind>" --prompt - --phase execute --timeout 120
+  fi
+}
+CASCADE_EXHAUSTED_RAIL=""
+case "$PRIMARY_RAIL_STATUS" in
+  ready) ;;
+  capped-or-unavailable) CASCADE_EXHAUSTED_RAIL="$PRIMARY_RAIL" ;;
+  *) echo "invalid primary rail status: $PRIMARY_RAIL_STATUS" >&2; exit 1 ;;
+esac
+CASCADE_OUT=$(run_cascade "$CASCADE_EXHAUSTED_RAIL")
 CASCADE_RC=$?
+if [ "$CASCADE_RC" -eq 78 ]; then
+  PAYLOAD_SHA256=$(printf '%s' "$CASCADE_OUT" | jq -er '
+    select(.status == "approval_required" and .authority == "user")
+    | .payloadSha256
+  ') || {
+    echo "invalid OpenRouter approval-required receipt" >&2
+    exit 1
+  }
+  # Pause here and ask the user to authorize this exact content digest. Only a
+  # later user response may populate APPROVED_PAYLOAD_SHA256.
+  if [ "${APPROVED_PAYLOAD_SHA256:-}" = "$PAYLOAD_SHA256" ]; then
+    OPENROUTER_PAYLOAD_APPROVAL_SHA256="$APPROVED_PAYLOAD_SHA256"
+    export OPENROUTER_PAYLOAD_APPROVAL_SHA256
+    CASCADE_OUT=$(run_cascade "$CASCADE_EXHAUSTED_RAIL")
+    CASCADE_RC=$?
+  else
+    printf '%s\n' "$CASCADE_OUT"
+    CASCADE_RC=78
+  fi
+fi
 ```
+
+The preparation branch remains RC 78 and `human_help_required` until the user
+responds. If the user explicitly declines, separately set RC 77 with
+`host_disclosure_declined` and use Codex; absence or mismatch of an approved
+digest is never inferred to be a decline.
 
 Always pass the observed exhausted primary rail. The proactive `usage-probe.sh` signal may be unknown or stale; the runtime cap/unavailable event is stronger evidence and prevents the cascade from selecting the same rail that just failed.
 
@@ -786,6 +848,8 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
+| `77` | Disclosure boundary or user authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
+| `78` | Exact payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
@@ -812,17 +876,19 @@ Step 3e.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
-> This block is the prior section 3d in full. It runs unchanged when `CASCADE_ACTIVE=0` (no `OPENROUTER_API_KEY`, no `PIPELINE_CASCADE=1`), and it is also the in-process dispatch target re-entered by Steps 3d.2 and 3d.4 (native re-route and wrapper fast-fail).
+> This block is the prior section 3d in full. It runs only when
+> `CASCADE_ACTIVE=0` (no available cascade). Steps 3d.2 and 3d.4 may re-enter
+> its native Codex path, but never its direct OpenRouter path.
 
 **Executor routing:** Read the chunk's `executor` field from the manifest.
 
-**When `executor: openrouter` (or derived from `kind: config` / docs / mechanical logic):**
+**When a legacy manifest says `executor: openrouter` while
+`CASCADE_ACTIVE=0`:**
 
-1. Use `$OPENROUTER_EXEC` derived from the same coherent Pipeline bundle selected in Step 3d.0.
-2. Export `OPENROUTER_EXEC_ALLOWED_PATHS` from the chunk's newline-delimited `filesToModify`, then pipe the full chunk prompt to the runner from the chunk worktree.
-3. Require a committed change and receipt with `implementedBy: openrouter`.
-4. Parse the runner receipt for files changed, fixed structural-validation result, native-verification deferral, and OpenRouter API `usage`.
-5. On runner failure or quality failure, descend to Codex. If Codex is unavailable, fail the chunk.
+1. Treat OpenRouter as unavailable and descend to Codex.
+2. Do not call `$OPENROUTER_EXEC` directly; exact payload approval is owned by
+   the active cascade protocol.
+3. If Codex is unavailable, fail the chunk.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**
 

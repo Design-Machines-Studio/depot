@@ -18,7 +18,7 @@ All dm-review commands default to zero-deferral: P1, P2, AND P3 findings MUST be
 
 Parse the argument string for flags and pass-through values:
 
-- `--full` -- Use full dm-review (all agents) instead of quick (5 core agents)
+- `--full` -- Use full dm-review (all agents) instead of quick (5 core criteria; 6 logical lanes when OpenRouter adds its security lens)
 - `--max-iterations N` -- Maximum review-fix cycles (default: 3)
 - `--allow-defer-p3` -- Opt out of zero-deferral for P3 findings. Requires each deferred finding to carry an explicit justification and a tracking destination. Default OFF.
 - Everything else -- Passed through to dm-review as the review target (PR number, branch, path)

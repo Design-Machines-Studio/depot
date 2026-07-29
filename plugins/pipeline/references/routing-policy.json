@@ -99,38 +99,50 @@
     "pattern-recognition-specialist": {
       "provider": "openrouter",
       "model": "z-ai/glm-5.2",
-      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackModel": "moonshotai/kimi-k3",
       "fallbackProvider": "codex",
-      "rationale": "Pattern checks use GLM-5.2, then DeepSeek V4 Pro through OpenRouter, before Codex fallback."
+      "rationale": "Pattern checks use the economical GLM-5.2 head, then the higher-quality Kimi K3 contender, before Codex fallback."
     },
     "code-simplicity-reviewer": {
       "provider": "openrouter",
       "model": "z-ai/glm-5.2",
-      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackModel": "moonshotai/kimi-k3",
       "fallbackProvider": "codex",
       "rationale": "Simplification review uses the quality-first OpenRouter mechanical ladder before Codex fallback."
     },
     "doc-sync-reviewer": {
       "provider": "openrouter",
       "model": "z-ai/glm-5.2",
-      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackModel": "moonshotai/kimi-k3",
       "fallbackProvider": "codex",
       "rationale": "Documentation consistency uses OpenRouter large-context models at any diff size."
     },
     "test-coverage-reviewer": {
       "provider": "openrouter",
       "model": "z-ai/glm-5.2",
-      "fallbackModel": "deepseek/deepseek-v4-pro",
+      "fallbackModel": "moonshotai/kimi-k3",
       "fallbackProvider": "codex",
       "rationale": "Coverage gap detection is read-heavy and uses the OpenRouter mechanical ladder."
     },
     "openrouter-bulk-analyst": {
       "provider": "openrouter",
-      "rationale": "Bulk/large-context analysis is OpenRouter-primary whenever OPENROUTER_API_KEY is present, not only over a line-count threshold."
+      "model": "moonshotai/kimi-k3",
+      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackProvider": "codex",
+      "rationale": "Bulk/large-context analysis is Kimi K3 primary whenever OPENROUTER_API_KEY is present, with GLM-5.2 then Codex as capacity fallbacks."
     },
-    "security-auditor": {
+    "security-auditor-openrouter": {
+      "provider": "openrouter",
+      "model": "moonshotai/kimi-k3",
+      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackProvider": "codex",
+      "rationale": "Kimi K3 analyzes only content-boundary-eligible sections; full or partial declines are completed under this same logical lane on Codex."
+    },
+    "security-auditor-codex-signoff": {
       "provider": "codex",
-      "rationale": "Security code review is Codex-native and never delegated to OpenRouter."
+      "required": true,
+      "inputScope": "full-diff",
+      "rationale": "Independent full-diff security completion is mandatory and cannot be satisfied by the external security lens."
     },
     "architecture-reviewer": {
       "provider": "codex",
@@ -215,7 +227,9 @@
         "outputAuthority": "validated-unified-diff-within-owned-paths"
       },
       "mechanical-review": {
-        "contentValidation": "complete-diff-including-removed-lines",
+        "contentValidation": "complete-diff-partitioned-by-file-section-including-removed-lines",
+        "sensitiveSectionAction": "exclude-section-and-require-codex-coverage",
+        "emptyRemainder": "decline-disclosure",
         "outputAuthority": "review-text-only"
       },
       "artifact-review": {
@@ -239,6 +253,7 @@
     },
     "positiveRouting": {
       "intendedLanes": [
+        "security analysis with independent Codex sign-off",
         "style / formatting",
         "duplication",
         "pattern-recognition",

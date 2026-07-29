@@ -35,7 +35,7 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 | `logic`, `integration`, `ui` | `codex` | Codex subscription | Kimi K3 OpenRouter exec -> quality-first OpenRouter ladder |
 | `config`, `docs`, mechanical logic | `openrouter` | Kimi K3 OpenRouter exec | quality-first OpenRouter ladder -> Codex subscription |
 
-**Kimi K3 is the quality-first OpenRouter execution head; GLM-5.2 (`z-ai/glm-5.2`, 1M ctx) remains the preferred mechanical and bulk quality-per-dollar model.** The coding quality floor is 70. `harness-profile.json` is the only host-specific file (it resolves abstract roles to concrete rails per host).
+**Kimi K3 is the quality-first OpenRouter execution and bulk-analysis head; GLM-5.2 (`z-ai/glm-5.2`) remains the immediate capacity fallback and the preferred primary for lightweight mechanical review.** The coding quality floor is 70. `harness-profile.json` is the only host-specific file (it resolves abstract roles to concrete rails per host).
 
 ## One-shot vs agentic (important)
 
@@ -57,11 +57,11 @@ export OPENROUTER_API_KEY="sk-or-..."   # activates the cascade + dm-review exte
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-OPENROUTER_API_KEY set        -> openrouter-bulk-analyst (GLM-5.2, preferred)
+OPENROUTER_API_KEY set        -> openrouter-bulk-analyst (Kimi K3 primary, GLM-5.2 fallback)
 neither                       -> Codex-native review
 ```
 
-Mechanical-agent routing (pattern-recognition, code-simplicity, doc-sync, test-coverage) uses `openrouter-agent-runner`, with GLM-5.2 primary and DeepSeek V4 Pro as an OpenRouter model fallback.
+Mechanical-agent routing (pattern-recognition, code-simplicity, doc-sync, test-coverage) uses `openrouter-agent-runner`; policy selects each lane's primary and fallback. Security uses separate `security-auditor-openrouter` eligible-content analysis and mandatory `security-auditor-codex-signoff` full-diff completion.
 
 ## Dry-run / verify (no API key needed)
 

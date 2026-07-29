@@ -26,7 +26,7 @@ Every review agent dispatched by this skill operates under a terse-output contra
 ## Usage
 
 - `/dm-review` -- Full review: all applicable agents + memory capture
-- `/dm-review quick` -- Quick review: 5 core agents (6 when UI files changed), no other conditional agents, no memory capture
+- `/dm-review quick` -- Quick review: 5 core criteria (6 logical lanes when OpenRouter is available), plus one UI lane when triggered
 
 ## Review Tiers (token-economy policy)
 
@@ -34,20 +34,19 @@ Match the review depth to the moment. Running full multi-round review on every c
 
 | When | Tier | What runs |
 |------|------|-----------|
-| **Per chunk during pipeline execution** | `dm-review-quick` | 5 core agents (+ ui-standards-reviewer when UI files changed). No memory capture, no conditional agents beyond file-type triggers. |
+| **Per chunk during pipeline execution** | `dm-review-quick` | 5 core criteria: 6 logical lanes with OpenRouter, 5 without (+ ui-standards-reviewer when UI files changed). |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
-| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Style, duplication, pattern, and doc-consistency lanes only. The exact diff is content-scanned immediately before disclosure; actual secrets/private data are declined, while safe security-related content remains eligible. Security judgment stays on Codex. |
+| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Kimi-led security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes independent Codex sign-off. |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
 **Escalation exception:** when a chunk touches auth, federation, or
 security-related paths (`internal/auth/**`, `internal/federation/**`,
 `**/secretbox*`, `**/destructive_confirmation*`,
 `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick
-tier and run the full Codex-native `security-auditor` lane. That security
-judgment never goes to OpenRouter. The same diff may still reach supplementary
-OpenRouter mechanical lanes when the immediate content boundary finds no
-actual secret, private data, or prohibited execution authority; path names
-alone never decline disclosure.
+tier and run both the Kimi-led `security-auditor` analysis (for eligible file
+sections) and the full-diff Codex security sign-off. File sections containing
+actual secret/private data stay on Codex; path names alone never decline
+disclosure.
 
 ## Shadow Workflow Kernel Contract
 
@@ -191,7 +190,7 @@ Select which agents to launch based on mode, diff classification, changed file e
 
 #### Routing Policy for Mechanical Agents
 
-Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline OpenRouter model table. OpenRouter is the only external model provider; DeepSeek identifiers are OpenRouter slugs. Security, architecture, and visual/UI code reviewers stay Codex-native. Claude is allowed only for non-coding lanes such as voice/editorial review.
+Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline OpenRouter model table. OpenRouter is the only external model provider; DeepSeek identifiers are OpenRouter slugs. Architecture and visual/UI code reviewers stay Codex-native. Security always has a Codex-native full-diff signoff and may add a separate Kimi lane for eligible content. Claude is allowed only for non-coding lanes such as voice/editorial review.
 
 **Before selecting agents, check external routing availability:**
 
@@ -199,6 +198,7 @@ Read `plugins/pipeline/references/routing-policy.json` before selecting models *
 OPENROUTER_RUNNER_PATH=""
 OPENROUTER_SECURITY_POLICY_PATH=""
 OPENROUTER_BOUNDARY_PATH=""
+OPENROUTER_AUTHORIZATION_PATH=""
 OPENROUTER_BUNDLE_ROOT=""
 OPENROUTER_BUNDLE_REF=""
 OPENROUTER_BUNDLE_VERSION=""
@@ -212,21 +212,23 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.6.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.7.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+        --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.6.0 \
+        --minimum-version 1.7.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+        --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     fi
   }
@@ -238,11 +240,12 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   OPENROUTER_RUNNER_PATH="$OPENROUTER_BUNDLE_ROOT/agents/workflow/openrouter-agent-runner.md"
   OPENROUTER_SECURITY_POLICY_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
   OPENROUTER_BOUNDARY_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+  OPENROUTER_AUTHORIZATION_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
   OPENROUTER_BUNDLE_VERSION=$(printf '%s' "$BUNDLE_JSON" | jq -r '.version // empty' 2>/dev/null)
   OPENROUTER_CACHE_CLASS=$(printf '%s' "$BUNDLE_JSON" | jq -r '.cache_class // empty' 2>/dev/null)
   OPENROUTER_RESOLUTION_REASON=$(printf '%s' "$BUNDLE_JSON" | jq -r '.reason // empty' 2>/dev/null)
 fi
-OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] && [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && [ -x "$OPENROUTER_BOUNDARY_PATH" ] && echo true || echo false )
+OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] && [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && [ -x "$OPENROUTER_BOUNDARY_PATH" ] && [ -x "$OPENROUTER_AUTHORIZATION_PATH" ] && echo true || echo false )
 ```
 
 **When `OPENROUTER_AVAILABLE=true`:** agents marked for OpenRouter MUST use `openrouter-agent-runner`. Mechanical orchestration runs on Codex or directly in the host; do not spend Claude coding quota to invoke the wrapper.
@@ -251,25 +254,30 @@ OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RU
 
 #### Quick mode with `lightweight` classification (diff < 100 lines)
 
-Run only these 3 agents:
+Run 3 review criteria as 4 logical lanes when OpenRouter is available:
 
-1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex** (security judgment, never OpenRouter)
-2. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
-3. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+1. **security-auditor-codex-signoff** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex, full diff, always required**
+2. **security-auditor-openrouter** -- same criteria -- **Kimi K3, eligible sections only, selected only when OpenRouter is available**
+3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
-Skip architecture-reviewer and doc-sync-reviewer. Net: 1 Codex agent + 2 OpenRouter-routed agents, or 3 Codex agents when OpenRouter is unavailable.
+Skip architecture-reviewer and doc-sync-reviewer. With OpenRouter available,
+this is 3 OpenRouter lanes plus the independent Codex security-signoff lane. If
+OpenRouter is unavailable, the three criteria run as 3 Codex lanes and the
+external security lane is not selected.
 
-Skip to Phase 4 with these 3 agents.
+Skip to Phase 4 with the selected logical lanes.
 
 #### Always-Run Agents (quick `standard`/`extended`, or full mode)
 
-These 5 agents always run in standard+ quick mode and all full-mode reviews:
+These 5 review criteria run as 6 logical lanes when OpenRouter is available:
 
-1. **security-auditor** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex** (never OpenRouter)
-2. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Codex**
-3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
-4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
-5. **doc-sync-reviewer** -- `dm-review/*/agents/review/doc-sync-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+1. **security-auditor-codex-signoff** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex, full diff, always required**
+2. **security-auditor-openrouter** -- same criteria -- **Kimi K3, eligible sections only, selected only when OpenRouter is available**
+3. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Codex**
+4. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+5. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+6. **doc-sync-reviewer** -- `dm-review/*/agents/review/doc-sync-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
 #### Configurable Codex Perspective
 
@@ -285,13 +293,16 @@ Use `-c service_tier=fast` even when a user config sets another tier. A stale `~
 
 Resolve its agent file at `dm-review/*/agents/review/codex-perspective.md` via the same Claude-first/Codex-fallback cache loop as other agents. The output is normalized to P1/P2/P3 and the consolidator merges it with all other findings; a finding from either perspective is in-scope.
 
-**If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with only these 5 agents.**
+**If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with
+the selected core logical lanes plus `codex-perspective` when enabled.**
 
 **If mode is "quick" AND UI files changed** (`.templ`, `.twig`, `.html`, or `.css` in the diff), add one more agent:
 
-6. **ui-standards-reviewer** -- `dm-review/*/agents/review/ui-standards-reviewer.md`
+Add **ui-standards-reviewer** as one additional logical lane.
 
-This ensures per-chunk pipeline reviews catch design quality issues, not just code quality. Skip to Phase 4 with these 6 agents.
+This ensures per-chunk pipeline reviews catch design quality issues, not just
+code quality. Skip to Phase 4 with the selected core lanes, this UI lane, and
+`codex-perspective` when enabled.
 
 #### Conditional Agents (Full mode only)
 
@@ -373,7 +384,12 @@ This context is injected ONLY into the browser-based agents (ux-quality-reviewer
 Before dispatching agents, apply the input guardrails from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 1. **Diff size check:** Count diff lines. If >5000, truncate to file list + first 200 lines per file. Note truncation in each agent's prompt. If `openrouter-bulk-analyst` is active, it receives the full untruncated diff separately.
-2. **Sensitive file filter:** Strip `.env`, credentials, secrets, key, and pem files from the diff for all agents EXCEPT security-auditor (which receives the full diff to catch committed secrets). Log exclusions.
+2. **Content boundary:** Codex lanes receive the complete review diff. Each
+   OpenRouter lane independently runs the shared mechanical content boundary
+   and transmits only its eligible file-diff sections. Path names alone never
+   remove content from Codex review. A full disclosure decline returns the
+   logical lane to Codex; a partial decline requires exact locally held-path
+   completion before that lane is complete.
 3. **Per-agent token check:** Estimate per-agent input: ~2K system prompt + (diff lines * ~4 tokens) + ~4K output headroom. If per-agent estimate exceeds ~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped. If required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input; do not proceed without the lane.
 
 If any agents were dropped or input was modified, report before proceeding:
@@ -395,10 +411,12 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 90s |
-| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 90s |
-| `doc-sync-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 60s |
-| `test-coverage-reviewer` | `z-ai/glm-5.2` | `deepseek/deepseek-v4-pro` | 60s |
+| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 120s |
+| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 90s |
+| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 90s |
+| `doc-sync-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 60s |
+| `test-coverage-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 60s |
+| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 120-180s |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -406,10 +424,34 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}):
-- N agents -> OpenRouter (pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
-- N coding agents -> Codex (security, architecture, visual/UI, unavailable-provider fallbacks)
+- N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
+- N coding/sign-off agents -> Codex (required security sign-off, architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
+
+#### Byte-bound user approval
+
+Every external lane requires payload-specific user authorization; general
+OpenRouter permission and orchestrator judgment are not disclosure authority.
+Approval uses an explicit two-pass protocol:
+
+1. The generic runner materializes the exact eligible system and user prompt
+   files after the content boundary and runs
+   `payload-authorization.sh snapshot`.
+2. With an empty `approved_payload_sha256`, it returns
+   `### PAYLOAD APPROVAL REQUIRED` and the content-free combined digest without
+   network contact.
+3. The root orchestrator collects all lane digests, presents one content-free
+   batch mapping each digest to its logical lane, requested model, and fallback
+   model, asks the user once, and re-dispatches each identical runner input with
+   only that lane's user-approved digest. A child runner cannot self-approve.
+4. The runner rebuilds the payload and runs `payload-authorization.sh verify`
+   with the approved digest immediately before network contact.
+5. A fresh approval is required after any mutation, reordering, or membership
+   change. A batch approval is valid only when it names every distinct combined
+   payload digest in that batch.
+6. On decline, the root records `host_disclosure_declined` and uses the Codex fallback
+   without retrying around the decision.
 
 ---
 
@@ -419,13 +461,11 @@ Launch ALL selected agents simultaneously using multiple Agent tool calls in a s
 
 #### How to launch each agent
 
-For each selected agent, check whether it is `codex-perspective` first. Use Branch C for that reviewer. Check `openrouter-bulk-analyst` next and use Branch A0. For all other agents, check `routing-policy.json` and the Phase 3.75 routing decision:
-
-**A0. If the agent is `openrouter-bulk-analyst`:**
-
-1. Read its installed agent definition directly; do not nest it inside `openrouter-agent-runner`. The bulk agent is already a wrapper-orchestration contract, while the generic runner expects pure review criteria plus an explicit target model.
-2. Build its prompt with the unfiltered changed-file list, the full untruncated diff, project context, and `$OPENROUTER_SECURITY_POLICY_PATH`. Its first action MUST run `delegation-boundary.sh --mode mechanical-review` and use only the emitted filtered paths and filtered diff. A decline means no safe remainder or credential-bearing content and returns the lane to Codex. The parallel security and architecture lanes still receive the full diff on Codex.
-3. On a Codex host, launch a native Codex subagent with the combined prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -` so large diffs never cross the process argument limit. The Codex process performs deterministic orchestration; GLM-5.2/DeepSeek V4 performs the external analysis. Never launch this coding-review lane through a Claude `Agent` call.
+For each selected agent, check whether it is `codex-perspective` first and use
+Branch C for that reviewer. All OpenRouter lanes, including
+`openrouter-bulk-analyst`, use Branch A. The bulk analyst definition contains
+review criteria only; the generic runner is the single boundary,
+authorization, invocation, fallback, and provenance implementation.
 
 **A. If the agent is routed to OpenRouter** (in the model table and `OPENROUTER_AVAILABLE=true`):
 
@@ -441,10 +481,19 @@ For each selected agent, check whether it is `codex-perspective` first. Use Bran
      to bind runner execution to the definition that was loaded; never publish it
    - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --
      durable resolver evidence (never the selected root)
+   - `approved_payload_sha256` -- empty on the preparation pass; on the second
+     pass, the exact per-lane digest supplied by the user's approval
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
 3. **Launch without Claude coding execution:** on a Codex host, use a native Codex subagent with the combined runner prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. The runner performs mechanical orchestration and OpenRouter performs the review judgment; a Claude `Agent` call is not a valid Branch A launcher.
+4. `security-auditor-openrouter` targets the installed
+   `security-auditor.md` criteria but keeps its distinct logical lane ID.
+   `security-auditor-codex-signoff` launches independently through Branch B
+   with the full unfiltered diff and is tagged
+   `[codex-signoff/security-auditor]`. Neither output substitutes for the
+   other. A full external decline may be completed by Codex under the external
+   lane ID, but it still does not satisfy the independent signoff lane.
 
 **B. Otherwise, dispatch coding review on Codex:**
 
@@ -481,7 +530,14 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
 5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
-**Failure handling:** If a routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. Do not mark the run clean until the retry completes.
+**Approval and failure handling:** Collect every
+`### PAYLOAD APPROVAL REQUIRED` result before asking the user; it is a
+preparation state, not success or failure. Re-dispatch approved lanes with
+identical inputs and their approved digest. If a routed agent emits
+`### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. If
+it emits `### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same
+criteria locally for the named paths. Do not mark the run clean until the
+required local work completes.
 
 **Example prompt structure for each agent:**
 
@@ -556,7 +612,7 @@ Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 - If a non-browser agent fails or times out (>120s), record the failure in the Agent Summary table and apply the documented lane policy. A required browser agent instead runs browser recovery and, on exhaustion, blocks with `human_help_required` and asks the user for help.
 - For agents routed to external LLMs, defer failure classification to Phase 4.5 before applying these policies
-- If a **core agent** (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation
+- If a **core agent** (security-auditor-codex-signoff, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation. A selected security-auditor-openrouter lane is also required until it completes externally or through its explicit Codex fallback.
 - If all non-browser conditional agents fail but core agents succeed, the review is "Degraded" but still valid. Missing required browser evidence is never degraded-valid.
 - See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full failure classification table
 
@@ -571,14 +627,17 @@ A **lane** is a review path with its own provider and absence mode: Codex, OpenR
 | Lane | Failure signal | Resolution |
 |------|----------------|------------|
 | OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Codex (procedure below) |
+| OpenRouter full disclosure decline | `### RUNNER DECLINED -- SENSITIVE CONTENT` or `host_disclosure_declined` | Run the complete same logical lane on Codex; preserve the declined external attempt |
+| OpenRouter partial | `### CODEX PARTIAL COVERAGE REQUIRED` in agent output | Run the same agent criteria on Codex for the named locally held paths |
 | Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
 | Codex-native coding agent | Agent errored or timed out | No Claude retry; apply guardrails immediately |
 
-Coding fallback moves between OpenRouter and Codex only. Security judgment
-starts on Codex and has no external lane to fall back from. Supplementary
-mechanical lanes remain content-gated: actual secret/private content declines
-OpenRouter, while safe security-related content is eligible regardless of path.
+Coding fallback moves between OpenRouter and Codex only. Security analysis
+starts on Kimi when eligible and always has an independent full-diff Codex
+sign-off. OpenRouter lanes remain content-gated: file sections containing actual
+secret/private content stay local, while safe sections remain eligible
+regardless of path.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
 
@@ -586,20 +645,39 @@ Every lane receipt records `requestedProvider`, `attemptedProvider`, `implemente
 
 #### When the external-LLM retry triggers
 
-Only applies to agents routed through OpenRouter. Codex-native agents that fail are classified immediately.
+Applies to agents routed through OpenRouter. `RUNNER FAILURE` and a full
+disclosure/host decline trigger a full Codex retry under the same logical lane
+ID; `CODEX PARTIAL COVERAGE REQUIRED` triggers a bounded Codex completion for
+the named paths. Codex-native agents that fail are classified immediately.
 
 #### Retry procedure
 
-For each agent whose output contains `### RUNNER FAILURE`:
+For each agent whose output contains `### RUNNER FAILURE`,
+`### RUNNER DECLINED -- SENSITIVE CONTENT`, or `host_disclosure_declined`:
 
 1. **Re-dispatch using Phase 4 Branch B** on Codex with the same agent definition, diff, and project context.
-2. **Tag fallback findings** with `[codex-fallback/{agent-name}]` for traceability.
+2. **Tag fallback findings** with `[codex-fallback/{agent-name}]` for
+   traceability. For a disclosure decline, record
+   `fallbackReason: disclosure-declined` or
+   `fallbackReason: host-disclosure-declined`; never translate it into an
+   OpenRouter success or omit the attempted lane.
 3. **Timeout:** Use the same 120s ceiling from guardrails.md. The fallback is a single retry, not a retry loop.
+
+For each agent whose output contains `### CODEX PARTIAL COVERAGE REQUIRED`:
+
+1. Parse only normalized path names from the marker; never recover or forward
+   the declined bytes through OpenRouter.
+2. Re-dispatch the same agent definition on Codex with the full local diff
+   sections for those paths and the same project context.
+3. Tag findings `[codex-sensitive-section/{agent-name}]` and record both the
+   OpenRouter eligible-content receipt and Codex held-content receipt.
+4. Treat failure of this local completion exactly like failure of the original
+   agent lane.
 
 #### If fallback also fails
 
 Apply the existing failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
-- Core agent (security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer): REVIEW INCOMPLETE
+- Core agent (security-auditor-codex-signoff, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer): REVIEW INCOMPLETE
 - Conditional agent: degraded but valid
 
 #### Agent Summary reporting
@@ -610,6 +688,8 @@ Report the fallback in the Agent Summary table:
 |-------|----------|--------|
 | pattern-recognition-specialist | OpenRouter `z-ai/glm-5.2` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
+| security-auditor-openrouter | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
+| security-auditor-codex-signoff | Codex (independent sign-off) | Completed (full diff) |
 
 Summarize: "pattern-recognition-specialist: OpenRouter failed -> Codex fallback succeeded"
 

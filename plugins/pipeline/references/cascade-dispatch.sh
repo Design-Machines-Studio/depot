@@ -19,6 +19,8 @@
 #   64  chosen rung is NATIVE -- directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
 #   75  ladder exhausted -- no rung had headroom above the floor
+#   77  disclosure declined -- use the trusted native fallback
+#   78  exact payload user approval required -- surface digest and retry unchanged
 #   2   bad args
 #
 # Deps: bash, jq. Optional: airlift engine (guarded; no-op if absent), node + Codex plugin.
@@ -107,19 +109,21 @@ resolve_openrouter_bundle() {
   esac
   if [ -n "$active" ]; then
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 \
+      --minimum-version 1.7.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --active-host "$active" 2>/dev/null)" || {
         OPENROUTER_BUNDLE_STATE="denied"; return 1;
       }
   else
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.6.0 \
+      --minimum-version 1.7.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
+      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       2>/dev/null)" || {
         OPENROUTER_BUNDLE_STATE="denied"; return 1;
       }
@@ -134,6 +138,7 @@ resolve_openrouter_bundle() {
   OPENROUTER_BUNDLE_REASON="$(printf '%s' "$result" | jq -r '.reason // empty')"
   [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
     [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh" ] &&
+    [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/payload-authorization.sh" ] &&
     [ -r "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json" ] || {
       OPENROUTER_BUNDLE_STATE="denied"; return 1;
     }
@@ -141,9 +146,50 @@ resolve_openrouter_bundle() {
   return 0
 }
 dispatch_wrapper() {
+  local model="$1" system task_tmp_root system_file prompt_file manifest_file
+  local policy boundary authorization payload_sha256 rc
   resolve_openrouter_bundle || return 1
-  "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
-    "$1" "$PROMPT" "$TIMEOUT" "${2:-}"
+  system="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
+  task_tmp_root="${TMPDIR:-/tmp}"
+  system_file="$(mktemp "$task_tmp_root/cascade-wrapper.system.XXXXXX")" || return 1
+  prompt_file="$(mktemp "$task_tmp_root/cascade-wrapper.prompt.XXXXXX")" || {
+    rm -f "$system_file"; return 1;
+  }
+  manifest_file="$(mktemp "$task_tmp_root/cascade-wrapper.authorization.XXXXXX")" || {
+    rm -f "$system_file" "$prompt_file"; return 1;
+  }
+  policy="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+  boundary="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+  authorization="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
+  printf '%s' "$system" > "$system_file"
+  printf '%s' "$PROMPT" > "$prompt_file"
+  if ! "$boundary" --mode artifact-delegation --policy "$policy" \
+      --content-file "$system_file" --content-file "$prompt_file"; then
+    rm -f "$system_file" "$prompt_file" "$manifest_file"
+    return 77
+  fi
+  payload_sha256="$("$authorization" snapshot --output "$manifest_file" \
+    --content-file "$system_file" --content-file "$prompt_file")" || {
+    rm -f "$system_file" "$prompt_file" "$manifest_file"; return 1;
+  }
+  if [ -z "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ]; then
+    printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' "$payload_sha256"
+    rm -f "$system_file" "$prompt_file" "$manifest_file"
+    return 78
+  fi
+  if ! "$authorization" verify --manifest "$manifest_file" \
+      --approved-sha256 "$OPENROUTER_PAYLOAD_APPROVAL_SHA256" \
+      --content-file "$system_file" --content-file "$prompt_file" 2>/dev/null; then
+    printf '{"status":"approval_required","payloadSha256":"%s","authority":"user","reason":"payload-or-approval-changed"}\n' "$payload_sha256"
+    rm -f "$system_file" "$prompt_file" "$manifest_file"
+    return 78
+  fi
+  OPENROUTER_SYSTEM="$(cat "$system_file")" \
+    "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
+    "$model" - "$TIMEOUT" "" < "$prompt_file"
+  rc=$?
+  rm -f "$system_file" "$prompt_file" "$manifest_file"
+  return "$rc"
 }
 resolve_openrouter_exec() {
   [ -x "$DIR/openrouter-exec.sh" ] && printf '%s' "$DIR/openrouter-exec.sh"
@@ -295,13 +341,19 @@ for role in $LADDER; do
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
         break;;                                        # other Codex failure -> next OpenRouter role
       wrapper)
-        fb="$(printf '%s' "$models" | awk -v m="$model" 'f{print;exit} $0==m{f=1}')"
-        out="$(dispatch_wrapper "$model" "$fb")"; rc=$?
+        out="$(dispatch_wrapper "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
+        [ $rc -eq 78 ] && { printf '%s\n' "$out"; exit 78; }
+        if [ $rc -eq 77 ]; then
+          OPENROUTER_GATE_STATE="denied"
+          EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
+          break
+        fi
         continue;;                                     # wrapper error -> next model
       openrouter_exec)
         out="$(dispatch_openrouter_exec "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
+        [ $rc -eq 78 ] && { printf '%s\n' "$out"; exit 78; }
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
           EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"

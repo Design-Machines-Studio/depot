@@ -114,7 +114,7 @@ Common questions mapped to the right skill:
 | ghostwriter | voice-editor | review | voice, editing, review, writing |
 | ghostwriter | social-publisher | workflow | social-media, content-creation, multi-platform |
 | live-wires | css-reviewer | review | css, review, compliance, live-wires |
-| openrouter | openrouter-bulk-analyst | review | diff, review, large-context, glm, openrouter |
+| openrouter | openrouter-bulk-analyst | review | diff, review, large-context, kimi-k3, openrouter |
 | openrouter | openrouter-agent-runner | workflow | workflow, review, delegation, openrouter, provider-routing |
 | pipeline | plan-adversary | workflow | review, adversarial, plan-review, convergence |
 | pipeline | execution-orchestrator | workflow | orchestration, worktrees, autonomous, execution, review-loop |
@@ -139,7 +139,7 @@ Common questions mapped to the right skill:
 | craft-developer | /craft-query | -- | Build complex Craft CMS element queries |
 | dm-review | /dm-review | [optional: PR number, branch name, or file path] | Full code review with all applicable agents including visual browser testing |
 | dm-review | /dm-review-fix | [optional: specific todo ID or priority like p1] | Resolve pending review findings from todos/ directory |
-| dm-review | /dm-review-quick | [optional: PR number, branch name, or file path] | Quick code review with 5 core agents, plus ui-standards-reviewer when UI files changed |
+| dm-review | /dm-review-quick | [optional: PR number, branch name, or file path] | Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer when UI files changed |
 | dm-review | /dm-review-visual | [optional: URL to test, --states, or --a11y] | Run visual browser testing on rendered pages |
 | dm-review | /dm-review-loop | [optional: --full, --max-iterations N, PR/branch/path] | Run dm-review then dm-review-fix in a convergence loop until zero findings remain |
 | dm-review | /dm-review-quality-pulse | [optional: --profile <path>] | Run the repository quality-pulse workflow |

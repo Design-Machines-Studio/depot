@@ -18,7 +18,9 @@ Apply these checks after agent selection (Phase 3) and before agent launch (Phas
 
 File names such as `.env`, `*credentials*`, `*secret*`, `*.key`, and `*.pem`
 are risk signals, not disclosure evidence. Do not strip content by path name.
-The local Codex-native security auditor receives the complete diff.
+The independent local Codex security sign-off receives the complete diff.
+Kimi K3 receives only the file sections emitted by the OpenRouter disclosure
+boundary; any declined sections receive additional same-agent Codex coverage.
 
 Immediately before any OpenRouter mechanical lane, run the installed
 OpenRouter delegation boundary over the exact immutable diff snapshot. A safe
@@ -56,7 +58,10 @@ Each agent runs in its own context. They don't share a budget.
 10. a11y-html-reviewer (HIGH -- legal compliance)
 11. go-build-verifier (HIGH -- catches compilation failures)
 
-Core agents (NEVER dropped): security-auditor, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer.
+Core criteria are never dropped. Required logical lanes are
+security-auditor-codex-signoff; security-auditor-openrouter when selected;
+architecture-reviewer; code-simplicity-reviewer;
+pattern-recognition-specialist; and doc-sync-reviewer.
 
 ---
 

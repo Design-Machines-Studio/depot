@@ -14,6 +14,17 @@
 #   OPENROUTER_SYSTEM    optional system prompt (default: terse coding assistant)
 #   OPENROUTER_BASE      optional, default https://openrouter.ai/api/v1
 #   OPENROUTER_ZDR       1 -> no-train/no-retain providers (data_collection: deny)
+#   OPENROUTER_PROVIDER_SORT
+#                       price|throughput|latency|exacto; Kimi defaults to exacto
+#   OPENROUTER_PROVIDER_ORDER
+#                       optional comma-separated provider/endpoint slugs
+#   OPENROUTER_FALLBACK_PROVIDER_ORDER
+#                       optional order for a different fallback model; primary
+#                       order is not inherited across models
+#   OPENROUTER_ALLOW_FALLBACKS
+#                       0|1 when provider order is set (default 1)
+#   OPENROUTER_RECEIPT_FILE
+#                       optional content-free JSON generation receipt path
 #
 # Exit codes:
 #   0  success   28 timeout   1 exhausted/error   2 bad args
@@ -25,8 +36,18 @@ if [ -z "$MODEL" ] || [ -z "$PROMPT_ARG" ]; then
   echo "usage: $0 <model> <prompt|-> [timeout] [fallback]" >&2; exit 2
 fi
 
+validate_model_slug() {
+  local slug="$1"
+  [[ "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] &&
+    [[ "$slug" != *".."* ]]
+}
+
 for candidate in "$MODEL" "$FALLBACK"; do
   [ -z "$candidate" ] && continue
+  validate_model_slug "$candidate" || {
+    echo "### RUNNER FAILURE: invalid OpenRouter model slug '$candidate'" >&2
+    exit 2
+  }
   candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
   case "$candidate_origin" in
     openai/*|anthropic/*)
@@ -39,6 +60,28 @@ done
 
 BASE="${OPENROUTER_BASE:-https://openrouter.ai/api/v1}"
 SYSTEM="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
+PROVIDER_ORDER="${OPENROUTER_PROVIDER_ORDER:-}"
+FALLBACK_PROVIDER_ORDER="${OPENROUTER_FALLBACK_PROVIDER_ORDER:-}"
+PROVIDER_SORT="${OPENROUTER_PROVIDER_SORT:-}"
+ALLOW_FALLBACKS="${OPENROUTER_ALLOW_FALLBACKS:-1}"
+
+case "$ALLOW_FALLBACKS" in
+  0|1) ;;
+  *) echo "### RUNNER FAILURE: OPENROUTER_ALLOW_FALLBACKS must be 0 or 1" >&2; exit 2 ;;
+esac
+case "$PROVIDER_SORT" in
+  ""|price|throughput|latency|exacto) ;;
+  *) echo "### RUNNER FAILURE: invalid OPENROUTER_PROVIDER_SORT" >&2; exit 2 ;;
+esac
+for configured_order in "$PROVIDER_ORDER" "$FALLBACK_PROVIDER_ORDER"; do
+  [ -z "$configured_order" ] && continue
+  case "$configured_order" in
+    *".."*|,*|*,|*,,*|*[!A-Za-z0-9._,/-]*)
+      echo "### RUNNER FAILURE: invalid OpenRouter provider order" >&2
+      exit 2
+      ;;
+  esac
+done
 
 if [ "$PROMPT_ARG" = "-" ]; then PROMPT="$(cat)"; else PROMPT="$PROMPT_ARG"; fi
 
@@ -50,22 +93,86 @@ TO=""; command -v gtimeout >/dev/null 2>&1 && TO="gtimeout ${TIMEOUT}s"
 #   OPENROUTER_REQUIRE_PARAMS=1 (default) -> skip providers that don't support the
 #       requested params (e.g. tool calling) so agentic calls don't silently degrade.
 #   OPENROUTER_ZDR=1 -> only providers that do NOT train on / retain data (privacy).
-#   OPENROUTER_PROVIDER_SORT=throughput|latency|price -> bias provider choice.
+#   OPENROUTER_PROVIDER_SORT=throughput|latency|price|exacto -> bias provider choice.
+#   OPENROUTER_PROVIDER_ORDER=slug,slug -> deterministic preference order.
 build_provider() {
+  local attempted_model="$1" effective_sort="$PROVIDER_SORT" effective_order=""
+  if [ "$attempted_model" = "$MODEL" ]; then
+    effective_order="$PROVIDER_ORDER"
+  else
+    effective_order="$FALLBACK_PROVIDER_ORDER"
+  fi
+  if [ -z "$effective_order" ] && [ -z "$effective_sort" ]; then
+    case "$attempted_model" in
+      moonshotai/kimi-k3|moonshotai/kimi-k3-*|moonshotai/kimi-k3:*)
+        # Exacto is a Kimi-specific default. Recompute it for every attempt so
+        # GLM -> Kimi fallback and Kimi -> GLM fallback cannot inherit the
+        # wrong primary-derived preference.
+        effective_sort="exacto"
+        ;;
+    esac
+  fi
   jq -n \
     --argjson req "$([ "${OPENROUTER_REQUIRE_PARAMS:-1}" = "1" ] && echo true || echo false)" \
     --arg zdr "${OPENROUTER_ZDR:-0}" \
-    --arg sort "${OPENROUTER_PROVIDER_SORT:-}" '
+    --arg sort "$effective_sort" \
+    --arg order "$effective_order" \
+    --argjson allow "$([ "$ALLOW_FALLBACKS" = "1" ] && echo true || echo false)" '
     {require_parameters: $req}
     + (if $zdr == "1" then {data_collection: "deny", zdr: true} else {} end)
-    + (if $sort != "" then {sort: $sort} else {} end)'
+    + (if $order != ""
+       then {order: ($order | split(",")), allow_fallbacks: $allow}
+       elif $sort != ""
+       then {sort: $sort}
+       else {}
+       end)'
 }
 
-PROVIDER="$(build_provider)"   # provider prefs depend only on env -- compute once, reuse across primary + fallback
+write_receipt() {
+  local response_body="$1" attempted_model="$2" receipt_tmp
+  [ -z "${OPENROUTER_RECEIPT_FILE:-}" ] && return 0
+  receipt_tmp="${OPENROUTER_RECEIPT_FILE}.tmp.$$"
+  (
+    umask 077
+    printf '%s' "$response_body" | jq \
+      --arg requested "$MODEL" \
+      --arg attempted "$attempted_model" '
+      {
+        schemaVersion: 1,
+        generationId: .id,
+        created: (.created // null),
+        requestedModel: $requested,
+        attemptedModel: $attempted,
+        attemptedModels: (
+          if $attempted == $requested
+          then [$requested]
+          else [$requested, $attempted]
+          end
+        ),
+        fallbackUsed: ($attempted != $requested),
+        responseModel: .model,
+        responseModelProvenance: "response",
+        servingProvider: (.provider // null),
+        servingProviderProvenance: (
+          if (.provider | type) == "string" and (.provider | length) > 0
+          then "response"
+          else "not_reported_by_completion"
+          end
+        ),
+        usage: (.usage // null)
+      }' > "$receipt_tmp"
+  ) || {
+    rm -f "$receipt_tmp"
+    echo "### RUNNER FAILURE: could not write OpenRouter receipt" >&2
+    return 1
+  }
+  mv "$receipt_tmp" "$OPENROUTER_RECEIPT_FILE"
+}
 
 call() {
-  local model="$1" body resp http rc
-  body="$(jq -n --arg m "$model" --arg s "$SYSTEM" --arg p "$PROMPT" --argjson prov "$PROVIDER" \
+  local model="$1" body resp http rc response_model provider
+  provider="$(build_provider "$model")"
+  body="$(jq -n --arg m "$model" --arg s "$SYSTEM" --arg p "$PROMPT" --argjson prov "$provider" \
     '{model:$m, provider:$prov, messages:[{role:"system",content:$s},{role:"user",content:$p}]}')"
   resp="$($TO curl -sS -w '\n%{http_code}' "$BASE/chat/completions" \
     -H "Authorization: Bearer $OPENROUTER_API_KEY" \
@@ -82,7 +189,37 @@ call() {
     echo "### RUNNER FAILURE ($model, HTTP $http): $(printf '%s' "$body" | jq -r '.error.message // empty' 2>/dev/null)" >&2
     return 1
   fi
-  printf '%s' "$body" | jq -r '.choices[0].message.content // empty'
+  response_model="$(printf '%s' "$body" | jq -er '
+    select(
+      (.id | type) == "string" and (.id | length) > 0
+      and (.model | type) == "string" and (.model | length) > 0
+      and (.choices[0].message.content | type) == "string"
+      and (.choices[0].message.content | length) > 0
+    )
+    | .model
+  ' 2>/dev/null)" || {
+    echo "### RUNNER FAILURE: OpenRouter response omitted required generation provenance" >&2
+    return 1
+  }
+  validate_model_slug "$response_model" || {
+    echo "### RUNNER FAILURE: OpenRouter response returned malformed model provenance" >&2
+    return 1
+  }
+  case "$(printf '%s' "$response_model" | tr '[:upper:]' '[:lower:]')" in
+    openai/*|anthropic/*)
+      echo "### RUNNER FAILURE: native-vendor-origin invariant rejected served model '$response_model'" >&2
+      return 1
+      ;;
+  esac
+  case "$response_model" in
+    "$model"|"$model"-*|"$model":*) ;;
+    *)
+      echo "### RUNNER FAILURE: served model '$response_model' does not match attempted family '$model'" >&2
+      return 1
+      ;;
+  esac
+  write_receipt "$body" "$model" || return 1
+  printf '%s' "$body" | jq -r '.choices[0].message.content'
 }
 
 out="$(call "$MODEL")"; rc=$?

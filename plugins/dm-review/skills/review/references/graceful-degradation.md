@@ -6,15 +6,18 @@ Decision table for classifying agent failures and determining review completenes
 
 ## Minimum Viable Review
 
-All 5 core agents must complete successfully for the review to be considered valid:
+All 5 core criteria must complete successfully. Security has two logical lanes
+when OpenRouter is selected: both must complete independently.
 
-1. security-auditor
+1. security-auditor-codex-signoff (always required)
+   - security-auditor-openrouter (also required when selected; may complete via its explicit Codex fallback)
 2. architecture-reviewer
 3. code-simplicity-reviewer
 4. pattern-recognition-specialist
 5. doc-sync-reviewer
 
-If all 5 complete, the review is valid regardless of conditional agent status. If any core agent fails, the review is flagged as incomplete.
+If all required logical lanes complete, the review is valid regardless of
+conditional status. One security output never satisfies both security lanes.
 
 ---
 
@@ -26,12 +29,13 @@ Before classifying an agent failure as "Review Compromised" or "Safe to Skip," r
 
 | Lane | Failure signal | Resolution | Reported as |
 |---|---|---|---|
-| OpenRouter | `### RUNNER FAILURE` | Retry on Codex (Phase 4.5) | "Completed (fallback)" or classify below |
+| OpenRouter | `### RUNNER FAILURE` or disclosure decline | Retry the same logical lane on Codex (Phase 4.5) | "Completed (fallback)" or classify below |
 | Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | None -- lane is optional | Coverage Gaps: "codex-perspective: skipped -- CLI absent" |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback | Header: `**Evidence source:** <source>` |
 | Codex-native coding agent | Errored or timed out | No Claude retry | Classify immediately below |
 
-Coding fallback moves between OpenRouter and Codex only. Sensitive paths start on Codex and never enter the external lane.
+Coding fallback moves between OpenRouter and Codex only. Sensitive sections
+stay local; eligible sections may enter the distinct external security lane.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. Reporting "all agents completed" while the Codex lane never ran is a false clean.
 
@@ -41,13 +45,14 @@ Agents that succeed via Codex fallback are reported as "Completed (fallback)" an
 
 | Failed Agent | Impact | Merge Recommendation |
 |---|---|---|
-| security-auditor | Security coverage lost. Vulnerabilities may go undetected. | REVIEW INCOMPLETE -- security-auditor unavailable |
+| security-auditor-codex-signoff | Independent full-diff security coverage lost. | REVIEW INCOMPLETE -- security-auditor-codex-signoff unavailable |
+| security-auditor-openrouter (when selected) | Required external security lens/fallback lane incomplete. | REVIEW INCOMPLETE -- security-auditor-openrouter unavailable |
 | architecture-reviewer | Structural issues unreviewed. Layer violations may pass. | REVIEW INCOMPLETE -- architecture-reviewer unavailable |
 | code-simplicity-reviewer | Complexity and dead code unreviewed. | REVIEW INCOMPLETE -- code-simplicity-reviewer unavailable |
 | pattern-recognition-specialist | Anti-patterns and naming issues unreviewed. | REVIEW INCOMPLETE -- pattern-recognition-specialist unavailable |
 | doc-sync-reviewer | Documentation drift undetected. | REVIEW INCOMPLETE -- doc-sync-reviewer unavailable |
 
-Multiple core failures compound: "REVIEW INCOMPLETE -- security-auditor, architecture-reviewer unavailable."
+Multiple core failures compound: "REVIEW INCOMPLETE -- security-auditor-codex-signoff, architecture-reviewer unavailable."
 
 ### Safe to Skip (conditional agent failure)
 
@@ -108,20 +113,21 @@ Full degradation priority from guardrails.md. Agents are dropped in this order w
 
 | Rank | Agent | Criticality | Droppable? |
 |---|---|---|---|
-| 1 | security-auditor | Core | NEVER |
-| 2 | architecture-reviewer | Core | NEVER |
-| 3 | code-simplicity-reviewer | Core | NEVER |
-| 4 | pattern-recognition-specialist | Core | NEVER |
-| 5 | doc-sync-reviewer | Core | NEVER |
-| 6 | go-build-verifier | HIGH | Yes, last resort |
-| 7 | a11y-html-reviewer | HIGH | Yes, last resort |
-| 8 | a11y-css-reviewer | MEDIUM | Yes |
-| 9 | css-reviewer | MEDIUM | Yes |
-| 10 | a11y-dynamic-content-reviewer | MEDIUM | Yes |
-| 11 | governance-domain | MEDIUM | Yes |
-| 12 | craft-reviewer | MEDIUM | Yes |
-| 13 | openrouter-bulk-analyst | MEDIUM | Yes (requires openrouter plugin + OPENROUTER_API_KEY) |
-| 14 | test-coverage-reviewer | LOW | Yes |
-| 15 | voice-editor | LOW | Yes |
-| 16 | visual-browser-tester | LOW | Yes |
-| 17 | ux-quality-reviewer | LOW | Yes |
+| 1 | security-auditor-codex-signoff | Core | NEVER |
+| 2 | security-auditor-openrouter (when selected) | Core logical lane | NEVER; Codex fallback allowed |
+| 3 | architecture-reviewer | Core | NEVER |
+| 4 | code-simplicity-reviewer | Core | NEVER |
+| 5 | pattern-recognition-specialist | Core | NEVER |
+| 6 | doc-sync-reviewer | Core | NEVER |
+| 7 | go-build-verifier | HIGH | Yes, last resort |
+| 8 | a11y-html-reviewer | HIGH | Yes, last resort |
+| 9 | a11y-css-reviewer | MEDIUM | Yes |
+| 10 | css-reviewer | MEDIUM | Yes |
+| 11 | a11y-dynamic-content-reviewer | MEDIUM | Yes |
+| 12 | governance-domain | MEDIUM | Yes |
+| 13 | craft-reviewer | MEDIUM | Yes |
+| 14 | openrouter-bulk-analyst | MEDIUM | Yes (requires openrouter plugin + OPENROUTER_API_KEY) |
+| 15 | test-coverage-reviewer | LOW | Yes |
+| 16 | voice-editor | LOW | Yes |
+| 17 | visual-browser-tester | LOW | Yes |
+| 18 | ux-quality-reviewer | LOW | Yes |

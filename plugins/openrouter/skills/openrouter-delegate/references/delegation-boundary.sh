@@ -12,6 +12,7 @@ CONTENT_COUNT=0
 DIFF_FILE=""
 OUTPUT_PATHS=""
 OUTPUT_DIFF=""
+OUTPUT_DECLINED_PATHS=""
 MODE="execution"
 
 while [ $# -gt 0 ]; do
@@ -34,6 +35,9 @@ while [ $# -gt 0 ]; do
     --output-diff)
       [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
       OUTPUT_DIFF="$2"; shift 2;;
+    --output-declined-paths)
+      [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
+      OUTPUT_DECLINED_PATHS="$2"; shift 2;;
     --mode)
       [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
       MODE="$2"; shift 2;;
@@ -67,7 +71,8 @@ if [ "$MODE" = "artifact-delegation" ]; then
     [ -z "$CHANGED_FILES" ] &&
     [ -z "$DIFF_FILE" ] &&
     [ -z "$OUTPUT_PATHS" ] &&
-    [ -z "$OUTPUT_DIFF" ] || {
+    [ -z "$OUTPUT_DIFF" ] &&
+    [ -z "$OUTPUT_DECLINED_PATHS" ] || {
       echo "delegation-boundary: input-invalid:artifact-delegation-authority" >&2
       exit 2
     }
@@ -79,7 +84,9 @@ else
 fi
 
 python3 - "$POLICY" "$CHANGED_FILES" "$DIFF_FILE" "$OUTPUT_PATHS" \
-  "$OUTPUT_DIFF" "$MODE" ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
+  "$OUTPUT_DIFF" "$OUTPUT_DECLINED_PATHS" "$MODE" \
+  ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
+import base64
 import collections
 import json
 import math
@@ -89,7 +96,16 @@ import shlex
 import sys
 from pathlib import Path, PurePosixPath
 
-policy_path, changed_path, diff_path, output_path, output_diff_path, mode, *content_paths = sys.argv[1:]
+(
+    policy_path,
+    changed_path,
+    diff_path,
+    output_path,
+    output_diff_path,
+    output_declined_path,
+    mode,
+    *content_paths,
+) = sys.argv[1:]
 
 
 def fail(code, reason):
@@ -191,7 +207,33 @@ def high_confidence(value):
     return classes >= 2 or entropy(value) >= 3.5
 
 
-def scan_disclosure(text):
+def looks_like_jwt(value):
+    value = value.strip().strip("'\"`").rstrip(",;")
+    if placeholder(value) or not re.fullmatch(
+        r"[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*", value
+    ):
+        return False
+    try:
+        header_raw, payload_raw, signature = value.split(".")
+        header = json.loads(base64.urlsafe_b64decode(
+            header_raw + "=" * (-len(header_raw) % 4)
+        ))
+        payload = json.loads(base64.urlsafe_b64decode(
+            payload_raw + "=" * (-len(payload_raw) % 4)
+        ))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    algorithm = header.get("alg") if isinstance(header, dict) else None
+    return (
+        isinstance(header, dict)
+        and isinstance(algorithm, str)
+        and bool(algorithm)
+        and isinstance(payload, dict)
+        and (len(signature) >= 8 or (not signature and algorithm.lower() == "none"))
+    )
+
+
+def disclosure_reason(text):
     key_block = re.compile(
         r"(?m)^[ +\-]?-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----\r?\n"
         r"((?:[ +\-]?[A-Za-z0-9+/=]+\r?\n)+)"
@@ -202,18 +244,30 @@ def scan_disclosure(text):
             line.lstrip(" +-") for line in match.group(2).splitlines()
         )
         if len(body) >= 32:
-            fail(3, "private-key")
+            return "private-key"
 
     for match in re.finditer(
-        r"(?<![A-Za-z0-9])(?:sk-or-v1-|sk-ant-|ghp_|github_pat_|AKIA)([A-Za-z0-9_./+=:-]{16,})",
+        r"(?<![A-Za-z0-9])"
+        r"(?:sk-or-v1-|sk-ant-|gh[pousr]_|github_pat_|AKIA|glpat-|npm_|"
+        r"xox[baprs]-|AIza|(?:sk|rk)_live_)"
+        r"([A-Za-z0-9_./+=:-]{16,})",
         text,
     ):
         if not placeholder(match.group(0)):
-            fail(3, "high-confidence-credential")
+            return "high-confidence-credential"
+
+    for match in re.finditer(
+        r"(?<![A-Za-z0-9_-])"
+        r"([A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*)"
+        r"(?![A-Za-z0-9_-])",
+        text,
+    ):
+        if looks_like_jwt(match.group(1)):
+            return "access-token"
 
     for match in re.finditer(r"\bAuthorization\s*:\s*Bearer\s+([^\s,;]+)", text, re.I):
         if high_confidence(match.group(1)):
-            fail(3, "access-token")
+            return "access-token"
 
     assignment = re.compile(
         r"""(?ix)
@@ -229,7 +283,7 @@ def scan_disclosure(text):
     )
     for match in assignment.finditer(text):
         if high_confidence(match.group(2)):
-            fail(3, "high-confidence-credential")
+            return "high-confidence-credential"
 
     for match in re.finditer(
         r"\b[a-z][a-z0-9+.-]*://([^/\s:@]+):([^/\s@]*)@([^/\s]+)",
@@ -238,14 +292,21 @@ def scan_disclosure(text):
     ):
         password = match.group(2)
         if password and not placeholder(password):
-            fail(3, "authenticated-dsn")
+            return "authenticated-dsn"
 
     if re.search(
         r"(?im)^\s*(?:data[_ -]?classification|classification|privacy[_ -]?class)"
         r"\s*[:=]\s*(?:private|regulated)\b",
         text,
     ):
-        fail(3, "classified-private-data")
+        return "classified-private-data"
+    return None
+
+
+def scan_disclosure(text):
+    reason = disclosure_reason(text)
+    if reason:
+        fail(3, reason)
 
 
 def parse_header_path(line, prefix):
@@ -275,6 +336,7 @@ def parse_diff(text):
         fail(2, "headerless-diff")
 
     parsed = set()
+    sections = []
     for position, start in enumerate(starts):
         end = starts[position + 1] if position + 1 < len(starts) else len(lines)
         section = lines[start:end]
@@ -295,9 +357,11 @@ def parse_diff(text):
             line.startswith(("GIT binary patch", "Binary files "))
             or line.startswith((
                 "new file mode 120000", "old mode 120000",
-                "deleted file mode 120000", "new mode 160000",
+                "deleted file mode 120000", "new mode 120000",
+                "new file mode 160000", "old mode 160000",
+                "deleted file mode 160000", "new mode 160000",
             ))
-            or re.match(r"^index \S+ 120000(?:\r?\n)?$", line)
+            or re.match(r"^index \S+ (?:120000|160000)(?:\r?\n)?$", line)
             for line in section
         ):
             fail(2, "binary-or-symlink-diff")
@@ -319,6 +383,7 @@ def parse_diff(text):
             fail(2, "diff-header-mismatch")
 
         changed_lines = 0
+        disclosure_lines = []
         for hunk_position, hunk_start in enumerate(hunk_indexes):
             hunk_end = hunk_indexes[hunk_position + 1] if hunk_position + 1 < len(hunk_indexes) else len(section)
             header = section[hunk_start].rstrip("\r\n")
@@ -333,6 +398,7 @@ def parse_diff(text):
                     continue
                 if not line or line[0] not in " +-":
                     fail(2, "malformed-hunk")
+                disclosure_lines.append(line[1:])
                 if line[0] in " -":
                     old_seen += 1
                 if line[0] in " +":
@@ -343,8 +409,10 @@ def parse_diff(text):
                 fail(2, "hunk-count-mismatch")
         if not changed_lines:
             fail(2, "empty-diff")
-        parsed.update((git_old, git_new))
-    return parsed
+        section_paths = {git_old, git_new}
+        parsed.update(section_paths)
+        sections.append((section_paths, "".join(section), "".join(disclosure_lines)))
+    return parsed, sections
 
 
 if mode == "artifact-delegation":
@@ -367,10 +435,12 @@ for path in changed:
     check_containment(path)
 
 parsed = set()
+sections = []
+declined_paths = set()
 diff_text = ""
 if diff_path:
     diff_text = read_text(diff_path, "diff-unreadable")
-    parsed = parse_diff(diff_text)
+    parsed, sections = parse_diff(diff_text)
     if not parsed.issubset(changed):
         fail(2, "undeclared-output-path")
 elif mode == "mechanical-review":
@@ -379,8 +449,27 @@ elif mode == "mechanical-review":
 for content_path in content_paths:
     scan_disclosure(read_text(content_path, "content-unreadable"))
 if diff_text:
-    # Scan the complete unified diff, including removed lines and context.
-    scan_disclosure(diff_text)
+    if mode == "mechanical-review":
+        safe_sections = []
+        safe_disclosure = []
+        safe_paths = set()
+        for section_paths, section_text, disclosure_text in sections:
+            if disclosure_reason(disclosure_text):
+                declined_paths.update(section_paths)
+                continue
+            safe_sections.append(section_text)
+            safe_disclosure.append(disclosure_text)
+            safe_paths.update(section_paths)
+        if not safe_sections:
+            fail(3, "no-safe-review-remainder")
+        diff_text = "".join(safe_sections)
+        parsed = safe_paths
+        # Defense in depth: the exact emitted remainder must independently pass.
+        scan_disclosure("".join(safe_disclosure))
+    else:
+        # Scan all hunk payloads, including removed lines and context. Git path
+        # headers are structural metadata and are governed by path policy.
+        scan_disclosure("".join(section[2] for section in sections))
 
 if output_path:
     try:
@@ -396,4 +485,13 @@ if output_diff_path:
         Path(output_diff_path).write_text(diff_text, encoding="utf-8")
     except OSError:
         fail(2, "output-diff")
+if output_declined_path:
+    if mode != "mechanical-review":
+        fail(2, "declined-paths-mode")
+    try:
+        with open(output_declined_path, "wb") as output:
+            for path in sorted(declined_paths):
+                output.write(path.encode("utf-8") + b"\0")
+    except OSError:
+        fail(2, "output-declined-paths")
 PY

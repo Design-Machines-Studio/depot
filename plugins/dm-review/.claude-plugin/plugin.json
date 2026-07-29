@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
-  "version": "1.46.0",
+  "version": "1.47.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -12,12 +12,12 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.4.0"
+    "workflow-kernel": ">=0.5.0"
   },
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.6.0"
+    "openrouter": ">=1.7.0"
   },
   "keywords": [
     "review",
@@ -294,7 +294,7 @@
       {
         "id": "dm-review-quick",
         "name": "Quick Review",
-        "description": "Quick code review with 5 core agents, plus ui-standards-reviewer when UI files changed",
+        "description": "Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer when UI files changed",
         "argumentHint": "[optional: PR number, branch name, or file path]"
       },
       {

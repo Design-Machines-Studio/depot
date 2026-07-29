@@ -49,7 +49,7 @@ If no issues found, state "No issues found" explicitly.
 Focus on changed code only. Do not flag pre-existing issues in context lines.
 ```
 
-**Model:** `z-ai/glm-5.2` (default), `deepseek/deepseek-v4-pro` fallback. **Timeout:** 120s (<10K lines) / 180s (>=10K lines).
+**Model:** `moonshotai/kimi-k3` (quality-first default), `z-ai/glm-5.2` fallback. **Timeout:** 120s (<10K lines) / 180s (>=10K lines).
 
 ---
 
@@ -64,7 +64,7 @@ For the `/openrouter` command -- general-purpose delegation.
 Respond concisely and directly.
 ```
 
-**Model:** `z-ai/glm-5.2` unless the user passes `--model`. **Timeout:** 90s.
+**Model:** `moonshotai/kimi-k3` unless the user passes `--model`; `z-ai/glm-5.2` is the default capacity fallback. **Timeout:** 90s.
 
 ---
 
@@ -95,7 +95,6 @@ Output only the file content.
 
 The wrapper prints the model's text content directly (it already extracts `.choices[0].message.content`). There is no JSON envelope to parse -- capture stdout as the answer:
 
-```bash
-RESULT=$(bash "$WRAPPER_PATH" "z-ai/glm-5.2" "$PROMPT" 120 "deepseek/deepseek-v4-pro")
-# $RESULT is the model's text directly
-```
+The authorized generic runner supplies the filled prompt to the wrapper and
+captures stdout as `RESULT`. Templates are prompt content only; they never
+invoke the network wrapper directly.
