@@ -43,7 +43,10 @@ fi
 
 ### Step 3: Select Timeout
 
-Default 90s. Increase to 120-180s for large inputs (big diffs).
+Default 300s. Increase to 600s for very large inputs (big diffs at or above
+10K lines). The wrapper separately enforces connection, first-byte, and
+stream-idle watchdogs, so this value is the total completion budget rather than
+the only liveness check.
 
 ### Step 4: Invoke OpenRouter
 
@@ -56,7 +59,7 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.0 \
+    --minimum-version 1.7.1 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -65,7 +68,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     --active-host "$ACTIVE_HOST")
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.0 \
+    --minimum-version 1.7.1 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -112,18 +115,23 @@ before calling the wrapper:
   --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
 
 RESULT=$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" \
+  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+  OPENROUTER_WORKLOAD=direct \
   OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
   bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
 ```
 
-The wrapper JSON-encodes the prompt safely; never embed raw user input directly in a curl `-d` body.
+The wrapper JSON-encodes the prompt into a private request file and streams the
+response with native OpenRouter model fallback; never embed raw user input
+directly in a curl `-d` body.
 Models beginning with `openai/` or `anthropic/` are invalid on this command. Use the native Codex or Claude CLI instead.
 Payload-specific user authorization is mandatory; see
 `references/invocation-protocol.md`.
 
 ### Step 5: Handle Errors
 
-Exit codes: `0` success, `28` timeout, `1` exhausted/error, `2` bad args. On error, report the type to the user.
+Exit codes: `0` success, `28` timeout, `1` exhausted/error, `2` bad args. On
+error, report the type and the content-free failure receipt to the user.
 
 ### Step 6: Present Response and Receipt
 

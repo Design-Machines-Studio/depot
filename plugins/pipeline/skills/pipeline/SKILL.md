@@ -425,7 +425,7 @@ network lens runs only after the byte-bound user gate below; it may therefore
 complete after Codex. This is a quality gate, not a fallback ladder.
 
 Before the OpenRouter lens, resolve the coherent installed Pipeline bundle
-through workflow-kernel with `--plugin pipeline --minimum-version 1.34.0
+through workflow-kernel with `--plugin pipeline --minimum-version 1.34.1
 --required-asset references/openrouter-authorization-contract.md
 --active-host <claude|codex>`, then read and apply
 `references/openrouter-authorization-contract.md` from that selected root.
@@ -434,12 +434,14 @@ path.
 Concatenate the review artifacts into the exact user-prompt pack and materialize
 the exact adversary system prompt. Screen both with
 `delegation-boundary.sh --mode artifact-delegation`, snapshot them in send
-order with `payload-authorization.sh`, and stop at `PAYLOAD APPROVAL REQUIRED`
-until the root obtains the user's exact combined digest. After approval,
-rebuild and verify the same ordered files immediately before wrapper contact.
-Do not use `artifact-review` as authorization and do not copy the generated
-digest into the approval input. High-confidence credential values decline the
-OpenRouter lens before disclosure. A user decline records
+order with `payload-authorization.sh`, and follow the selected contract mode.
+The default `exact-digest` mode stops at `PAYLOAD APPROVAL REQUIRED`. A user who
+does not plan to inspect each payload may set
+`OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` once for the run; every send
+then reruns the canonical scanner and verifies unchanged bytes without another
+prompt. Do not silently switch modes or use `artifact-review` as authorization.
+High-confidence credential values decline the OpenRouter lens before
+disclosure. A user decline records
 `openrouter-perspective: host_disclosure_declined` while Codex continues.
 Malformed/unverifiable input is a fail-closed OpenRouter runner failure, not a
 clean review.

@@ -350,7 +350,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.34.0",
+      "version": "1.34.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -422,7 +422,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.7.0",
+      "version": "1.7.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

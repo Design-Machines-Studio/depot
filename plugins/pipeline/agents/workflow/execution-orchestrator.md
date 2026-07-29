@@ -711,7 +711,7 @@ ACTIVE_HOST=""
 resolve_pipeline_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.33.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.34.1 --active-host "$ACTIVE_HOST" \
       --required-executable references/cascade-dispatch.sh \
       --required-executable references/openrouter-exec.sh \
       --required-executable references/usage-probe.sh \
@@ -720,7 +720,7 @@ resolve_pipeline_bundle() {
       --required-asset references/routing-policy.json
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.33.0 \
+      --minimum-version 1.34.1 \
       --required-executable references/cascade-dispatch.sh \
       --required-executable references/openrouter-exec.sh \
       --required-executable references/usage-probe.sh \
@@ -795,11 +795,11 @@ run_cascade() {
   local exhausted_rail="${1:-}"
   if [ -n "$exhausted_rail" ]; then
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-      --kind "<kind>" --prompt - --phase execute --timeout 120 \
+      --kind "<kind>" --prompt - --phase execute --timeout 300 \
       --exhausted-rail "$exhausted_rail"
   else
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-      --kind "<kind>" --prompt - --phase execute --timeout 120
+      --kind "<kind>" --prompt - --phase execute --timeout 300
   fi
 }
 CASCADE_EXHAUSTED_RAIL=""
@@ -810,7 +810,8 @@ case "$PRIMARY_RAIL_STATUS" in
 esac
 CASCADE_OUT=$(run_cascade "$CASCADE_EXHAUSTED_RAIL")
 CASCADE_RC=$?
-if [ "$CASCADE_RC" -eq 78 ]; then
+if [ "$CASCADE_RC" -eq 78 ] &&
+   [ "${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}" = "exact-digest" ]; then
   PAYLOAD_SHA256=$(printf '%s' "$CASCADE_OUT" | jq -er '
     select(.status == "approval_required" and .authority == "user")
     | .payloadSha256
@@ -832,10 +833,14 @@ if [ "$CASCADE_RC" -eq 78 ]; then
 fi
 ```
 
-The preparation branch remains RC 78 and `human_help_required` until the user
-responds. If the user explicitly declines, separately set RC 77 with
-`host_disclosure_declined` and use Codex; absence or mismatch of an approved
-digest is never inferred to be a decline.
+With the default `exact-digest` mode, the preparation branch remains RC 78 and
+`human_help_required` until the user responds. A user who does not intend to
+inspect every payload may explicitly set
+`OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` once for the run. That mode
+does not enter the RC 78 branch: the canonical boundary is rerun immediately
+before every send and unchanged-byte verification remains mandatory. If the
+user explicitly declines, separately set RC 77 with
+`host_disclosure_declined` and use Codex.
 
 Always pass the observed exhausted primary rail. The proactive `usage-probe.sh` signal may be unknown or stale; the runtime cap/unavailable event is stronger evidence and prevents the cascade from selecting the same rail that just failed.
 
@@ -848,8 +853,8 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
-| `77` | Disclosure boundary or user authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
-| `78` | Exact payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
+| `77` | Disclosure boundary, exact authorization, or trusted-boundary authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
+| `78` | Exact-digest mode only: payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
@@ -886,8 +891,8 @@ Step 3e.
 `CASCADE_ACTIVE=0`:**
 
 1. Treat OpenRouter as unavailable and descend to Codex.
-2. Do not call `$OPENROUTER_EXEC` directly; exact payload approval is owned by
-   the active cascade protocol.
+2. Do not call `$OPENROUTER_EXEC` directly; exact-digest or trusted-boundary
+   authorization is owned by the active cascade protocol.
 3. If Codex is unavailable, fail the chunk.
 
 **When `executor: codex` (or derived from `kind: logic` / `kind: config`):**

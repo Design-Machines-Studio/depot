@@ -25,25 +25,31 @@ no more than 15 minutes apart and use it only before expiry.
 
 | Task Type | Model | Timeout | Rationale |
 |-----------|-------|---------|-----------|
-| Agentic implementation | `moonshotai/kimi-k3` | 180s | Strong coding model and current open-weight release; this runner still accepts only bounded unified diffs and leaves execution/verification authority with Codex. |
-| Security analysis | `moonshotai/kimi-k3` | 120s | Quality-first adversarial lens; completion still requires independent Codex full-diff sign-off. |
-| Big-diff review (<10K lines) | `moonshotai/kimi-k3` | 120s | Highest-ranked eligible OpenRouter contender; GLM-5.2 covers provider capacity. |
-| Big-diff review (>=10K lines) | `moonshotai/kimi-k3` | 180s | 1M context; longer timeout for very large diffs. |
-| Second-opinion analysis | `moonshotai/kimi-k3` | 120s | Quality-first independent analysis. |
-| Config / doc generation | `z-ai/glm-5.2` | 90s | One-shot text the caller writes to disk. |
-| Frontier cross-check (cascade) | `moonshotai/kimi-k3` | 120s | Highest-quality eligible OpenRouter rung; native Codex is the fallback when valid OpenRouter capacity is exhausted. |
+| Agentic implementation | `moonshotai/kimi-k3` | 300s | Strong coding model and current open-weight release; this runner still accepts only bounded unified diffs and leaves execution/verification authority with Codex. |
+| Security analysis | `moonshotai/kimi-k3` | 300s | Quality-first adversarial lens; completion still requires independent Codex full-diff sign-off. |
+| Big-diff review (<10K lines) | `moonshotai/kimi-k3` | 300s | Highest-ranked eligible OpenRouter contender; GLM-5.2 covers provider capacity. |
+| Big-diff review (>=10K lines) | `moonshotai/kimi-k3` | 600s | 1M context; longer total budget for very large diffs while stream-idle checks still detect stalls. |
+| Second-opinion analysis | `moonshotai/kimi-k3` | 300s | Quality-first independent analysis. |
+| Config / doc generation | `z-ai/glm-5.2` | 180s | One-shot text the caller writes to disk. |
+| Frontier cross-check (cascade) | `moonshotai/kimi-k3` | 300s | Highest-quality eligible OpenRouter rung; native Codex is the fallback when valid OpenRouter capacity is exhausted. |
 
 The current `openrouter-wrapper.sh` accepts text prompts only. Model modality columns describe upstream capability, not an operational claim that this rail can yet attach images, audio, video, or files.
 
-## Rate-Limit Fallback Chain
+## Native Model Fallback Chain
 
-The wrapper accepts a `[fallback-slug]` (4th positional arg). On HTTP 429/503 from the primary, it retries the fallback:
+The wrapper accepts a `[fallback-slug]` (4th positional arg) and sends the
+primary plus fallback as one ordered OpenRouter `models` array. OpenRouter can
+therefore walk to the fallback for any eligible model error without the wrapper
+issuing a second client request:
 
 ```
 moonshotai/kimi-k3 -> z-ai/glm-5.2 -> deepseek/deepseek-v4-pro -> minimax/minimax-m3 -> deepseek/deepseek-v4-flash -> qwen/qwen3-coder -> skip
 ```
 
-For quality-first direct calls, use Kimi K3 with `z-ai/glm-5.2` as the immediate fallback. Use GLM-5.2 first only for an explicitly economical mechanical call. The wrapper accepts one fallback; the pipeline cascade owns the full ladder and continues through later models on per-model failures.
+For quality-first direct calls, use Kimi K3 with `z-ai/glm-5.2` as the immediate
+fallback. Use GLM-5.2 first only for an explicitly economical mechanical call.
+The wrapper accepts one native fallback; the pipeline cascade owns the full
+ladder and continues through later models after the request is exhausted.
 
 OpenAI and Anthropic are deliberately absent from this catalog. Never pass `openai/*` or `anthropic/*` as a primary or fallback. OpenAI models use the native Codex CLI; Anthropic models use the native Claude CLI for the allowed non-coding/compatibility lanes.
 
@@ -55,10 +61,12 @@ Fireworks-fast variant. Endpoint health changes independently from the model
 catalog and benchmark datasets, so do not convert one telemetry snapshot into a
 permanent availability claim.
 
-Routine Kimi calls default to `provider.sort: "exacto"` through
-`openrouter-wrapper.sh`. Exacto lets OpenRouter continuously apply its
-quality-first provider signals while retaining fallback capacity. For a
-reproducible eval or incident replay, set an explicit endpoint order:
+Quality and security Kimi calls default to `provider.sort: "exacto"` through
+`openrouter-wrapper.sh`. Direct, bulk, and mechanical workloads default to
+`provider.sort: "throughput"` so long generations favor faster capacity while
+retaining provider fallback. An explicit `OPENROUTER_PROVIDER_SORT` or provider
+order overrides the workload default. For a reproducible eval or incident
+replay, set an explicit endpoint order:
 
 ```bash
 OPENROUTER_PROVIDER_ORDER=baseten/fp8,moonshotai/mxfp4 \
@@ -69,9 +77,8 @@ OPENROUTER_ALLOW_FALLBACKS=0 \
 `baseten/fp8` and `moonshotai/mxfp4` were the strongest-uptime standard-price
 routes in the inspected snapshot; they are examples, not timeless defaults.
 Refresh `list-model-endpoints` and `list-providers` before changing a durable
-order. A primary-specific order is not reused for a different fallback model;
-set `OPENROUTER_FALLBACK_PROVIDER_ORDER` when a reproducible fallback endpoint
-order is also required.
+order. `OPENROUTER_FALLBACK_PROVIDER_ORDER` appends fallback-model endpoints to
+the same native request, preserving one deterministic ordered provider list.
 The response model, serving provider, generation ID, and usage belong in
 the call receipt so an alias such as `moonshotai/kimi-k3` remains reproducible
 after its canonical dated slug advances.

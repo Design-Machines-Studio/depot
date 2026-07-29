@@ -44,15 +44,16 @@ Launch two agents simultaneously:
 **OpenRouter authorization:** Executor selection does not authorize disclosure.
 Before either assessment lane contacts OpenRouter, resolve the coherent
 installed Pipeline bundle through workflow-kernel with `--plugin pipeline
---minimum-version 1.34.0 --required-asset
+--minimum-version 1.34.1 --required-asset
 references/openrouter-authorization-contract.md --active-host
 <claude|codex>`, then read that reference from the selected root. Never use a
 target-repository-relative contract path. Prepare the
 exact ordered system/user payload for each lane, disclosure-screen and snapshot
-it, return `PAYLOAD APPROVAL REQUIRED`, and let the root collect the distinct
-digests for one user decision. Only an unchanged second pass with that lane's
-user-approved digest may verify immediately before network contact. On decline,
-record `host_disclosure_declined` and run the trusted local assessment fallback.
+it, then follow the contract's selected mode. `exact-digest` returns `PAYLOAD
+APPROVAL REQUIRED`; `trusted-boundary` reruns the scanner and verifies unchanged
+bytes immediately before network contact without a per-payload prompt. On
+decline, record `host_disclosure_declined` and run the trusted local assessment
+fallback.
 
 **Agent 1: Code Assessment**
 

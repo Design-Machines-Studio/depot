@@ -27,6 +27,8 @@ pass() {
 
 cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+security_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 model_selection="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 
@@ -152,16 +154,76 @@ fi
 fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/openrouter-origin.XXXXXX")"
 server_pid=""
 cleanup() {
-  [ -z "$server_pid" ] || kill "$server_pid" >/dev/null 2>&1 || true
+  if [ -n "$server_pid" ]; then
+    kill "$server_pid" >/dev/null 2>&1 || true
+    wait "$server_pid" >/dev/null 2>&1 || true
+  fi
   rm -rf "$fixture_root"
 }
 trap cleanup EXIT
+trusted_system="$fixture_root/trusted.system"
+trusted_prompt="$fixture_root/trusted.prompt"
+trusted_manifest="$fixture_root/trusted.authorization.json"
+printf '%s' 'You are a bounded test assistant.' > "$trusted_system"
+printf '%s' 'Review this public fixture.' > "$trusted_prompt"
+trusted_digest="$("$authorization" snapshot --output "$trusted_manifest" \
+  --content-file "$trusted_system" --content-file "$trusted_prompt")"
+trusted_receipt="$("$authorization" verify-trusted-boundary \
+  --manifest "$trusted_manifest" --policy "$security_policy" \
+  --content-file "$trusted_system" --content-file "$trusted_prompt")"
+if printf '%s' "$trusted_receipt" | jq -e \
+   --arg digest "$trusted_digest" '
+     .authorizationMode == "trusted-boundary"
+     and .authorizationScope == "policy-accepted-unchanged-ordered-content-bytes"
+     and .payloadSha256 == $digest
+   ' >/dev/null; then
+  pass "trusted-boundary mode authorizes policy-accepted unchanged bytes without a digest prompt"
+else
+  fail "trusted-boundary mode must retain policy scanning and exact-byte verification"
+  any_failed=1
+fi
+
+printf '%s' 'changed after snapshot' >> "$trusted_prompt"
+set +e
+"$authorization" verify-trusted-boundary \
+  --manifest "$trusted_manifest" --policy "$security_policy" \
+  --content-file "$trusted_system" --content-file "$trusted_prompt" \
+  >/dev/null 2>&1
+trusted_changed_rc=$?
+set -e
+if [ "$trusted_changed_rc" -eq 2 ]; then
+  pass "trusted-boundary mode rejects payload mutation after snapshot"
+else
+  fail "trusted-boundary mode must not authorize changed payload bytes"
+  any_failed=1
+fi
+
+printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' > "$trusted_prompt"
+"$authorization" snapshot --output "$trusted_manifest" \
+  --content-file "$trusted_system" --content-file "$trusted_prompt" >/dev/null
+set +e
+"$authorization" verify-trusted-boundary \
+  --manifest "$trusted_manifest" --policy "$security_policy" \
+  --content-file "$trusted_system" --content-file "$trusted_prompt" \
+  >/dev/null 2>&1
+trusted_secret_rc=$?
+set -e
+if [ "$trusted_secret_rc" -eq 3 ]; then
+  pass "trusted-boundary mode still declines credential-class content"
+else
+  fail "trusted-boundary mode must not bypass the canonical disclosure scanner"
+  any_failed=1
+fi
+
 network_marker="$fixture_root/network.marker"
 fail_primary="$fixture_root/fail-primary"
 missing_model="$fixture_root/missing-model"
 missing_provider="$fixture_root/missing-provider"
 malformed_model="$fixture_root/malformed-model"
 substituted_model="$fixture_root/substituted-model"
+stall_stream="$fixture_root/stall-stream"
+delay_first_byte="$fixture_root/delay-first-byte"
+stream_error="$fixture_root/stream-error"
 port_file="$fixture_root/port"
 request_file="$fixture_root/request.json"
 cat > "$fixture_root/http-sentinel.py" <<'PY'
@@ -169,6 +231,7 @@ import http.server
 import json
 import pathlib
 import sys
+import time
 
 marker = pathlib.Path(sys.argv[1])
 fail_primary = pathlib.Path(sys.argv[2])
@@ -178,16 +241,23 @@ missing_model = pathlib.Path(sys.argv[5])
 missing_provider = pathlib.Path(sys.argv[6])
 malformed_model = pathlib.Path(sys.argv[7])
 substituted_model = pathlib.Path(sys.argv[8])
+stall_stream = pathlib.Path(sys.argv[9])
+delay_first_byte = pathlib.Path(sys.argv[10])
+stream_error = pathlib.Path(sys.argv[11])
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
         document = json.loads(self.rfile.read(length))
-        model = document.get("model", "")
+        candidates = document.get("models") or [document.get("model", "")]
+        model = candidates[0]
+        selected_model = model
+        if fail_primary.exists() and len(candidates) > 1:
+            selected_model = candidates[1]
         request_file.write_text(json.dumps(document), encoding="utf-8")
         with marker.open("a", encoding="utf-8") as output:
-            output.write(model + "\n")
-        if fail_primary.exists() and model == "z-ai/glm-5.2":
+            output.write(",".join(candidates) + "\n")
+        if fail_primary.exists() and len(candidates) == 1:
             status = 429
             response = {"error": {"message": "capacity"}}
         else:
@@ -195,7 +265,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             response = {
                 "id": "gen-fixture",
                 "created": 1785210000,
-                "model": model + "-canonical",
+                "model": selected_model + "-canonical",
                 "provider": "FixtureProvider",
                 "usage": {
                     "prompt_tokens": 10,
@@ -212,12 +282,46 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 response["model"] = "unqualified-model"
             if substituted_model.exists():
                 response["model"] = "z-ai/glm-5.2"
-        payload = json.dumps(response).encode("utf-8")
+        if status != 200:
+            payload = json.dumps(response).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
+
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
         self.end_headers()
-        self.wfile.write(payload)
+        if delay_first_byte.exists():
+            time.sleep(2)
+        first = {
+            key: response[key]
+            for key in ("id", "created", "model", "provider")
+            if key in response
+        }
+        first["choices"] = [{"delta": {"content": "con"}}]
+        second = {"choices": [{"delta": {"content": "trolled"}}]}
+        final = {
+            "usage": response["usage"],
+            "choices": [{"delta": {}, "finish_reason": "stop"}],
+        }
+        if stream_error.exists():
+            second = {"error": {"code": 502, "message": "fixture stream failure"}}
+        chunks = [first, second, final]
+        try:
+            for index, chunk in enumerate(chunks):
+                payload = f"data: {json.dumps(chunk)}\n\n".encode("utf-8")
+                self.wfile.write(payload)
+                self.wfile.flush()
+                if index == 0 and stall_stream.exists():
+                    time.sleep(3)
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def log_message(self, format, *args):
         pass
@@ -228,7 +332,8 @@ server.serve_forever()
 PY
 python3 "$fixture_root/http-sentinel.py" \
   "$network_marker" "$fail_primary" "$port_file" "$request_file" \
-  "$missing_model" "$missing_provider" "$malformed_model" "$substituted_model" &
+  "$missing_model" "$missing_provider" "$malformed_model" "$substituted_model" \
+  "$stall_stream" "$delay_first_byte" "$stream_error" &
 server_pid=$!
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   [ -s "$port_file" ] && break
@@ -283,11 +388,20 @@ rm -f "$network_marker" "$request_file" "$receipt_file"
 if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
    OPENROUTER_RECEIPT_FILE="$receipt_file" \
    "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1 &&
-   jq -e '.provider.sort == "exacto" and (.provider | has("order") | not)' \
+   jq -e '
+     .stream == true
+     and .stream_options.include_usage == true
+     and .provider.sort == "exacto"
+     and .provider.allow_fallbacks == true
+     and (.provider | has("order") | not)
+   ' \
      "$request_file" >/dev/null &&
    jq -e '
-     .generationId == "gen-fixture"
+     .schemaVersion == 2
+     and .outcome == "success"
+     and .generationId == "gen-fixture"
      and .requestedModel == "moonshotai/kimi-k3"
+     and .modelCandidates == ["moonshotai/kimi-k3"]
      and .attemptedModel == "moonshotai/kimi-k3"
      and .attemptedModels == ["moonshotai/kimi-k3"]
      and .fallbackUsed == false
@@ -296,10 +410,12 @@ if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
      and .servingProvider == "FixtureProvider"
      and .servingProviderProvenance == "response"
      and .usage.total_tokens == 15
+     and .routing.workload == "quality"
+     and .routing.sort == "exacto"
    ' "$receipt_file" >/dev/null; then
-  pass "Kimi defaults to live quality-first Exacto routing and emits a content-free receipt"
+  pass "Kimi quality work streams with Exacto routing and emits a content-free receipt"
 else
-  fail "Kimi must use Exacto by default and preserve generation/provider/usage evidence"
+  fail "Kimi quality work must stream with native routing and preserve generation/provider/usage evidence"
   any_failed=1
 fi
 
@@ -313,10 +429,18 @@ OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
 missing_model_rc=$?
 set -e
 rm -f "$missing_model"
-if [ "$missing_model_rc" -eq 1 ] && [ ! -e "$missing_model_receipt" ]; then
-  pass "a successful HTTP response without model provenance fails closed"
+if [ "$missing_model_rc" -eq 1 ] &&
+   jq -e '
+     .outcome == "error"
+     and .failureKind == "missing_generation_provenance"
+     and .responseModel == null
+     and .servingProvider == null
+     and .usage == null
+     and (has("prompt") | not)
+   ' "$missing_model_receipt" >/dev/null; then
+  pass "a stream without model provenance fails closed with a content-free receipt"
 else
-  fail "missing response.model must not become a successful or inferred receipt"
+  fail "missing response.model must produce a non-inferred failure receipt"
   any_failed=1
 fi
 
@@ -348,10 +472,15 @@ OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
 malformed_model_rc=$?
 set -e
 rm -f "$malformed_model"
-if [ "$malformed_model_rc" -eq 1 ] && [ ! -e "$malformed_model_receipt" ]; then
-  pass "an unqualified response model fails provenance validation"
+if [ "$malformed_model_rc" -eq 1 ] &&
+   jq -e '
+     .outcome == "error"
+     and .failureKind == "malformed_model_provenance"
+     and .attemptedModels == null
+   ' "$malformed_model_receipt" >/dev/null; then
+  pass "an unqualified response model fails with explicit provenance uncertainty"
 else
-  fail "response model must retain canonical provider/model origin"
+  fail "malformed response provenance must produce a content-free failure receipt"
   any_failed=1
 fi
 
@@ -365,8 +494,13 @@ OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
 substituted_model_rc=$?
 set -e
 rm -f "$substituted_model"
-if [ "$substituted_model_rc" -eq 1 ] && [ ! -e "$substituted_model_receipt" ]; then
-  pass "an unrelated served model fails attempted-family validation"
+if [ "$substituted_model_rc" -eq 1 ] &&
+   jq -e '
+     .outcome == "error"
+     and .failureKind == "unexpected_model_provenance"
+     and .attemptedModels == null
+   ' "$substituted_model_receipt" >/dev/null; then
+  pass "an unrelated served model fails attempted-family validation with a receipt"
 else
   fail "served model provenance must match the attempted model family"
   any_failed=1
@@ -412,22 +546,32 @@ if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
    OPENROUTER_ALLOW_FALLBACKS=0 \
    "$wrapper" z-ai/glm-5.2 test 10 deepseek/deepseek-v4-pro \
    >/dev/null 2>&1 &&
-   [ "$(sed -n '1p' "$network_marker")" = "z-ai/glm-5.2" ] &&
-   [ "$(sed -n '2p' "$network_marker")" = "deepseek/deepseek-v4-pro" ] &&
+   [ "$(sed -n '1p' "$network_marker")" = "z-ai/glm-5.2,deepseek/deepseek-v4-pro" ] &&
+   [ "$(wc -l < "$network_marker" | tr -d '[:space:]')" = "1" ] &&
+   jq -e '
+     .models == ["z-ai/glm-5.2", "deepseek/deepseek-v4-pro"]
+     and .stream == true
+   ' "$request_file" >/dev/null &&
    jq -e '
      .requestedModel == "z-ai/glm-5.2"
+     and .modelCandidates == ["z-ai/glm-5.2", "deepseek/deepseek-v4-pro"]
      and .attemptedModel == "deepseek/deepseek-v4-pro"
      and .attemptedModels == ["z-ai/glm-5.2", "deepseek/deepseek-v4-pro"]
      and .fallbackUsed == true
      and .responseModel == "deepseek/deepseek-v4-pro-canonical"
    ' "$fallback_receipt" >/dev/null &&
    jq -e '
-     .provider.order == ["fixture/fallback-a", "fixture/fallback-b"]
+     .provider.order == [
+       "fixture/primary",
+       "fixture/fallback",
+       "fixture/fallback-a",
+       "fixture/fallback-b"
+     ]
      and .provider.allow_fallbacks == false
    ' "$request_file" >/dev/null; then
-  pass "fallback preserves explicit endpoint order and reports the actual served model"
+  pass "one native request preserves endpoint order and reports the served fallback model"
 else
-  fail "fallback sentinel sequence, provider order, or provenance receipt is invalid"
+  fail "native model fallback, provider order, or provenance receipt is invalid"
   any_failed=1
 fi
 rm -f "$fail_primary"
@@ -442,17 +586,151 @@ if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
    jq -e '.provider.sort == "exacto" and (.provider | has("order") | not)' \
      "$request_file" >/dev/null &&
    jq -e '
-     .attemptedModels == ["z-ai/glm-5.2", "moonshotai/kimi-k3"]
+     .modelCandidates == ["z-ai/glm-5.2", "moonshotai/kimi-k3"]
+     and .attemptedModels == ["z-ai/glm-5.2", "moonshotai/kimi-k3"]
      and .fallbackUsed == true
    ' "$kimi_fallback_receipt" >/dev/null; then
-  pass "GLM-to-Kimi fallback recomputes Kimi's Exacto provider default"
+  pass "a quality fallback list containing Kimi retains Exacto routing"
 else
-  fail "fallback provider preferences must be derived from the attempted model"
+  fail "quality-native fallback routing must retain Kimi's Exacto preference"
   any_failed=1
 fi
 rm -f "$fail_primary"
 
-fallback_block="$(awk '/## Rate-Limit Fallback Chain/{flag=1; next} /## Privacy/{flag=0} flag' "$model_selection")"
+direct_receipt="$fixture_root/direct-receipt.json"
+rm -f "$network_marker" "$request_file" "$direct_receipt"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_WORKLOAD=direct \
+   OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
+   OPENROUTER_RECEIPT_FILE="$direct_receipt" \
+   "$wrapper" moonshotai/kimi-k3 test 10 z-ai/glm-5.2 \
+   >/dev/null 2>&1 &&
+   jq -e '
+     .models == ["moonshotai/kimi-k3", "z-ai/glm-5.2"]
+     and .provider.sort == "throughput"
+     and .provider.allow_fallbacks == true
+   ' "$request_file" >/dev/null &&
+   jq -e '
+     .routing.workload == "direct"
+     and .routing.sort == "throughput"
+     and .authorization.mode == "trusted-boundary"
+   ' "$direct_receipt" >/dev/null; then
+  pass "direct Kimi work prefers throughput and records authorization provenance"
+else
+  fail "direct workload routing must preserve fallbacks and authorization provenance"
+  any_failed=1
+fi
+
+invalid_workload_receipt="$fixture_root/invalid-workload-receipt.json"
+rm -f "$network_marker" "$invalid_workload_receipt"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_WORKLOAD=unknown \
+  OPENROUTER_RECEIPT_FILE="$invalid_workload_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+invalid_workload_rc=$?
+set -e
+if [ "$invalid_workload_rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+  pass "invalid workload routing fails before network contact"
+else
+  fail "invalid OPENROUTER_WORKLOAD must fail closed before network contact"
+  any_failed=1
+fi
+
+first_byte_receipt="$fixture_root/first-byte-timeout-receipt.json"
+rm -f "$network_marker" "$first_byte_receipt"
+touch "$delay_first_byte"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_FIRST_BYTE_TIMEOUT=1 OPENROUTER_IDLE_TIMEOUT=5 \
+  OPENROUTER_RECEIPT_FILE="$first_byte_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 5 >/dev/null 2>&1
+first_byte_rc=$?
+set -e
+rm -f "$delay_first_byte"
+if [ "$first_byte_rc" -eq 28 ] &&
+   jq -e '
+     .outcome == "timeout"
+     and .failureKind == "stream_timeout"
+     and .timeout.kind == "first_byte"
+     and .responseModel == null
+     and .usage == null
+     and (has("prompt") | not)
+   ' "$first_byte_receipt" >/dev/null; then
+  pass "first-byte timeout is distinct and content-free"
+else
+  fail "first-byte timeout must emit exit 28 and a classified failure receipt"
+  any_failed=1
+fi
+
+idle_receipt="$fixture_root/idle-timeout-receipt.json"
+rm -f "$network_marker" "$idle_receipt"
+touch "$stall_stream"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_FIRST_BYTE_TIMEOUT=5 OPENROUTER_IDLE_TIMEOUT=1 \
+  OPENROUTER_RECEIPT_FILE="$idle_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 5 >/dev/null 2>&1
+idle_rc=$?
+set -e
+rm -f "$stall_stream"
+if [ "$idle_rc" -eq 28 ] &&
+   jq -e '
+     .outcome == "timeout"
+     and .timeout.kind == "idle"
+     and .attemptedModels == null
+   ' "$idle_receipt" >/dev/null; then
+  pass "stream-idle timeout is distinct from first-byte and overall budgets"
+else
+  fail "stream-idle timeout must emit a classified failure receipt"
+  any_failed=1
+fi
+
+overall_receipt="$fixture_root/overall-timeout-receipt.json"
+rm -f "$network_marker" "$overall_receipt"
+touch "$stall_stream"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_FIRST_BYTE_TIMEOUT=5 OPENROUTER_IDLE_TIMEOUT=5 \
+  OPENROUTER_RECEIPT_FILE="$overall_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 1 >/dev/null 2>&1
+overall_rc=$?
+set -e
+rm -f "$stall_stream"
+if [ "$overall_rc" -eq 28 ] &&
+   jq -e '
+     .outcome == "timeout"
+     and .timeout.kind == "overall"
+   ' "$overall_receipt" >/dev/null; then
+  pass "overall completion budget remains bounded after streaming begins"
+else
+  fail "overall timeout must remain independently enforceable"
+  any_failed=1
+fi
+
+stream_error_receipt="$fixture_root/stream-error-receipt.json"
+rm -f "$network_marker" "$stream_error_receipt"
+touch "$stream_error"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_RECEIPT_FILE="$stream_error_receipt" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+stream_error_rc=$?
+set -e
+rm -f "$stream_error"
+if [ "$stream_error_rc" -eq 1 ] &&
+   jq -e '
+     .outcome == "error"
+     and .failureKind == "stream_error"
+     and .usage == null
+   ' "$stream_error_receipt" >/dev/null; then
+  pass "mid-stream provider errors discard partial output and emit a failure receipt"
+else
+  fail "stream errors must never return partial completion content as success"
+  any_failed=1
+fi
+
+fallback_block="$(awk '/## Native Model Fallback Chain/{flag=1; next} /## Privacy/{flag=0} flag' "$model_selection")"
 if printf '%s' "$fallback_block" | grep -q 'minimax/minimax-m3'; then
   pass "OpenRouter fallback docs include MiniMax-M3"
 else

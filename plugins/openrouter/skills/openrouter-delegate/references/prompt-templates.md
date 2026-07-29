@@ -49,7 +49,7 @@ If no issues found, state "No issues found" explicitly.
 Focus on changed code only. Do not flag pre-existing issues in context lines.
 ```
 
-**Model:** `moonshotai/kimi-k3` (quality-first default), `z-ai/glm-5.2` fallback. **Timeout:** 120s (<10K lines) / 180s (>=10K lines).
+**Model:** `moonshotai/kimi-k3` (quality-first default), `z-ai/glm-5.2` native fallback. **Timeout:** 300s (<10K lines) / 600s (>=10K lines).
 
 ---
 
@@ -64,7 +64,7 @@ For the `/openrouter` command -- general-purpose delegation.
 Respond concisely and directly.
 ```
 
-**Model:** `moonshotai/kimi-k3` unless the user passes `--model`; `z-ai/glm-5.2` is the default capacity fallback. **Timeout:** 90s.
+**Model:** `moonshotai/kimi-k3` unless the user passes `--model`; `z-ai/glm-5.2` is the default native capacity fallback. **Timeout:** 300s.
 
 ---
 
@@ -87,7 +87,7 @@ Requirements:
 Output only the file content.
 ```
 
-**Model:** `z-ai/glm-5.2`. **Timeout:** 90s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
+**Model:** `z-ai/glm-5.2`. **Timeout:** 180s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
 
 ---
 

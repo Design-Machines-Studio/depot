@@ -47,16 +47,17 @@ Launch all available research agents simultaneously. Each agent gets the feature
 
 **Payload-specific user approval:** Before any OpenRouter research fan-out,
 resolve the coherent installed Pipeline bundle through workflow-kernel with
-`--plugin pipeline --minimum-version 1.34.0 --required-asset
+`--plugin pipeline --minimum-version 1.34.1 --required-asset
 references/openrouter-authorization-contract.md --active-host
 <claude|codex>`, then read that reference from the selected root. Never use a
 target-repository-relative contract path. Prepare
 each lane's exact ordered system/user files, disclosure-screen them, and use
-the canonical combined `payload-authorization.sh` snapshot. Each preparation
-pass returns `PAYLOAD APPROVAL REQUIRED`; the root collects all lane digests
-and asks once. Only a second pass carrying the corresponding user-approved
-digest may verify and contact OpenRouter. Per-file SHA lists, general
-permission, or a child copying its own digest are not authorization.
+the canonical combined `payload-authorization.sh` snapshot. In the default
+`exact-digest` mode, preparation returns `PAYLOAD APPROVAL REQUIRED`. With the
+explicit run-scoped `OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` mode,
+the helper reruns the scanner and verifies unchanged bytes immediately before
+contact without a per-payload prompt. Per-file SHA lists or a child silently
+switching modes are not authorization.
 If the user declines, record `host_disclosure_declined` and continue through
 the local research fallback without retrying around the decision.
 

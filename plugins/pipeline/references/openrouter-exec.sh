@@ -16,7 +16,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 MODE="run"
 MODEL="${OPENROUTER_EXEC_MODEL:-moonshotai/kimi-k3}"
 FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
-TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-180}"
+TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-300}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
 
@@ -71,7 +71,7 @@ elif [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ]; then
 fi
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.0 \
+    --minimum-version 1.7.1 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -82,7 +82,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     }
 else
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.0 \
+    --minimum-version 1.7.1 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -145,18 +145,37 @@ if ! "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
 fi
 PAYLOAD_SHA256="$("$AUTHORIZATION" snapshot --output "$AUTHORIZATION_RECEIPT" \
   --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE")"
-[ -n "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ] || {
-  printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' "$PAYLOAD_SHA256"
-  exit 78
-}
-if ! "$AUTHORIZATION" verify --manifest "$AUTHORIZATION_RECEIPT" \
-  --approved-sha256 "$OPENROUTER_PAYLOAD_APPROVAL_SHA256" \
-  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" 2>/dev/null; then
-  printf '{"status":"approval_required","payloadSha256":"%s","authority":"user","reason":"payload-or-approval-changed"}\n' "$PAYLOAD_SHA256"
-  exit 78
-fi
+AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"
+case "$AUTHORIZATION_MODE" in
+  exact-digest)
+    [ -n "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ] || {
+      printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' "$PAYLOAD_SHA256"
+      exit 78
+    }
+    if ! "$AUTHORIZATION" verify --manifest "$AUTHORIZATION_RECEIPT" \
+      --approved-sha256 "$OPENROUTER_PAYLOAD_APPROVAL_SHA256" \
+      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" 2>/dev/null; then
+      printf '{"status":"approval_required","payloadSha256":"%s","authority":"user","reason":"payload-or-approval-changed"}\n' "$PAYLOAD_SHA256"
+      exit 78
+    fi
+    ;;
+  trusted-boundary)
+    if ! "$AUTHORIZATION" verify-trusted-boundary \
+      --manifest "$AUTHORIZATION_RECEIPT" --policy "$POLICY" \
+      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null; then
+      echo "openrouter-exec: trusted boundary authorization failed" >&2
+      exit 77
+    fi
+    ;;
+  *)
+    echo "openrouter-exec: invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2
+    exit 2
+    ;;
+esac
 
 if RAW_OUT="$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" OPENROUTER_ZDR="${OPENROUTER_ZDR:-0}" \
+    OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
+    OPENROUTER_WORKLOAD=mechanical \
     OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
     "$WRAPPER" "$MODEL" - "$TIMEOUT" "$FALLBACK_MODEL" < "$PROMPT_FILE" 2>"$WRAPPER_STDERR")"; then
   :

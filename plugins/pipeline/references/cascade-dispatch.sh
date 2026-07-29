@@ -41,7 +41,7 @@ OPENROUTER_BUNDLE_VERSION=""
 OPENROUTER_BUNDLE_CLASS=""
 OPENROUTER_BUNDLE_REASON=""
 
-CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="120"; DRYRUN=0; PROBE_FILE=""
+CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="300"; DRYRUN=0; PROBE_FILE=""
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -109,7 +109,7 @@ resolve_openrouter_bundle() {
   esac
   if [ -n "$active" ]; then
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.0 \
+      --minimum-version 1.7.1 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -119,7 +119,7 @@ resolve_openrouter_bundle() {
       }
   else
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.0 \
+      --minimum-version 1.7.1 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -147,7 +147,7 @@ resolve_openrouter_bundle() {
 }
 dispatch_wrapper() {
   local model="$1" system task_tmp_root system_file prompt_file manifest_file
-  local policy boundary authorization payload_sha256 rc
+  local policy boundary authorization payload_sha256 authorization_mode rc
   resolve_openrouter_bundle || return 1
   system="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
   task_tmp_root="${TMPDIR:-/tmp}"
@@ -172,19 +172,38 @@ dispatch_wrapper() {
     --content-file "$system_file" --content-file "$prompt_file")" || {
     rm -f "$system_file" "$prompt_file" "$manifest_file"; return 1;
   }
-  if [ -z "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ]; then
-    printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' "$payload_sha256"
-    rm -f "$system_file" "$prompt_file" "$manifest_file"
-    return 78
-  fi
-  if ! "$authorization" verify --manifest "$manifest_file" \
-      --approved-sha256 "$OPENROUTER_PAYLOAD_APPROVAL_SHA256" \
-      --content-file "$system_file" --content-file "$prompt_file" 2>/dev/null; then
-    printf '{"status":"approval_required","payloadSha256":"%s","authority":"user","reason":"payload-or-approval-changed"}\n' "$payload_sha256"
-    rm -f "$system_file" "$prompt_file" "$manifest_file"
-    return 78
-  fi
+  authorization_mode="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"
+  case "$authorization_mode" in
+    exact-digest)
+      if [ -z "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ]; then
+        printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' "$payload_sha256"
+        rm -f "$system_file" "$prompt_file" "$manifest_file"
+        return 78
+      fi
+      if ! "$authorization" verify --manifest "$manifest_file" \
+          --approved-sha256 "$OPENROUTER_PAYLOAD_APPROVAL_SHA256" \
+          --content-file "$system_file" --content-file "$prompt_file" 2>/dev/null; then
+        printf '{"status":"approval_required","payloadSha256":"%s","authority":"user","reason":"payload-or-approval-changed"}\n' "$payload_sha256"
+        rm -f "$system_file" "$prompt_file" "$manifest_file"
+        return 78
+      fi
+      ;;
+    trusted-boundary)
+      if ! "$authorization" verify-trusted-boundary \
+          --manifest "$manifest_file" --policy "$policy" \
+          --content-file "$system_file" --content-file "$prompt_file" >/dev/null; then
+        rm -f "$system_file" "$prompt_file" "$manifest_file"
+        return 77
+      fi
+      ;;
+    *)
+      echo "cascade-dispatch: invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2
+      rm -f "$system_file" "$prompt_file" "$manifest_file"
+      return 2
+      ;;
+  esac
   OPENROUTER_SYSTEM="$(cat "$system_file")" \
+    OPENROUTER_AUTHORIZATION_MODE="$authorization_mode" \
     "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
     "$model" - "$TIMEOUT" "" < "$prompt_file"
   rc=$?

@@ -48,9 +48,13 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 
 ## Invocation Protocol
 
-Load the full protocol from `${CLAUDE_SKILL_DIR}/references/invocation-protocol.md`. It covers the wrapper's positional argument shape, the per-request provider preferences (`OPENROUTER_ZDR`, `OPENROUTER_REQUIRE_PARAMS`, `OPENROUTER_PROVIDER_SORT`), HTTP status handling, the rate-limit fallback to a second model slug, and response parsing.
+Load the full protocol from `${CLAUDE_SKILL_DIR}/references/invocation-protocol.md`. It covers the wrapper's positional argument shape, workload-aware provider preferences (`OPENROUTER_WORKLOAD`, `OPENROUTER_ZDR`, `OPENROUTER_REQUIRE_PARAMS`, `OPENROUTER_PROVIDER_SORT`), streamed response handling, native fallback to a second model slug, layered timeouts, and content-free success/failure receipts.
 
-Key rules: always set a timeout, always use the wrapper for automated flows, pipe large prompts via stdin (`-` as the prompt arg). The wrapper prints the model's text content directly (it already extracts `.choices[0].message.content`). All failures are graceful skips.
+Key rules: always set an overall timeout, always use the wrapper for automated
+flows, and pipe large prompts via stdin (`-` as the prompt arg). The wrapper
+privately JSON-encodes the prompt, assembles the streamed deltas, and prints the
+model's text directly. All failures are graceful skips with content-free
+receipts when requested.
 
 ## Model Selection
 
@@ -69,7 +73,7 @@ documentation before changing the durable Matrix.
 
 The MCP is discovery/observability only for automated workflows. Do not replace
 the direct API runner with `send-message`: the runner owns the team key,
-payload-specific disclosure boundary, timeouts, provider controls, fallback
+    exact-digest or Pipeline trusted-boundary authorization, timeouts, provider controls, fallback
 chain, and content-free receipts. MCP absence never silently changes the
 selected model.
 
@@ -103,13 +107,13 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.0 --active-host "$ACTIVE_HOST" \
+    --minimum-version 1.7.1 --active-host "$ACTIVE_HOST" \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.0 \
+    --minimum-version 1.7.1 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/payload-authorization.sh)

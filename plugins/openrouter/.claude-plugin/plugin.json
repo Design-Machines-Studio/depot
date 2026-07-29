@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
   "description": "OpenRouter provider plugin with Kimi K3-led security and bulk analysis, exact disclosure filtering, bounded direct-API execution, and an optional official MCP control plane for live model, endpoint, benchmark, credit, and generation discovery.",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"

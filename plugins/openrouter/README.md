@@ -7,6 +7,12 @@ OpenRouter MCP is a read-only-first control plane for live model/provider
 discovery, benchmarks, credits, documentation, and generation inspection. See
 `skills/openrouter-delegate/references/mcp-control-plane.md`.
 
+The direct runner uses streamed chat completions, OpenRouter-native ordered
+model fallback, separate connection/first-byte/idle/overall watchdogs, and
+content-free success or failure receipts. Routine direct and bulk workloads
+prefer throughput; consequential quality and security workloads retain
+quality-first Exacto routing.
+
 ## What it routes
 
 Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. When `OPENROUTER_API_KEY` is set, OpenRouter is:
@@ -34,4 +40,11 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
 
 - `OPENROUTER_API_KEY` set in the environment. When unset, external coding-review lanes fall back to Codex.
 - `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).
+- `OPENROUTER_WORKLOAD=quality|security|direct|bulk|mechanical` selects the
+  default provider-routing strategy; explicit provider sort/order overrides it.
+- Pipeline users may set
+  `OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` once per trusted run to
+  replace per-payload digest prompts with automatic canonical scanning plus
+  unchanged-byte verification. Direct `/openrouter` and dm-review calls retain
+  exact-digest approval by default.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.

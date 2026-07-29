@@ -22,7 +22,8 @@ The caller passes you these inputs in the prompt body:
 - `target_agent_path` -- absolute path to the agent definition file inside the depot repo or an installed depot plugin cache
 - `target_agent_name` -- bare agent ID (must match `^[a-z0-9-]+$`)
 - `target_model` -- full OpenRouter model slug such as `z-ai/glm-5.2` or `deepseek/deepseek-v4-pro`
-- `fallback_model` -- optional full OpenRouter model slug tried by the wrapper on HTTP 429/503
+- `fallback_model` -- optional full OpenRouter model slug sent in the same
+  ordered native fallback request
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
 - `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
 - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` -- expected resolver identity
@@ -128,7 +129,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.7.1 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -138,7 +139,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.0 \
+      --minimum-version 1.7.1 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -363,8 +364,16 @@ Immediately before the network call, verify that neither file changed:
   --content-file "$SYS_FILE" \
   --content-file "$USER_FILE"
 
+case "$target_agent_name" in
+  security-auditor*) OPENROUTER_WORKLOAD_CLASS="security" ;;
+  openrouter-bulk-analyst) OPENROUTER_WORKLOAD_CLASS="bulk" ;;
+  *) OPENROUTER_WORKLOAD_CLASS="quality" ;;
+esac
+
 RESULT=$( \
   OPENROUTER_SYSTEM="$(cat "$SYS_FILE")" \
+  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+  OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
   OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
   bash "$WRAPPER_PATH" "$target_model" - "$target_timeout" "${fallback_model:-}" \
   < "$USER_FILE" \
