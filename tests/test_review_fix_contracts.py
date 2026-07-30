@@ -171,7 +171,9 @@ class ReviewFixContractTests(unittest.TestCase):
         for minimum, expected in (
             ("0.3.0", 0),
             ("0.5.0", 0),
-            ("0.5.1", 2),
+            ("0.5.1", 0),
+            ("0.6.1", 0),
+            ("0.6.2", 2),
             ("not-semver", 2),
         ):
             with self.subTest(minimum=minimum):

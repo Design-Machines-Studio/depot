@@ -11,7 +11,7 @@ repository verification planner; do not author or guess build/test commands.
 ## Workflow
 
 1. Require the target repository's `.dm/verification.json`.
-2. Resolve one coherent Workflow Kernel `>=0.6.0` launcher through the shared
+2. Resolve one coherent Workflow Kernel `>=0.6.1` launcher through the shared
    runtime-resolution contract.
 3. Determine the requested boundary:
    - ordinary implementation: `chunk`;

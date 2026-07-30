@@ -1,6 +1,6 @@
 # Repository Verification Planner
 
-Workflow Kernel `0.6.0` provides deterministic repository test selection and
+Workflow Kernel `0.6.1` provides deterministic repository test selection and
 authenticated exact receipt reuse. Repository configuration declares commands
 and policy; separate host approval authorizes the exact execution closure.
 

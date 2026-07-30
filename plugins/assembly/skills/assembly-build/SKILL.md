@@ -92,7 +92,7 @@ host approval and a newly sealed approval artifact.
 ## Execution
 
 Resolve one compatible Workflow Kernel launcher using its
-`references/runtime-resolution.md` contract. Require Workflow Kernel `>=0.6.0`
+`references/runtime-resolution.md` contract. Require Workflow Kernel `>=0.6.1`
 and pin that launcher for the command.
 
 Use these run-owned artifacts:

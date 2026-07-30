@@ -1,6 +1,6 @@
 {
   "name": "assembly",
-  "version": "3.9.0",
+  "version": "3.9.1",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
   "author": {
     "name": "Design Machines"
@@ -152,7 +152,7 @@
     ]
   },
   "pluginDependencies": {
-    "workflow-kernel": ">=0.6.0"
+    "workflow-kernel": ">=0.6.1"
   },
   "optionalPluginDependencies": {
     "council": ">=1.5.0",

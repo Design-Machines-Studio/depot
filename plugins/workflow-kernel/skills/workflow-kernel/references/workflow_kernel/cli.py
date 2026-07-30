@@ -22,7 +22,7 @@ from .events import EventStore
 from .inspection import InspectionError
 from .repository_scope import repository_scope as _repository_scope
 from .runtime_resolution import (
-    KERNEL_VERSION_FLOOR, compatible_kernel_version,
+    KERNEL_VERSION, KERNEL_VERSION_FLOOR, compatible_kernel_version,
     resolve_plugin_bundle, resolve_workflow_kernel_runtime, semantic_version,
 )
 from .schema import (
@@ -2753,16 +2753,16 @@ def command_snapshot_files(args):
 
 
 def command_kernel_info(args):
-    version = ".".join(str(item) for item in KERNEL_VERSION_FLOOR)
+    version = ".".join(str(item) for item in KERNEL_VERSION)
     requested = (
         semantic_version(args.minimum_version)
         if args.minimum_version
-        else KERNEL_VERSION_FLOOR
+        else KERNEL_VERSION
     )
     if (
         requested is None
-        or requested[0] != KERNEL_VERSION_FLOOR[0]
-        or KERNEL_VERSION_FLOOR < requested
+        or requested[0] != KERNEL_VERSION[0]
+        or KERNEL_VERSION < requested
     ):
         raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
             ErrorDetailKey.REASON_CODE.value: "kernel_version_incompatible",

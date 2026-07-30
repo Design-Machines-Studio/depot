@@ -6,7 +6,7 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.6.0 retains the inspection, shadow-comparison, retry, redaction,
+Version 0.6.1 retains the inspection, shadow-comparison, retry, redaction,
 authoritative JSON, derived Markdown, and compatible trend mechanics introduced
 in earlier releases. It adds authenticated repository verification with sealed
 profile approvals, exact-head provider evidence, and contained Docker lanes.
@@ -23,7 +23,7 @@ Depot checkout or a compatible same-major entry under the Claude cache, then
 the Codex cache, ordered by parsed semver (never mtime). Existing inspection,
 quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; repository-verification consumers require
-`>=0.6.0`. The
+`>=0.6.1`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -334,7 +334,7 @@ Promotion is an evidence decision, not a mode flag.
 - `native_available -> native_default` is forbidden in this epic and returns
   `separate_human_approval_required`.
 
-Fixture evidence cannot masquerade as real-run evidence. Version 0.6.0 keeps
+Fixture evidence cannot masquerade as real-run evidence. Version 0.6.1 keeps
 `shadow` as the `init` default while exposing only the bounded authoritative
 commands named above. A caller must explicitly select an approved mode and
 delegate each mechanic; no release promotion makes the kernel an autonomous

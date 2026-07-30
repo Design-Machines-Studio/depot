@@ -130,7 +130,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.9.0",
+      "version": "3.9.1",
       "author": {
         "name": "Design Machines"
       },
@@ -350,7 +350,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.35.0",
+      "version": "1.35.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -375,7 +375,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.6.0",
+      "version": "0.6.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -50,7 +50,7 @@ graph LR
 |---|---|---|---|
 | airlift | openrouter | optional | `>=1.7.0` |
 | airlift | workflow-kernel | optional | `>=0.5.0` |
-| assembly | workflow-kernel | required | `>=0.6.0` |
+| assembly | workflow-kernel | required | `>=0.6.1` |
 | assembly | council | optional | `>=1.5.0` |
 | assembly | design-machines | optional | `>=1.3.0` |
 | assembly | dm-review | optional | `>=1.35.0` |
@@ -68,9 +68,9 @@ graph LR
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.47.1` |
 | pipeline | ned | required | `>=1.4.0` |
-| pipeline | workflow-kernel | required | `>=0.6.0` |
+| pipeline | workflow-kernel | required | `>=0.6.1` |
 | pipeline | design-machines | optional | `>=1.3.0` |
-| pipeline | assembly | optional | `>=3.9.0` |
+| pipeline | assembly | optional | `>=3.9.1` |
 | pipeline | live-wires | optional | `>=1.8.0` |
 | pipeline | craft-developer | optional | `>=1.0.0` |
 | pipeline | accessibility-compliance | optional | `>=1.2.0` |

@@ -565,7 +565,7 @@ Tradeoff: no parallel isolation. This is acceptable for sequential manifests and
 
 ### 1d: Repository Verification Planner
 
-Use Workflow Kernel `>=0.6.0` as the only executable source of repository
+Use Workflow Kernel `>=0.6.1` as the only executable source of repository
 test selection. Pin the launcher already resolved for this run.
 
 This authority is separate from optional kernel shadow observation. Shadow
