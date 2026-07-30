@@ -41,7 +41,7 @@ OPENROUTER_BUNDLE_VERSION=""
 OPENROUTER_BUNDLE_CLASS=""
 OPENROUTER_BUNDLE_REASON=""
 
-CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="300"; DRYRUN=0; PROBE_FILE=""
+CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="3600"; DRYRUN=0; PROBE_FILE=""
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -109,7 +109,7 @@ resolve_openrouter_bundle() {
   esac
   if [ -n "$active" ]; then
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.1 \
+      --minimum-version 1.7.2 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -119,7 +119,7 @@ resolve_openrouter_bundle() {
       }
   else
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.1 \
+      --minimum-version 1.7.2 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \

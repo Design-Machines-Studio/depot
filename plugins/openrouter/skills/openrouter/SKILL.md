@@ -58,10 +58,10 @@ fi
 
 ### Step 3: Select Timeout
 
-Default 300s. Increase to 600s for very large inputs (big diffs at or above
-10K lines). The wrapper separately enforces connection, first-byte, and
-stream-idle watchdogs, so this value is the total completion budget rather than
-the only liveness check.
+Default 3600s. Increase to 7200s for very large inputs (big diffs at or above
+10K lines). The wrapper separately enforces a 30s connection timeout plus 600s
+first-byte and stream-idle watchdogs, so this value is the total completion
+budget rather than the only liveness check.
 
 ### Step 4: Invoke OpenRouter
 
@@ -74,7 +74,7 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.1 \
+    --minimum-version 1.7.2 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -83,7 +83,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     --active-host "$ACTIVE_HOST")
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.1 \
+    --minimum-version 1.7.2 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \

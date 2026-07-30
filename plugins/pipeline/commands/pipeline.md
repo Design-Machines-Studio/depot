@@ -410,7 +410,7 @@ network lens runs only after the byte-bound user gate below; it may therefore
 complete after Codex. This is a quality gate, not a fallback ladder.
 
 Before the OpenRouter lens, resolve the coherent installed Pipeline bundle
-through workflow-kernel with `--plugin pipeline --minimum-version 1.34.1
+through workflow-kernel with `--plugin pipeline --minimum-version 1.34.2
 --required-asset references/openrouter-authorization-contract.md
 --active-host <claude|codex>`, then read and apply
 `references/openrouter-authorization-contract.md` from that selected root.

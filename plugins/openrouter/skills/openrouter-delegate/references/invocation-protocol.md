@@ -19,7 +19,8 @@ openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 
 - `<model-slug>` -- OpenRouter model ID, e.g. `moonshotai/kimi-k3` or `z-ai/glm-5.2`
 - `<prompt|->` -- literal prompt string, or `-` to read the prompt from stdin (use for large diffs)
-- `[timeout_s]` -- overall streamed completion budget in seconds (default `300`)
+- `[timeout_s]` -- overall streamed completion budget in seconds (default
+  `3600`; use `7200` for very large or bulk review)
 - `[fallback-slug]` -- a second model included in the same ordered OpenRouter
   `models` request
 
@@ -39,7 +40,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.1 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.7.2 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -47,7 +48,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.1 \
+      --minimum-version 1.7.2 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -100,10 +101,14 @@ Payload-Specific Host Authorization before invoking it.
   to the request order for the fallback model.
 - `OPENROUTER_ALLOW_FALLBACKS` (`0|1`, default `1`): whether routing may fall
   through to other eligible providers.
-- `OPENROUTER_CONNECT_TIMEOUT` (default `15`): TCP/TLS connection timeout.
-- `OPENROUTER_FIRST_BYTE_TIMEOUT` (default `120`): maximum time before the first
+- `OPENROUTER_OVERALL_TIMEOUT` (default `3600`): overall streamed completion
+  budget when the positional timeout is omitted.
+- `OPENROUTER_CONNECT_TIMEOUT` (default `30`): TCP/TLS connection timeout.
+- `OPENROUTER_FIRST_BYTE_TIMEOUT` (default `600`): maximum time before the first
   streamed response byte.
-- `OPENROUTER_IDLE_TIMEOUT` (default `90`): maximum time without stream progress.
+- `OPENROUTER_IDLE_TIMEOUT` (default `600`): maximum time without stream
+  progress. Any streamed bytes reset this watchdog; only a completed, validated
+  stream becomes review evidence.
 - `OPENROUTER_AUTHORIZATION_MODE` (`exact-digest|trusted-boundary|unspecified`):
   content-free receipt provenance supplied by the authorized caller.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or

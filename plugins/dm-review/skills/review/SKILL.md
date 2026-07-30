@@ -212,7 +212,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.7.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.7.2 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -222,7 +222,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.7.0 \
+        --minimum-version 1.7.2 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -328,7 +328,7 @@ Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` p
 | `.css` changed | **css-reviewer** | `live-wires/*/agents/review/css-reviewer.md` |
 | `.templ`, `.js`, or `.ts` changed AND project is Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `accessibility-compliance/*/agents/review/a11y-dynamic-content-reviewer.md` |
 | `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `ghostwriter/*/agents/review/voice-editor.md` |
-| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- **OpenRouter when available** (60s) | `dm-review/*/agents/review/test-coverage-reviewer.md` |
+| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- **OpenRouter when available** (1800s) | `dm-review/*/agents/review/test-coverage-reviewer.md` |
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
@@ -411,12 +411,12 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 120s |
-| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 90s |
-| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 90s |
-| `doc-sync-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 60s |
-| `test-coverage-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 60s |
-| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 120-180s |
+| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |
+| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
+| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
+| `doc-sync-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
+| `test-coverage-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
+| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -476,7 +476,8 @@ authorization, invocation, fallback, and provenance implementation.
    - `target_agent_name` -- bare ID (e.g., `pattern-recognition-specialist`)
    - `target_model` -- full primary OpenRouter slug from policy or the inline table
    - `fallback_model` -- full fallback OpenRouter slug from policy or the inline table
-   - `target_timeout` -- `90` or `60` per the table
+   - `target_timeout` -- the workload-scaled 1800s, 3600s, or 7200s value from
+     the table
    - `openrouter_bundle_ref` -- ephemeral home-relative selected root used only
      to bind runner execution to the definition that was loaded; never publish it
    - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --

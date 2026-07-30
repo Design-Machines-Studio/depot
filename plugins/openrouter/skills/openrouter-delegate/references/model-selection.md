@@ -25,13 +25,13 @@ no more than 15 minutes apart and use it only before expiry.
 
 | Task Type | Model | Timeout | Rationale |
 |-----------|-------|---------|-----------|
-| Agentic implementation | `moonshotai/kimi-k3` | 300s | Strong coding model and current open-weight release; this runner still accepts only bounded unified diffs and leaves execution/verification authority with Codex. |
-| Security analysis | `moonshotai/kimi-k3` | 300s | Quality-first adversarial lens; completion still requires independent Codex full-diff sign-off. |
-| Big-diff review (<10K lines) | `moonshotai/kimi-k3` | 300s | Highest-ranked eligible OpenRouter contender; GLM-5.2 covers provider capacity. |
-| Big-diff review (>=10K lines) | `moonshotai/kimi-k3` | 600s | 1M context; longer total budget for very large diffs while stream-idle checks still detect stalls. |
-| Second-opinion analysis | `moonshotai/kimi-k3` | 300s | Quality-first independent analysis. |
-| Config / doc generation | `z-ai/glm-5.2` | 180s | One-shot text the caller writes to disk. |
-| Frontier cross-check (cascade) | `moonshotai/kimi-k3` | 300s | Highest-quality eligible OpenRouter rung; native Codex is the fallback when valid OpenRouter capacity is exhausted. |
+| Agentic implementation | `moonshotai/kimi-k3` | 3600s | Strong coding model and current open-weight release; this runner still accepts only bounded unified diffs and leaves execution/verification authority with Codex. |
+| Security analysis | `moonshotai/kimi-k3` | 3600s | Quality-first adversarial lens with enough completion time for large security payloads; independent Codex full-diff sign-off remains mandatory. |
+| Big-diff review (<10K lines) | `moonshotai/kimi-k3` | 3600s | Highest-ranked eligible OpenRouter contender; GLM-5.2 covers provider capacity. |
+| Big-diff review (>=10K lines) | `moonshotai/kimi-k3` | 7200s | 1M context; two-hour completion budget while first-byte and stream-idle watchdogs still detect dead transports. |
+| Second-opinion analysis | `moonshotai/kimi-k3` | 3600s | Quality-first independent analysis. |
+| Config / doc generation | `z-ai/glm-5.2` | 1800s | One-shot text the caller writes to disk. |
+| Frontier cross-check (cascade) | `moonshotai/kimi-k3` | 3600s | Highest-quality eligible OpenRouter rung; native Codex is the fallback when valid OpenRouter capacity is exhausted. |
 
 The current `openrouter-wrapper.sh` accepts text prompts only. Model modality columns describe upstream capability, not an operational claim that this rail can yet attach images, audio, video, or files.
 

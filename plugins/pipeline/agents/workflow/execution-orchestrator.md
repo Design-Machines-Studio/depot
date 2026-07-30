@@ -711,7 +711,7 @@ ACTIVE_HOST=""
 resolve_pipeline_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.34.1 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.34.2 --active-host "$ACTIVE_HOST" \
       --required-executable references/cascade-dispatch.sh \
       --required-executable references/openrouter-exec.sh \
       --required-executable references/usage-probe.sh \
@@ -720,7 +720,7 @@ resolve_pipeline_bundle() {
       --required-asset references/routing-policy.json
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.34.1 \
+      --minimum-version 1.34.2 \
       --required-executable references/cascade-dispatch.sh \
       --required-executable references/openrouter-exec.sh \
       --required-executable references/usage-probe.sh \
@@ -795,11 +795,11 @@ run_cascade() {
   local exhausted_rail="${1:-}"
   if [ -n "$exhausted_rail" ]; then
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-      --kind "<kind>" --prompt - --phase execute --timeout 300 \
+      --kind "<kind>" --prompt - --phase execute --timeout 3600 \
       --exhausted-rail "$exhausted_rail"
   else
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-      --kind "<kind>" --prompt - --phase execute --timeout 300
+      --kind "<kind>" --prompt - --phase execute --timeout 3600
   fi
 }
 CASCADE_EXHAUSTED_RAIL=""

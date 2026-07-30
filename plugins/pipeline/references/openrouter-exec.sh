@@ -16,7 +16,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 MODE="run"
 MODEL="${OPENROUTER_EXEC_MODEL:-moonshotai/kimi-k3}"
 FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
-TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-300}"
+TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
 
@@ -71,7 +71,7 @@ elif [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ]; then
 fi
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.1 \
+    --minimum-version 1.7.2 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -82,7 +82,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     }
 else
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.1 \
+    --minimum-version 1.7.2 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \

@@ -110,7 +110,7 @@ N findings referencing files not in changeset (hallucinated references)."
 
 | Scenario | Policy |
 |----------|--------|
-| Agent timeout (>120s) | Skip. Record "Timed out" in Agent Summary. No retry. The 120s threshold provides a buffer above the routed-agent ceilings (90s or 60s, per dm-review Phase 3.75). If those ceilings are ever raised above 120s, this guardrail must be raised in lockstep or it will silently pass timed-out agents. |
+| Agent timeout (>7500s) | Skip. Record "Timed out" in Agent Summary. No retry. The 7500s threshold provides a five-minute buffer above the largest 7200s routed-agent ceiling in dm-review Phase 3.75. If that ceiling changes, this guardrail must change in lockstep or it will silently preempt a valid long-running lane. |
 | Agent returns empty | Treat as "Clean (empty response)" in Agent Summary. |
 | Agent returns error | Record error message in Agent Summary. Don't retry. |
 | Agent output contains `### RUNNER FAILURE` | External-LLM-routed runner failed. See Phase 4.5 for fallback procedure. If fallback also fails, apply core/conditional failure policies (REVIEW INCOMPLETE for core agents, degraded for conditional). Extract failure reasons from both runs for the Agent Summary. |

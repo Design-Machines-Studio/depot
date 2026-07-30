@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+# Keep strict-approval fixtures deterministic even when the developer's global
+# harness environment opts into trusted-boundary authorization.
+export OPENROUTER_PAYLOAD_AUTHORIZATION=exact-digest
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 POLICY="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
@@ -491,7 +495,7 @@ cat > "$FIXTURE_ROOT/fake-workflow-kernel.sh" <<'EOF'
 set -euo pipefail
 [ "${1:-}" = "resolve-plugin-bundle" ] || exit 2
 cat <<'JSON'
-{"selected_root":"~/openrouter-bundle","version":"1.7.0","cache_class":"fixture","reason":"offline-test"}
+{"selected_root":"~/openrouter-bundle","version":"1.7.2","cache_class":"fixture","reason":"offline-test"}
 JSON
 EOF
 chmod +x "$FIXTURE_ROOT/fake-workflow-kernel.sh"

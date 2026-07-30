@@ -47,7 +47,7 @@ Launch all available research agents simultaneously. Each agent gets the feature
 
 **Payload-specific user approval:** Before any OpenRouter research fan-out,
 resolve the coherent installed Pipeline bundle through workflow-kernel with
-`--plugin pipeline --minimum-version 1.34.1 --required-asset
+`--plugin pipeline --minimum-version 1.34.2 --required-asset
 references/openrouter-authorization-contract.md --active-host
 <claude|codex>`, then read that reference from the selected root. Never use a
 target-repository-relative contract path. Prepare

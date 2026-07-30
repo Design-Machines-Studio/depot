@@ -13,6 +13,12 @@ content-free success or failure receipts. Routine direct and bulk workloads
 prefer throughput; consequential quality and security workloads retain
 quality-first Exacto routing.
 
+Long-running generations use a one-hour completion budget by default and two
+hours for very large or bulk review. A 30-second connection timeout plus
+10-minute first-byte and stream-idle watchdogs still terminate dead transports
+without confusing one model-call budget with the duration of the full Pipeline
+run.
+
 ## What it routes
 
 Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. When `OPENROUTER_API_KEY` is set, OpenRouter is:

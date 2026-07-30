@@ -129,7 +129,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.1 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.7.2 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -139,7 +139,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.1 \
+      --minimum-version 1.7.2 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \

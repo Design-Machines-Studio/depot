@@ -26,7 +26,7 @@ Resolve one installed OpenRouter bundle through workflow-kernel with:
 
 ```text
 resolve-plugin-bundle --plugin openrouter
---minimum-version 1.7.1
+--minimum-version 1.7.2
 --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh
 --required-asset skills/openrouter-delegate/references/delegation-security-policy.json
 --required-executable skills/openrouter-delegate/references/delegation-boundary.sh

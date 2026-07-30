@@ -24,12 +24,14 @@
 #                       model in the same native model-fallback request
 #   OPENROUTER_ALLOW_FALLBACKS
 #                       0|1 for provider fallback (default 1)
+#   OPENROUTER_OVERALL_TIMEOUT
+#                       completion budget when timeout_s is omitted (default 3600)
 #   OPENROUTER_CONNECT_TIMEOUT
-#                       TCP/TLS connection timeout seconds (default 15)
+#                       TCP/TLS connection timeout seconds (default 30)
 #   OPENROUTER_FIRST_BYTE_TIMEOUT
-#                       maximum seconds before the first streamed byte (default 120)
+#                       maximum seconds before the first streamed byte (default 600)
 #   OPENROUTER_IDLE_TIMEOUT
-#                       maximum seconds without streamed progress (default 90)
+#                       maximum seconds without streamed progress (default 600)
 #   OPENROUTER_AUTHORIZATION_MODE
 #                       exact-digest|trusted-boundary|unspecified for receipts
 #   OPENROUTER_RECEIPT_FILE
@@ -42,7 +44,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"   # fixed PATH: pre
 
 MODEL="${1:-}"
 PROMPT_ARG="${2:-}"
-TIMEOUT="${3:-300}"
+TIMEOUT="${3:-${OPENROUTER_OVERALL_TIMEOUT:-3600}}"
 FALLBACK="${4:-}"
 if [ -z "$MODEL" ] || [ -z "$PROMPT_ARG" ]; then
   echo "usage: $0 <model> <prompt|-> [timeout] [fallback]" >&2
@@ -89,9 +91,9 @@ FALLBACK_PROVIDER_ORDER="${OPENROUTER_FALLBACK_PROVIDER_ORDER:-}"
 PROVIDER_SORT="${OPENROUTER_PROVIDER_SORT:-}"
 ALLOW_FALLBACKS="${OPENROUTER_ALLOW_FALLBACKS:-1}"
 WORKLOAD="${OPENROUTER_WORKLOAD:-quality}"
-CONNECT_TIMEOUT="${OPENROUTER_CONNECT_TIMEOUT:-15}"
-FIRST_BYTE_TIMEOUT="${OPENROUTER_FIRST_BYTE_TIMEOUT:-120}"
-IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-90}"
+CONNECT_TIMEOUT="${OPENROUTER_CONNECT_TIMEOUT:-30}"
+FIRST_BYTE_TIMEOUT="${OPENROUTER_FIRST_BYTE_TIMEOUT:-600}"
+IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"
 AUTHORIZATION_MODE="${OPENROUTER_AUTHORIZATION_MODE:-unspecified}"
 
 validate_positive_integer() {
