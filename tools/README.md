@@ -100,6 +100,10 @@ Assembly persona layouts.
 It requires only the Python standard library. It does not require Docker, a
 browser, network access, API keys, or a running project.
 
+The default gate is hermetic. Set `DEPOT_LIVE_ASSEMBLY_UX=1` only for an
+intentional sibling-repository declaration probe; that external result is
+separate from Depot's release gate.
+
 ```bash
 ./tools/validate-workflow-kernel.py
 ./tools/validate-workflow-kernel.py --verbose

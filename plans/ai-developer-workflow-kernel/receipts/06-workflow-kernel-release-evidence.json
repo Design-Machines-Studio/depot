@@ -18,8 +18,8 @@
   "evidence_origin": "fixture",
   "host_compatibility": {
     "claude-code": "reference",
-    "codex": "explained_host_difference",
-    "generic": "explained_host_difference"
+    "codex": "explained_host_economics_difference",
+    "generic": "explained_host_economics_difference"
   },
   "persona_layouts": [
     "declaration_root",

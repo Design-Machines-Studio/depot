@@ -58,11 +58,25 @@ If any check fails, report the issue and stop.
 
 ## Shadow Workflow Kernel Preflight
 
-The Markdown manifest, this command, routing policy, orchestrator, and receipts remain authoritative. The workflow kernel is observation-only and may not select ready nodes, block a merge, change fallback routing, invoke cleanup, or convert a review result.
+The Markdown manifest, this command, routing policy, orchestrator, and receipts remain authoritative. Workflow Kernel prediction, observation, comparison, and
+metrics commands are shadow-only: they may not select ready nodes, block a
+merge, change fallback routing, invoke cleanup, or convert a review result.
+Repository-verification commands are a separate authoritative fail-closed
+capability on profile-aware repositories.
 
-Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Store observation and parity artifacts beneath `plans/<feature>/` and initialize every run at `.workflow-kernel/runs/<run-id>`. If resolution or compatibility fails, preserve the authoritative run and record `shadow unavailable` with the safe reason.
+Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Store observation and parity artifacts beneath `plans/<feature>/` and initialize every run at `.workflow-kernel/runs/<run-id>`.
 
-Invoke only stable launcher subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
+The kernel has two distinct roles:
+
+- shadow observation is optional and may record `shadow unavailable` without
+  changing the canonical workflow; and
+- repository verification is authoritative on profile-aware repositories.
+  Missing/incompatible runtime, a missing/invalid sealed profile approval,
+  unavailable host authority broker, or a required pending/failed lane stops with
+  `human_help_required`. Never downgrade this authority failure to shadow
+  unavailability.
+
+Invoke only stable launcher subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan or required repository verification failed/pending, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
 
 The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulative ordered redacted array `plans/<feature>/authoritative-receipts.json`. Produce the independent prediction before corresponding authoritative actions and seal it first:
 
@@ -155,6 +169,24 @@ references.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
+
+**Repository verification adapter:** Resolve Workflow Kernel `>=0.6.0` once
+and use its `plan-verification` and `run-verification` subcommands whenever the
+target repository supplies `.dm/verification.json`.
+
+- `chunk`: doctor, fast, and changed-package/dependent checks only.
+- `revision_batch`: apply the complete finding set from one review pass, then
+  perform one affected recheck.
+- `execution_level`: after all sibling chunks merge, run one integrated full
+  non-race pass.
+- `merge_candidate`: reuse identical level evidence or run once for the changed
+  tree; preserve remote race/security/container/harness lanes explicitly.
+
+Do not execute a full or race suite after each chunk or each individual finding
+fix. Do not synthesize cache hits: reuse requires a matching passing receipt
+for the exact profile, argv, relevant inputs, and declared environment. For an
+Assembly target without `.dm/verification.json`, stop for project
+configuration rather than restoring hardcoded Go/Docker commands.
 
 **Repository cleanup is host-independent.** The Codex adapter runs the same cleanup contract as the Claude path, at the same points (Step 0e registry init, Step 3j per chunk, Step 5b sweep + inventory) -- see `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. Cleanup is deterministic git executed by the orchestrator in-process. It is never delegated to a `multi_agent_v1.spawn_agent` worker and never routed through `openrouter-exec.sh` or `openrouter-wrapper.sh`. Deleting refs is not a judgment task, and a worker sandbox cannot be trusted to report honestly which refs survived.
 

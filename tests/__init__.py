@@ -180,6 +180,7 @@ def schema_matches(value, schema, root=None):
             "array": type(value) is list,
             "string": type(value) is str,
             "integer": type(value) is int,
+            "number": type(value) in {int, float},
             "boolean": type(value) is bool,
             "null": value is None,
         }
@@ -203,7 +204,7 @@ def schema_matches(value, schema, root=None):
         schema["pattern"], value,
     ) is None:
         return False
-    if type(value) is int and value < schema.get("minimum", value):
+    if type(value) in {int, float} and value < schema.get("minimum", value):
         return False
     if any(not schema_matches(value, item, root) for item in schema.get("allOf", [])):
         return False

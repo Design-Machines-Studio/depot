@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/repository-verification-profile-v1.json",
+  "title": "Repository Verification Profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "lanes"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "profile_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "lanes": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"$ref": "#/$defs/lane"}
+    }
+  },
+  "$defs": {
+    "safeString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096
+    },
+    "safePath": {
+      "allOf": [
+        {"$ref": "#/$defs/safeString"},
+        {"pattern": "^(?!/|\\\\|-)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"}
+      ]
+    },
+    "package": {
+      "allOf": [
+        {"$ref": "#/$defs/safeString"},
+        {"pattern": "^(?:\\.|\\./\\.\\.\\.|\\./(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+)$"}
+      ]
+    },
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "tier", "cadences", "owner", "argv"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "tier": {
+          "enum": ["doctor", "fast", "focused", "full", "race", "harness", "remote"]
+        },
+        "cadences": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["chunk", "revision_batch", "execution_level", "merge_candidate", "post_merge"]
+          }
+        },
+        "owner": {
+          "enum": ["local", "github", "blueprint", "other", "unresolved"]
+        },
+        "argv": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {"$ref": "#/$defs/safeString"}
+        },
+        "changed_paths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/safePath"}
+        },
+        "input_paths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/safePath"}
+        },
+        "authority_paths": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/safePath"}
+        },
+        "package_selector": {"enum": ["none", "go_changed"]},
+        "declared_dependents": {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {"$ref": "#/$defs/package"},
+          "additionalProperties": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {"$ref": "#/$defs/package"}
+          }
+        },
+        "required": {"type": "boolean"},
+        "cache": {"enum": ["content", "never"]},
+        "risks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {"enum": ["low", "medium", "high"]}
+        },
+        "cache_environment": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
+          }
+        },
+        "required_environment": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
+          }
+        },
+        "authority_environment": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
+          }
+        },
+        "after": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+          }
+        },
+        "mutates_repository": {"type": "boolean"},
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3600
+        }
+      }
+    }
+  }
+}

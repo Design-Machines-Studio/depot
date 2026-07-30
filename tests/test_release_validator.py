@@ -31,18 +31,25 @@ class ReleaseValidatorTests(unittest.TestCase):
             "plan-create", "plan-compose", "record-create", "plan-cleanup",
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
             "plan-reconcile",
+            "approve-verification-profile", "plan-verification",
+            "run-verification", "record-verification-result",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
         self.assertTrue(all("--help" not in case for case in VALIDATOR.BEHAVIORAL_CLI_CASES.values()))
 
-    def test_schema_inventory_is_exactly_the_nine_released_documents(self):
+    def test_schema_inventory_is_exactly_the_thirteen_released_documents(self):
         expected = {
             "behavioral-verification-contract-schema.json",
             "verification-contract-approval-schema.json",
             "browser-recovery-schema.json",
             "cleanup-plan-schema.json",
             "cleanup-receipt-schema.json",
+            "repository-verification-plan-schema.json",
+            "repository-verification-approval-schema.json",
+            "repository-verification-provider-attestation-schema.json",
+            "repository-verification-profile-schema.json",
+            "repository-verification-receipts-schema.json",
             "resource-registry-schema.json",
             "verification-profile-schema.json",
             "workflow-classes-schema.json",

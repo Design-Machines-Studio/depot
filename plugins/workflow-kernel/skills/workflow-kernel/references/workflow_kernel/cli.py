@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -2888,7 +2889,209 @@ def command_resolve_plugin_bundle(args):
     return 0
 
 
+def _repository_profile_ref(repository_root, profile_path):
+    repository = Path(repository_root).resolve(strict=True)
+    if Path(profile_path).is_symlink():
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "verification_profile_symlink",
+        })
+    profile = Path(profile_path).resolve(strict=True)
+    try:
+        return repository, profile.relative_to(repository).as_posix()
+    except ValueError:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "verification_profile_outside_repository",
+        }) from None
+
+
+def _load_receipt_key_from_stdin(enabled):
+    if not enabled or sys.stdin.isatty():
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "receipt_key_required",
+        })
+    stream = sys.stdin.buffer
+    value = stream.read(4097)
+    try:
+        stream.close()
+    except OSError:
+        pass
+    if len(value) < 32 or len(value) > 4096:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "receipt_key_size",
+        })
+    return value
+
+
+def _exact_commit(repository, value):
+    result = subprocess.run(
+        ["git", "-C", str(repository), "rev-parse", "--verify", f"{value}^{{commit}}"],
+        capture_output=True, check=False, text=True,
+    )
+    commit = result.stdout.strip()
+    if (
+        result.returncode != 0
+        or re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit) is None
+    ):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "verification_commit_unresolved",
+        })
+    return commit
+
+
+def command_approve_verification_profile(args):
+    from .verification_authority import issue_profile_approval
+    from .verification_errors import VerificationPlannerError
+
+    repository, profile_ref = _repository_profile_ref(
+        args.repository_root, args.profile,
+    )
+    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
+    try:
+        approval = issue_profile_approval(
+            _load_json(args.profile), repository, profile_ref,
+            trusted_base_commit=_exact_commit(
+                repository, args.trusted_base_commit,
+            ),
+            candidate_commit=_exact_commit(
+                repository, args.candidate_commit,
+            ),
+            include_worktree=args.include_worktree,
+            run_id=args.run_id,
+            authorization_event_id=args.authorization_event_id,
+            approved_at=args.approved_at,
+            receipt_key=receipt_key,
+        )
+    except VerificationPlannerError as exc:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
+        }) from exc
+    _write_json_once(args.output, approval)
+    _emit(approval)
+    return 0
+
+
+def _publish_receipt_ledger(path, produced, baseline_count, receipt_key):
+    from .verification_errors import VerificationPlannerError
+    from .verification_receipts import merge_receipt_ledgers
+
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = destination.with_name(destination.name + ".lock")
+    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        current = _load_json(destination) if destination.exists() else None
+        merged = merge_receipt_ledgers(
+            current, produced, baseline_count, receipt_key,
+        )
+        _write_json(destination, merged)
+        return merged
+    except VerificationPlannerError as exc:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "verification_receipt_conflict",
+        }) from exc
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+
+
+def command_plan_verification(args):
+    from .verification_errors import VerificationPlannerError
+    from .verification_planning import build_plan
+
+    repository, profile_ref = _repository_profile_ref(
+        args.repository_root, args.profile,
+    )
+    approval = _load_json(args.approval)
+    changed_paths = approval.get("changed_paths", [])
+    receipts = None if args.receipts is None else _load_json(args.receipts)
+    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
+    try:
+        plan = build_plan(
+            _load_json(args.profile), repository, profile_ref, changed_paths,
+            args.boundary, args.risk, receipt_ledger=receipts,
+            receipt_key=receipt_key, approval=approval,
+            head_commit=_exact_commit(
+                repository, approval.get("candidate_commit", ""),
+            ),
+        )
+    except VerificationPlannerError as exc:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
+        }) from exc
+    _write_json(args.output, plan)
+    _emit(plan)
+    return EXIT_UNSAFE_PLAN if plan["status"] == "blocked" else 0
+
+
+def command_run_verification(args):
+    from .verification_errors import VerificationPlannerError
+    from .verification_orchestrator import execute_plan
+
+    repository, _profile_ref = _repository_profile_ref(
+        args.repository_root, args.profile,
+    )
+    receipts = None if args.receipts is None else _load_json(args.receipts)
+    baseline_count = 0 if receipts is None else len(receipts.get("receipts", []))
+    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
+    try:
+        result, outcome = execute_plan(
+            _load_json(args.profile), repository, _load_json(args.plan),
+            receipt_ledger=receipts, receipt_key=receipt_key,
+            approval=_load_json(args.approval),
+        )
+    except VerificationPlannerError as exc:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
+        }) from exc
+    result = _publish_receipt_ledger(
+        args.output, result, baseline_count, receipt_key,
+    )
+    _emit({
+        "status": outcome,
+        "receipt_count": len(result["receipts"]),
+        "output": str(args.output),
+    })
+    return 0 if outcome == "complete" else EXIT_UNSAFE_PLAN
+
+
+def command_record_verification_result(args):
+    from .verification_errors import VerificationPlannerError
+    from .verification_provider import record_provider_result
+
+    repository, _profile_ref = _repository_profile_ref(
+        args.repository_root, args.profile,
+    )
+    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
+    receipts = None if args.receipts is None else _load_json(args.receipts)
+    baseline_count = 0 if receipts is None else len(receipts.get("receipts", []))
+    try:
+        result = record_provider_result(
+            _load_json(args.profile), repository, _load_json(args.plan),
+            approval=_load_json(args.approval), receipt_ledger=receipts,
+            receipt_key=receipt_key, lane_id=args.lane_id,
+            provider_attestation=_load_json(args.provider_attestation),
+        )
+    except VerificationPlannerError as exc:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
+        }) from exc
+    result = _publish_receipt_ledger(
+        args.output, result, baseline_count, receipt_key,
+    )
+    outcome = result["receipts"][-1]["status"]
+    _emit({
+        "status": outcome,
+        "receipt_count": len(result["receipts"]),
+        "output": str(args.output),
+    })
+    return 0 if outcome == "passed" else EXIT_UNSAFE_PLAN
+
+
 def parser():
+    from .verification_contract import BOUNDARY_CHOICES
+    from .verification_repository import RISK_CHOICES
+
     result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
     commands = result.add_subparsers(dest="command", required=True)
 
@@ -3009,6 +3212,166 @@ def parser():
     metrics.add_argument("--events", required=True)
     metrics.add_argument("--output", required=True)
     metrics.set_defaults(handler=command_metrics)
+
+    approve_verification = commands.add_parser(
+        "approve-verification-profile",
+        help="seal host authority for one repository verification profile",
+    )
+    approve_verification.add_argument(
+        "--repository-root", required=True,
+        help="repository whose durable scope and profile are being authorized",
+    )
+    approve_verification.add_argument(
+        "--profile", required=True,
+        help="repository-owned verification profile to validate and seal",
+    )
+    approve_verification.add_argument(
+        "--trusted-base-commit", required=True,
+        help="host-validated base commit bound into the approval",
+    )
+    approve_verification.add_argument(
+        "--candidate-commit", required=True,
+        help="exact candidate commit whose changes and provider gates are approved",
+    )
+    approve_verification.add_argument(
+        "--include-worktree", action="store_true",
+        help="bind tracked and untracked worktree changes into this approval",
+    )
+    approve_verification.add_argument(
+        "--run-id", required=True,
+        help="workflow run identifier bound into the approval",
+    )
+    approve_verification.add_argument(
+        "--authorization-event-id", required=True,
+        help="unique host authorization event recorded in the approval",
+    )
+    approve_verification.add_argument(
+        "--approved-at", required=True,
+        help="timezone-aware timestamp for the host authorization decision",
+    )
+    approve_verification.add_argument(
+        "--receipt-key-stdin", action="store_true", required=True,
+        help=(
+            "read 32-4096 broker-supplied authority bytes from standard input; "
+            "the key is never named in argv or passed to verification children"
+        ),
+    )
+    approve_verification.add_argument(
+        "--output", required=True,
+        help="destination for the sealed approval JSON",
+    )
+    approve_verification.set_defaults(
+        handler=command_approve_verification_profile,
+    )
+
+    plan_verification = commands.add_parser(
+        "plan-verification",
+        help="select tiered repository verification lanes for one boundary",
+        description=(
+            "Validate a repository-owned command-array profile, resolve changed "
+            "paths, select only the lanes scheduled for this boundary, and reuse "
+            "content-identical passing receipts."
+        ),
+    )
+    plan_verification.add_argument("--repository-root", required=True)
+    plan_verification.add_argument("--profile", required=True)
+    plan_verification.add_argument(
+        "--boundary", choices=BOUNDARY_CHOICES, required=True,
+    )
+    plan_verification.add_argument(
+        "--risk", choices=RISK_CHOICES, required=True,
+    )
+    plan_verification.add_argument(
+        "--approval", required=True,
+        help="host-authenticated profile approval issued before dispatch",
+    )
+    plan_verification.add_argument("--receipts")
+    plan_verification.add_argument(
+        "--receipt-key-stdin", action="store_true", required=True,
+        help=(
+            "read broker-supplied authority bytes from standard input to "
+            "validate approval and any prior receipts"
+        ),
+    )
+    plan_verification.add_argument("--output", required=True)
+    plan_verification.set_defaults(handler=command_plan_verification)
+
+    run_verification = commands.add_parser(
+        "run-verification",
+        help="execute exact local lanes from a fresh repository verification plan",
+        description=(
+            "Revalidate the profile, source inputs, commands, and cache authority "
+            "before executing local argv arrays without a shell. Remote lanes "
+            "remain explicit pending receipts."
+        ),
+    )
+    run_verification.add_argument("--repository-root", required=True)
+    run_verification.add_argument("--profile", required=True)
+    run_verification.add_argument("--plan", required=True)
+    run_verification.add_argument(
+        "--approval", required=True,
+        help="host-authenticated approval bound into the plan",
+    )
+    run_verification.add_argument("--receipts")
+    run_verification.add_argument(
+        "--receipt-key-stdin", action="store_true", required=True,
+        help=(
+            "read broker-supplied authority bytes from standard input; "
+            "standard input is consumed before repository commands start"
+        ),
+    )
+    run_verification.add_argument("--output", required=True)
+    run_verification.set_defaults(handler=command_run_verification)
+
+    record_verification = commands.add_parser(
+        "record-verification-result",
+        help="authenticate one exact provider result for a remote lane",
+    )
+    record_verification.add_argument(
+        "--repository-root", required=True,
+        help="repository whose scope and selected inputs must match the plan",
+    )
+    record_verification.add_argument(
+        "--profile", required=True,
+        help="repository-owned verification profile bound into the plan",
+    )
+    record_verification.add_argument(
+        "--plan", required=True,
+        help="exact verification plan that selected the remote lane",
+    )
+    record_verification.add_argument(
+        "--approval", required=True,
+        help="sealed host approval authorizing this profile and execution closure",
+    )
+    record_verification.add_argument(
+        "--receipts",
+        help="existing receipt array used to preserve completed lane evidence",
+    )
+    record_verification.add_argument(
+        "--lane-id", required=True,
+        help="remote lane selected by the supplied verification plan",
+    )
+    record_verification.add_argument(
+        "--provider-attestation", required=True,
+        help=(
+            "broker-sealed JSON attestation produced only after provider-native "
+            "evidence, exact head SHA, outcome, and exit code are verified"
+        ),
+    )
+    record_verification.add_argument(
+        "--receipt-key-stdin", action="store_true", required=True,
+        help=(
+            "read broker-supplied host authority bytes from standard input "
+            "after provider identity and exact-SHA evidence are verified"
+        ),
+    )
+    record_verification.add_argument(
+        "--output", required=True,
+        help="destination for the updated authenticated receipt array",
+    )
+    record_verification.set_defaults(
+        handler=command_record_verification_result,
+    )
 
     def creation_command(name, handler):
         command = commands.add_parser(name, help="plan one managed Docker creation")
@@ -3273,6 +3636,7 @@ def main(argv=None):
             "guarded_cleanup_authority_conflict", "guarded_cleanup_authority_changed",
             "guarded_cleanup_authority_bijection_failed",
             "guarded_cleanup_authority_step_gap",
+            "verification_receipt_conflict",
         }:
             return EXIT_CONFLICT
         return EXIT_INVALID

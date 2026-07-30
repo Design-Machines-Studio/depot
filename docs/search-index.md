@@ -74,7 +74,7 @@ Common questions mapped to the right skill:
 | the-local | element-branding | element-web, branding, css, theming, matrix | -- | "Element Web appearance", "auth page styling", "logo replacement", "welcome page", "custom CSS not applying", ... |
 | the-local | server-ops | server-ops, docker, matrix, digitalocean, infrastructure | -- | "SSH into server", "docker compose restart", "create Matrix account", "check server logs", "backup database", ... |
 | the-local | synapse-config | synapse, matrix, configuration, email, jinja2 | -- | "homeserver.yaml", "registration token", "email template", "SMTP setup", "Resend config", ... |
-| workflow-kernel | workflow-kernel | workflow, state-machine, event-ledger, recovery | -- | "validate a workflow-kernel run", "replay workflow events", "inspect workflow-kernel state", "diagnose a corrupt run ledger", "recover workflow run state" |
+| workflow-kernel | workflow-kernel | workflow, state-machine, event-ledger, recovery, test-batching, verification-receipts | -- | "validate a workflow-kernel run", "batch repository tests", "reuse authenticated test receipts", "plan focused verification", "replay workflow events", ... |
 
 ## Agents Index
 
@@ -127,7 +127,7 @@ Common questions mapped to the right skill:
 | airlift | /airlift-out | [--commit | --no-commit] [note] | Create or refresh a .airlift handoff bundle from the current session (default no-commit patch capture). |
 | airlift | /airlift-in | [path] | Resume from an existing .airlift handoff bundle in the current harness. |
 | airlift | /airlift-install | [wire | unwire | status] | Wire, unwire, or check the airlift Tier-3 early-warning monitor in settings.json (statusLine chain + StopFailure hook). Preserves the existing statusLine; ccusage optional. |
-| assembly | /assembly-build | [optional: test, generate, or full] | Build and test Assembly via Docker |
+| assembly | /assembly-build | [generate, build, test, full, focused, level, candidate, or post-merge] | Build and test via legacy Docker modes or tiered repository verification |
 | chef | /meal-plan | [number of days, any constraints or preferences] | Generate a meal plan following Eve Persak's timing framework |
 | chef | /recipe-check | [paste recipe text, URL, or Mela recipe name] | Analyze a recipe against Eve Persak's dietary framework |
 | chef | /recipe-convert | [recipe name from Mela, URL, or paste recipe text] | Convert a recipe to a healthy, Bali-friendly version and export as .melarecipe |

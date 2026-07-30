@@ -137,9 +137,13 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 
 - Date: YYYY-MM-DD
 - Branch: <featureBranch>
-- Merge: CLEAN | APPROVE WITH FIXES | BLOCKS MERGE
+- Base: <baseBranch>
+- Merge: CLEAN | APPROVE WITH FIXES | BLOCKS MERGE | BLOCKED PENDING CALLER VERIFICATION | BLOCKED PENDING REMOTE VERIFICATION
 - Chunks: N executed, M parallel
 - Mode: full_cli | codex_native | manual_walkthrough
+- Isolation: per-chunk-worktree | sequential-on-branch
+- providerSplit: `{claude: N, codex: N, openrouter: N}`
+- eligibleProviderSplit: `{codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}`
 - Workflow class: chore | bug | feature | hotfix | security | investigation | migration
 - Workflow class defaulted: true | false
 
@@ -150,7 +154,7 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 | 2 | <text> | screenshot (cleaned) |
 | 3 | <text> | authorize-present:`grep -n "Authorize" internal/handler/foo.go` |
 | 4 | <text> | event-published:`grep -n "Publish" internal/service/foo.go` |
-| 5 | <text> | docker-test-pass:`docker compose exec app go test ./...` |
+| 5 | <text> | repository-verification:`go-full-non-race` exact receipt |
 
 ## Cleanup
 - Ephemeral removed: N files

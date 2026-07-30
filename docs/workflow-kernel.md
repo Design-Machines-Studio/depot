@@ -6,10 +6,11 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.4.0 retains observation-only workflow shadow comparison and adds
-trusted repository inspection profiles, digest-bound host authorization,
-contained Docker lanes, redaction, authoritative JSON, derived Markdown, and
-compatible trend mechanics. Those commands are authoritative only where the
+Version 0.6.0 retains the inspection, shadow-comparison, retry, redaction,
+authoritative JSON, derived Markdown, and compatible trend mechanics introduced
+in earlier releases. It adds authenticated repository verification with sealed
+profile approvals, exact-head provider evidence, and contained Docker lanes.
+Those commands are authoritative only where the
 calling Markdown workflow explicitly delegates the mechanic; the kernel does
 not choose repository policy, providers, findings, merge disposition, or
 cleanup policy.
@@ -18,11 +19,11 @@ cleanup policy.
 
 Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
 `references/` directory). The launcher resolves the runtime from the canonical
-Depot checkout or a compatible same-major `>=0.4.0` entry under the Claude
-cache, then the Codex cache, ordered by parsed semver (never mtime). Version
-0.4.0 is the minimum for quality-pulse consumers because they require the
-inspection, behavioral-contract, validation-retry, and review-contribution
-command surface. The
+Depot checkout or a compatible same-major entry under the Claude cache, then
+the Codex cache, ordered by parsed semver (never mtime). Existing inspection,
+quality-pulse, behavioral-contract, validation-retry, and review-contribution
+consumers require `>=0.5.0`; repository-verification consumers require
+`>=0.6.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -109,6 +110,52 @@ authoritative evidence, unexpected transition, prediction gap, and unsafe to
 promote. Metrics aggregate observed reliability and produce proposal-only
 routing recommendations; they never mutate routing policy.
 
+### Repository verification planning
+
+Projects may declare `.dm/verification.json` using the closed
+`repository-verification-profile-schema.json`. Workflow Kernel then owns
+mechanical lane selection, changed-Go-package expansion, exact command-array
+execution, timing receipts, and content-addressed evidence reuse:
+
+```sh
+"$HOST_AUTHORITY_BROKER" | "$WORKFLOW_KERNEL" approve-verification-profile \
+  --repository-root "$PWD" --profile "$PWD/.dm/verification.json" \
+  --trusted-base-commit "$TRUSTED_BASE_SHA" \
+  --candidate-commit "$EXACT_HEAD_SHA" --include-worktree \
+  --run-id "$RUN_ID" \
+  --authorization-event-id "$AUTHORIZATION_EVENT_ID" \
+  --approved-at "$APPROVED_AT" --receipt-key-stdin \
+  --output "$HOST_APPROVAL"
+"$HOST_AUTHORITY_BROKER" | "$WORKFLOW_KERNEL" plan-verification \
+  --repository-root "$PWD" --profile "$PWD/.dm/verification.json" \
+  --boundary chunk --risk medium \
+  --approval "$HOST_APPROVAL" \
+  --receipts plans/feature/repository-verification-receipts.json \
+  --receipt-key-stdin \
+  --output plans/feature/verification-plans/chunk-01.json
+"$HOST_AUTHORITY_BROKER" | "$WORKFLOW_KERNEL" run-verification \
+  --repository-root "$PWD" --profile "$PWD/.dm/verification.json" \
+  --plan plans/feature/verification-plans/chunk-01.json \
+  --approval "$HOST_APPROVAL" \
+  --receipts plans/feature/repository-verification-receipts.json \
+  --receipt-key-stdin \
+  --output plans/feature/repository-verification-receipts.json
+```
+
+The profile execution closure is approved independently before builder
+dispatch; candidate content cannot authorize its own commands. Receipt ledgers
+are authenticated by a host broker outside the worker process identity and use
+lock-protected concurrent publication. Provider results return through
+`record-verification-result`, using a broker-sealed provider attestation bound
+to provider run, exact commit, evidence, outcome, and lane identities. The
+cadence is chunk/revision focused verification, one integrated
+full non-race pass per execution level, merge-candidate reuse when exact source,
+mode, environment, and substrate inputs are unchanged, and explicit remote
+race/security/container/harness lanes. Required remote pending exits non-zero.
+Expensive gates move later; they do not disappear. See
+`plugins/workflow-kernel/skills/workflow-kernel/references/repository-verification.md`
+for the complete profile, cache-key, receipt, and evidence contract.
+
 ### Behavioral contracts and validation retry
 
 Pipeline binds the approved behavioral contract after `run.started` and before
@@ -172,7 +219,7 @@ or previously existing output file.
 |---:|---|---|
 | `0` | The command completed and its output is authoritative for that invocation. | Validate and retain the emitted receipt or artifact. |
 | `2` | Invalid arguments, schema, state, path, or other fail-closed input/operation error. | Preserve evidence and correct the input; do not retry unchanged. |
-| `3` | A creation or cleanup plan/result is unsafe or unmanaged. | Retain the resource and follow the reported guarded recovery path. |
+| `3` | A creation/cleanup plan is unsafe, or required repository verification failed or remains pending. | Retain evidence; follow guarded recovery or obtain the exact missing verification result. |
 | `4` | The compatible kernel runtime is unavailable. | Record `shadow unavailable` where permitted; never bypass an authoritative gate. |
 | `5` | Shadow comparison found a parity or evidence gap. | Keep authoritative workflow results unchanged and investigate the report. |
 | `6` | Sequence, revision, lease, registration, or guarded-authority conflict. | Re-read fresh state and reconcile ownership before retrying. |
@@ -287,7 +334,7 @@ Promotion is an evidence decision, not a mode flag.
 - `native_available -> native_default` is forbidden in this epic and returns
   `separate_human_approval_required`.
 
-Fixture evidence cannot masquerade as real-run evidence. Version 0.4.0 keeps
+Fixture evidence cannot masquerade as real-run evidence. Version 0.6.0 keeps
 `shadow` as the `init` default while exposing only the bounded authoritative
 commands named above. A caller must explicitly select an approved mode and
 delegate each mechanic; no release promotion makes the kernel an autonomous

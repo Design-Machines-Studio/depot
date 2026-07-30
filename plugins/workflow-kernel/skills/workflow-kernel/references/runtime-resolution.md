@@ -75,9 +75,9 @@ root plus durable cache class, version, and reason.
   `workflow-kernel` entries under `~/.claude/plugins/cache/depot/` and then
   `~/.codex/plugins/cache/depot/`.
 - Version compatibility is semantic: same-major versions at or above the
-  declared `>=0.5.0` floor. This floor is the capability boundary for
-  inspection commands, authoritative retry decisions, and behavioral-contract
-  bind/revise commands.
+  consuming workflow's declared floor. Existing inspection, retry, and
+  behavioral-contract consumers may declare `>=0.5.0`; repository verification
+  planning/execution consumers require `>=0.6.0`.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,
@@ -88,10 +88,12 @@ root plus durable cache class, version, and reason.
   repository/root device and inode. No caller-selected lease root is
   accepted. Symlink, cross-repository, scope-metadata, and run-directory
   mismatches fail closed.
-- If the launcher, runtime, or any observation step is unavailable or
-  incompatible, preserve the authoritative Markdown result and record
-  `shadow unavailable` with a safe reason. Launcher exit `4` means runtime
+- If the launcher, runtime, or any shadow prediction/observation/comparison/
+  metrics step is unavailable or incompatible, preserve the authoritative
+  Markdown result and record `shadow unavailable` with a safe reason.
+  Repository-verification runtime or authority failure remains a fail-closed
+  canonical blocker on profile-aware repositories. Launcher exit `4` means runtime
   unavailable; the kernel's stable exits are `0` success, `2` invalid
-  input/schema, `3` unsafe/blocked, `4` unavailable/incompatible, `5` parity
-  gap, `6` write/state conflict. None authorizes changing the canonical
-  result.
+  input/schema, `3` unsafe/blocked/required verification failed or pending,
+  `4` unavailable/incompatible, `5` parity gap, and `6` write/state conflict.
+  None authorizes changing the canonical result.

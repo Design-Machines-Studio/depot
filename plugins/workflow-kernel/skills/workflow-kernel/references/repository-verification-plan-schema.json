@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/repository-verification-plan-v1.json",
+  "title": "Repository Verification Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "artifact_role", "profile_id", "profile_ref",
+    "profile_digest", "approval_digest", "repository_scope_digest",
+    "run_id", "trusted_base_commit", "request", "status", "lanes"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "artifact_role": {"const": "repository_verification_plan"},
+    "profile_id": {"type": "string"},
+    "profile_ref": {"type": "string"},
+    "profile_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "approval_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "repository_scope_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run_id": {"type": "string"},
+    "trusted_base_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boundary", "risk", "base_commit", "head_commit", "changed_paths"
+      ],
+      "properties": {
+        "boundary": {
+          "enum": ["chunk", "revision_batch", "execution_level", "merge_candidate", "post_merge"]
+        },
+        "risk": {"enum": ["low", "medium", "high"]},
+        "base_commit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "head_commit": {
+          "type": "string",
+          "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "changed_paths": {
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "status": {"enum": ["ready", "blocked"]},
+    "lanes": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "tier", "owner", "required", "cache", "disposition",
+          "reason", "argv", "packages", "input_digest", "command_digest",
+          "cache_key", "after"
+        ],
+        "properties": {
+          "id": {"type": "string"},
+          "tier": {
+            "enum": [
+              "doctor", "fast", "focused", "full", "race", "harness", "remote"
+            ]
+          },
+          "owner": {
+            "enum": ["local", "github", "blueprint", "other", "unresolved"]
+          },
+          "required": {"type": "boolean"},
+          "cache": {"enum": ["content", "never"]},
+          "after": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string"}
+          },
+          "disposition": {
+            "enum": [
+              "not_scheduled", "not_triggered", "run", "reuse", "remote",
+              "blocked", "unavailable"
+            ]
+          },
+          "reason": {"type": "string"},
+          "argv": {"type": "array", "items": {"type": "string"}},
+          "packages": {"type": "array", "items": {"type": "string"}},
+          "input_digest": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "command_digest": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "cache_key": {
+            "type": ["string", "null"],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,9 +1,12 @@
 {
   "name": "assembly",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
-  "version": "3.8.0",
+  "version": "3.9.0",
   "author": {
     "name": "Design Machines"
+  },
+  "pluginDependencies": {
+    "workflow-kernel": ">=0.6.0"
   },
   "optionalPluginDependencies": {
     "council": ">=1.5.0",
@@ -135,7 +138,7 @@
         "id": "go-test-runner",
         "name": "Go Test Runner",
         "category": "workflow",
-        "description": "Runs Go tests with race detection, reports coverage, flags missing test files",
+        "description": "Plans and runs repository-configured focused, level, candidate, and remote Go verification lanes",
         "tags": [
           "go",
           "testing",
@@ -148,8 +151,8 @@
       {
         "id": "assembly-build",
         "name": "Assembly Build",
-        "description": "Build and test Assembly via Docker",
-        "argumentHint": "[optional: test, generate, or full]"
+        "description": "Build and test via legacy Docker modes or tiered repository verification",
+        "argumentHint": "[generate, build, test, full, focused, level, candidate, or post-merge]"
       }
     ]
   }

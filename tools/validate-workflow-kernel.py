@@ -59,6 +59,11 @@ SCHEMA_DOCUMENTS = frozenset({
     "browser-recovery-schema.json",
     "cleanup-plan-schema.json",
     "cleanup-receipt-schema.json",
+    "repository-verification-plan-schema.json",
+    "repository-verification-approval-schema.json",
+    "repository-verification-provider-attestation-schema.json",
+    "repository-verification-profile-schema.json",
+    "repository-verification-receipts-schema.json",
     "resource-registry-schema.json",
     "verification-profile-schema.json",
     "workflow-classes-schema.json",
@@ -83,6 +88,33 @@ BEHAVIORAL_CLI_CASES = {
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
+    "approve-verification-profile": (
+        "--repository-root", "<state>", "--profile", "<missing>",
+        "--trusted-base-commit", "0" * 40,
+        "--candidate-commit", "0" * 40, "--run-id", "validator-cli",
+        "--authorization-event-id", "validator-approval",
+        "--approved-at", "2026-07-30T00:00:00Z",
+        "--receipt-key-stdin", "--output", "<output>",
+    ),
+    "plan-verification": (
+        "--repository-root", "<state>", "--profile", "<missing>",
+        "--boundary", "chunk", "--risk", "low",
+        "--approval", "<missing>",
+        "--receipt-key-stdin", "--output", "<output>",
+    ),
+    "run-verification": (
+        "--repository-root", "<state>", "--profile", "<missing>",
+        "--plan", "<missing>", "--approval", "<missing>",
+        "--receipt-key-stdin",
+        "--output", "<output>",
+    ),
+    "record-verification-result": (
+        "--repository-root", "<state>", "--profile", "<missing>",
+        "--plan", "<missing>", "--approval", "<missing>",
+        "--lane-id", "remote", "--provider-attestation", "<missing>",
+        "--receipt-key-stdin",
+        "--output", "<output>",
+    ),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
     "plan-compose": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
     "record-create": ("--state-dir", "<state>", "--plan", "<missing>", "--result", "<missing>", "--before-inventory", "<missing>", "--after-inventory", "<missing>"),
@@ -402,13 +434,16 @@ def check_cli(context):
         "authorize-verification-contract-revision",
         "bind-verification-contract", "revise-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
-        "compare", "metrics",
+        "compare", "metrics", "approve-verification-profile",
+        "plan-verification", "run-verification",
+        "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
         "inspection-validate", "inspection-classify", "inspection-trend",
         "inspection-finalize", "inspection-render", "inspection-run",
-        "resolve-plugin-bundle",
+        "inspection-publish", "resolve-plugin-bundle", "kernel-info",
+        "snapshot-files",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
@@ -418,7 +453,8 @@ def check_cli(context):
     inspection_commands = {
         "inspection-validate", "inspection-classify", "inspection-trend",
         "inspection-finalize", "inspection-render", "inspection-run",
-        "resolve-plugin-bundle",
+        "inspection-publish", "resolve-plugin-bundle", "kernel-info",
+        "snapshot-files",
     }
     require(
         set(BEHAVIORAL_CLI_CASES) == expected - inspection_commands,
@@ -461,7 +497,7 @@ def check_cli(context):
                     cli.EXIT_RUNTIME_UNAVAILABLE, cli.EXIT_PARITY_GAP,
                     cli.EXIT_CONFLICT,
                 }
-                if command == "plan-reconcile":
+                if command in {"decide-validation-retry", "plan-reconcile"}:
                     safe_outcomes.add(0)
                 require(completed.returncode in safe_outcomes,
                         f"{command} did not produce a defined outcome")
@@ -665,7 +701,8 @@ def check_cli(context):
             "summary": "Retain the approved behavioral obligations.",
             "added_obligation_ids": [],
             "retained_obligation_ids": [
-                "PROOF:CHK-001:REQ-001", "REG-001", "REQ-001",
+                "PROOF:CHK-001:REG-001", "PROOF:CHK-001:REQ-001",
+                "REG-001", "REQ-001",
             ],
             "removed_obligation_ids": [],
             "human_approval_evidence_ref": None,
@@ -780,7 +817,7 @@ def check_cli(context):
             ),
             (
                 RuntimeCliTests,
-                "test_decide_validation_retry_rejects_hostile_ledgers_without_echo_or_writes",
+                "test_decide_validation_retry_rejects_hostile_signature_without_write",
                 "hostile retry ledger",
             ),
         )

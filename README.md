@@ -107,8 +107,8 @@ Assembly governance application development with Go, Templ, and Datastar. 3 skil
 - **templ-scaffolder** (agent) -- Scaffolds new Templ pages, handlers, routes, and SSE endpoints
 - **datastar-sse** (agent) -- Datastar reactivity and SSE endpoint patterns
 - **nats-reviewer** (agent) -- Reviews NATS usage for embedded safety, ScopedEventBus patterns, and event ordering
-- **go-test-runner** (agent) -- Runs Go tests with race detection, reports coverage
-- `/assembly-build` -- Build and test Assembly via Docker
+- **go-test-runner** (agent) -- Runs profile-selected focused, level, candidate, and authenticated remote verification
+- `/assembly-build` -- Backward-compatible Docker build/test modes plus opt-in tiered repository verification
 
 ### live-wires
 
@@ -206,7 +206,7 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 - **promptcraft** -- Generates self-contained execution prompts with overlap-aware dependency ordering
 - **eval-sweep** -- Ledger-first system-wide route, breakpoint, and accessibility evaluation
 - **plan-adversary** (agent) -- Adversarial review of plans and prompts, iterating to convergence
-- **execution-orchestrator** (agent) -- Autonomous worktree execution with review-fix loops and zero-deferral policy
+- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched review fixes, tiered tests, authenticated receipt reuse, and zero-deferral policy
 - `/pipeline` -- Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver
 - `/pipeline-assess` -- Pre-plan assessment of current state
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
@@ -218,8 +218,8 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 Neutral deterministic workflow and inspection mechanics. 1 internal skill.
 
 - **workflow-kernel** -- Run-state replay/recovery, behavioral contracts,
-  receipts, trusted inspection profiles, contained lanes, redaction, canonical
-  output, and compatible trends
+  authenticated tiered repository verification, receipts, trusted inspection
+  profiles, contained lanes, redaction, canonical output, and compatible trends
 
 ### openrouter
 

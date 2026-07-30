@@ -563,6 +563,80 @@ In `sequential-on-branch` mode:
 
 Tradeoff: no parallel isolation. This is acceptable for sequential manifests and required when Docker-mounted verification would otherwise test the wrong checkout.
 
+### 1d: Repository Verification Planner
+
+Use Workflow Kernel `>=0.6.0` as the only executable source of repository
+test selection. Pin the launcher already resolved for this run.
+
+This authority is separate from optional kernel shadow observation. Shadow
+prediction/metrics may degrade to `shadow unavailable`; repository verification
+on a profile-aware repository fails closed with `human_help_required`.
+
+If `.dm/verification.json` exists, validate it with `plan-verification` before
+the first builder dispatch. If the target is an Assembly project and the file
+is absent, stop with `human_help_required`; never fall back to the old
+hardcoded `./cmd/api`, `docker compose exec app`, or full-race-on-every-Go-change
+commands. Non-Assembly repositories without a profile retain their existing
+repository-native verification command for compatibility, record
+`verificationPlanner: unavailable`, and add a measured postmortem proposal to
+adopt the profile. Do not claim batching or receipt reuse on that legacy path.
+
+Before dispatching a builder, invoke `approve-verification-profile` from the
+host boundary. Seal repository scope, profile path/digest, authority-path and
+authority-environment identity from the immutable trusted base, the trusted
+base and exact candidate commits, the derived changed-path digest, worktree
+inclusion choice, run ID, authorization event, and approval time. If the
+feature changes the profile or execution closure, require an explicit caller
+authorization event and establish a new trusted base before issuing approval.
+A candidate-derived digest is identity, not approval.
+
+Provision one host-owned authority broker outside the repository, every worker
+worktree, and the worker process identity. It supplies stable key bytes only on
+standard input to the non-model kernel invocation via
+`--receipt-key-stdin`; no key pathname appears in argv, artifacts, environment,
+or model context. Consume standard input before any repository command starts.
+
+Keep one absolute orchestrator-owned append-only ledger at:
+
+```text
+plans/<feature-slug>/repository-verification-receipts.json
+```
+
+Every planner invocation writes a fresh boundary-specific plan beneath
+`plans/<feature-slug>/verification-plans/`. The sealed approval is the only
+authority for the diff base, candidate commit, and worktree inclusion. Pass
+that approval, the shared prior receipt ledger, and broker authority. Invoke
+`run-verification` with that fresh plan, approval, and broker authority. Publication
+uses the kernel's ledger lock and authenticated merge: each worker may execute
+concurrently, but it atomically appends only its new receipts to the latest
+shared history. A divergent baseline exits with write conflict; never replace
+the ledger manually. The runner revalidates the profile, exact argv, relevant
+source/mode digests, declared environment and execution-substrate fingerprint,
+and authenticated cache authority before executing any local command.
+
+Provider-owned evidence returns through `record-verification-result`. The host
+broker validates the provider-native response, exact planned commit, outcome,
+and exit consistency, then seals one structured provider attestation. The
+integration supplies that artifact rather than caller-controlled scalar
+assertions. The kernel rechecks its HMAC plus approval and
+lane/profile/command/input/cache/substrate identities before appending the
+receipt. Until that transition succeeds, a required remote lane remains
+`BLOCKED PENDING REMOTE VERIFICATION`.
+
+The authoritative cadence is:
+
+| Boundary | When | Allowed local depth |
+|---|---|---|
+| `chunk` | Worker completed one chunk | Doctor, fast, focused |
+| `revision_batch` | All fixes from one review pass are applied | Affected doctor, fast, focused |
+| `execution_level` | Every chunk in one dependency level is merged | Integrated full non-race once |
+| `merge_candidate` | All levels are merged and before final review | Exact candidate; reuse identical level evidence; remote lanes explicit |
+| `post_merge` | Main-branch proof | Repository-declared authoritative lanes |
+
+Full race, security, container, browser, accessibility, and other expensive
+required lanes are moved to their declared merge-candidate/remote boundary;
+they are never omitted or relabeled as passing local evidence.
+
 ## Step 2: Execute by Level
 
 Read the `executionPlan.levels` array. Process each level in order.
@@ -981,12 +1055,11 @@ You MUST verify these before proceeding:
 
 1. **Completion check:** The subagent reported completion (not an error or question)
 2. **Commit check:** Run `git log <featureBranch>..<chunk-branch> --oneline` -- there MUST be at least one commit
-3. **Focused verification:** Run the narrow build/tests that exercise the
-   chunk. Run the repository-wide suite once per completed execution level, or
-   when a merge changes code that invalidates the prior full-suite result.
-   Cache the verification receipt by content-addressed input: repository tree
-   hash, exact command, and relevant environment fingerprint. Documentation,
-   receipt, or metadata-only commits do not invalidate a passing code suite.
+3. **Focused verification:** On profile-aware repositories, invoke
+   `plan-verification` for boundary `chunk` using the exact chunk diff, then
+   invoke `run-verification`. Do not run a repository-wide or race suite here.
+   On the compatibility path, run only the repository's narrow documented
+   check and record that no executable planner/cache authority was available.
 4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
 For an eligible deterministic check failure, do not send prose back to a new
@@ -1217,9 +1290,13 @@ cd .worktrees/pipeline/<feature>/<chunk-id>
 
 Run `/codex:review` on the worktree. This delegates code review to OpenAI's Codex -- runs on OpenAI quota, NOT Claude tokens. If findings:
 
-1. Apply fixes via Edit/Write
-2. Re-run `/codex:review`
-3. Max 2 iterations
+1. Collect the complete finding set from this pass.
+2. Apply all accepted fixes as one revision batch; do not test after each
+   individual edit.
+3. Invoke the repository planner once with boundary `revision_batch` and the
+   exact paths changed by the batch.
+4. Re-run `/codex:review`.
+5. Max 2 iterations.
 
 If Codex is unavailable (plugin not installed, auth failure), fall back to the dm-review Skill pattern from "How to Run dm-review" above.
 
@@ -1526,9 +1603,36 @@ Every `block` call records the ref, the reason, and the exact follow-up command.
 
 Mark `[chunk-id] 10. Clean up worktree` complete (or `blocked: [reason]`).
 
+### 3k: Verify the Integrated Execution Level
+
+After every chunk in the current execution level has completed Step 3j and its
+merge disposition is authoritative, check out `<featureBranch>` and invoke the
+repository planner exactly once with boundary `execution_level`. Supply the
+cumulative changed paths for that level, not one invocation per chunk.
+
+The full non-race lane runs against the first tree where all sibling chunks
+actually coexist. If an identical passing receipt already exists, the runner
+may reuse it. A documentation, receipt, or unrelated metadata-only change does
+not invalidate a code lane unless `.dm/verification.json` explicitly includes
+that path. A failed required level lane blocks dependent levels.
+
+Append the resulting verification receipts to the canonical receipt ledger and
+record:
+
+```text
+LEVEL_VERIFICATION: <level> | passed: <N> | reused: <N> | failed: <N>
+```
+
 ## Step 4: Final Full Review
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
+
+Before dispatching the review, invoke the repository planner with boundary
+`merge_candidate` on the exact feature-branch tree. This is not an automatic
+second full-suite run: an unchanged candidate reuses the content-identical
+passing `execution_level` receipt. It does materialize every required remote
+race/security/container/harness lane as `remote_pending`, `blocked`, or
+`unavailable` until its declared provider returns authoritative evidence.
 
 First materialize the cumulative authoritative receipt array through the
 `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint.
@@ -1573,10 +1677,18 @@ The review output follows the unified format (per `plugins/dm-review/skills/revi
 
 If issues found:
 
-1. Fix directly on feature branch
-2. Stage each changed path independently or with `git add -A -- <dir>`, verify `git diff --cached --stat`, write the message to a file, and commit with `git commit -F <file>`
-3. Re-run a full-mode review (`Skill(skill="dm-review:review", args="full <feature-branch>")`) to verify
-4. Max 2 full review iterations
+1. Collect the complete finding set from the review pass and fix it as one
+   revision batch on the feature branch.
+2. Stage each changed path independently or with `git add -A -- <dir>`, verify
+   `git diff --cached --stat`, write the message to a file, and commit with
+   `git commit -F <file>`.
+3. Invoke `revision_batch` once for the affected paths, then
+   `merge_candidate` once for the new exact tree. Do not test after every
+   finding edit.
+4. Re-run a full-mode review
+   (`Skill(skill="dm-review:review", args="full <feature-branch>")`) on the exact
+   newly tested SHA.
+5. Max 2 full review iterations.
 
 If findings remain after 2 full review iterations, apply the same deferred-findings protocol from Step 3g: fix manually, re-verify, log any remaining as DEFERRED with explicit justification.
 
@@ -1599,8 +1711,17 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 - `APPROVE WITH FIXES` -- zero P1, any P2/P3 findings resolved before this line is emitted (zero-deferral). Emit only when every finding from the final review is resolved.
 - `BLOCKS MERGE` -- any P1 remains, or any finding could not be resolved.
 - `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Emit this regardless of review findings. The caller must resolve the blocked case and complete browser verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
+- `BLOCKED PENDING REMOTE VERIFICATION` -- any non-browser lane with
+  `required: true` is `remote_pending`, `failed`, `blocked`, or `unavailable`.
+  Only a provider receipt validated and authenticated by the host integration
+  clears this recommendation.
 
-**Docker verification (Assembly projects):** Before emitting any merge recommendation, run `docker compose exec app go build ./cmd/api && docker compose exec app go test ./...` to confirm the feature branch compiles and passes tests inside the container. A merge recommendation emitted without a passing Docker build is invalid.
+**Repository verification interlock:** Before emitting any merge
+recommendation, require passing or exact-reused local `merge_candidate`
+receipts from `.dm/verification.json`. Required remote lanes retain their
+actual pending/failed/unavailable status; the lane's `required` field is the
+merge-gating authority. Never substitute hardcoded Docker, Go package, service,
+or build-tag commands.
 
 **Doc-sync check:** Grep for `CLAUDE.md` and `README.md` in the repo root. If the feature introduced new patterns, modules, or architectural conventions, verify these files reflect the changes. Flag missing doc updates as P2.
 
@@ -2018,10 +2139,11 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 ## Final Review
 - **Mode:** Full (all agents)
 - **Result:** Clean / N findings remaining
-- **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION
+- **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION / BLOCKED PENDING REMOTE VERIFICATION
 - **executionMode:** full_cli / codex_native / manual_walkthrough
 - **isolationStrategy:** per-chunk-worktree / sequential-on-branch
 - **providerSplit:** `{claude: N, codex: N, openrouter: N}` measured from run receipts/postmortem; DeepSeek-model calls count under OpenRouter
+- **eligibleProviderSplit:** `{codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}` measured before disclosure/routing fallback
 - **workflowClass:** `<class>` (`workflow_class_defaulted=true|false`)
 - **shadow:** match / parity-gap / unavailable (reason)
 - **noMergeOnCompletion:** true/false

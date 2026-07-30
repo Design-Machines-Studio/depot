@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "version": "0.5.0",
-  "description": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+  "version": "0.6.0",
+  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -19,13 +19,14 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow-kernel state, behavioral verification contracts, event ledgers, contribution receipts, and attempt economics when explicitly requested.",
+        "description": "Inspect, validate, replay, and recover deterministic workflow state; plan tiered repository verification; and validate behavioral contracts, contribution receipts, and attempt economics.",
         "triggers": [
           "validate a workflow-kernel run",
           "replay workflow events",
           "inspect workflow-kernel state",
           "diagnose a corrupt run ledger",
-          "recover workflow run state"
+          "recover workflow run state",
+          "plan tiered repository verification"
         ],
         "tags": [
           "workflow",
@@ -43,8 +44,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Workflow Kernel",
-    "shortDescription": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow obse",
-    "longDescription": "Neutral deterministic run-state, behavioral verification contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+    "shortDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, contri",
+    "longDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
     "developerName": "Design Machines",
     "category": "Productivity",
     "capabilities": [

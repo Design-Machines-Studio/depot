@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/repository-verification-approval-v1.json",
+  "title": "Repository Verification Profile Approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "artifact_role", "repository_scope_digest",
+    "profile_id", "profile_ref", "profile_digest", "authority_digest",
+    "trusted_base_commit", "candidate_commit", "include_worktree",
+    "changed_paths", "changed_paths_digest", "candidate_snapshot_digest",
+    "run_id", "authorization_event_id",
+    "approved_at", "authority_key_id", "approval_auth"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "artifact_role": {"const": "repository_verification_profile_approval"},
+    "repository_scope_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "profile_id": {"type": "string"},
+    "profile_ref": {"type": "string"},
+    "profile_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "authority_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "trusted_base_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "candidate_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "include_worktree": {"type": "boolean"},
+    "changed_paths": {
+      "type": "array",
+      "maxItems": 100000,
+      "uniqueItems": true,
+      "items": {"type": "string"}
+    },
+    "changed_paths_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidate_snapshot_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "run_id": {"type": "string"},
+    "authorization_event_id": {"type": "string"},
+    "approved_at": {"type": "string"},
+    "authority_key_id": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "approval_auth": {
+      "type": "string",
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$"
+    }
+  }
+}

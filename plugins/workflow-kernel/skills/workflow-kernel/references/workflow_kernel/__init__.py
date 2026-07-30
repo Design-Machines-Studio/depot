@@ -30,6 +30,21 @@ from .schema import (
 )
 from .state import MAX_STATE_BYTES, PreparedState, RunLease, StateStore
 from .transitions import MAX_EVENT_ITEMS, MAX_RECONSTRUCTION_WORK, TransitionEngine
+from .verification_authority import (
+    issue_profile_approval, validate_profile_approval,
+)
+from .verification_contract import (
+    BOUNDARIES, BOUNDARY_CHOICES, CACHE_POLICIES, OWNERS, TIERS,
+)
+from .verification_errors import VerificationPlannerError
+from .verification_orchestrator import execute_plan
+from .verification_repository import (
+    PACKAGE_SELECTORS, RISKS, RISK_CHOICES,
+    git_changed_paths, validate_profile,
+)
+from .verification_planning import build_plan
+from .verification_provider import record_provider_result
+from .verification_receipts import merge_receipt_ledgers
 
 __all__ = [
     "SCHEMA_VERSION", "RunMode", "RunStatus", "NodeStatus", "WorkflowEvent",
@@ -54,4 +69,10 @@ __all__ = [
     "authoritative_bytes", "compare_trends",
     "finalize_authoritative_result",
     "render_markdown",
+    "BOUNDARIES", "BOUNDARY_CHOICES", "TIERS", "OWNERS", "RISKS",
+    "RISK_CHOICES", "CACHE_POLICIES",
+    "PACKAGE_SELECTORS", "VerificationPlannerError", "validate_profile",
+    "git_changed_paths", "build_plan", "execute_plan",
+    "issue_profile_approval", "validate_profile_approval",
+    "record_provider_result", "merge_receipt_ledgers",
 ]

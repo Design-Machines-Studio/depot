@@ -322,6 +322,10 @@ class VerificationProfileTests(unittest.TestCase):
         self.assertEqual(profile.profile_id, baseline.profile_id)
 
     def test_live_assembly_declaration_shapes_are_readable_when_available(self):
+        if os.environ.get("DEPOT_LIVE_ASSEMBLY_UX") != "1":
+            self.skipTest(
+                "set DEPOT_LIVE_ASSEMBLY_UX=1 for non-hermetic sibling-repo validation",
+            )
         repositories = (
             Path("/Users/trav/Websites/design-machines/assembly"),
             Path("/Users/trav/Websites/design-machines/assembly-baseplate"),
