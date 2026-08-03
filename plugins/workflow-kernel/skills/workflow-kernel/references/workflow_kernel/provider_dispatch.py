@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
 import struct
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
@@ -52,7 +54,8 @@ ERROR_CODES = frozenset({
 })
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
-_SIGNATURE = re.compile(r"fixture-rsa-sha256-v1:[0-9a-f]{256}\Z")
+_FIXTURE_SIGNATURE = re.compile(r"fixture-rsa-sha256-v1:[0-9a-f]{256}\Z")
+_BASE64URL = re.compile(r"[A-Za-z0-9_-]{1,4096}\Z")
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}\Z")
 _TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 _ROLE = frozenset({"system", "user"})
@@ -80,7 +83,7 @@ _CHALLENGE_FIELDS = frozenset({
     "peer_uid", "peer_pid", "request_body_sha256", "destination", "method",
     "path", "models", "scope", "daemon_build_sha256", "scanner_build_sha256",
     "policy_sha256", "nonce", "sequence", "boot_id", "session_id", "issued_at",
-    "expires_at", "limits", "result_public_key", "fixture_assertion",
+    "expires_at", "limits", "result_signer", "authority_assertion",
     "prior_chain_digest",
 })
 _ACK_FIELDS = frozenset({"schema_version", "protocol", "type", "challenge_sha256"})
@@ -89,7 +92,7 @@ _RESULT_FIELDS = frozenset({
     "outcome", "exit_code", "request_body_sha256", "response_sha256",
     "response_length", "part_count", "models", "selected_model", "provider",
     "scope", "sequence", "issued_at", "completed_at", "challenge_sha256",
-    "fido_assertion_sha256", "result_public_key_sha256", "cleanup", "signature",
+    "authority_assertion_sha256", "result_signer_sha256", "cleanup", "signature",
     "prior_chain_digest",
 })
 _STATUS_FIELDS = frozenset({
@@ -102,6 +105,14 @@ _EXCHANGE_FIELDS = frozenset({
     "network_attempted", "response_retrievable",
 })
 _CLEANUP_FIELDS = frozenset({"reservation", "connection", "content_buffer"})
+_FIXTURE_ENVELOPE_FIELDS = frozenset({"kind", "domain", "value"})
+_FIXTURE_SIGNER_FIELDS = frozenset({"kind", "domain", "public_key"})
+_FIDO_FIELDS = frozenset({
+    "kind", "credential_id", "authenticator_data", "client_data_json",
+    "signature_der", "user_presence", "user_verification",
+})
+_ES256_SIGNER_FIELDS = frozenset({"kind", "public_key_sec1"})
+_ES256_SIGNATURE_FIELDS = frozenset({"kind", "signature_der"})
 
 FROZEN_EXCHANGE = {
     "transport": "unix-sock-stream-single-connection",
@@ -344,6 +355,60 @@ def build_openrouter_body(request: Mapping[str, Any], part_bytes: Sequence[bytes
     return body
 
 
+def _authority_assertion(value: Any) -> dict[str, Any]:
+    if type(value) is not dict:
+        _fail()
+    kind = value.get("kind")
+    if kind == "fido2-es256":
+        assertion = _object(value, _FIDO_FIELDS)
+        for field in ("credential_id", "authenticator_data", "client_data_json", "signature_der"):
+            _string(assertion[field], pattern=_BASE64URL)
+        if assertion["user_presence"] is not True or assertion["user_verification"] is not True:
+            _fail("terminal_binding_invalid")
+    elif kind == "fixture-rsa-sha256-v1":
+        assertion = _object(value, _FIXTURE_ENVELOPE_FIELDS)
+        if assertion["domain"] != PRODUCTION_INELIGIBLE_DOMAIN:
+            _fail()
+        _string(assertion["value"], pattern=_FIXTURE_SIGNATURE)
+    else:
+        _fail()
+    return assertion
+
+
+def _result_signer(value: Any) -> dict[str, Any]:
+    if type(value) is not dict:
+        _fail()
+    kind = value.get("kind")
+    if kind == "ephemeral-es256":
+        signer = _object(value, _ES256_SIGNER_FIELDS)
+        _string(signer["public_key_sec1"], pattern=_BASE64URL)
+    elif kind == "fixture-rsa-sha256-v1":
+        signer = _object(value, _FIXTURE_SIGNER_FIELDS)
+        if signer["domain"] != PRODUCTION_INELIGIBLE_DOMAIN:
+            _fail()
+        _plain_string(signer["public_key"], 1024)
+    else:
+        _fail()
+    return signer
+
+
+def _terminal_signature(value: Any) -> dict[str, Any]:
+    if type(value) is not dict:
+        _fail()
+    kind = value.get("kind")
+    if kind == "es256":
+        signature = _object(value, _ES256_SIGNATURE_FIELDS)
+        _string(signature["signature_der"], pattern=_BASE64URL)
+    elif kind == "fixture-rsa-sha256-v1":
+        signature = _object(value, _FIXTURE_ENVELOPE_FIELDS)
+        if signature["domain"] != PRODUCTION_INELIGIBLE_DOMAIN:
+            _fail()
+        _string(signature["value"], pattern=_FIXTURE_SIGNATURE)
+    else:
+        _fail()
+    return signature
+
+
 def validate_challenge(document: Any) -> dict[str, Any]:
     challenge = _object(document, _CHALLENGE_FIELDS)
     _fixed(challenge)
@@ -351,8 +416,8 @@ def validate_challenge(document: Any) -> dict[str, Any]:
         _fail()
     for field in ("transaction_id", "nonce", "boot_id", "session_id"):
         _string(challenge[field])
-    _plain_string(challenge["result_public_key"], 1024)
-    _string(challenge["fixture_assertion"], pattern=_SIGNATURE)
+    _result_signer(challenge["result_signer"])
+    _authority_assertion(challenge["authority_assertion"])
     for field in ("destination", "method", "path"):
         _plain_string(challenge[field])
     for field in ("connection_nonce_sha256", "request_body_sha256", "daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "prior_chain_digest"):
@@ -394,14 +459,16 @@ def validate_result(document: Any) -> dict[str, Any]:
         "unknown": EXIT_UNKNOWN,
     }[result["outcome"]]:
         _fail("terminal_binding_invalid")
-    for field in ("request_body_sha256", "response_sha256", "challenge_sha256", "fido_assertion_sha256", "result_public_key_sha256", "prior_chain_digest"):
+    for field in ("request_body_sha256", "response_sha256", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest"):
         _digest(result[field])
     _integer(result["response_length"], 0, MAX_RESPONSE_BYTES)
     _integer(result["part_count"], 1, MAX_PARTS)
     _strings(result["models"])
     for field in ("selected_model", "provider"):
         _string(result[field])
-    _string(result["signature"], pattern=_SIGNATURE)
+    if result["provider"] != "openrouter":
+        _fail("terminal_binding_invalid")
+    _terminal_signature(result["signature"])
     _scope(result["scope"])
     _integer(result["sequence"], 1)
     _string(result["issued_at"], pattern=_TIME)
@@ -462,6 +529,37 @@ def validate_exchange(document: Any) -> dict[str, Any]:
     )
     if actual != combinations[state]:
         _fail("exchange_state_invalid")
+    challenge = exchange["challenge"]
+    request = exchange["request"]
+    if challenge is not None:
+        authority = request["authority"]
+        repeated = (
+            exchange["request_body_sha256"] == challenge["request_body_sha256"],
+            request["mapping"] == challenge["mapping"],
+            request["operation_family"] == challenge["operation_family"],
+            request["substrate_authority"] == challenge["substrate_authority"],
+            request["destination"] == challenge["destination"],
+            request["method"] == challenge["method"], request["path"] == challenge["path"],
+            request["models"] == challenge["models"], request["scope"] == challenge["scope"],
+            authority["sequence"] == challenge["sequence"],
+            authority["prior_chain_digest"] == challenge["prior_chain_digest"],
+            authority["issued_at"] == challenge["issued_at"],
+            authority["expires_at"] == challenge["expires_at"],
+        )
+        if not all(repeated):
+            _fail("terminal_binding_invalid")
+    result = exchange["result"]
+    if result is not None:
+        if challenge is None or not all((
+            exchange["request_body_sha256"] == result["request_body_sha256"],
+            challenge["request_body_sha256"] == result["request_body_sha256"],
+            request["models"] == result["models"], request["scope"] == result["scope"],
+            request["authority"]["sequence"] == result["sequence"],
+            request["authority"]["prior_chain_digest"] == result["prior_chain_digest"],
+            request["authority"]["issued_at"] == result["issued_at"],
+            result["selected_model"] in request["models"], result["provider"] == "openrouter",
+        )):
+            _fail("terminal_binding_invalid")
     return exchange
 
 
@@ -515,6 +613,7 @@ def decode_request(wire: bytes) -> tuple[dict[str, Any], tuple[bytes, ...]]:
 
 def decode_response(
     wire: bytes, request: Mapping[str, Any], challenge: Mapping[str, Any],
+    *, fixture_trust: bool = False, production_verifier=None,
 ) -> tuple[bytes, dict[str, Any]]:
     """Buffer and verify one response/terminal pair before any fd-3 release."""
     if type(wire) is not bytes or len(wire) < 12:
@@ -531,15 +630,51 @@ def decode_response(
     if terminal_end != len(wire):
         _fail("exchange_trailing_data")
     terminal = parse_canonical_json(wire[content_end + 4:terminal_end])
-    verify_terminal_result(request, challenge, content, terminal)
+    verify_terminal_result(
+        request, challenge, content, terminal, fixture_trust=fixture_trust,
+        production_verifier=production_verifier,
+    )
     return content, terminal
+
+
+def validate_fd3(fd: int, used_descriptors: set[int]) -> None:
+    """Accept only unused descriptor 3 backed by an inherited anonymous pipe."""
+    if type(fd) is not int or fd != 3 or type(used_descriptors) is not set or fd in used_descriptors:
+        _fail("exchange_state_invalid")
+    try:
+        metadata = os.fstat(fd)
+    except OSError:
+        _fail("exchange_state_invalid")
+    if not stat.S_ISFIFO(metadata.st_mode) or metadata.st_nlink != 0:
+        _fail("exchange_state_invalid")
+
+
+def deliver_verified_fd3(
+    fd: int, used_descriptors: set[int], response_wire: bytes,
+    request: Mapping[str, Any], challenge: Mapping[str, Any], *,
+    fixture_trust: bool = False, production_verifier=None,
+) -> dict[str, Any]:
+    """Buffer, verify, and write content exactly once to inherited fd 3."""
+    validate_fd3(fd, used_descriptors)
+    content, terminal = decode_response(
+        response_wire, request, challenge, fixture_trust=fixture_trust,
+        production_verifier=production_verifier,
+    )
+    try:
+        written = os.write(fd, content)
+    except OSError:
+        _fail("result_verification_failed")
+    used_descriptors.add(fd)
+    if written != len(content):
+        _fail("result_verification_failed")
+    return terminal
 
 
 def signature_input(kind: str, document: Mapping[str, Any]) -> bytes:
     """Freeze Go-compatible domain-separated inputs; no auth-mode selector exists."""
     if kind == "challenge":
         validate_challenge(document)
-        projection = {key: value for key, value in document.items() if key != "fixture_assertion"}
+        projection = {key: value for key, value in document.items() if key != "authority_assertion"}
     elif kind == "terminal":
         validate_result(document)
         projection = {key: value for key, value in document.items() if key != "signature"}
@@ -564,8 +699,11 @@ def _fixture_verify(public_key: str, signature: str, payload: bytes) -> bool:
 
 def verify_fixture_assertion(challenge: Mapping[str, Any]) -> None:
     validate_challenge(challenge)
+    assertion = challenge["authority_assertion"]
+    if assertion["kind"] != "fixture-rsa-sha256-v1":
+        _fail("terminal_binding_invalid")
     if not _fixture_verify(
-        FIXTURE_ROOT_PUBLIC_KEY, challenge["fixture_assertion"],
+        FIXTURE_ROOT_PUBLIC_KEY, assertion["value"],
         signature_input("challenge", challenge),
     ):
         _fail("terminal_binding_invalid")
@@ -603,13 +741,13 @@ def validate_authority_binding(
 
 def verify_terminal_result(
     request: Mapping[str, Any], challenge: Mapping[str, Any],
-    response: bytes, result: Mapping[str, Any],
+    response: bytes, result: Mapping[str, Any], *, fixture_trust: bool = False,
+    production_verifier=None,
 ) -> None:
     """Verify content-free terminal binding before fd-3 delivery."""
     validate_request(request)
     validate_challenge(challenge)
     validate_result(result)
-    verify_fixture_assertion(challenge)
     if type(response) is not bytes or len(response) > MAX_RESPONSE_BYTES:
         _fail("frame_too_large")
     checks = (
@@ -621,19 +759,41 @@ def verify_terminal_result(
         result["scope"] == request["scope"],
         result["sequence"] == request["authority"]["sequence"],
         result["challenge_sha256"] == sha256(canonical_json(challenge)),
-        result["result_public_key_sha256"] == sha256(challenge["result_public_key"].encode("utf-8")),
-        result["fido_assertion_sha256"] == sha256(challenge["fixture_assertion"].encode("utf-8")),
+        result["result_signer_sha256"] == sha256(canonical_json(challenge["result_signer"])),
+        result["authority_assertion_sha256"] == sha256(canonical_json(challenge["authority_assertion"])),
         result["prior_chain_digest"] == request["authority"]["prior_chain_digest"],
         result["selected_model"] in request["models"],
         result["provider"] == "openrouter",
     )
     if not all(checks):
         _fail("terminal_binding_invalid")
-    if not _fixture_verify(
-        challenge["result_public_key"], result["signature"],
-        signature_input("terminal", result),
-    ):
-        _fail("terminal_binding_invalid")
+    assertion_kind = challenge["authority_assertion"]["kind"]
+    signer_kind = challenge["result_signer"]["kind"]
+    signature_kind = result["signature"]["kind"]
+    if assertion_kind == "fixture-rsa-sha256-v1":
+        if not fixture_trust or signer_kind != assertion_kind or signature_kind != assertion_kind:
+            _fail("terminal_binding_invalid")
+        verify_fixture_assertion(challenge)
+        if not _fixture_verify(
+            challenge["result_signer"]["public_key"], result["signature"]["value"],
+            signature_input("terminal", result),
+        ):
+            _fail("terminal_binding_invalid")
+    else:
+        if assertion_kind != "fido2-es256" or signer_kind != "ephemeral-es256" or signature_kind != "es256":
+            _fail("terminal_binding_invalid")
+        if production_verifier is None:
+            _fail("authority_unavailable")
+        try:
+            verified = production_verifier(
+                signature_input("challenge", challenge), challenge["authority_assertion"],
+                signature_input("terminal", result), challenge["result_signer"],
+                result["signature"],
+            )
+        except Exception:
+            _fail("authority_unavailable")
+        if verified is not True:
+            _fail("terminal_binding_invalid")
 
 
 def sha256(payload: bytes) -> str:
@@ -736,6 +896,8 @@ class FakeBroker:
         }
         validate_authority_binding(request, body, challenge, synthetic_ack)
         self.expire(now)
+        if not challenge["issued_at"] <= now < challenge["expires_at"]:
+            _fail("authorization_expired")
         transaction_id = challenge["transaction_id"]
         if transaction_id in self.reservations or transaction_id in self.used_transactions:
             _fail("authorization_replayed")
@@ -758,7 +920,7 @@ class FakeBroker:
     ) -> None:
         reservation = self._owned(transaction_id, connection_id)
         _string(now, pattern=_TIME)
-        if reservation.challenge["expires_at"] <= now:
+        if not reservation.challenge["issued_at"] <= now < reservation.challenge["expires_at"]:
             self._tombstone(reservation, "authorization_expired")
             _fail("authorization_expired")
         if reservation.state != "challenged":
@@ -793,6 +955,7 @@ class FakeBroker:
             _fail("frame_too_large")
         verify_terminal_result(
             reservation.request, reservation.challenge, response, result,
+            fixture_trust=True,
         )
         self.response_allocations += 1
         reservation.result = result
@@ -819,6 +982,15 @@ class FakeBroker:
     def decline_disclosure(self) -> None:
         """Represent scanner/operator decline before reservation or transport."""
         _fail("disclosure_declined")
+
+    def reserve_for_delivery(
+        self, fd: int, used_descriptors: set[int], connection_id: str,
+        peer_uid: int, request: Mapping[str, Any], parts: Sequence[bytes],
+        challenge: Mapping[str, Any], now: str,
+    ) -> str:
+        """Validate the path-free delivery seam before allocating reservation state."""
+        validate_fd3(fd, used_descriptors)
+        return self.reserve(connection_id, peer_uid, request, parts, challenge, now)
 
     def complete_exchange(
         self, request: Mapping[str, Any], parts: Sequence[bytes],
