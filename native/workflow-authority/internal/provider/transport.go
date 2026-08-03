@@ -186,6 +186,7 @@ type ResponseSink interface {
 	WriteAuthorizationProof(context.Context, AuthorizationProof) error
 	WriteResponse(context.Context, []byte) error
 	WriteTerminalAndClose(context.Context, []byte) error
+	Abort() error
 }
 
 type OriginalConnectionSink struct {
@@ -197,6 +198,17 @@ type OriginalConnectionSink struct {
 }
 
 func (s *OriginalConnectionSink) ConnectionID() string { return s.ID }
+func (s *OriginalConnectionSink) Abort() error {
+	if s == nil || s.Conn == nil || s.closed {
+		return nil
+	}
+	s.closed = true
+	err := s.Conn.Close()
+	if errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+	return err
+}
 func (s *OriginalConnectionSink) WriteAuthorizationProof(ctx context.Context, proof AuthorizationProof) error {
 	if s == nil || s.Conn == nil || s.ID == "" || s.proofUsed || s.used || ctx.Err() != nil {
 		return ErrSink
@@ -245,6 +257,9 @@ func (s *OriginalConnectionSink) WriteResponse(ctx context.Context, payload []by
 
 func (s *OriginalConnectionSink) WriteTerminalAndClose(ctx context.Context, payload []byte) error {
 	if s == nil || s.Conn == nil || !s.used || s.closed || ctx.Err() != nil || len(payload) > protocol.MaxFrameBytes {
+		if s != nil {
+			_ = s.Abort()
+		}
 		return ErrSink
 	}
 	s.closed = true

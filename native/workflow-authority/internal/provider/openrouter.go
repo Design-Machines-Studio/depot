@@ -222,7 +222,16 @@ type AuthorizationProof struct {
 }
 
 func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink ResponseSink) (TerminalResult, error) {
-	if d.Scanner == nil || d.Credentials == nil || d.Transport == nil || d.Authority == nil || sink == nil || sink.ConnectionID() != in.ConnectionID || ScannerBuildDigest != in.Request.Authority.ScannerBuildSHA256 {
+	if sink == nil {
+		return TerminalResult{}, ErrStartup
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = sink.Abort()
+		}
+	}()
+	if d.Scanner == nil || d.Credentials == nil || d.Transport == nil || d.Authority == nil || sink.ConnectionID() != in.ConnectionID || ScannerBuildDigest != in.Request.Authority.ScannerBuildSHA256 {
 		return TerminalResult{}, ErrStartup
 	}
 	policyDigest := protocol.Digest(d.Policy)
@@ -313,6 +322,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	if err := sink.WriteTerminalAndClose(ctx, terminal); err != nil {
 		return TerminalResult{}, ErrSink
 	}
+	closed = true
 	return result, nil
 }
 

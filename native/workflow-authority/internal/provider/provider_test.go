@@ -177,6 +177,7 @@ func (testSink) WriteResponse(context.Context, []byte) error { return errors.New
 func (testSink) WriteTerminalAndClose(context.Context, []byte) error {
 	return errors.New("must not run")
 }
+func (testSink) Abort() error { return nil }
 
 type captureSink struct {
 	id                 string
@@ -205,6 +206,10 @@ func (s *captureSink) WriteTerminalAndClose(_ context.Context, b []byte) error {
 		return ErrSink
 	}
 	s.terminal = append([]byte(nil), b...)
+	s.closed = true
+	return nil
+}
+func (s *captureSink) Abort() error {
 	s.closed = true
 	return nil
 }
@@ -390,6 +395,32 @@ func TestOriginalSinkTerminalRequiresEOFAndCannotBeRetrievedAgain(t *testing.T) 
 	}
 	if err := sink.WriteTerminalAndClose(context.Background(), []byte("again")); err == nil {
 		t.Fatal("terminal retrieved twice")
+	}
+}
+
+func TestOriginalSinkCancellationForcesEOF(t *testing.T) {
+	server, client := net.Pipe()
+	sink := &OriginalConnectionSink{ID: "connection", Conn: server, proofUsed: true, used: true}
+	received := make(chan error, 1)
+	go func() {
+		_, err := io.ReadAll(client)
+		received <- err
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := sink.WriteTerminalAndClose(ctx, []byte(`{"terminal":true}`)); err == nil {
+		t.Fatal("cancelled terminal accepted")
+	}
+	select {
+	case err := <-received:
+		if err != nil {
+			t.Fatalf("client did not receive EOF: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled terminal left connection open")
+	}
+	if !sink.closed {
+		t.Fatal("cancelled sink not closed")
 	}
 }
 
