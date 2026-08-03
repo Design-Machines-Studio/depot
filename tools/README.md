@@ -132,6 +132,24 @@ PYTHONPATH=plugins/workflow-kernel/skills/workflow-kernel/references \
 See `docs/workflow-kernel.md` for architecture, command examples, shadow
 authority boundaries, cleanup safety, promotion gates, and troubleshooting.
 
+## validate-workflow-authority.sh
+
+Runs the native Workflow Authority broker's local release-candidate suite with
+exact Go 1.26.5: normal tests, the race detector, and `go vet`. The suite
+includes a real Unix-socket exchange across the durable allocator, IPC server,
+authority manager, disclosure scanner, fixture credential reader, loopback TLS
+provider, fixed client verifier, and signed terminal receipt. It also proves
+that replay does not cause a second provider request.
+
+```bash
+./tools/validate-workflow-authority.sh
+```
+
+This is fixture evidence only. It uses test-only FIDO and TLS adapters, performs
+no root installation or external provider request, and cannot satisfy the live
+Linux systemd, libfido2 hardware, worker-principal, or credential-custody gates.
+Those remain separate operator acceptance evidence.
+
 ## validate-quality-pulse.sh
 
 Runs the stdlib-only, offline consumer conformance suite for the repository
