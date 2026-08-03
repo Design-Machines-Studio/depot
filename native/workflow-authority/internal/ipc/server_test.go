@@ -40,7 +40,12 @@ type fixtureAllocator struct {
 	closed     int
 }
 
-func (a *fixtureAllocator) Allocate(context.Context) (Allocation, error) { return a.allocation, nil }
+func (a *fixtureAllocator) Allocate(ctx context.Context) (Allocation, error) {
+	if err := ctx.Err(); err != nil {
+		return Allocation{}, err
+	}
+	return a.allocation, nil
+}
 func (a *fixtureAllocator) Consume(_ context.Context, _ Allocation, reason string) error {
 	a.consumed = append(a.consumed, reason)
 	return nil
@@ -221,6 +226,39 @@ func TestServerRejectsAlteredPartBeforeReservation(t *testing.T) {
 	}
 }
 
+func TestServerRejectsOversizedPartDeclarationWithoutReadingParts(t *testing.T) {
+	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	server, allocator, manager, dispatcher := fixtureServer(now, 0)
+	daemon, client := net.Pipe()
+	done := make(chan struct{})
+	go func() { server.handle(context.Background(), daemon); close(done) }()
+	helloRaw, err := protocol.ReadFrame(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parts := make([]protocol.Part, protocol.FrozenAllocationLimits().MaxParts+1)
+	for index := range parts {
+		parts[index] = protocol.Part{Role: "user", ContentLength: 1, ContentSHA256: protocol.Digest([]byte("x"))}
+	}
+	proposal := protocol.DispatchProposal{SchemaVersion: 1, Protocol: protocol.Name, Type: protocol.DispatchProposalType, Mapping: protocol.Mapping, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Destination: protocol.Destination, Method: protocol.Method, Path: protocol.Path, Models: []string{"model/fixture"}, Parts: parts, Scope: protocol.Scope{Repository: "repo", RunID: "run", Lane: "lane", Candidate: "candidate", Workload: "workload"}, CallerNonce: "caller-nonce", AuthorityHelloSHA256: protocol.Digest(helloRaw)}
+	proposalRaw, _ := protocol.CanonicalJSON(proposal)
+	if err := protocol.WriteFrame(client, proposalRaw); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := protocol.ReadFrame(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var safe protocol.SafeError
+	if protocol.DecodeClosed(raw, &safe) != nil || safe.Code != "authorization_declined" {
+		t.Fatalf("safe error = %#v", safe)
+	}
+	<-done
+	if manager.challenge.TransactionID != "" || dispatcher.called != 0 || len(allocator.consumed) != 1 || allocator.consumed[0] != "parts_invalid" {
+		t.Fatal("oversized declaration crossed the pre-read limit")
+	}
+}
+
 func TestServerRejectsUnauthorizedPeerWithoutHello(t *testing.T) {
 	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
 	server, allocator, _, dispatcher := fixtureServer(now, 0)
@@ -326,4 +364,87 @@ func TestServerUnexpectedAcceptFailureShutsDownDependencies(t *testing.T) {
 	if manager.shutdown != 1 || allocator.closed != 1 {
 		t.Fatalf("shutdown manager=%d allocator=%d", manager.shutdown, allocator.closed)
 	}
+}
+
+type channelListener struct {
+	connections chan net.Conn
+	closed      chan struct{}
+}
+
+func newChannelListener() *channelListener {
+	return &channelListener{connections: make(chan net.Conn), closed: make(chan struct{})}
+}
+func (l *channelListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.connections:
+		return conn, nil
+	case <-l.closed:
+		return nil, net.ErrClosed
+	}
+}
+func (l *channelListener) Close() error {
+	select {
+	case <-l.closed:
+	default:
+		close(l.closed)
+	}
+	return nil
+}
+func (*channelListener) Addr() net.Addr { return fixtureAddr("fixture") }
+
+type blockingDispatcher struct {
+	entered   chan struct{}
+	cancelled chan struct{}
+	called    int
+}
+
+func (d *blockingDispatcher) Dispatch(ctx context.Context, _ provider.DispatchInput, _ provider.ResponseSink) (provider.TerminalResult, error) {
+	d.called++
+	if d.called == 1 {
+		close(d.entered)
+	}
+	<-ctx.Done()
+	close(d.cancelled)
+	return provider.TerminalResult{}, ctx.Err()
+}
+
+func TestStopCancelsInflightDispatchAndPreventsQueuedProgress(t *testing.T) {
+	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	server, allocator, manager, _ := fixtureServer(now, 0)
+	blocking := &blockingDispatcher{entered: make(chan struct{}), cancelled: make(chan struct{})}
+	server.Dispatcher = blocking
+	listener := newChannelListener()
+	serveResult := make(chan error, 1)
+	go func() { serveResult <- server.Serve(context.Background(), listener) }()
+	daemonOne, clientOne := net.Pipe()
+	listener.connections <- daemonOne
+	writeFixtureRequest(t, clientOne, allocator.allocation.Hello, true)
+	<-blocking.entered
+	daemonTwo, clientTwo := net.Pipe()
+	listener.connections <- daemonTwo
+	stopContext, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := server.Stop(stopContext, listener); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-serveResult; err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-blocking.cancelled:
+	default:
+		t.Fatal("dispatcher context was not cancelled")
+	}
+	if blocking.called != 1 {
+		t.Fatalf("queued request dispatched after stop: %d", blocking.called)
+	}
+	_ = clientTwo.SetReadDeadline(time.Now().Add(time.Second))
+	if _, err := protocol.ReadFrame(clientTwo); err == nil {
+		t.Fatal("queued connection received authority after stop")
+	}
+	if manager.shutdown != 1 || allocator.closed != 1 || len(allocator.consumed) != 1 || allocator.consumed[0] != "dispatch_ambiguous" {
+		t.Fatalf("shutdown=%d closed=%d consumed=%#v", manager.shutdown, allocator.closed, allocator.consumed)
+	}
+	_ = clientOne.Close()
+	_ = clientTwo.Close()
 }

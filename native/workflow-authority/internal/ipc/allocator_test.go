@@ -102,8 +102,39 @@ func TestAllocatorAmbiguousSaveNeverRollsBackSequence(t *testing.T) {
 	if _, err := allocator.Allocate(context.Background()); !errors.Is(err, ErrDurability) {
 		t.Fatalf("allocate = %v", err)
 	}
-	if _, err := allocator.Allocate(context.Background()); !errors.Is(err, ErrBusy) {
+	if _, err := allocator.Allocate(context.Background()); !errors.Is(err, ErrDurability) {
 		t.Fatalf("ambiguous allocation was reused: %v", err)
+	}
+}
+
+func TestAllocatorRecoveryRejectsInconsistentActiveState(t *testing.T) {
+	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	mutations := map[string]func(*allocatorState){
+		"sequence mismatch":      func(state *allocatorState) { state.Active.Sequence++ },
+		"prior chain mismatch":   func(state *allocatorState) { state.Active.PriorChainDigest = protocol.Digest([]byte("other-chain")) },
+		"invalid hello digest":   func(state *allocatorState) { state.Active.HelloSHA256 = "sha256:invalid" },
+		"invalid connection":     func(state *allocatorState) { state.Active.ConnectionID = "connection-invalid" },
+		"populated zero version": func(state *allocatorState) { state.Version = 0 },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			store := &memoryStateStore{}
+			allocator, err := NewDurableAllocator(allocatorConfig(now), store)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := allocator.Allocate(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			corrupt := store.state
+			active := *corrupt.Active
+			corrupt.Active = &active
+			mutate(&corrupt)
+			store.state = corrupt
+			if _, err := NewDurableAllocator(allocatorConfig(now), store); !errors.Is(err, ErrDurability) {
+				t.Fatalf("corrupt recovery = %v", err)
+			}
+		})
 	}
 }
 

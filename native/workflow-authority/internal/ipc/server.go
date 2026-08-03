@@ -49,6 +49,8 @@ type Server struct {
 	stopped      bool
 	shutdownOnce sync.Once
 	shutdownErr  error
+	serveCancel  context.CancelFunc
+	serveDone    chan struct{}
 }
 
 func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
@@ -56,7 +58,20 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 		return provider.ErrStartup
 	}
 	serveContext, cancel := context.WithCancel(ctx)
-	defer cancel()
+	s.mu.Lock()
+	if s.stopped || s.serveCancel != nil {
+		s.mu.Unlock()
+		cancel()
+		return provider.ErrStartup
+	}
+	done := make(chan struct{})
+	s.serveCancel = cancel
+	s.serveDone = done
+	s.mu.Unlock()
+	defer func() {
+		cancel()
+		close(done)
+	}()
 	queue := make(chan net.Conn, s.QueueDepth)
 	workerDone := make(chan struct{})
 	go func() {
@@ -96,17 +111,28 @@ func (s *Server) Serve(ctx context.Context, listener net.Listener) error {
 func (s *Server) Stop(ctx context.Context, listener net.Listener) error {
 	s.mu.Lock()
 	s.stopped = true
-	if s.active != nil {
-		_ = s.active.Close()
-	}
+	cancel := s.serveCancel
+	done := s.serveDone
+	active := s.active
 	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if listener != nil {
 		_ = listener.Close()
 	}
-	if err := ctx.Err(); err != nil {
-		return err
+	if active != nil {
+		_ = active.Close()
 	}
-	return nil
+	if done == nil {
+		return provider.ErrStartup
+	}
+	select {
+	case <-done:
+		return s.shutdownErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (s *Server) isStopped() bool {
@@ -176,7 +202,8 @@ func (s *Server) handle(ctx context.Context, raw net.Conn) {
 		reason = "proposal_invalid"
 		return
 	}
-	parts, err := readParts(conn, proposal.Parts, protocol.FrozenAllocationLimits().MaxRequestBytes)
+	limits := protocol.FrozenAllocationLimits()
+	parts, err := readParts(conn, proposal.Parts, limits.MaxParts, limits.MaxRequestBytes)
 	if err != nil {
 		s.writeSafe(conn, "authorization_declined")
 		reason = "parts_invalid"
@@ -260,7 +287,10 @@ func readFrame(conn GuardedConn) ([]byte, error) {
 	return payload, nil
 }
 
-func readParts(conn GuardedConn, declared []protocol.Part, limit int64) ([][]byte, error) {
+func readParts(conn GuardedConn, declared []protocol.Part, maxParts int, limit int64) ([][]byte, error) {
+	if len(declared) == 0 || len(declared) > maxParts {
+		return nil, protocol.ErrPartMismatch
+	}
 	parts := make([][]byte, 0, len(declared))
 	var total int64
 	for _, part := range declared {
