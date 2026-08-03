@@ -137,9 +137,9 @@ func (t *Transport) Send(ctx context.Context, credential *Credential, body []byt
 	limited := io.LimitReader(resp.Body, maxProviderResponse+1)
 	response, readErr := io.ReadAll(limited)
 	bodyCloseErr := resp.Body.Close()
-	connCloseErr := conn.Close()
+	_ = conn.Close()
 	closed = true
-	if readErr != nil || bodyCloseErr != nil || (connCloseErr != nil && !errors.Is(connCloseErr, net.ErrClosed)) || int64(len(response)) > maxProviderResponse || wire.N <= 0 {
+	if readErr != nil || bodyCloseErr != nil || int64(len(response)) > maxProviderResponse || wire.N <= 0 {
 		zero(response)
 		return nil, ErrTransport
 	}

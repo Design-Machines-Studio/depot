@@ -313,7 +313,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	zero(usageCanonical)
 	content := []byte(*projected.Choices[0].Message.Content)
 	defer zero(content)
-	if !utf8.Valid(content) || int64(len(content)) > maxProviderResponse {
+	if len(content) == 0 || !utf8.Valid(content) || int64(len(content)) > maxProviderResponse {
 		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
 		return TerminalResult{}, ErrProvenance
 	}
