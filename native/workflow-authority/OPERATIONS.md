@@ -5,6 +5,9 @@ dispatch milestone. The commands below are documentation only: repository
 validation must not install files, enable services, access a FIDO authenticator,
 or contact a provider.
 
+Read [THREAT-MODEL.md](THREAT-MODEL.md) before provisioning. In particular,
+ordinary FIDO UP+UV is user presence, not a trusted hardware display of scope.
+
 ## Fixed boundary
 
 The production binaries accept no socket, enrollment-record, credential,
@@ -64,6 +67,29 @@ Status is intentionally content-free:
 - `provider-required`: enrollment exists but provider custody is incomplete;
 - `ready`: fixed layout, enrollment files, and provider custody are present;
 - `degraded` or `unavailable`: do not enable dispatch; follow recovery.
+
+## Minimal automated caller environment
+
+Pipeline/Baseplate callers export only non-secret scope and routing inputs. The
+socket, provider credential, FIDO selector, policy path, and authorization mode
+are fixed host configuration and have no environment override:
+
+```sh
+export DM_PROVIDER_REPOSITORY="design-machines/assembly-baseplate"
+export DM_PROVIDER_RUN_ID="pipeline-run-20260804-001"
+export DM_PROVIDER_LANE="pipeline-assessment-artifact-delegation-v1"
+export DM_PROVIDER_CANDIDATE="candidate-sha256-0123456789abcdef"
+export DM_PROVIDER_WORKLOAD="pipeline-assessment"
+export DM_PROVIDER_NONCE="fresh-single-use-caller-nonce"
+export OPENROUTER_EXEC_ALLOWED_PATHS="docs/example.md"
+```
+
+Do not export `OPENROUTER_API_KEY`, a broker/socket path, a FIDO credential or
+selector, `OPENROUTER_PAYLOAD_AUTHORIZATION`, or
+`OPENROUTER_PAYLOAD_APPROVAL_SHA256` for automated broker dispatch. The first
+provider milestone also exports no `DM_VERIFICATION_SUBSTRATE`: its receipts
+state `substrate_authority: not_asserted` until the separate observed Docker
+attestation milestone exists.
 
 ## Rotation, revocation, and recovery
 
