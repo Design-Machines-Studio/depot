@@ -590,3 +590,21 @@ func TestDirWALChecksAndPersists(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestShutdownErasesRootPrivateCredentialID(t *testing.T) {
+	_, _, config, clock := fixture(t)
+	secret := []byte("root-private-credential-id")
+	config.Credential.ID = secret
+	manager, err := NewManager(config, &fakeFIDO{}, &memoryWAL{}, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range secret {
+		if value != 0 {
+			t.Fatal("credential id remained after shutdown")
+		}
+	}
+}
