@@ -379,10 +379,13 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 			t.Errorf("runtime preparation service contains override surface %s", forbidden)
 		}
 	}
-	for _, want := range []string{"ExecStart=" + DaemonPath, "User=root", "Group=root", "UMask=0077", "PrivateTmp=yes", "NoNewPrivileges=yes", "CapabilityBoundingSet=", "AmbientCapabilities=", "ProtectSystem=strict", "UnsetEnvironment=HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY https_proxy http_proxy all_proxy no_proxy OPENROUTER_API_KEY", "DevicePolicy=closed", "DeviceAllow=/dev/hidraw0 rw", "SystemCallFilter=@system-service @network-io", "SystemCallErrorNumber=EPERM", "LimitNOFILE=256", "TasksMax=32", "MemoryMax=256M", "LimitCORE=0", "TimeoutStopSec=15s"} {
+	for _, want := range []string{"ExecStart=" + DaemonPath, "User=root", "Group=root", "UMask=0077", "PrivateTmp=yes", "NoNewPrivileges=yes", "CapabilityBoundingSet=", "AmbientCapabilities=", "ProtectSystem=strict", "UnsetEnvironment=HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY https_proxy http_proxy all_proxy no_proxy OPENROUTER_API_KEY", "DevicePolicy=closed", "DeviceAllow=char-hidraw rw", "SystemCallFilter=@system-service @network-io", "SystemCallErrorNumber=EPERM", "LimitNOFILE=256", "TasksMax=32", "MemoryMax=256M", "LimitCORE=0", "TimeoutStopSec=15s"} {
 		if !strings.Contains(string(service), want) {
 			t.Errorf("service missing %s", want)
 		}
+	}
+	if strings.Contains(string(service), "DeviceAllow=/dev/hidraw0") {
+		t.Error("service hardcodes a boot-unstable hidraw index")
 	}
 	for _, forbidden := range []string{"EnvironmentFile=", "$", "%E", "/bin/sh", "bash -c"} {
 		if strings.Contains(string(service), forbidden) {
