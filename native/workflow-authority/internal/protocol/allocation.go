@@ -130,10 +130,10 @@ type TerminalResult struct {
 	Models                   []string          `json:"models"`
 	SelectedModel            *string           `json:"selected_model"`
 	Provider                 string            `json:"provider"`
-	GenerationID             string            `json:"generation_id"`
-	ServingProvider          string            `json:"serving_provider"`
-	UsageSHA256              string            `json:"usage_sha256"`
-	Fallback                 bool              `json:"fallback"`
+	GenerationID             *string           `json:"generation_id"`
+	ServingProvider          *string           `json:"serving_provider"`
+	UsageSHA256              *string           `json:"usage_sha256"`
+	Fallback                 *bool             `json:"fallback"`
 	Scope                    Scope             `json:"scope"`
 	Sequence                 uint64            `json:"sequence"`
 	IssuedAt                 string            `json:"issued_at"`
@@ -287,16 +287,15 @@ func ValidateTerminalResult(value TerminalResult) error {
 	if exit, ok := exits[value.Outcome]; !ok || value.ExitCode != exit {
 		return ErrInvalidDocument
 	}
-	for _, digest := range []string{value.RequestBodySHA256, value.ResponseSHA256, value.UsageSHA256, value.ChallengeSHA256, value.AuthorityAssertionSHA256, value.ResultSignerSHA256, value.PriorChainDigest} {
+	for _, digest := range []string{value.RequestBodySHA256, value.ResponseSHA256, value.ChallengeSHA256, value.AuthorityAssertionSHA256, value.ResultSignerSHA256, value.PriorChainDigest} {
 		if !digestPattern.MatchString(digest) {
 			return ErrInvalidDocument
 		}
 	}
-	if value.ResponseLength < 0 || value.ResponseLength > 8_388_608 || value.PartCount < 1 || value.PartCount > 256 || len(value.Models) == 0 || len(value.Models) > 256 || value.SelectedModel == nil || value.Provider != "openrouter" || value.Sequence == 0 || value.Sequence > math.MaxInt64 {
+	if value.ResponseLength < 0 || value.ResponseLength > 8_388_608 || value.PartCount < 1 || value.PartCount > 256 || len(value.Models) == 0 || len(value.Models) > 256 || value.Provider != "openrouter" || value.Sequence == 0 || value.Sequence > math.MaxInt64 {
 		return ErrInvalidDocument
 	}
 	seen := map[string]struct{}{}
-	selected := false
 	for _, model := range value.Models {
 		if !idPattern.MatchString(model) {
 			return ErrInvalidDocument
@@ -305,14 +304,27 @@ func ValidateTerminalResult(value TerminalResult) error {
 			return ErrInvalidDocument
 		}
 		seen[model] = struct{}{}
-		selected = selected || model == *value.SelectedModel
 	}
-	for _, identifier := range []string{*value.SelectedModel, value.GenerationID, value.ServingProvider, value.Scope.Repository, value.Scope.RunID, value.Scope.Lane, value.Scope.Candidate, value.Scope.Workload} {
+	for _, identifier := range []string{value.Scope.Repository, value.Scope.RunID, value.Scope.Lane, value.Scope.Candidate, value.Scope.Workload} {
 		if !idPattern.MatchString(identifier) {
 			return ErrInvalidDocument
 		}
 	}
-	if !selected || value.Fallback != (*value.SelectedModel != value.Models[0]) || !timePattern.MatchString(value.IssuedAt) || !timePattern.MatchString(value.CompletedAt) || value.Cleanup != (TerminalCleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}) {
+	if !timePattern.MatchString(value.IssuedAt) || !timePattern.MatchString(value.CompletedAt) || value.Cleanup != (TerminalCleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}) {
+		return ErrInvalidDocument
+	}
+	if value.Outcome == "verified" {
+		if value.SelectedModel == nil || value.GenerationID == nil || value.ServingProvider == nil || value.UsageSHA256 == nil || value.Fallback == nil || !idPattern.MatchString(*value.SelectedModel) || !idPattern.MatchString(*value.GenerationID) || !idPattern.MatchString(*value.ServingProvider) || !digestPattern.MatchString(*value.UsageSHA256) {
+			return ErrInvalidDocument
+		}
+		selected := false
+		for _, model := range value.Models {
+			selected = selected || model == *value.SelectedModel
+		}
+		if !selected || *value.Fallback != (*value.SelectedModel != value.Models[0]) {
+			return ErrInvalidDocument
+		}
+	} else if value.SelectedModel != nil || value.GenerationID != nil || value.ServingProvider != nil || value.UsageSHA256 != nil || value.Fallback != nil {
 		return ErrInvalidDocument
 	}
 	switch value.Signature.Kind {

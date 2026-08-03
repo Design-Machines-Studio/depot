@@ -139,11 +139,12 @@ func TestTypedConsentSafeErrorAndTerminalES256Projection(t *testing.T) {
 		t.Fatal("post-send outcome accepted as unsigned safe error")
 	}
 	selected := "openai/gpt-5.6"
+	generation, serving, usage, fallback := "generation-01", "provider-01", digest, false
 	document := TerminalResult{
 		SchemaVersion: 1, Protocol: Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted",
 		Outcome: "verified", ExitCode: 0, RequestBodySHA256: digest, ResponseSHA256: digest,
 		ResponseLength: 2, PartCount: 2, Models: []string{selected, "z-ai/glm-5.2"}, SelectedModel: &selected,
-		Provider: "openrouter", GenerationID: "generation-01", ServingProvider: "provider-01", UsageSHA256: digest,
+		Provider: "openrouter", GenerationID: &generation, ServingProvider: &serving, UsageSHA256: &usage, Fallback: &fallback,
 		Scope:    Scope{Repository: "design-machines/depot", RunID: "run-01", Lane: "assessment", Candidate: "candidate-01", Workload: "pipeline-assessment"},
 		Sequence: 7, IssuedAt: "2026-08-03T00:00:00Z", CompletedAt: "2026-08-03T00:00:03Z",
 		ChallengeSHA256: digest, AuthorityAssertionSHA256: digest, ResultSignerSHA256: digest, PriorChainDigest: digest,
@@ -170,6 +171,23 @@ func TestTypedConsentSafeErrorAndTerminalES256Projection(t *testing.T) {
 	invalidSequence.Sequence = uint64(^uint64(0)>>1) + 1
 	if _, err := TerminalSignatureInput(invalidSequence); err == nil {
 		t.Fatal("out-of-range terminal sequence projected")
+	}
+	failure := document
+	failure.Outcome, failure.ExitCode = "provider_failure", 73
+	failure.ResponseSHA256, failure.ResponseLength = Digest(nil), 0
+	failure.SelectedModel, failure.GenerationID, failure.ServingProvider, failure.UsageSHA256, failure.Fallback = nil, nil, nil, nil, nil
+	if _, err := TerminalSignatureInput(failure); err != nil {
+		t.Fatalf("content-free signed failure rejected: %v", err)
+	}
+	mixed := failure
+	mixed.GenerationID = &generation
+	if _, err := TerminalSignatureInput(mixed); err == nil {
+		t.Fatal("failure with invented provenance projected")
+	}
+	downgrade := failure
+	downgrade.Signature = TerminalSignature{Kind: "hmac", Value: "forbidden"}
+	if _, err := TerminalSignatureInput(downgrade); err == nil {
+		t.Fatal("terminal signature downgrade projected")
 	}
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	hash := sha256.Sum256(input)

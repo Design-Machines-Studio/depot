@@ -371,7 +371,7 @@ func mustChallengeInput(challengeRaw []byte) []byte {
 }
 
 func verifyTerminal(request protocol.Request, challenge protocol.Challenge, challengeRaw []byte, proof provider.AuthorizationProof, assertion authority.Assertion, response []byte, result protocol.TerminalResult, now time.Time) error {
-	if protocol.ValidateTerminalResult(result) != nil || result.RequestBodySHA256 != challenge.RequestBodySHA256 || result.ResponseSHA256 != protocol.Digest(response) || result.ResponseLength != int64(len(response)) || result.PartCount != len(request.Parts) || !same(result.Models, request.Models) || result.Scope != request.Scope || result.Sequence != request.Authority.Sequence || result.IssuedAt != request.Authority.IssuedAt || result.ChallengeSHA256 != protocol.Digest(challengeRaw) || proof.ChallengeSHA256 != protocol.Digest(challengeRaw) || result.PriorChainDigest != request.Authority.PriorChainDigest || result.Signature.Kind != "es256" || result.SelectedModel == nil {
+	if protocol.ValidateTerminalResult(result) != nil || result.RequestBodySHA256 != challenge.RequestBodySHA256 || result.ResponseSHA256 != protocol.Digest(response) || result.ResponseLength != int64(len(response)) || result.PartCount != len(request.Parts) || !same(result.Models, request.Models) || result.Scope != request.Scope || result.Sequence != request.Authority.Sequence || result.IssuedAt != request.Authority.IssuedAt || result.ChallengeSHA256 != protocol.Digest(challengeRaw) || proof.ChallengeSHA256 != protocol.Digest(challengeRaw) || result.PriorChainDigest != request.Authority.PriorChainDigest || result.Signature.Kind != "es256" || (result.Outcome == "verified") != (len(response) > 0) {
 		return ErrUncertain
 	}
 	issued, issuedErr := time.Parse(time.RFC3339, result.IssuedAt)
