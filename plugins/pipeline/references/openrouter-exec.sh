@@ -12,7 +12,6 @@ DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
 WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"
 ASSESSMENT_LANE="pipeline-assessment-artifact-delegation-v1"
-FIXTURE_DOMAIN="fixture.workflow-authority.invalid"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -71,48 +70,42 @@ BOUNDARY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation
 }
 
 authority_client() {
-  if [ "${DM_AUTOMATION_TEST:-}" = "1" ] &&
-      [ -n "${DM_AUTOMATION_TEST_ROOT:-}" ] &&
-      [ -f "$DM_AUTOMATION_TEST_ROOT/.workflow-authority-fixture" ] &&
-      [ "$(cat "$DM_AUTOMATION_TEST_ROOT/.workflow-authority-fixture" 2>/dev/null)" = "workflow-authority-fixture-v1" ] &&
-      [ -x "$DM_AUTOMATION_TEST_ROOT/workflow-authority" ]; then
-    printf '%s' "$DM_AUTOMATION_TEST_ROOT/workflow-authority"
-    return 0
-  fi
   [ -x "$WORKFLOW_AUTHORITY_CLIENT" ] || return 1
   printf '%s' "$WORKFLOW_AUTHORITY_CLIENT"
 }
 
 authority_env() {
-  local client="$1"; shift
-  if [ "$client" != "$WORKFLOW_AUTHORITY_CLIENT" ]; then
-    env -i PATH="$PATH" LC_ALL=C HOME="$DM_AUTOMATION_TEST_ROOT" DM_AUTOMATION_TEST=1 \
-      DM_AUTOMATION_TEST_ROOT="$DM_AUTOMATION_TEST_ROOT" \
-      DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="${DM_WORKFLOW_AUTHORITY_FIXTURE_CASE:-signed-success}" \
-      "$@"
-  else
-    env -i PATH="$PATH" LC_ALL=C "$@"
-  fi
+  env -i PATH="$PATH" LC_ALL=C "$@"
+}
+
+request_body_digest() {
+  local model="$1" fallback="$2" system_file="$3" prompt_file="$4"
+  /usr/bin/python3 - "$model" "$fallback" 4<"$system_file" 5<"$prompt_file" <<'PY'
+import hashlib, json, os, sys
+models = [sys.argv[1]] + ([sys.argv[2]] if sys.argv[2] else [])
+body = {"messages": [{"content": os.read(4, 8388609).decode("utf-8"), "role": "system"},
+                     {"content": os.read(5, 8388609).decode("utf-8"), "role": "user"}],
+        "models": models, "temperature": None}
+raw = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+print("sha256:" + hashlib.sha256(raw).hexdigest())
+PY
+}
+
+response_metrics() {
+  /usr/bin/python3 -c 'import hashlib,sys; b=sys.stdin.buffer.read(); print(len(b)); print("sha256:"+hashlib.sha256(b).hexdigest())'
 }
 
 CLIENT="$(authority_client)" || {
   echo "openrouter-exec: host_authority_unavailable" >&2
   exit 70
 }
-STATUS="$(authority_env "$CLIENT" "$CLIENT" provider-transport-status 2>/dev/null)" || {
+STATUS="$(authority_env "$CLIENT" provider-transport-status 2>/dev/null)" || {
   echo "openrouter-exec: host_authority_unavailable" >&2
   exit 70
 }
-if [ "$CLIENT" != "$WORKFLOW_AUTHORITY_CLIENT" ]; then
-  printf '%s' "$STATUS" | jq -e --arg domain "$FIXTURE_DOMAIN" \
-    '.production_ready == false and .fixture_ready == true and .fixture_domain == $domain and .socket_root_source == "injected-test-only"' >/dev/null || {
-    echo "openrouter-exec: host_authority_unavailable" >&2; exit 70;
-  }
-else
-  printf '%s' "$STATUS" | jq -e '.production_ready == true and .m1_acceptance == true' >/dev/null || {
-    echo "openrouter-exec: host_authority_unavailable" >&2; exit 70;
-  }
-fi
+printf '%s' "$STATUS" | jq -e '.production_ready == true and .m1_acceptance == true' >/dev/null || {
+  echo "openrouter-exec: host_authority_unavailable" >&2; exit 70;
+}
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
@@ -132,7 +125,7 @@ printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
 marker="$(printf '\001')"
 set +e
 RAW_OUT="$(
-  authority_env "$CLIENT" "$CLIENT" dispatch-provider-request \
+  authority_env "$CLIENT" dispatch-provider-request \
     --repository "$DM_PROVIDER_REPOSITORY" --run-id "$DM_PROVIDER_RUN_ID" \
     --lane "$DM_PROVIDER_LANE" --candidate "$DM_PROVIDER_CANDIDATE" \
     --workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" --nonce "$DM_PROVIDER_NONCE" \
@@ -156,28 +149,38 @@ if [ "$rc" -ne 0 ]; then
   esac
 fi
 RAW_OUT="${RAW_OUT%$marker}"
-RESPONSE_LENGTH="${#RAW_OUT}"
+METRICS="$(printf '%s' "$RAW_OUT" | response_metrics)" || {
+  echo "openrouter-exec: response digest failed" >&2; exit 2;
+}
+RESPONSE_LENGTH="$(printf '%s\n' "$METRICS" | sed -n '1p')"
+RESPONSE_DIGEST="$(printf '%s\n' "$METRICS" | sed -n '2p')"
+BODY_DIGEST="$(request_body_digest "$MODEL" "$FALLBACK_MODEL" "$SYSTEM_FILE" "$PROMPT_FILE")" || {
+  echo "openrouter-exec: request body digest failed" >&2; exit 2;
+}
+MODELS_JSON="$(jq -nc --arg model "$MODEL" --arg fallback "$FALLBACK_MODEL" \
+  'if $fallback == "" then [$model] else [$model,$fallback] end')"
 jq -e --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_ID" \
   --arg lane "$DM_PROVIDER_LANE" --arg candidate "$DM_PROVIDER_CANDIDATE" \
   --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" --arg nonce "$DM_PROVIDER_NONCE" \
-  --arg model "$MODEL" --argjson response_length "$RESPONSE_LENGTH" '
+  --arg body_digest "$BODY_DIGEST" --arg response_digest "$RESPONSE_DIGEST" \
+  --argjson models "$MODELS_JSON" --argjson response_length "$RESPONSE_LENGTH" '
     .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
     .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
     .outcome == "verified" and .exit_code == 0 and
     .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
     .scope.candidate == $candidate and .scope.workload == $workload and
-    .models[0] == $model and (.selected_model | type == "string" and length > 0) and
+    .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
     .provider == "openrouter" and .part_count == 2 and
-    (.request_body_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-    (.response_sha256 | test("^sha256:[0-9a-f]{64}$")) and .response_length == $response_length and
+    .request_body_sha256 == $body_digest and
+    .response_sha256 == $response_digest and .response_length == $response_length and
     (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
     (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
     (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
     (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
     (.sequence | type == "number" and . >= 1) and
     .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
-    (.signature.kind | type == "string" and length > 0) and
-    ((.signature.domain // "") != "" or .signature.kind == "es256") and
+    .signature.kind == "es256" and
+    (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
     ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
   ' "$RESULT_FILE" >/dev/null || {
   echo "openrouter-exec: broker result scope mismatch" >&2

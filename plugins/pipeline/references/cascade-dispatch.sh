@@ -36,7 +36,6 @@ PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"
 PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
 # Automated provider dispatch has one installed client and one fixture-only seam.
 WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"
-WORKFLOW_AUTHORITY_FIXTURE_DOMAIN="fixture.workflow-authority.invalid"
 ASSESSMENT_LANE="pipeline-assessment-artifact-delegation-v1"
 
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="3600"; DRYRUN=0; PROBE_FILE=""
@@ -96,59 +95,62 @@ dispatch_codex() {
   node "${root}/scripts/codex-companion.mjs" task --write "$PROMPT" 2>&1
 }
 authority_client() {
-  if [ "${DM_AUTOMATION_TEST:-}" = "1" ] &&
-      [ -n "${DM_AUTOMATION_TEST_ROOT:-}" ] &&
-      [ -f "$DM_AUTOMATION_TEST_ROOT/.workflow-authority-fixture" ] &&
-      [ "$(cat "$DM_AUTOMATION_TEST_ROOT/.workflow-authority-fixture" 2>/dev/null)" = "workflow-authority-fixture-v1" ] &&
-      [ -x "$DM_AUTOMATION_TEST_ROOT/workflow-authority" ]; then
-    printf '%s' "$DM_AUTOMATION_TEST_ROOT/workflow-authority"
-    return 0
-  fi
   [ -x "$WORKFLOW_AUTHORITY_CLIENT" ] || return 1
   printf '%s' "$WORKFLOW_AUTHORITY_CLIENT"
 }
 
 authority_env() {
-  local client="$1"; shift
-  if [ "$client" != "$WORKFLOW_AUTHORITY_CLIENT" ]; then
-    env -i PATH="$PATH" LC_ALL=C HOME="$DM_AUTOMATION_TEST_ROOT" DM_AUTOMATION_TEST=1 \
-      DM_AUTOMATION_TEST_ROOT="$DM_AUTOMATION_TEST_ROOT" \
-      DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="${DM_WORKFLOW_AUTHORITY_FIXTURE_CASE:-signed-success}" \
-      "$@"
-  else
-    env -i PATH="$PATH" LC_ALL=C "$@"
-  fi
+  env -i PATH="$PATH" LC_ALL=C "$@"
+}
+
+request_body_digest() {
+  local model="$1" fallback="$2" system_file="$3" prompt_file="$4"
+  /usr/bin/python3 - "$model" "$fallback" 4<"$system_file" 5<"$prompt_file" <<'PY'
+import hashlib, json, os, sys
+models = [sys.argv[1]] + ([sys.argv[2]] if sys.argv[2] else [])
+body = {"messages": [{"content": os.read(4, 8388609).decode("utf-8"), "role": "system"},
+                     {"content": os.read(5, 8388609).decode("utf-8"), "role": "user"}],
+        "models": models, "temperature": None}
+raw = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+print("sha256:" + hashlib.sha256(raw).hexdigest())
+PY
+}
+
+response_metrics() {
+  /usr/bin/python3 -c 'import hashlib,sys; b=sys.stdin.buffer.read(); print(len(b)); print("sha256:"+hashlib.sha256(b).hexdigest())'
 }
 
 validate_provider_result() {
-  local receipt="$1" model="$2" response_length="$3"
+  local receipt="$1" model="$2" fallback="$3" response_length="$4" response_digest="$5" body_digest="$6" models
+  models="$(jq -nc --arg model "$model" --arg fallback "$fallback" 'if $fallback == "" then [$model] else [$model,$fallback] end')"
   jq -e --arg repository "${DM_PROVIDER_REPOSITORY:-}" \
     --arg run_id "${DM_PROVIDER_RUN_ID:-}" --arg lane "${DM_PROVIDER_LANE:-}" \
     --arg candidate "${DM_PROVIDER_CANDIDATE:-}" --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" \
-    --arg nonce "${DM_PROVIDER_NONCE:-}" --arg model "$model" --argjson response_length "$response_length" '
+    --arg model "$model" --arg body_digest "$body_digest" --arg response_digest "$response_digest" \
+    --argjson models "$models" --argjson response_length "$response_length" '
       .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
       .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
       .outcome == "verified" and .exit_code == 0 and
       .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
       .scope.candidate == $candidate and .scope.workload == $workload and
-      .models[0] == $model and (.selected_model | type == "string" and length > 0) and
+      .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
       .provider == "openrouter" and .part_count == 2 and
-      (.request_body_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-      (.response_sha256 | test("^sha256:[0-9a-f]{64}$")) and .response_length == $response_length and
+      .request_body_sha256 == $body_digest and
+      .response_sha256 == $response_digest and .response_length == $response_length and
       (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
       (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
       (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
       (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
       (.sequence | type == "number" and . >= 1) and
       .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
-      (.signature.kind | type == "string" and length > 0) and
-      ((.signature.domain // "") != "" or .signature.kind == "es256") and
+      .signature.kind == "es256" and
+      (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
       ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
     ' "$receipt" >/dev/null 2>&1
 }
 
 dispatch_wrapper() {
-  local model="$1" system task_tmp_root system_file prompt_file receipt_file client response marker rc
+  local model="$1" system task_tmp_root system_file prompt_file receipt_file client response marker rc metrics response_length response_digest body_digest
   client="$(authority_client)" || return 1
   system="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
   task_tmp_root="${TMPDIR:-/tmp}"
@@ -163,7 +165,7 @@ dispatch_wrapper() {
   printf '%s' "$PROMPT" > "$prompt_file"
   marker="$(printf '\001')"
   response="$(
-    authority_env "$client" "$client" dispatch-provider-request \
+    authority_env "$client" dispatch-provider-request \
       --repository "${DM_PROVIDER_REPOSITORY:-}" --run-id "${DM_PROVIDER_RUN_ID:-}" \
       --lane "${DM_PROVIDER_LANE:-}" --candidate "${DM_PROVIDER_CANDIDATE:-}" \
       --workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" --nonce "${DM_PROVIDER_NONCE:-}" \
@@ -178,7 +180,11 @@ dispatch_wrapper() {
     case "$rc" in 71|72) return 77;; 70) return 1;; 73|74) return 1;; *) return 2;; esac
   fi
   response="${response%$marker}"
-  if ! validate_provider_result "$receipt_file" "$model" "${#response}"; then
+  metrics="$(printf '%s' "$response" | response_metrics)" || return 2
+  response_length="$(printf '%s\n' "$metrics" | sed -n '1p')"
+  response_digest="$(printf '%s\n' "$metrics" | sed -n '2p')"
+  body_digest="$(request_body_digest "$model" "" "$system_file" "$prompt_file")" || return 2
+  if ! validate_provider_result "$receipt_file" "$model" "" "$response_length" "$response_digest" "$body_digest"; then
     rm -f "$system_file" "$prompt_file" "$receipt_file"
     return 2
   fi
@@ -216,16 +222,10 @@ openrouter_allowed() {
     OPENROUTER_GATE_STATE="denied"
     return 1
   }
-  status="$(authority_env "$client" "$client" provider-transport-status 2>/dev/null)" || {
+  status="$(authority_env "$client" provider-transport-status 2>/dev/null)" || {
     OPENROUTER_GATE_STATE="denied"; return 1;
   }
-  if [ "$client" != "$WORKFLOW_AUTHORITY_CLIENT" ] && printf '%s' "$status" | jq -e \
-      --arg domain "$WORKFLOW_AUTHORITY_FIXTURE_DOMAIN" \
-      '.production_ready == false and .fixture_ready == true and .fixture_domain == $domain and .socket_root_source == "injected-test-only"' >/dev/null; then
-    OPENROUTER_GATE_STATE="safe"
-    return 0
-  fi
-  if [ "$client" = "$WORKFLOW_AUTHORITY_CLIENT" ] && printf '%s' "$status" | jq -e \
+  if printf '%s' "$status" | jq -e \
       '.production_ready == true and .m1_acceptance == true' >/dev/null; then
     OPENROUTER_GATE_STATE="safe"
     return 0

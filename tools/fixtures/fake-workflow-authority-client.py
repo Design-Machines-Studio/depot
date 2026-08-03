@@ -100,9 +100,6 @@ def dispatch(argv: list[str]) -> None:
         fail(72 if case == "disclosure-declined" else 71, case)
     if case in {"provider-failure", "timeout"}:
         fail(73 if case == "provider-failure" else 74, case)
-    if case in {"malformed-frame", "forged-signature", "missing-result"}:
-        fail(75, case)
-
     system = os.read(4, 8_388_609)
     user = os.read(5, 8_388_609)
     if len(system) + len(user) > 8_388_608:
@@ -132,7 +129,11 @@ def dispatch(argv: list[str]) -> None:
         "schema_version": 1, "protocol": PROTOCOL,
         "operation_family": "external_provider_dispatch",
         "substrate_authority": "not_asserted", "outcome": "verified", "exit_code": 0,
-        "request_body_sha256": digest(canonical({"messages": header["parts"], "models": models})),
+        "request_body_sha256": digest(canonical({
+            "messages": [{"content": system.decode(), "role": "system"},
+                         {"content": user.decode(), "role": "user"}],
+            "models": models, "temperature": None,
+        })),
         "response_sha256": digest(response), "response_length": len(response),
         "part_count": 2, "models": models, "selected_model": args["--model"],
         "provider": "openrouter",
@@ -154,10 +155,25 @@ def dispatch(argv: list[str]) -> None:
         terminal["scope"]["candidate"] = "wrong-candidate"
     elif case == "wrong-response-length":
         terminal["response_length"] = len(response) + 1
+    elif case == "wrong-response-digest":
+        terminal["response_sha256"] = digest(b"wrong-response")
     elif case == "unknown-outcome":
         terminal["outcome"] = "unknown"
         terminal["exit_code"] = 74
+    elif case == "wrong-body":
+        terminal["request_body_sha256"] = digest(b"wrong-body")
+    elif case == "wrong-model-order":
+        terminal["models"] = list(reversed(models))
+    elif case == "wrong-selected-model":
+        terminal["selected_model"] = "fixture/not-requested"
+    elif case == "forged-signature":
+        terminal["signature"]["value"] = "fixture-rsa-sha256-v1:" + "0" * 256
     os.write(3, response)
+    if case == "missing-result":
+        return
+    if case == "malformed-frame":
+        sys.stdout.buffer.write(b"{malformed\n")
+        return
     sys.stdout.buffer.write(canonical(terminal) + b"\n")
 
 

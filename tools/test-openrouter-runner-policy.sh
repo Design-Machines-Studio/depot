@@ -436,9 +436,42 @@ expect_rc 2 'payload changed after authorization snapshot' 'payload membership c
 
 AUTH_ROOT="$FIXTURE_ROOT/workflow-authority-fixture"
 mkdir -p "$AUTH_ROOT" "$FIXTURE_ROOT/exec-repo/auth"
-cp "$REPO_ROOT/tools/fixtures/fake-workflow-authority-client.py" "$AUTH_ROOT/workflow-authority"
+cp "$REPO_ROOT/tools/fixtures/fake-workflow-authority-client.py" "$AUTH_ROOT/fake-client.py"
+cat > "$AUTH_ROOT/workflow-authority" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+CASE="$(cat "$ROOT/case")"
+exec env -i PATH=/usr/bin:/bin HOME="$ROOT" DM_AUTOMATION_TEST=1 \
+  DM_AUTOMATION_TEST_ROOT="$ROOT" DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$CASE" \
+  "$ROOT/fake-client.py" "$@"
+EOF
 chmod +x "$AUTH_ROOT/workflow-authority"
 printf '%s\n' workflow-authority-fixture-v1 > "$AUTH_ROOT/.workflow-authority-fixture"
+printf '%s\n' signed-success > "$AUTH_ROOT/case"
+PRODUCTION_EXEC_RUNNER="$EXEC_RUNNER"
+PRODUCTION_CASCADE="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
+EXEC_RUNNER="$AUTH_ROOT/openrouter-exec.sh"
+CASCADE="$AUTH_ROOT/cascade-dispatch.sh"
+/usr/bin/python3 - "$PRODUCTION_EXEC_RUNNER" "$PRODUCTION_CASCADE" "$EXEC_RUNNER" "$CASCADE" \
+  "$AUTH_ROOT/workflow-authority" "$REPO_ROOT/plugins/pipeline/references" <<'PY'
+from pathlib import Path
+import sys
+source_exec, source_cascade, out_exec, out_cascade, client, refs = sys.argv[1:]
+signature = '.signature.kind == "es256" and\n    (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$"))'
+fixture_signature = '.signature.kind == "fixture-rsa-sha256-v1" and\n    .signature.domain == "fixture.workflow-authority.invalid" and\n    (.signature.value | test("^fixture-rsa-sha256-v1:a{256}$"))'
+for source, output in ((source_exec, out_exec), (source_cascade, out_cascade)):
+    text = Path(source).read_text()
+    text = text.replace('WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"', f'WORKFLOW_AUTHORITY_CLIENT="{client}"')
+    text = text.replace('.production_ready == true and .m1_acceptance == true', '.production_ready == false and .fixture_ready == true')
+    text = text.replace(signature, fixture_signature)
+    text = text.replace(signature.replace('\n    ', '\n      '), fixture_signature.replace('\n    ', '\n      '))
+    text = text.replace('DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"', f'DIR="{refs}"')
+    if source == source_cascade:
+        text = text.replace('[ -x "$DIR/openrouter-exec.sh" ] && printf \'%s\' "$DIR/openrouter-exec.sh"', f'[ -x "{out_exec}" ] && printf \'%s\' "{out_exec}"')
+    Path(output).write_text(text)
+PY
+chmod +x "$EXEC_RUNNER" "$CASCADE"
 printf '%s\n' old > "$FIXTURE_ROOT/exec-repo/auth/session.go"
 git -C "$FIXTURE_ROOT/exec-repo" init -q
 git -C "$FIXTURE_ROOT/exec-repo" config user.email test@example.invalid
@@ -484,28 +517,33 @@ expect_rc 70 'host_authority_unavailable' 'production broker unavailable' \
   DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
   DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
   DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-02 \
-  "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+  "$PRODUCTION_EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 
 for bad_case in forged-signature malformed-frame missing-result; do
-  expect_rc 2 'broker result verification failed' "$bad_case rejected" \
-    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
-    DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$bad_case" \
-    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
-    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
-    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$bad_case" \
-    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
-done
-for bad_case in wrong-scope wrong-response-length unknown-outcome; do
+  printf '%s\n' "$bad_case" > "$AUTH_ROOT/case"
   expect_rc 2 'broker result scope mismatch' "$bad_case rejected" \
     env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
     DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$bad_case" \
     DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
     DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
     DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$bad_case" \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
     OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
     "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 done
+for bad_case in wrong-scope wrong-response-length wrong-response-digest unknown-outcome wrong-body wrong-model-order wrong-selected-model; do
+  printf '%s\n' "$bad_case" > "$AUTH_ROOT/case"
+  expect_rc 2 'broker result scope mismatch' "$bad_case rejected" \
+    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$bad_case" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$bad_case" \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
+    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+done
+printf '%s\n' disclosure-declined > "$AUTH_ROOT/case"
 expect_rc 77 'host_disclosure_declined' 'disclosure decline class' \
   env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
   DM_WORKFLOW_AUTHORITY_FIXTURE_CASE=disclosure-declined \
@@ -513,6 +551,7 @@ expect_rc 77 'host_disclosure_declined' 'disclosure decline class' \
   DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
   DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-decline \
   OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+printf '%s\n' provider-failure > "$AUTH_ROOT/case"
 expect_rc 1 'provider failure' 'provider failure class' \
   env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
   DM_WORKFLOW_AUTHORITY_FIXTURE_CASE=provider-failure \
@@ -521,7 +560,7 @@ expect_rc 1 'provider failure' 'provider failure class' \
   DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-provider \
   OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 
-CASCADE="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
+printf '%s\n' signed-success > "$AUTH_ROOT/case"
 rm -f "$AUTH_ROOT/observed-user"
 mkdir -p "$FIXTURE_ROOT/cascade-repo/docs"
 printf '%s\n' old > "$FIXTURE_ROOT/cascade-repo/docs/assessment.md"
@@ -583,14 +622,19 @@ grep -Fq 'export PATH=' "$BOUNDARY"
 grep -Fq 'artifact-delegation' "$BOUNDARY"
 grep -Fq 'git apply --check' "$EXEC_RUNNER"
 grep -Fq -- '--pathspec-file-nul' "$EXEC_RUNNER"
-grep -Fq '/usr/local/bin/workflow-authority' "$EXEC_RUNNER"
-grep -Fq 'pipeline-assessment-artifact-delegation-v1' "$EXEC_RUNNER"
-if grep -Eq 'openrouter-wrapper\.sh|curl[[:space:]]' "$EXEC_RUNNER"; then
+grep -Fq '/usr/local/bin/workflow-authority' "$PRODUCTION_EXEC_RUNNER"
+grep -Fq 'pipeline-assessment-artifact-delegation-v1' "$PRODUCTION_EXEC_RUNNER"
+if grep -Eq 'openrouter-wrapper\.sh|curl[[:space:]]' "$PRODUCTION_EXEC_RUNNER"; then
   echo 'automated exec regained direct provider transport' >&2
   exit 1
 fi
-if grep -Eq 'OPENROUTER_PAYLOAD_AUTHORIZATION|OPENROUTER_PAYLOAD_APPROVAL_SHA256|OPENROUTER_BASE' "$EXEC_RUNNER"; then
+if grep -Eq 'OPENROUTER_PAYLOAD_AUTHORIZATION|OPENROUTER_PAYLOAD_APPROVAL_SHA256|OPENROUTER_BASE' "$PRODUCTION_EXEC_RUNNER"; then
   echo 'automated exec regained caller authority or transport selection' >&2
+  exit 1
+fi
+if grep -Eq 'DM_AUTOMATION_TEST|DM_AUTOMATION_TEST_ROOT|FIXTURE_DOMAIN|fixture_ready' \
+    "$PRODUCTION_EXEC_RUNNER" "$PRODUCTION_CASCADE"; then
+  echo 'shipping adapter gained a fixture-selected client branch' >&2
   exit 1
 fi
 if grep -Eq 'eval.*RAW_OUT|bash.*RAW_OUT' "$EXEC_RUNNER"; then
