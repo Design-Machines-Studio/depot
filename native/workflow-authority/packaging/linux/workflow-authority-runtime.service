@@ -9,5 +9,5 @@ ExecStart=/usr/bin/test -d /run/design-machines/workflow-authority
 ExecStart=/usr/bin/test ! -L /run/design-machines/workflow-authority
 NoNewPrivileges=yes
 PrivateTmp=yes
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=yes

@@ -320,7 +320,7 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 	if !strings.Contains(string(tmpfiles), wantTmpfiles) || !strings.Contains(string(tmpfiles), "Install as "+TmpfilesPath) {
 		t.Fatalf("tmpfiles declaration does not freeze installed target and ownership: %s", tmpfiles)
 	}
-	for _, want := range []string{"Type=oneshot", "ExecStartPre=/usr/bin/systemd-tmpfiles --create " + TmpfilesPath, "ExecStart=/usr/bin/test -d " + filepath.Dir(SocketPath), "ExecStart=/usr/bin/test ! -L " + filepath.Dir(SocketPath), "NoNewPrivileges=yes", "ProtectSystem=strict"} {
+	for _, want := range []string{"Type=oneshot", "ExecStartPre=/usr/bin/systemd-tmpfiles --create " + TmpfilesPath, "ExecStart=/usr/bin/test -d " + filepath.Dir(SocketPath), "ExecStart=/usr/bin/test ! -L " + filepath.Dir(SocketPath), "NoNewPrivileges=yes", "ProtectSystem=full"} {
 		if !strings.Contains(string(runtimeService), want) {
 			t.Errorf("runtime preparation service missing %s", want)
 		}
