@@ -434,21 +434,51 @@ expect_rc 2 'payload changed after authorization snapshot' 'payload membership c
   --content-file "$FIXTURE_ROOT/artifact-b.txt" \
   --content-file "$FIXTURE_ROOT/artifact-a.md"
 
-mkdir -p "$FIXTURE_ROOT/exec-repo/auth"
+AUTH_ROOT="$FIXTURE_ROOT/workflow-authority-fixture"
+mkdir -p "$AUTH_ROOT" "$FIXTURE_ROOT/exec-repo/auth"
+cp "$REPO_ROOT/tools/fixtures/fake-workflow-authority-client.py" "$AUTH_ROOT/fake-client.py"
+cat > "$AUTH_ROOT/workflow-authority" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+CASE="$(cat "$ROOT/case")"
+exec env -i PATH=/usr/bin:/bin HOME="$ROOT" DM_AUTOMATION_TEST=1 \
+  DM_AUTOMATION_TEST_ROOT="$ROOT" DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$CASE" \
+  "$ROOT/fake-client.py" "$@"
+EOF
+chmod +x "$AUTH_ROOT/workflow-authority"
+printf '%s\n' workflow-authority-fixture-v1 > "$AUTH_ROOT/.workflow-authority-fixture"
+printf '%s\n' signed-success > "$AUTH_ROOT/case"
+PRODUCTION_EXEC_RUNNER="$EXEC_RUNNER"
+PRODUCTION_CASCADE="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
+EXEC_RUNNER="$AUTH_ROOT/openrouter-exec.sh"
+CASCADE="$AUTH_ROOT/cascade-dispatch.sh"
+/usr/bin/python3 - "$PRODUCTION_EXEC_RUNNER" "$PRODUCTION_CASCADE" "$EXEC_RUNNER" "$CASCADE" \
+  "$AUTH_ROOT/workflow-authority" "$REPO_ROOT/plugins/pipeline/references" <<'PY'
+from pathlib import Path
+import sys
+source_exec, source_cascade, out_exec, out_cascade, client, refs = sys.argv[1:]
+signature = '.signature.kind == "es256" and\n    (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$"))'
+fixture_signature = '.signature.kind == "fixture-rsa-sha256-v1" and\n    .signature.domain == "fixture.workflow-authority.invalid" and\n    (.signature.value | test("^fixture-rsa-sha256-v1:a{256}$"))'
+for source, output in ((source_exec, out_exec), (source_cascade, out_cascade)):
+    text = Path(source).read_text()
+    text = text.replace('WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"', f'WORKFLOW_AUTHORITY_CLIENT="{client}"')
+    text = text.replace('.production_ready == true and .m1_acceptance == true', '.production_ready == false and .fixture_ready == true')
+    text = text.replace(signature, fixture_signature)
+    text = text.replace(signature.replace('\n    ', '\n      '), fixture_signature.replace('\n    ', '\n      '))
+    text = text.replace('DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"', f'DIR="{refs}"')
+    if source == source_cascade:
+        text = text.replace('[ -x "$DIR/openrouter-exec.sh" ] && printf \'%s\' "$DIR/openrouter-exec.sh"', f'[ -x "{out_exec}" ] && printf \'%s\' "{out_exec}"')
+    Path(output).write_text(text)
+PY
+chmod +x "$EXEC_RUNNER" "$CASCADE"
 printf '%s\n' old > "$FIXTURE_ROOT/exec-repo/auth/session.go"
 git -C "$FIXTURE_ROOT/exec-repo" init -q
 git -C "$FIXTURE_ROOT/exec-repo" config user.email test@example.invalid
 git -C "$FIXTURE_ROOT/exec-repo" config user.name 'Boundary Test'
 git -C "$FIXTURE_ROOT/exec-repo" add auth/session.go
 git -C "$FIXTURE_ROOT/exec-repo" commit -qm initial
-cat > "$FIXTURE_ROOT/wrapper-safe.sh" <<'EOF'
-#!/usr/bin/env bash
-cat > "$WRAPPER_PROMPT"
-touch "$WRAPPER_SENTINEL"
-cat > "$OPENROUTER_RECEIPT_FILE" <<JSON
-{"schemaVersion":1,"generationId":"fixture","requestedModel":"$1","attemptedModel":"$1","attemptedModels":["$1"],"fallbackUsed":false,"responseModel":"$1","responseModelProvenance":"response","servingProvider":null,"servingProviderProvenance":"not_reported_by_completion"}
-JSON
-cat <<'DIFF'
+cat > "$AUTH_ROOT/response" <<'DIFF'
 diff --git a/auth/session.go b/auth/session.go
 --- a/auth/session.go
 +++ b/auth/session.go
@@ -456,215 +486,127 @@ diff --git a/auth/session.go b/auth/session.go
 -old
 +new middleware checks the Authorization header
 DIFF
-EOF
-cat > "$FIXTURE_ROOT/wrapper-provider-fail.sh" <<'EOF'
-#!/usr/bin/env bash
-touch "$WRAPPER_SENTINEL"
-exit 42
-EOF
-cat > "$FIXTURE_ROOT/wrapper-mismatch.sh" <<'EOF'
-#!/usr/bin/env bash
-touch "$WRAPPER_SENTINEL"
-cat > "$OPENROUTER_RECEIPT_FILE" <<JSON
-{"schemaVersion":1,"generationId":"fixture","requestedModel":"$1","attemptedModel":"$1","attemptedModels":["$1"],"fallbackUsed":false,"responseModel":"$1","responseModelProvenance":"response","servingProvider":null,"servingProviderProvenance":"not_reported_by_completion"}
-JSON
-cat <<'DIFF'
-diff --git a/auth/session.go b/auth/session.go
---- a/auth/other.go
-+++ b/auth/session.go
-@@ -1 +1 @@
--old
-+new
-DIFF
-EOF
-chmod +x "$FIXTURE_ROOT"/wrapper-*.sh
-
-# Build one coherent fake installed OpenRouter bundle. Production consumers must
-# resolve the bundle as a unit, so fixtures replace only the wrapper inside that
-# unit instead of injecting caller-selected production asset paths.
-FAKE_HOME="$FIXTURE_ROOT/home"
-BUNDLE_ROOT="$FAKE_HOME/openrouter-bundle"
-BUNDLE_REFS="$BUNDLE_ROOT/skills/openrouter-delegate/references"
-mkdir -p "$BUNDLE_REFS"
-cp "$POLICY" "$BUNDLE_REFS/delegation-security-policy.json"
-cp "$BOUNDARY" "$BUNDLE_REFS/delegation-boundary.sh"
-cp "$AUTHORIZATION" "$BUNDLE_REFS/payload-authorization.sh"
-chmod +x "$BUNDLE_REFS/delegation-boundary.sh" "$BUNDLE_REFS/payload-authorization.sh"
-cat > "$FIXTURE_ROOT/fake-workflow-kernel.sh" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-[ "${1:-}" = "resolve-plugin-bundle" ] || exit 2
-cat <<'JSON'
-{"selected_root":"~/openrouter-bundle","version":"1.7.2","cache_class":"fixture","reason":"offline-test"}
-JSON
-EOF
-chmod +x "$FIXTURE_ROOT/fake-workflow-kernel.sh"
-
 printf '%s' 'Implement safe auth middleware; docs mention deploy/.env.example.' > "$FIXTURE_ROOT/expected.prompt"
 printf '%s' 'You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences.' > "$FIXTURE_ROOT/expected.system"
-expected_payload_sha="$("$AUTHORIZATION" snapshot \
-  --output "$FIXTURE_ROOT/expected-authorization.json" \
-  --content-file "$FIXTURE_ROOT/expected.system" \
-  --content-file "$FIXTURE_ROOT/expected.prompt")"
-cp "$FIXTURE_ROOT/wrapper-safe.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
+
 (
   cd "$FIXTURE_ROOT/exec-repo"
-  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
+  env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-01 \
     OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
+    OPENROUTER_API_KEY=caller-secret OPENROUTER_BASE=https://evil.invalid \
+    OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary \
+    OPENROUTER_PAYLOAD_APPROVAL_SHA256=sha256:caller \
     OPENROUTER_EXEC_VERIFY_CMD="touch $FIXTURE_ROOT/untrusted-verifier-ran" \
-    OPENROUTER_EXEC_COMMIT_MSG='test: bounded auth diff' \
-    WRAPPER_PROMPT="$FIXTURE_ROOT/actual.prompt" \
-    WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-safe" \
     "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt" > "$FIXTURE_ROOT/exec-receipt.json"
 )
-[ -e "$FIXTURE_ROOT/exec-network-safe" ]
 [ ! -e "$FIXTURE_ROOT/untrusted-verifier-ran" ]
-cmp "$FIXTURE_ROOT/expected.prompt" "$FIXTURE_ROOT/actual.prompt"
+cmp "$FIXTURE_ROOT/expected.prompt" "$AUTH_ROOT/observed-user"
+cmp "$FIXTURE_ROOT/expected.system" "$AUTH_ROOT/observed-system"
 jq -e '.implementedBy == "openrouter" and .status == "committed"
-  and (.verification | startswith("deferred_to_native_reviewer:"))' \
-  "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
-jq -e '.requestedModel == "moonshotai/kimi-k3"
-  and .attemptedModels == ["moonshotai/kimi-k3"]
+  and .requestedModel == "moonshotai/kimi-k3"
   and .actualModel == "moonshotai/kimi-k3"
-  and .servingProviderProvenance == "not_reported_by_completion"
-  and .fallback == false' \
-  "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
+  and .servingProviderProvenance == "broker-verified"
+  and .fallback == false' "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
 git -C "$FIXTURE_ROOT/exec-repo" diff --quiet
 
-mkdir -p "$FIXTURE_ROOT/magic-repo"
-printf '%s\n' old > "$FIXTURE_ROOT/magic-repo/:(glob)*"
-printf '%s\n' original > "$FIXTURE_ROOT/magic-repo/unrelated.md"
-git -C "$FIXTURE_ROOT/magic-repo" init -q
-git -C "$FIXTURE_ROOT/magic-repo" config user.email test@example.invalid
-git -C "$FIXTURE_ROOT/magic-repo" config user.name 'Boundary Test'
-git -C "$FIXTURE_ROOT/magic-repo" add --all
-git -C "$FIXTURE_ROOT/magic-repo" commit -qm initial
-printf '%s\n' 'unrelated user edit' > "$FIXTURE_ROOT/magic-repo/unrelated.md"
-cat > "$FIXTURE_ROOT/wrapper-magic-path.sh" <<'EOF'
-#!/usr/bin/env bash
-cat >/dev/null
-cat > "$OPENROUTER_RECEIPT_FILE" <<JSON
-{"schemaVersion":1,"generationId":"fixture-magic","requestedModel":"$1","attemptedModel":"$1","attemptedModels":["$1"],"fallbackUsed":false,"responseModel":"$1","responseModelProvenance":"response","servingProvider":null,"servingProviderProvenance":"not_reported_by_completion"}
-JSON
-cat <<'DIFF'
-diff --git a/:(glob)* b/:(glob)*
---- a/:(glob)*
-+++ b/:(glob)*
+expect_rc 70 'host_authority_unavailable' 'production broker unavailable' \
+  env OPENROUTER_API_KEY=caller-secret OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
+  DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+  DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+  DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-02 \
+  "$PRODUCTION_EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+
+for bad_case in forged-signature malformed-frame missing-result; do
+  printf '%s\n' "$bad_case" > "$AUTH_ROOT/case"
+  expect_rc 2 'broker result scope mismatch' "$bad_case rejected" \
+    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$bad_case" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$bad_case" \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
+    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+done
+for bad_case in wrong-scope wrong-response-length wrong-response-digest unknown-outcome wrong-body wrong-model-order wrong-selected-model; do
+  printf '%s\n' "$bad_case" > "$AUTH_ROOT/case"
+  expect_rc 2 'broker result scope mismatch' "$bad_case rejected" \
+    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_WORKFLOW_AUTHORITY_FIXTURE_CASE="$bad_case" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$bad_case" \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
+    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+done
+printf '%s\n' disclosure-declined > "$AUTH_ROOT/case"
+expect_rc 77 'host_disclosure_declined' 'disclosure decline class' \
+  env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+  DM_WORKFLOW_AUTHORITY_FIXTURE_CASE=disclosure-declined \
+  DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+  DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+  DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-decline \
+  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+printf '%s\n' provider-failure > "$AUTH_ROOT/case"
+expect_rc 1 'provider failure' 'provider failure class' \
+  env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+  DM_WORKFLOW_AUTHORITY_FIXTURE_CASE=provider-failure \
+  DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+  DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+  DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-provider \
+  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+
+printf '%s\n' signed-success > "$AUTH_ROOT/case"
+rm -f "$AUTH_ROOT/observed-user"
+mkdir -p "$FIXTURE_ROOT/cascade-repo/docs"
+printf '%s\n' old > "$FIXTURE_ROOT/cascade-repo/docs/assessment.md"
+git -C "$FIXTURE_ROOT/cascade-repo" init -q
+git -C "$FIXTURE_ROOT/cascade-repo" config user.email test@example.invalid
+git -C "$FIXTURE_ROOT/cascade-repo" config user.name 'Boundary Test'
+git -C "$FIXTURE_ROOT/cascade-repo" add docs/assessment.md
+git -C "$FIXTURE_ROOT/cascade-repo" commit -qm initial
+cat > "$AUTH_ROOT/response" <<'DIFF'
+diff --git a/docs/assessment.md b/docs/assessment.md
+--- a/docs/assessment.md
++++ b/docs/assessment.md
 @@ -1 +1 @@
 -old
-+new
++broker-mediated assessment
 DIFF
-EOF
-chmod +x "$FIXTURE_ROOT/wrapper-magic-path.sh"
-cp "$FIXTURE_ROOT/wrapper-magic-path.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
 (
-  cd "$FIXTURE_ROOT/magic-repo"
-  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-    'OPENROUTER_EXEC_ALLOWED_PATHS=:(glob)*' \
-    OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
-    OPENROUTER_EXEC_COMMIT_MSG='test: literal pathspec staging' \
-    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt" > "$FIXTURE_ROOT/magic-receipt.json"
+  cd "$FIXTURE_ROOT/cascade-repo"
+  printf '%s' 'Implement safe documentation wording.' | env \
+    DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-cascade \
+    OPENROUTER_API_KEY=caller-secret OPENROUTER_BASE=https://evil.invalid \
+    OPENROUTER_EXEC_ALLOWED_PATHS=docs/assessment.md \
+    "$CASCADE" --class openrouter --prompt - --host codex > "$FIXTURE_ROOT/cascade-receipt.json"
 )
-[ "$(git -C "$FIXTURE_ROOT/magic-repo" show --pretty=format: --name-only HEAD)" = ':(glob)*' ]
-[ "$(git -C "$FIXTURE_ROOT/magic-repo" diff --name-only)" = 'unrelated.md' ]
-git -C "$FIXTURE_ROOT/magic-repo" diff --cached --quiet
+jq -e '.implementedBy == "openrouter" and .status == "committed"
+  and .servingProviderProvenance == "broker-verified"' "$FIXTURE_ROOT/cascade-receipt.json" >/dev/null
+[ -e "$AUTH_ROOT/observed-user" ]
 
-cat > "$FIXTURE_ROOT/wrapper-fallback.sh" <<'EOF'
-#!/usr/bin/env bash
-cat >/dev/null
-printf '%s\n' 'provider capacity; falling back to z-ai/glm-5.2' >&2
-cat > "$OPENROUTER_RECEIPT_FILE" <<JSON
-{"schemaVersion":1,"generationId":"fixture-fallback","requestedModel":"$1","attemptedModel":"$4","attemptedModels":["$1","$4"],"fallbackUsed":true,"responseModel":"$4","responseModelProvenance":"response","servingProvider":"Fixture","servingProviderProvenance":"response"}
-JSON
-cat <<'DIFF'
-diff --git a/auth/session.go b/auth/session.go
---- a/auth/session.go
-+++ b/auth/session.go
-@@ -1 +1 @@
--new middleware checks the Authorization header
-+fallback middleware checks the Authorization header
-DIFF
-EOF
-chmod +x "$FIXTURE_ROOT/wrapper-fallback.sh"
-cp "$FIXTURE_ROOT/wrapper-fallback.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
-(
-  cd "$FIXTURE_ROOT/exec-repo"
-  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-    OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
-    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
-    OPENROUTER_EXEC_VERIFY_CMD='grep -Fq "fallback middleware" auth/session.go' \
-    OPENROUTER_EXEC_COMMIT_MSG='test: fallback receipt' \
-    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt" > "$FIXTURE_ROOT/fallback-receipt.json"
-)
-jq -e '.requestedModel == "moonshotai/kimi-k3"
-  and .attemptedModels == ["moonshotai/kimi-k3", "z-ai/glm-5.2"]
-  and .actualModel == "z-ai/glm-5.2"
-  and .fallback == true' \
-  "$FIXTURE_ROOT/fallback-receipt.json" >/dev/null
+rm -f "$AUTH_ROOT/observed-user"
+for lane in research adversarial-review execution dm-review airlift unknown ''; do
+  CASCADE_OUT="$(printf '%s' 'safe input' | env \
+    DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE="$lane" DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-lane \
+    "$CASCADE" --class openrouter --prompt - --host codex 2>/dev/null || true)"
+  printf '%s' "$CASCADE_OUT" | jq -e '.dispatch == "native" and .role == "premium_sub"' >/dev/null
+  [ ! -e "$AUTH_ROOT/observed-user" ]
+done
 
-printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' > "$FIXTURE_ROOT/secret.prompt"
-cp "$FIXTURE_ROOT/wrapper-safe.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
-expect_rc 77 'delegation declined' 'exec prompt disclosure' \
-  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-  OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
-  WRAPPER_PROMPT="$FIXTURE_ROOT/secret-actual.prompt" \
-  WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-secret" \
-  "$EXEC_RUNNER" < "$FIXTURE_ROOT/secret.prompt"
-[ ! -e "$FIXTURE_ROOT/exec-network-secret" ]
-
-cp "$FIXTURE_ROOT/wrapper-provider-fail.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
-expect_rc 1 'provider failure' 'provider receipt class' \
-  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-  OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
-  WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-provider-fail" \
-  "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
-[ -e "$FIXTURE_ROOT/exec-network-provider-fail" ]
-
-cp "$FIXTURE_ROOT/wrapper-mismatch.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
-expect_rc 2 'model patch could not be validated' 'malformed model output' \
-  env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-  OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
-  OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
-  WRAPPER_SENTINEL="$FIXTURE_ROOT/exec-network-mismatch" \
-  "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
-[ -e "$FIXTURE_ROOT/exec-network-mismatch" ]
-
-cat > "$FIXTURE_ROOT/cascade-sentinel.sh" <<'EOF'
-#!/usr/bin/env bash
-touch "$WRAPPER_SENTINEL"
-exit 99
-EOF
-chmod +x "$FIXTURE_ROOT/cascade-sentinel.sh"
-cp "$FIXTURE_ROOT/cascade-sentinel.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
-CASCADE="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
-set +e
-CASCADE_APPROVAL_OUT="$(printf '%s' 'Implement safe documentation wording.' | env \
-  HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-  OPENROUTER_API_KEY=fixture \
-  OPENROUTER_EXEC_ALLOWED_PATHS=plugins/openrouter/README.md \
-  WRAPPER_SENTINEL="$FIXTURE_ROOT/cascade-approval-wrapper-called" \
-  "$CASCADE" --class openrouter --prompt - --host codex 2>/dev/null)"
-CASCADE_APPROVAL_RC=$?
-set -e
-[ "$CASCADE_APPROVAL_RC" -eq 78 ]
-printf '%s' "$CASCADE_APPROVAL_OUT" | jq -e '
-  .status == "approval_required"
-  and .authority == "user"
-  and (.payloadSha256 | test("^[0-9a-f]{64}$"))
-' >/dev/null
-[ ! -e "$FIXTURE_ROOT/cascade-approval-wrapper-called" ]
-
-CASCADE_OUT="$(printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' | env \
-  HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
-  OPENROUTER_EXEC_ALLOWED_PATHS=plugins/openrouter/README.md \
-  WRAPPER_SENTINEL="$FIXTURE_ROOT/cascade-wrapper-called" \
-  "$CASCADE" --class openrouter --prompt - --host codex 2>/dev/null || true)"
-printf '%s' "$CASCADE_OUT" | jq -e '.dispatch == "native" and .role == "premium_sub"' >/dev/null
-[ ! -e "$FIXTURE_ROOT/cascade-wrapper-called" ]
+DRY_OUT="$(env DM_PROVIDER_LANE=research "$CASCADE" --class openrouter \
+  --prompt 'dry run' --host codex --dry-run)"
+printf '%s' "$DRY_OUT" | jq -e '.requestedProvider == "openrouter" and .fallback == false' >/dev/null
+[ ! -e "$AUTH_ROOT/observed-user" ]
 
 grep -Fq 'os.path.realpath(sys.argv[1])' "$RUNNER"
 grep -Fq 'delegation-boundary.sh' "$RUNNER"
@@ -680,6 +622,21 @@ grep -Fq 'export PATH=' "$BOUNDARY"
 grep -Fq 'artifact-delegation' "$BOUNDARY"
 grep -Fq 'git apply --check' "$EXEC_RUNNER"
 grep -Fq -- '--pathspec-file-nul' "$EXEC_RUNNER"
+grep -Fq '/usr/local/bin/workflow-authority' "$PRODUCTION_EXEC_RUNNER"
+grep -Fq 'pipeline-assessment-artifact-delegation-v1' "$PRODUCTION_EXEC_RUNNER"
+if grep -Eq 'openrouter-wrapper\.sh|curl[[:space:]]' "$PRODUCTION_EXEC_RUNNER"; then
+  echo 'automated exec regained direct provider transport' >&2
+  exit 1
+fi
+if grep -Eq 'OPENROUTER_PAYLOAD_AUTHORIZATION|OPENROUTER_PAYLOAD_APPROVAL_SHA256|OPENROUTER_BASE' "$PRODUCTION_EXEC_RUNNER"; then
+  echo 'automated exec regained caller authority or transport selection' >&2
+  exit 1
+fi
+if grep -Eq 'DM_AUTOMATION_TEST|DM_AUTOMATION_TEST_ROOT|FIXTURE_DOMAIN|fixture_ready' \
+    "$PRODUCTION_EXEC_RUNNER" "$PRODUCTION_CASCADE"; then
+  echo 'shipping adapter gained a fixture-selected client branch' >&2
+  exit 1
+fi
 if grep -Eq 'eval.*RAW_OUT|bash.*RAW_OUT' "$EXEC_RUNNER"; then
   echo 'model output gained command authority' >&2
   exit 1
