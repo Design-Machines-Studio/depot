@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"designmachines.dev/workflow-authority/internal/enrollment"
 	"designmachines.dev/workflow-authority/internal/protocol"
 )
 
@@ -22,6 +23,13 @@ func TestStubNeverReportsProductionReady(t *testing.T) {
 	}
 	if _, err := adapter.Assert(context.Background(), []byte("challenge"), Credential{}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("stub assertion: %v", err)
+	}
+}
+
+func TestStubEnrollerFailsClosed(t *testing.T) {
+	credential, err := NewFIDOEnroller().Enroll(context.Background(), enrollment.Request{Generation: 1})
+	if !errors.Is(err, enrollment.ErrUnavailable) || len(credential.ID) != 0 {
+		t.Fatalf("stub enrollment did not fail closed: %#v %v", credential, err)
 	}
 }
 
