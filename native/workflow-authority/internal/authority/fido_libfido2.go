@@ -226,7 +226,10 @@ type libfido2Adapter struct{}
 func NewFIDOAdapter() FIDO                 { return &libfido2Adapter{} }
 func NewFIDOEnroller() enrollment.Enroller { return &libfido2Adapter{} }
 func (a *libfido2Adapter) Readiness(ctx context.Context) Readiness {
-	device, err := selectManifestDevice("")
+	return a.ReadinessFor(ctx, "")
+}
+func (a *libfido2Adapter) ReadinessFor(ctx context.Context, selector string) Readiness {
+	device, err := selectManifestDevice(selector)
 	if ctx.Err() != nil || err != nil {
 		return Readiness{Production: false, Adapter: "libfido2", Version: FIDO2Version}
 	}
@@ -237,7 +240,7 @@ func (a *libfido2Adapter) Readiness(ctx context.Context) Readiness {
 }
 
 func (a *libfido2Adapter) Assert(ctx context.Context, challenge []byte, credential Credential) (Assertion, error) {
-	if err := ctx.Err(); err != nil || credential.Algorithm != -7 || !credential.InternalUV || credential.Status != "active" || len(credential.ID) == 0 {
+	if err := ctx.Err(); err != nil || credential.Algorithm != -7 || !credential.InternalUV || credential.Status != "active" || len(credential.ID) == 0 || credential.DeviceSelector == "" {
 		return Assertion{}, ErrUnavailable
 	}
 	challengeDigest := sha256.Sum256(challenge)
@@ -246,7 +249,7 @@ func (a *libfido2Adapter) Assert(ctx context.Context, challenge []byte, credenti
 		return Assertion{}, ErrUnavailable
 	}
 	clientDataDigest := sha256.Sum256(clientData)
-	device, err := selectManifestDevice("")
+	device, err := selectManifestDevice(credential.DeviceSelector)
 	if err != nil {
 		return Assertion{}, ErrUnavailable
 	}

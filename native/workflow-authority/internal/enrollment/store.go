@@ -36,7 +36,6 @@ type PublicCredential struct {
 	InternalUV        bool      `json:"internal_uv"`
 	AAGUID            string    `json:"aaguid"`
 	AttestationFormat string    `json:"attestation_format"`
-	DeviceSelector    string    `json:"device_selector"`
 }
 
 type LifecycleEvent struct {
@@ -53,13 +52,26 @@ type PublicTrust struct {
 	Events           []LifecycleEvent   `json:"events"`
 }
 
+func (t PublicTrust) ActiveRecord() (PublicCredential, error) {
+	if validateTrust(t) != nil || t.ActiveGeneration == nil {
+		return PublicCredential{}, ErrUnavailable
+	}
+	for _, credential := range t.Credentials {
+		if credential.Generation == *t.ActiveGeneration {
+			return credential, nil
+		}
+	}
+	return PublicCredential{}, ErrCorrupt
+}
+
 type privateRecord struct {
-	Protocol     string      `json:"protocol"`
-	Generation   uint64      `json:"generation"`
-	Status       string      `json:"status"`
-	CredentialID secretBytes `json:"credential_id,omitempty"`
-	Trust        PublicTrust `json:"trust"`
-	PublicSHA256 string      `json:"public_sha256"`
+	Protocol       string      `json:"protocol"`
+	Generation     uint64      `json:"generation"`
+	Status         string      `json:"status"`
+	CredentialID   secretBytes `json:"credential_id,omitempty"`
+	DeviceSelector string      `json:"device_selector,omitempty"`
+	Trust          PublicTrust `json:"trust"`
+	PublicSHA256   string      `json:"public_sha256"`
 }
 
 type secretBytes []byte
@@ -116,7 +128,7 @@ func (s *Store) Enroll(ctx context.Context, credential Credential) error {
 		}
 		g := credential.Generation
 		trust := PublicTrust{Protocol: Protocol, ActiveGeneration: &g, Credentials: []PublicCredential{publicCredential(credential)}, Events: []LifecycleEvent{{Sequence: 1, Generation: g, Action: "activated", At: credential.EnrolledAt.UTC()}}}
-		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), Trust: trust})
+		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), DeviceSelector: credential.DeviceSelector, Trust: trust})
 	})
 }
 
@@ -139,7 +151,7 @@ func (s *Store) Rotate(ctx context.Context, credential Credential) error {
 		g := credential.Generation
 		trust.ActiveGeneration = &g
 		trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: g, Action: "activated", At: credential.EnrolledAt.UTC()})
-		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), Trust: trust})
+		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), DeviceSelector: credential.DeviceSelector, Trust: trust})
 	})
 }
 
@@ -181,7 +193,7 @@ func (s *Store) Recover(ctx context.Context, credential Credential) error {
 		g := credential.Generation
 		trust.ActiveGeneration = &g
 		trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: g, Action: "recovered", At: credential.EnrolledAt.UTC()})
-		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), Trust: trust})
+		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), DeviceSelector: credential.DeviceSelector, Trust: trust})
 	})
 }
 
@@ -364,12 +376,12 @@ func (s *Store) readPrivate(missingOK bool) (privateRecord, error) {
 	}
 	zero(canonical)
 	if record.Trust.ActiveGeneration == nil {
-		if record.Status != "revoked" || len(record.CredentialID) != 0 || record.Generation == 0 {
+		if record.Status != "revoked" || len(record.CredentialID) != 0 || record.DeviceSelector != "" || record.Generation == 0 {
 			record.destroy()
 			return privateRecord{}, ErrCorrupt
 		}
 	} else {
-		if record.Status != "active" || record.Generation != *record.Trust.ActiveGeneration || len(record.CredentialID) == 0 {
+		if record.Status != "active" || record.Generation != *record.Trust.ActiveGeneration || len(record.CredentialID) == 0 || !validSelector(record.DeviceSelector) {
 			record.destroy()
 			return privateRecord{}, ErrCorrupt
 		}
@@ -394,7 +406,7 @@ func (r privateRecord) activeCredential() (Credential, error) {
 			if e1 != nil || e2 != nil {
 				return Credential{}, ErrCorrupt
 			}
-			c := Credential{Reference: public.Reference, ID: append([]byte(nil), r.CredentialID...), PublicKey: key, Algorithm: public.Algorithm, Generation: public.Generation, RPID: public.RPID, EnrolledAt: public.EnrolledAt, Status: "active", InternalUV: public.InternalUV, AAGUID: aaguid, Format: public.AttestationFormat, DeviceSelector: public.DeviceSelector}
+			c := Credential{Reference: public.Reference, ID: append([]byte(nil), r.CredentialID...), PublicKey: key, Algorithm: public.Algorithm, Generation: public.Generation, RPID: public.RPID, EnrolledAt: public.EnrolledAt, Status: "active", InternalUV: public.InternalUV, AAGUID: aaguid, Format: public.AttestationFormat, DeviceSelector: r.DeviceSelector}
 			if ValidateCredential(c) != nil {
 				c.Destroy()
 				return Credential{}, ErrCorrupt
@@ -406,7 +418,7 @@ func (r privateRecord) activeCredential() (Credential, error) {
 }
 
 func publicCredential(c Credential) PublicCredential {
-	return PublicCredential{Generation: c.Generation, Reference: c.Reference, PublicKey: base64.RawURLEncoding.EncodeToString(c.PublicKey), Algorithm: c.Algorithm, RPID: c.RPID, EnrolledAt: c.EnrolledAt.UTC(), InternalUV: c.InternalUV, AAGUID: base64.RawURLEncoding.EncodeToString(c.AAGUID), AttestationFormat: c.Format, DeviceSelector: c.DeviceSelector}
+	return PublicCredential{Generation: c.Generation, Reference: c.Reference, PublicKey: base64.RawURLEncoding.EncodeToString(c.PublicKey), Algorithm: c.Algorithm, RPID: c.RPID, EnrolledAt: c.EnrolledAt.UTC(), InternalUV: c.InternalUV, AAGUID: base64.RawURLEncoding.EncodeToString(c.AAGUID), AttestationFormat: c.Format}
 }
 
 func validateTrust(t PublicTrust) error {
@@ -418,7 +430,7 @@ func validateTrust(t PublicTrust) error {
 	for _, c := range t.Credentials {
 		key, e1 := base64.RawURLEncoding.Strict().DecodeString(c.PublicKey)
 		aaguid, e2 := base64.RawURLEncoding.Strict().DecodeString(c.AAGUID)
-		if c.Generation <= previous || c.Reference == "" || c.Algorithm != ES256 || c.RPID != RPID || c.EnrolledAt.IsZero() || !c.InternalUV || c.AttestationFormat != "packed" || !validSelector(c.DeviceSelector) || e1 != nil || e2 != nil || len(aaguid) != 16 || validatePublicKey(key) != nil {
+		if c.Generation <= previous || c.Reference == "" || c.Algorithm != ES256 || c.RPID != RPID || c.EnrolledAt.IsZero() || !c.InternalUV || c.AttestationFormat != "packed" || e1 != nil || e2 != nil || len(aaguid) != 16 || validatePublicKey(key) != nil {
 			return ErrCorrupt
 		}
 		credentials[c.Generation] = c

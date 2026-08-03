@@ -104,6 +104,10 @@ func TestFakeEnrollerStateMachineRotationRevocationAndRecovery(t *testing.T) {
 	if err != nil || len(trust.Credentials) != 3 || len(trust.Events) != 5 || trust.Credentials[0].Reference != first.Reference || trust.Credentials[1].Reference != second.Reference {
 		t.Fatalf("append-only public history lost: %#v %v", trust, err)
 	}
+	active, err := trust.ActiveRecord()
+	if err != nil || active.Generation != 3 {
+		t.Fatalf("public active lookup: %#v %v", active, err)
+	}
 }
 
 func TestPublicRecordContainsNoCredentialIDOrSecretSentinel(t *testing.T) {
@@ -117,7 +121,7 @@ func TestPublicRecordContainsNoCredentialIDOrSecretSentinel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Contains(public, secret) || bytes.Contains(public, []byte(base64.RawURLEncoding.EncodeToString(secret))) || bytes.Contains(public, []byte("credential_id")) {
+	if bytes.Contains(public, secret) || bytes.Contains(public, []byte(base64.RawURLEncoding.EncodeToString(secret))) || bytes.Contains(public, []byte("credential_id")) || bytes.Contains(public, []byte(credential.DeviceSelector)) || bytes.Contains(public, []byte("device_selector")) {
 		t.Fatal("public record exposed the credential ID")
 	}
 	if err := store.Enroll(context.Background(), credential); err == nil || strings.Contains(err.Error(), string(secret)) {
@@ -190,7 +194,7 @@ func TestStaleGenerationAndPartialRotationRecovery(t *testing.T) {
 	trust.ActiveGeneration = &g
 	trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: g, Action: "activated", At: second.EnrolledAt})
 	publicBytes, _ := marshalClosed(trust)
-	private := privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), second.ID...), Trust: trust, PublicSHA256: digest(publicBytes)}
+	private := privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), second.ID...), DeviceSelector: second.DeviceSelector, Trust: trust, PublicSHA256: digest(publicBytes)}
 	privateBytes, _ := marshalClosed(private)
 	if err := os.WriteFile(filepath.Join(root, strings.TrimPrefix(privatePath, "/")), privateBytes, 0o600); err != nil {
 		t.Fatal(err)

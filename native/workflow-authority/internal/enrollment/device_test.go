@@ -32,4 +32,24 @@ func TestManifestDeviceSelectionFailsClosedAndIsDeterministic(t *testing.T) {
 	if strings.Contains(selector, first.Path) {
 		t.Fatal("selector exposed device path")
 	}
+	if _, _, err := SelectDevice([]DeviceManifest{second}, selector); !errors.Is(err, ErrConflict) {
+		t.Fatalf("renumbered/mismatched selected device: %v", err)
+	}
+}
+
+func TestMultiDeviceSelectedReadinessAndAssertionResolution(t *testing.T) {
+	first := DeviceManifest{Path: "/dev/hidraw8", Manufacturer: "One", Product: "Key", VendorID: 10, ProductID: 20}
+	second := DeviceManifest{Path: "/dev/hidraw9", Manufacturer: "Two", Product: "Key", VendorID: 30, ProductID: 40}
+	_, selector, err := SelectDevice([]DeviceManifest{first}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ReadinessFor and Assert both call this resolver with the enrolled selector.
+	selected, got, err := SelectDevice([]DeviceManifest{second, first}, selector)
+	if err != nil || selected != first || got != selector {
+		t.Fatalf("selected resolution: %#v %q %v", selected, got, err)
+	}
+	if _, _, err := SelectDevice([]DeviceManifest{second}, selector); !errors.Is(err, ErrConflict) {
+		t.Fatalf("missing enrolled device did not fail closed: %v", err)
+	}
 }
