@@ -44,7 +44,7 @@ func testCredential(t *testing.T, generation uint64) Credential {
 func testCredentialWithID(generation uint64, id []byte) Credential {
 	private, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	public, _ := x509.MarshalPKIXPublicKey(&private.PublicKey)
-	return Credential{Reference: ReferenceForID(id), ID: append([]byte(nil), id...), PublicKey: public, Algorithm: ES256, Generation: generation, RPID: RPID, EnrolledAt: time.Unix(1_800_000_000+int64(generation), 0).UTC(), Status: "active", InternalUV: true, AAGUID: bytes.Repeat([]byte{byte(generation)}, 16), Format: "packed"}
+	return Credential{Reference: ReferenceForID(id), ID: append([]byte(nil), id...), PublicKey: public, Algorithm: ES256, Generation: generation, RPID: RPID, EnrolledAt: time.Unix(1_800_000_000+int64(generation), 0).UTC(), Status: "active", InternalUV: true, AAGUID: bytes.Repeat([]byte{byte(generation)}, 16), Format: "packed", DeviceSelector: "sha256:" + strings.Repeat("a", 64)}
 }
 
 func newFixtureStore(t *testing.T) (*Store, string) {
@@ -100,6 +100,10 @@ func TestFakeEnrollerStateMachineRotationRevocationAndRecovery(t *testing.T) {
 		t.Fatalf("recovery generation: %#v %v", loaded, err)
 	}
 	loaded.Destroy()
+	trust, err := store.LoadTrust(context.Background())
+	if err != nil || len(trust.Credentials) != 3 || len(trust.Events) != 5 || trust.Credentials[0].Reference != first.Reference || trust.Credentials[1].Reference != second.Reference {
+		t.Fatalf("append-only public history lost: %#v %v", trust, err)
+	}
 }
 
 func TestPublicRecordContainsNoCredentialIDOrSecretSentinel(t *testing.T) {
@@ -174,9 +178,19 @@ func TestStaleGenerationAndPartialRotationRecovery(t *testing.T) {
 		t.Fatalf("stale generation: %v", err)
 	}
 	second := testCredential(t, 5)
-	public := projection(second)
-	publicBytes, _ := marshalClosed(public)
-	private := privateRecord{Protocol: Protocol, Generation: second.Generation, Reference: second.Reference, CredentialID: append(secretBytes(nil), second.ID...), PublicKey: base64Raw(second.PublicKey), PublicSHA256: digest(publicBytes), Algorithm: second.Algorithm, RPID: second.RPID, EnrolledAt: second.EnrolledAt, Status: second.Status, InternalUV: true, AAGUID: base64Raw(second.AAGUID), AttestationFormat: second.Format}
+	current, err := store.readPrivate(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer current.destroy()
+	trust := cloneTrust(current.Trust)
+	trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: current.Generation, Action: "rotated", At: second.EnrolledAt})
+	trust.Credentials = append(trust.Credentials, publicCredential(second))
+	g := second.Generation
+	trust.ActiveGeneration = &g
+	trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: g, Action: "activated", At: second.EnrolledAt})
+	publicBytes, _ := marshalClosed(trust)
+	private := privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), second.ID...), Trust: trust, PublicSHA256: digest(publicBytes)}
 	privateBytes, _ := marshalClosed(private)
 	if err := os.WriteFile(filepath.Join(root, strings.TrimPrefix(privatePath, "/")), privateBytes, 0o600); err != nil {
 		t.Fatal(err)
@@ -206,6 +220,19 @@ func TestSymlinkHardlinkModeOwnerAndParentAttacks(t *testing.T) {
 		}
 		if err := store.Enroll(context.Background(), testCredential(t, 1)); err == nil {
 			t.Fatal("symlink accepted")
+		}
+	})
+	t.Run("symlink-lock", func(t *testing.T) {
+		store, root := newFixtureStore(t)
+		target := filepath.Join(root, "lock-target")
+		if err := os.WriteFile(target, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(root, strings.TrimPrefix(lockPath, "/"))); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Enroll(context.Background(), testCredential(t, 1)); err == nil {
+			t.Fatal("symlink lock accepted")
 		}
 	})
 	t.Run("symlink-public-record", func(t *testing.T) {
@@ -299,11 +326,45 @@ func TestConcurrentActivationSerializesGeneration(t *testing.T) {
 	loaded.Destroy()
 }
 
+func TestTwoStoreInstancesPreventStaleInterleaving(t *testing.T) {
+	first, root := newFixtureStore(t)
+	second, err := NewTestStore(root, uint32(os.Getuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Enroll(context.Background(), testCredential(t, 1)); err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	go func() { <-start; results <- first.Rotate(context.Background(), testCredential(t, 2)) }()
+	go func() { <-start; results <- second.Rotate(context.Background(), testCredential(t, 3)) }()
+	close(start)
+	err1, err2 := <-results, <-results
+	for _, err := range []error{err1, err2} {
+		if err != nil && !errors.Is(err, ErrConflict) {
+			t.Fatalf("cross-store error: %v", err)
+		}
+	}
+	loaded, err := first.LoadActive(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Generation < 2 || loaded.Generation > 3 {
+		t.Fatalf("stale generation won: %d", loaded.Generation)
+	}
+	loaded.Destroy()
+	trust, err := second.LoadTrust(context.Background())
+	if err != nil || validateTrust(trust) != nil {
+		t.Fatalf("split public/private state: %v", err)
+	}
+}
+
 func TestCancellationAndRequestValidation(t *testing.T) {
 	store, _ := newFixtureStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := store.Enroll(ctx, testCredential(t, 1)); !errors.Is(err, ErrDenied) {
+	if err := store.Enroll(ctx, testCredential(t, 1)); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("cancel: %v", err)
 	}
 	enroller := &fakeEnroller{}
@@ -319,7 +380,7 @@ func TestCancellationAndRequestValidation(t *testing.T) {
 
 func TestProductionPathsAreFixed(t *testing.T) {
 	store := NewStore()
-	if store.fixture || store.resolve(privatePath) != privatePath || store.resolve(publicPath) != publicPath {
+	if store.fixture || store.resolve(privatePath) != privatePath || store.resolve(publicPath) != publicPath || store.resolve(lockPath) != lockPath {
 		t.Fatal("production paths became injectable")
 	}
 	if runtime.GOOS == "windows" {

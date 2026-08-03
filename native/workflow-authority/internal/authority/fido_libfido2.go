@@ -48,6 +48,40 @@ done:
 	return rc;
 }
 
+#define DM_MAX_DEVICES 16
+typedef struct {
+	char path[1024]; char manufacturer[256]; char product[256];
+	unsigned short vendor_id; unsigned short product_id;
+} dm_manifest_device;
+
+static int dm_copy_string(char *dst, size_t dst_len, const char *src) {
+	if (!dst || dst_len == 0 || !src || src[0] == '\0' || strlen(src) >= dst_len) return FIDO_ERR_INVALID_ARGUMENT;
+	memcpy(dst, src, strlen(src) + 1); return FIDO_OK;
+}
+
+static int dm_manifest(dm_manifest_device *out, size_t capacity, size_t *count) {
+	fido_dev_info_t *list = NULL; size_t found = 0; int rc = FIDO_ERR_INTERNAL;
+	if (!out || !count || capacity == 0 || capacity > DM_MAX_DEVICES) return FIDO_ERR_INVALID_ARGUMENT;
+	memset(out, 0, sizeof(*out) * capacity); *count = 0; fido_init(0);
+	if ((list = fido_dev_info_new(capacity)) == NULL) return FIDO_ERR_INTERNAL;
+	if ((rc = fido_dev_info_manifest(list, capacity, &found)) != FIDO_OK) goto done;
+	if (found > capacity) { rc = FIDO_ERR_INVALID_ARGUMENT; goto done; }
+	for (size_t i = 0; i < found; i++) {
+		const fido_dev_info_t *info = fido_dev_info_ptr(list, i);
+		if (!info || dm_copy_string(out[i].path, sizeof(out[i].path), fido_dev_info_path(info)) != FIDO_OK) { rc = FIDO_ERR_INVALID_ARGUMENT; goto done; }
+		const char *manufacturer = fido_dev_info_manufacturer_string(info);
+		const char *product = fido_dev_info_product_string(info);
+		if (!manufacturer) manufacturer = "unknown"; if (!product) product = "unknown";
+		if (strlen(manufacturer) >= sizeof(out[i].manufacturer) || strlen(product) >= sizeof(out[i].product)) { rc = FIDO_ERR_INVALID_ARGUMENT; goto done; }
+		memcpy(out[i].manufacturer, manufacturer, strlen(manufacturer) + 1);
+		memcpy(out[i].product, product, strlen(product) + 1);
+		out[i].vendor_id = fido_dev_info_vendor(info); out[i].product_id = fido_dev_info_product(info);
+	}
+	*count = found; rc = FIDO_OK;
+done:
+	if (list) fido_dev_info_free(&list, capacity); return rc;
+}
+
 typedef struct { fido_dev_t *dev; fido_assert_t *assert; char *path; } dm_operation;
 
 static dm_operation *dm_operation_new(const char *path, const char *rp_id,
@@ -187,15 +221,16 @@ import (
 	"designmachines.dev/workflow-authority/internal/protocol"
 )
 
-type libfido2Adapter struct{ DevicePath string }
+type libfido2Adapter struct{}
 
-func NewFIDOAdapter() FIDO                 { return &libfido2Adapter{DevicePath: "/dev/hidraw0"} }
-func NewFIDOEnroller() enrollment.Enroller { return &libfido2Adapter{DevicePath: "/dev/hidraw0"} }
+func NewFIDOAdapter() FIDO                 { return &libfido2Adapter{} }
+func NewFIDOEnroller() enrollment.Enroller { return &libfido2Adapter{} }
 func (a *libfido2Adapter) Readiness(ctx context.Context) Readiness {
-	if ctx.Err() != nil || a.DevicePath == "" {
+	device, err := selectManifestDevice("")
+	if ctx.Err() != nil || err != nil {
 		return Readiness{Production: false, Adapter: "libfido2", Version: FIDO2Version}
 	}
-	path := C.CString(a.DevicePath)
+	path := C.CString(device.path)
 	defer C.free(unsafe.Pointer(path))
 	ready := C.dm_ready(path) == C.FIDO_OK
 	return Readiness{Production: ready, Adapter: "libfido2", Version: FIDO2Version, InternalUV: ready}
@@ -211,7 +246,11 @@ func (a *libfido2Adapter) Assert(ctx context.Context, challenge []byte, credenti
 		return Assertion{}, ErrUnavailable
 	}
 	clientDataDigest := sha256.Sum256(clientData)
-	cpath := C.CString(a.DevicePath)
+	device, err := selectManifestDevice("")
+	if err != nil {
+		return Assertion{}, ErrUnavailable
+	}
+	cpath := C.CString(device.path)
 	crp := C.CString(credential.RPID)
 	defer C.free(unsafe.Pointer(cpath))
 	defer C.free(unsafe.Pointer(crp))
@@ -253,7 +292,11 @@ type enrollmentResult struct {
 }
 
 func (a *libfido2Adapter) Enroll(ctx context.Context, request enrollment.Request) (enrollment.Credential, error) {
-	if ctx.Err() != nil || a.DevicePath == "" || request.Generation == 0 || len(request.ExcludeCredentialID) > 4096 {
+	if ctx.Err() != nil || request.Generation == 0 || len(request.ExcludeCredentialID) > 4096 || len(request.ExcludeCredentialID) > 0 && request.DeviceSelector == "" {
+		return enrollment.Credential{}, enrollment.ErrUnavailable
+	}
+	device, err := selectManifestDevice(request.DeviceSelector)
+	if err != nil {
 		return enrollment.Credential{}, enrollment.ErrUnavailable
 	}
 	var challenge [32]byte
@@ -261,15 +304,21 @@ func (a *libfido2Adapter) Enroll(ctx context.Context, request enrollment.Request
 		return enrollment.Credential{}, enrollment.ErrUnavailable
 	}
 	userID := sha256.Sum256([]byte("workflow-authority.designmachines.local/root-authority"))
-	cpath := C.CString(a.DevicePath)
+	excludeCopy := append([]byte(nil), request.ExcludeCredentialID...)
+	defer func() {
+		for i := range excludeCopy {
+			excludeCopy[i] = 0
+		}
+	}()
+	cpath := C.CString(device.path)
 	crp := C.CString(enrollment.RPID)
 	defer C.free(unsafe.Pointer(cpath))
 	defer C.free(unsafe.Pointer(crp))
 	var exclude *C.uchar
-	if len(request.ExcludeCredentialID) > 0 {
-		exclude = (*C.uchar)(unsafe.Pointer(&request.ExcludeCredentialID[0]))
+	if len(excludeCopy) > 0 {
+		exclude = (*C.uchar)(unsafe.Pointer(&excludeCopy[0]))
 	}
-	op := C.dm_enroll_operation_new(cpath, crp, (*C.uchar)(unsafe.Pointer(&challenge[0])), 32, (*C.uchar)(unsafe.Pointer(&userID[0])), 32, exclude, C.size_t(len(request.ExcludeCredentialID)))
+	op := C.dm_enroll_operation_new(cpath, crp, (*C.uchar)(unsafe.Pointer(&challenge[0])), 32, (*C.uchar)(unsafe.Pointer(&userID[0])), 32, exclude, C.size_t(len(excludeCopy)))
 	if op == nil {
 		return enrollment.Credential{}, enrollment.ErrUnavailable
 	}
@@ -289,7 +338,7 @@ func (a *libfido2Adapter) Enroll(ctx context.Context, request enrollment.Request
 			}
 			if err == nil {
 				id := C.GoBytes(unsafe.Pointer(out.id), C.int(out.id_len))
-				result = enrollmentResult{credential: enrollment.Credential{Reference: enrollment.ReferenceForID(id), ID: id, PublicKey: publicDER, Algorithm: enrollment.ES256, Generation: request.Generation, RPID: enrollment.RPID, EnrolledAt: time.Now().UTC(), Status: "active", InternalUV: uint(out.flags)&4 != 0, AAGUID: C.GoBytes(unsafe.Pointer(out.aaguid), C.int(out.aaguid_len)), Format: "packed"}}
+				result = enrollmentResult{credential: enrollment.Credential{Reference: enrollment.ReferenceForID(id), ID: id, PublicKey: publicDER, Algorithm: enrollment.ES256, Generation: request.Generation, RPID: enrollment.RPID, EnrolledAt: time.Now().UTC(), Status: "active", InternalUV: uint(out.flags)&4 != 0, AAGUID: C.GoBytes(unsafe.Pointer(out.aaguid), C.int(out.aaguid_len)), Format: "packed", DeviceSelector: device.selector}}
 			}
 		}
 		C.dm_free_enrollment(&out)
@@ -318,6 +367,36 @@ func (a *libfido2Adapter) Enroll(ctx context.Context, request enrollment.Request
 		close(release)
 		return enrollment.Credential{}, enrollment.ErrConflict
 	}
+}
+
+type manifestDevice struct{ path, selector string }
+
+func selectManifestDevice(requested string) (manifestDevice, error) {
+	devices, err := manifestDevices()
+	if err != nil {
+		return manifestDevice{}, enrollment.ErrUnavailable
+	}
+	selected, selector, err := enrollment.SelectDevice(devices, requested)
+	if err != nil {
+		return manifestDevice{}, err
+	}
+	return manifestDevice{path: selected.Path, selector: selector}, nil
+}
+
+func manifestDevices() ([]enrollment.DeviceManifest, error) {
+	var raw [16]C.dm_manifest_device
+	var count C.size_t
+	if C.dm_manifest(&raw[0], 16, &count) != C.FIDO_OK || count > 16 {
+		return nil, enrollment.ErrUnavailable
+	}
+	devices := make([]enrollment.DeviceManifest, 0, int(count))
+	for i := 0; i < int(count); i++ {
+		path := C.GoString(&raw[i].path[0])
+		manufacturer := C.GoString(&raw[i].manufacturer[0])
+		product := C.GoString(&raw[i].product[0])
+		devices = append(devices, enrollment.DeviceManifest{Path: path, Manufacturer: manufacturer, Product: product, VendorID: uint16(raw[i].vendor_id), ProductID: uint16(raw[i].product_id)})
+	}
+	return devices, nil
 }
 
 func marshalES256PublicKey(raw []byte) ([]byte, error) {
