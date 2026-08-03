@@ -26,6 +26,13 @@ consumers=(
   plugins/pipeline/references/openrouter-authorization-contract.md
 )
 
+is_broker_consumer() {
+  case "$1" in
+    plugins/pipeline/references/cascade-dispatch.sh|plugins/pipeline/references/openrouter-exec.sh) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 if [ "$MODE" = "--all" ]; then
   consumers+=(plugins/openrouter/skills/openrouter/SKILL.md)
 fi
@@ -37,7 +44,7 @@ for relative in "${consumers[@]}"; do
     failures=1
     continue
   fi
-  if ! grep -Fq 'resolve-plugin-bundle' "$file"; then
+  if ! is_broker_consumer "$relative" && ! grep -Fq 'resolve-plugin-bundle' "$file"; then
     echo "  FAIL  resolver contract absent: $relative"
     failures=1
   fi
@@ -78,7 +85,7 @@ for relative in "${consumers[@]}"; do
       failures=1
     }
   fi
-  if grep -Fq 'skills/openrouter-delegate/references/delegation-boundary.sh' "$file"; then
+  if ! is_broker_consumer "$relative" && grep -Fq 'skills/openrouter-delegate/references/delegation-boundary.sh' "$file"; then
     grep -Fq -- '--required-executable skills/openrouter-delegate/references/delegation-boundary.sh' "$file" &&
     ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/delegation-boundary.sh' "$file" || {
       echo "  FAIL  OpenRouter boundary is not declared executable-only: $relative"
@@ -138,8 +145,6 @@ grep -Fq 'generic `openrouter-agent-runner` is the only execution path' "$bulk_c
 for relative in \
   plugins/openrouter/commands/openrouter.md \
   plugins/openrouter/agents/workflow/openrouter-agent-runner.md \
-  plugins/pipeline/references/cascade-dispatch.sh \
-  plugins/pipeline/references/openrouter-exec.sh \
   plugins/airlift/commands/airlift-in.md \
   plugins/airlift/prompts/airlift-in.md
 do
@@ -147,6 +152,23 @@ do
   grep -Fq 'payload-authorization.sh' "$file" &&
   grep -Fq ' verify ' "$file" || {
     echo "  FAIL  wrapper consumer lacks byte-bound authorization: $relative"
+    failures=1
+  }
+done
+
+for relative in \
+  plugins/pipeline/references/cascade-dispatch.sh \
+  plugins/pipeline/references/openrouter-exec.sh
+do
+  file="$ROOT/$relative"
+  grep -Fq 'WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"' "$file" &&
+  grep -Fq 'provider-transport-status' "$file" &&
+  grep -Fq 'dispatch-provider-request' "$file" &&
+  grep -Fq 'env -i PATH="$PATH" LC_ALL=C' "$file" &&
+  ! grep -Fq 'payload-authorization.sh' "$file" &&
+  ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
+  ! grep -Fq 'OPENROUTER_PAYLOAD_APPROVAL_SHA256' "$file" || {
+    echo "  FAIL  broker consumer does not use the fixed empty-environment authority client: $relative"
     failures=1
   }
 done

@@ -1,26 +1,39 @@
 # OpenRouter External Payload Authorization
 
-Apply this contract before every Pipeline workflow sends prompt or artifact
-content bytes to the OpenRouter service, including read-only research,
-assessment, and adversarial review lanes. Pipeline supports two explicit
-authorization modes:
+Pipeline has two separate OpenRouter authorization families. They must not be
+mixed or treated as substitutes for one another.
+
+Automated Pipeline dispatch uses only the fixed
+`/usr/local/bin/workflow-authority` client. The root service owns disclosure
+scanning, exact OpenRouter request construction, the provider credential,
+network transport, replay state, and signed result receipts. Automated callers
+export only non-secret repository, run, lane, candidate, workload, nonce, and
+model bindings. They must not use an environment variable, API-key presence,
+caller digest, plugin helper, or caller-selected socket as authority. If the
+fixed client or production-ready status is unavailable, the lane fails closed
+before provider contact.
+
+Direct interactive `/openrouter` remains a distinct compatibility path. It
+supports two explicit disclosure authorization modes:
 
 - `exact-digest` (default): the user approves each distinct ordered payload.
 - `trusted-boundary`: the user opts into automatic authorization for the run;
   immediately before every send, the canonical disclosure scanner must accept
   the exact bytes and the authorization helper must verify they are unchanged.
 
-Enable the low-friction mode for a trusted local run with:
+Enable the low-friction interactive mode for a trusted local run with:
 
 ```bash
 export OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary
 ```
 
-This setting authorizes policy-accepted payloads, not arbitrary disclosure. It
+This setting never authorizes automated broker dispatch. For direct
+interactive use, it authorizes policy-accepted payloads, not arbitrary
+disclosure. It
 does not bypass credential detection, exact-byte verification, owned-path
 restrictions, native-vendor rejection, or provider provenance checks.
 
-## Coherent bundle
+## Direct interactive coherent bundle
 
 Resolve one installed OpenRouter bundle through workflow-kernel with:
 
@@ -37,9 +50,9 @@ resolve-plugin-bundle --plugin openrouter
 Use every asset from that selected root. Never resolve one helper independently
 or accept a caller-selected executable path.
 
-## Authorization protocol
+## Direct interactive authorization protocol
 
-For each external lane:
+For each direct interactive request:
 
 1. Materialize the exact ordered system and user prompt files that would be
    sent. Artifact packs are prompt files; path lists are boundary metadata and
@@ -74,9 +87,10 @@ authority. A boundary decline is recorded as `host_disclosure_declined` and is
 never retried or routed around. Missing or mismatched exact approval is a
 preparation state, not provider failure and not a clean review result.
 
-`trusted-boundary` is run-scoped authority supplied by the user or trusted host
-environment. Do not persist it into repository files, infer it from an API key,
-or enable it merely because OpenRouter was selected as an executor.
+`trusted-boundary` is interactive run-scoped authority supplied by the user or
+trusted host environment. Do not persist it into repository files, infer it
+from an API key, enable it merely because OpenRouter was selected as an
+executor, or pass it into the automated broker client.
 
 ## Broker terminal outcomes
 
