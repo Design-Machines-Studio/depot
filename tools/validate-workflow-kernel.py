@@ -192,16 +192,28 @@ def check_documents(context):
         == SCHEMA_DOCUMENTS | {"inspection-profile-schema.json"},
         "schema document set changed",
     )
-    for path in schemas:
-        document = json.loads(path.read_text(encoding="utf-8"))
+    documents = {
+        path: json.loads(path.read_text(encoding="utf-8")) for path in schemas
+    }
+    documents_by_id = {
+        document.get("$id"): document for document in documents.values()
+        if type(document.get("$id")) is str
+    }
+    for path, document in documents.items():
         require(type(document) is dict, f"{path.name} is not an object")
         require(document.get("$schema") == "https://json-schema.org/draft/2020-12/schema", f"{path.name} draft mismatch")
         require(type(document.get("$id")) is str and document["$id"], f"{path.name} id missing")
         def visit(value):
             if type(value) is dict:
                 reference = value.get("$ref")
-                if type(reference) is str and reference.startswith("#"):
-                    _resolve_pointer(document, reference)
+                if type(reference) is str:
+                    if reference.startswith("#"):
+                        _resolve_pointer(document, reference)
+                    elif reference.startswith("https://designmachines.dev/schemas/workflow-kernel/"):
+                        target_id, marker, fragment = reference.partition("#")
+                        require(target_id in documents_by_id, "unresolved provider schema reference")
+                        if marker:
+                            _resolve_pointer(documents_by_id[target_id], "#" + fragment)
                 for child in value.values():
                     visit(child)
             elif type(value) is list:

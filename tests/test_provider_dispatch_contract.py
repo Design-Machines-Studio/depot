@@ -9,9 +9,9 @@ from workflow_kernel.provider_dispatch import (
     EXIT_PROVIDER_FAILURE, EXIT_RESULT_VERIFICATION, EXIT_UNKNOWN,
     EXIT_VERIFIED, FROZEN_EXCHANGE, FROZEN_TRUST_CHAIN, MAX_FRAME_BYTES,
     MAX_REQUEST_BYTES, MAPPING, OPERATION_FAMILY, PRODUCTION_INELIGIBLE_DOMAIN,
-    PROTOCOL, SUBSTRATE_AUTHORITY, FakeBroker, ProviderDispatchError,
+    PROTOCOL, SUBSTRATE_AUTHORITY, FIXTURE_ROOT_PUBLIC_KEY, FakeBroker, ProviderDispatchError,
     build_openrouter_body, canonical_json, encode_request, frame32, frame64,
-    parse_canonical_json, sha256, signature_input, validate_authority_binding,
+    decode_request, decode_response, parse_canonical_json, sha256, signature_input, validate_authority_binding,
     validate_exchange, validate_request, validate_result, validate_status,
     verify_terminal_result,
 )
@@ -22,7 +22,15 @@ RESULT_SCHEMA = KERNEL_REFERENCES / "provider-dispatch-result-schema.json"
 STATUS_SCHEMA = KERNEL_REFERENCES / "provider-dispatch-status-schema.json"
 EXCHANGE_SCHEMA = KERNEL_REFERENCES / "provider-dispatch-exchange-schema.json"
 D = "sha256:" + "1" * 64
-SIG = "ed25519:" + "A" * 86
+ROOT_D = int("87ada8c1b7a07e3c423e657645d02e2ffb8fd6db8f0db87d451dd57894ccb81a6f15ce5371be54f67c6efcaf300c0831a0c86633b774c0b17f3cdb305ab31061ae4c7e51fdccd2b03e7911f88ab7684aab332d561e3a84b8ca68da3b4bfadfec4cee011628e77ec98aa570d655bd36ae8c40399d431d9ac64f854045fe57881", 16)
+RESULT_N = int("b3f92ef0a7d361a25719124dee17407c05508be29ae7c916ebb68544cf71e61a403adc6372598f4b797d21567e88f6550077fa36acc769822ec814f0d05cc274d0ec6aecfb7a4bbce97d036e8467ea61eff01b21a4a411639f9ac4252d101c5e9d9b8de98c576b7e96c79eb68fa8a4646bdfe1213c1d8c51912f2e875d72bd1d", 16)
+RESULT_D = int("14a6a31c3a25a72e599026e98a4860bdda5e43aedcd77bdb85708c1a39337893ca8af67ef2c0141134ff86b3c6113132cfbaf49b11785042ffdb358bec5cb8733d9fb09b570c73a50c35f3a24966d89f475572406ef3db11f280aa28cb57c981f84b69c6c40b9f95c102e4a778d5962e8502addfdb755799b3b031a9e7f83e81", 16)
+RESULT_PUBLIC_KEY = f"fixture-rsa-sha256-v1:{RESULT_N:0256x}:10001"
+
+
+def fixture_sign(modulus, private_exponent, payload):
+    digest = int.from_bytes(__import__("hashlib").sha256(payload).digest(), "big")
+    return f"fixture-rsa-sha256-v1:{pow(digest, private_exponent, modulus):0256x}"
 
 
 def limits():
@@ -59,6 +67,7 @@ def request(parts=(b"system\n", b"user \xf0\x9f\x8c\x8d\\\"\n"), roles=("system"
             "policy_sha256": D, "nonce": "nonce-01", "sequence": 7,
             "boot_id": "boot-01", "session_id": "session-01",
             "connection_nonce_sha256": D,
+            "prior_chain_digest": "sha256:" + "3" * 64,
             "issued_at": "2026-08-03T00:00:00Z",
             "expires_at": "2026-08-03T00:02:00Z",
         },
@@ -68,7 +77,7 @@ def request(parts=(b"system\n", b"user \xf0\x9f\x8c\x8d\\\"\n"), roles=("system"
 
 def challenge(req, body):
     authority = req["authority"]
-    return {
+    document = {
         "schema_version": 1, "protocol": PROTOCOL, "mapping": MAPPING,
         "operation_family": OPERATION_FAMILY,
         "substrate_authority": SUBSTRATE_AUTHORITY,
@@ -84,12 +93,19 @@ def challenge(req, body):
         "sequence": authority["sequence"], "boot_id": authority["boot_id"],
         "session_id": authority["session_id"], "issued_at": authority["issued_at"],
         "expires_at": authority["expires_at"], "limits": req["limits"],
-        "result_public_key": "fixture-result-key-01",
+        "result_public_key": RESULT_PUBLIC_KEY,
+        "fixture_assertion": "fixture-rsa-sha256-v1:" + "0" * 256,
+        "prior_chain_digest": authority["prior_chain_digest"],
     }
+    document["fixture_assertion"] = fixture_sign(
+        int(FIXTURE_ROOT_PUBLIC_KEY.split(":")[1], 16), ROOT_D,
+        signature_input("challenge", document),
+    )
+    return document
 
 
 def result(req, chall, response=b'{"ok":true}'):
-    return {
+    document = {
         "schema_version": 1, "protocol": PROTOCOL,
         "operation_family": OPERATION_FAMILY,
         "substrate_authority": SUBSTRATE_AUTHORITY,
@@ -102,11 +118,16 @@ def result(req, chall, response=b'{"ok":true}'):
         "issued_at": req["authority"]["issued_at"],
         "completed_at": "2026-08-03T00:00:03Z",
         "challenge_sha256": sha256(canonical_json(chall)),
-        "fido_assertion_sha256": D,
+        "fido_assertion_sha256": sha256(chall["fixture_assertion"].encode()),
         "result_public_key_sha256": sha256(chall["result_public_key"].encode()),
+        "prior_chain_digest": req["authority"]["prior_chain_digest"],
         "cleanup": {"reservation": "consumed", "connection": "closed", "content_buffer": "discarded"},
-        "signature": SIG,
+        "signature": "fixture-rsa-sha256-v1:" + "0" * 256,
     }
+    document["signature"] = fixture_sign(
+        RESULT_N, RESULT_D, signature_input("terminal", document),
+    )
+    return document
 
 
 class ProviderDispatchContractTests(unittest.TestCase):
@@ -149,8 +170,10 @@ class ProviderDispatchContractTests(unittest.TestCase):
             self.assertNotIn("repository_verification", canonical_json(document).decode())
 
     def test_req_m0_04_openrouter_mapping_preserves_exact_order_and_text(self):
-        expected = b'{"messages":[{"content":"system\\n","role":"system"},{"content":"user \xf0\x9f\x8c\x8d\\\\\\\"\\n","role":"user"}],"models":["openai/gpt-5.6","z-ai/glm-5.2"]}'
+        expected = b'{"messages":[{"content":"system\\n","role":"system"},{"content":"user \xf0\x9f\x8c\x8d\\\\\\\"\\n","role":"user"}],"models":["openai/gpt-5.6","z-ai/glm-5.2"],"temperature":null}'
         self.assertEqual(self.body, expected)
+        self.assertIn(b'"temperature":null', self.body)
+        self.assertNotIn(b'"provider":null', self.body)
         null_parts = (b"null", b"line1\nline2")
         mapped = build_openrouter_body(request(null_parts), null_parts)
         self.assertIn(b'"content":"null"', mapped)
@@ -204,7 +227,7 @@ class ProviderDispatchContractTests(unittest.TestCase):
         terminal_bytes = frame32(canonical_json(self.result))
         vector = request_bytes + challenge_bytes + ack_bytes + content_bytes + terminal_bytes
         self.assertEqual(struct.unpack(">I", request_bytes[:4])[0], len(canonical_json(self.request)))
-        self.assertEqual(sha256(vector), "sha256:601c9c609a32a737879d7cca4b7909461c9b103af2750db45a85f7f682b104f1")
+        self.assertEqual(sha256(vector), "sha256:1a25067645a07a6b9d93cfe1bfefb44c94c1c4752c328ff71901a93158ea2f3b")
         self.assertEqual(EXIT_VERIFIED, 0)
         self.assertEqual(FROZEN_EXCHANGE["fd3"]["kind"], "inherited-anonymous-pipe")
         self.assertFalse(FROZEN_EXCHANGE["retrieve"])
@@ -230,13 +253,17 @@ class ProviderDispatchContractTests(unittest.TestCase):
                 "challenge_sha256": sha256(canonical_json(chall)),
             }
             terminal = result(req, chall, response)
-            golden_variants[name] = sha256(fake.complete_exchange(
+            golden_variants[name] = sha256(FakeBroker(f"/tmp/{name}/socket").complete_exchange(
                 req, parts, chall, ack, response, terminal,
             ))
         self.assertEqual(golden_variants, {
-            "null": "sha256:9860384f26a0df1879bdc90e00bcdb614f28400df182265b22730ad417b9873b",
-            "max": "sha256:60f7e6702c1bce64f38de03142fbdf0292606b4ec10aa35a5255215adf68d201",
+            "null": "sha256:d3124ee7cb7fa699030ce84c3471c2cf89ce69d95e9adb58c175df57e6fad5f8",
+            "max": "sha256:d9c061d0590d9525fad74aa98b03c3009a42bd295cdd2fee27b115e5b0520a21",
         })
+        self.assertEqual(
+            sha256(signature_input("terminal", self.result)),
+            "sha256:b7f450f2f6b5a91ccff799f25728b5c0d9daff70a7fa32bd10f2d8159ff94527",
+        )
 
     def test_req_m0_10_cross_connection_stale_build_policy_and_result_mismatch_reject(self):
         cases = {}
@@ -269,6 +296,11 @@ class ProviderDispatchContractTests(unittest.TestCase):
                 parse_canonical_json(raw)
         with self.assertRaisesRegex(ProviderDispatchError, "frame_too_large"):
             parse_canonical_json(b" " * (MAX_FRAME_BYTES + 1))
+        hostile_integer = b'{"value":' + b"9" * 5000 + b"}"
+        with self.assertRaises(ProviderDispatchError) as caught:
+            parse_canonical_json(hostile_integer)
+        self.assertEqual(str(caught.exception), "invalid_document")
+        self.assertNotIn("digit", str(caught.exception))
 
     def test_chk_m0_03_negative_vector_codes_and_state_outcomes(self):
         expected = {
@@ -319,6 +351,131 @@ class ProviderDispatchContractTests(unittest.TestCase):
         body = build_openrouter_body(req, (raw,))
         self.assertLessEqual(len(body), MAX_REQUEST_BYTES)
         self.assertEqual(len(encode_request(req, (raw,))), 4 + len(canonical_json(req)) + 8 + len(raw))
+
+    def test_chk_m0_07_producer_and_parser_use_literal_component_frames(self):
+        self.assertEqual(frame32(b"{}"), b"\x00\x00\x00\x02{}")
+        self.assertEqual(frame64(b"ok"), b"\x00\x00\x00\x00\x00\x00\x00\x02ok")
+        wire = encode_request(self.request, self.parts)
+        decoded_request, decoded_parts = decode_request(wire)
+        self.assertEqual(decoded_request, self.request)
+        self.assertEqual(decoded_parts, self.parts)
+        with self.assertRaisesRegex(ProviderDispatchError, "exchange_trailing_data"):
+            decode_request(wire + b"hostile")
+        truncated = wire[:-1]
+        with self.assertRaisesRegex(ProviderDispatchError, "part_frame_mismatch"):
+            decode_request(truncated)
+        response_wire = frame64(self.response) + frame32(canonical_json(self.result))
+        decoded_content, decoded_terminal = decode_response(
+            response_wire, self.request, self.challenge,
+        )
+        self.assertEqual((decoded_content, decoded_terminal), (self.response, self.result))
+        with self.assertRaisesRegex(ProviderDispatchError, "exchange_trailing_data"):
+            decode_response(response_wire + b"hostile", self.request, self.challenge)
+
+    def test_chk_m0_08_fixture_crypto_rejects_root_terminal_and_provenance_mutations(self):
+        verify_terminal_result(self.request, self.challenge, self.response, self.result)
+        challenge_mutation = copy.deepcopy(self.challenge)
+        challenge_mutation["fixture_assertion"] = "fixture-rsa-sha256-v1:" + "0" * 256
+        with self.assertRaisesRegex(ProviderDispatchError, "terminal_binding_invalid"):
+            verify_terminal_result(self.request, challenge_mutation, self.response, self.result)
+        for field, value in (
+            ("signature", "fixture-rsa-sha256-v1:" + "0" * 256),
+            ("selected_model", "attacker/model"), ("provider", "attacker"),
+            ("prior_chain_digest", D),
+        ):
+            mutation = copy.deepcopy(self.result); mutation[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ProviderDispatchError, "terminal_binding_invalid"):
+                verify_terminal_result(self.request, self.challenge, self.response, mutation)
+        cleanup = copy.deepcopy(self.result); cleanup["cleanup"]["reservation"] = "closed"
+        with self.assertRaises(ProviderDispatchError):
+            validate_result(cleanup)
+
+    def test_chk_m0_09_stateful_fake_owns_connection_consumes_and_tombstones(self):
+        fake = FakeBroker("/tmp/stateful/socket")
+        tx = fake.reserve("connection-1", 501, self.request, self.parts, self.challenge, "2026-08-03T00:00:01Z")
+        with self.assertRaisesRegex(ProviderDispatchError, "consent_connection_invalid"):
+            fake.acknowledge(tx, "connection-2", self.ack, "2026-08-03T00:00:02Z")
+        self.assertEqual((fake.fido_attempts, fake.network_attempts, fake.response_allocations), (0, 0, 0))
+        fake.acknowledge(tx, "connection-1", self.ack, "2026-08-03T00:00:02Z")
+        fake.mark_sent(tx, "connection-1")
+        fake.finish(tx, "connection-1", self.response, self.result)
+        self.assertEqual((fake.fido_attempts, fake.network_attempts, fake.response_allocations), (1, 1, 1))
+        with self.assertRaisesRegex(ProviderDispatchError, "authorization_replayed"):
+            fake.retrieve(tx, "connection-1")
+        with self.assertRaisesRegex(ProviderDispatchError, "authorization_replayed"):
+            fake.reserve("connection-1", 501, self.request, self.parts, self.challenge, "2026-08-03T00:00:03Z")
+
+    def test_chk_m0_10_disconnect_expiry_and_flood_are_pre_authority(self):
+        fake = FakeBroker("/tmp/stateful/socket")
+        with self.assertRaisesRegex(ProviderDispatchError, "disclosure_declined"):
+            fake.decline_disclosure()
+        self.assertEqual(fake.status()["pending"], 0)
+        tx = fake.reserve("connection-1", 501, self.request, self.parts, self.challenge, "2026-08-03T00:00:01Z")
+        fake.disconnect(tx, "connection-1")
+        self.assertEqual(fake.reservations[tx].safe_error, "consent_connection_invalid")
+        self.assertEqual((fake.fido_attempts, fake.network_attempts, fake.response_allocations), (0, 0, 0))
+        stale_req = copy.deepcopy(self.request)
+        stale_req["authority"]["nonce"] = "nonce-stale"
+        stale_challenge = challenge(stale_req, build_openrouter_body(stale_req, self.parts))
+        stale_challenge["transaction_id"] = "transaction-stale"
+        stale_challenge["peer_uid"] = 502
+        stale_challenge["fixture_assertion"] = "fixture-rsa-sha256-v1:" + "0" * 256
+        stale_challenge["fixture_assertion"] = fixture_sign(
+            int(FIXTURE_ROOT_PUBLIC_KEY.split(":")[1], 16), ROOT_D,
+            signature_input("challenge", stale_challenge),
+        )
+        tx2 = fake.reserve("connection-2", 502, stale_req, self.parts, stale_challenge, "2026-08-03T00:00:01Z")
+        with self.assertRaisesRegex(ProviderDispatchError, "authorization_expired"):
+            fake.acknowledge(tx2, "connection-2", {
+                "schema_version": 1, "protocol": PROTOCOL, "type": "consent_ack",
+                "challenge_sha256": sha256(canonical_json(stale_challenge)),
+            }, "2026-08-03T00:03:00Z")
+        self.assertEqual(fake.fido_attempts, 0)
+        flood = FakeBroker("/tmp/flood/socket")
+        for number in range(5):
+            chall = challenge(self.request, self.body)
+            chall["transaction_id"] = f"transaction-flood-{number}"
+            chall["fixture_assertion"] = "fixture-rsa-sha256-v1:" + "0" * 256
+            chall["fixture_assertion"] = fixture_sign(
+                int(FIXTURE_ROOT_PUBLIC_KEY.split(":")[1], 16), ROOT_D,
+                signature_input("challenge", chall),
+            )
+            if number < 4:
+                flood.reserve(f"connection-{number}", 501, self.request, self.parts, chall, "2026-08-03T00:00:01Z")
+            else:
+                with self.assertRaisesRegex(ProviderDispatchError, "rate_limited"):
+                    flood.reserve(f"connection-{number}", 501, self.request, self.parts, chall, "2026-08-03T00:00:01Z")
+        self.assertEqual((flood.fido_attempts, flood.network_attempts, flood.response_allocations), (0, 0, 0))
+
+        declined = FakeBroker("/tmp/declined/socket")
+        declined_tx = declined.reserve("connection-declined", 501, self.request, self.parts, self.challenge, "2026-08-03T00:00:01Z")
+        with self.assertRaisesRegex(ProviderDispatchError, "authorization_declined"):
+            declined.acknowledge(declined_tx, "connection-declined", self.ack, "2026-08-03T00:00:02Z", approved=False)
+        self.assertEqual((declined.fido_attempts, declined.network_attempts, declined.response_allocations), (1, 0, 0))
+
+        sent = FakeBroker("/tmp/sent/socket")
+        tx3 = sent.reserve("connection-sent", 501, self.request, self.parts, self.challenge, "2026-08-03T00:00:01Z")
+        sent.acknowledge(tx3, "connection-sent", self.ack, "2026-08-03T00:00:02Z")
+        sent.mark_sent(tx3, "connection-sent")
+        sent.disconnect(tx3, "connection-sent")
+        self.assertEqual(sent.reservations[tx3].safe_error, "provider_result_unknown")
+        with self.assertRaises(ProviderDispatchError):
+            sent.retrieve(tx3, "connection-sent")
+
+    def test_chk_m0_11_complete_wire_exact_boundary_and_overflow(self):
+        parts = [b"x" * MAX_FRAME_BYTES for _ in range(7)] + [b"x" * 1000]
+        for _ in range(5):
+            req = request(tuple(parts), tuple("user" for _ in parts))
+            size = 4 + len(canonical_json(req)) + sum(8 + len(part) for part in parts)
+            delta = MAX_REQUEST_BYTES - size
+            parts[-1] = parts[-1] + b"x" * delta if delta >= 0 else parts[-1][:delta]
+        req = request(tuple(parts), tuple("user" for _ in parts))
+        wire = encode_request(req, tuple(parts))
+        self.assertEqual(len(wire), MAX_REQUEST_BYTES)
+        overflow = list(parts); overflow[-1] += b"x"
+        overflow_req = request(tuple(overflow), tuple("user" for _ in overflow))
+        with self.assertRaisesRegex(ProviderDispatchError, "bounds_exceeded"):
+            encode_request(overflow_req, tuple(overflow))
 
 
 if __name__ == "__main__":

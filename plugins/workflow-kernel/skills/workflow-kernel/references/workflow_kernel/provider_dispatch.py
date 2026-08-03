@@ -12,7 +12,7 @@ import hashlib
 import json
 import re
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 
@@ -52,7 +52,7 @@ ERROR_CODES = frozenset({
 })
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
-_SIGNATURE = re.compile(r"ed25519:[A-Za-z0-9_-]{86}\Z")
+_SIGNATURE = re.compile(r"fixture-rsa-sha256-v1:[0-9a-f]{256}\Z")
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}\Z")
 _TIME = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z\Z")
 _ROLE = frozenset({"system", "user"})
@@ -68,7 +68,7 @@ _SCOPE_FIELDS = frozenset({
 _AUTHORITY_FIELDS = frozenset({
     "daemon_build_sha256", "scanner_build_sha256", "policy_sha256",
     "nonce", "sequence", "boot_id", "session_id", "connection_nonce_sha256",
-    "issued_at", "expires_at",
+    "issued_at", "expires_at", "prior_chain_digest",
 })
 _LIMIT_FIELDS = frozenset({
     "max_request_bytes", "max_response_bytes", "max_parts",
@@ -80,7 +80,8 @@ _CHALLENGE_FIELDS = frozenset({
     "peer_uid", "peer_pid", "request_body_sha256", "destination", "method",
     "path", "models", "scope", "daemon_build_sha256", "scanner_build_sha256",
     "policy_sha256", "nonce", "sequence", "boot_id", "session_id", "issued_at",
-    "expires_at", "limits", "result_public_key",
+    "expires_at", "limits", "result_public_key", "fixture_assertion",
+    "prior_chain_digest",
 })
 _ACK_FIELDS = frozenset({"schema_version", "protocol", "type", "challenge_sha256"})
 _RESULT_FIELDS = frozenset({
@@ -89,6 +90,7 @@ _RESULT_FIELDS = frozenset({
     "response_length", "part_count", "models", "selected_model", "provider",
     "scope", "sequence", "issued_at", "completed_at", "challenge_sha256",
     "fido_assertion_sha256", "result_public_key_sha256", "cleanup", "signature",
+    "prior_chain_digest",
 })
 _STATUS_FIELDS = frozenset({
     "schema_version", "protocol", "production_ready", "fixture_domain",
@@ -133,6 +135,15 @@ FROZEN_TRUST_CHAIN = {
     "fixture_domain": PRODUCTION_INELIGIBLE_DOMAIN,
     "downgrades_rejected": ["authority-envelope-v1", "hmac", "receipt-key"],
 }
+
+FIXTURE_ROOT_N = int(
+    "73e08fd9e3b795fb174140de9f83b2484e5ba8644364cd6f3b3ba8890071d834"
+    "3a3c6a40b1b35f304fc3c4514893effa95dd6f39f5e2efafeedc37e094822c0e"
+    "d9022246d4fa52a182b537066bc3d698411f3884ec81aabebc3e3aa982351b57d"
+    "53b38559979c9227baba6ef365294abc925ab9e5004884e0cd063329292e69d", 16,
+)
+FIXTURE_RSA_E = 65537
+FIXTURE_ROOT_PUBLIC_KEY = f"fixture-rsa-sha256-v1:{FIXTURE_ROOT_N:0256x}:10001"
 
 
 class ProviderDispatchError(ValueError):
@@ -195,7 +206,7 @@ def parse_canonical_json(raw: bytes, *, limit: int = MAX_FRAME_BYTES) -> Any:
         )
     except ProviderDispatchError:
         raise
-    except (UnicodeError, json.JSONDecodeError, RecursionError):
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
         _fail()
     _depth_and_items(value)
     if canonical_json(value) != raw:
@@ -304,11 +315,9 @@ def validate_request(document: Any, part_bytes: Sequence[bytes] | None = None) -
                 _fail("part_frame_mismatch")
     if part_bytes is not None and len(part_bytes) != len(parts):
         _fail("part_frame_mismatch")
-    if total > MAX_REQUEST_BYTES:
-        _fail("bounds_exceeded")
     _scope(request["scope"])
     authority = _object(request["authority"], _AUTHORITY_FIELDS)
-    for field in ("daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "connection_nonce_sha256"):
+    for field in ("daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "connection_nonce_sha256", "prior_chain_digest"):
         _digest(authority[field])
     for field in ("nonce", "boot_id", "session_id"):
         _string(authority[field])
@@ -327,7 +336,9 @@ def build_openrouter_body(request: Mapping[str, Any], part_bytes: Sequence[bytes
     messages = []
     for part, raw in zip(request["parts"], part_bytes, strict=True):
         messages.append({"role": part["role"], "content": raw.decode("utf-8")})
-    body = canonical_json({"messages": messages, "models": request["models"]})
+    body = canonical_json({
+        "messages": messages, "models": request["models"], "temperature": None,
+    })
     if len(body) > MAX_REQUEST_BYTES:
         _fail("bounds_exceeded")
     return body
@@ -338,11 +349,13 @@ def validate_challenge(document: Any) -> dict[str, Any]:
     _fixed(challenge)
     if challenge["mapping"] != MAPPING or challenge["operation_family"] != OPERATION_FAMILY or challenge["substrate_authority"] != SUBSTRATE_AUTHORITY:
         _fail()
-    for field in ("transaction_id", "nonce", "boot_id", "session_id", "result_public_key"):
+    for field in ("transaction_id", "nonce", "boot_id", "session_id"):
         _string(challenge[field])
+    _plain_string(challenge["result_public_key"], 1024)
+    _string(challenge["fixture_assertion"], pattern=_SIGNATURE)
     for field in ("destination", "method", "path"):
         _plain_string(challenge[field])
-    for field in ("connection_nonce_sha256", "request_body_sha256", "daemon_build_sha256", "scanner_build_sha256", "policy_sha256"):
+    for field in ("connection_nonce_sha256", "request_body_sha256", "daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "prior_chain_digest"):
         _digest(challenge[field])
     _integer(challenge["peer_uid"])
     _integer(challenge["peer_pid"], 1)
@@ -381,7 +394,7 @@ def validate_result(document: Any) -> dict[str, Any]:
         "unknown": EXIT_UNKNOWN,
     }[result["outcome"]]:
         _fail("terminal_binding_invalid")
-    for field in ("request_body_sha256", "response_sha256", "challenge_sha256", "fido_assertion_sha256", "result_public_key_sha256"):
+    for field in ("request_body_sha256", "response_sha256", "challenge_sha256", "fido_assertion_sha256", "result_public_key_sha256", "prior_chain_digest"):
         _digest(result[field])
     _integer(result["response_length"], 0, MAX_RESPONSE_BYTES)
     _integer(result["part_count"], 1, MAX_PARTS)
@@ -394,7 +407,7 @@ def validate_result(document: Any) -> dict[str, Any]:
     _string(result["issued_at"], pattern=_TIME)
     _string(result["completed_at"], pattern=_TIME)
     cleanup = _object(result["cleanup"], _CLEANUP_FIELDS)
-    if any(value not in {"consumed", "closed", "discarded"} for value in cleanup.values()):
+    if cleanup != {"reservation": "consumed", "connection": "closed", "content_buffer": "discarded"}:
         _fail()
     return result
 
@@ -433,6 +446,22 @@ def validate_exchange(document: Any) -> dict[str, Any]:
             _fail()
     if exchange["response_retrievable"]:
         _fail("exchange_state_invalid")
+    state = exchange["state"]
+    combinations = {
+        "reserved": (False, False, False, False, False, False),
+        "challenged": (True, False, False, False, False, False),
+        "authorized": (True, True, False, False, False, False),
+        "sent": (True, True, False, False, False, True),
+        "terminal": (True, True, True, False, True, True),
+        "tombstone": (exchange["challenge"] is not None, exchange["consent_ack"] is not None, False, True, True, exchange["network_attempted"]),
+    }
+    actual = (
+        exchange["challenge"] is not None, exchange["consent_ack"] is not None,
+        exchange["result"] is not None, exchange["safe_error"] is not None,
+        exchange["consumed"], exchange["network_attempted"],
+    )
+    if actual != combinations[state]:
+        _fail("exchange_state_invalid")
     return exchange
 
 
@@ -450,20 +479,96 @@ def frame64(payload: bytes, *, limit: int = MAX_RESPONSE_BYTES) -> bytes:
 
 def encode_request(request: Mapping[str, Any], part_bytes: Sequence[bytes]) -> bytes:
     validate_request(request, part_bytes)
-    return frame32(canonical_json(request)) + b"".join(frame64(part, limit=MAX_FRAME_BYTES) for part in part_bytes)
+    header = canonical_json(request)
+    wire_length = 4 + len(header) + sum(8 + len(part) for part in part_bytes)
+    if wire_length > MAX_REQUEST_BYTES:
+        _fail("bounds_exceeded")
+    return frame32(header) + b"".join(frame64(part, limit=MAX_FRAME_BYTES) for part in part_bytes)
+
+
+def decode_request(wire: bytes) -> tuple[dict[str, Any], tuple[bytes, ...]]:
+    """Independently parse one bounded request frame without trailing data."""
+    if type(wire) is not bytes or len(wire) > MAX_REQUEST_BYTES or len(wire) < 4:
+        _fail("frame_too_large")
+    header_length = struct.unpack(">I", wire[:4])[0]
+    if header_length > MAX_FRAME_BYTES or 4 + header_length > len(wire):
+        _fail("frame_too_large")
+    request = parse_canonical_json(wire[4:4 + header_length])
+    offset = 4 + header_length
+    parts = []
+    if type(request) is not dict or type(request.get("parts")) is not list:
+        _fail()
+    for _part in request["parts"]:
+        if offset + 8 > len(wire):
+            _fail("part_frame_mismatch")
+        length = struct.unpack(">Q", wire[offset:offset + 8])[0]
+        offset += 8
+        if length > MAX_FRAME_BYTES or offset + length > len(wire):
+            _fail("part_frame_mismatch")
+        parts.append(wire[offset:offset + length])
+        offset += length
+    if offset != len(wire):
+        _fail("exchange_trailing_data")
+    validate_request(request, parts)
+    return request, tuple(parts)
+
+
+def decode_response(
+    wire: bytes, request: Mapping[str, Any], challenge: Mapping[str, Any],
+) -> tuple[bytes, dict[str, Any]]:
+    """Buffer and verify one response/terminal pair before any fd-3 release."""
+    if type(wire) is not bytes or len(wire) < 12:
+        _fail("part_frame_mismatch")
+    content_length = struct.unpack(">Q", wire[:8])[0]
+    if content_length > MAX_RESPONSE_BYTES or 8 + content_length + 4 > len(wire):
+        _fail("frame_too_large")
+    content_end = 8 + content_length
+    content = wire[8:content_end]
+    terminal_length = struct.unpack(">I", wire[content_end:content_end + 4])[0]
+    terminal_end = content_end + 4 + terminal_length
+    if terminal_length > MAX_FRAME_BYTES or terminal_end > len(wire):
+        _fail("frame_too_large")
+    if terminal_end != len(wire):
+        _fail("exchange_trailing_data")
+    terminal = parse_canonical_json(wire[content_end + 4:terminal_end])
+    verify_terminal_result(request, challenge, content, terminal)
+    return content, terminal
 
 
 def signature_input(kind: str, document: Mapping[str, Any]) -> bytes:
     """Freeze Go-compatible domain-separated inputs; no auth-mode selector exists."""
     if kind == "challenge":
         validate_challenge(document)
-        projection = document
+        projection = {key: value for key, value in document.items() if key != "fixture_assertion"}
     elif kind == "terminal":
         validate_result(document)
         projection = {key: value for key, value in document.items() if key != "signature"}
     else:
         _fail()
     return b"workflow-authority\x00provider-dispatch-v1\x00" + kind.encode("ascii") + b"\x00" + canonical_json(projection)
+
+
+def _fixture_verify(public_key: str, signature: str, payload: bytes) -> bool:
+    """Verify domain-marked fixture RSA; never represents production FIDO."""
+    try:
+        marker, n_hex, e_hex = public_key.split(":")
+        signature_marker, signature_hex = signature.split(":")
+        if marker != "fixture-rsa-sha256-v1" or signature_marker != marker:
+            return False
+        n, exponent, signed = int(n_hex, 16), int(e_hex, 16), int(signature_hex, 16)
+        expected = int.from_bytes(hashlib.sha256(payload).digest(), "big")
+        return len(n_hex) == 256 and exponent == FIXTURE_RSA_E and signed < n and pow(signed, exponent, n) == expected
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+
+def verify_fixture_assertion(challenge: Mapping[str, Any]) -> None:
+    validate_challenge(challenge)
+    if not _fixture_verify(
+        FIXTURE_ROOT_PUBLIC_KEY, challenge["fixture_assertion"],
+        signature_input("challenge", challenge),
+    ):
+        _fail("terminal_binding_invalid")
 
 
 def validate_authority_binding(
@@ -488,6 +593,7 @@ def validate_authority_binding(
         "sequence": authority["sequence"], "boot_id": authority["boot_id"],
         "session_id": authority["session_id"], "issued_at": authority["issued_at"],
         "expires_at": authority["expires_at"], "limits": request["limits"],
+        "prior_chain_digest": authority["prior_chain_digest"],
     }
     if any(challenge[field] != value for field, value in expected.items()):
         _fail("terminal_binding_invalid")
@@ -503,6 +609,7 @@ def verify_terminal_result(
     validate_request(request)
     validate_challenge(challenge)
     validate_result(result)
+    verify_fixture_assertion(challenge)
     if type(response) is not bytes or len(response) > MAX_RESPONSE_BYTES:
         _fail("frame_too_large")
     checks = (
@@ -515,8 +622,17 @@ def verify_terminal_result(
         result["sequence"] == request["authority"]["sequence"],
         result["challenge_sha256"] == sha256(canonical_json(challenge)),
         result["result_public_key_sha256"] == sha256(challenge["result_public_key"].encode("utf-8")),
+        result["fido_assertion_sha256"] == sha256(challenge["fixture_assertion"].encode("utf-8")),
+        result["prior_chain_digest"] == request["authority"]["prior_chain_digest"],
+        result["selected_model"] in request["models"],
+        result["provider"] == "openrouter",
     )
     if not all(checks):
+        _fail("terminal_binding_invalid")
+    if not _fixture_verify(
+        challenge["result_public_key"], result["signature"],
+        signature_input("terminal", result),
+    ):
         _fail("terminal_binding_invalid")
 
 
@@ -524,12 +640,34 @@ def sha256(payload: bytes) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
-@dataclass(frozen=True)
+@dataclass
+class _Reservation:
+    connection_id: str
+    peer_uid: int
+    repository: str
+    request: Mapping[str, Any]
+    parts: Sequence[bytes]
+    body: bytes
+    challenge: Mapping[str, Any]
+    state: str = "challenged"
+    consumed: bool = False
+    network_attempted: bool = False
+    safe_error: str | None = None
+    consent_ack: Mapping[str, Any] | None = None
+    result: Mapping[str, Any] | None = None
+
+
+@dataclass
 class FakeBroker:
-    """Offline fixture only; cannot bind or report production readiness."""
+    """Stateful offline fixture; all authority remains production-ineligible."""
 
     socket_root: str
     fixture_domain: str = PRODUCTION_INELIGIBLE_DOMAIN
+    reservations: dict[str, _Reservation] = field(default_factory=dict, init=False)
+    used_transactions: set[str] = field(default_factory=set, init=False)
+    fido_attempts: int = field(default=0, init=False)
+    network_attempts: int = field(default=0, init=False)
+    response_allocations: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if type(self.socket_root) is not str or not self.socket_root.startswith("/tmp/"):
@@ -541,7 +679,7 @@ class FakeBroker:
         status = {
             "schema_version": 1, "protocol": PROTOCOL,
             "production_ready": False, "fixture_domain": self.fixture_domain,
-            "socket_root_source": "injected-test-only", "pending": 0,
+            "socket_root_source": "injected-test-only", "pending": self._pending(),
             "limits": {
                 "max_request_bytes": MAX_REQUEST_BYTES,
                 "max_response_bytes": MAX_RESPONSE_BYTES, "max_parts": MAX_PARTS,
@@ -556,15 +694,149 @@ class FakeBroker:
     def production_ready(self) -> bool:
         return False
 
+    def _pending(self) -> int:
+        return sum(not item.consumed for item in self.reservations.values())
+
+    def _owned(self, transaction_id: str, connection_id: str) -> _Reservation:
+        reservation = self.reservations.get(transaction_id)
+        if reservation is None or transaction_id in self.used_transactions or reservation.consumed:
+            _fail("authorization_replayed")
+        if reservation.connection_id != connection_id:
+            _fail("consent_connection_invalid")
+        return reservation
+
+    def _tombstone(self, reservation: _Reservation, code: str) -> None:
+        reservation.state = "tombstone"
+        reservation.consumed = True
+        reservation.safe_error = code
+        self.used_transactions.add(reservation.challenge["transaction_id"])
+
+    def expire(self, now: str) -> None:
+        _string(now, pattern=_TIME)
+        for reservation in self.reservations.values():
+            if not reservation.consumed and reservation.challenge["expires_at"] <= now:
+                self._tombstone(reservation, "authorization_expired")
+
+    def reserve(
+        self, connection_id: str, peer_uid: int, request: Mapping[str, Any],
+        parts: Sequence[bytes], challenge: Mapping[str, Any], now: str,
+    ) -> str:
+        """Validate and charge all bytes before durable reservation or fixture UV."""
+        _string(connection_id)
+        _integer(peer_uid)
+        _string(now, pattern=_TIME)
+        encode_request(request, parts)  # full wire bound before state allocation
+        body = build_openrouter_body(request, parts)
+        validate_challenge(challenge)
+        if challenge["peer_uid"] != peer_uid:
+            _fail("consent_connection_invalid")
+        synthetic_ack = {
+            "schema_version": 1, "protocol": PROTOCOL, "type": "consent_ack",
+            "challenge_sha256": sha256(canonical_json(challenge)),
+        }
+        validate_authority_binding(request, body, challenge, synthetic_ack)
+        self.expire(now)
+        transaction_id = challenge["transaction_id"]
+        if transaction_id in self.reservations or transaction_id in self.used_transactions:
+            _fail("authorization_replayed")
+        repository = request["scope"]["repository"]
+        active = [item for item in self.reservations.values() if not item.consumed]
+        if (
+            len(active) >= MAX_PENDING_PER_DAEMON
+            or sum(item.peer_uid == peer_uid for item in active) >= MAX_PENDING_PER_PEER
+            or sum(item.repository == repository for item in active) >= MAX_PENDING_PER_REPOSITORY
+        ):
+            _fail("rate_limited")
+        self.reservations[transaction_id] = _Reservation(
+            connection_id, peer_uid, repository, request, tuple(parts), body, challenge,
+        )
+        return transaction_id
+
+    def acknowledge(
+        self, transaction_id: str, connection_id: str,
+        consent_ack: Mapping[str, Any], now: str, *, approved: bool = True,
+    ) -> None:
+        reservation = self._owned(transaction_id, connection_id)
+        _string(now, pattern=_TIME)
+        if reservation.challenge["expires_at"] <= now:
+            self._tombstone(reservation, "authorization_expired")
+            _fail("authorization_expired")
+        if reservation.state != "challenged":
+            _fail("exchange_state_invalid")
+        validate_authority_binding(
+            reservation.request, reservation.body, reservation.challenge, consent_ack,
+        )
+        verify_fixture_assertion(reservation.challenge)
+        self.fido_attempts += 1
+        if not approved:
+            self._tombstone(reservation, "authorization_declined")
+            _fail("authorization_declined")
+        reservation.consent_ack = consent_ack
+        reservation.state = "authorized"
+
+    def mark_sent(self, transaction_id: str, connection_id: str) -> None:
+        reservation = self._owned(transaction_id, connection_id)
+        if reservation.state != "authorized":
+            _fail("exchange_state_invalid")
+        reservation.state = "sent"
+        reservation.network_attempted = True
+        self.network_attempts += 1
+
+    def finish(
+        self, transaction_id: str, connection_id: str,
+        response: bytes, result: Mapping[str, Any],
+    ) -> None:
+        reservation = self._owned(transaction_id, connection_id)
+        if reservation.state != "sent":
+            _fail("exchange_state_invalid")
+        if type(response) is not bytes or len(response) > MAX_RESPONSE_BYTES:
+            _fail("frame_too_large")
+        verify_terminal_result(
+            reservation.request, reservation.challenge, response, result,
+        )
+        self.response_allocations += 1
+        reservation.result = result
+        reservation.state = "terminal"
+        reservation.consumed = True
+        self.used_transactions.add(transaction_id)
+
+    def disconnect(self, transaction_id: str, connection_id: str) -> None:
+        reservation = self._owned(transaction_id, connection_id)
+        code = (
+            "provider_result_unknown" if reservation.state == "sent"
+            else "consent_connection_invalid" if reservation.state == "challenged"
+            else "authorization_declined"
+        )
+        self._tombstone(reservation, code)
+
+    def retrieve(self, transaction_id: str, connection_id: str) -> None:
+        """Transactions are never bearer capabilities and content is unretrievable."""
+        reservation = self.reservations.get(transaction_id)
+        if reservation is not None and reservation.connection_id != connection_id:
+            _fail("consent_connection_invalid")
+        _fail("authorization_replayed")
+
+    def decline_disclosure(self) -> None:
+        """Represent scanner/operator decline before reservation or transport."""
+        _fail("disclosure_declined")
+
     def complete_exchange(
         self, request: Mapping[str, Any], parts: Sequence[bytes],
         challenge: Mapping[str, Any], consent_ack: Mapping[str, Any],
         response: bytes, result: Mapping[str, Any],
     ) -> bytes:
-        """Return a deterministic fixture transcript without opening a socket."""
+        """Run the deterministic lifecycle and return its byte transcript."""
         body = build_openrouter_body(request, parts)
-        validate_authority_binding(request, body, challenge, consent_ack)
-        verify_terminal_result(request, challenge, response, result)
+        transaction_id = self.reserve(
+            "fixture-connection", challenge["peer_uid"], request, parts,
+            challenge, challenge["issued_at"],
+        )
+        self.acknowledge(
+            transaction_id, "fixture-connection", consent_ack,
+            challenge["issued_at"],
+        )
+        self.mark_sent(transaction_id, "fixture-connection")
+        self.finish(transaction_id, "fixture-connection", response, result)
         return (
             encode_request(request, parts)
             + frame32(canonical_json(challenge))
