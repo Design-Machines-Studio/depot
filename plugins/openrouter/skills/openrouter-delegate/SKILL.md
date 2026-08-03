@@ -1,13 +1,13 @@
 ---
 name: openrouter-delegate
-description: Delegate policy-selected review, security analysis, second-opinion analysis, config/doc generation, and bounded execution to quality- and cost-ranked OpenRouter model slugs. Kimi K3 is the quality-first default and GLM-5.2 is the economical fallback. Powers the pipeline cascade's OpenRouter rail, generic review-agent runner, openrouter-exec runner, and dm-review external routing. Invoke with /openrouter for direct delegation.
+description: Use when the user explicitly asks to use, ask, send, delegate, or offload work to OpenRouter; requests GLM-5.2, Kimi K3, Terra, or Luna through OpenRouter; wants a cheap model for config/docs; needs a 1M-context or bulk/large-diff review; wants a second opinion via OpenRouter; or wants to reduce subscription usage. Routes security and bulk analysis to Kimi, quality backup to Terra, and economical mechanical work to Luna. Do not trigger for ordinary coding, review, pipeline, commit, or push requests that do not mention OpenRouter, a routed model, cost offload, or large-context analysis.
 ---
 
 # OpenRouter Delegation
 
 Invoke OpenRouter for coding tasks where model quality, cost, or large context make it the right rail. Coding uses Codex and OpenRouter; Claude is reserved for non-coding work.
 
-OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin pins **Kimi K3** (`moonshotai/kimi-k3`) as the quality-first default and security-analysis head, with **GLM-5.2** (`z-ai/glm-5.2`) as its immediate capacity fallback. Both carry 1M-token context.
+OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin uses **GPT-5.6 Terra** (`openai/gpt-5.6-terra`) for general quality work, **GPT-5.6 Luna** (`openai/gpt-5.6-luna`) for economical mechanical work, and **Kimi K3** (`moonshotai/kimi-k3`) as the security-analysis head. All three carry roughly 1M-token context.
 
 ## One-Shot vs Agentic (read first)
 
@@ -23,7 +23,7 @@ Pipeline agentic execution is handled by `plugins/pipeline/references/openrouter
 | Advantage | Use Case | Why OpenRouter |
 |-----------|----------|----------------|
 | **Quality-first analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi K3 leads eligible OpenRouter analysis while independent Codex review remains the consequential sign-off. |
-| **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. Kimi K3 and GLM-5.2 both hold large context. |
+| **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. Kimi K3, Terra, Luna, and GLM-5.2 all hold roughly 1M context. |
 | **Provider routing** | Privacy / throughput control | Per-request provider preferences (`OPENROUTER_ZDR=1` for no-train/no-retain providers). |
 | **Capacity relief** | Pipeline / review runs burning Codex quota | Every eligible token routed to OpenRouter preserves Codex subscription headroom. |
 
@@ -60,9 +60,9 @@ receipts when requested.
 
 Load the decision table from `${CLAUDE_SKILL_DIR}/references/model-selection.md`. It maps task types to model slugs, timeouts, and the fallback chain.
 
-**Default model:** `moonshotai/kimi-k3` (Kimi K3, 1M context). **Immediate fallback:** `z-ai/glm-5.2`.
+**Default model:** `openai/gpt-5.6-terra` (Terra, 1.05M context). **Immediate fallback:** `moonshotai/kimi-k3`.
 
-**Provider-origin invariant:** OpenRouter primary and fallback slugs must never begin with `openai/` or `anthropic/`. OpenAI runs only through native Codex CLI capability; Anthropic runs only through native Claude CLI capability. This is an operational provenance boundary, not a nationality or jurisdiction embargo.
+**Provider-origin invariant:** OpenRouter primary and fallback slugs must never begin with `anthropic/`. OpenAI may run through native Codex or the receipted OpenRouter API rail; Anthropic runs only through native Claude capability.
 
 ## MCP Control Plane
 
@@ -90,7 +90,7 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 | Agent | File | Purpose |
 |-------|------|---------|
 | **openrouter-agent-runner** | `plugins/openrouter/agents/workflow/openrouter-agent-runner.md` | Runs any eligible review-agent criteria through a policy-selected full OpenRouter model slug |
-| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Eligible full-diff-section review using Kimi K3 with a GLM-5.2 OpenRouter fallback |
+| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Eligible full-diff-section review using Kimi K3 with a Terra OpenRouter fallback |
 
 ## Prerequisites
 
@@ -107,13 +107,13 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 --active-host "$ACTIVE_HOST" \
+    --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/payload-authorization.sh)

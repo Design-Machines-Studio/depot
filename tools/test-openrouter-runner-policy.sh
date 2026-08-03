@@ -43,7 +43,7 @@ expect_rc() {
 }
 
 expect_rc 2 'native-vendor-origin invariant' 'mixed-case wrapper origin' \
-  env OPENROUTER_API_KEY=fixture "$WRAPPER" OpenAI/gpt-test prompt
+  env OPENROUTER_API_KEY=fixture "$WRAPPER" Anthropic/claude-test prompt
 expect_rc 2 'native-vendor-origin invariant' 'mixed-case exec origin' \
   "$EXEC_RUNNER" --dry-run --model Anthropic/claude-test
 
@@ -495,7 +495,7 @@ cat > "$FIXTURE_ROOT/fake-workflow-kernel.sh" <<'EOF'
 set -euo pipefail
 [ "${1:-}" = "resolve-plugin-bundle" ] || exit 2
 cat <<'JSON'
-{"selected_root":"~/openrouter-bundle","version":"1.7.2","cache_class":"fixture","reason":"offline-test"}
+{"selected_root":"~/openrouter-bundle","version":"1.8.0","cache_class":"fixture","reason":"offline-test"}
 JSON
 EOF
 chmod +x "$FIXTURE_ROOT/fake-workflow-kernel.sh"
@@ -524,9 +524,9 @@ cmp "$FIXTURE_ROOT/expected.prompt" "$FIXTURE_ROOT/actual.prompt"
 jq -e '.implementedBy == "openrouter" and .status == "committed"
   and (.verification | startswith("deferred_to_native_reviewer:"))' \
   "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
-jq -e '.requestedModel == "moonshotai/kimi-k3"
-  and .attemptedModels == ["moonshotai/kimi-k3"]
-  and .actualModel == "moonshotai/kimi-k3"
+jq -e '.requestedModel == "z-ai/glm-5.2"
+  and .attemptedModels == ["z-ai/glm-5.2"]
+  and .actualModel == "z-ai/glm-5.2"
   and .servingProviderProvenance == "not_reported_by_completion"
   and .fallback == false' \
   "$FIXTURE_ROOT/exec-receipt.json" >/dev/null
@@ -593,6 +593,7 @@ cp "$FIXTURE_ROOT/wrapper-fallback.sh" "$BUNDLE_REFS/openrouter-wrapper.sh"
   env HOME="$FAKE_HOME" WORKFLOW_KERNEL="$FIXTURE_ROOT/fake-workflow-kernel.sh" \
     OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
     OPENROUTER_PAYLOAD_APPROVAL_SHA256="$expected_payload_sha" \
+    OPENROUTER_EXEC_MODEL=moonshotai/kimi-k3 \
     OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
     OPENROUTER_EXEC_VERIFY_CMD='grep -Fq "fallback middleware" auth/session.go' \
     OPENROUTER_EXEC_COMMIT_MSG='test: fallback receipt' \

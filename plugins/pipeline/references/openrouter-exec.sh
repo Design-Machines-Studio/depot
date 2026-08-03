@@ -14,7 +14,7 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 MODE="run"
-MODEL="${OPENROUTER_EXEC_MODEL:-moonshotai/kimi-k3}"
+MODEL="${OPENROUTER_EXEC_MODEL:-z-ai/glm-5.2}"
 FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
@@ -36,7 +36,7 @@ for candidate in "$MODEL" "$FALLBACK_MODEL"; do
   [ -z "$candidate" ] && continue
   candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
   case "$candidate_origin" in
-    openai/*|anthropic/*)
+    anthropic/*)
       echo "openrouter-exec: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
       exit 2
       ;;
@@ -71,7 +71,7 @@ elif [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ]; then
 fi
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -82,7 +82,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     }
 else
   BUNDLE_JSON="$("$KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -145,7 +145,7 @@ if ! "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
 fi
 PAYLOAD_SHA256="$("$AUTHORIZATION" snapshot --output "$AUTHORIZATION_RECEIPT" \
   --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE")"
-AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"
+AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}"
 case "$AUTHORIZATION_MODE" in
   exact-digest)
     [ -n "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ] || {

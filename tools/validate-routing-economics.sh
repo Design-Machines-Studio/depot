@@ -292,13 +292,13 @@ if [ -f "$routing" ] && [ -f "$model_cascade" ]; then
   jq -e '
     .invariants.providerOrigin == {
       "schemaVersion":1,
-      "openrouterForbiddenModelPrefixes":["openai/","anthropic/"],
-      "nativeOpenAIExecution":"codex-cli-only",
+      "openrouterForbiddenModelPrefixes":["anthropic/"],
+      "nativeOpenAIExecution":"codex-cli-preferred-or-openrouter-api",
       "nativeAnthropicExecution":"claude-cli-only",
       "genericNativeVendorFallback":"unavailable",
       "appliesTo":["primary","fallback"],
       "failureMode":"fail-closed-before-provider-contact",
-      "rationale":"Provider origin is operational provenance. Third-party OpenRouter models remain eligible after disclosure and output controls; nationality is not a routing embargo."
+      "rationale":"Provider origin is receipted explicitly. OpenAI and third-party OpenRouter models remain eligible after disclosure and output controls; Anthropic remains native-only."
     }
   ' "$routing" >/dev/null || { printf "  FAIL  routing policy provider-origin invariant is missing or malformed\n"; failures=1; }
   drift="$(jq -rs '

@@ -73,7 +73,7 @@ for candidate in "$MODEL" "$FALLBACK"; do
   }
   candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
   case "$candidate_origin" in
-    openai/*|anthropic/*)
+    anthropic/*)
       echo "### RUNNER FAILURE: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
       exit 2
       ;;
@@ -475,7 +475,7 @@ validate_model_slug "$response_model" || {
   exit 1
 }
 case "$(printf '%s' "$response_model" | tr '[:upper:]' '[:lower:]')" in
-  openai/*|anthropic/*)
+  anthropic/*)
     write_failure_receipt error "native_vendor_origin" "" "$http" || true
     echo "### RUNNER FAILURE: native-vendor-origin invariant rejected served model '$response_model'" >&2
     exit 1

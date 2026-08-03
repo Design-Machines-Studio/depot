@@ -1,6 +1,6 @@
 # openrouter
 
-OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked third-party OpenRouter model slugs over one endpoint. The matrix includes GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4, and Kimi K3. OpenAI and Anthropic are native-only: they run through Codex and Claude CLIs respectively, never through OpenRouter.
+OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked OpenRouter model slugs over one endpoint. The matrix includes GPT-5.6 Terra and Luna, GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4, and Kimi K3. OpenAI models may run through OpenRouter as an economical API rail; Anthropic remains native Claude-only.
 
 The direct API runner is the execution data plane. The optional official
 OpenRouter MCP is a read-only-first control plane for live model/provider
@@ -48,9 +48,8 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
 - `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).
 - `OPENROUTER_WORKLOAD=quality|security|direct|bulk|mechanical` selects the
   default provider-routing strategy; explicit provider sort/order overrides it.
-- Pipeline users may set
-  `OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` once per trusted run to
-  replace per-payload digest prompts with automatic canonical scanning plus
-  unchanged-byte verification. Direct `/openrouter` and dm-review calls retain
-  exact-digest approval by default.
+- Automatic canonical scanning plus unchanged-byte verification is the default
+  for Pipeline, direct `/openrouter`, and dm-review. Set
+  `OPENROUTER_PAYLOAD_AUTHORIZATION=exact-digest` for a run that requires
+  per-payload human approval.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.

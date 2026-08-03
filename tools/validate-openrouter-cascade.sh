@@ -45,10 +45,10 @@ else
   role="$(printf '%s' "$out" | jq -r '.role // empty' 2>/dev/null || true)"
   kind="$(printf '%s' "$out" | jq -r '.kind // empty' 2>/dev/null || true)"
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
-  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "moonshotai/kimi-k3" ]; then
+  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "z-ai/glm-5.2" ]; then
     pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter exec"
   else
-    fail "cascade should descend to quality-first openrouter_exec moonshotai/kimi-k3 when --exhausted-rail codex is set"
+    fail "cascade should descend to economical openrouter_exec z-ai/glm-5.2 when --exhausted-rail codex is set"
     printf "  ${YELLOW}GOT${RESET}   %s\n" "${out:-<empty>}"
     any_failed=1
   fi
@@ -70,7 +70,7 @@ else
   if [ "$or_role" = "premium_sub" ] &&
      printf '%s' "$or_out" | jq -e '
        .requestedProvider == "openrouter" and
-       .requestedModel == "moonshotai/kimi-k3" and
+       .requestedModel == "z-ai/glm-5.2" and
        .attemptedProvider == "codex" and
        .attemptedModel == "gpt-5.6-sol" and
        .actualImplementer == "codex" and
@@ -117,7 +117,7 @@ else
   fi
 
   origin_profile="$(mktemp "${TMPDIR:-/tmp}/openrouter-origin-profile.json.XXXXXX")"
-  jq '.hosts.codex.roles.openrouter_exec.models = ["OpenAI/gpt-test"]' \
+  jq '.hosts.codex.roles.openrouter_exec.models = ["Anthropic/claude-test"]' \
     "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" > "$origin_profile"
   set +e
   origin_out="$(CASCADE_EXHAUSTED_RAILS= PROFILE_FILE="$origin_profile" "$cascade" \
@@ -128,9 +128,9 @@ else
   rm -f "$origin_profile"
   if [ "$origin_rc" -eq 2 ] &&
      printf '%s' "$origin_out" | grep -Fq "native-vendor-origin invariant"; then
-    pass "mixed-case OpenAI/Anthropic origins fail before OpenRouter dispatch"
+    pass "mixed-case Anthropic origins fail before OpenRouter dispatch"
   else
-    fail "mixed-case native-vendor origins must be rejected on the cascade path"
+    fail "mixed-case Anthropic origins must be rejected on the cascade path"
     any_failed=1
   fi
 
@@ -368,10 +368,18 @@ forbidden_case() {
   fi
 }
 
-forbidden_case primary-openai openai/gpt-test ""
-forbidden_case fallback-openai z-ai/glm-5.2 openai/gpt-test
 forbidden_case primary-anthropic anthropic/claude-test ""
 forbidden_case fallback-anthropic z-ai/glm-5.2 anthropic/claude-test
+
+rm -f "$network_marker" "$fail_primary"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   "$wrapper" openai/gpt-test test 10 >/dev/null 2>&1 &&
+   grep -Fxq openai/gpt-test "$network_marker"; then
+  pass "allowed OpenAI API slug reaches the controlled network sentinel"
+else
+  fail "allowed OpenAI API slug must prove the sentinel is reachable"
+  any_failed=1
+fi
 
 rm -f "$network_marker" "$fail_primary"
 if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
@@ -730,7 +738,7 @@ else
   any_failed=1
 fi
 
-fallback_block="$(awk '/## Native Model Fallback Chain/{flag=1; next} /## Privacy/{flag=0} flag' "$model_selection")"
+fallback_block="$(awk '/## OpenRouter Fallback Chains/{flag=1; next} /## Kimi Provider Routing/{flag=0} flag' "$model_selection")"
 if printf '%s' "$fallback_block" | grep -q 'minimax/minimax-m3'; then
   pass "OpenRouter fallback docs include MiniMax-M3"
 else

@@ -8,7 +8,7 @@ Structured prompt patterns for each OpenRouter delegation type. Every prompt mus
 2. **Output format specified.** Tell the model exactly what structure to return.
 3. **Constraints explicit.** If findings should be P1/P2/P3, define what each severity means.
 4. **System via env, task via prompt.** The wrapper takes the system prompt from `OPENROUTER_SYSTEM`; the task content is the prompt argument (or stdin).
-5. **Provider origin.** Templates name only third-party OpenRouter slugs. `openai/*` and `anthropic/*` are invalid as either primary or fallback; those vendors use their native CLIs.
+5. **Provider origin.** Templates may name OpenAI or third-party OpenRouter slugs. `anthropic/*` is invalid as either primary or fallback and remains native Claude-only.
 6. **Coherent assets.** The caller resolves one installed OpenRouter root with workflow-kernel `resolve-plugin-bundle` and loads the wrapper, policy, boundary, and this template only from that root.
 
 ---
@@ -49,7 +49,7 @@ If no issues found, state "No issues found" explicitly.
 Focus on changed code only. Do not flag pre-existing issues in context lines.
 ```
 
-**Model:** `moonshotai/kimi-k3` (quality-first default), `z-ai/glm-5.2` native fallback. **Timeout:** 3600s (<10K lines) / 7200s (>=10K lines).
+**Model:** `moonshotai/kimi-k3` (independent quality-first default), `openai/gpt-5.6-terra` native OpenRouter fallback. **Timeout:** 3600s (<10K lines) / 7200s (>=10K lines).
 
 ---
 
@@ -64,7 +64,7 @@ For the `/openrouter` command -- general-purpose delegation.
 Respond concisely and directly.
 ```
 
-**Model:** `moonshotai/kimi-k3` unless the user passes `--model`; `z-ai/glm-5.2` is the default native capacity fallback. **Timeout:** 3600s.
+**Model:** `openai/gpt-5.6-terra` unless the user passes `--model`; `moonshotai/kimi-k3` is the default quality fallback. **Timeout:** 3600s.
 
 ---
 
@@ -87,7 +87,7 @@ Requirements:
 Output only the file content.
 ```
 
-**Model:** `z-ai/glm-5.2`. **Timeout:** 1800s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
+**Model:** `openai/gpt-5.6-luna`, with Terra as the quality fallback. **Timeout:** 1800s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
 
 ---
 

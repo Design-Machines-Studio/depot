@@ -76,7 +76,7 @@ validate_model_slug "$target_model" || {
 }
 target_model_origin="$(printf '%s' "$target_model" | tr '[:upper:]' '[:lower:]')"
 case "$target_model_origin" in
-  openai/*|anthropic/*)
+  anthropic/*)
     echo "ERROR: native-vendor-origin invariant rejected target_model: $target_model" >&2
     exit 2
     ;;
@@ -88,7 +88,7 @@ if [ -n "${fallback_model:-}" ]; then
   }
   fallback_model_origin="$(printf '%s' "$fallback_model" | tr '[:upper:]' '[:lower:]')"
   case "$fallback_model_origin" in
-    openai/*|anthropic/*)
+    anthropic/*)
       echo "ERROR: native-vendor-origin invariant rejected fallback_model: $fallback_model" >&2
       exit 2
       ;;
@@ -129,7 +129,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -139,7 +139,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
+      --minimum-version 1.8.0 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -322,7 +322,8 @@ PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot \
   --content-file "$SYS_FILE" \
   --content-file "$USER_FILE")
 
-if [ -z "${approved_payload_sha256:-}" ]; then
+AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}"
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ] && [ -z "${approved_payload_sha256:-}" ]; then
   cat <<EOF
 ### PAYLOAD APPROVAL REQUIRED
 lane: \`${target_agent_name}\`
@@ -355,14 +356,30 @@ payload approval, or orchestrator judgment is not authority for these bytes.
 If the user declines, the orchestrator records `host_disclosure_declined` and
 returns the lane to Codex.
 
-Immediately before the network call, verify that neither file changed:
+Immediately before the network call, authorize the unchanged payload according
+to the selected mode:
 
 ```bash
-"$AUTHORIZATION_HELPER" verify \
-  --manifest "$AUTHORIZATION_RECEIPT" \
-  --approved-sha256 "$approved_payload_sha256" \
-  --content-file "$SYS_FILE" \
-  --content-file "$USER_FILE"
+case "$AUTHORIZATION_MODE" in
+  exact-digest)
+    "$AUTHORIZATION_HELPER" verify \
+      --manifest "$AUTHORIZATION_RECEIPT" \
+      --approved-sha256 "$approved_payload_sha256" \
+      --content-file "$SYS_FILE" \
+      --content-file "$USER_FILE"
+    ;;
+  trusted-boundary)
+    "$AUTHORIZATION_HELPER" verify-trusted-boundary \
+      --manifest "$AUTHORIZATION_RECEIPT" \
+      --policy "$SECURITY_POLICY_RESOLVED" \
+      --content-file "$SYS_FILE" \
+      --content-file "$USER_FILE"
+    ;;
+  *)
+    echo "RUNNER FAILURE: invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2
+    exit 2
+    ;;
+esac
 
 case "$target_agent_name" in
   security-auditor*) OPENROUTER_WORKLOAD_CLASS="security" ;;
@@ -372,7 +389,7 @@ esac
 
 RESULT=$( \
   OPENROUTER_SYSTEM="$(cat "$SYS_FILE")" \
-  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+  OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
   OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
   OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
   bash "$WRAPPER_PATH" "$target_model" - "$target_timeout" "${fallback_model:-}" \

@@ -1,6 +1,6 @@
 ---
 name: openrouter
-description: Direct OpenRouter invocation with model selection. Delegates a prompt to an OpenRouter model and returns the response. Uses Kimi K3 as the quality-first default with GLM-5.2 capacity fallback.
+description: Direct OpenRouter invocation with model selection. Delegates a prompt to an OpenRouter model and returns the response. Uses Terra by default with Kimi K3 as the quality fallback.
 argument-hint: "<prompt> [--model <slug>]"
 ---
 
@@ -27,7 +27,8 @@ security completion still requires a separate full-input Codex review.
 Extract the prompt and optional `--model` flag from the user's input.
 
 - If `--model` is specified, use that slug.
-- If `--model` is not specified, use `moonshotai/kimi-k3` with `z-ai/glm-5.2` as the capacity fallback.
+- If `--model` is not specified, use `openai/gpt-5.6-terra` with
+  `moonshotai/kimi-k3` as the quality fallback.
 - If `--model` is specified, honor it exactly; do not silently replace an explicit user choice.
 
 ### Step 2: Check Prerequisites
@@ -59,7 +60,7 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -68,7 +69,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     --active-host "$ACTIVE_HOST")
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -103,19 +104,30 @@ PAYLOAD_SHA256=$("$AUTHORIZATION_PATH" snapshot \
   --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE")
 ```
 
-Ask the user to approve disclosure of the exact payload identified by
-`PAYLOAD_SHA256`; only the user can provide this authorization. Set
-`approved_payload_sha256` from that response. A general permission statement,
-the assistant's judgment, or a prior approval is not sufficient. Immediately
-before calling the wrapper:
+Read `OPENROUTER_PAYLOAD_AUTHORIZATION`, defaulting to `trusted-boundary`.
+Immediately before calling the wrapper, authorize the unchanged payload. The
+default reruns the canonical scanner without a prompt; `exact-digest` restores
+payload-specific human approval:
 
 ```bash
-"$AUTHORIZATION_PATH" verify --manifest "$AUTHORIZATION_FILE" \
-  --approved-sha256 "$approved_payload_sha256" \
-  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
+AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}"
+case "$AUTHORIZATION_MODE" in
+  trusted-boundary)
+    "$AUTHORIZATION_PATH" verify-trusted-boundary \
+      --manifest "$AUTHORIZATION_FILE" --policy "$SECURITY_POLICY_PATH" \
+      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
+    ;;
+  exact-digest)
+    # Ask the user to approve PAYLOAD_SHA256, then set approved_payload_sha256.
+    "$AUTHORIZATION_PATH" verify --manifest "$AUTHORIZATION_FILE" \
+      --approved-sha256 "$approved_payload_sha256" \
+      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
+    ;;
+  *) echo "Invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2; exit 2 ;;
+esac
 
 RESULT=$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" \
-  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+  OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
   OPENROUTER_WORKLOAD=direct \
   OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
   bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
@@ -124,8 +136,9 @@ RESULT=$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" \
 The wrapper JSON-encodes the prompt into a private request file and streams the
 response with native OpenRouter model fallback; never embed raw user input
 directly in a curl `-d` body.
-Models beginning with `openai/` or `anthropic/` are invalid on this command. Use the native Codex or Claude CLI instead.
-Payload-specific user authorization is mandatory; see
+Models beginning with `anthropic/` are invalid on this command. OpenAI and
+third-party slugs are allowed through OpenRouter; Anthropic remains native
+Claude-only. Boundary authorization is mandatory; see
 `references/invocation-protocol.md`.
 
 ### Step 5: Handle Errors

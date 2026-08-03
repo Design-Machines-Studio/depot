@@ -785,7 +785,7 @@ ACTIVE_HOST=""
 resolve_pipeline_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.34.2 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.36.0 --active-host "$ACTIVE_HOST" \
       --required-executable references/cascade-dispatch.sh \
       --required-executable references/openrouter-exec.sh \
       --required-executable references/usage-probe.sh \
@@ -794,7 +794,7 @@ resolve_pipeline_bundle() {
       --required-asset references/routing-policy.json
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.34.2 \
+      --minimum-version 1.36.0 \
       --required-executable references/cascade-dispatch.sh \
       --required-executable references/openrouter-exec.sh \
       --required-executable references/usage-probe.sh \
@@ -885,7 +885,7 @@ esac
 CASCADE_OUT=$(run_cascade "$CASCADE_EXHAUSTED_RAIL")
 CASCADE_RC=$?
 if [ "$CASCADE_RC" -eq 78 ] &&
-   [ "${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}" = "exact-digest" ]; then
+   [ "${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}" = "exact-digest" ]; then
   PAYLOAD_SHA256=$(printf '%s' "$CASCADE_OUT" | jq -er '
     select(.status == "approval_required" and .authority == "user")
     | .payloadSha256
@@ -907,10 +907,9 @@ if [ "$CASCADE_RC" -eq 78 ] &&
 fi
 ```
 
-With the default `exact-digest` mode, the preparation branch remains RC 78 and
-`human_help_required` until the user responds. A user who does not intend to
-inspect every payload may explicitly set
-`OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` once for the run. That mode
+With explicit `exact-digest` mode, the preparation branch remains RC 78 and
+`human_help_required` until the user responds. The default
+`trusted-boundary` mode
 does not enter the RC 78 branch: the canonical boundary is rerun immediately
 before every send and unchanged-byte verification remains mandatory. If the
 user explicitly declines, separately set RC 77 with

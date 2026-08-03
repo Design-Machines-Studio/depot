@@ -54,7 +54,7 @@ for relative in "${consumers[@]}"; do
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
     case "$relative" in
-      plugins/openrouter/*|plugins/pipeline/*|plugins/dm-review/*) openrouter_floor="1.7.2" ;;
+      plugins/openrouter/*|plugins/pipeline/*|plugins/dm-review/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;
     esac
     floor_calls="$(grep -Fc -- "--minimum-version $openrouter_floor" "$file" || true)"
@@ -65,9 +65,9 @@ for relative in "${consumers[@]}"; do
   fi
   pipeline_calls="$(grep -Fc 'resolve-plugin-bundle --plugin pipeline' "$file" || true)"
   if [ "$pipeline_calls" -gt 0 ]; then
-    floor_calls="$(grep -Fc -- '--minimum-version 1.34.2' "$file" || true)"
+    floor_calls="$(grep -Fc -- '--minimum-version 1.36.0' "$file" || true)"
     if [ "$floor_calls" -ne "$pipeline_calls" ]; then
-      echo "  FAIL  every Pipeline resolver call must require exact floor 1.34.2: $relative"
+      echo "  FAIL  every Pipeline resolver call must require exact floor 1.36.0: $relative"
       failures=1
     fi
   fi
@@ -114,7 +114,7 @@ for relative in \
 do
   file="$ROOT/$relative"
   grep -Fq -- '--plugin pipeline' "$file" &&
-  grep -Fq -- '--minimum-version 1.34.2' "$file" &&
+  grep -Fq -- '--minimum-version 1.36.0' "$file" &&
   grep -Fq -- '--required-asset' "$file" &&
   grep -Fq 'references/openrouter-authorization-contract.md' "$file" &&
   grep -Fq -- '--active-host' "$file" &&
@@ -163,9 +163,9 @@ do
   fi
 done
 
-grep -Fq 'openai/*|anthropic/*' \
+grep -Fq 'anthropic/*' \
   "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh" || {
-    echo "  FAIL  final wrapper lacks native-vendor pre-network rejection"
+    echo "  FAIL  final wrapper lacks Anthropic pre-network rejection"
     failures=1
   }
 for origin_guard in \

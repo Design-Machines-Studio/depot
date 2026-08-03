@@ -98,38 +98,38 @@
   "agentType": {
     "pattern-recognition-specialist": {
       "provider": "openrouter",
-      "model": "z-ai/glm-5.2",
-      "fallbackModel": "moonshotai/kimi-k3",
+      "model": "openai/gpt-5.6-luna",
+      "fallbackModel": "z-ai/glm-5.2",
       "fallbackProvider": "codex",
-      "rationale": "Pattern checks use the economical GLM-5.2 head, then the higher-quality Kimi K3 contender, before Codex fallback."
+      "rationale": "Pattern checks use low-cost Luna on the OpenRouter rail, then GLM-5.2, before Codex fallback."
     },
     "code-simplicity-reviewer": {
       "provider": "openrouter",
-      "model": "z-ai/glm-5.2",
-      "fallbackModel": "moonshotai/kimi-k3",
+      "model": "openai/gpt-5.6-luna",
+      "fallbackModel": "z-ai/glm-5.2",
       "fallbackProvider": "codex",
-      "rationale": "Simplification review uses the quality-first OpenRouter mechanical ladder before Codex fallback."
+      "rationale": "Simplification review uses low-cost Luna, then GLM-5.2, before Codex fallback."
     },
     "doc-sync-reviewer": {
       "provider": "openrouter",
-      "model": "z-ai/glm-5.2",
-      "fallbackModel": "moonshotai/kimi-k3",
+      "model": "openai/gpt-5.6-luna",
+      "fallbackModel": "z-ai/glm-5.2",
       "fallbackProvider": "codex",
       "rationale": "Documentation consistency uses OpenRouter large-context models at any diff size."
     },
     "test-coverage-reviewer": {
       "provider": "openrouter",
-      "model": "z-ai/glm-5.2",
-      "fallbackModel": "moonshotai/kimi-k3",
+      "model": "openai/gpt-5.6-luna",
+      "fallbackModel": "z-ai/glm-5.2",
       "fallbackProvider": "codex",
       "rationale": "Coverage gap detection is read-heavy and uses the OpenRouter mechanical ladder."
     },
     "openrouter-bulk-analyst": {
       "provider": "openrouter",
       "model": "moonshotai/kimi-k3",
-      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackModel": "openai/gpt-5.6-terra",
       "fallbackProvider": "codex",
-      "rationale": "Bulk/large-context analysis is Kimi K3 primary whenever OPENROUTER_API_KEY is present, with GLM-5.2 then Codex as capacity fallbacks."
+      "rationale": "Bulk/large-context analysis keeps Kimi K3 primary for provider diversity, with Terra then Codex as capacity fallbacks."
     },
     "security-auditor-openrouter": {
       "provider": "openrouter",
@@ -175,13 +175,13 @@
     "proposalOnlyEconomics": true,
     "providerOrigin": {
       "schemaVersion": 1,
-      "openrouterForbiddenModelPrefixes": ["openai/", "anthropic/"],
-      "nativeOpenAIExecution": "codex-cli-only",
+      "openrouterForbiddenModelPrefixes": ["anthropic/"],
+      "nativeOpenAIExecution": "codex-cli-preferred-or-openrouter-api",
       "nativeAnthropicExecution": "claude-cli-only",
       "genericNativeVendorFallback": "unavailable",
       "appliesTo": ["primary", "fallback"],
       "failureMode": "fail-closed-before-provider-contact",
-      "rationale": "Provider origin is operational provenance. Third-party OpenRouter models remain eligible after disclosure and output controls; nationality is not a routing embargo."
+      "rationale": "Provider origin is receipted explicitly. OpenAI and third-party OpenRouter models remain eligible after disclosure and output controls; Anthropic remains native-only."
     }
   },
   "security": {

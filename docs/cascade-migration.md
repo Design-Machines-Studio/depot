@@ -7,7 +7,7 @@ This note covers the `world-b-openrouter` changes: a shared `openrouter` provide
 1. **Unified leaf plugin `plugins/openrouter`** -- the sole external-provider primitive. It owns the wrapper, bulk analyst, and generic mechanical-agent runner; DeepSeek V4 remains a model choice through OpenRouter, not a separate plugin.
 2. **Cascade in `execution-orchestrator.md` Step 3d** -- Codex and OpenRouter form the complete coding ladder (probe headroom -> on cap, Airlift checkpoint + descend). Legacy `executor: claude` manifests normalize to Codex.
 3. **Claude is non-coding-only** -- it remains available for strategy, writing/voice, research synthesis, and optional plan critique, but never for implementation or code review.
-4. **Native vendor provenance is explicit** -- OpenAI models execute only through Codex CLI rails and Anthropic models execute only through Claude-native non-coding/compatibility rails. `openai/*` and `anthropic/*` are forbidden on every OpenRouter primary and fallback.
+4. **Provider provenance is explicit** -- native Codex remains the preferred OpenAI coding rail, while receipted `openai/*` OpenRouter models are eligible for economical API work and capacity fallback. Anthropic models execute only through Claude-native non-coding/compatibility rails and `anthropic/*` remains forbidden on every OpenRouter primary and fallback.
 5. **Installed assets resolve coherently** -- workflow-kernel `resolve-plugin-bundle` selects one highest compatible semantic-version root across Claude/Codex caches. Wrapper, boundary, policy, protocol, and template paths are derived from that root; assets are never combined by independent mtime lookup.
 
 ## Environment variables
@@ -24,7 +24,7 @@ This note covers the `world-b-openrouter` changes: a shared `openrouter` provide
 
 `OPENROUTER_API_KEY` lives in environment or settings only -- `.env` and `*.local` are gitignored. Claude's main loop is never routed through OpenRouter (no `ANTHROPIC_BASE_URL`).
 
-The generic host exposes no native OpenAI or Anthropic substitution. If the corresponding native CLI capability is absent, that route is unavailable and the receipt says so; it is never translated to OpenRouter.
+The generic host exposes no native OpenAI or Anthropic substitution. It may use explicitly configured OpenAI or third-party OpenRouter roles, while Anthropic intent remains unavailable rather than translated.
 
 ## Classes, kinds, and the ladder
 
@@ -35,7 +35,7 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 | `logic`, `integration`, `ui` | `codex` | Codex subscription | Kimi K3 OpenRouter exec -> quality-first OpenRouter ladder |
 | `config`, `docs`, mechanical logic | `openrouter` | Kimi K3 OpenRouter exec | quality-first OpenRouter ladder -> Codex subscription |
 
-**Kimi K3 is the quality-first OpenRouter execution and bulk-analysis head; GLM-5.2 (`z-ai/glm-5.2`) remains the immediate capacity fallback and the preferred primary for lightweight mechanical review.** The coding quality floor is 70. `harness-profile.json` is the only host-specific file (it resolves abstract roles to concrete rails per host).
+**Native Codex subscription capacity remains the first coding rail. Kimi K3 is the independent security and bulk-analysis head; Terra is its OpenRouter quality backup; Luna is the economical mechanical rail.** The coding quality floor is 70. `harness-profile.json` is the only host-specific file (it resolves abstract roles to concrete rails per host).
 
 ## One-shot vs agentic (important)
 
@@ -57,7 +57,7 @@ export OPENROUTER_API_KEY="sk-or-..."   # activates the cascade + dm-review exte
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-OPENROUTER_API_KEY set        -> openrouter-bulk-analyst (Kimi K3 primary, GLM-5.2 fallback)
+OPENROUTER_API_KEY set        -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
 neither                       -> Codex-native review
 ```
 

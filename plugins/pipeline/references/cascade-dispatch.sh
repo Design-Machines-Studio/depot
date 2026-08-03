@@ -109,7 +109,7 @@ resolve_openrouter_bundle() {
   esac
   if [ -n "$active" ]; then
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
+      --minimum-version 1.8.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -119,7 +119,7 @@ resolve_openrouter_bundle() {
       }
   else
     result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
+      --minimum-version 1.8.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -172,7 +172,7 @@ dispatch_wrapper() {
     --content-file "$system_file" --content-file "$prompt_file")" || {
     rm -f "$system_file" "$prompt_file" "$manifest_file"; return 1;
   }
-  authorization_mode="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"
+  authorization_mode="${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}"
   case "$authorization_mode" in
     exact-digest)
       if [ -z "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ]; then
@@ -307,7 +307,7 @@ for role in $LADDER; do
   for model in $models; do
     model_origin="$(printf '%s' "$model" | tr '[:upper:]' '[:lower:]')"
     case "$kind:$model_origin" in
-      wrapper:openai/*|wrapper:anthropic/*|openrouter_exec:openai/*|openrouter_exec:anthropic/*)
+      wrapper:anthropic/*|openrouter_exec:anthropic/*)
         echo "cascade-dispatch: native-vendor-origin invariant rejected OpenRouter model '$model'" >&2
         exit 2
         ;;

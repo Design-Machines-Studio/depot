@@ -24,7 +24,9 @@ openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 - `[fallback-slug]` -- a second model included in the same ordered OpenRouter
   `models` request
 
-Both model arguments must be third-party OpenRouter slugs. `openai/*` and `anthropic/*` are rejected before network contact; use native Codex and Claude CLIs for those vendors.
+Both model arguments must be valid OpenRouter slugs. `openai/*` is allowed on
+the API fallback rail; `anthropic/*` is rejected before network contact and
+remains native Claude-only.
 
 **Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- stdout is the answer.
 
@@ -40,7 +42,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -48,7 +50,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
+      --minimum-version 1.8.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -166,7 +168,7 @@ domains = { "openrouter.ai" = "allow" }
 ```
 
 This controls whether sandboxed commands can reach OpenRouter. It does not
-override payload-specific disclosure review, workspace policy, or a declined
+override byte-bound disclosure authorization, workspace policy, or a declined
 boundary check.
 
 ## API Endpoint
@@ -203,7 +205,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 | `0` | Success | stdout is the model's text content. |
 | `28` | Timeout | Report the first-byte, idle, or overall timeout from the failure receipt; proceed without OpenRouter input. Do not issue a blind client retry. |
 | `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` to stderr. Skip gracefully. |
-| `2` | Bad args / origin rejection | Missing arguments or an `openai/*` / `anthropic/*` primary or fallback. |
+| `2` | Bad args / origin rejection | Missing arguments or an `anthropic/*` primary or fallback. |
 
 When a fallback is present, OpenRouter receives both models in one ordered
 request and handles eligible fallback errors server-side. The wrapper never

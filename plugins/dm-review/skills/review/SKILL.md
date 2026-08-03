@@ -212,7 +212,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.7.2 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.8.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -222,7 +222,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.7.2 \
+        --minimum-version 1.8.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -412,11 +412,11 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
 | `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |
-| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `doc-sync-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `test-coverage-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s; 7200s at or above 10K diff lines |
+| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -429,28 +429,32 @@ Provider routing (OPENROUTER_AVAILABLE={true|false}):
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
 
-#### Byte-bound user approval
+#### Byte-bound authorization
 
-Every external lane requires payload-specific user authorization; general
-OpenRouter permission and orchestrator judgment are not disclosure authority.
-Approval uses an explicit two-pass protocol:
+Every external lane requires byte-bound authorization. The default
+`trusted-boundary` mode automatically reruns the canonical scanner and verifies
+unchanged bytes immediately before network contact. Set
+`OPENROUTER_PAYLOAD_AUTHORIZATION=exact-digest` to restore human approval for
+each distinct payload. Authorization uses this protocol:
 
 1. The generic runner materializes the exact eligible system and user prompt
    files after the content boundary and runs
    `payload-authorization.sh snapshot`.
-2. With an empty `approved_payload_sha256`, it returns
-   `### PAYLOAD APPROVAL REQUIRED` and the content-free combined digest without
-   network contact.
-3. The root orchestrator collects all lane digests, presents one content-free
+2. In `trusted-boundary` mode, the runner calls
+   `payload-authorization.sh verify-trusted-boundary` with the canonical policy
+   and continues without a prompt.
+3. In `exact-digest` mode with an empty `approved_payload_sha256`, it returns
+   `### PAYLOAD APPROVAL REQUIRED`. The root orchestrator collects all lane
+   digests, presents one content-free
    batch mapping each digest to its logical lane, requested model, and fallback
    model, asks the user once, and re-dispatches each identical runner input with
    only that lane's user-approved digest. A child runner cannot self-approve.
-4. The runner rebuilds the payload and runs `payload-authorization.sh verify`
+4. In `exact-digest` mode, the runner rebuilds the payload and runs `payload-authorization.sh verify`
    with the approved digest immediately before network contact.
-5. A fresh approval is required after any mutation, reordering, or membership
+5. Exact-digest mode requires fresh approval after any mutation, reordering, or membership
    change. A batch approval is valid only when it names every distinct combined
    payload digest in that batch.
-6. On decline, the root records `host_disclosure_declined` and uses the Codex fallback
+6. On scanner or human decline, the root records `host_disclosure_declined` and uses the Codex fallback
    without retrying around the decision.
 
 ---
@@ -482,8 +486,8 @@ authorization, invocation, fallback, and provenance implementation.
      to bind runner execution to the definition that was loaded; never publish it
    - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --
      durable resolver evidence (never the selected root)
-   - `approved_payload_sha256` -- empty on the preparation pass; on the second
-     pass, the exact per-lane digest supplied by the user's approval
+   - `approved_payload_sha256` -- normally empty; in explicit `exact-digest`
+     mode, empty on preparation and set to the exact user-approved lane digest
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
@@ -531,10 +535,11 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
 5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
-**Approval and failure handling:** Collect every
-`### PAYLOAD APPROVAL REQUIRED` result before asking the user; it is a
-preparation state, not success or failure. Re-dispatch approved lanes with
-identical inputs and their approved digest. If a routed agent emits
+**Authorization and failure handling:** In explicit `exact-digest` mode,
+collect every `### PAYLOAD APPROVAL REQUIRED` result before asking the user; it
+is a preparation state, not success or failure. Re-dispatch approved lanes with
+identical inputs and their approved digest. The default trusted-boundary mode
+does not produce that preparation result. If a routed agent emits
 `### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. If
 it emits `### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same
 criteria locally for the named paths. Do not mark the run clean until the
