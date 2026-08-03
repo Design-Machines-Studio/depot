@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -19,6 +20,8 @@ import (
 )
 
 const ProductionURL = "https://openrouter.ai/api/v1/chat/completions"
+
+const maxProviderMetadata = int64(128 << 10)
 
 type Transport struct {
 	Origin    string
@@ -70,10 +73,30 @@ func (t *Transport) Send(ctx context.Context, credential *Credential, body []byt
 			return (&tls.Dialer{NetDialer: d, Config: c}).DialContext(ctx, network, address)
 		}
 	}
-	conn, err := dial(requestCtx, "tcp", u.Host, config) // the sole attempt; no retry exists.
+	port := u.Port()
+	if port == "" {
+		port = "443"
+	}
+	address := net.JoinHostPort(u.Hostname(), port)
+	conn, err := dial(requestCtx, "tcp", address, config) // the sole attempt; no retry exists.
 	if err != nil {
 		return nil, ErrTransport
 	}
+	if deadline, ok := requestCtx.Deadline(); ok {
+		if err := conn.SetDeadline(deadline); err != nil {
+			_ = conn.Close()
+			return nil, ErrTransport
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-requestCtx.Done():
+			_ = conn.Close()
+		case <-done:
+		}
+	}()
+	defer close(done)
 	closed := false
 	defer func() {
 		if !closed {
@@ -98,8 +121,17 @@ func (t *Transport) Send(ctx context.Context, credential *Credential, body []byt
 	if err := writeConnection(conn, body); err != nil {
 		return nil, ErrTransport
 	}
-	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodPost})
+	wire := &io.LimitedReader{R: conn, N: maxProviderResponse + maxProviderMetadata + 1}
+	headerBlock, err := readHeaderBlock(wire, maxProviderMetadata)
 	if err != nil {
+		return nil, ErrTransport
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(io.MultiReader(bytes.NewReader(headerBlock), wire)), &http.Request{Method: http.MethodPost})
+	if err != nil {
+		return nil, ErrTransport
+	}
+	if resp.ContentLength > maxProviderResponse {
+		_ = resp.Body.Close()
 		return nil, ErrTransport
 	}
 	limited := io.LimitReader(resp.Body, maxProviderResponse+1)
@@ -107,7 +139,7 @@ func (t *Transport) Send(ctx context.Context, credential *Credential, body []byt
 	bodyCloseErr := resp.Body.Close()
 	connCloseErr := conn.Close()
 	closed = true
-	if readErr != nil || bodyCloseErr != nil || (connCloseErr != nil && !errors.Is(connCloseErr, net.ErrClosed)) || int64(len(response)) > maxProviderResponse {
+	if readErr != nil || bodyCloseErr != nil || (connCloseErr != nil && !errors.Is(connCloseErr, net.ErrClosed)) || int64(len(response)) > maxProviderResponse || wire.N <= 0 {
 		zero(response)
 		return nil, ErrTransport
 	}
@@ -118,6 +150,36 @@ func (t *Transport) Send(ctx context.Context, credential *Credential, body []byt
 }
 
 func protocolPath() string { return "/api/v1/chat/completions" }
+
+func readHeaderBlock(reader io.Reader, limit int64) ([]byte, error) {
+	if limit < 4 {
+		return nil, ErrTransport
+	}
+	header := make([]byte, 0, minInt64(limit, 4096))
+	var one [1]byte
+	for int64(len(header)) < limit {
+		n, err := reader.Read(one[:])
+		if n == 1 {
+			header = append(header, one[0])
+			if len(header) >= 4 && bytes.Equal(header[len(header)-4:], []byte("\r\n\r\n")) {
+				return header, nil
+			}
+		}
+		if err != nil {
+			zero(header)
+			return nil, ErrTransport
+		}
+	}
+	zero(header)
+	return nil, ErrTransport
+}
+
+func minInt64(value int64, capValue int) int {
+	if value < int64(capValue) {
+		return int(value)
+	}
+	return capValue
+}
 
 type ResponseSink interface {
 	ConnectionID() string
@@ -185,6 +247,8 @@ func (s *OriginalConnectionSink) WriteTerminalAndClose(ctx context.Context, payl
 	if s == nil || s.Conn == nil || !s.used || s.closed || ctx.Err() != nil || len(payload) > protocol.MaxFrameBytes {
 		return ErrSink
 	}
+	s.closed = true
+	defer s.Conn.Close()
 	var length [4]byte
 	binary.BigEndian.PutUint32(length[:], uint32(len(payload)))
 	if writeConnection(s.Conn, length[:]) != nil || writeConnection(s.Conn, payload) != nil {
@@ -194,10 +258,10 @@ func (s *OriginalConnectionSink) WriteTerminalAndClose(ctx context.Context, payl
 		if half.CloseWrite() != nil {
 			return ErrSink
 		}
-	} else if s.Conn.Close() != nil {
+	}
+	if err := s.Conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 		return ErrSink
 	}
-	s.closed = true
 	return nil
 }
 

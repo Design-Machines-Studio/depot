@@ -141,7 +141,7 @@ type Authority interface {
 	Authorize(context.Context, string, string, authority.Peer, string) (authority.Assertion, error)
 	Cancel(context.Context, string) error
 	BeginSend(context.Context, string, string, authority.Peer) (authority.SendRight, error)
-	Finalize(context.Context, authority.SendRight, int64, string) error
+	Finalize(context.Context, authority.SendRight, int64, string, string) error
 	SignFinalized(authority.SendRight, []byte) ([]byte, error)
 }
 
@@ -272,23 +272,20 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	response, sendErr := d.Transport.Send(ctx, credential, body)
 	defer zero(response)
 	if sendErr != nil {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "outcome_unknown")
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "outcome_unknown", "")
 		return TerminalResult{}, sendErr
 	}
 	var projected providerResponse
 	if json.Unmarshal(response, &projected) != nil || projected.ID == "" || projected.Provider == "" || len(projected.Usage) == 0 || string(projected.Usage) == "null" || !exactModel(projected.Model, in.Request.Models) {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure")
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
 		return TerminalResult{}, ErrProvenance
 	}
 	responseDigest, responseLength := protocol.Digest(response), int64(len(response))
 	if err := sink.WriteResponse(ctx, response); err != nil {
-		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown")
+		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown", "")
 		return TerminalResult{}, ErrSink
 	}
 	zero(response)
-	if err := d.Authority.Finalize(ctx, right, responseLength, "verified"); err != nil {
-		return TerminalResult{}, err
-	}
 	signerBytes, _ := protocol.CanonicalJSON(in.Challenge.ResultSigner)
 	// Provider is the frozen destination projection, not serving-provider
 	// provenance. The exact raw response digest transitively binds the verified
@@ -300,7 +297,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	_ = json.Unmarshal(unsignedBytes, &unsigned)
 	delete(unsigned, "signature")
 	canonical, _ := protocol.CanonicalJSON(unsigned)
-	sig, signErr := d.Authority.SignFinalized(right, append([]byte("workflow-authority\x00provider-dispatch-v1\x00terminal\x00"), canonical...))
+	terminalInput := append([]byte("workflow-authority\x00provider-dispatch-v1\x00terminal\x00"), canonical...)
+	if err := d.Authority.Finalize(ctx, right, responseLength, "verified", protocol.Digest(terminalInput)); err != nil {
+		return TerminalResult{}, err
+	}
+	sig, signErr := d.Authority.SignFinalized(right, terminalInput)
 	if signErr != nil {
 		return TerminalResult{}, signErr
 	}

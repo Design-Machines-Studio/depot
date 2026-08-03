@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"io"
@@ -313,6 +314,42 @@ func TestProductionTransportHasNoProxyOrRedirect(t *testing.T) {
 	}
 	if tr.DialTLS == nil || tr.TLSConfig == nil {
 		t.Fatal("production TLS unavailable")
+	}
+	credential := &Credential{bytes: []byte("production-fixture-sentinel")}
+	var address string
+	tr.DialTLS = func(_ context.Context, _, candidate string, _ *tls.Config) (net.Conn, error) {
+		address = candidate
+		return nil, errors.New("stop before network")
+	}
+	if _, err := tr.Send(context.Background(), credential, []byte("{}")); err == nil {
+		t.Fatal("injected dial failure accepted")
+	}
+	if address != "openrouter.ai:443" {
+		t.Fatalf("production address=%q", address)
+	}
+}
+
+func TestTransportCancellationClosesPostDialIO(t *testing.T) {
+	client, server := net.Pipe()
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	tr := &Transport{Origin: "https://fixture.invalid" + protocol.Path, Fixture: true, Timeout: time.Minute, DialTLS: func(context.Context, string, string, *tls.Config) (net.Conn, error) {
+		return client, nil
+	}}
+	done := make(chan error, 1)
+	go func() {
+		_, err := tr.Send(ctx, &Credential{bytes: []byte("fixture"), fixture: true}, []byte("{}"))
+		done <- err
+	}()
+	go io.Copy(io.Discard, server)
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancelled transport succeeded")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancellation did not close post-dial I/O")
 	}
 }
 
