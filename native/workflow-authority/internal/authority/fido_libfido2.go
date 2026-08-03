@@ -94,23 +94,103 @@ static void dm_operation_free(dm_operation *op) {
 	if (op->dev) { fido_dev_close(op->dev); fido_dev_free(&op->dev); }
 	if (op->assert) fido_assert_free(&op->assert); free(op->path); free(op);
 }
+
+typedef struct {
+	unsigned char *id; size_t id_len;
+	unsigned char *pubkey; size_t pubkey_len;
+	unsigned char *aaguid; size_t aaguid_len;
+	unsigned int flags;
+} dm_enrollment;
+
+static void dm_free_enrollment(dm_enrollment *out) {
+	if (out == NULL) return;
+	if (out->id) { explicit_bzero(out->id, out->id_len); free(out->id); }
+	if (out->pubkey) { explicit_bzero(out->pubkey, out->pubkey_len); free(out->pubkey); }
+	if (out->aaguid) { explicit_bzero(out->aaguid, out->aaguid_len); free(out->aaguid); }
+	memset(out, 0, sizeof(*out));
+}
+
+typedef struct { fido_dev_t *dev; fido_cred_t *cred; char *path; } dm_enroll_operation;
+
+static dm_enroll_operation *dm_enroll_operation_new(const char *path, const char *rp_id,
+	const unsigned char *challenge_hash, size_t challenge_hash_len,
+	const unsigned char *user_id, size_t user_id_len,
+	const unsigned char *exclude_id, size_t exclude_id_len) {
+	dm_enroll_operation *op = NULL;
+	if (!path || !rp_id || !challenge_hash || challenge_hash_len != 32 || !user_id || user_id_len == 0 || user_id_len > 64) return NULL;
+	if ((op = calloc(1, sizeof(*op))) == NULL) return NULL; fido_init(0);
+	if ((op->dev = fido_dev_new()) == NULL || (op->cred = fido_cred_new()) == NULL) goto fail;
+	if ((op->path = strdup(path)) == NULL) goto fail;
+	if (fido_dev_set_timeout(op->dev, 30000) != FIDO_OK) goto fail;
+	if (fido_cred_set_type(op->cred, COSE_ES256) != FIDO_OK) goto fail;
+	if (fido_cred_set_clientdata_hash(op->cred, challenge_hash, challenge_hash_len) != FIDO_OK) goto fail;
+	if (fido_cred_set_rp(op->cred, rp_id, "Workflow Authority") != FIDO_OK) goto fail;
+	if (fido_cred_set_user(op->cred, user_id, user_id_len, "workflow-authority", "Workflow Authority", NULL) != FIDO_OK) goto fail;
+	if (fido_cred_set_rk(op->cred, FIDO_OPT_FALSE) != FIDO_OK) goto fail;
+	if (fido_cred_set_uv(op->cred, FIDO_OPT_TRUE) != FIDO_OK) goto fail;
+	if (exclude_id_len > 0 && (!exclude_id || fido_cred_exclude(op->cred, exclude_id, exclude_id_len) != FIDO_OK)) goto fail;
+	return op;
+fail:
+	if (op) { if (op->dev) { fido_dev_close(op->dev); fido_dev_free(&op->dev); } if (op->cred) fido_cred_free(&op->cred); free(op->path); free(op); }
+	return NULL;
+}
+
+static int dm_enroll_operation_run(dm_enroll_operation *op, const char *expected_rp, dm_enrollment *out) {
+	int rc = FIDO_ERR_INTERNAL; const char *fmt = NULL; const char *actual_rp = NULL;
+	if (!op || !op->dev || !op->cred || !expected_rp || !out) return FIDO_ERR_INVALID_ARGUMENT;
+	memset(out, 0, sizeof(*out)); fido_init(0);
+	if ((rc = fido_dev_open(op->dev, op->path)) != FIDO_OK) goto done;
+	if (!fido_dev_has_uv(op->dev)) { rc = FIDO_ERR_UNSUPPORTED_OPTION; goto done; }
+	// NULL is intentional: host-PIN fallback is outside the authority model.
+	if ((rc = fido_dev_make_cred(op->dev, op->cred, NULL)) != FIDO_OK) goto done;
+	fmt = fido_cred_fmt(op->cred); actual_rp = fido_cred_rp_id(op->cred);
+	if (!fmt || strcmp(fmt, "packed") != 0 || !actual_rp || strcmp(actual_rp, expected_rp) != 0 || fido_cred_type(op->cred) != COSE_ES256) { rc = FIDO_ERR_INVALID_ARGUMENT; goto done; }
+	out->flags = fido_cred_flags(op->cred);
+	if ((out->flags & 0x05u) != 0x05u) { rc = FIDO_ERR_INVALID_ARGUMENT; goto done; }
+	if (fido_cred_x5c_ptr(op->cred) != NULL) rc = fido_cred_verify(op->cred);
+	else rc = fido_cred_verify_self(op->cred);
+	if (rc != FIDO_OK) goto done;
+	if ((rc = dm_copy(&out->id, &out->id_len, fido_cred_id_ptr(op->cred), fido_cred_id_len(op->cred))) != FIDO_OK) goto done;
+	if ((rc = dm_copy(&out->pubkey, &out->pubkey_len, fido_cred_pubkey_ptr(op->cred), fido_cred_pubkey_len(op->cred))) != FIDO_OK) goto done;
+	if ((rc = dm_copy(&out->aaguid, &out->aaguid_len, fido_cred_aaguid_ptr(op->cred), fido_cred_aaguid_len(op->cred))) != FIDO_OK) goto done;
+	rc = FIDO_OK;
+done:
+	if (rc != FIDO_OK) dm_free_enrollment(out); return rc;
+}
+
+static int dm_enroll_operation_cancel(dm_enroll_operation *op) {
+	if (!op || !op->dev) return FIDO_ERR_INVALID_ARGUMENT; fido_init(0); return fido_dev_cancel(op->dev);
+}
+
+static void dm_enroll_operation_free(dm_enroll_operation *op) {
+	if (!op) return;
+	if (op->dev) { fido_dev_close(op->dev); fido_dev_free(&op->dev); }
+	if (op->cred) fido_cred_free(&op->cred); free(op->path); free(op);
+}
 */
 import "C"
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
+	"math/big"
 	"syscall"
 	"time"
 	"unsafe"
 
+	"designmachines.dev/workflow-authority/internal/enrollment"
 	"designmachines.dev/workflow-authority/internal/protocol"
 )
 
 type libfido2Adapter struct{ DevicePath string }
 
-func NewFIDOAdapter() FIDO { return &libfido2Adapter{DevicePath: "/dev/hidraw0"} }
+func NewFIDOAdapter() FIDO                 { return &libfido2Adapter{DevicePath: "/dev/hidraw0"} }
+func NewFIDOEnroller() enrollment.Enroller { return &libfido2Adapter{DevicePath: "/dev/hidraw0"} }
 func (a *libfido2Adapter) Readiness(ctx context.Context) Readiness {
 	if ctx.Err() != nil || a.DevicePath == "" {
 		return Readiness{Production: false, Adapter: "libfido2", Version: FIDO2Version}
@@ -165,6 +245,95 @@ func (a *libfido2Adapter) Assert(ctx context.Context, challenge []byte, credenti
 
 func (a *libfido2Adapter) Verify(_ context.Context, challenge []byte, credential Credential, assertion Assertion) error {
 	return verifyES256Assertion(challenge, credential, assertion)
+}
+
+type enrollmentResult struct {
+	credential enrollment.Credential
+	err        error
+}
+
+func (a *libfido2Adapter) Enroll(ctx context.Context, request enrollment.Request) (enrollment.Credential, error) {
+	if ctx.Err() != nil || a.DevicePath == "" || request.Generation == 0 || len(request.ExcludeCredentialID) > 4096 {
+		return enrollment.Credential{}, enrollment.ErrUnavailable
+	}
+	var challenge [32]byte
+	if _, err := rand.Read(challenge[:]); err != nil {
+		return enrollment.Credential{}, enrollment.ErrUnavailable
+	}
+	userID := sha256.Sum256([]byte("workflow-authority.designmachines.local/root-authority"))
+	cpath := C.CString(a.DevicePath)
+	crp := C.CString(enrollment.RPID)
+	defer C.free(unsafe.Pointer(cpath))
+	defer C.free(unsafe.Pointer(crp))
+	var exclude *C.uchar
+	if len(request.ExcludeCredentialID) > 0 {
+		exclude = (*C.uchar)(unsafe.Pointer(&request.ExcludeCredentialID[0]))
+	}
+	op := C.dm_enroll_operation_new(cpath, crp, (*C.uchar)(unsafe.Pointer(&challenge[0])), 32, (*C.uchar)(unsafe.Pointer(&userID[0])), 32, exclude, C.size_t(len(request.ExcludeCredentialID)))
+	if op == nil {
+		return enrollment.Credential{}, enrollment.ErrUnavailable
+	}
+	results := make(chan enrollmentResult, 1)
+	release := make(chan struct{})
+	go func() {
+		var out C.dm_enrollment
+		expectedRP := C.CString(enrollment.RPID)
+		rc := C.dm_enroll_operation_run(op, expectedRP, &out)
+		C.free(unsafe.Pointer(expectedRP))
+		result := enrollmentResult{err: enrollment.ErrUnavailable}
+		if rc == C.FIDO_OK {
+			rawPublic := C.GoBytes(unsafe.Pointer(out.pubkey), C.int(out.pubkey_len))
+			publicDER, err := marshalES256PublicKey(rawPublic)
+			for i := range rawPublic {
+				rawPublic[i] = 0
+			}
+			if err == nil {
+				id := C.GoBytes(unsafe.Pointer(out.id), C.int(out.id_len))
+				result = enrollmentResult{credential: enrollment.Credential{Reference: enrollment.ReferenceForID(id), ID: id, PublicKey: publicDER, Algorithm: enrollment.ES256, Generation: request.Generation, RPID: enrollment.RPID, EnrolledAt: time.Now().UTC(), Status: "active", InternalUV: uint(out.flags)&4 != 0, AAGUID: C.GoBytes(unsafe.Pointer(out.aaguid), C.int(out.aaguid_len)), Format: "packed"}}
+			}
+		}
+		C.dm_free_enrollment(&out)
+		results <- result
+		<-release
+		C.dm_enroll_operation_free(op)
+	}()
+	select {
+	case result := <-results:
+		close(release)
+		if result.err != nil || enrollment.ValidateCredential(result.credential) != nil {
+			result.credential.Destroy()
+			return enrollment.Credential{}, enrollment.ErrUnavailable
+		}
+		return result.credential, nil
+	case <-ctx.Done():
+		if C.dm_enroll_operation_cancel(op) != C.FIDO_OK {
+			close(release)
+			return enrollment.Credential{}, enrollment.ErrUnavailable
+		}
+		select {
+		case result := <-results:
+			result.credential.Destroy()
+		case <-time.After(500 * time.Millisecond):
+		}
+		close(release)
+		return enrollment.Credential{}, enrollment.ErrConflict
+	}
+}
+
+func marshalES256PublicKey(raw []byte) ([]byte, error) {
+	if len(raw) == 65 && raw[0] == 4 {
+		raw = raw[1:]
+	}
+	if len(raw) != 64 {
+		return nil, enrollment.ErrUnavailable
+	}
+	curve := elliptic.P256()
+	x := new(big.Int).SetBytes(raw[:32])
+	y := new(big.Int).SetBytes(raw[32:])
+	if !curve.IsOnCurve(x, y) {
+		return nil, enrollment.ErrUnavailable
+	}
+	return x509.MarshalPKIXPublicKey(&ecdsa.PublicKey{Curve: curve, X: x, Y: y})
 }
 
 // LinuxPeerCredentials is eligibility evidence only. It never authorizes send.
