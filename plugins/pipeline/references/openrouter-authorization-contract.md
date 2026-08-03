@@ -91,8 +91,10 @@ classes are part of the fail-closed boundary:
   preserving the content-free receipt, the adapter must require zero response
   bytes and match its repository, run, lane, candidate, workload, ordered
   models, exact request-body digest, outcome/exit pair, chain/cleanup fields,
-  and production signature shape. The client has already verified the
-  signature and its challenge binding, including the caller nonce.
+  and production signature shape. Selected-model, generation, serving-provider,
+  usage, and fallback fields must be `null`; failure paths cannot infer
+  provenance that the provider did not verify. The client has already verified
+  the signature and its challenge binding, including the caller nonce.
 - `75` means the post-dial outcome is unsigned or unverifiable. It carries no
   receipt and is never converted into one by Pipeline.
 
@@ -103,6 +105,8 @@ external provider, or treat an automatic Codex fallback as completion. A
 validated `73`/`74` receipt may pass unchanged through the existing receipt
 channel as evidence; its content is never written to stderr or mixed with a
 provider response. Invalid receipts and native `75` outcomes expose no receipt.
+Genuine model-ladder exhaustion is the distinct cascade exit `76` and carries
+no provider terminal receipt.
 
 Dry-run routing, direct interactive exact-digest approval, and the routing
 matrix are unchanged by this terminal normalization.

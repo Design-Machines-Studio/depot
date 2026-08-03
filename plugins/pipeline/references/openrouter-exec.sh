@@ -109,12 +109,10 @@ validate_terminal_failure() {
       .outcome == $outcome and .exit_code == $exit_code and
       .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
       .scope.candidate == $candidate and .scope.workload == $workload and
-      .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
+      .models == $models and .selected_model == null and
       .provider == "openrouter" and .part_count == 2 and
-      (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
-      (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
-      (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-      (.fallback == (.selected_model != .models[0])) and
+      .generation_id == null and .serving_provider == null and
+      .usage_sha256 == null and .fallback == null and
       .request_body_sha256 == $body_digest and
       .response_sha256 == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and
       .response_length == 0 and

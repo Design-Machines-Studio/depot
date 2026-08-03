@@ -18,7 +18,8 @@
 #   0   a wrapper/codex_companion/openrouter_exec rung executed -- output on stdout
 #   64  chosen rung is NATIVE -- directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
-#   75  ladder exhausted -- no rung had headroom above the floor
+#   75  provider terminal -- signed failure/unknown receipt or unverifiable post-dial outcome
+#   76  ladder exhausted -- no rung had headroom above the floor
 #   77  disclosure declined -- use the trusted native fallback
 #   78  exact payload user approval required -- surface digest and retry unchanged
 #   2   bad args
@@ -166,12 +167,10 @@ validate_provider_failure() {
       .outcome == $outcome and .exit_code == $exit_code and
       .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
       .scope.candidate == $candidate and .scope.workload == $workload and
-      .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
+      .models == $models and .selected_model == null and
       .provider == "openrouter" and .part_count == 2 and
-      (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
-      (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
-      (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-      (.fallback == (.selected_model != .models[0])) and
+      .generation_id == null and .serving_provider == null and
+      .usage_sha256 == null and .fallback == null and
       .request_body_sha256 == $body_digest and
       .response_sha256 == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and
       .response_length == 0 and
@@ -419,4 +418,4 @@ for role in $LADDER; do
 done
 
 echo "cascade-dispatch: ladder exhausted for class '$CLASS' on host '$HOST' (floor $FLOOR)" >&2
-exit 75
+exit 76

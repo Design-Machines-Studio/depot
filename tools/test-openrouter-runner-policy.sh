@@ -469,6 +469,11 @@ text = text.replace(
     '''    if terminal_case:
         terminal["outcome"] = "unknown" if case == "terminal-unknown" else "provider_failure"
         terminal["exit_code"] = 74 if case == "terminal-unknown" else 73
+        terminal["selected_model"] = None
+        terminal["generation_id"] = None
+        terminal["serving_provider"] = None
+        terminal["usage_sha256"] = None
+        terminal["fallback"] = None
     if case == "terminal-wrong-scope":
         terminal["scope"]["candidate"] = "wrong-candidate"
     elif case == "terminal-wrong-workload":
@@ -477,7 +482,6 @@ text = text.replace(
         terminal["request_body_sha256"] = digest(b"wrong-body")
     elif case == "terminal-wrong-model":
         terminal["models"] = ["fixture/wrong-model"]
-        terminal["selected_model"] = "fixture/wrong-model"
     elif case == "terminal-wrong-exit":
         terminal["exit_code"] = 74
     elif case == "terminal-wrong-cleanup":
@@ -643,7 +647,9 @@ for terminal_case in terminal-provider-failure terminal-unknown; do
   expected_outcome=provider_failure
   [ "$terminal_case" = terminal-unknown ] && expected_outcome=unknown
   jq -e --arg outcome "$expected_outcome" \
-    '.outcome == $outcome and .response_length == 0' "$FIXTURE_ROOT/cmd.out" >/dev/null
+    '.outcome == $outcome and .response_length == 0 and
+     .selected_model == null and .generation_id == null and .serving_provider == null and
+     .usage_sha256 == null and .fallback == null' "$FIXTURE_ROOT/cmd.out" >/dev/null
 done
 
 for terminal_case in terminal-wrong-scope terminal-wrong-workload terminal-wrong-body \
@@ -709,7 +715,9 @@ for terminal_case in terminal-provider-failure terminal-unknown terminal-unsigne
   if [ "$terminal_case" = terminal-unsigned-ambiguity ]; then
     [ ! -s "$FIXTURE_ROOT/cmd.out" ]
   else
-    jq -e '.response_length == 0 and (.outcome == "provider_failure" or .outcome == "unknown")' \
+    jq -e '.response_length == 0 and (.outcome == "provider_failure" or .outcome == "unknown") and
+      .selected_model == null and .generation_id == null and .serving_provider == null and
+      .usage_sha256 == null and .fallback == null' \
       "$FIXTURE_ROOT/cmd.out" >/dev/null
   fi
 done
@@ -729,7 +737,20 @@ expect_rc 75 'terminal provider outcome' 'wrapper rail stops after signed provid
   DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-wrapper-terminal \
   "$CASCADE" --class openrouter --prompt 'terminal wrapper test' --host codex
 [ "$(cat "$AUTH_ROOT/request-count")" -eq 1 ]
-jq -e '.outcome == "provider_failure" and .response_length == 0' "$FIXTURE_ROOT/cmd.out" >/dev/null
+jq -e '.outcome == "provider_failure" and .response_length == 0 and
+  .selected_model == null and .generation_id == null and .serving_provider == null and
+  .usage_sha256 == null and .fallback == null' "$FIXTURE_ROOT/cmd.out" >/dev/null || {
+  echo 'wrapper terminal receipt was not preserved as one valid JSON document' >&2
+  cat "$FIXTURE_ROOT/cmd.out" >&2
+  exit 1
+}
+
+printf '%s\n' 0 > "$AUTH_ROOT/request-count"
+expect_rc 76 'ladder exhausted' 'ladder exhaustion remains distinct from provider terminal' \
+  env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+  "$CASCADE" --class openrouter --prompt 'no eligible generic rung' --host generic
+[ "$(cat "$AUTH_ROOT/request-count")" -eq 0 ]
+[ ! -s "$FIXTURE_ROOT/cmd.out" ]
 
 rm -f "$AUTH_ROOT/observed-user"
 for lane in research adversarial-review execution dm-review airlift unknown ''; do
