@@ -155,6 +155,56 @@ func TestExactRequestLifecycleAndFsyncLinearization(t *testing.T) {
 	}
 }
 
+func TestAtomicFinalizeConsumesAndSignsOnce(t *testing.T) {
+	wal := &memoryWAL{}
+	manager, challenge, peer, _ := reserve(t, &fakeFIDO{}, wal)
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	if _, err := manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical)); err != nil {
+		t.Fatal(err)
+	}
+	right, err := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Finalize(context.Background(), right, 64, "verified"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer); err == nil {
+		t.Fatal("finalized send reused")
+	}
+	if signature, err := manager.SignFinalized(right, []byte("terminal")); err != nil || len(signature) == 0 {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := manager.SignFinalized(right, []byte("terminal")); err == nil {
+		t.Fatal("finalized signer reused")
+	}
+	if got := manager.records[challenge.TransactionID].event.State; got != Cleanup {
+		t.Fatalf("state=%s", got)
+	}
+}
+
+func TestAtomicFinalizeDurabilityFailureRecoversUnknown(t *testing.T) {
+	wal := &memoryWAL{failAt: 4}
+	manager, challenge, peer, clock := reserve(t, &fakeFIDO{}, wal)
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	_, _ = manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical))
+	right, _ := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer)
+	if err := manager.Finalize(context.Background(), right, 64, "verified"); err == nil {
+		t.Fatal("finalize survived durability failure")
+	}
+	if _, err := manager.SignFinalized(right, []byte("terminal")); err == nil {
+		t.Fatal("unfinalized signer accepted")
+	}
+	_, _, config, _ := fixture(t)
+	recovered, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.records[challenge.TransactionID].event.Outcome != "outcome_unknown" {
+		t.Fatal("failed finalize became retryable")
+	}
+}
+
 func TestWALFailureNeverPublishesTransition(t *testing.T) {
 	wal := &memoryWAL{}
 	manager, challenge, peer, _ := reserve(t, &fakeFIDO{}, wal)

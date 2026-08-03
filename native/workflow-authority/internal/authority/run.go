@@ -345,6 +345,8 @@ type reservation struct {
 	peer         Peer
 	private      *ecdsa.PrivateKey
 	cancelled    bool
+	finalized    bool
+	signed       bool
 }
 
 type Manager struct {
@@ -565,11 +567,55 @@ func (m *Manager) SignTerminal(right SendRight, terminalInput []byte) ([]byte, e
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	record, ok := m.records[right.TransactionID]
-	if !ok || record.event.State != SendStarted || record.private == nil || len(terminalInput) == 0 {
+	if !ok || record.event.State != SendStarted || record.signed || record.private == nil || len(terminalInput) == 0 {
 		return nil, ErrConflict
 	}
+	record.signed = true
 	digest := sha256.Sum256(terminalInput)
 	signature, err := ecdsa.SignASN1(rand.Reader, record.private, digest[:])
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	return signature, nil
+}
+
+// Finalize consumes send authority with one durable cleanup record. The
+// ephemeral signer survives only for the subsequent one-shot terminal sign.
+func (m *Manager) Finalize(ctx context.Context, right SendRight, responseBytes int64, outcome string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	record, ok := m.records[right.TransactionID]
+	if !ok || record.event.State != SendStarted || record.finalized || responseBytes < 0 || m.bytes+responseBytes > m.config.MaxBytes || (outcome != "verified" && outcome != "provider_failure" && outcome != "outcome_unknown") {
+		return ErrConflict
+	}
+	next := record.event
+	next.State = Cleanup
+	next.ResponseBytes = responseBytes
+	next.Outcome = outcome
+	next.At = m.clock.Now().Format(time.RFC3339)
+	if err := m.wal.Append(ctx, next); err != nil {
+		return err
+	}
+	record.event = next
+	record.finalized = true
+	m.bytes += responseBytes
+	return nil
+}
+
+// SignFinalized signs once after durable consumption and destroys the key.
+// Terminal write/close failure therefore cannot mint a retry receipt.
+func (m *Manager) SignFinalized(right SendRight, terminalInput []byte) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	record, ok := m.records[right.TransactionID]
+	if !ok || record.event.State != Cleanup || !record.finalized || record.signed || record.private == nil || len(terminalInput) == 0 {
+		return nil, ErrConflict
+	}
+	record.signed = true
+	digest := sha256.Sum256(terminalInput)
+	signature, err := ecdsa.SignASN1(rand.Reader, record.private, digest[:])
+	zeroKey(record.private)
+	record.private = nil
 	if err != nil {
 		return nil, ErrUnavailable
 	}

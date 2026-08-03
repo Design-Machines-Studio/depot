@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -68,7 +70,7 @@ func TestFixtureTLSExactlyOneAttemptAndCredentialIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer credential.Destroy()
-	transport := &Transport{Origin: server.URL + protocol.Path, Fixture: true, Client: server.Client(), Timeout: time.Second}
+	transport := fixtureTransport(server)
 	body := []byte(`{"messages":[],"models":[],"temperature":null}`)
 	response, err := transport.Send(context.Background(), credential, body)
 	if err != nil {
@@ -88,7 +90,8 @@ func TestRejectionsHaveZeroRequests(t *testing.T) {
 	defer server.Close()
 	fixture := &Credential{bytes: []byte("fixture-value"), fixture: true}
 	prod := &Credential{bytes: []byte("production-value")}
-	cases := []*Transport{{Origin: ProductionURL, Fixture: true, Client: server.Client()}, {Origin: server.URL + protocol.Path, Fixture: false, Client: server.Client()}, {Origin: server.URL + "/wrong", Fixture: true, Client: server.Client()}}
+	tlsConfig := server.Client().Transport.(*http.Transport).TLSClientConfig
+	cases := []*Transport{{Origin: ProductionURL, Fixture: true, TLSConfig: tlsConfig}, {Origin: server.URL + protocol.Path, Fixture: false, TLSConfig: tlsConfig}, {Origin: server.URL + "/wrong", Fixture: true, TLSConfig: tlsConfig}}
 	creds := []*Credential{fixture, prod, fixture}
 	for i, tr := range cases {
 		if _, err := tr.Send(context.Background(), creds[i], []byte("{}")); err == nil {
@@ -145,7 +148,7 @@ func (f *providerFIDO) Readiness(context.Context) authority.Readiness {
 }
 func (f *providerFIDO) Assert(context.Context, []byte, authority.Credential) (authority.Assertion, error) {
 	f.calls.Add(1)
-	return authority.Assertion{}, errors.New("must not run")
+	return authority.Assertion{CredentialReference: "credential-1", Generation: 1, Signature: []byte("fixture-signature"), AuthenticatorData: []byte("fixture-authenticator-data"), ClientDataJSON: []byte(`{"fixture":true}`), UserPresence: true, UserVerification: true}, nil
 }
 func (*providerFIDO) Verify(context.Context, []byte, authority.Credential, authority.Assertion) error {
 	return nil
@@ -157,6 +160,12 @@ func (rejectingReader) Read(context.Context) (*Credential, error) {
 	return nil, errors.New("must not run")
 }
 
+type staticReader struct{ value []byte }
+
+func (r staticReader) Read(context.Context) (*Credential, error) {
+	return &Credential{bytes: append([]byte(nil), r.value...), fixture: true}, nil
+}
+
 type testSink struct{ id string }
 
 func (s testSink) ConnectionID() string { return s.id }
@@ -164,6 +173,40 @@ func (testSink) WriteAuthorizationProof(context.Context, AuthorizationProof) err
 	return errors.New("must not run")
 }
 func (testSink) WriteResponse(context.Context, []byte) error { return errors.New("must not run") }
+func (testSink) WriteTerminalAndClose(context.Context, []byte) error {
+	return errors.New("must not run")
+}
+
+type captureSink struct {
+	id                 string
+	proof              bool
+	response, terminal []byte
+	closed             bool
+}
+
+func (s *captureSink) ConnectionID() string { return s.id }
+func (s *captureSink) WriteAuthorizationProof(_ context.Context, _ AuthorizationProof) error {
+	if s.proof {
+		return ErrSink
+	}
+	s.proof = true
+	return nil
+}
+func (s *captureSink) WriteResponse(_ context.Context, b []byte) error {
+	if !s.proof || s.response != nil {
+		return ErrSink
+	}
+	s.response = append([]byte(nil), b...)
+	return nil
+}
+func (s *captureSink) WriteTerminalAndClose(_ context.Context, b []byte) error {
+	if s.response == nil || s.closed {
+		return ErrSink
+	}
+	s.terminal = append([]byte(nil), b...)
+	s.closed = true
+	return nil
+}
 
 func TestDispatcherRejectsSubstitutionBeforeRealManagerAuthorization(t *testing.T) {
 	now := time.Date(2026, 8, 3, 0, 1, 0, 0, time.UTC)
@@ -201,11 +244,52 @@ func TestDispatcherRejectsSubstitutionBeforeRealManagerAuthorization(t *testing.
 			t.Fatalf("case %d: %v", i, err)
 		}
 	}
-	if _, err := d.Dispatch(context.Background(), base, testSink{"connection-1"}); err != ErrStartup {
-		t.Fatalf("bound request did not fail closed: %v", err)
-	}
 	if fido.calls.Load() != 0 {
 		t.Fatalf("FIDO called %d times", fido.calls.Load())
+	}
+}
+
+func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "openai/gpt-5.6", "provider": "fixture-provider", "usage": map[string]int{"total_tokens": 2}})
+	}))
+	defer server.Close()
+	now := time.Date(2026, 8, 3, 0, 1, 0, 0, time.UTC)
+	parts := [][]byte{[]byte("system"), []byte("ordinary review text")}
+	req := fixtureRequest(parts)
+	req.Authority.IssuedAt = now.Add(-time.Minute).Format(time.RFC3339)
+	req.Authority.ExpiresAt = now.Add(time.Minute).Format(time.RFC3339)
+	req.Authority.PolicySHA256 = protocol.Digest(policyFixture())
+	body, _ := BuildBody(req, parts)
+	peer := authority.Peer{UID: 501, PID: 4321}
+	c := protocol.Challenge{SchemaVersion: req.SchemaVersion, Protocol: req.Protocol, Mapping: req.Mapping, OperationFamily: req.OperationFamily, SubstrateAuthority: req.SubstrateAuthority, TransactionID: "transaction-positive", ConnectionNonceSHA256: req.Authority.ConnectionNonceSHA256, PeerUID: peer.UID, PeerPID: peer.PID, RequestBodySHA256: protocol.Digest(body), Destination: req.Destination, Method: req.Method, Path: req.Path, Models: append([]string(nil), req.Models...), Scope: req.Scope, DaemonBuildSHA256: req.Authority.DaemonBuildSHA256, ScannerBuildSHA256: req.Authority.ScannerBuildSHA256, PolicySHA256: req.Authority.PolicySHA256, Nonce: req.Authority.Nonce, Sequence: req.Authority.Sequence, BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, IssuedAt: req.Authority.IssuedAt, ExpiresAt: req.Authority.ExpiresAt, Limits: req.Limits, PriorChainDigest: req.Authority.PriorChainDigest}
+	fido := &providerFIDO{}
+	manager, err := authority.NewManager(authority.Config{BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, AllowedUIDs: map[uint32]struct{}{peer.UID: {}}, MaxOperations: 8, MaxBytes: 32 << 20, MaxConcurrent: 4, Credential: authority.Credential{Reference: "credential-1", PublicKey: []byte("public"), Algorithm: -7, Generation: 1, RPID: "workflow-authority.designmachines.local", Status: "active", InternalUV: true}}, fido, &providerMemoryWAL{}, providerClock{now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := manager.Reserve(context.Background(), req, c, body, peer, "connection-positive")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ := protocol.CanonicalJSON(bound)
+	input := DispatchInput{Request: req, Challenge: bound, Parts: parts, TransactionID: bound.TransactionID, ConnectionID: "connection-positive", ConsentChallengeDigest: protocol.Digest(canonical), Peer: peer}
+	d := Dispatcher{Scanner: BuiltinScanner{}, Policy: policyFixture(), Credentials: staticReader{[]byte("fixture-token-value")}, Transport: fixtureTransport(server), Authority: manager, Clock: func() time.Time { return now }}
+	sink := &captureSink{id: "connection-positive"}
+	result, err := d.Dispatch(context.Background(), input, sink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != "verified" || !sink.closed || len(sink.response) == 0 || len(sink.terminal) == 0 || requests.Load() != 1 {
+		t.Fatalf("result=%v closed=%v requests=%d", result.Outcome, sink.closed, requests.Load())
+	}
+	if _, err := d.Dispatch(context.Background(), input, &captureSink{id: "connection-positive"}); err == nil {
+		t.Fatal("replay accepted")
+	}
+	if requests.Load() != 1 {
+		t.Fatal("replay contacted provider")
 	}
 }
 
@@ -227,11 +311,8 @@ func TestProductionTransportHasNoProxyOrRedirect(t *testing.T) {
 	if tr.Origin != ProductionURL {
 		t.Fatal(tr.Origin)
 	}
-	if tr.Client.CheckRedirect == nil {
-		t.Fatal("redirects enabled")
-	}
-	if _, ok := tr.Client.Transport.(*http.Transport); !ok {
-		t.Fatal("unexpected transport")
+	if tr.DialTLS == nil || tr.TLSConfig == nil {
+		t.Fatal("production TLS unavailable")
 	}
 }
 
@@ -242,9 +323,36 @@ func TestResponseBound(t *testing.T) {
 	}))
 	defer server.Close()
 	c := &Credential{bytes: []byte("fixture"), fixture: true}
-	tr := &Transport{Origin: server.URL + protocol.Path, Fixture: true, Client: server.Client()}
+	tr := fixtureTransport(server)
 	if _, err := tr.Send(context.Background(), c, []byte("{}")); err == nil {
 		t.Fatal("oversize accepted")
+	}
+}
+
+func fixtureTransport(server *httptest.Server) *Transport {
+	return &Transport{Origin: server.URL + protocol.Path, Fixture: true, TLSConfig: server.Client().Transport.(*http.Transport).TLSClientConfig, Timeout: time.Second}
+}
+
+func TestOriginalSinkTerminalRequiresEOFAndCannotBeRetrievedAgain(t *testing.T) {
+	server, client := net.Pipe()
+	sink := &OriginalConnectionSink{ID: "connection", Conn: server}
+	received := make(chan []byte, 1)
+	go func() { b, _ := io.ReadAll(client); received <- b }()
+	proof := AuthorizationProof{SchemaVersion: 1, Protocol: protocol.Name, Type: "authorization_proof", ChallengeSHA256: protocol.Digest([]byte("challenge")), AuthorityAssertion: FIDOAssertion{Kind: "fido2-es256", CredentialID: "Y3JlZA", AuthenticatorData: "YXV0aA", ClientDataJSON: "Y2xpZW50", SignatureDER: "c2ln", UserPresence: true, UserVerification: true}}
+	if err := sink.WriteAuthorizationProof(context.Background(), proof); err != nil {
+		t.Fatal(err)
+	}
+	if err := sink.WriteResponse(context.Background(), []byte("response")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sink.WriteTerminalAndClose(context.Background(), []byte(`{"terminal":true}`)); err != nil {
+		t.Fatal(err)
+	}
+	if len(<-received) == 0 || !sink.closed {
+		t.Fatal("terminal EOF not observed")
+	}
+	if err := sink.WriteTerminalAndClose(context.Background(), []byte("again")); err == nil {
+		t.Fatal("terminal retrieved twice")
 	}
 }
 

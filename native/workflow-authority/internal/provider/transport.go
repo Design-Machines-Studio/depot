@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/binary"
@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -20,20 +21,22 @@ import (
 const ProductionURL = "https://openrouter.ai/api/v1/chat/completions"
 
 type Transport struct {
-	Origin  string
-	Fixture bool
-	Client  *http.Client
-	Timeout time.Duration
+	Origin    string
+	Fixture   bool
+	TLSConfig *tls.Config
+	DialTLS   func(context.Context, string, string, *tls.Config) (net.Conn, error)
+	Timeout   time.Duration
 }
 
 func ProductionTransport() *Transport {
 	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: -1}
-	rt := &http.Transport{Proxy: nil, DialContext: dialer.DialContext, ForceAttemptHTTP2: true, DisableKeepAlives: true, MaxIdleConns: 0, TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13}}
-	return &Transport{Origin: ProductionURL, Client: &http.Client{Transport: rt, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect_rejected") }}, Timeout: 10 * time.Minute}
+	return &Transport{Origin: ProductionURL, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS13}, DialTLS: func(ctx context.Context, network, address string, config *tls.Config) (net.Conn, error) {
+		return (&tls.Dialer{NetDialer: dialer, Config: config}).DialContext(ctx, network, address)
+	}, Timeout: 10 * time.Minute}
 }
 
 func (t *Transport) Send(ctx context.Context, credential *Credential, body []byte) ([]byte, error) {
-	if credential == nil || len(credential.Bytes()) == 0 || t == nil || t.Client == nil || t.Origin == "" || t.Fixture != credential.Fixture() {
+	if credential == nil || len(credential.Bytes()) == 0 || t == nil || t.Origin == "" || t.Fixture != credential.Fixture() {
 		return nil, ErrTransport
 	}
 	u, err := url.Parse(t.Origin)
@@ -52,27 +55,59 @@ func (t *Transport) Send(ctx context.Context, credential *Credential, body []byt
 		requestCtx, cancel = context.WithTimeout(ctx, t.Timeout)
 		defer cancel()
 	}
-	req, err := http.NewRequestWithContext(requestCtx, http.MethodPost, t.Origin, bytes.NewReader(body))
+	config := t.TLSConfig
+	if config == nil {
+		config = &tls.Config{MinVersion: tls.VersionTLS13}
+	} else {
+		config = config.Clone()
+	}
+	config.ServerName = u.Hostname()
+	config.NextProtos = []string{"http/1.1"}
+	dial := t.DialTLS
+	if dial == nil {
+		d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: -1}
+		dial = func(ctx context.Context, network, address string, c *tls.Config) (net.Conn, error) {
+			return (&tls.Dialer{NetDialer: d, Config: c}).DialContext(ctx, network, address)
+		}
+	}
+	conn, err := dial(requestCtx, "tcp", u.Host, config) // the sole attempt; no retry exists.
 	if err != nil {
 		return nil, ErrTransport
 	}
-	authorizationBytes := append([]byte("Bearer "), credential.Bytes()...)
-	// net/http requires immutable string header values. Keep that unavoidable
-	// copy request-scoped, erase the mutable assembly buffer immediately, and
-	// drop all request/header references as soon as Do returns.
-	authorization := string(authorizationBytes)
-	zero(authorizationBytes)
-	req.Header = http.Header{"Authorization": []string{authorization}, "Content-Type": []string{"application/json"}, "Accept": []string{"application/json"}}
-	resp, err := t.Client.Do(req) // exactly one attempt; no retry loop exists.
-	req.Header.Del("Authorization")
-	authorization = ""
+	closed := false
+	defer func() {
+		if !closed {
+			_ = conn.Close()
+		}
+	}()
+	header := make([]byte, 0, 256+len(credential.Bytes()))
+	header = append(header, "POST "...)
+	header = append(header, u.EscapedPath()...)
+	header = append(header, " HTTP/1.1\r\nHost: "...)
+	header = append(header, u.Host...)
+	header = append(header, "\r\nAuthorization: Bearer "...)
+	header = append(header, credential.Bytes()...)
+	header = append(header, "\r\nContent-Type: application/json\r\nAccept: application/json\r\nContent-Length: "...)
+	header = strconv.AppendInt(header, int64(len(body)), 10)
+	header = append(header, "\r\nConnection: close\r\n\r\n"...)
+	if err := writeConnection(conn, header); err != nil {
+		zero(header)
+		return nil, ErrTransport
+	}
+	zero(header)
+	if err := writeConnection(conn, body); err != nil {
+		return nil, ErrTransport
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(conn), &http.Request{Method: http.MethodPost})
 	if err != nil {
 		return nil, ErrTransport
 	}
-	defer resp.Body.Close()
 	limited := io.LimitReader(resp.Body, maxProviderResponse+1)
 	response, readErr := io.ReadAll(limited)
-	if readErr != nil || int64(len(response)) > maxProviderResponse {
+	bodyCloseErr := resp.Body.Close()
+	connCloseErr := conn.Close()
+	closed = true
+	if readErr != nil || bodyCloseErr != nil || (connCloseErr != nil && !errors.Is(connCloseErr, net.ErrClosed)) || int64(len(response)) > maxProviderResponse {
 		zero(response)
 		return nil, ErrTransport
 	}
@@ -88,6 +123,7 @@ type ResponseSink interface {
 	ConnectionID() string
 	WriteAuthorizationProof(context.Context, AuthorizationProof) error
 	WriteResponse(context.Context, []byte) error
+	WriteTerminalAndClose(context.Context, []byte) error
 }
 
 type OriginalConnectionSink struct {
@@ -95,6 +131,7 @@ type OriginalConnectionSink struct {
 	Conn      net.Conn
 	proofUsed bool
 	used      bool
+	closed    bool
 }
 
 func (s *OriginalConnectionSink) ConnectionID() string { return s.ID }
@@ -115,7 +152,7 @@ func (s *OriginalConnectionSink) WriteAuthorizationProof(ctx context.Context, pr
 	return writeConnection(s.Conn, payload)
 }
 func (s *OriginalConnectionSink) WriteResponse(ctx context.Context, payload []byte) error {
-	if s == nil || s.Conn == nil || s.ID == "" || !s.proofUsed || s.used || ctx.Err() != nil {
+	if s == nil || s.Conn == nil || s.ID == "" || !s.proofUsed || s.used || s.closed || ctx.Err() != nil {
 		return ErrSink
 	}
 	if raw, ok := s.Conn.(syscall.Conn); ok {
@@ -142,6 +179,26 @@ func (s *OriginalConnectionSink) WriteResponse(ctx context.Context, payload []by
 		return err
 	}
 	return writeConnection(s.Conn, payload)
+}
+
+func (s *OriginalConnectionSink) WriteTerminalAndClose(ctx context.Context, payload []byte) error {
+	if s == nil || s.Conn == nil || !s.used || s.closed || ctx.Err() != nil || len(payload) > protocol.MaxFrameBytes {
+		return ErrSink
+	}
+	var length [4]byte
+	binary.BigEndian.PutUint32(length[:], uint32(len(payload)))
+	if writeConnection(s.Conn, length[:]) != nil || writeConnection(s.Conn, payload) != nil {
+		return ErrSink
+	}
+	if half, ok := s.Conn.(interface{ CloseWrite() error }); ok {
+		if half.CloseWrite() != nil {
+			return ErrSink
+		}
+	} else if s.Conn.Close() != nil {
+		return ErrSink
+	}
+	s.closed = true
+	return nil
 }
 
 func writeConnection(conn net.Conn, payload []byte) error {

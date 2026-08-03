@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -140,9 +141,8 @@ type Authority interface {
 	Authorize(context.Context, string, string, authority.Peer, string) (authority.Assertion, error)
 	Cancel(context.Context, string) error
 	BeginSend(context.Context, string, string, authority.Peer) (authority.SendRight, error)
-	SignTerminal(authority.SendRight, []byte) ([]byte, error)
-	Complete(context.Context, string, int64, string) error
-	Cleanup(context.Context, string) error
+	Finalize(context.Context, authority.SendRight, int64, string) error
+	SignFinalized(authority.SendRight, []byte) ([]byte, error)
 }
 
 type DispatchInput struct {
@@ -242,14 +242,6 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	if err := d.Scanner.Scan(ctx, in.Parts, d.Policy); err != nil {
 		return TerminalResult{}, ErrPolicy
 	}
-	// The frozen terminal requires cleanup.connection="closed" while that same
-	// connection is still needed to emit the terminal frame. Until IPC owns an
-	// atomic close-and-terminal projection, signing would assert a future state.
-	// Refuse before FIDO, credential access, DNS, or provider contact.
-	return TerminalResult{}, ErrStartup
-
-	/* unreachable transport composition retained for the contract revision that
-	truthfully separates response delivery from completed connection cleanup.
 	assertion, err := d.Authority.Authorize(ctx, in.TransactionID, in.ConnectionID, in.Peer, in.ConsentChallengeDigest)
 	if err != nil {
 		return TerminalResult{}, err
@@ -278,49 +270,49 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 		return TerminalResult{}, err
 	}
 	response, sendErr := d.Transport.Send(ctx, credential, body)
-	outcome, exitCode, walOutcome := "verified", 0, "verified"
+	defer zero(response)
 	if sendErr != nil {
-		outcome, exitCode, walOutcome = "unknown", 74, "outcome_unknown"
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "outcome_unknown")
+		return TerminalResult{}, sendErr
 	}
-	selected := in.Request.Models[0]
-	if sendErr == nil {
-		var projected providerResponse
-		if json.Unmarshal(response, &projected) != nil || projected.ID == "" || projected.Provider == "" || len(projected.Usage) == 0 || string(projected.Usage) == "null" || !exactModel(projected.Model, in.Request.Models) {
-			sendErr = ErrProvenance
-			outcome, exitCode, walOutcome = "provider_failure", 73, "provider_failure"
-		} else {
-			selected = projected.Model
-		}
+	var projected providerResponse
+	if json.Unmarshal(response, &projected) != nil || projected.ID == "" || projected.Provider == "" || len(projected.Usage) == 0 || string(projected.Usage) == "null" || !exactModel(projected.Model, in.Request.Models) {
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure")
+		return TerminalResult{}, ErrProvenance
 	}
-	if sendErr == nil {
-		if err := sink.WriteResponse(ctx, response); err != nil {
-			sendErr, outcome, exitCode, walOutcome = ErrSink, "unknown", 74, "outcome_unknown"
-		}
+	responseDigest, responseLength := protocol.Digest(response), int64(len(response))
+	if err := sink.WriteResponse(ctx, response); err != nil {
+		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown")
+		return TerminalResult{}, ErrSink
 	}
-	responseDigest := protocol.Digest(response)
+	zero(response)
+	if err := d.Authority.Finalize(ctx, right, responseLength, "verified"); err != nil {
+		return TerminalResult{}, err
+	}
 	signerBytes, _ := protocol.CanonicalJSON(in.Challenge.ResultSigner)
 	// Provider is the frozen destination projection, not serving-provider
 	// provenance. The exact raw response digest transitively binds the verified
 	// generation id, response model, serving provider, and usage object.
-	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: outcome, ExitCode: exitCode, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: responseDigest, ResponseLength: int64(len(response)), PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: &selected, Provider: "openrouter", Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
+	selected := projected.Model
+	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: responseDigest, ResponseLength: responseLength, PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: &selected, Provider: "openrouter", Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
 	unsignedBytes, _ := protocol.CanonicalJSON(result)
 	var unsigned map[string]any
 	_ = json.Unmarshal(unsignedBytes, &unsigned)
 	delete(unsigned, "signature")
 	canonical, _ := protocol.CanonicalJSON(unsigned)
-	sig, signErr := d.Authority.SignTerminal(right, append([]byte("workflow-authority\x00provider-dispatch-v1\x00terminal\x00"), canonical...))
+	sig, signErr := d.Authority.SignFinalized(right, append([]byte("workflow-authority\x00provider-dispatch-v1\x00terminal\x00"), canonical...))
 	if signErr != nil {
 		return TerminalResult{}, signErr
 	}
 	result.Signature.SignatureDER = base64.RawURLEncoding.EncodeToString(sig)
-	if completeErr := d.Authority.Complete(ctx, in.TransactionID, int64(len(response)), walOutcome); completeErr != nil {
-		return TerminalResult{}, completeErr
+	terminal, err := protocol.CanonicalJSON(result)
+	if err != nil {
+		return TerminalResult{}, ErrBinding
 	}
-	if cleanupErr := d.Authority.Cleanup(ctx, in.TransactionID); cleanupErr != nil {
-		return TerminalResult{}, cleanupErr
+	if err := sink.WriteTerminalAndClose(ctx, terminal); err != nil {
+		return TerminalResult{}, ErrSink
 	}
-	zero(response)
-	return result, sendErr */
+	return result, nil
 }
 
 func validateBoundSnapshot(in DispatchInput, now time.Time) error {

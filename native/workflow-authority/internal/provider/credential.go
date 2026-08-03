@@ -14,6 +14,8 @@ import (
 const ProductionCredentialPath = "/etc/design-machines/workflow-authority/credentials/openrouter"
 const productionRootPath = "/etc/design-machines/workflow-authority"
 
+var ErrRotationCommittedSyncUncertain = errors.New("credential_rotation_committed_sync_uncertain")
+
 type Credential struct {
 	bytes   []byte
 	fixture bool
@@ -163,6 +165,7 @@ func RotateCredential(path string, next []byte, owner uint32) error {
 		return ErrStartup
 	}
 	ok := false
+	renamed := false
 	defer func() {
 		tmp.Close()
 		if !ok {
@@ -180,6 +183,9 @@ func RotateCredential(path string, next []byte, owner uint32) error {
 	}
 	if err == nil {
 		err = root.Rename("credentials/.openrouter.rotate", "credentials/openrouter")
+		if err == nil {
+			renamed = true
+		}
 	}
 	if err == nil {
 		var d *os.File
@@ -190,6 +196,10 @@ func RotateCredential(path string, next []byte, owner uint32) error {
 		}
 	}
 	if err != nil {
+		if renamed {
+			ok = true
+			return ErrRotationCommittedSyncUncertain
+		}
 		return ErrStartup
 	}
 	ok = true
