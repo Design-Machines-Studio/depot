@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
 	"strings"
 	"time"
@@ -26,12 +27,13 @@ const (
 )
 
 var (
-	ErrPolicy     = errors.New("provider_policy_rejected")
-	ErrBinding    = errors.New("provider_binding_invalid")
-	ErrTransport  = errors.New("provider_transport_failed")
-	ErrProvenance = errors.New("provider_provenance_missing")
-	ErrSink       = errors.New("provider_response_delivery_failed")
-	ErrStartup    = errors.New("provider_startup_unavailable")
+	ErrPolicy        = errors.New("provider_policy_rejected")
+	ErrBinding       = errors.New("provider_binding_invalid")
+	ErrTransport     = errors.New("provider_transport_failed")
+	ErrProvenance    = errors.New("provider_provenance_missing")
+	ErrSink          = errors.New("provider_response_delivery_failed")
+	ErrStartup       = errors.New("provider_startup_unavailable")
+	providerMetadata = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$`)
 )
 
 type Scanner interface {
@@ -185,6 +187,10 @@ type TerminalResult struct {
 	Models                   []string       `json:"models"`
 	SelectedModel            *string        `json:"selected_model"`
 	Provider                 string         `json:"provider"`
+	GenerationID             string         `json:"generation_id"`
+	ServingProvider          string         `json:"serving_provider"`
+	UsageSHA256              string         `json:"usage_sha256"`
+	Fallback                 bool           `json:"fallback"`
 	Scope                    protocol.Scope `json:"scope"`
 	Sequence                 uint64         `json:"sequence"`
 	IssuedAt                 string         `json:"issued_at"`
@@ -198,10 +204,19 @@ type TerminalResult struct {
 }
 
 type providerResponse struct {
-	ID       string          `json:"id"`
-	Model    string          `json:"model"`
-	Provider string          `json:"provider"`
-	Usage    json.RawMessage `json:"usage"`
+	ID       string           `json:"id"`
+	Model    string           `json:"model"`
+	Provider string           `json:"provider"`
+	Usage    json.RawMessage  `json:"usage"`
+	Choices  []providerChoice `json:"choices"`
+}
+type providerChoice struct {
+	Message      providerMessage `json:"message"`
+	Error        json.RawMessage `json:"error"`
+	FinishReason *string         `json:"finish_reason"`
+}
+type providerMessage struct {
+	Content *string `json:"content"`
 }
 
 type FIDOAssertion struct {
@@ -285,22 +300,33 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 		return TerminalResult{}, sendErr
 	}
 	var projected providerResponse
-	if json.Unmarshal(response, &projected) != nil || projected.ID == "" || projected.Provider == "" || len(projected.Usage) == 0 || string(projected.Usage) == "null" || !exactModel(projected.Model, in.Request.Models) {
+	if json.Unmarshal(response, &projected) != nil || !providerMetadata.MatchString(projected.ID) || !providerMetadata.MatchString(projected.Provider) || !exactModel(projected.Model, in.Request.Models) || len(projected.Choices) != 1 || projected.Choices[0].Message.Content == nil || hasChoiceError(projected.Choices[0]) {
 		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
 		return TerminalResult{}, ErrProvenance
 	}
-	responseDigest, responseLength := protocol.Digest(response), int64(len(response))
-	if err := sink.WriteResponse(ctx, response); err != nil {
+	usageCanonical, usageErr := canonicalUsage(projected.Usage)
+	if usageErr != nil {
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
+		return TerminalResult{}, ErrProvenance
+	}
+	usageDigest := protocol.Digest(usageCanonical)
+	zero(usageCanonical)
+	content := []byte(*projected.Choices[0].Message.Content)
+	defer zero(content)
+	if !utf8.Valid(content) || int64(len(content)) > maxProviderResponse {
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
+		return TerminalResult{}, ErrProvenance
+	}
+	responseDigest, responseLength := protocol.Digest(content), int64(len(content))
+	if err := sink.WriteResponse(ctx, content); err != nil {
 		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown", "")
 		return TerminalResult{}, ErrSink
 	}
+	zero(content)
 	zero(response)
 	signerBytes, _ := protocol.CanonicalJSON(in.Challenge.ResultSigner)
-	// Provider is the frozen destination projection, not serving-provider
-	// provenance. The exact raw response digest transitively binds the verified
-	// generation id, response model, serving provider, and usage object.
 	selected := projected.Model
-	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: responseDigest, ResponseLength: responseLength, PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: &selected, Provider: "openrouter", Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
+	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: responseDigest, ResponseLength: responseLength, PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: &selected, Provider: "openrouter", GenerationID: projected.ID, ServingProvider: projected.Provider, UsageSHA256: usageDigest, Fallback: selected != in.Request.Models[0], Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
 	unsignedBytes, _ := protocol.CanonicalJSON(result)
 	var unsigned map[string]any
 	_ = json.Unmarshal(unsignedBytes, &unsigned)
@@ -363,6 +389,34 @@ func exactModel(actual string, requested []string) bool {
 		}
 	}
 	return false
+}
+
+func hasChoiceError(choice providerChoice) bool {
+	if len(choice.Error) != 0 && string(choice.Error) != "null" {
+		return true
+	}
+	return choice.FinishReason != nil && *choice.FinishReason == "error"
+}
+
+func canonicalUsage(raw json.RawMessage) ([]byte, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, ErrProvenance
+	}
+	var usage map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if decoder.Decode(&usage) != nil || usage == nil {
+		return nil, ErrProvenance
+	}
+	var trailing any
+	if decoder.Decode(&trailing) != io.EOF {
+		return nil, ErrProvenance
+	}
+	canonical, err := protocol.CanonicalJSON(usage)
+	if err != nil {
+		return nil, ErrProvenance
+	}
+	return canonical, nil
 }
 
 func (d *Dispatcher) now() time.Time {

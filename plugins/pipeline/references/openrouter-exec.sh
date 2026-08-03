@@ -171,6 +171,10 @@ jq -e --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_
     .scope.candidate == $candidate and .scope.workload == $workload and
     .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
     .provider == "openrouter" and .part_count == 2 and
+    (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+    (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+    (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+    (.fallback == (.selected_model != .models[0])) and
     .request_body_sha256 == $body_digest and
     .response_sha256 == $response_digest and .response_length == $response_length and
     (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
@@ -225,12 +229,14 @@ FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')
 jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" \
   --arg verification "$VERIFY_RESULT" --arg requested_model "$MODEL" \
   --arg actual_model "$(jq -r '.selected_model' "$RESULT_FILE")" \
-  --arg provider "$(jq -r '.provider' "$RESULT_FILE")" \
-  --argjson fallback "$([ "$(jq -r '.selected_model' "$RESULT_FILE")" != "$MODEL" ] && echo true || echo false)" '
+  --arg provider "$(jq -r '.serving_provider' "$RESULT_FILE")" \
+  --arg generation_id "$(jq -r '.generation_id' "$RESULT_FILE")" \
+  --arg usage_sha256 "$(jq -r '.usage_sha256' "$RESULT_FILE")" \
+  --argjson fallback "$(jq '.fallback' "$RESULT_FILE")" '
   {requestedProvider:"openrouter",attemptedProvider:"openrouter",actualImplementer:"openrouter",
    implementedBy:"openrouter",status:"committed",commit:$commit,filesChanged:$files,
    verification:$verification,requestedModel:$requested_model,actualModel:$actual_model,
-   servingProvider:$provider,responseModelProvenance:"broker-verified",
+   servingProvider:$provider,generationId:$generation_id,usageSha256:$usage_sha256,responseModelProvenance:"broker-verified",
    servingProviderProvenance:"broker-verified",fallback:$fallback,
    fallbackReason:(if $fallback then "broker-routed-fallback" else "none" end),
    nativeVendorOriginInvariant:"passed",usage:null}'

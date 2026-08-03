@@ -59,7 +59,7 @@ func TestFixtureTLSExactlyOneAttemptAndCredentialIsolation(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		authorization = r.Header.Get("Authorization")
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "z-ai/glm-5.2", "provider": "fixture", "usage": map[string]int{"total_tokens": 2}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "z-ai/glm-5.2", "provider": "fixture", "usage": map[string]int{"total_tokens": 2}, "choices": []any{map[string]any{"message": map[string]any{"content": "fixture-content"}, "finish_reason": "stop"}}})
 	}))
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), "credential")
@@ -259,7 +259,7 @@ func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "openai/gpt-5.6", "provider": "fixture-provider", "usage": map[string]int{"total_tokens": 2}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "openai/gpt-5.6", "provider": "fixture-provider", "usage": map[string]int{"total_tokens": 2}, "choices": []any{map[string]any{"message": map[string]any{"content": "exact assistant bytes"}, "finish_reason": "stop"}}})
 	}))
 	defer server.Close()
 	now := time.Date(2026, 8, 3, 0, 1, 0, 0, time.UTC)
@@ -291,11 +291,36 @@ func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
 	if result.Outcome != "verified" || !sink.closed || len(sink.response) == 0 || len(sink.terminal) == 0 || requests.Load() != 1 {
 		t.Fatalf("result=%v closed=%v requests=%d", result.Outcome, sink.closed, requests.Load())
 	}
+	if string(sink.response) != "exact assistant bytes" || result.ResponseSHA256 != protocol.Digest(sink.response) || result.ResponseLength != int64(len(sink.response)) {
+		t.Fatalf("delivered response binding mismatch: %q %+v", sink.response, result)
+	}
+	if result.GenerationID != "generation-fixture" || result.ServingProvider != "fixture-provider" || result.UsageSHA256 != protocol.Digest([]byte(`{"total_tokens":2}`)) || result.Fallback {
+		t.Fatalf("provider provenance mismatch: %+v", result)
+	}
 	if _, err := d.Dispatch(context.Background(), input, &captureSink{id: "connection-positive"}); err == nil {
 		t.Fatal("replay accepted")
 	}
 	if requests.Load() != 1 {
 		t.Fatal("replay contacted provider")
+	}
+}
+
+func TestProviderProvenanceRejectsInvalidMetadataUsageAndChoiceErrors(t *testing.T) {
+	if providerMetadata.MatchString("") || providerMetadata.MatchString("bad provider") || providerMetadata.MatchString(repeat("a", 257)) {
+		t.Fatal("invalid provider metadata accepted")
+	}
+	canonical, err := canonicalUsage(json.RawMessage(`{"total_tokens":2,"prompt_tokens":1}`))
+	if err != nil || string(canonical) != `{"prompt_tokens":1,"total_tokens":2}` {
+		t.Fatalf("canonical usage=%q err=%v", canonical, err)
+	}
+	for _, raw := range []string{"", "null", "[]", `"usage"`} {
+		if _, err := canonicalUsage(json.RawMessage(raw)); err == nil {
+			t.Fatalf("invalid usage accepted: %q", raw)
+		}
+	}
+	errorReason := "error"
+	if !hasChoiceError(providerChoice{Error: json.RawMessage(`{"code":500}`)}) || !hasChoiceError(providerChoice{FinishReason: &errorReason}) || hasChoiceError(providerChoice{Error: json.RawMessage("null")}) {
+		t.Fatal("choice error classification mismatch")
 	}
 }
 
