@@ -216,7 +216,109 @@ type providerChoice struct {
 	FinishReason *string         `json:"finish_reason"`
 }
 type providerMessage struct {
-	Content *string `json:"content"`
+	Content json.RawMessage `json:"content"`
+	Role    string          `json:"role"`
+}
+
+func decodeJSONString(raw []byte) ([]byte, error) {
+	if len(raw) < 2 || raw[0] != '"' || raw[len(raw)-1] != '"' {
+		return nil, ErrProvenance
+	}
+	out := make([]byte, 0, len(raw)-2)
+	for i := 1; i < len(raw)-1; i++ {
+		value := raw[i]
+		if value != '\\' {
+			if value < 0x20 {
+				zero(out)
+				return nil, ErrProvenance
+			}
+			out = append(out, value)
+			continue
+		}
+		i++
+		if i >= len(raw)-1 {
+			zero(out)
+			return nil, ErrProvenance
+		}
+		switch raw[i] {
+		case '"', '\\', '/':
+			out = append(out, raw[i])
+		case 'b':
+			out = append(out, '\b')
+		case 'f':
+			out = append(out, '\f')
+		case 'n':
+			out = append(out, '\n')
+		case 'r':
+			out = append(out, '\r')
+		case 't':
+			out = append(out, '\t')
+		case 'u':
+			first, next, ok := jsonHexRune(raw, i+1)
+			if !ok {
+				zero(out)
+				return nil, ErrProvenance
+			}
+			i = next - 1
+			if first >= 0xD800 && first <= 0xDBFF {
+				if i+6 >= len(raw) || raw[i+1] != '\\' || raw[i+2] != 'u' {
+					zero(out)
+					return nil, ErrProvenance
+				}
+				second, end, valid := jsonHexRune(raw, i+3)
+				if !valid || second < 0xDC00 || second > 0xDFFF {
+					zero(out)
+					return nil, ErrProvenance
+				}
+				first = 0x10000 + ((first - 0xD800) << 10) + (second - 0xDC00)
+				i = end - 1
+			} else if first >= 0xDC00 && first <= 0xDFFF {
+				zero(out)
+				return nil, ErrProvenance
+			}
+			out = utf8.AppendRune(out, rune(first))
+		default:
+			zero(out)
+			return nil, ErrProvenance
+		}
+	}
+	if !utf8.Valid(out) {
+		zero(out)
+		return nil, ErrProvenance
+	}
+	return out, nil
+}
+
+func jsonHexRune(raw []byte, start int) (uint32, int, bool) {
+	if start+4 > len(raw)-1 {
+		return 0, start, false
+	}
+	var value uint32
+	for _, item := range raw[start : start+4] {
+		value <<= 4
+		switch {
+		case item >= '0' && item <= '9':
+			value += uint32(item - '0')
+		case item >= 'a' && item <= 'f':
+			value += uint32(item-'a') + 10
+		case item >= 'A' && item <= 'F':
+			value += uint32(item-'A') + 10
+		default:
+			return 0, start, false
+		}
+	}
+	return value, start + 4, true
+}
+
+func zeroProviderResponse(value *providerResponse) {
+	if value == nil {
+		return
+	}
+	zero(value.Usage)
+	for i := range value.Choices {
+		zero(value.Choices[i].Error)
+		zero(value.Choices[i].Message.Content)
+	}
 }
 
 type FIDOAssertion struct {
@@ -300,7 +402,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 		return TerminalResult{}, sendErr
 	}
 	var projected providerResponse
-	if json.Unmarshal(response, &projected) != nil || !providerMetadata.MatchString(projected.ID) || !providerMetadata.MatchString(projected.Provider) || !exactModel(projected.Model, in.Request.Models) || len(projected.Choices) != 1 || projected.Choices[0].Message.Content == nil || hasChoiceError(projected.Choices[0]) {
+	if json.Unmarshal(response, &projected) != nil {
+		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
+		return TerminalResult{}, ErrProvenance
+	}
+	defer zeroProviderResponse(&projected)
+	if !providerMetadata.MatchString(projected.ID) || !providerMetadata.MatchString(projected.Provider) || !exactModel(projected.Model, in.Request.Models) || len(projected.Choices) != 1 || !validDeliveredChoice(projected.Choices[0]) {
 		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
 		return TerminalResult{}, ErrProvenance
 	}
@@ -311,9 +418,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	}
 	usageDigest := protocol.Digest(usageCanonical)
 	zero(usageCanonical)
-	content := []byte(*projected.Choices[0].Message.Content)
+	content, contentErr := decodeJSONString(projected.Choices[0].Message.Content)
 	defer zero(content)
-	if len(content) == 0 || !utf8.Valid(content) || int64(len(content)) > maxProviderResponse {
+	if contentErr != nil || len(content) == 0 || int64(len(content)) > maxProviderResponse {
 		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
 		return TerminalResult{}, ErrProvenance
 	}
@@ -391,15 +498,27 @@ func exactModel(actual string, requested []string) bool {
 	return false
 }
 
-func hasChoiceError(choice providerChoice) bool {
-	if len(choice.Error) != 0 && string(choice.Error) != "null" {
-		return true
+func successfulFinishReason(choice providerChoice) bool {
+	if len(choice.Error) != 0 && !bytes.Equal(choice.Error, []byte("null")) {
+		return false
 	}
-	return choice.FinishReason != nil && *choice.FinishReason == "error"
+	if choice.FinishReason == nil {
+		return false
+	}
+	switch *choice.FinishReason {
+	case "stop", "length", "content_filter":
+		return true
+	default:
+		return false
+	}
+}
+
+func validDeliveredChoice(choice providerChoice) bool {
+	return choice.Message.Role == "assistant" && len(choice.Message.Content) != 0 && successfulFinishReason(choice)
 }
 
 func canonicalUsage(raw json.RawMessage) ([]byte, error) {
-	if len(raw) == 0 || string(raw) == "null" {
+	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
 		return nil, ErrProvenance
 	}
 	var usage map[string]any

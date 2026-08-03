@@ -59,7 +59,7 @@ func TestFixtureTLSExactlyOneAttemptAndCredentialIsolation(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		authorization = r.Header.Get("Authorization")
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "z-ai/glm-5.2", "provider": "fixture", "usage": map[string]int{"total_tokens": 2}, "choices": []any{map[string]any{"message": map[string]any{"content": "fixture-content"}, "finish_reason": "stop"}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "z-ai/glm-5.2", "provider": "fixture", "usage": map[string]int{"total_tokens": 2}, "choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": "fixture-content"}, "finish_reason": "stop"}}})
 	}))
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), "credential")
@@ -259,7 +259,7 @@ func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "openai/gpt-5.6", "provider": "fixture-provider", "usage": map[string]int{"total_tokens": 2}, "choices": []any{map[string]any{"message": map[string]any{"content": "exact assistant bytes"}, "finish_reason": "stop"}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "generation-fixture", "model": "openai/gpt-5.6", "provider": "fixture-provider", "usage": map[string]int{"total_tokens": 2}, "choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": "exact assistant bytes"}, "finish_reason": "stop"}}})
 	}))
 	defer server.Close()
 	now := time.Date(2026, 8, 3, 0, 1, 0, 0, time.UTC)
@@ -318,9 +318,69 @@ func TestProviderProvenanceRejectsInvalidMetadataUsageAndChoiceErrors(t *testing
 			t.Fatalf("invalid usage accepted: %q", raw)
 		}
 	}
-	errorReason := "error"
-	if !hasChoiceError(providerChoice{Error: json.RawMessage(`{"code":500}`)}) || !hasChoiceError(providerChoice{FinishReason: &errorReason}) || hasChoiceError(providerChoice{Error: json.RawMessage("null")}) {
-		t.Fatal("choice error classification mismatch")
+	stop, length, filtered := "stop", "length", "content_filter"
+	errorReason, unknown, toolCalls := "error", "future_reason", "tool_calls"
+	for _, choice := range []providerChoice{{FinishReason: &stop}, {FinishReason: &length}, {FinishReason: &filtered, Error: json.RawMessage("null")}} {
+		if !successfulFinishReason(choice) {
+			t.Fatalf("completed choice rejected: %+v", choice)
+		}
+	}
+	for _, choice := range []providerChoice{{}, {FinishReason: &errorReason}, {FinishReason: &unknown}, {FinishReason: &toolCalls}, {FinishReason: &stop, Error: json.RawMessage(`{"code":500}`)}} {
+		if successfulFinishReason(choice) {
+			t.Fatalf("incomplete or failed choice accepted: %+v", choice)
+		}
+	}
+}
+
+func TestMutableAssistantContentDecodeAndWipe(t *testing.T) {
+	raw := json.RawMessage(`"line\nquote:\" globe:\uD83C\uDF0D"`)
+	decoded, err := decodeJSONString(raw)
+	if err != nil || string(decoded) != "line\nquote:\" globe:🌍" {
+		t.Fatalf("decoded=%q err=%v", decoded, err)
+	}
+	zero(decoded)
+	for i, value := range decoded {
+		if value != 0 {
+			t.Fatalf("decoded byte %d was not wiped", i)
+		}
+	}
+	empty, err := decodeJSONString(json.RawMessage(`""`))
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("valid empty JSON string decode=%q err=%v", empty, err)
+	}
+	for _, invalid := range []json.RawMessage{
+		json.RawMessage(`null`),
+		json.RawMessage(`"bad\xescape"`),
+		json.RawMessage(`"unpaired-high:\uD83C"`),
+		json.RawMessage(`"unpaired-low:\uDF0D"`),
+		json.RawMessage(`"bad-pair:\uD83C\u0041"`),
+	} {
+		if decoded, decodeErr := decodeJSONString(invalid); decodeErr == nil {
+			zero(decoded)
+			t.Fatalf("invalid JSON string accepted: %q", invalid)
+		}
+	}
+	response := providerResponse{Usage: json.RawMessage(`{"total_tokens":2}`), Choices: []providerChoice{{Error: json.RawMessage(`{"code":500}`), Message: providerMessage{Content: append(json.RawMessage(nil), raw...)}}}}
+	zeroProviderResponse(&response)
+	for _, buffer := range [][]byte{response.Usage, response.Choices[0].Error, response.Choices[0].Message.Content} {
+		for i, value := range buffer {
+			if value != 0 {
+				t.Fatalf("provider buffer byte %d was not wiped", i)
+			}
+		}
+	}
+}
+
+func TestDeliveredChoiceRequiresExactAssistantRole(t *testing.T) {
+	stop := "stop"
+	content := json.RawMessage(`"answer"`)
+	if !validDeliveredChoice(providerChoice{FinishReason: &stop, Message: providerMessage{Role: "assistant", Content: content}}) {
+		t.Fatal("exact assistant choice rejected")
+	}
+	for _, role := range []string{"", "user", "Assistant", " assistant"} {
+		if validDeliveredChoice(providerChoice{FinishReason: &stop, Message: providerMessage{Role: role, Content: content}}) {
+			t.Fatalf("invalid role accepted: %q", role)
+		}
 	}
 }
 
