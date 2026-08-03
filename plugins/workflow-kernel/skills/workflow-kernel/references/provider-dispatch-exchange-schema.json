@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.dev/schemas/workflow-kernel/provider-dispatch-exchange-v1.json",
+  "title": "Provider dispatch single-connection exchange v1",
+  "description": "One non-resumable connection from reservation through signed terminal result. Transaction identifiers are diagnostic and response retrieval is forbidden.",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "protocol", "state", "request", "request_body_sha256", "challenge", "consent_ack", "result", "safe_error", "consumed", "network_attempted", "response_retrievable"],
+  "properties": {
+    "schema_version": {"const": 1}, "protocol": {"const": "workflow-authority-provider-dispatch-v1"},
+    "state": {"enum": ["reserved", "challenged", "authorized", "sent", "terminal", "tombstone"]},
+    "request": {"$ref": "provider-dispatch-request-schema.json"}, "request_body_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "challenge": {"type": ["object", "null"]}, "consent_ack": {"type": ["object", "null"]}, "result": {"anyOf": [{"$ref": "provider-dispatch-result-schema.json"}, {"type": "null"}]},
+    "safe_error": {"type": ["string", "null"]}, "consumed": {"type": "boolean"}, "network_attempted": {"type": "boolean"}, "response_retrievable": {"const": false}
+  }
+}

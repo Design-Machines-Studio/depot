@@ -38,13 +38,17 @@ class ReleaseValidatorTests(unittest.TestCase):
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
         self.assertTrue(all("--help" not in case for case in VALIDATOR.BEHAVIORAL_CLI_CASES.values()))
 
-    def test_schema_inventory_is_exactly_the_thirteen_released_documents(self):
+    def test_schema_inventory_is_exactly_the_released_documents(self):
         expected = {
             "behavioral-verification-contract-schema.json",
             "verification-contract-approval-schema.json",
             "browser-recovery-schema.json",
             "cleanup-plan-schema.json",
             "cleanup-receipt-schema.json",
+            "provider-dispatch-exchange-schema.json",
+            "provider-dispatch-request-schema.json",
+            "provider-dispatch-result-schema.json",
+            "provider-dispatch-status-schema.json",
             "repository-verification-plan-schema.json",
             "repository-verification-approval-schema.json",
             "repository-verification-provider-attestation-schema.json",

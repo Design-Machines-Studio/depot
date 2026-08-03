@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.dev/schemas/workflow-kernel/provider-dispatch-request-v1.json",
+  "title": "Provider dispatch request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "protocol", "mapping", "operation_family", "substrate_authority", "destination", "method", "path", "models", "parts", "scope", "authority", "limits"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "protocol": {"const": "workflow-authority-provider-dispatch-v1"},
+    "mapping": {"const": "openrouter-chat-v1"},
+    "operation_family": {"const": "external_provider_dispatch"},
+    "substrate_authority": {"const": "not_asserted"},
+    "destination": {"const": "https://openrouter.ai"},
+    "method": {"const": "POST"},
+    "path": {"const": "/api/v1/chat/completions"},
+    "models": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+    "parts": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/part"}},
+    "scope": {"$ref": "#/$defs/scope"},
+    "authority": {"$ref": "#/$defs/authority"},
+    "limits": {"$ref": "#/$defs/limits"}
+  },
+  "$defs": {
+    "id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "part": {"type": "object", "additionalProperties": false, "required": ["role", "content_length", "content_sha256"], "properties": {"role": {"enum": ["system", "user"]}, "content_length": {"type": "integer", "minimum": 0, "maximum": 1048576}, "content_sha256": {"$ref": "#/$defs/digest"}}},
+    "scope": {"type": "object", "additionalProperties": false, "required": ["repository", "run_id", "lane", "candidate", "workload"], "properties": {"repository": {"$ref": "#/$defs/id"}, "run_id": {"$ref": "#/$defs/id"}, "lane": {"$ref": "#/$defs/id"}, "candidate": {"$ref": "#/$defs/id"}, "workload": {"$ref": "#/$defs/id"}}},
+    "authority": {"type": "object", "additionalProperties": false, "required": ["daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "nonce", "sequence", "boot_id", "session_id", "connection_nonce_sha256", "issued_at", "expires_at"], "properties": {"daemon_build_sha256": {"$ref": "#/$defs/digest"}, "scanner_build_sha256": {"$ref": "#/$defs/digest"}, "policy_sha256": {"$ref": "#/$defs/digest"}, "nonce": {"$ref": "#/$defs/id"}, "sequence": {"type": "integer", "minimum": 1}, "boot_id": {"$ref": "#/$defs/id"}, "session_id": {"$ref": "#/$defs/id"}, "connection_nonce_sha256": {"$ref": "#/$defs/digest"}, "issued_at": {"$ref": "#/$defs/time"}, "expires_at": {"$ref": "#/$defs/time"}}},
+    "limits": {"type": "object", "additionalProperties": false, "required": ["max_request_bytes", "max_response_bytes", "max_parts", "max_pending_per_peer", "max_pending_per_repository", "max_pending_per_daemon"], "properties": {"max_request_bytes": {"const": 8388608}, "max_response_bytes": {"const": 8388608}, "max_parts": {"const": 256}, "max_pending_per_peer": {"const": 4}, "max_pending_per_repository": {"const": 16}, "max_pending_per_daemon": {"const": 64}}}
+  }
+}
