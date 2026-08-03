@@ -164,6 +164,61 @@ func TestProtocolClosedDecoderFramingAndDepth(t *testing.T) {
 	if err := protocol.RequireNoAncillary(1); err == nil {
 		t.Fatal("ancillary descriptor accepted")
 	}
+	framed := append([]byte{0, 0, 0, 1, 'x'}, 'y')
+	if _, err := protocol.ReadSingleFrame(bytes.NewReader(framed)); !errors.Is(err, protocol.ErrTrailingData) {
+		t.Fatalf("trailing exchange accepted: %v", err)
+	}
+}
+
+func TestFrozenM0RequestGrammarRejectsEveryRelaxation(t *testing.T) {
+	request, _, _, clock := fixture(t)
+	mutations := map[string]func(*protocol.Request){
+		"duplicate-model":     func(r *protocol.Request) { r.Models = append(r.Models, r.Models[0]) },
+		"bad-model":           func(r *protocol.Request) { r.Models[0] = " model" },
+		"bad-role":            func(r *protocol.Request) { r.Parts[0].Role = "assistant" },
+		"bad-part-digest":     func(r *protocol.Request) { r.Parts[0].ContentSHA256 = "sha256:ABC" },
+		"oversize-part":       func(r *protocol.Request) { r.Parts[0].ContentLength = protocol.MaxFrameBytes + 1 },
+		"bad-scope":           func(r *protocol.Request) { r.Scope.Repository = "../repo" },
+		"changed-limit":       func(r *protocol.Request) { r.Limits.MaxPendingPerPeer = 5 },
+		"issued-after-expiry": func(r *protocol.Request) { r.Authority.IssuedAt = r.Authority.ExpiresAt },
+		"fractional-time":     func(r *protocol.Request) { r.Authority.IssuedAt = "2026-08-03T00:00:00.1Z" },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			changed := request
+			changed.Models = append([]string(nil), request.Models...)
+			changed.Parts = append([]protocol.Part(nil), request.Parts...)
+			mutate(&changed)
+			if err := protocol.ValidateRequest(changed, clock.Now()); err == nil {
+				t.Fatal("relaxed M0 request accepted")
+			}
+		})
+	}
+}
+
+func TestRequestExchangeBindsPartLengthDigestAndOrder(t *testing.T) {
+	request, _, _, clock := fixture(t)
+	part := []byte("hello")
+	request.Parts[0].ContentLength = int64(len(part))
+	request.Parts[0].ContentSHA256 = protocol.Digest(part)
+	header, _ := protocol.CanonicalJSON(request)
+	var wire bytes.Buffer
+	if err := protocol.WriteFrame(&wire, header); err != nil {
+		t.Fatal(err)
+	}
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(part)))
+	wire.Write(size[:])
+	wire.Write(part)
+	decoded, parts, err := protocol.ReadRequestExchange(bytes.NewReader(wire.Bytes()), clock.Now())
+	if err != nil || decoded.Scope != request.Scope || !bytes.Equal(parts[0], part) {
+		t.Fatalf("exchange failed: %v", err)
+	}
+	mutated := append([]byte(nil), wire.Bytes()...)
+	mutated[len(mutated)-1] ^= 1
+	if _, _, err := protocol.ReadRequestExchange(bytes.NewReader(mutated), clock.Now()); !errors.Is(err, protocol.ErrPartMismatch) {
+		t.Fatalf("part substitution accepted: %v", err)
+	}
 }
 
 func TestPinnedNativeSourceAndNoHostPINFallback(t *testing.T) {
@@ -173,7 +228,7 @@ func TestPinnedNativeSourceAndNoHostPINFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(raw)
-	for _, marker := range []string{"FIDO_VERSION_MAJOR != 1", "FIDO_VERSION_MINOR != 17", "FIDO_VERSION_PATCH != 0", "fido_dev_has_uv", "FIDO_OPT_TRUE", "fido_dev_get_assert(dev, assert, NULL)"} {
+	for _, marker := range []string{"FIDO_VERSION_MAJOR != 1", "FIDO_VERSION_MINOR != 17", "FIDO_VERSION_PATCH != 0", "dm_ready", "fido_dev_has_uv", "fido_dev_set_timeout(dev, 30000)", "fido_assert_authdata_raw_ptr", "FIDO_OPT_TRUE", "fido_dev_get_assert(dev, assert, NULL)"} {
 		if !strings.Contains(source, marker) {
 			t.Fatalf("native invariant missing: %s", marker)
 		}

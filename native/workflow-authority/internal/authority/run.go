@@ -2,6 +2,7 @@
 package authority
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,6 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -347,9 +349,15 @@ func NewManager(config Config, fido FIDO, wal WAL, clock Clock) (*Manager, error
 	if err != nil {
 		return nil, err
 	}
+	latest := make(map[string]Event)
 	for _, event := range events {
 		m.nonces[event.Nonce] = struct{}{}
 		m.sequences[event.Sequence] = struct{}{}
+		latest[event.TransactionID] = event
+	}
+	for _, event := range latest {
+		m.operations++
+		m.bytes += event.RequestBytes + event.ResponseBytes
 		if event.State == SendStarted {
 			event.State = Terminal
 			event.Outcome = "outcome_unknown"
@@ -393,17 +401,14 @@ func (m *Manager) Reserve(ctx context.Context, request protocol.Request, challen
 	if _, ok := m.sequences[request.Authority.Sequence]; ok {
 		return protocol.Challenge{}, ErrDenied
 	}
-	if m.operations >= m.config.MaxOperations || m.bytes+requestBytes > m.config.MaxBytes || m.pendingLocked() >= m.config.MaxConcurrent {
+	if m.operations >= m.config.MaxOperations || m.bytes+requestBytes > m.config.MaxBytes || m.pendingLocked() >= min(m.config.MaxConcurrent, 64) || m.pendingForPeerLocked(peer.UID) >= 4 || m.pendingForRepositoryLocked(request.Scope.Repository) >= 16 {
 		return protocol.Challenge{}, ErrConflict
 	}
 	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return protocol.Challenge{}, ErrUnavailable
 	}
-	public, err := x509.MarshalPKIXPublicKey(&private.PublicKey)
-	if err != nil {
-		return protocol.Challenge{}, ErrUnavailable
-	}
+	public := elliptic.Marshal(elliptic.P256(), private.PublicKey.X, private.PublicKey.Y)
 	challenge.ResultSigner = protocol.ResultSigner{Kind: "ephemeral-es256", PublicKeySEC1: base64.RawURLEncoding.EncodeToString(public)}
 	challenge.AuthorityAssertion = nil
 	challengeBytes, err := protocol.CanonicalJSON(challenge)
@@ -477,12 +482,14 @@ func (m *Manager) Authorize(ctx context.Context, transactionID, connectionID str
 		return Assertion{}, err
 	}
 	digest := sha256.Sum256(append(append([]byte{}, assertion.AuthenticatorData...), assertion.Signature...))
-	record.event.State = Authorized
-	record.event.AssertionSHA256 = fmt.Sprintf("sha256:%x", digest)
-	record.event.At = m.clock.Now().Format(time.RFC3339)
-	if err := m.wal.Append(ctx, record.event); err != nil {
+	next := record.event
+	next.State = Authorized
+	next.AssertionSHA256 = fmt.Sprintf("sha256:%x", digest)
+	next.At = m.clock.Now().Format(time.RFC3339)
+	if err := m.wal.Append(ctx, next); err != nil {
 		return Assertion{}, err
 	}
+	record.event = next
 	return assertion, nil
 }
 
@@ -500,11 +507,13 @@ func (m *Manager) BeginSend(ctx context.Context, transactionID, connectionID str
 	if record.cancelled {
 		return SendRight{}, ErrConflict
 	}
-	record.event.State = SendStarted
-	record.event.At = m.clock.Now().Format(time.RFC3339)
-	if err := m.wal.Append(ctx, record.event); err != nil {
+	next := record.event
+	next.State = SendStarted
+	next.At = m.clock.Now().Format(time.RFC3339)
+	if err := m.wal.Append(ctx, next); err != nil {
 		return SendRight{}, err
 	}
+	record.event = next
 	return SendRight{TransactionID: transactionID}, nil
 }
 
@@ -534,13 +543,15 @@ func (m *Manager) Complete(ctx context.Context, transactionID string, responseBy
 	if responseBytes < 0 || m.bytes+responseBytes > m.config.MaxBytes || (outcome != "verified" && outcome != "provider_failure" && outcome != "outcome_unknown") {
 		return ErrConflict
 	}
-	record.event.State = Terminal
-	record.event.ResponseBytes = responseBytes
-	record.event.Outcome = outcome
-	record.event.At = m.clock.Now().Format(time.RFC3339)
-	if err := m.wal.Append(ctx, record.event); err != nil {
+	next := record.event
+	next.State = Terminal
+	next.ResponseBytes = responseBytes
+	next.Outcome = outcome
+	next.At = m.clock.Now().Format(time.RFC3339)
+	if err := m.wal.Append(ctx, next); err != nil {
 		return err
 	}
+	record.event = next
 	m.bytes += responseBytes
 	return nil
 }
@@ -555,13 +566,15 @@ func (m *Manager) Cancel(ctx context.Context, transactionID string) error {
 	if record.event.State == SendStarted || record.event.State == Terminal {
 		return ErrConflict
 	}
-	record.cancelled = true
-	record.event.State = Cleanup
-	record.event.Outcome = "cancelled"
-	record.event.At = m.clock.Now().Format(time.RFC3339)
-	if err := m.wal.Append(ctx, record.event); err != nil {
+	next := record.event
+	next.State = Cleanup
+	next.Outcome = "cancelled"
+	next.At = m.clock.Now().Format(time.RFC3339)
+	if err := m.wal.Append(ctx, next); err != nil {
 		return err
 	}
+	record.event = next
+	record.cancelled = true
 	zeroKey(record.private)
 	record.private = nil
 	return nil
@@ -574,11 +587,13 @@ func (m *Manager) Cleanup(ctx context.Context, transactionID string) error {
 	if !ok || record.event.State != Terminal {
 		return ErrConflict
 	}
-	record.event.State = Cleanup
-	record.event.At = m.clock.Now().Format(time.RFC3339)
-	if err := m.wal.Append(ctx, record.event); err != nil {
+	next := record.event
+	next.State = Cleanup
+	next.At = m.clock.Now().Format(time.RFC3339)
+	if err := m.wal.Append(ctx, next); err != nil {
 		return err
 	}
+	record.event = next
 	zeroKey(record.private)
 	record.private = nil
 	return nil
@@ -607,6 +622,30 @@ func (m *Manager) pendingLocked() int {
 	}
 	return count
 }
+func (m *Manager) pendingForPeerLocked(uid uint32) int {
+	count := 0
+	for _, record := range m.records {
+		if record.peer.UID == uid && record.event.State != Terminal && record.event.State != Cleanup {
+			count++
+		}
+	}
+	return count
+}
+func (m *Manager) pendingForRepositoryLocked(repository string) int {
+	count := 0
+	for _, record := range m.records {
+		if record.event.Scope.Repository == repository && record.event.State != Terminal && record.event.State != Cleanup {
+			count++
+		}
+	}
+	return count
+}
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
 func redactFIDO(err error) error {
 	if errors.Is(err, context.Canceled) {
 		return ErrConflict
@@ -624,21 +663,67 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	defer m.mu.Unlock()
 	for _, record := range m.records {
 		if record.event.State == Reserved || record.event.State == Authorized {
-			record.event.State = Cleanup
-			record.event.Outcome = "shutdown_cancelled"
-			if err := m.wal.Append(ctx, record.event); err != nil {
+			next := record.event
+			next.State = Cleanup
+			next.Outcome = "shutdown_cancelled"
+			if err := m.wal.Append(ctx, next); err != nil {
 				return err
 			}
+			record.event = next
 		}
 		if record.event.State == SendStarted {
-			record.event.State = Terminal
-			record.event.Outcome = "outcome_unknown"
-			if err := m.wal.Append(ctx, record.event); err != nil {
+			next := record.event
+			next.State = Terminal
+			next.Outcome = "outcome_unknown"
+			if err := m.wal.Append(ctx, next); err != nil {
 				return err
 			}
+			record.event = next
 		}
 		zeroKey(record.private)
 		record.private = nil
 	}
 	return m.wal.Close()
+}
+
+func verifyES256Assertion(challenge []byte, credential Credential, assertion Assertion) error {
+	if !assertion.UserPresence || !assertion.UserVerification || assertion.HostPINRequested || assertion.Generation != credential.Generation || assertion.CredentialReference != credential.Reference {
+		return ErrDenied
+	}
+	challengeDigest := sha256.Sum256(challenge)
+	if assertion.ChallengeDigest != challengeDigest || len(assertion.AuthenticatorData) < 37 {
+		return ErrDenied
+	}
+	var clientData struct {
+		Challenge   string `json:"challenge"`
+		CrossOrigin bool   `json:"crossOrigin"`
+		Origin      string `json:"origin"`
+		Type        string `json:"type"`
+	}
+	if err := protocol.DecodeClosed(assertion.ClientDataJSON, &clientData); err != nil || clientData.Challenge != base64.RawURLEncoding.EncodeToString(challengeDigest[:]) || clientData.CrossOrigin || clientData.Origin != "https://workflow-authority.designmachines.local" || clientData.Type != "webauthn.get" {
+		return ErrDenied
+	}
+	rpHash := sha256.Sum256([]byte(credential.RPID))
+	if !bytes.Equal(assertion.AuthenticatorData[:32], rpHash[:]) || assertion.AuthenticatorData[32]&0x01 == 0 || assertion.AuthenticatorData[32]&0x04 == 0 {
+		return ErrDenied
+	}
+	counter := binary.BigEndian.Uint32(assertion.AuthenticatorData[33:37])
+	if counter != assertion.Counter || (counter != 0 && counter <= credential.SignCount) {
+		return ErrDenied
+	}
+	public, err := x509.ParsePKIXPublicKey(credential.PublicKey)
+	if err != nil {
+		return ErrDenied
+	}
+	key, ok := public.(*ecdsa.PublicKey)
+	if !ok {
+		return ErrDenied
+	}
+	clientHash := sha256.Sum256(assertion.ClientDataJSON)
+	signed := append(append([]byte{}, assertion.AuthenticatorData...), clientHash[:]...)
+	digest := sha256.Sum256(signed)
+	if !ecdsa.VerifyASN1(key, digest[:], assertion.Signature) {
+		return ErrDenied
+	}
+	return nil
 }

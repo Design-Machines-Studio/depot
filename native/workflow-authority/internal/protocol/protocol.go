@@ -32,7 +32,10 @@ var (
 	ErrNonCanonical    = errors.New("noncanonical_document")
 	ErrFrameTooLarge   = errors.New("frame_too_large")
 	ErrTrailingData    = errors.New("exchange_trailing_data")
+	ErrPartMismatch    = errors.New("part_frame_mismatch")
 	digestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	idPattern          = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$`)
+	timePattern        = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$`)
 )
 
 type Scope struct {
@@ -249,17 +252,43 @@ func ValidateRequest(r Request, now time.Time) error {
 	if len(r.Models) == 0 || len(r.Models) > 256 || len(r.Parts) == 0 || len(r.Parts) > 256 {
 		return ErrInvalidDocument
 	}
+	if r.Limits != (Limits{MaxRequestBytes: 8_388_608, MaxResponseBytes: 8_388_608, MaxParts: 256, MaxPendingPerPeer: 4, MaxPendingRepository: 16, MaxPendingDaemon: 64}) {
+		return ErrInvalidDocument
+	}
+	seenModels := make(map[string]struct{}, len(r.Models))
+	for _, model := range r.Models {
+		if !idPattern.MatchString(model) {
+			return ErrInvalidDocument
+		}
+		if _, exists := seenModels[model]; exists {
+			return ErrInvalidDocument
+		}
+		seenModels[model] = struct{}{}
+	}
+	for _, part := range r.Parts {
+		if (part.Role != "system" && part.Role != "user") || part.ContentLength < 0 || part.ContentLength > MaxFrameBytes || !digestPattern.MatchString(part.ContentSHA256) {
+			return ErrInvalidDocument
+		}
+	}
+	for _, value := range []string{r.Scope.Repository, r.Scope.RunID, r.Scope.Lane, r.Scope.Candidate, r.Scope.Workload, r.Authority.Nonce, r.Authority.BootID, r.Authority.SessionID} {
+		if !idPattern.MatchString(value) {
+			return ErrInvalidDocument
+		}
+	}
 	for _, digest := range []string{r.Authority.DaemonBuildSHA256, r.Authority.ScannerBuildSHA256, r.Authority.PolicySHA256, r.Authority.ConnectionNonceSHA256, r.Authority.PriorChainDigest} {
 		if !digestPattern.MatchString(digest) {
 			return ErrInvalidDocument
 		}
+	}
+	if !timePattern.MatchString(r.Authority.IssuedAt) || !timePattern.MatchString(r.Authority.ExpiresAt) {
+		return ErrInvalidDocument
 	}
 	expires, err := time.Parse(time.RFC3339, r.Authority.ExpiresAt)
 	if err != nil || !now.Before(expires) {
 		return errors.New("authorization_expired")
 	}
 	issued, err := time.Parse(time.RFC3339, r.Authority.IssuedAt)
-	if err != nil || issued.After(now) || r.Authority.Sequence == 0 {
+	if err != nil || issued.After(now) || !issued.Before(expires) || r.Authority.Sequence == 0 {
 		return ErrInvalidDocument
 	}
 	return nil
@@ -287,13 +316,82 @@ func WriteFrame(w io.Writer, payload []byte) error {
 	}
 	var header [4]byte
 	binary.BigEndian.PutUint32(header[:], uint32(len(payload)))
-	if _, err := w.Write(header[:]); err != nil {
+	if err := writeAll(w, header[:]); err != nil {
 		return errors.New("durable_state_unavailable")
 	}
-	if _, err := w.Write(payload); err != nil {
+	if err := writeAll(w, payload); err != nil {
 		return errors.New("durable_state_unavailable")
 	}
 	return nil
+}
+
+func writeAll(w io.Writer, payload []byte) error {
+	for len(payload) > 0 {
+		n, err := w.Write(payload)
+		if err != nil {
+			return err
+		}
+		if n <= 0 || n > len(payload) {
+			return io.ErrShortWrite
+		}
+		payload = payload[n:]
+	}
+	return nil
+}
+
+// ReadSingleFrame rejects a second frame or any trailing byte.
+func ReadSingleFrame(r io.Reader) ([]byte, error) {
+	payload, err := ReadFrame(r)
+	if err != nil {
+		return nil, err
+	}
+	var trailing [1]byte
+	n, err := r.Read(trailing[:])
+	if n != 0 || (err != nil && err != io.EOF) || err == nil {
+		return nil, ErrTrailingData
+	}
+	return payload, nil
+}
+
+// ReadRequestExchange consumes the M0 control frame followed by its ordered
+// uint64-length-prefixed content parts and verifies every declared digest.
+func ReadRequestExchange(r io.Reader, now time.Time) (Request, [][]byte, error) {
+	header, err := ReadFrame(r)
+	if err != nil {
+		return Request{}, nil, err
+	}
+	var request Request
+	if err := DecodeClosed(header, &request); err != nil {
+		return Request{}, nil, err
+	}
+	if err := ValidateRequest(request, now); err != nil {
+		return Request{}, nil, err
+	}
+	total := int64(4 + len(header))
+	parts := make([][]byte, 0, len(request.Parts))
+	for _, declared := range request.Parts {
+		var lengthBytes [8]byte
+		if _, err := io.ReadFull(r, lengthBytes[:]); err != nil {
+			return Request{}, nil, ErrPartMismatch
+		}
+		length := binary.BigEndian.Uint64(lengthBytes[:])
+		if length > MaxFrameBytes || int64(length) != declared.ContentLength {
+			return Request{}, nil, ErrPartMismatch
+		}
+		part := make([]byte, int(length))
+		if _, err := io.ReadFull(r, part); err != nil {
+			return Request{}, nil, ErrPartMismatch
+		}
+		if Digest(part) != declared.ContentSHA256 {
+			return Request{}, nil, ErrPartMismatch
+		}
+		total += 8 + int64(length)
+		if total > request.Limits.MaxRequestBytes {
+			return Request{}, nil, ErrFrameTooLarge
+		}
+		parts = append(parts, part)
+	}
+	return request, parts, nil
 }
 
 func ChallengeInput(challenge Challenge) ([]byte, error) {

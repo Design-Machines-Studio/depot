@@ -2,8 +2,15 @@ package authority
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"testing"
@@ -101,6 +108,10 @@ func TestExactRequestLifecycleAndFsyncLinearization(t *testing.T) {
 	wal := &memoryWAL{}
 	fido := &fakeFIDO{}
 	manager, challenge, peer, _ := reserve(t, fido, wal)
+	public, err := base64.RawURLEncoding.DecodeString(challenge.ResultSigner.PublicKeySEC1)
+	if err != nil || len(public) != 65 || public[0] != 4 {
+		t.Fatalf("result signer is not uncompressed SEC1: %x %v", public, err)
+	}
 	bytes, _ := protocol.CanonicalJSON(challenge)
 	if _, err := manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(bytes)); err != nil {
 		t.Fatal(err)
@@ -129,6 +140,184 @@ func TestExactRequestLifecycleAndFsyncLinearization(t *testing.T) {
 		if wal.events[i].State != state {
 			t.Fatalf("transition %d = %s", i, wal.events[i].State)
 		}
+	}
+}
+
+func TestWALFailureNeverPublishesTransition(t *testing.T) {
+	wal := &memoryWAL{}
+	manager, challenge, peer, _ := reserve(t, &fakeFIDO{}, wal)
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	wal.failAt = 2
+	if _, err := manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical)); err == nil {
+		t.Fatal("authorization fsync failure accepted")
+	}
+	if manager.records[challenge.TransactionID].event.State != Reserved {
+		t.Fatal("failed authorization published")
+	}
+	wal.failAt = 0
+	if _, err := manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical)); err != nil {
+		t.Fatal(err)
+	}
+	wal.failAt = 4
+	if _, err := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer); err == nil {
+		t.Fatal("send fsync failure accepted")
+	}
+	if manager.records[challenge.TransactionID].event.State != Authorized {
+		t.Fatal("failed send published")
+	}
+	wal.failAt = 0
+	if _, err := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer); err != nil {
+		t.Fatal(err)
+	}
+	beforeBytes := manager.bytes
+	wal.failAt = 6
+	if err := manager.Complete(context.Background(), challenge.TransactionID, 10, "verified"); err == nil {
+		t.Fatal("terminal fsync failure accepted")
+	}
+	if manager.records[challenge.TransactionID].event.State != SendStarted || manager.bytes != beforeBytes {
+		t.Fatal("failed terminal published")
+	}
+	wal.failAt = 0
+	if err := manager.Complete(context.Background(), challenge.TransactionID, 10, "verified"); err != nil {
+		t.Fatal(err)
+	}
+	wal.failAt = 8
+	if err := manager.Cleanup(context.Background(), challenge.TransactionID); err == nil {
+		t.Fatal("cleanup fsync failure accepted")
+	}
+	if manager.records[challenge.TransactionID].event.State != Terminal || manager.records[challenge.TransactionID].private == nil {
+		t.Fatal("failed cleanup published")
+	}
+
+	cancelWAL := &memoryWAL{}
+	cancelManager, cancelChallenge, _, _ := reserve(t, &fakeFIDO{}, cancelWAL)
+	cancelWAL.failAt = 2
+	if err := cancelManager.Cancel(context.Background(), cancelChallenge.TransactionID); err == nil {
+		t.Fatal("cancel fsync failure accepted")
+	}
+	if record := cancelManager.records[cancelChallenge.TransactionID]; record.event.State != Reserved || record.cancelled {
+		t.Fatal("failed cancel published")
+	}
+}
+
+func TestRawAuthenticatorDataES256Vector(t *testing.T) {
+	challenge := []byte("exact-challenge")
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	challengeDigest := sha256.Sum256(challenge)
+	clientData, _ := protocol.CanonicalJSON(map[string]any{"challenge": base64.RawURLEncoding.EncodeToString(challengeDigest[:]), "crossOrigin": false, "origin": "https://workflow-authority.designmachines.local", "type": "webauthn.get"})
+	rpID := "workflow-authority.designmachines.local"
+	rpHash := sha256.Sum256([]byte(rpID))
+	authdata := append([]byte{}, rpHash[:]...)
+	authdata = append(authdata, 0x05, 0, 0, 0, 2)
+	clientHash := sha256.Sum256(clientData)
+	signed := append(append([]byte{}, authdata...), clientHash[:]...)
+	digest := sha256.Sum256(signed)
+	signature, err := ecdsa.SignASN1(rand.Reader, key, digest[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	credential := Credential{Reference: "credential-generation-1", PublicKey: public, Algorithm: -7, Generation: 1, RPID: rpID, Status: "active", InternalUV: true, SignCount: 1}
+	assertion := Assertion{CredentialReference: credential.Reference, Generation: 1, ChallengeDigest: challengeDigest, Signature: signature, AuthenticatorData: authdata, ClientDataJSON: clientData, UserPresence: true, UserVerification: true, Counter: binary.BigEndian.Uint32(authdata[33:37])}
+	if err := verifyES256Assertion(challenge, credential, assertion); err != nil {
+		t.Fatal(err)
+	}
+	assertion.AuthenticatorData[32] &^= 0x04
+	if err := verifyES256Assertion(challenge, credential, assertion); err == nil {
+		t.Fatal("missing raw UV flag accepted")
+	}
+}
+
+func TestRestartReconstructsBudgetsOncePerTransaction(t *testing.T) {
+	request, challenge, config, clock := fixture(t)
+	config.MaxOperations = 1
+	config.MaxBytes = 20
+	event := Event{Version: 1, TransactionID: challenge.TransactionID, Nonce: request.Authority.Nonce, Sequence: request.Authority.Sequence, State: Reserved, RequestBodySHA256: challenge.RequestBodySHA256, Scope: challenge.Scope, RequestBytes: 4}
+	terminal := event
+	terminal.State = Terminal
+	terminal.ResponseBytes = 6
+	wal := &memoryWAL{events: []Event{event, terminal}}
+	manager, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manager.operations != 1 || manager.bytes != 10 {
+		t.Fatalf("reconstructed operations=%d bytes=%d", manager.operations, manager.bytes)
+	}
+	request.Authority.Nonce = "nonce-02"
+	request.Authority.Sequence = 8
+	challenge.Nonce = "nonce-02"
+	challenge.Sequence = 8
+	challenge.TransactionID = "transaction-02"
+	if _, err := manager.Reserve(context.Background(), request, challenge, []byte("body"), Peer{UID: 501, PID: 4321}, "connection-02"); err == nil {
+		t.Fatal("restart reset operation budget")
+	}
+}
+
+func TestFrozenPendingBounds(t *testing.T) {
+	attempt := func(manager *Manager, index int, uid uint32, repository string) error {
+		request, challenge, _, _ := fixture(t)
+		token := fmt.Sprintf("n-%d", index)
+		request.Authority.Nonce = token
+		request.Authority.Sequence = uint64(index + 1)
+		request.Scope.Repository = repository
+		challenge.Nonce = token
+		challenge.Sequence = uint64(index + 1)
+		challenge.TransactionID = fmt.Sprintf("t-%d", index)
+		challenge.Scope.Repository = repository
+		challenge.PeerUID = uid
+		challenge.PeerPID = int32(index + 10)
+		_, err := manager.Reserve(context.Background(), request, challenge, []byte("body"), Peer{UID: uid, PID: int32(index + 10)}, fmt.Sprintf("c-%d", index))
+		return err
+	}
+	newBounded := func(allowed map[uint32]struct{}) *Manager {
+		_, _, config, clock := fixture(t)
+		config.AllowedUIDs = allowed
+		config.MaxOperations = 100
+		config.MaxConcurrent = 100
+		config.MaxBytes = 1 << 30
+		manager, err := NewManager(config, &fakeFIDO{}, &memoryWAL{}, clock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return manager
+	}
+	peerManager := newBounded(map[uint32]struct{}{501: {}})
+	for i := 0; i < 4; i++ {
+		if err := attempt(peerManager, i, 501, fmt.Sprintf("repo/%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := attempt(peerManager, 4, 501, "repo/4"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("per-peer bound: %v", err)
+	}
+	allowed := map[uint32]struct{}{}
+	for i := 0; i < 65; i++ {
+		allowed[uint32(1000+i)] = struct{}{}
+	}
+	repositoryManager := newBounded(allowed)
+	for i := 0; i < 16; i++ {
+		if err := attempt(repositoryManager, i, uint32(1000+i), "shared/repo"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := attempt(repositoryManager, 16, 1016, "shared/repo"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("repository bound: %v", err)
+	}
+	daemonManager := newBounded(allowed)
+	for i := 0; i < 64; i++ {
+		if err := attempt(daemonManager, i, uint32(1000+i), fmt.Sprintf("repo/%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := attempt(daemonManager, 64, 1064, "repo/64"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("daemon bound: %v", err)
 	}
 }
 

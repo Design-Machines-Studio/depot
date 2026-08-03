@@ -36,6 +36,18 @@ static int dm_copy(unsigned char **dst, size_t *dst_len, const unsigned char *sr
 	memcpy(*dst, src, src_len); *dst_len = src_len; return FIDO_OK;
 }
 
+static int dm_ready(const char *path) {
+	int rc = FIDO_ERR_INTERNAL; fido_dev_t *dev = NULL;
+	if (!path) return FIDO_ERR_INVALID_ARGUMENT; fido_init(0);
+	if ((dev = fido_dev_new()) == NULL) return FIDO_ERR_INTERNAL;
+	if ((rc = fido_dev_open(dev, path)) != FIDO_OK) goto done;
+	if (!fido_dev_has_uv(dev)) { rc = FIDO_ERR_UNSUPPORTED_OPTION; goto done; }
+	rc = FIDO_OK;
+done:
+	if (dev) { fido_dev_close(dev); fido_dev_free(&dev); }
+	return rc;
+}
+
 static int dm_assert_exact(const char *path, const char *rp_id,
 	const unsigned char *credential, size_t credential_len,
 	const unsigned char *challenge_hash, size_t challenge_hash_len,
@@ -46,6 +58,7 @@ static int dm_assert_exact(const char *path, const char *rp_id,
 	if ((dev = fido_dev_new()) == NULL || (assert = fido_assert_new()) == NULL) goto done;
 	if ((rc = fido_dev_open(dev, path)) != FIDO_OK) goto done;
 	if (!fido_dev_has_uv(dev)) { rc = FIDO_ERR_UNSUPPORTED_OPTION; goto done; }
+	if ((rc = fido_dev_set_timeout(dev, 30000)) != FIDO_OK) goto done;
 	if ((rc = fido_assert_set_rp(assert, rp_id)) != FIDO_OK) goto done;
 	if ((rc = fido_assert_set_clientdata_hash(assert, challenge_hash, challenge_hash_len)) != FIDO_OK) goto done;
 	if ((rc = fido_assert_allow_cred(assert, credential, credential_len)) != FIDO_OK) goto done;
@@ -54,7 +67,7 @@ static int dm_assert_exact(const char *path, const char *rp_id,
 	// A NULL PIN is intentional: authenticators requiring host PIN fail closed.
 	if ((rc = fido_dev_get_assert(dev, assert, NULL)) != FIDO_OK) goto done;
 	if (fido_assert_count(assert) != 1) { rc = FIDO_ERR_INVALID_ARGUMENT; goto done; }
-	if ((rc = dm_copy(&out->authdata, &out->authdata_len, fido_assert_authdata_ptr(assert, 0), fido_assert_authdata_len(assert, 0))) != FIDO_OK) goto done;
+	if ((rc = dm_copy(&out->authdata, &out->authdata_len, fido_assert_authdata_raw_ptr(assert, 0), fido_assert_authdata_raw_len(assert, 0))) != FIDO_OK) goto done;
 	if ((rc = dm_copy(&out->sig, &out->sig_len, fido_assert_sig_ptr(assert, 0), fido_assert_sig_len(assert, 0))) != FIDO_OK) goto done;
 	out->flags = fido_assert_flags(assert, 0); out->counter = fido_assert_sigcount(assert, 0); rc = FIDO_OK;
 done:
@@ -67,14 +80,9 @@ done:
 import "C"
 
 import (
-	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/binary"
-	"errors"
 	"syscall"
 	"unsafe"
 
@@ -84,8 +92,14 @@ import (
 type libfido2Adapter struct{ DevicePath string }
 
 func NewFIDOAdapter() FIDO { return &libfido2Adapter{DevicePath: "/dev/hidraw0"} }
-func (a *libfido2Adapter) Readiness(context.Context) Readiness {
-	return Readiness{Production: a.DevicePath != "", Adapter: "libfido2", Version: FIDO2Version, InternalUV: true}
+func (a *libfido2Adapter) Readiness(ctx context.Context) Readiness {
+	if ctx.Err() != nil || a.DevicePath == "" {
+		return Readiness{Production: false, Adapter: "libfido2", Version: FIDO2Version}
+	}
+	path := C.CString(a.DevicePath)
+	defer C.free(unsafe.Pointer(path))
+	ready := C.dm_ready(path) == C.FIDO_OK
+	return Readiness{Production: ready, Adapter: "libfido2", Version: FIDO2Version, InternalUV: ready}
 }
 
 func (a *libfido2Adapter) Assert(ctx context.Context, challenge []byte, credential Credential) (Assertion, error) {
@@ -108,49 +122,14 @@ func (a *libfido2Adapter) Assert(ctx context.Context, challenge []byte, credenti
 	if rc != C.FIDO_OK {
 		return Assertion{}, ErrUnavailable
 	}
+	if err := ctx.Err(); err != nil {
+		return Assertion{}, ErrConflict
+	}
 	return Assertion{CredentialReference: credential.Reference, Generation: credential.Generation, ChallengeDigest: challengeDigest, Signature: C.GoBytes(unsafe.Pointer(out.sig), C.int(out.sig_len)), AuthenticatorData: C.GoBytes(unsafe.Pointer(out.authdata), C.int(out.authdata_len)), ClientDataJSON: clientData, UserPresence: uint(out.flags)&1 != 0, UserVerification: uint(out.flags)&4 != 0, Counter: uint32(out.counter)}, nil
 }
 
 func (a *libfido2Adapter) Verify(_ context.Context, challenge []byte, credential Credential, assertion Assertion) error {
-	if !assertion.UserPresence || !assertion.UserVerification || assertion.HostPINRequested || assertion.Generation != credential.Generation {
-		return ErrDenied
-	}
-	challengeDigest := sha256.Sum256(challenge)
-	if assertion.ChallengeDigest != challengeDigest || len(assertion.AuthenticatorData) < 37 {
-		return ErrDenied
-	}
-	var clientData struct {
-		Challenge   string `json:"challenge"`
-		CrossOrigin bool   `json:"crossOrigin"`
-		Origin      string `json:"origin"`
-		Type        string `json:"type"`
-	}
-	if err := protocol.DecodeClosed(assertion.ClientDataJSON, &clientData); err != nil || clientData.Challenge != base64.RawURLEncoding.EncodeToString(challengeDigest[:]) || clientData.CrossOrigin || clientData.Origin != "https://workflow-authority.designmachines.local" || clientData.Type != "webauthn.get" {
-		return ErrDenied
-	}
-	rpHash := sha256.Sum256([]byte(credential.RPID))
-	if !bytes.Equal(assertion.AuthenticatorData[:32], rpHash[:]) || assertion.AuthenticatorData[32]&0x01 == 0 || assertion.AuthenticatorData[32]&0x04 == 0 {
-		return ErrDenied
-	}
-	counter := binary.BigEndian.Uint32(assertion.AuthenticatorData[33:37])
-	if counter != assertion.Counter || (counter != 0 && counter <= credential.SignCount) {
-		return ErrDenied
-	}
-	public, err := x509.ParsePKIXPublicKey(credential.PublicKey)
-	if err != nil {
-		return ErrDenied
-	}
-	key, ok := public.(*ecdsa.PublicKey)
-	if !ok {
-		return ErrDenied
-	}
-	clientHash := sha256.Sum256(assertion.ClientDataJSON)
-	signed := append(append([]byte{}, assertion.AuthenticatorData...), clientHash[:]...)
-	digest := sha256.Sum256(signed)
-	if !ecdsa.VerifyASN1(key, digest[:], assertion.Signature) {
-		return errors.New("fido_signature_invalid")
-	}
-	return nil
+	return verifyES256Assertion(challenge, credential, assertion)
 }
 
 // LinuxPeerCredentials is eligibility evidence only. It never authorizes send.
