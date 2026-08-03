@@ -2,7 +2,6 @@
 package platform
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -35,12 +34,14 @@ type Paths struct {
 
 type ServiceController interface {
 	StopSocket() error
+	StopService() error
 	DisableUnits() error
 }
 
 type noopService struct{}
 
 func (noopService) StopSocket() error   { return ErrUnavailable }
+func (noopService) StopService() error  { return ErrUnavailable }
 func (noopService) DisableUnits() error { return ErrUnavailable }
 
 type systemdService struct{}
@@ -53,7 +54,8 @@ func (systemdService) run(args ...string) error {
 	cmd.Stderr = io.Discard
 	return cmd.Run()
 }
-func (s systemdService) StopSocket() error { return s.run("stop", "workflow-authority.socket") }
+func (s systemdService) StopSocket() error  { return s.run("stop", "workflow-authority.socket") }
+func (s systemdService) StopService() error { return s.run("stop", "workflow-authority.service") }
 func (s systemdService) DisableUnits() error {
 	return s.run("disable", "workflow-authority.socket", "workflow-authority.service")
 }
@@ -203,8 +205,14 @@ func (p *Linux) ProvisionOpenRouter(secret []byte) error {
 			_ = root.Remove(tmp)
 		}
 	}()
-	if _, err = f.Write(secret); err == nil {
+	if err = f.Chmod(0o600); err == nil {
+		_, err = f.Write(secret)
+	}
+	if err == nil {
 		err = f.Sync()
+	}
+	if err == nil {
+		err = validateCredentialFile(f, p.expectedOwner())
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -219,6 +227,24 @@ func (p *Linux) ProvisionOpenRouter(secret []byte) error {
 		return recovery("provision", "run status; if credential is absent retry provision-openrouter", err)
 	}
 	committed = true
+	return nil
+}
+
+func (p *Linux) expectedOwner() uint32 {
+	if p.test {
+		return uint32(os.Geteuid())
+	}
+	return 0
+}
+func validateCredentialFile(f *os.File, owner uint32) error {
+	i, e := f.Stat()
+	if e != nil || !i.Mode().IsRegular() || i.Mode().Perm() != 0o600 {
+		return ErrUnavailable
+	}
+	s, ok := i.Sys().(*syscall.Stat_t)
+	if !ok || s.Uid != owner || s.Nlink != 1 {
+		return ErrUnavailable
+	}
 	return nil
 }
 
@@ -259,6 +285,9 @@ func (p *Linux) RevokeOpenRouter() error {
 	if err := p.service.StopSocket(); err != nil {
 		return recovery("revoke", "stop workflow-authority.socket, then retry revoke-openrouter", err)
 	}
+	if err := p.service.StopService(); err != nil {
+		return recovery("revoke", "keep workflow-authority.socket stopped; stop workflow-authority.service, then retry revoke-openrouter", err)
+	}
 	parent := filepath.Dir(p.paths.Credential)
 	if err := p.check(parent, 0o700, true); err != nil {
 		return err
@@ -287,6 +316,9 @@ func (p *Linux) Disable() error {
 	if err := p.service.StopSocket(); err != nil {
 		return recovery("disable", "stop workflow-authority.socket manually, then retry disable", err)
 	}
+	if err := p.service.StopService(); err != nil {
+		return recovery("disable", "keep workflow-authority.socket stopped; stop workflow-authority.service, then retry disable", err)
+	}
 	if err := p.service.DisableUnits(); err != nil {
 		return recovery("disable", "disable workflow-authority.socket and workflow-authority.service, then retry disable", err)
 	}
@@ -300,7 +332,7 @@ func (p *Linux) writeTombstone(name string) error {
 	path := filepath.Join(p.paths.State, name+".tombstone")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
 	if errors.Is(err, os.ErrExist) {
-		return nil
+		return validateTombstone(path, p.expectedOwner())
 	}
 	if err != nil {
 		return recovery(name, "preserve state and retry the command", err)
@@ -316,6 +348,21 @@ func (p *Linux) writeTombstone(name string) error {
 	}
 	return err
 }
+func validateTombstone(path string, owner uint32) error {
+	i, e := os.Lstat(path)
+	if e != nil || !i.Mode().IsRegular() || i.Mode().Perm() != 0o600 {
+		return ErrUnavailable
+	}
+	s, ok := i.Sys().(*syscall.Stat_t)
+	if !ok || s.Uid != owner || s.Nlink != 1 {
+		return ErrUnavailable
+	}
+	b, e := os.ReadFile(path)
+	if e != nil || !bytes.Equal(b, []byte("workflow-authority lifecycle tombstone\n")) {
+		return ErrUnavailable
+	}
+	return nil
+}
 
 func (p *Linux) UninstallPlan() ([]string, error) {
 	if p.RequireRoot() != nil {
@@ -329,8 +376,13 @@ func (p *Linux) UninstallPlan() ([]string, error) {
 	}
 	return []string{
 		"systemctl stop workflow-authority.socket workflow-authority.service",
+		"systemctl is-active --quiet workflow-authority.socket workflow-authority.service must report inactive before removal",
 		"systemctl disable workflow-authority.socket workflow-authority.service",
 		"remove exactly: " + strings.Join(paths, ", "),
+		"remove exactly: /etc/systemd/system/workflow-authority.socket, /etc/systemd/system/workflow-authority.service",
+		"rmdir exactly if empty: /run/design-machines/workflow-authority",
+		"systemctl daemon-reload",
+		"after verifying no members or files depend on it: groupdel workflow-authority",
 		"preserve forensic state by default: " + p.paths.State,
 	}, nil
 }
@@ -357,9 +409,9 @@ func recovery(op, action string, err error) error {
 
 type TerminalIdentity struct{ Device, Inode uint64 }
 type Terminal struct {
-	file     *os.File
-	reader   *bufio.Reader
-	identity TerminalIdentity
+	file        *os.File
+	identity    TerminalIdentity
+	openCurrent func() (*os.File, error)
 }
 
 func OpenTerminal() (*Terminal, error) {
@@ -372,7 +424,7 @@ func OpenTerminal() (*Terminal, error) {
 		_ = f.Close()
 		return nil, err
 	}
-	return &Terminal{f, bufio.NewReader(f), id}, nil
+	return &Terminal{file: f, identity: id, openCurrent: func() (*os.File, error) { return os.OpenFile("/dev/tty", os.O_RDWR, 0) }}, nil
 }
 func terminalIdentity(f *os.File) (TerminalIdentity, error) {
 	i, e := f.Stat()
@@ -390,6 +442,18 @@ func (t *Terminal) Stable() error {
 	if e != nil || id != t.identity {
 		return ErrUnavailable
 	}
+	if t.openCurrent == nil {
+		return ErrUnavailable
+	}
+	current, e := t.openCurrent()
+	if e != nil {
+		return ErrUnavailable
+	}
+	defer current.Close()
+	fresh, e := terminalIdentity(current)
+	if e != nil || fresh != t.identity {
+		return ErrUnavailable
+	}
 	return nil
 }
 func (t *Terminal) Write(p []byte) (int, error) {
@@ -402,16 +466,18 @@ func (t *Terminal) ReadLine() (string, error) {
 	if t.Stable() != nil {
 		return "", ErrUnavailable
 	}
-	s, e := t.reader.ReadString('\n')
+	b, e := t.readMutableLine(4096)
 	if e != nil {
 		return "", ErrUnavailable
 	}
+	s := string(b)
+	zeroCapacity(b)
 	if t.Stable() != nil {
 		return "", ErrUnavailable
 	}
 	return s, nil
 }
-func (t *Terminal) ReadSecret(prompt string) ([]byte, error) {
+func (t *Terminal) ReadSecret(prompt string) (line []byte, err error) {
 	if t.Stable() != nil {
 		return nil, ErrUnavailable
 	}
@@ -431,17 +497,44 @@ func (t *Terminal) ReadSecret(prompt string) ([]byte, error) {
 	if _, _, e := syscall.Syscall6(syscall.SYS_IOCTL, t.file.Fd(), 0x5402, uintptr(unsafePointer(&term)), 0, 0, 0); e != 0 {
 		return nil, ErrUnavailable
 	}
-	line, readErr := t.reader.ReadBytes('\n')
-	_, _, restoreErr := syscall.Syscall6(syscall.SYS_IOCTL, t.file.Fd(), 0x5402, uintptr(unsafePointer(&original)), 0, 0, 0)
+	defer func() {
+		_, _, restoreErr := syscall.Syscall6(syscall.SYS_IOCTL, t.file.Fd(), 0x5402, uintptr(unsafePointer(&original)), 0, 0, 0)
+		if restoreErr != 0 {
+			zeroCapacity(line)
+			line = nil
+			err = ErrUnavailable
+		}
+	}()
+	line, readErr := t.readMutableLine(4096)
 	_, _ = io.WriteString(t.file, "\n")
-	if readErr != nil || restoreErr != 0 || t.Stable() != nil {
-		zeroBytes(line)
+	if readErr != nil || t.Stable() != nil {
+		zeroCapacity(line)
 		return nil, ErrUnavailable
 	}
 	for len(line) > 0 && (line[len(line)-1] == '\r' || line[len(line)-1] == '\n') {
 		line = line[:len(line)-1]
 	}
 	return line, nil
+}
+func (t *Terminal) readMutableLine(limit int) ([]byte, error) {
+	out := make([]byte, 0, limit+1)
+	one := []byte{0}
+	for len(out) <= limit {
+		n, e := t.file.Read(one)
+		if n == 1 {
+			out = append(out, one[0])
+			one[0] = 0
+			if out[len(out)-1] == '\n' {
+				return out, nil
+			}
+		}
+		if e != nil {
+			zeroCapacity(out)
+			return nil, ErrUnavailable
+		}
+	}
+	zeroCapacity(out)
+	return nil, ErrUnavailable
 }
 func (t *Terminal) Close() error { return t.file.Close() }
 
@@ -451,5 +544,10 @@ func unsafePointer(value *syscall.Termios) unsafe.Pointer { return unsafe.Pointe
 func zeroBytes(value []byte) {
 	for i := range value {
 		value[i] = 0
+	}
+}
+func zeroCapacity(value []byte) {
+	if value != nil {
+		zeroBytes(value[:cap(value)])
 	}
 }

@@ -10,12 +10,26 @@ import (
 )
 
 type fakeService struct {
-	stopErr, disableErr error
-	stopped, disabled   int
+	stopErr, serviceErr, disableErr   error
+	stopped, serviceStopped, disabled int
+	order                             []string
 }
 
-func (s *fakeService) StopSocket() error   { s.stopped++; return s.stopErr }
-func (s *fakeService) DisableUnits() error { s.disabled++; return s.disableErr }
+func (s *fakeService) StopSocket() error {
+	s.stopped++
+	s.order = append(s.order, "socket")
+	return s.stopErr
+}
+func (s *fakeService) StopService() error {
+	s.serviceStopped++
+	s.order = append(s.order, "service")
+	return s.serviceErr
+}
+func (s *fakeService) DisableUnits() error {
+	s.disabled++
+	s.order = append(s.order, "disable")
+	return s.disableErr
+}
 
 func testPlatform(t *testing.T, root bool) (*Linux, *fakeService) {
 	t.Helper()
@@ -116,8 +130,8 @@ func TestProvisionRevokeDisableAndRecovery(t *testing.T) {
 	if err := p.RevokeOpenRouter(); err != nil {
 		t.Fatal(err)
 	}
-	if s.stopped != 1 {
-		t.Fatal("revoke did not stop socket first")
+	if strings.Join(s.order[:2], ",") != "socket,service" {
+		t.Fatal("revoke did not stop socket then service")
 	}
 	if _, err := os.Stat(p.paths.Credential); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("credential remains")
@@ -137,6 +151,23 @@ func TestProvisionRevokeDisableAndRecovery(t *testing.T) {
 	s.stopErr = errors.New("fixture stop failure")
 	if err := p.RevokeOpenRouter(); err == nil || !strings.Contains(err.Error(), "stop workflow-authority.socket") {
 		t.Fatalf("missing recovery: %v", err)
+	}
+}
+
+func TestServiceStopFailurePreservesCredential(t *testing.T) {
+	p, s := testPlatform(t, true)
+	if err := p.ProvisionOpenRouter([]byte("secret")); err != nil {
+		t.Fatal(err)
+	}
+	s.serviceErr = errors.New("busy")
+	if err := p.RevokeOpenRouter(); err == nil || !strings.Contains(err.Error(), "stop workflow-authority.service") {
+		t.Fatalf("bad recovery %v", err)
+	}
+	if _, err := os.Stat(p.paths.Credential); err != nil {
+		t.Fatal("credential removed before service drained")
+	}
+	if strings.Join(s.order, ",") != "socket,service" {
+		t.Fatalf("bad order %v", s.order)
 	}
 }
 
@@ -227,7 +258,7 @@ func TestChangedTerminalIdentityRejected(t *testing.T) {
 	if err != nil {
 		t.Skip(err)
 	}
-	terminal := &Terminal{file: first, identity: changed}
+	terminal := &Terminal{file: first, identity: changed, openCurrent: func() (*os.File, error) { return os.OpenFile("/dev/null", os.O_RDWR, 0) }}
 	if !errors.Is(terminal.Stable(), ErrUnavailable) {
 		t.Fatal("changed terminal identity accepted")
 	}
@@ -262,12 +293,12 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"ListenStream=" + SocketPath, "SocketUser=root", "SocketGroup=workflow-authority", "SocketMode=0660", "DirectoryMode=0750"} {
+	for _, want := range []string{"ListenStream=" + SocketPath, "SocketUser=root", "SocketGroup=workflow-authority", "SocketMode=0660", "DirectoryMode=0750", "RemoveOnStop=yes", "Service=workflow-authority.service"} {
 		if !strings.Contains(string(socket), want) {
 			t.Errorf("socket missing %s", want)
 		}
 	}
-	for _, want := range []string{"ExecStart=" + DaemonPath, "User=root", "Group=root", "UMask=0077", "PrivateTmp=yes", "NoNewPrivileges=yes", "ProtectSystem=strict", "UnsetEnvironment=HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY https_proxy http_proxy all_proxy no_proxy OPENROUTER_API_KEY", "DevicePolicy=closed", "DeviceAllow=/dev/hidraw0 rw", "LimitNOFILE=256", "TasksMax=32", "MemoryMax=256M", "LimitCORE=0", "TimeoutStopSec=15s"} {
+	for _, want := range []string{"ExecStart=" + DaemonPath, "User=root", "Group=root", "UMask=0077", "PrivateTmp=yes", "NoNewPrivileges=yes", "CapabilityBoundingSet=", "AmbientCapabilities=", "ProtectSystem=strict", "UnsetEnvironment=HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY https_proxy http_proxy all_proxy no_proxy OPENROUTER_API_KEY", "DevicePolicy=closed", "DeviceAllow=/dev/hidraw0 rw", "SystemCallFilter=@system-service @network-io", "SystemCallErrorNumber=EPERM", "LimitNOFILE=256", "TasksMax=32", "MemoryMax=256M", "LimitCORE=0", "TimeoutStopSec=15s"} {
 		if !strings.Contains(string(service), want) {
 			t.Errorf("service missing %s", want)
 		}
@@ -276,6 +307,17 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 		if strings.Contains(string(service), forbidden) {
 			t.Errorf("service contains override surface %s", forbidden)
 		}
+	}
+}
+
+func TestExistingTombstoneMustBeExact(t *testing.T) {
+	p, _ := testPlatform(t, true)
+	path := filepath.Join(p.paths.State, "service-disabled.tombstone")
+	if err := os.WriteFile(path, []byte("forged\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if p.Disable() == nil {
+		t.Fatal("forged tombstone accepted")
 	}
 }
 

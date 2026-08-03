@@ -46,7 +46,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if err != nil {
 			return fail(stderr, "status unavailable", exitUnavailable)
 		}
-		_, _ = stdout.Write(append(raw, '\n'))
+		if _, err = stdout.Write(append(raw, '\n')); err != nil {
+			return fail(stderr, "status output failed", exitUnavailable)
+		}
 		return 0
 	case "dispatch-provider-request":
 		if admin || len(args) != 2 {
@@ -101,15 +103,24 @@ func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
 		if err := p.ProvisionOpenRouter(secret); err != nil {
 			return fail(stderr, err.Error(), exitUnavailable)
 		}
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; provisioning may have completed, run status before recovery", exitUnavailable)
+		}
 		return contentFree(stdout, "provisioned")
 	case "revoke-openrouter":
 		if err := p.RevokeOpenRouter(); err != nil {
 			return fail(stderr, err.Error(), exitUnavailable)
 		}
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; revocation may have completed, run status before recovery", exitUnavailable)
+		}
 		return contentFree(stdout, "revoked")
 	case "disable":
 		if err := p.Disable(); err != nil {
 			return fail(stderr, err.Error(), exitUnavailable)
+		}
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; disable may have completed, inspect service state before recovery", exitUnavailable)
 		}
 		return contentFree(stdout, "disabled")
 	case "uninstall-plan":
@@ -118,6 +129,9 @@ func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
 			return fail(stderr, "uninstall plan unavailable", exitUnavailable)
 		}
 		for _, step := range plan {
+			if terminal.Stable() != nil {
+				return fail(stderr, "controlling terminal changed; uninstall plan aborted", exitDeclined)
+			}
 			_, _ = fmt.Fprintln(stdout, step)
 		}
 		return 0
