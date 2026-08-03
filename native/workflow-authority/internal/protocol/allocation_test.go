@@ -138,14 +138,38 @@ func TestTypedConsentSafeErrorAndTerminalES256Projection(t *testing.T) {
 	if err := ValidateSafeError(SafeError{SchemaVersion: 1, Protocol: Name, Type: SafeErrorType, Code: "provider_failure", ExitCode: 73, Consumed: true, NetworkAttempted: true}); err == nil {
 		t.Fatal("post-send outcome accepted as unsigned safe error")
 	}
-	document := map[string]any{"schema_version": 1, "protocol": Name, "outcome": "verified", "signature": map[string]any{"kind": "es256", "signature_der": "placeholder"}}
+	selected := "openai/gpt-5.6"
+	document := TerminalResult{
+		SchemaVersion: 1, Protocol: Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted",
+		Outcome: "verified", ExitCode: 0, RequestBodySHA256: digest, ResponseSHA256: digest,
+		ResponseLength: 2, PartCount: 2, Models: []string{selected, "z-ai/glm-5.2"}, SelectedModel: &selected,
+		Provider: "openrouter", GenerationID: "generation-01", ServingProvider: "provider-01", UsageSHA256: digest,
+		Scope:    Scope{Repository: "design-machines/depot", RunID: "run-01", Lane: "assessment", Candidate: "candidate-01", Workload: "pipeline-assessment"},
+		Sequence: 7, IssuedAt: "2026-08-03T00:00:00Z", CompletedAt: "2026-08-03T00:00:03Z",
+		ChallengeSHA256: digest, AuthorityAssertionSHA256: digest, ResultSignerSHA256: digest, PriorChainDigest: digest,
+		Cleanup:   TerminalCleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"},
+		Signature: TerminalSignature{Kind: "es256", SignatureDER: "AQ"},
+	}
 	input, err := TerminalSignatureInput(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := "workflow-authority\x00provider-dispatch-v1\x00terminal\x00{\"outcome\":\"verified\",\"protocol\":\"workflow-authority-provider-dispatch-v1\",\"schema_version\":1}"
-	if string(input) != expected {
-		t.Fatalf("terminal projection drifted: %q", input)
+	if got := Digest(input); got != "sha256:a3cf86fea1196b642958ec23155e32ffadd0726697b91572602ad3e23f969205" {
+		t.Fatalf("terminal projection drifted: %s\n%s", got, input)
+	}
+	fixtureDocument := document
+	fixtureDocument.Signature = TerminalSignature{Kind: "fixture-rsa-sha256-v1", Domain: "fixture.workflow-authority.invalid", Value: "fixture-rsa-sha256-v1:" + strings.Repeat("0", 256)}
+	fixtureInput, err := TerminalSignatureInput(fixtureDocument)
+	if err != nil || string(fixtureInput) != string(input) {
+		t.Fatalf("signature kind changed terminal projection: %v", err)
+	}
+	if _, err := TerminalSignatureInput(map[string]any{"schema_version": 1, "protocol": Name, "outcome": "verified", "signature": map[string]any{"kind": "es256", "signature_der": "AQ"}}); err == nil {
+		t.Fatal("incomplete terminal projected")
+	}
+	invalidSequence := document
+	invalidSequence.Sequence = uint64(^uint64(0)>>1) + 1
+	if _, err := TerminalSignatureInput(invalidSequence); err == nil {
+		t.Fatal("out-of-range terminal sequence projected")
 	}
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	hash := sha256.Sum256(input)

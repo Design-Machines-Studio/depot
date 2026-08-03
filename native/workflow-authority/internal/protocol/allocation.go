@@ -101,6 +101,51 @@ type SafeError struct {
 	NetworkAttempted bool   `json:"network_attempted"`
 }
 
+type TerminalSignature struct {
+	Kind         string `json:"kind"`
+	SignatureDER string `json:"signature_der,omitempty"`
+	Domain       string `json:"domain,omitempty"`
+	Value        string `json:"value,omitempty"`
+}
+
+type TerminalCleanup struct {
+	Reservation   string `json:"reservation"`
+	Connection    string `json:"connection"`
+	ContentBuffer string `json:"content_buffer"`
+}
+
+// TerminalResult is the closed cross-language terminal wire document. It
+// lives in protocol so projection validation cannot drift from the signer.
+type TerminalResult struct {
+	SchemaVersion            int               `json:"schema_version"`
+	Protocol                 string            `json:"protocol"`
+	OperationFamily          string            `json:"operation_family"`
+	SubstrateAuthority       string            `json:"substrate_authority"`
+	Outcome                  string            `json:"outcome"`
+	ExitCode                 int               `json:"exit_code"`
+	RequestBodySHA256        string            `json:"request_body_sha256"`
+	ResponseSHA256           string            `json:"response_sha256"`
+	ResponseLength           int64             `json:"response_length"`
+	PartCount                int               `json:"part_count"`
+	Models                   []string          `json:"models"`
+	SelectedModel            *string           `json:"selected_model"`
+	Provider                 string            `json:"provider"`
+	GenerationID             string            `json:"generation_id"`
+	ServingProvider          string            `json:"serving_provider"`
+	UsageSHA256              string            `json:"usage_sha256"`
+	Fallback                 bool              `json:"fallback"`
+	Scope                    Scope             `json:"scope"`
+	Sequence                 uint64            `json:"sequence"`
+	IssuedAt                 string            `json:"issued_at"`
+	CompletedAt              string            `json:"completed_at"`
+	ChallengeSHA256          string            `json:"challenge_sha256"`
+	AuthorityAssertionSHA256 string            `json:"authority_assertion_sha256"`
+	ResultSignerSHA256       string            `json:"result_signer_sha256"`
+	PriorChainDigest         string            `json:"prior_chain_digest"`
+	Cleanup                  TerminalCleanup   `json:"cleanup"`
+	Signature                TerminalSignature `json:"signature"`
+}
+
 func ValidateAuthorityHello(hello AuthorityHello, now time.Time) error {
 	if hello.SchemaVersion != Version || hello.Protocol != Name || hello.Type != AuthorityHelloType || hello.Limits != FrozenAllocationLimits() || hello.Sequence == 0 || hello.Sequence > math.MaxInt64 {
 		return ErrInvalidDocument
@@ -234,12 +279,80 @@ func ValidateSafeError(value SafeError) error {
 	return nil
 }
 
+func ValidateTerminalResult(value TerminalResult) error {
+	if value.SchemaVersion != Version || value.Protocol != Name || value.OperationFamily != "external_provider_dispatch" || value.SubstrateAuthority != "not_asserted" {
+		return ErrInvalidDocument
+	}
+	exits := map[string]int{"verified": 0, "provider_failure": 73, "unknown": 74}
+	if exit, ok := exits[value.Outcome]; !ok || value.ExitCode != exit {
+		return ErrInvalidDocument
+	}
+	for _, digest := range []string{value.RequestBodySHA256, value.ResponseSHA256, value.UsageSHA256, value.ChallengeSHA256, value.AuthorityAssertionSHA256, value.ResultSignerSHA256, value.PriorChainDigest} {
+		if !digestPattern.MatchString(digest) {
+			return ErrInvalidDocument
+		}
+	}
+	if value.ResponseLength < 0 || value.ResponseLength > 8_388_608 || value.PartCount < 1 || value.PartCount > 256 || len(value.Models) == 0 || len(value.Models) > 256 || value.SelectedModel == nil || value.Provider != "openrouter" || value.Sequence == 0 || value.Sequence > math.MaxInt64 {
+		return ErrInvalidDocument
+	}
+	seen := map[string]struct{}{}
+	selected := false
+	for _, model := range value.Models {
+		if !idPattern.MatchString(model) {
+			return ErrInvalidDocument
+		}
+		if _, exists := seen[model]; exists {
+			return ErrInvalidDocument
+		}
+		seen[model] = struct{}{}
+		selected = selected || model == *value.SelectedModel
+	}
+	for _, identifier := range []string{*value.SelectedModel, value.GenerationID, value.ServingProvider, value.Scope.Repository, value.Scope.RunID, value.Scope.Lane, value.Scope.Candidate, value.Scope.Workload} {
+		if !idPattern.MatchString(identifier) {
+			return ErrInvalidDocument
+		}
+	}
+	if !selected || value.Fallback != (*value.SelectedModel != value.Models[0]) || !timePattern.MatchString(value.IssuedAt) || !timePattern.MatchString(value.CompletedAt) || value.Cleanup != (TerminalCleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}) {
+		return ErrInvalidDocument
+	}
+	switch value.Signature.Kind {
+	case "es256":
+		if value.Signature.Domain != "" || value.Signature.Value != "" || len(value.Signature.SignatureDER) > 4096 {
+			return ErrInvalidDocument
+		}
+		if value.Signature.SignatureDER != "" {
+			if _, err := base64.RawURLEncoding.DecodeString(value.Signature.SignatureDER); err != nil {
+				return ErrInvalidDocument
+			}
+		}
+	case "fixture-rsa-sha256-v1":
+		if value.Signature.SignatureDER != "" || value.Signature.Domain != "fixture.workflow-authority.invalid" || len(value.Signature.Value) != len("fixture-rsa-sha256-v1:")+256 || value.Signature.Value[:len("fixture-rsa-sha256-v1:")] != "fixture-rsa-sha256-v1:" {
+			return ErrInvalidDocument
+		}
+		for _, char := range value.Signature.Value[len("fixture-rsa-sha256-v1:"):] {
+			if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+				return ErrInvalidDocument
+			}
+		}
+	default:
+		return ErrInvalidDocument
+	}
+	return nil
+}
+
 // TerminalSignatureInput removes only the signature member and freezes the
 // exact v1 domain-separated bytes. Callers must validate the terminal document
 // with its closed result validator before invoking this projection helper.
 func TerminalSignatureInput(document any) ([]byte, error) {
 	raw, err := CanonicalJSON(document)
 	if err != nil {
+		return nil, err
+	}
+	var terminal TerminalResult
+	if err := DecodeClosed(raw, &terminal); err != nil {
+		return nil, err
+	}
+	if err := ValidateTerminalResult(terminal); err != nil {
 		return nil, err
 	}
 	var projection map[string]json.RawMessage

@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -164,44 +163,9 @@ type Dispatcher struct {
 	Clock       func() time.Time
 }
 
-type Signature struct {
-	Kind         string `json:"kind"`
-	SignatureDER string `json:"signature_der"`
-}
-type Cleanup struct {
-	Reservation   string `json:"reservation"`
-	Connection    string `json:"connection"`
-	ContentBuffer string `json:"content_buffer"`
-}
-type TerminalResult struct {
-	SchemaVersion            int            `json:"schema_version"`
-	Protocol                 string         `json:"protocol"`
-	OperationFamily          string         `json:"operation_family"`
-	SubstrateAuthority       string         `json:"substrate_authority"`
-	Outcome                  string         `json:"outcome"`
-	ExitCode                 int            `json:"exit_code"`
-	RequestBodySHA256        string         `json:"request_body_sha256"`
-	ResponseSHA256           string         `json:"response_sha256"`
-	ResponseLength           int64          `json:"response_length"`
-	PartCount                int            `json:"part_count"`
-	Models                   []string       `json:"models"`
-	SelectedModel            *string        `json:"selected_model"`
-	Provider                 string         `json:"provider"`
-	GenerationID             string         `json:"generation_id"`
-	ServingProvider          string         `json:"serving_provider"`
-	UsageSHA256              string         `json:"usage_sha256"`
-	Fallback                 bool           `json:"fallback"`
-	Scope                    protocol.Scope `json:"scope"`
-	Sequence                 uint64         `json:"sequence"`
-	IssuedAt                 string         `json:"issued_at"`
-	CompletedAt              string         `json:"completed_at"`
-	ChallengeSHA256          string         `json:"challenge_sha256"`
-	AuthorityAssertionSHA256 string         `json:"authority_assertion_sha256"`
-	ResultSignerSHA256       string         `json:"result_signer_sha256"`
-	PriorChainDigest         string         `json:"prior_chain_digest"`
-	Cleanup                  Cleanup        `json:"cleanup"`
-	Signature                Signature      `json:"signature"`
-}
+type Signature = protocol.TerminalSignature
+type Cleanup = protocol.TerminalCleanup
+type TerminalResult = protocol.TerminalResult
 
 type providerResponse struct {
 	ID       string           `json:"id"`
@@ -549,5 +513,3 @@ func zero(b []byte) {
 	}
 	_ = sha256.Sum256(b)
 }
-
-func (r TerminalResult) String() string { return fmt.Sprintf("%s:%d", r.Outcome, r.ExitCode) }

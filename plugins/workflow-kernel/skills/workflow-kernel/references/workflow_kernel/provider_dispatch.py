@@ -692,6 +692,8 @@ def validate_result(document: Any) -> dict[str, Any]:
     _integer(result["response_length"], 0, MAX_RESPONSE_BYTES)
     _integer(result["part_count"], 1, MAX_PARTS)
     _strings(result["models"])
+    if len(set(result["models"])) != len(result["models"]):
+        _fail("content_order_invalid")
     for field in ("selected_model", "provider", "generation_id", "serving_provider"):
         _string(result[field])
     if result["provider"] != "openrouter":
@@ -983,16 +985,26 @@ def validate_authority_binding(
     consent_ack: Mapping[str, Any],
 ) -> None:
     """Reject any substitution between reserved request and FIDO challenge."""
+    validate_request_challenge_binding(request, challenge)
+    if challenge["request_body_sha256"] != sha256(body):
+        _fail("terminal_binding_invalid")
+    validate_consent_ack(consent_ack)
+    if consent_ack["challenge_sha256"] != sha256(canonical_json(challenge)):
+        _fail("consent_connection_invalid")
+
+
+def validate_request_challenge_binding(
+    request: Mapping[str, Any], challenge: Mapping[str, Any],
+) -> None:
+    """Bind every repeated request field before trusting challenge signatures."""
     validate_request(request)
     validate_challenge(challenge)
-    validate_consent_ack(consent_ack)
     authority = request["authority"]
     expected = {
         "mapping": request["mapping"], "operation_family": request["operation_family"],
         "substrate_authority": request["substrate_authority"],
         "destination": request["destination"], "method": request["method"],
         "path": request["path"], "models": request["models"], "scope": request["scope"],
-        "request_body_sha256": sha256(body),
         "connection_nonce_sha256": authority["connection_nonce_sha256"],
         "daemon_build_sha256": authority["daemon_build_sha256"],
         "scanner_build_sha256": authority["scanner_build_sha256"],
@@ -1006,8 +1018,6 @@ def validate_authority_binding(
     }
     if any(challenge[field] != value for field, value in expected.items()):
         _fail("terminal_binding_invalid")
-    if consent_ack["challenge_sha256"] != sha256(canonical_json(challenge)):
-        _fail("consent_connection_invalid")
 
 
 def verify_terminal_result(
@@ -1017,8 +1027,7 @@ def verify_terminal_result(
     production_verifier=None,
 ) -> None:
     """Verify content-free terminal binding before fd-3 delivery."""
-    validate_request(request)
-    validate_challenge(challenge)
+    validate_request_challenge_binding(request, challenge)
     proof = validate_authorization_proof(authorization_proof)
     validate_result(result)
     if type(response) is not bytes or len(response) > MAX_RESPONSE_BYTES:
@@ -1158,7 +1167,12 @@ class FakeBroker:
         self, connection_id: str, peer_uid: int, request: Mapping[str, Any],
         parts: Sequence[bytes], challenge: Mapping[str, Any], now: str,
     ) -> str:
-        """Validate and charge all bytes before durable reservation or fixture UV."""
+        """Validate bytes before in-memory fixture state or fixture UV.
+
+        Durable allocation and replay enforcement remain future daemon/WAL
+        obligations; this production-ineligible fake proves only process-local
+        state transitions.
+        """
         _string(connection_id)
         _integer(peer_uid)
         _string(now, pattern=_TIME)

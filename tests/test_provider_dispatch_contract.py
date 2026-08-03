@@ -339,6 +339,14 @@ class ProviderDispatchContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ProviderDispatchError, "terminal_binding_invalid"):
             validate_authority_binding(self.request, self.body, changed_models, self.ack)
 
+        duplicate_terminal_models = copy.deepcopy(self.result)
+        duplicate_terminal_models["models"][1] = duplicate_terminal_models["models"][0]
+        with self.assertRaisesRegex(ProviderDispatchError, "content_order_invalid"):
+            signature_input("terminal", duplicate_terminal_models)
+        self.assertTrue(
+            json.loads(RESULT_SCHEMA.read_text())["properties"]["models"]["uniqueItems"]
+        )
+
     def test_req_m0_08_public_diagnostics_never_echo_hostile_text(self):
         hostile = b'{"secret":"sk-fixture-do-not-echo","secret":1}'
         with self.assertRaises(ProviderDispatchError) as caught:
@@ -603,6 +611,30 @@ class ProviderDispatchContractTests(unittest.TestCase):
             challenge_mutation[field] = value
             with self.subTest(field=field), self.assertRaisesRegex(ProviderDispatchError, "terminal_binding_invalid"):
                 verify_terminal_result(self.request, challenge_mutation, self.authorization_proof, self.response, self.result, fixture_trust=True)
+        for label, mutate in (
+            ("candidate", lambda item: item["scope"].__setitem__("candidate", "candidate-02")),
+            ("nonce", lambda item: item.__setitem__("nonce", "caller-nonce-02")),
+            ("hello_digest", lambda item: item.__setitem__("allocation_hello_sha256", "sha256:" + "8" * 64)),
+            ("proposal_digest", lambda item: item.__setitem__("dispatch_proposal_sha256", "sha256:" + "9" * 64)),
+        ):
+            hostile_challenge = copy.deepcopy(self.challenge)
+            mutate(hostile_challenge)
+            hostile_proof = authorization_proof(hostile_challenge)
+            hostile_result = result(
+                self.request, hostile_challenge, hostile_proof, self.response,
+            )
+            hostile_wire = (
+                frame32(canonical_json(hostile_proof))
+                + frame64(self.response)
+                + frame32(canonical_json(hostile_result))
+            )
+            with self.subTest(freshly_signed=label), self.assertRaisesRegex(
+                ProviderDispatchError, "terminal_binding_invalid",
+            ):
+                decode_response(
+                    hostile_wire, self.request, hostile_challenge,
+                    fixture_trust=True,
+                )
         assertion_mutation = copy.deepcopy(self.authorization_proof)
         assertion_mutation["authority_assertion"]["value"] = "fixture-rsa-sha256-v1:" + "0" * 256
         with self.assertRaisesRegex(ProviderDispatchError, "terminal_binding_invalid"):
