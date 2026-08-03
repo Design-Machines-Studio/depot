@@ -23,3 +23,19 @@ func validateResponsePipe(pipe *os.File) error {
 	}
 	return nil
 }
+
+func validateInputFile(input *os.File) error {
+	info, err := input.Stat()
+	if err != nil || (!info.Mode().IsRegular() && info.Mode()&os.ModeNamedPipe == 0) {
+		return errors.New("input must be readable regular file or anonymous pipe")
+	}
+	flags, _, errno := syscall.Syscall(syscall.SYS_FCNTL, input.Fd(), uintptr(syscall.F_GETFL), 0)
+	if errno != 0 || int(flags)&syscall.O_ACCMODE == syscall.O_WRONLY {
+		return errors.New("input must be readable regular file or anonymous pipe")
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || (info.Mode().IsRegular() && stat.Nlink != 1) || (info.Mode()&os.ModeNamedPipe != 0 && stat.Nlink != 0) {
+		return errors.New("input descriptor is not stable")
+	}
+	return nil
+}
