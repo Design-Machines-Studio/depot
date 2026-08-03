@@ -15,6 +15,9 @@ func NewFIDOEnroller() enrollment.Enroller { return unavailableFIDO{} }
 func (unavailableFIDO) Readiness(context.Context) Readiness {
 	return Readiness{Production: false, Adapter: "stub", Version: "unavailable", InternalUV: false}
 }
+func (unavailableFIDO) ReadinessFor(context.Context, string) Readiness {
+	return Readiness{Production: false, Adapter: "stub", Version: "unavailable", InternalUV: false}
+}
 func (unavailableFIDO) Assert(context.Context, []byte, Credential) (Assertion, error) {
 	return Assertion{}, ErrUnavailable
 }

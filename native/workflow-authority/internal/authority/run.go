@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"designmachines.dev/workflow-authority/internal/enrollment"
 	"designmachines.dev/workflow-authority/internal/protocol"
 )
 
@@ -71,6 +72,9 @@ type Credential struct {
 	SignCount  uint32     `json:"sign_count"`
 	// ID is root-private input to the native adapter and is never serialized.
 	ID []byte `json:"-"`
+	// DeviceSelector is root-private runtime metadata. It binds assertions to
+	// the exact bounded manifest identity selected during enrollment.
+	DeviceSelector string `json:"-"`
 }
 
 type EnrollmentRegistry struct {
@@ -161,6 +165,18 @@ type FIDO interface {
 	Readiness(context.Context) Readiness
 	Assert(context.Context, []byte, Credential) (Assertion, error)
 	Verify(context.Context, []byte, Credential, Assertion) error
+}
+
+type SelectorAwareFIDO interface {
+	FIDO
+	ReadinessFor(context.Context, string) Readiness
+}
+
+func CredentialFromEnrollment(source enrollment.Credential) (Credential, error) {
+	if enrollment.ValidateCredential(source) != nil {
+		return Credential{}, ErrDenied
+	}
+	return Credential{Reference: source.Reference, PublicKey: append([]byte(nil), source.PublicKey...), Algorithm: source.Algorithm, Generation: source.Generation, RPID: source.RPID, EnrolledAt: source.EnrolledAt, Status: source.Status, RevokedAt: source.RevokedAt, InternalUV: source.InternalUV, ID: append([]byte(nil), source.ID...), DeviceSelector: source.DeviceSelector}, nil
 }
 
 type Readiness struct {

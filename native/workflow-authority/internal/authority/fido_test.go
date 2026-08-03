@@ -3,7 +3,12 @@ package authority
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -30,6 +35,41 @@ func TestStubEnrollerFailsClosed(t *testing.T) {
 	credential, err := NewFIDOEnroller().Enroll(context.Background(), enrollment.Request{Generation: 1})
 	if !errors.Is(err, enrollment.ErrUnavailable) || len(credential.ID) != 0 {
 		t.Fatalf("stub enrollment did not fail closed: %#v %v", credential, err)
+	}
+}
+
+func TestStubSelectorReadinessAndEnrollmentMapper(t *testing.T) {
+	adapter, ok := NewFIDOAdapter().(SelectorAwareFIDO)
+	if !ok {
+		t.Fatal("adapter lost selector-aware readiness seam")
+	}
+	if readiness := adapter.ReadinessFor(context.Background(), "sha256:"+strings.Repeat("a", 64)); readiness.Production {
+		t.Fatalf("stub selector readiness became production: %+v", readiness)
+	}
+	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := x509.MarshalPKIXPublicKey(&private.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := []byte("root-private-credential-id")
+	source := enrollment.Credential{Reference: enrollment.ReferenceForID(id), ID: id, PublicKey: public, Algorithm: enrollment.ES256, Generation: 7, RPID: enrollment.RPID, EnrolledAt: time.Unix(1_800_000_000, 0).UTC(), Status: "active", InternalUV: true, AAGUID: bytes.Repeat([]byte{7}, 16), Format: "packed", DeviceSelector: "sha256:" + strings.Repeat("b", 64)}
+	mapped, err := CredentialFromEnrollment(source)
+	if err != nil || mapped.DeviceSelector != source.DeviceSelector || !bytes.Equal(mapped.ID, source.ID) {
+		t.Fatalf("map: %#v %v", mapped, err)
+	}
+	source.Destroy()
+	if bytes.Equal(mapped.ID, source.ID) || len(mapped.ID) == 0 {
+		t.Fatal("mapper did not take independent root-private ownership")
+	}
+	encoded, err := json.Marshal(mapped)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(encoded, mapped.ID) || bytes.Contains(encoded, []byte(mapped.DeviceSelector)) {
+		t.Fatal("runtime metadata escaped serialization")
 	}
 }
 
