@@ -43,9 +43,10 @@ type AllocatorConfig struct {
 }
 
 type allocatorActive struct {
-	Sequence     uint64 `json:"sequence"`
-	HelloSHA256  string `json:"hello_sha256"`
-	ConnectionID string `json:"connection_id"`
+	Sequence         uint64 `json:"sequence"`
+	HelloSHA256      string `json:"hello_sha256"`
+	PriorChainDigest string `json:"prior_chain_digest"`
+	ConnectionID     string `json:"connection_id"`
 }
 
 type allocatorState struct {
@@ -82,8 +83,11 @@ func NewDurableAllocator(config AllocatorConfig, store stateStore) (*DurableAllo
 		return nil, ErrDurability
 	}
 	if state.Version == 0 {
+		if state.Sequence != 0 || state.PriorChainDigest != "" || state.Active != nil {
+			return nil, ErrDurability
+		}
 		state = allocatorState{Version: 1, PriorChainDigest: protocol.Digest(nil)}
-	} else if state.Version != 1 || state.Sequence > math.MaxInt64 || state.PriorChainDigest == "" {
+	} else if state.Version != 1 || state.Sequence > math.MaxInt64 || !validDigest(state.PriorChainDigest) || !validActiveState(state) {
 		return nil, ErrDurability
 	}
 	allocator := &DurableAllocator{config: config, store: store, state: state}
@@ -99,11 +103,11 @@ func NewDurableAllocator(config AllocatorConfig, store stateStore) (*DurableAllo
 func (a *DurableAllocator) Allocate(ctx context.Context) (Allocation, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.closed || a.poisoned || ctx.Err() != nil || a.state.Active != nil || a.state.Sequence >= math.MaxInt64 {
-		if a.state.Active != nil {
-			return Allocation{}, ErrBusy
-		}
+	if a.closed || a.poisoned || ctx.Err() != nil || a.state.Sequence >= math.MaxInt64 {
 		return Allocation{}, ErrDurability
+	}
+	if a.state.Active != nil {
+		return Allocation{}, ErrBusy
 	}
 	nonce := make([]byte, 32)
 	connection := make([]byte, 16)
@@ -132,12 +136,35 @@ func (a *DurableAllocator) Allocate(ctx context.Context) (Allocation, error) {
 	}
 	allocation := Allocation{Hello: hello, ConnectionID: "connection-" + hex.EncodeToString(connection)}
 	a.state.Sequence = sequence
-	a.state.Active = &allocatorActive{Sequence: sequence, HelloSHA256: protocol.Digest(helloBytes), ConnectionID: allocation.ConnectionID}
+	a.state.Active = &allocatorActive{Sequence: sequence, HelloSHA256: protocol.Digest(helloBytes), PriorChainDigest: a.state.PriorChainDigest, ConnectionID: allocation.ConnectionID}
 	if err := a.store.Save(a.state); err != nil {
 		a.poisoned = true
 		return Allocation{}, ErrDurability
 	}
 	return allocation, nil
+}
+
+func validActiveState(state allocatorState) bool {
+	if state.Active == nil {
+		return true
+	}
+	active := state.Active
+	if active.Sequence == 0 || active.Sequence != state.Sequence || active.Sequence > math.MaxInt64 || !validDigest(active.HelloSHA256) || active.PriorChainDigest != state.PriorChainDigest {
+		return false
+	}
+	if len(active.ConnectionID) != len("connection-")+32 || active.ConnectionID[:len("connection-")] != "connection-" {
+		return false
+	}
+	_, err := hex.DecodeString(active.ConnectionID[len("connection-"):])
+	return err == nil
+}
+
+func validDigest(value string) bool {
+	if len(value) != len("sha256:")+64 || value[:len("sha256:")] != "sha256:" {
+		return false
+	}
+	_, err := hex.DecodeString(value[len("sha256:"):])
+	return err == nil
 }
 
 func (a *DurableAllocator) Consume(ctx context.Context, allocation Allocation, reason string) error {
