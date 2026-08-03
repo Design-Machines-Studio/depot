@@ -118,8 +118,9 @@ credentials, private keys, authenticated DSNs, private customer data, and
 other prohibited disclosure classes remain blocked or redacted before network
 contact.
 
-OpenAI and Anthropic models are never selected through OpenRouter. OpenAI work
-uses the native Codex CLI/runtime; Anthropic work uses the native Claude CLI.
+Anthropic models are never selected through OpenRouter. Native Codex remains
+the preferred OpenAI coding rail; explicitly routed Terra/Luna API work may use
+OpenRouter. Anthropic work uses the native Claude CLI.
 Provider-origin receipts preserve requested, attempted, and actual providers.
 
 ## Validation

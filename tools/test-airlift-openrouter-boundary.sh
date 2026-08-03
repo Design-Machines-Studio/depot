@@ -39,7 +39,8 @@ chmod +x "$REFS/delegation-boundary.sh" "$REFS/delegation-boundary.real.sh" \
 cat > "$REFS/openrouter-wrapper.sh" <<'EOF'
 #!/usr/bin/env bash
 touch "$AIRLIFT_WRAPPER_SENTINEL"
-printf '%s' "$OPENROUTER_SYSTEM" > "$AIRLIFT_WRAPPER_CAPTURE.resume"
+[ -n "${OPENROUTER_SYSTEM_FILE:-}" ] && [ -z "${OPENROUTER_SYSTEM:-}" ]
+cp "$OPENROUTER_SYSTEM_FILE" "$AIRLIFT_WRAPPER_CAPTURE.resume"
 cat > "$AIRLIFT_WRAPPER_CAPTURE.handoff"
 printf 'controlled safe delegation\n'
 EOF

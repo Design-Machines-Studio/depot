@@ -1,6 +1,6 @@
 ---
 name: openrouter
-description: Codex skill alias for /openrouter. Direct OpenRouter invocation with model selection. Delegates a prompt to an OpenRouter model and returns the response. Uses Kimi K3 as the quality-first default with GLM-5.2 capacity fallback.
+description: Codex skill alias for /openrouter. Direct OpenRouter invocation with model selection. Delegates a prompt to an OpenRouter model and returns the response. Uses Terra by default with Kimi K3 as the quality fallback.
 argument-hint: "<prompt> [--model <slug>]"
 ---
 
@@ -42,7 +42,8 @@ security completion still requires a separate full-input Codex review.
 Extract the prompt and optional `--model` flag from the user's input.
 
 - If `--model` is specified, use that slug.
-- If `--model` is not specified, use `moonshotai/kimi-k3` with `z-ai/glm-5.2` as the capacity fallback.
+- If `--model` is not specified, use `openai/gpt-5.6-terra` with
+  `moonshotai/kimi-k3` as the quality fallback.
 - If `--model` is specified, honor it exactly; do not silently replace an explicit user choice.
 
 ### Step 2: Check Prerequisites
@@ -74,7 +75,7 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -83,7 +84,7 @@ if [ -n "$ACTIVE_HOST" ]; then
     --active-host "$ACTIVE_HOST")
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.7.2 \
+    --minimum-version 1.8.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -118,19 +119,50 @@ PAYLOAD_SHA256=$("$AUTHORIZATION_PATH" snapshot \
   --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE")
 ```
 
-Ask the user to approve disclosure of the exact payload identified by
-`PAYLOAD_SHA256`; only the user can provide this authorization. Set
-`approved_payload_sha256` from that response. A general permission statement,
-the assistant's judgment, or a prior approval is not sufficient. Immediately
-before calling the wrapper:
+Direct interactive `/openrouter` supports only `exact-digest` until the
+external Workflow Authority Broker is installed and integrated. Immediately
+before calling the wrapper, authorize the unchanged payload through the
+payload-specific human gate. Caller-selected `trusted-boundary` is unavailable
+and must not be treated as authority.
+
+In `exact-digest` mode this is a two-pass workflow:
+
+1. **Preparation pass:** Materialize, disclosure-screen, and snapshot the exact
+   ordered bytes. If no recorded human decision exists for that digest, emit
+   `approval_required` with status/exit `78`, stop before the wrapper, and ask
+   the human with `AskUserQuestion` (or a normal chat question when that tool is
+   unavailable) to approve or decline that exact digest. End the current turn;
+   approval pending is neither success nor provider failure.
+2. **Resume/re-dispatch pass:** Continue only after a recorded human response.
+   A decline records `host_disclosure_declined`, returns status/exit `77`, and
+   sends nothing. On approval, copy only the digest from that human response
+   into `approved_payload_sha256`, then rerun Step 4 from payload
+   materialization. Rebuild, rescan, and snapshot the same ordered bytes and
+   verify them against the recorded approved digest immediately before contact.
+
+Never self-populate `approved_payload_sha256` from `PAYLOAD_SHA256`, infer
+approval from general OpenRouter permission, or continue to the wrapper during
+the preparation pass. The recorded human response, not the command or child
+runner, is the authority.
 
 ```bash
-"$AUTHORIZATION_PATH" verify --manifest "$AUTHORIZATION_FILE" \
-  --approved-sha256 "$approved_payload_sha256" \
-  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
+AUTHORIZATION_MODE=exact-digest
+case "$AUTHORIZATION_MODE" in
+  exact-digest)
+    [ -n "${approved_payload_sha256:-}" ] || {
+      printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' \
+        "$PAYLOAD_SHA256"
+      exit 78
+    }
+    "$AUTHORIZATION_PATH" verify --manifest "$AUTHORIZATION_FILE" \
+      --approved-sha256 "$approved_payload_sha256" \
+      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
+    ;;
+  *) echo "OpenRouter host authority unavailable" >&2; exit 77 ;;
+esac
 
-RESULT=$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" \
-  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
+  OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
   OPENROUTER_WORKLOAD=direct \
   OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
   bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
@@ -139,14 +171,19 @@ RESULT=$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" \
 The wrapper JSON-encodes the prompt into a private request file and streams the
 response with native OpenRouter model fallback; never embed raw user input
 directly in a curl `-d` body.
-Models beginning with `openai/` or `anthropic/` are invalid on this command. Use the native Codex or Claude CLI instead.
-Payload-specific user authorization is mandatory; see
+Models beginning with `anthropic/` are invalid on this command. OpenAI and
+third-party slugs are allowed through OpenRouter; Anthropic remains native
+Claude-only. Boundary authorization is mandatory; see
 `references/invocation-protocol.md`.
 
 ### Step 5: Handle Errors
 
-Exit codes: `0` success, `28` timeout, `1` exhausted/error, `2` bad args. On
-error, report the type and the content-free failure receipt to the user.
+Command statuses: `0` success, `77` human disclosure decline (no send), `78`
+human approval required or approved bytes changed (pause; no send), `28`
+timeout, `1` exhausted/error, and `2` bad args. An approval-required result is
+a preparation state: ask the human and stop the current turn rather than
+presenting it as success or silently falling back. On provider error, report
+the type and the content-free failure receipt to the user.
 
 ### Step 6: Present Response and Receipt
 

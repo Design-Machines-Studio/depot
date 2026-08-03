@@ -45,10 +45,10 @@ else
   role="$(printf '%s' "$out" | jq -r '.role // empty' 2>/dev/null || true)"
   kind="$(printf '%s' "$out" | jq -r '.kind // empty' 2>/dev/null || true)"
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
-  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "moonshotai/kimi-k3" ]; then
+  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "z-ai/glm-5.2" ]; then
     pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter exec"
   else
-    fail "cascade should descend to quality-first openrouter_exec moonshotai/kimi-k3 when --exhausted-rail codex is set"
+    fail "cascade should descend to economical openrouter_exec z-ai/glm-5.2 when --exhausted-rail codex is set"
     printf "  ${YELLOW}GOT${RESET}   %s\n" "${out:-<empty>}"
     any_failed=1
   fi
@@ -70,7 +70,7 @@ else
   if [ "$or_role" = "premium_sub" ] &&
      printf '%s' "$or_out" | jq -e '
        .requestedProvider == "openrouter" and
-       .requestedModel == "moonshotai/kimi-k3" and
+       .requestedModel == "z-ai/glm-5.2" and
        .attemptedProvider == "codex" and
        .attemptedModel == "gpt-5.6-sol" and
        .actualImplementer == "codex" and
@@ -117,7 +117,7 @@ else
   fi
 
   origin_profile="$(mktemp "${TMPDIR:-/tmp}/openrouter-origin-profile.json.XXXXXX")"
-  jq '.hosts.codex.roles.openrouter_exec.models = ["OpenAI/gpt-test"]' \
+  jq '.hosts.codex.roles.openrouter_exec.models = ["Anthropic/claude-test"]' \
     "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" > "$origin_profile"
   set +e
   origin_out="$(CASCADE_EXHAUSTED_RAILS= PROFILE_FILE="$origin_profile" "$cascade" \
@@ -128,9 +128,9 @@ else
   rm -f "$origin_profile"
   if [ "$origin_rc" -eq 2 ] &&
      printf '%s' "$origin_out" | grep -Fq "native-vendor-origin invariant"; then
-    pass "mixed-case OpenAI/Anthropic origins fail before OpenRouter dispatch"
+    pass "mixed-case Anthropic origins fail before OpenRouter dispatch"
   else
-    fail "mixed-case native-vendor origins must be rejected on the cascade path"
+    fail "mixed-case Anthropic origins must be rejected on the cascade path"
     any_failed=1
   fi
 
@@ -352,6 +352,64 @@ else
   pass "wrapper retains fixed-path curl execution"
 fi
 
+rm -f "$network_marker"
+set +e
+OPENROUTER_API_KEY=sk-or-v1-production-looking-key \
+  OPENROUTER_BASE="$sentinel_base" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+production_key_loopback_rc=$?
+set -e
+if [ "$production_key_loopback_rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+  pass "production-looking API key cannot use a loopback base override"
+else
+  fail "production-looking API key must be rejected before loopback network contact"
+  any_failed=1
+fi
+
+rm -f "$network_marker"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="http://0.0.0.0:$(cat "$port_file")" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+non_loopback_rc=$?
+set -e
+if [ "$non_loopback_rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+  pass "fixture API key cannot override the base to a non-allowlisted host"
+else
+  fail "non-allowlisted base override must be rejected before network contact"
+  any_failed=1
+fi
+
+system_bytes_file="$fixture_root/system-bytes.prompt"
+user_bytes_file="$fixture_root/user-bytes.prompt"
+printf 'first system line\nsecond system line\n\n' > "$system_bytes_file"
+printf 'first user line\nsecond user line\n\n' > "$user_bytes_file"
+rm -f "$network_marker" "$request_file"
+if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+   OPENROUTER_SYSTEM_FILE="$system_bytes_file" \
+   "$wrapper" moonshotai/kimi-k3 - 10 < "$user_bytes_file" >/dev/null 2>&1 &&
+   jq -e '.messages[0].content == "first system line\nsecond system line\n\n"
+     and .messages[1].content == "first user line\nsecond user line\n\n"' \
+     "$request_file" >/dev/null; then
+  pass "file-based system and stdin user prompts preserve trailing newline bytes"
+else
+  fail "wrapper must preserve complete system and user prompt bytes"
+  any_failed=1
+fi
+
+rm -f "$network_marker"
+set +e
+OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+  OPENROUTER_SYSTEM=inline OPENROUTER_SYSTEM_FILE="$system_bytes_file" \
+  "$wrapper" moonshotai/kimi-k3 test 10 >/dev/null 2>&1
+conflicting_system_rc=$?
+set -e
+if [ "$conflicting_system_rc" -eq 2 ] && [ ! -e "$network_marker" ]; then
+  pass "conflicting system prompt interfaces stop before network contact"
+else
+  fail "OPENROUTER_SYSTEM and OPENROUTER_SYSTEM_FILE must be mutually exclusive"
+  any_failed=1
+fi
+
 forbidden_case() {
   local label="$1" primary="$2" fallback="$3" rc
   rm -f "$network_marker" "$fail_primary"
@@ -368,10 +426,20 @@ forbidden_case() {
   fi
 }
 
-forbidden_case primary-openai openai/gpt-test ""
-forbidden_case fallback-openai z-ai/glm-5.2 openai/gpt-test
 forbidden_case primary-anthropic anthropic/claude-test ""
 forbidden_case fallback-anthropic z-ai/glm-5.2 anthropic/claude-test
+
+for openai_slug in openai/gpt-test openai/gpt-5.6-luna openai/gpt-5.6-terra; do
+  rm -f "$network_marker" "$fail_primary"
+  if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
+     "$wrapper" "$openai_slug" test 10 >/dev/null 2>&1 &&
+     grep -Fxq "$openai_slug" "$network_marker"; then
+    pass "allowed OpenAI API slug $openai_slug reaches the controlled network sentinel"
+  else
+    fail "allowed OpenAI API slug $openai_slug must prove the sentinel is reachable"
+    any_failed=1
+  fi
+done
 
 rm -f "$network_marker" "$fail_primary"
 if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
@@ -730,11 +798,26 @@ else
   any_failed=1
 fi
 
-fallback_block="$(awk '/## Native Model Fallback Chain/{flag=1; next} /## Privacy/{flag=0} flag' "$model_selection")"
-if printf '%s' "$fallback_block" | grep -q 'minimax/minimax-m3'; then
-  pass "OpenRouter fallback docs include MiniMax-M3"
+fallback_block="$(awk '/## Pipeline execution cascade/{flag=1; next} /## Direct wrapper fallback behavior/{flag=0} flag' "$model_selection")"
+documented_openrouter_exec="$(printf '%s\n' "$fallback_block" | awk -F'|' '
+  $2 ~ /^[[:space:]]*`openrouter_exec`[[:space:]]*$/ {
+    value=$4
+    sub(/^[[:space:]]*/, "", value)
+    sub(/[[:space:]]*$/, "", value)
+    if (!found) print value
+    found=1
+  }
+')"
+expected_openrouter_exec='GLM-5.2 -> DeepSeek V4 Flash -> Kimi K3 -> Grok 4.5 -> MiniMax-M3'
+if [ "$documented_openrouter_exec" = "$expected_openrouter_exec" ] &&
+   jq -e '
+     ["z-ai/glm-5.2", "deepseek/deepseek-v4-flash", "moonshotai/kimi-k3", "x-ai/grok-4.5", "minimax/minimax-m3"] as $expected
+     | [.hosts[].roles.openrouter_exec.models == $expected]
+     | all
+   ' "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" >/dev/null; then
+  pass "documented OpenRouter exec chain exactly matches every host profile"
 else
-  fail "model-selection.md fallback chain is missing minimax/minimax-m3"
+  fail "documented OpenRouter exec chain must exactly match every host profile"
   any_failed=1
 fi
 

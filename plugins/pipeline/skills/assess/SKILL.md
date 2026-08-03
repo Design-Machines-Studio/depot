@@ -39,21 +39,23 @@ Produce a file list of 5-20 key files to examine. Prioritize:
 
 Launch two agents simultaneously:
 
-**Executor routing:** Read `plugins/pipeline/references/routing-policy.json`. Set `ASSESS_EXECUTOR` from the environment when present; otherwise default to `openrouter` when `OPENROUTER_API_KEY` is set, else `claude`. Use this executor for read-heavy assessment fan-out. Keep Phase 3 consolidation/synthesis on Claude because it feeds pipeline gates.
+**Executor routing:** Default read-heavy assessment fan-out to Codex, with
+Claude as the local fallback when Codex is unavailable. Automated OpenRouter
+assessment is disabled until broker integration. Ignore an `openrouter`
+executor override, record `host_authority_unavailable`, and use Codex.
 
-**OpenRouter authorization:** Executor selection does not authorize disclosure.
-Before either assessment lane contacts OpenRouter, resolve the coherent
-installed Pipeline bundle through workflow-kernel with `--plugin pipeline
---minimum-version 1.34.2 --required-asset
-references/openrouter-authorization-contract.md --active-host
-<claude|codex>`, then read that reference from the selected root. Never use a
-target-repository-relative contract path. Prepare the
-exact ordered system/user payload for each lane, disclosure-screen and snapshot
-it, then follow the contract's selected mode. `exact-digest` returns `PAYLOAD
-APPROVAL REQUIRED`; `trusted-boundary` reruns the scanner and verifies unchanged
-bytes immediately before network contact without a per-payload prompt. On
-decline, record `host_disclosure_declined` and run the trusted local assessment
-fallback.
+**OpenRouter authorization:** Do not prepare or transmit automated assessment
+payloads. Record `host_authority_unavailable` and run the complete trusted local
+assessment fallback. API-key presence and caller authorization variables are
+non-authoritative.
+
+Resolve the coherent installed Pipeline bundle with `--plugin pipeline
+--minimum-version 1.36.0 --required-asset
+references/openrouter-authorization-contract.md --active-host <claude|codex>`
+and read the current-mode contract from that selected root. Never use a
+target-repository copy. Automated assessment does not emit `PAYLOAD APPROVAL
+REQUIRED`; exact-digest remains direct-interactive only and caller-selected
+`trusted-boundary` is unavailable.
 
 **Agent 1: Code Assessment**
 

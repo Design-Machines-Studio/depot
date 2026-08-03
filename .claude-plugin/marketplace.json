@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.47.1",
+      "version": "1.48.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -350,7 +350,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.35.1",
+      "version": "1.36.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -422,12 +422,12 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.7.2",
+      "version": "1.8.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "OpenRouter provider plugin with Kimi K3-led security and bulk analysis, exact disclosure filtering, bounded direct-API execution, and an optional official MCP control plane for live model, endpoint, benchmark, credit, and generation discovery.",
+      "description": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 2,

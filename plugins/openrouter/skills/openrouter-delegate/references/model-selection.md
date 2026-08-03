@@ -1,10 +1,16 @@
 # Model Selection
 
-Decision table for choosing the right OpenRouter model for each delegation task. Kimi K3 is the quality-first default and security-analysis head; GLM-5.2 is its economical capacity fallback and remains first for lightweight mechanical checks.
+Decision tables for the three distinct routing systems that use these model names. Native Codex execution, dm-review/direct OpenRouter delegation, and the Pipeline cascade have different ordering and provenance; do not combine them into one fallback ladder.
+
+> **Current production mode:** only direct interactive `/openrouter` calls may
+> reach the API, after exact-digest approval. The dm-review and Pipeline tables
+> describe the broker-enabled target topology and dry-run decisions. Their
+> non-dry automated attempts currently record `host_authority_unavailable` and
+> complete on Codex.
 
 ## Available Models
 
-Prices below are a checked-in planning snapshot from 2026-07-28, in USD per
+Prices below are a checked-in planning snapshot from 2026-08-03, in USD per
 million input/output tokens; they are not current telemetry. Before a paid or
 policy-changing run, obtain a live MCP receipt with `observedAt` and `expiresAt`
 no more than 15 minutes apart and use it only before expiry.
@@ -12,8 +18,10 @@ no more than 15 minutes apart and use it only before expiry.
 | Slug | Name | Input / output | Context | Quality and role |
 |------|------|----------------|---------|------------------|
 | `moonshotai/kimi-k3` | Kimi K3 | $3 / $15; $0.30 cache read | 1,048,576 | AA intelligence 57.1 / coding 76.2 / agentic 50.1; quality-first security and bulk-analysis head; reasoning efforts low/high/max |
+| `openai/gpt-5.6-terra` | GPT-5.6 Terra | $1 / $6; $0.10 cache read | 1,050,000 | AA intelligence 55.0 / coding 76.7 / agentic 47.4; high-quality OpenRouter backup; reasoning none through max |
+| `openai/gpt-5.6-luna` | GPT-5.6 Luna | $0.10 / $0.60; $0.01 cache read | 1,050,000 | AA intelligence 51.2 / coding 71.4 / agentic 45.6; low-cost mechanical and config/doc work; reasoning none through max |
 | `x-ai/grok-4.5` | Grok 4.5 | $2 / $6 | 500K | AA 54; near-frontier value fallback |
-| `z-ai/glm-5.2` | GLM-5.2 | about $0.91 / $2.86 | 1M | AA 51; lightweight mechanical default and Kimi capacity fallback |
+| `z-ai/glm-5.2` | GLM-5.2 | catalog $1.19 / $3.74; lower-cost endpoints exist | 1M | AA intelligence 51.1 / coding 68.8 / agentic 43.1; third-party mechanical and security-capacity fallback |
 | `meta/muse-spark-1.1` | Muse Spark 1.1 | $1.25 / $4.25 | 1M | AA 51; multimodal frontier value |
 | `google/gemini-3.5-flash` | Gemini 3.5 Flash | $1.50 / $9 | 1M | AA 50; multimodal frontier tail |
 | `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro | $0.435 / $0.87 | 1M | AA 44; cheap code-analysis fallback through OpenRouter |
@@ -21,21 +29,47 @@ no more than 15 minutes apart and use it only before expiry.
 | `deepseek/deepseek-v4-flash` | DeepSeek V4 Flash | $0.098 / $0.196 | 1M | AA 40; cheapest mechanical checks |
 | `qwen/qwen3-coder` | Qwen3 Coder | $0.30 / $1 | 1M model; top endpoint about 262K | Lower-quality final bulk fallback; validate endpoint capacity before very large prompts |
 
-## Task -> Model Mapping
+## Native Codex execution
 
-| Task Type | Model | Timeout | Rationale |
-|-----------|-------|---------|-----------|
-| Agentic implementation | `moonshotai/kimi-k3` | 3600s | Strong coding model and current open-weight release; this runner still accepts only bounded unified diffs and leaves execution/verification authority with Codex. |
-| Security analysis | `moonshotai/kimi-k3` | 3600s | Quality-first adversarial lens with enough completion time for large security payloads; independent Codex full-diff sign-off remains mandatory. |
-| Big-diff review (<10K lines) | `moonshotai/kimi-k3` | 3600s | Highest-ranked eligible OpenRouter contender; GLM-5.2 covers provider capacity. |
-| Big-diff review (>=10K lines) | `moonshotai/kimi-k3` | 7200s | 1M context; two-hour completion budget while first-byte and stream-idle watchdogs still detect dead transports. |
-| Second-opinion analysis | `moonshotai/kimi-k3` | 3600s | Quality-first independent analysis. |
-| Config / doc generation | `z-ai/glm-5.2` | 1800s | One-shot text the caller writes to disk. |
-| Frontier cross-check (cascade) | `moonshotai/kimi-k3` | 3600s | Highest-quality eligible OpenRouter rung; native Codex is the fallback when valid OpenRouter capacity is exhausted. |
+Native Codex models run through the Codex host or `codex-companion`; they are not OpenRouter requests and retain `implementedBy: codex` provenance.
+
+| Host | Coding role | Ordered native models |
+|------|-------------|-----------------------|
+| Codex | `premium_sub` | GPT-5.6 Sol -> GPT-5.6 Terra -> GPT-5.5 -> GPT-5.6 Luna |
+| Claude Code | `premium_sub` via `codex-companion` | GPT-5.6 Sol (representative; Codex selects its configured native model) |
+| Generic | `premium_sub` | unavailable |
+
+## dm-review target topology and direct OpenRouter delegation
+
+These calls use the OpenRouter API and retain `implementedBy: openrouter` even when the selected slug begins with `openai/`. A later Codex fallback is a separate native attempt with its own receipt.
+
+| Workload | OpenRouter primary | OpenRouter fallback | Native completion |
+|----------|--------------------|---------------------|-------------------|
+| Direct `/openrouter` | Terra, unless `--model` overrides it | Kimi K3 | none implicit |
+| Mechanical dm-review lanes | Luna | GLM-5.2 | Codex if the OpenRouter attempt cannot complete |
+| Bulk / large-context dm-review | Kimi K3 | Terra | Codex if the OpenRouter attempt cannot complete |
+| Security dm-review lens | Kimi K3 | GLM-5.2 | same logical lane completes on Codex; independent full-diff Codex sign-off is always required |
+| One-shot config / doc generation | Luna | Terra quality fallback | caller owns writing and verification |
+
+Review timeouts are 3600s, extended to 7200s for bulk diffs of at least 10K lines. One-shot config/doc generation uses 1800s.
+
+## Pipeline execution cascade target topology
+
+Pipeline resolves abstract roles through `harness-profile.json`, then walks the class ladder in `model-cascade.json`. Its agentic OpenRouter executor is GLM-5.2-headed; Kimi remains a later capacity rung and the head of analysis-only frontier/bulk wrapper roles.
+
+| Role | Kind | Ordered models |
+|------|------|----------------|
+| `premium_sub` | native Codex / Codex companion | host-specific native ordering above |
+| `openrouter_exec` | bounded agentic execution | GLM-5.2 -> DeepSeek V4 Flash -> Kimi K3 -> Grok 4.5 -> MiniMax-M3 |
+| `frontier_api` | single-turn wrapper analysis | Kimi K3 -> Grok 4.5 -> GLM-5.2 -> Muse Spark 1.1 -> Gemini 3.5 Flash |
+| `cheap_api` | single-turn wrapper text/analysis | DeepSeek V4 Flash -> GLM-5.2 -> MiniMax-M3 -> DeepSeek V4 Pro -> Qwen3 Coder |
+| `bulk_api` | single-turn bulk analysis | Kimi K3 -> GLM-5.2 -> DeepSeek V4 Pro -> MiniMax-M3 -> DeepSeek V4 Flash |
+
+The `codex` class walks `premium_sub -> openrouter_exec -> frontier_api -> cheap_api`; the `openrouter` class walks `openrouter_exec -> premium_sub -> frontier_api -> cheap_api`. Wrapper roles never autonomously implement complex logic, UI, or integration work.
 
 The current `openrouter-wrapper.sh` accepts text prompts only. Model modality columns describe upstream capability, not an operational claim that this rail can yet attach images, audio, video, or files.
 
-## Native Model Fallback Chain
+## Direct wrapper fallback behavior
 
 The wrapper accepts a `[fallback-slug]` (4th positional arg) and sends the
 primary plus fallback as one ordered OpenRouter `models` array. OpenRouter can
@@ -43,15 +77,19 @@ therefore walk to the fallback for any eligible model error without the wrapper
 issuing a second client request:
 
 ```
-moonshotai/kimi-k3 -> z-ai/glm-5.2 -> deepseek/deepseek-v4-pro -> minimax/minimax-m3 -> deepseek/deepseek-v4-flash -> qwen/qwen3-coder -> skip
+bulk:       moonshotai/kimi-k3 -> openai/gpt-5.6-terra -> separate Codex fallback
+mechanical: openai/gpt-5.6-luna -> z-ai/glm-5.2 -> separate Codex fallback
+security:   moonshotai/kimi-k3 -> z-ai/glm-5.2 -> same-lane Codex completion + independent Codex sign-off
+direct:     openai/gpt-5.6-terra -> moonshotai/kimi-k3 -> stop
 ```
 
-For quality-first direct calls, use Kimi K3 with `z-ai/glm-5.2` as the immediate
-fallback. Use GLM-5.2 first only for an explicitly economical mechanical call.
-The wrapper accepts one native fallback; the pipeline cascade owns the full
-ladder and continues through later models after the request is exhausted.
+The wrapper accepts one OpenRouter fallback slug. It does not invoke a native
+Codex fallback; dm-review or Pipeline performs that as a separately receipted
+attempt. The Pipeline cascade, not the wrapper, owns its longer role ladders.
 
-OpenAI and Anthropic are deliberately absent from this catalog. Never pass `openai/*` or `anthropic/*` as a primary or fallback. OpenAI models use the native Codex CLI; Anthropic models use the native Claude CLI for the allowed non-coding/compatibility lanes.
+OpenAI slugs are allowed through the receipted OpenRouter rail. Anthropic slugs
+remain invalid as a primary or fallback and use native Claude only for allowed
+non-coding/compatibility lanes.
 
 ## Kimi Provider Routing
 
@@ -93,6 +131,6 @@ from model availability. Re-check live endpoint policy before a sensitive run.
 If `OPENROUTER_ZDR=1` leaves no eligible Kimi endpoint, the cascade walks to the
 next model rung and records the fallback.
 
-## Note on Roles vs Slugs
+## Note on roles vs slugs
 
-The pipeline cascade (`model-cascade.json` + `harness-profile.json`) references these same slugs by abstract role (`cheap_api`, `frontier_api`, `bulk_api`). `bulk_api` and `frontier_api` place Kimi first; `cheap_api` keeps GLM-5.2 first but includes Kimi before DeepSeek. Keep this file's defaults aligned with those roles.
+The Pipeline cascade references slugs through abstract roles, while dm-review reads its lane-specific models from `routing-policy.json` and direct delegation uses command defaults. Similar model names do not make these routes interchangeable. Keep each matrix aligned with its own executable source.

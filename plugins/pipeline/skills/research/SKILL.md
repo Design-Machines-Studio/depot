@@ -43,23 +43,23 @@ Detect the project type to determine which domain plugins to load as companions.
 
 Launch all available research agents simultaneously. Each agent gets the feature description and assessment brief (if available).
 
-**Executor routing:** Read `plugins/pipeline/references/routing-policy.json`. Set `RESEARCH_EXECUTOR` from the environment when present; otherwise default to `openrouter` when `OPENROUTER_API_KEY` is set, else `claude`. Use this executor for read-heavy research fan-out. Keep Phase 4 consolidation/synthesis on Claude because it feeds planning gates.
+**Executor routing:** Default read-heavy research fan-out to Codex, with Claude
+as the local fallback when Codex is unavailable. Automated OpenRouter research
+is disabled until broker integration. Ignore an `openrouter` override, record
+`host_authority_unavailable`, and use Codex.
 
-**Payload-specific user approval:** Before any OpenRouter research fan-out,
-resolve the coherent installed Pipeline bundle through workflow-kernel with
-`--plugin pipeline --minimum-version 1.34.2 --required-asset
-references/openrouter-authorization-contract.md --active-host
-<claude|codex>`, then read that reference from the selected root. Never use a
-target-repository-relative contract path. Prepare
-each lane's exact ordered system/user files, disclosure-screen them, and use
-the canonical combined `payload-authorization.sh` snapshot. In the default
-`exact-digest` mode, preparation returns `PAYLOAD APPROVAL REQUIRED`. With the
-explicit run-scoped `OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` mode,
-the helper reruns the scanner and verifies unchanged bytes immediately before
-contact without a per-payload prompt. Per-file SHA lists or a child silently
-switching modes are not authorization.
-If the user declines, record `host_disclosure_declined` and continue through
-the local research fallback without retrying around the decision.
+**External-provider boundary:** Do not prepare or transmit automated research
+payloads. Record `host_authority_unavailable` and continue through the complete
+local research path. API-key presence and caller authorization variables are
+non-authoritative.
+
+Resolve the coherent installed Pipeline bundle with `--plugin pipeline
+--minimum-version 1.36.0 --required-asset
+references/openrouter-authorization-contract.md --active-host <claude|codex>`
+and read the current-mode contract from that selected root. Never use a
+target-repository copy. Automated research does not emit `PAYLOAD APPROVAL
+REQUIRED`; exact-digest remains direct-interactive only and caller-selected
+`trusted-boundary` is unavailable.
 
 **Agent 1: ai-memory Researcher**
 

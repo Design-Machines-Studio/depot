@@ -12,7 +12,11 @@
 # Env:
 #   OPENROUTER_API_KEY   required
 #   OPENROUTER_SYSTEM    optional system prompt (default: terse coding assistant)
-#   OPENROUTER_BASE      optional, default https://openrouter.ai/api/v1
+#   OPENROUTER_SYSTEM_FILE
+#                       optional byte-preserving system prompt file; mutually
+#                       exclusive with OPENROUTER_SYSTEM
+#   OPENROUTER_BASE      production is pinned to https://openrouter.ai/api/v1;
+#                       fixture-key requests may override to loopback HTTP only
 #   OPENROUTER_ZDR       1 -> no-train/no-retain providers (data_collection: deny)
 #   OPENROUTER_WORKLOAD  quality|security|direct|bulk|mechanical (default quality)
 #   OPENROUTER_PROVIDER_SORT
@@ -73,7 +77,7 @@ for candidate in "$MODEL" "$FALLBACK"; do
   }
   candidate_origin="$(printf '%s' "$candidate" | tr '[:upper:]' '[:lower:]')"
   case "$candidate_origin" in
-    openai/*|anthropic/*)
+    anthropic/*)
       echo "### RUNNER FAILURE: native-vendor-origin invariant rejected OpenRouter model '$candidate'" >&2
       exit 2
       ;;
@@ -84,8 +88,38 @@ done
   exit 1
 }
 
-BASE="${OPENROUTER_BASE:-https://openrouter.ai/api/v1}"
-SYSTEM="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
+PRODUCTION_BASE="https://openrouter.ai/api/v1"
+BASE="${OPENROUTER_BASE:-$PRODUCTION_BASE}"
+if [ "$BASE" != "$PRODUCTION_BASE" ]; then
+  if [ "$OPENROUTER_API_KEY" != "test" ]; then
+    echo "### RUNNER FAILURE: OPENROUTER_BASE override requires the fixture API key" >&2
+    exit 2
+  fi
+  if [[ "$BASE" =~ ^http://(127\.0\.0\.1|localhost):([1-9][0-9]{0,4})(/[^?#]*)?$ ]]; then
+    BASE_PORT="${BASH_REMATCH[2]}"
+    [ "$BASE_PORT" -le 65535 ] || {
+      echo "### RUNNER FAILURE: invalid loopback OPENROUTER_BASE port" >&2
+      exit 2
+    }
+  else
+    echo "### RUNNER FAILURE: OPENROUTER_BASE override must be a controlled loopback HTTP endpoint" >&2
+    exit 2
+  fi
+fi
+
+if [ "${OPENROUTER_SYSTEM+x}" = x ] && [ "${OPENROUTER_SYSTEM_FILE+x}" = x ]; then
+  echo "### RUNNER FAILURE: OPENROUTER_SYSTEM and OPENROUTER_SYSTEM_FILE are mutually exclusive" >&2
+  exit 2
+fi
+SYSTEM_SOURCE_FILE="${OPENROUTER_SYSTEM_FILE:-}"
+if [ "${OPENROUTER_SYSTEM_FILE+x}" = x ]; then
+  [ -n "$SYSTEM_SOURCE_FILE" ] && [ -f "$SYSTEM_SOURCE_FILE" ] && [ -r "$SYSTEM_SOURCE_FILE" ] || {
+    echo "### RUNNER FAILURE: OPENROUTER_SYSTEM_FILE must be a readable regular file" >&2
+    exit 2
+  }
+else
+  SYSTEM="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
+fi
 PROVIDER_ORDER="${OPENROUTER_PROVIDER_ORDER:-}"
 FALLBACK_PROVIDER_ORDER="${OPENROUTER_FALLBACK_PROVIDER_ORDER:-}"
 PROVIDER_SORT="${OPENROUTER_PROVIDER_SORT:-}"
@@ -135,12 +169,6 @@ for configured_order in "$PROVIDER_ORDER" "$FALLBACK_PROVIDER_ORDER"; do
   esac
 done
 
-if [ "$PROMPT_ARG" = "-" ]; then
-  PROMPT="$(cat)"
-else
-  PROMPT="$PROMPT_ARG"
-fi
-
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/openrouter-wrapper.XXXXXX")" || exit 1
 chmod 700 "$RUN_ROOT"
 cleanup() {
@@ -148,6 +176,18 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
+
+PROMPT_SOURCE_FILE="$RUN_ROOT/user.prompt"
+if [ "$PROMPT_ARG" = "-" ]; then
+  cat > "$PROMPT_SOURCE_FILE" || exit 1
+else
+  printf '%s' "$PROMPT_ARG" > "$PROMPT_SOURCE_FILE" || exit 1
+fi
+
+if [ -z "$SYSTEM_SOURCE_FILE" ]; then
+  SYSTEM_SOURCE_FILE="$RUN_ROOT/system.prompt"
+  printf '%s' "$SYSTEM" > "$SYSTEM_SOURCE_FILE" || exit 1
+fi
 
 MODEL_CANDIDATES="$(jq -cn --arg primary "$MODEL" --arg fallback "$FALLBACK" '
   if $fallback == "" then [$primary] else [$primary, $fallback] end
@@ -314,8 +354,8 @@ if [ -n "$FALLBACK" ]; then
   jq -n \
     --arg primary "$MODEL" \
     --arg fallback "$FALLBACK" \
-    --arg system "$SYSTEM" \
-    --arg prompt "$PROMPT" \
+    --rawfile system "$SYSTEM_SOURCE_FILE" \
+    --rawfile prompt "$PROMPT_SOURCE_FILE" \
     --argjson provider "$provider" '
     {
       models: [$primary, $fallback],
@@ -330,8 +370,8 @@ if [ -n "$FALLBACK" ]; then
 else
   jq -n \
     --arg model "$MODEL" \
-    --arg system "$SYSTEM" \
-    --arg prompt "$PROMPT" \
+    --rawfile system "$SYSTEM_SOURCE_FILE" \
+    --rawfile prompt "$PROMPT_SOURCE_FILE" \
     --argjson provider "$provider" '
     {
       model: $model,
@@ -475,7 +515,7 @@ validate_model_slug "$response_model" || {
   exit 1
 }
 case "$(printf '%s' "$response_model" | tr '[:upper:]' '[:lower:]')" in
-  openai/*|anthropic/*)
+  anthropic/*)
     write_failure_receipt error "native_vendor_origin" "" "$http" || true
     echo "### RUNNER FAILURE: native-vendor-origin invariant rejected served model '$response_model'" >&2
     exit 1

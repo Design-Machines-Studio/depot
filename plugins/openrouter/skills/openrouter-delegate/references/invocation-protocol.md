@@ -24,7 +24,9 @@ openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 - `[fallback-slug]` -- a second model included in the same ordered OpenRouter
   `models` request
 
-Both model arguments must be third-party OpenRouter slugs. `openai/*` and `anthropic/*` are rejected before network contact; use native Codex and Claude CLIs for those vendors.
+Both model arguments must be valid OpenRouter slugs. `openai/*` is allowed on
+the API fallback rail; `anthropic/*` is rejected before network contact and
+remains native Claude-only.
 
 **Output:** the wrapper prints the model's **text content directly** (it already extracts `.choices[0].message.content`). There is no JSON to parse -- stdout is the answer.
 
@@ -40,7 +42,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -48,7 +50,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
+      --minimum-version 1.8.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -87,8 +89,14 @@ Payload-Specific Host Authorization before invoking it.
 ## Environment Variables
 
 - `OPENROUTER_API_KEY` (required): your OpenRouter API key. Never commit it.
-- `OPENROUTER_SYSTEM` (default: terse coding assistant): system prompt.
-- `OPENROUTER_BASE` (default `https://openrouter.ai/api/v1`): API base URL.
+- `OPENROUTER_SYSTEM` (default: terse coding assistant): inline system prompt.
+- `OPENROUTER_SYSTEM_FILE`: readable regular file containing the exact system
+  prompt bytes. It is mutually exclusive with `OPENROUTER_SYSTEM`; authorized
+  file-based callers must unset the inherited inline variable.
+- `OPENROUTER_BASE`: production is pinned to
+  `https://openrouter.ai/api/v1`. Overrides are test-only: the API key must be
+  exactly `test` and the URL must be controlled loopback HTTP on `127.0.0.1`
+  or `localhost` with an explicit port.
 - `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Opt-in only -- privacy is demoted (Quality > Price > Speed > Provider privacy); set for genuinely sensitive material (client code under NDA, credentials-adjacent diffs).
 - `OPENROUTER_WORKLOAD` (`quality|security|direct|bulk|mechanical`, default
   `quality`): selects the default routing strategy. Direct, bulk, and mechanical
@@ -110,7 +118,9 @@ Payload-Specific Host Authorization before invoking it.
   progress. Any streamed bytes reset this watchdog; only a completed, validated
   stream becomes review evidence.
 - `OPENROUTER_AUTHORIZATION_MODE` (`exact-digest|trusted-boundary|unspecified`):
-  content-free receipt provenance supplied by the authorized caller.
+  low-level receipt vocabulary. Current production automation never accepts
+  caller-selected `trusted-boundary`; direct interactive use records
+  `exact-digest`. The other values remain for compatibility and offline tests.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or
   failure receipt. Failure receipts record timeout/error classification without
   prompt, partial completion, inferred provider, or usage content.
@@ -129,9 +139,9 @@ the direct API key's workspace.
 
 ## Host Authorization
 
-Direct `/openrouter` and dm-review workflows require user disclosure approval
-for the exact outbound payload. Treat it as byte-bound authority, separate from
-network permission:
+Direct interactive `/openrouter` requires user disclosure approval for the
+exact outbound payload. Treat it as byte-bound authority, separate from network
+permission:
 
 1. Run `delegation-boundary.sh` first and materialize the exact eligible system
    and user prompt bytes in private temporary files.
@@ -143,12 +153,11 @@ network permission:
 4. Never retry around a denial or broaden a file-specific authorization. Record
    `host_disclosure_declined` and fall back to Codex.
 
-Pipeline additionally supports an explicit run-scoped
-`OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` mode. In that mode,
-`payload-authorization.sh verify-trusted-boundary` reruns the canonical scanner
-and checks the unchanged ordered bytes immediately before every send. It
-removes repetitive digest prompts without weakening content classification.
-See Pipeline's `references/openrouter-authorization-contract.md`.
+Automated Pipeline and dm-review lanes are temporarily unavailable and return
+to Codex with `host_authority_unavailable`. Neither an API key nor
+caller-selected authorization variables enable them. Re-enable only through an
+external broker that owns authorization, credential custody, and transport and
+binds the exact payload, destination, run, lane, candidate, and substrate.
 
 ### Codex network allowlist
 
@@ -166,7 +175,7 @@ domains = { "openrouter.ai" = "allow" }
 ```
 
 This controls whether sandboxed commands can reach OpenRouter. It does not
-override payload-specific disclosure review, workspace policy, or a declined
+override byte-bound disclosure authorization, workspace policy, or a declined
 boundary check.
 
 ## API Endpoint
@@ -203,7 +212,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 | `0` | Success | stdout is the model's text content. |
 | `28` | Timeout | Report the first-byte, idle, or overall timeout from the failure receipt; proceed without OpenRouter input. Do not issue a blind client retry. |
 | `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` to stderr. Skip gracefully. |
-| `2` | Bad args / origin rejection | Missing arguments or an `openai/*` / `anthropic/*` primary or fallback. |
+| `2` | Bad args / origin rejection | Missing arguments or an `anthropic/*` primary or fallback. |
 
 When a fallback is present, OpenRouter receives both models in one ordered
 request and handles eligible fallback errors server-side. The wrapper never

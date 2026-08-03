@@ -212,7 +212,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.7.2 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.8.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -222,7 +222,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.7.2 \
+        --minimum-version 1.8.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -245,12 +245,20 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   OPENROUTER_CACHE_CLASS=$(printf '%s' "$BUNDLE_JSON" | jq -r '.cache_class // empty' 2>/dev/null)
   OPENROUTER_RESOLUTION_REASON=$(printf '%s' "$BUNDLE_JSON" | jq -r '.reason // empty' 2>/dev/null)
 fi
-OPENROUTER_AVAILABLE=$( [ -n "${OPENROUTER_API_KEY:-}" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] && [ -f "$OPENROUTER_SECURITY_POLICY_PATH" ] && [ -x "$OPENROUTER_BOUNDARY_PATH" ] && [ -x "$OPENROUTER_AUTHORIZATION_PATH" ] && echo true || echo false )
+# Automated external review is disabled until the independent Workflow
+# Authority Broker owns run-bound authorization and provider transport. An API
+# key or caller-selected environment mode cannot make this true.
+OPENROUTER_AVAILABLE=false
+OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
 ```
 
 **When `OPENROUTER_AVAILABLE=true`:** agents marked for OpenRouter MUST use `openrouter-agent-runner`. Mechanical orchestration runs on Codex or directly in the host; do not spend Claude coding quota to invoke the wrapper.
 
-**When false:** coding agents run on Codex. Record whether the API key, runner, or policy was missing. Non-coding agents may still use Claude.
+**When false:** coding agents run on Codex. Record
+`host_authority_unavailable`; do not reinterpret an available API key, runner,
+policy, or caller environment variable as automated dispatch authority.
+Non-coding agents may still use Claude. Direct interactive `/openrouter` is a
+separate exact-digest workflow and does not enable these child lanes.
 
 #### Quick mode with `lightweight` classification (diff < 100 lines)
 
@@ -412,11 +420,11 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
 | `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |
-| `pattern-recognition-specialist` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `code-simplicity-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `doc-sync-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `test-coverage-reviewer` | `z-ai/glm-5.2` | `moonshotai/kimi-k3` | 1800s |
-| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s; 7200s at or above 10K diff lines |
+| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -429,29 +437,18 @@ Provider routing (OPENROUTER_AVAILABLE={true|false}):
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
 
-#### Byte-bound user approval
+#### Byte-bound authorization
 
-Every external lane requires payload-specific user authorization; general
-OpenRouter permission and orchestrator judgment are not disclosure authority.
-Approval uses an explicit two-pass protocol:
+Automated external lanes are unavailable in this release. Selection always
+records `host_authority_unavailable` and launches the complete criterion on
+Codex without preparing external payload bytes. An API key, exact digest, or
+caller-selected `trusted-boundary` does not change this state.
 
-1. The generic runner materializes the exact eligible system and user prompt
-   files after the content boundary and runs
-   `payload-authorization.sh snapshot`.
-2. With an empty `approved_payload_sha256`, it returns
-   `### PAYLOAD APPROVAL REQUIRED` and the content-free combined digest without
-   network contact.
-3. The root orchestrator collects all lane digests, presents one content-free
-   batch mapping each digest to its logical lane, requested model, and fallback
-   model, asks the user once, and re-dispatches each identical runner input with
-   only that lane's user-approved digest. A child runner cannot self-approve.
-4. The runner rebuilds the payload and runs `payload-authorization.sh verify`
-   with the approved digest immediately before network contact.
-5. A fresh approval is required after any mutation, reordering, or membership
-   change. A batch approval is valid only when it names every distinct combined
-   payload digest in that batch.
-6. On decline, the root records `host_disclosure_declined` and uses the Codex fallback
-   without retrying around the decision.
+The dormant generic runner documents the future broker integration seam. It
+must remain non-callable until an independently installed broker owns
+authorization, credential custody, and transport and binds the exact payload,
+destination, repository, run, candidate, lane, and substrate. Direct
+interactive `/openrouter` retains its separate exact-digest human workflow.
 
 ---
 
@@ -482,8 +479,8 @@ authorization, invocation, fallback, and provenance implementation.
      to bind runner execution to the definition that was loaded; never publish it
    - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --
      durable resolver evidence (never the selected root)
-   - `approved_payload_sha256` -- empty on the preparation pass; on the second
-     pass, the exact per-lane digest supplied by the user's approval
+   - `approved_payload_sha256` -- empty during default `exact-digest`
+     preparation and set only to the exact user-approved lane digest
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
@@ -531,14 +528,15 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
 5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
 
-**Approval and failure handling:** Collect every
-`### PAYLOAD APPROVAL REQUIRED` result before asking the user; it is a
-preparation state, not success or failure. Re-dispatch approved lanes with
-identical inputs and their approved digest. If a routed agent emits
-`### RUNNER FAILURE`, Phase 4.5 retries on Codex before applying guardrails. If
-it emits `### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same
-criteria locally for the named paths. Do not mark the run clean until the
-required local work completes.
+**Authorization and failure handling:** Current automated OpenRouter selection
+must produce `host_authority_unavailable` before payload preparation and launch
+the same logical criterion on Codex. Treat any approval-required or successful
+OpenRouter child result as an invalid authority transition. If a future
+broker-backed routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on
+Codex before applying guardrails. If it emits
+`### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same criteria
+locally for the named paths. Do not mark the run clean until required local
+work completes.
 
 **Example prompt structure for each agent:**
 

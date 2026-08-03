@@ -418,43 +418,33 @@ Present the manifest summary: chunk count, parallel groups, overlap risk, requir
 
 ## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
-Default to two non-Claude lenses: Codex + OpenRouter. Start
-`/codex:adversarial-review` and OpenRouter payload preparation concurrently on
-the same plan, prompts, manifest, and `original-prompt.md`. The OpenRouter
-network lens runs only after the byte-bound user gate below; it may therefore
-complete after Codex. This is a quality gate, not a fallback ladder.
+Codex is the required adversarial reviewer. Run its lens over the plan, prompts, manifest, and
+`original-prompt.md`. Automated OpenRouter review is temporarily unavailable;
+record `openrouter-perspective: host_authority_unavailable` and do not prepare
+or transmit a payload. An API key or caller authorization variable does not
+change this state.
 
-Before the OpenRouter lens, resolve the coherent installed Pipeline bundle
-through workflow-kernel with `--plugin pipeline --minimum-version 1.34.2
---required-asset references/openrouter-authorization-contract.md
---active-host <claude|codex>`, then read and apply
-`references/openrouter-authorization-contract.md` from that selected root.
-Never read the contract from a target-repository-relative `plugins/pipeline`
-path.
-Concatenate the review artifacts into the exact user-prompt pack and materialize
-the exact adversary system prompt. Screen both with
-`delegation-boundary.sh --mode artifact-delegation`, snapshot them in send
-order with `payload-authorization.sh`, and follow the selected contract mode.
-The default `exact-digest` mode stops at `PAYLOAD APPROVAL REQUIRED`. A user who
-does not plan to inspect each payload may set
-`OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` once for the run; every send
-then reruns the canonical scanner and verifies unchanged bytes without another
-prompt. Do not silently switch modes or use `artifact-review` as authorization.
-High-confidence credential values decline the OpenRouter lens before
-disclosure. A user decline records
-`openrouter-perspective: host_disclosure_declined` while Codex continues.
-Malformed/unverifiable input is a fail-closed OpenRouter runner failure, not a
-clean review.
+Resolve the coherent installed Pipeline bundle through workflow-kernel with
+`--plugin pipeline --minimum-version 1.36.0 --required-asset
+references/openrouter-authorization-contract.md --active-host <claude|codex>`
+and read that contract from the selected root. It defines the current disabled
+mode and future broker re-enablement boundary. Never read a target-repository
+copy. Current automated execution does not emit `PAYLOAD APPROVAL REQUIRED`;
+`exact-digest` is direct-interactive only, and caller-selected
+`trusted-boundary` remains non-authoritative.
 
-Claude `plan-adversary` is an optional third lens/tiebreak only when `PIPELINE_CLAUDE_ADVERSARY=1` or when both non-Claude lenses disagree on a blocker. If Codex is unavailable, continue with OpenRouter and record `codex-perspective: unavailable`. If OpenRouter is unavailable, continue with Codex and record `openrouter-perspective: unavailable`. If both are unavailable, block or explicitly enable `PIPELINE_CLAUDE_ADVERSARY=1`.
+Claude `plan-adversary` remains an optional independent second lens when
+`PIPELINE_CLAUDE_ADVERSARY=1` or when the user explicitly requests it. If Codex
+is unavailable, block or explicitly enable that Claude lens; do not route
+around the missing broker through an automated OpenRouter call.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
-2. Both adversaries review for feasibility, completeness, and DM standards
-3. Both adversaries produce **sprint contract addendums** -- additional acceptance criteria per chunk that promptcraft may have missed (edge cases, error states, browser-verifiable criteria)
-4. Merge findings from both outputs; deduplicate by chunk/file/acceptance criterion; a finding from either perspective is in-scope and must be addressed unless code or prompt evidence disproves it
+2. Every available adversary reviews for feasibility, completeness, and DM standards
+3. Every available adversary produces a **sprint contract addendum** -- additional acceptance criteria per chunk that promptcraft may have missed (edge cases, error states, browser-verifiable criteria)
+4. Merge findings from all available outputs; deduplicate by chunk/file/acceptance criterion; a finding from any perspective is in-scope unless code or prompt evidence disproves it
 5. Merge the adversaries' proposed criteria into the chunk prompts
-6. If either verdict is REVISE: apply revisions and re-submit to both available perspectives (max 3 rounds)
-7. If both available non-Claude perspectives are APPROVED: proceed
+6. If any verdict is REVISE: apply revisions and re-submit to every available perspective (max 3 rounds)
+7. When all available required perspectives are APPROVED: proceed, retaining the unavailable OpenRouter coverage receipt
 
 Mark ledger item 10 as complete.
 

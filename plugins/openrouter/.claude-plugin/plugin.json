@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
-  "description": "OpenRouter provider plugin with Kimi K3-led security and bulk analysis, exact disclosure filtering, bounded direct-API execution, and an optional official MCP control plane for live model, endpoint, benchmark, credit, and generation discovery.",
-  "version": "1.7.2",
+  "description": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
+  "version": "1.8.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -24,7 +24,7 @@
       {
         "id": "openrouter-delegate",
         "name": "OpenRouter Delegation",
-        "description": "Delegate Kimi K3-led security and big-diff analysis, second-opinion review, and bounded generation through the direct API while using the official MCP for live discovery and receipts.",
+        "description": "Use exact-digest direct interactive OpenRouter delegation for Kimi K3-led security and big-diff analysis, Terra quality fallback, Luna economical mechanical work, and second opinions; automated routing remains unavailable until broker integration.",
         "triggers": [
           "use openrouter",
           "ask openrouter",
@@ -55,7 +55,7 @@
         "id": "openrouter-bulk-analyst",
         "name": "OpenRouter Bulk Diff Analyst",
         "category": "review",
-        "description": "Policy-selected Kimi K3 bulk, large-context, and security analysis with GLM-5.2 capacity fallback and independent Codex sign-off. Produces P1/P2/P3 findings for dm-review consolidation.",
+        "description": "Policy-selected Kimi K3 bulk and security analysis with Terra or GLM capacity fallback and independent Codex sign-off. Produces P1/P2/P3 findings for dm-review consolidation.",
         "tags": [
           "diff",
           "review",
@@ -68,7 +68,7 @@
         "id": "openrouter-agent-runner",
         "name": "OpenRouter Agent Runner",
         "category": "workflow",
-        "description": "Loads a trusted review-agent definition and runs its criteria through a policy-selected OpenRouter model slug with security filtering, refusal detection, and Codex fallback receipts.",
+        "description": "Broker-integration seam for policy-selected review criteria; current automated runs return host_authority_unavailable and complete on Codex.",
         "tags": [
           "workflow",
           "review",

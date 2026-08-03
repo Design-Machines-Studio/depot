@@ -18,7 +18,8 @@
 #   0   a wrapper/codex_companion/openrouter_exec rung executed -- output on stdout
 #   64  chosen rung is NATIVE -- directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
-#   75  ladder exhausted -- no rung had headroom above the floor
+#   75  provider terminal -- signed failure/unknown receipt or unverifiable post-dial outcome
+#   76  ladder exhausted -- no rung had headroom above the floor
 #   77  disclosure declined -- use the trusted native fallback
 #   78  exact payload user approval required -- surface digest and retry unchanged
 #   2   bad args
@@ -34,12 +35,9 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CASCADE="${CASCADE_FILE:-$DIR/model-cascade.json}"
 PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"
 PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
-# OpenRouter assets are selected once from one coherent installed bundle.
-OPENROUTER_BUNDLE_STATE="unchecked"
-OPENROUTER_BUNDLE_ROOT=""
-OPENROUTER_BUNDLE_VERSION=""
-OPENROUTER_BUNDLE_CLASS=""
-OPENROUTER_BUNDLE_REASON=""
+# Automated provider dispatch has one installed client and one fixture-only seam.
+WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"
+ASSESSMENT_LANE="pipeline-assessment-artifact-delegation-v1"
 
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="3600"; DRYRUN=0; PROBE_FILE=""
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
@@ -97,118 +95,160 @@ dispatch_codex() {
   [ -z "$root" ] && return 127                       # Codex not installed -> unavailable
   node "${root}/scripts/codex-companion.mjs" task --write "$PROMPT" 2>&1
 }
-resolve_openrouter_bundle() {
-  [ "$OPENROUTER_BUNDLE_STATE" = "ready" ] && return 0
-  [ "$OPENROUTER_BUNDLE_STATE" = "denied" ] && return 1
-  local kernel="${WORKFLOW_KERNEL:-}" active="" result="" selected=""
-  [ -n "$kernel" ] || kernel="$DIR/../../workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
-  [ -x "$kernel" ] || { OPENROUTER_BUNDLE_STATE="denied"; return 1; }
-  case "$HOST" in
-    claude-code) active="claude" ;;
-    codex) active="codex" ;;
-  esac
-  if [ -n "$active" ]; then
-    result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
-      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-      --active-host "$active" 2>/dev/null)" || {
-        OPENROUTER_BUNDLE_STATE="denied"; return 1;
-      }
-  else
-    result="$("$kernel" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.7.2 \
-      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-      2>/dev/null)" || {
-        OPENROUTER_BUNDLE_STATE="denied"; return 1;
-      }
-  fi
-  selected="$(printf '%s' "$result" | jq -r '.selected_root // empty')"
-  case "$selected" in
-    "~/"*) OPENROUTER_BUNDLE_ROOT="$HOME/${selected#\~/}" ;;
-    *) OPENROUTER_BUNDLE_STATE="denied"; return 1 ;;
-  esac
-  OPENROUTER_BUNDLE_VERSION="$(printf '%s' "$result" | jq -r '.version // empty')"
-  OPENROUTER_BUNDLE_CLASS="$(printf '%s' "$result" | jq -r '.cache_class // empty')"
-  OPENROUTER_BUNDLE_REASON="$(printf '%s' "$result" | jq -r '.reason // empty')"
-  [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
-    [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh" ] &&
-    [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/payload-authorization.sh" ] &&
-    [ -r "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json" ] || {
-      OPENROUTER_BUNDLE_STATE="denied"; return 1;
-    }
-  OPENROUTER_BUNDLE_STATE="ready"
-  return 0
+authority_client() {
+  [ -x "$WORKFLOW_AUTHORITY_CLIENT" ] || return 1
+  printf '%s' "$WORKFLOW_AUTHORITY_CLIENT"
 }
+
+authority_env() {
+  env -i PATH="$PATH" LC_ALL=C "$@"
+}
+
+request_body_digest() {
+  local model="$1" fallback="$2" system_file="$3" prompt_file="$4"
+  /usr/bin/python3 - "$model" "$fallback" 4<"$system_file" 5<"$prompt_file" <<'PY'
+import hashlib, json, os, sys
+models = [sys.argv[1]] + ([sys.argv[2]] if sys.argv[2] else [])
+body = {"messages": [{"content": os.read(4, 8388609).decode("utf-8"), "role": "system"},
+                     {"content": os.read(5, 8388609).decode("utf-8"), "role": "user"}],
+        "models": models, "temperature": None}
+text = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+raw = text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029").encode()
+print("sha256:" + hashlib.sha256(raw).hexdigest())
+PY
+}
+
+response_metrics() {
+  /usr/bin/python3 -c 'import hashlib,sys; b=sys.stdin.buffer.read(); print(len(b)); print("sha256:"+hashlib.sha256(b).hexdigest())'
+}
+
+validate_provider_result() {
+  local receipt="$1" model="$2" fallback="$3" response_length="$4" response_digest="$5" body_digest="$6" models
+  models="$(jq -nc --arg model "$model" --arg fallback "$fallback" 'if $fallback == "" then [$model] else [$model,$fallback] end')"
+  jq -e --arg repository "${DM_PROVIDER_REPOSITORY:-}" \
+    --arg run_id "${DM_PROVIDER_RUN_ID:-}" --arg lane "${DM_PROVIDER_LANE:-}" \
+    --arg candidate "${DM_PROVIDER_CANDIDATE:-}" --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" \
+    --arg model "$model" --arg body_digest "$body_digest" --arg response_digest "$response_digest" \
+    --argjson models "$models" --argjson response_length "$response_length" '
+      .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
+      .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
+      .outcome == "verified" and .exit_code == 0 and
+      .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
+      .scope.candidate == $candidate and .scope.workload == $workload and
+      .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
+      .provider == "openrouter" and .part_count == 2 and
+      (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+      (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+      (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.fallback == (.selected_model != .models[0])) and
+      .request_body_sha256 == $body_digest and
+      .response_sha256 == $response_digest and .response_length == $response_length and
+      (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
+      (.sequence | type == "number" and . >= 1) and
+      .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
+      .signature.kind == "es256" and
+      (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
+      ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
+    ' "$receipt" >/dev/null 2>&1
+}
+
+validate_provider_failure() {
+  local receipt="$1" model="$2" body_digest="$3" outcome="$4" exit_code="$5" models
+  models="$(jq -nc --arg model "$model" '[$model]')"
+  jq -e --arg repository "${DM_PROVIDER_REPOSITORY:-}" \
+    --arg run_id "${DM_PROVIDER_RUN_ID:-}" --arg lane "${DM_PROVIDER_LANE:-}" \
+    --arg candidate "${DM_PROVIDER_CANDIDATE:-}" --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" \
+    --arg body_digest "$body_digest" --arg outcome "$outcome" --argjson exit_code "$exit_code" \
+    --argjson models "$models" '
+      .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
+      .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
+      .outcome == $outcome and .exit_code == $exit_code and
+      .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
+      .scope.candidate == $candidate and .scope.workload == $workload and
+      .models == $models and .selected_model == null and
+      .provider == "openrouter" and .part_count == 2 and
+      .generation_id == null and .serving_provider == null and
+      .usage_sha256 == null and .fallback == null and
+      .request_body_sha256 == $body_digest and
+      .response_sha256 == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and
+      .response_length == 0 and
+      (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
+      (.sequence | type == "number" and . >= 1 and . <= 9223372036854775807) and
+      (.issued_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+      (.completed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+      .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
+      .signature.kind == "es256" and
+      (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
+      ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
+    ' "$receipt" >/dev/null 2>&1
+}
+
 dispatch_wrapper() {
-  local model="$1" system task_tmp_root system_file prompt_file manifest_file
-  local policy boundary authorization payload_sha256 authorization_mode rc
-  resolve_openrouter_bundle || return 1
+  local model="$1" system task_tmp_root system_file prompt_file receipt_file client response marker rc metrics response_length response_digest body_digest outcome
+  client="$(authority_client)" || return 1
   system="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
   task_tmp_root="${TMPDIR:-/tmp}"
   system_file="$(mktemp "$task_tmp_root/cascade-wrapper.system.XXXXXX")" || return 1
   prompt_file="$(mktemp "$task_tmp_root/cascade-wrapper.prompt.XXXXXX")" || {
     rm -f "$system_file"; return 1;
   }
-  manifest_file="$(mktemp "$task_tmp_root/cascade-wrapper.authorization.XXXXXX")" || {
+  receipt_file="$(mktemp "$task_tmp_root/cascade-wrapper.result.XXXXXX")" || {
     rm -f "$system_file" "$prompt_file"; return 1;
   }
-  policy="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
-  boundary="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-  authorization="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
   printf '%s' "$system" > "$system_file"
   printf '%s' "$PROMPT" > "$prompt_file"
-  if ! "$boundary" --mode artifact-delegation --policy "$policy" \
-      --content-file "$system_file" --content-file "$prompt_file"; then
-    rm -f "$system_file" "$prompt_file" "$manifest_file"
-    return 77
-  fi
-  payload_sha256="$("$authorization" snapshot --output "$manifest_file" \
-    --content-file "$system_file" --content-file "$prompt_file")" || {
-    rm -f "$system_file" "$prompt_file" "$manifest_file"; return 1;
+  body_digest="$(request_body_digest "$model" "" "$system_file" "$prompt_file")" || {
+    rm -f "$system_file" "$prompt_file" "$receipt_file"
+    return 2
   }
-  authorization_mode="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"
-  case "$authorization_mode" in
-    exact-digest)
-      if [ -z "${OPENROUTER_PAYLOAD_APPROVAL_SHA256:-}" ]; then
-        printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' "$payload_sha256"
-        rm -f "$system_file" "$prompt_file" "$manifest_file"
-        return 78
-      fi
-      if ! "$authorization" verify --manifest "$manifest_file" \
-          --approved-sha256 "$OPENROUTER_PAYLOAD_APPROVAL_SHA256" \
-          --content-file "$system_file" --content-file "$prompt_file" 2>/dev/null; then
-        printf '{"status":"approval_required","payloadSha256":"%s","authority":"user","reason":"payload-or-approval-changed"}\n' "$payload_sha256"
-        rm -f "$system_file" "$prompt_file" "$manifest_file"
-        return 78
-      fi
-      ;;
-    trusted-boundary)
-      if ! "$authorization" verify-trusted-boundary \
-          --manifest "$manifest_file" --policy "$policy" \
-          --content-file "$system_file" --content-file "$prompt_file" >/dev/null; then
-        rm -f "$system_file" "$prompt_file" "$manifest_file"
-        return 77
-      fi
-      ;;
-    *)
-      echo "cascade-dispatch: invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2
-      rm -f "$system_file" "$prompt_file" "$manifest_file"
-      return 2
-      ;;
-  esac
-  OPENROUTER_SYSTEM="$(cat "$system_file")" \
-    OPENROUTER_AUTHORIZATION_MODE="$authorization_mode" \
-    "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
-    "$model" - "$TIMEOUT" "" < "$prompt_file"
-  rc=$?
-  rm -f "$system_file" "$prompt_file" "$manifest_file"
-  return "$rc"
+  marker="$(printf '\001')"
+  response="$(
+    authority_env "$client" dispatch-provider-request \
+      --repository "${DM_PROVIDER_REPOSITORY:-}" --run-id "${DM_PROVIDER_RUN_ID:-}" \
+      --lane "${DM_PROVIDER_LANE:-}" --candidate "${DM_PROVIDER_CANDIDATE:-}" \
+      --workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" --nonce "${DM_PROVIDER_NONCE:-}" \
+      --model "$model" --fallback-model "" --system-fd 4 --user-fd 5 --response-fd 3 \
+      4<"$system_file" 5<"$prompt_file" 3>&1 >"$receipt_file"
+    rc=$?
+    [ "$rc" -eq 0 ] && printf '\001'
+    exit "$rc"
+  )"; rc=$?
+  if [ "$rc" -ne 0 ]; then
+    case "$rc" in
+      71|72) rm -f "$system_file" "$prompt_file" "$receipt_file"; return 77;;
+      70) rm -f "$system_file" "$prompt_file" "$receipt_file"; return 1;;
+      73|74)
+        outcome="provider_failure"
+        [ "$rc" -eq 74 ] && outcome="unknown"
+        if [ -z "$response" ] && validate_provider_failure "$receipt_file" "$model" "$body_digest" "$outcome" "$rc"; then
+          cat "$receipt_file"
+        fi
+        rm -f "$system_file" "$prompt_file" "$receipt_file"
+        return 75
+        ;;
+      75) rm -f "$system_file" "$prompt_file" "$receipt_file"; return 75;;
+      *) rm -f "$system_file" "$prompt_file" "$receipt_file"; return 2;;
+    esac
+  fi
+  response="${response%"$marker"}"
+  metrics="$(printf '%s' "$response" | response_metrics)" || {
+    rm -f "$system_file" "$prompt_file" "$receipt_file"
+    return 2
+  }
+  response_length="$(printf '%s\n' "$metrics" | sed -n '1p')"
+  response_digest="$(printf '%s\n' "$metrics" | sed -n '2p')"
+  if ! validate_provider_result "$receipt_file" "$model" "" "$response_length" "$response_digest" "$body_digest"; then
+    rm -f "$system_file" "$prompt_file" "$receipt_file"
+    return 2
+  fi
+  printf '%s' "$response"
+  rm -f "$system_file" "$prompt_file" "$receipt_file"
 }
 resolve_openrouter_exec() {
   [ -x "$DIR/openrouter-exec.sh" ] && printf '%s' "$DIR/openrouter-exec.sh"
@@ -216,7 +256,7 @@ resolve_openrouter_exec() {
 dispatch_openrouter_exec() {
   local runner; runner="$(resolve_openrouter_exec)"
   [ -z "$runner" ] && return 1
-  printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT" 2>&1
+  printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT"
 }
 
 # Gate the prompt once before any OpenRouter execution or wrapper role. A
@@ -227,36 +267,25 @@ openrouter_allowed() {
   [ "$DRYRUN" = "1" ] && return 0
   [ "$OPENROUTER_GATE_STATE" = "safe" ] && return 0
   [ "$OPENROUTER_GATE_STATE" = "denied" ] && return 1
-  [ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || {
+  [ "${DM_PROVIDER_LANE:-}" = "$ASSESSMENT_LANE" ] || {
     OPENROUTER_GATE_STATE="denied"
     return 1
   }
-  local policy="" helper="" task_tmp_root prompt_file allowed_file rc
-  resolve_openrouter_bundle || {
+  [ -n "${DM_PROVIDER_REPOSITORY:-}" ] && [ -n "${DM_PROVIDER_RUN_ID:-}" ] &&
+    [ -n "${DM_PROVIDER_CANDIDATE:-}" ] && [ -n "${DM_PROVIDER_NONCE:-}" ] || {
     OPENROUTER_GATE_STATE="denied"
     return 1
   }
-  policy="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
-  helper="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-  [ -f "$policy" ] && [ -x "$helper" ] || {
+  local client="" status=""
+  client="$(authority_client)" || {
     OPENROUTER_GATE_STATE="denied"
     return 1
   }
-  task_tmp_root="${TMPDIR:-/tmp}"
-  prompt_file="$(mktemp "$task_tmp_root/cascade-boundary.prompt.XXXXXX")" || return 1
-  allowed_file="$(mktemp "$task_tmp_root/cascade-boundary.allowed.XXXXXX")" || {
-    rm -f "$prompt_file"
-    return 1
+  status="$(authority_env "$client" provider-transport-status 2>/dev/null)" || {
+    OPENROUTER_GATE_STATE="denied"; return 1;
   }
-  printf '%s' "$PROMPT" > "$prompt_file"
-  printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$allowed_file"
-  if "$helper" --policy "$policy" --changed-files "$allowed_file" --content-file "$prompt_file"; then
-    rc=0
-  else
-    rc=$?
-  fi
-  rm -f "$prompt_file" "$allowed_file"
-  if [ "$rc" -eq 0 ]; then
+  if printf '%s' "$status" | jq -e \
+      '.production_ready == true and .m1_acceptance == true' >/dev/null; then
     OPENROUTER_GATE_STATE="safe"
     return 0
   fi
@@ -307,7 +336,7 @@ for role in $LADDER; do
   for model in $models; do
     model_origin="$(printf '%s' "$model" | tr '[:upper:]' '[:lower:]')"
     case "$kind:$model_origin" in
-      wrapper:openai/*|wrapper:anthropic/*|openrouter_exec:openai/*|openrouter_exec:anthropic/*)
+      wrapper:anthropic/*|openrouter_exec:anthropic/*)
         echo "cascade-dispatch: native-vendor-origin invariant rejected OpenRouter model '$model'" >&2
         exit 2
         ;;
@@ -360,24 +389,27 @@ for role in $LADDER; do
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
         break;;                                        # other Codex failure -> next OpenRouter role
       wrapper)
-        out="$(dispatch_wrapper "$model")"; rc=$?
-        [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
-        [ $rc -eq 78 ] && { printf '%s\n' "$out"; exit 78; }
+        dispatch_wrapper "$model"; rc=$?
+        [ $rc -eq 0 ] && exit 0
+        [ $rc -eq 75 ] && { echo "cascade-dispatch: terminal provider outcome; external dispatch rail stopped" >&2; exit 75; }
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
           EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
           break
         fi
+        [ $rc -eq 2 ] && exit 2
         continue;;                                     # wrapper error -> next model
       openrouter_exec)
         out="$(dispatch_openrouter_exec "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
+        [ $rc -eq 75 ] && { [ -z "$out" ] || printf '%s\n' "$out"; echo "cascade-dispatch: terminal provider outcome; external dispatch rail stopped" >&2; exit 75; }
         [ $rc -eq 78 ] && { printf '%s\n' "$out"; exit 78; }
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
           EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
           break                                    # skip every later OpenRouter role
         fi
+        [ $rc -eq 2 ] && exit 2
         continue;;
       *)
         echo "cascade-dispatch: unknown rail kind '$kind'" >&2
@@ -387,4 +419,4 @@ for role in $LADDER; do
 done
 
 echo "cascade-dispatch: ladder exhausted for class '$CLASS' on host '$HOST' (floor $FLOOR)" >&2
-exit 75
+exit 76

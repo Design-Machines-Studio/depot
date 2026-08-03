@@ -34,7 +34,8 @@ require_text "$pipeline_run" "dm-review inline protocol" "pipeline-run replaces 
 require_text "$pipeline_run" "executionMode: codex_native" "pipeline-run records codex_native receipts"
 
 require_text "$pipeline_command" "Codex Native Execution Adapter" "full pipeline Phase 6 links to Codex-native adapter"
-require_text "$pipeline_command" "Codex + OpenRouter" "full pipeline defaults adversarial review to non-Claude dual lenses"
+require_text "$pipeline_command" "Codex is the required adversarial reviewer" "full pipeline keeps Codex as the required adversarial lens"
+require_text "$pipeline_command" "openrouter-perspective: host_authority_unavailable" "full pipeline records the unavailable automated OpenRouter lens"
 
 require_text "$orchestrator" "codex_native" "orchestrator accepts codex_native execution mode"
 require_text "$orchestrator" "Codex Native Adapter Parity" "orchestrator documents parity rules for Codex"
