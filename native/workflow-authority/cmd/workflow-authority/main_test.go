@@ -3,15 +3,22 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
 	"errors"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"designmachines.dev/workflow-authority/internal/client"
+	"designmachines.dev/workflow-authority/internal/enrollment"
 )
 
 type fakePlatform struct {
@@ -34,9 +41,17 @@ func (f *fakePlatform) UninstallPlan() ([]string, error) { return f.plan, f.unin
 type fakeTerminal struct {
 	matchErr, stableErr, readErr error
 	secret                       []byte
+	stableCalls                  int
+	stableAt                     map[int]error
 }
 
-func (f *fakeTerminal) Stable() error                { return f.stableErr }
+func (f *fakeTerminal) Stable() error {
+	f.stableCalls++
+	if err := f.stableAt[f.stableCalls]; err != nil {
+		return err
+	}
+	return f.stableErr
+}
 func (f *fakeTerminal) MatchesInput(io.Reader) error { return f.matchErr }
 func (f *fakeTerminal) ReadSecret(string) ([]byte, error) {
 	return append([]byte(nil), f.secret...), f.readErr
@@ -70,6 +85,227 @@ func withFakes(t *testing.T, p localPlatform, terminal adminTerminal) {
 	openLinuxPlatform = func() (localPlatform, error) { return p, nil }
 	openAdminTerminal = func() (adminTerminal, error) { return terminal, nil }
 	t.Cleanup(func() { openLinuxPlatform, openAdminTerminal = oldPlatform, oldTerminal })
+}
+
+type fakeEnrollmentStore struct {
+	active                          *enrollment.Credential
+	trust                           enrollment.PublicTrust
+	loadErr, commitErr, recoveryErr error
+	enrolled, rotated, revoked      int
+	recovered, publicRecovered      int
+	revokedGeneration               uint64
+}
+
+func (f *fakeEnrollmentStore) Enroll(_ context.Context, _ enrollment.Credential) error {
+	f.enrolled++
+	return f.commitErr
+}
+func (f *fakeEnrollmentStore) Rotate(_ context.Context, _ enrollment.Credential) error {
+	f.rotated++
+	return f.commitErr
+}
+func (f *fakeEnrollmentStore) Revoke(_ context.Context, generation uint64, _ time.Time) error {
+	f.revoked++
+	f.revokedGeneration = generation
+	return f.commitErr
+}
+func (f *fakeEnrollmentStore) Recover(_ context.Context, _ enrollment.Credential) error {
+	f.recovered++
+	return f.commitErr
+}
+func (f *fakeEnrollmentStore) RecoverPartial(context.Context) error {
+	f.publicRecovered++
+	return f.recoveryErr
+}
+func (f *fakeEnrollmentStore) LoadActive(context.Context) (*enrollment.Credential, error) {
+	if f.loadErr != nil || f.active == nil {
+		return nil, f.loadErr
+	}
+	copy := *f.active
+	copy.ID = append([]byte(nil), f.active.ID...)
+	return &copy, nil
+}
+func (f *fakeEnrollmentStore) LoadTrust(context.Context) (enrollment.PublicTrust, error) {
+	if f.loadErr == nil && f.active == nil && len(f.trust.Credentials) == 0 {
+		return enrollment.PublicTrust{}, os.ErrNotExist
+	}
+	return f.trust, f.loadErr
+}
+
+type fakeFIDOEnroller struct {
+	request enrollment.Request
+	result  enrollment.Credential
+	err     error
+	calls   int
+}
+
+func (f *fakeFIDOEnroller) Enroll(_ context.Context, request enrollment.Request) (enrollment.Credential, error) {
+	f.calls++
+	f.request = enrollment.Request{Generation: request.Generation, ExcludeCredentialID: append([]byte(nil), request.ExcludeCredentialID...), DeviceSelector: request.DeviceSelector}
+	if f.err != nil {
+		return enrollment.Credential{}, f.err
+	}
+	if len(f.result.ID) > 0 {
+		result := f.result
+		result.ID = append([]byte(nil), f.result.ID...)
+		result.PublicKey = append([]byte(nil), f.result.PublicKey...)
+		result.AAGUID = append([]byte(nil), f.result.AAGUID...)
+		result.Generation = request.Generation
+		result.DeviceSelector = "sha256:" + strings.Repeat("b", 64)
+		return result, nil
+	}
+	return enrollment.Credential{ID: []byte("new-credential-id"), Generation: request.Generation}, nil
+}
+
+func withEnrollmentFakes(t *testing.T, store enrollmentLifecycle, enroller enrollment.Enroller) {
+	t.Helper()
+	oldStore, oldEnroller, oldNow := openEnrollmentStore, openFIDOEnroller, enrollmentNow
+	openEnrollmentStore = func() enrollmentLifecycle { return store }
+	openFIDOEnroller = func() enrollment.Enroller { return enroller }
+	enrollmentNow = func() time.Time { return time.Unix(1_900_000_000, 0).UTC() }
+	t.Cleanup(func() { openEnrollmentStore, openFIDOEnroller, enrollmentNow = oldStore, oldEnroller, oldNow })
+}
+
+func TestFIDOEnrollmentLifecycleUsesOnlyFixedOrStoredSelection(t *testing.T) {
+	p := &fakePlatform{}
+	terminal := &fakeTerminal{}
+	store := &fakeEnrollmentStore{}
+	enroller := &fakeFIDOEnroller{}
+	withFakes(t, p, terminal)
+	withEnrollmentFakes(t, store, enroller)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"workflow-authority-admin", "enroll-fido"}, strings.NewReader(""), &stdout, &stderr); code != 0 || store.enrolled != 1 {
+		t.Fatalf("enroll code=%d calls=%d stdout=%q stderr=%q", code, store.enrolled, stdout.String(), stderr.String())
+	}
+	if enroller.request.Generation != 1 || enroller.request.DeviceSelector != "" || len(enroller.request.ExcludeCredentialID) != 0 {
+		t.Fatalf("initial enrollment accepted caller selection: %#v", enroller.request)
+	}
+
+	store.active = &enrollment.Credential{ID: []byte("active-secret-id"), Generation: 7, DeviceSelector: "sha256:" + strings.Repeat("a", 64)}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"workflow-authority-admin", "rotate-fido"}, strings.NewReader(""), &stdout, &stderr); code != 0 || store.rotated != 1 {
+		t.Fatalf("rotate code=%d calls=%d stderr=%q", code, store.rotated, stderr.String())
+	}
+	if enroller.request.Generation != 8 || enroller.request.DeviceSelector != store.active.DeviceSelector || string(enroller.request.ExcludeCredentialID) != "active-secret-id" {
+		t.Fatalf("rotation did not bind stored enrollment: %#v", enroller.request)
+	}
+
+	store.active = nil
+	store.trust = enrollment.PublicTrust{Protocol: enrollment.Protocol, Credentials: []enrollment.PublicCredential{{Generation: 7}, {Generation: 11}}}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"workflow-authority-admin", "recover-fido"}, strings.NewReader(""), &stdout, &stderr); code != 0 || store.recovered != 1 {
+		t.Fatalf("recover code=%d calls=%d stderr=%q", code, store.recovered, stderr.String())
+	}
+	if enroller.request.Generation != 12 || enroller.request.DeviceSelector != "" || len(enroller.request.ExcludeCredentialID) != 0 {
+		t.Fatalf("recovery accepted caller selection: %#v", enroller.request)
+	}
+}
+
+func TestFIDOEnrollmentFailsClosedBeforeCommit(t *testing.T) {
+	p := &fakePlatform{}
+	terminal := &fakeTerminal{}
+	store := &fakeEnrollmentStore{}
+	enroller := &fakeFIDOEnroller{err: enrollment.ErrConflict}
+	withFakes(t, p, terminal)
+	withEnrollmentFakes(t, store, enroller)
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"workflow-authority-admin", "enroll-fido"}, strings.NewReader(""), &stdout, &stderr); code != exitUnavailable || store.enrolled != 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "exactly one") {
+		t.Fatalf("ambiguous device did not fail closed: code=%d commits=%d stdout=%q stderr=%q", code, store.enrolled, stdout.String(), stderr.String())
+	}
+
+	enroller.err = nil
+	terminal.stableAt = map[int]error{terminal.stableCalls + 2: errors.New("changed")}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"workflow-authority-admin", "enroll-fido"}, strings.NewReader(""), &stdout, &stderr); code != exitDeclined || store.enrolled != 0 || stdout.Len() != 0 {
+		t.Fatalf("changed terminal committed enrollment: code=%d commits=%d stdout=%q stderr=%q calls=%d", code, store.enrolled, stdout.String(), stderr.String(), terminal.stableCalls)
+	}
+}
+
+func TestExistingOrCorruptEnrollmentFailsBeforeFIDODeviceAccess(t *testing.T) {
+	p := &fakePlatform{}
+	terminal := &fakeTerminal{}
+	enroller := &fakeFIDOEnroller{}
+	store := &fakeEnrollmentStore{trust: enrollment.PublicTrust{Credentials: []enrollment.PublicCredential{{Generation: 1}}}}
+	withFakes(t, p, terminal)
+	withEnrollmentFakes(t, store, enroller)
+	if code := run([]string{"workflow-authority-admin", "enroll-fido"}, strings.NewReader(""), io.Discard, io.Discard); code != exitDeclined || enroller.calls != 0 {
+		t.Fatalf("existing enrollment reached FIDO device: code=%d calls=%d", code, enroller.calls)
+	}
+	store.trust = enrollment.PublicTrust{}
+	store.loadErr = enrollment.ErrCorrupt
+	if code := run([]string{"workflow-authority-admin", "enroll-fido"}, strings.NewReader(""), io.Discard, io.Discard); code != exitUnavailable || enroller.calls != 0 {
+		t.Fatalf("corrupt enrollment reached FIDO device: code=%d calls=%d", code, enroller.calls)
+	}
+}
+
+func TestAdminEnrollmentComposesWithDurableStoreAtTempRoot(t *testing.T) {
+	root := t.TempDir()
+	for _, item := range []struct {
+		path string
+		mode os.FileMode
+	}{
+		{"var", 0o755}, {"var/lib", 0o755}, {"var/lib/design-machines", 0o755}, {"var/lib/design-machines/workflow-authority", 0o700},
+		{"etc", 0o755}, {"etc/design-machines", 0o755}, {"etc/design-machines/workflow-authority", 0o755}, {"etc/design-machines/workflow-authority/trust", 0o755},
+	} {
+		if err := os.Mkdir(filepath.Join(root, item.path), item.mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	store, err := enrollment.NewTestStore(root, uint32(os.Getuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	public, err := x509.MarshalPKIXPublicKey(&private.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := []byte("temp-root-credential-id")
+	enroller := &fakeFIDOEnroller{result: enrollment.Credential{
+		Reference: enrollment.ReferenceForID(id), ID: id, PublicKey: public, Algorithm: enrollment.ES256,
+		RPID: enrollment.RPID, EnrolledAt: time.Unix(1_900_000_000, 0).UTC(), Status: "active", InternalUV: true,
+		AAGUID: bytes.Repeat([]byte{7}, 16), Format: "packed",
+	}}
+	var stdout, stderr bytes.Buffer
+	if code := runFIDOLifecycle("enroll-fido", &fakeTerminal{}, store, enroller, &stdout, &stderr); code != 0 {
+		t.Fatalf("real store enrollment code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	for path, mode := range map[string]os.FileMode{
+		filepath.Join(root, "etc/design-machines/workflow-authority/trust/authority-public.json"): 0o644,
+		filepath.Join(root, "var/lib/design-machines/workflow-authority/enrollment-private.json"): 0o600,
+		filepath.Join(root, "var/lib/design-machines/workflow-authority/enrollment.lock"):         0o600,
+	} {
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode().Perm() != mode || !info.Mode().IsRegular() {
+			t.Fatalf("bad enrollment record %s mode=%v err=%v", path, info, err)
+		}
+	}
+	if code := runFIDOLifecycle("enroll-fido", &fakeTerminal{}, store, enroller, io.Discard, io.Discard); code != exitDeclined || enroller.calls != 1 {
+		t.Fatalf("repeat enrollment reached device: code=%d calls=%d", code, enroller.calls)
+	}
+}
+
+func TestFIDORevocationAndPublicRecoveryAreContentFree(t *testing.T) {
+	p := &fakePlatform{}
+	terminal := &fakeTerminal{}
+	store := &fakeEnrollmentStore{active: &enrollment.Credential{ID: []byte("secret-id-never-output"), Generation: 4}}
+	withFakes(t, p, terminal)
+	withEnrollmentFakes(t, store, &fakeFIDOEnroller{})
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"workflow-authority-admin", "revoke-fido"}, strings.NewReader(""), &stdout, &stderr); code != 0 || store.revoked != 1 || store.revokedGeneration != 4 || strings.Contains(stdout.String()+stderr.String(), "secret-id") {
+		t.Fatalf("revoke code=%d calls=%d stdout=%q stderr=%q", code, store.revoked, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := run([]string{"workflow-authority-admin", "recover-fido-public"}, strings.NewReader(""), &stdout, &stderr); code != 0 || store.publicRecovered != 1 || !strings.Contains(stdout.String(), "public-trust-recovered") {
+		t.Fatalf("public recovery code=%d calls=%d stdout=%q stderr=%q", code, store.publicRecovered, stdout.String(), stderr.String())
+	}
 }
 
 func TestBasenameAndExitClassification(t *testing.T) {

@@ -46,7 +46,7 @@ func testPlatform(t *testing.T, root bool) (*Linux, *fakeService) {
 	paths := p.Paths()
 	for path, mode := range map[string]os.FileMode{
 		filepath.Dir(paths.Client): 0o755, filepath.Dir(paths.Admin): 0o755, filepath.Dir(paths.Daemon): 0o755,
-		filepath.Dir(paths.Socket): 0o750, filepath.Dir(paths.Credential): 0o700, paths.State: 0o700,
+		filepath.Dir(paths.Socket): 0o750, filepath.Dir(paths.Credential): 0o700, paths.State: 0o700, paths.TrustDir: 0o755,
 	} {
 		if err := os.MkdirAll(path, mode); err != nil {
 			t.Fatal(err)
@@ -72,8 +72,8 @@ func testPlatform(t *testing.T, root bool) (*Linux, *fakeService) {
 func TestFrozenPathsAndNoBroadRoot(t *testing.T) {
 	p, _ := testPlatform(t, true)
 	got := p.Paths()
-	want := []string{ClientPath, AdminPath, DaemonPath, SocketPath, PolicyPath, CredentialPath, StatePath}
-	have := []string{got.Client, got.Admin, got.Daemon, got.Socket, got.Policy, got.Credential, got.State}
+	want := []string{ClientPath, AdminPath, DaemonPath, SocketPath, PolicyPath, CredentialPath, StatePath, TrustDirPath, PublicTrustPath, PrivateEnrollmentPath, EnrollmentLockPath}
+	have := []string{got.Client, got.Admin, got.Daemon, got.Socket, got.Policy, got.Credential, got.State, got.TrustDir, got.PublicTrust, got.PrivateEnrollment, got.EnrollmentLock}
 	root := filepath.Dir(filepath.Dir(filepath.Dir(got.Client)))
 	for i := range want {
 		if !strings.HasSuffix(have[i], want[i]) || have[i] == root || have[i] == "/" {
@@ -112,6 +112,14 @@ func TestLayoutModesTypesAndLinks(t *testing.T) {
 
 func TestProvisionRevokeDisableAndRecovery(t *testing.T) {
 	p, s := testPlatform(t, true)
+	for path, mode := range map[string]os.FileMode{p.paths.PublicTrust: 0o644, p.paths.PrivateEnrollment: 0o600, p.paths.EnrollmentLock: 0o600} {
+		if err := os.WriteFile(path, []byte("enrollment fixture\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+	}
 	secret := []byte("openrouter-test-value")
 	if err := p.ProvisionOpenRouter(secret); err != nil {
 		t.Fatal(err)
@@ -206,7 +214,7 @@ func TestUninstallPlanPreservesStateAndIsExact(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(plan, "\n")
-	for _, path := range []string{p.paths.Client, p.paths.Admin, p.paths.Daemon, p.paths.Socket, p.paths.Policy, p.paths.Credential, p.paths.State} {
+	for _, path := range []string{p.paths.Client, p.paths.Admin, p.paths.Daemon, p.paths.Socket, p.paths.Policy, p.paths.Credential, p.paths.State, p.paths.PublicTrust} {
 		if !strings.Contains(joined, path) {
 			t.Fatalf("missing %s", path)
 		}
@@ -216,6 +224,39 @@ func TestUninstallPlanPreservesStateAndIsExact(t *testing.T) {
 	}
 	if !strings.Contains(joined, "preserve forensic state") {
 		t.Fatal("state preservation absent")
+	}
+	if !strings.Contains(joined, "reversible recovery") {
+		t.Fatal("enrollment recovery preservation absent")
+	}
+}
+
+func TestEnrollmentLayoutIsAllOrNothingAndModeBound(t *testing.T) {
+	p, _ := testPlatform(t, true)
+	if p.Status().State != "enrollment-required" {
+		t.Fatalf("unexpected empty enrollment state %q", p.Status().State)
+	}
+	if err := os.WriteFile(p.paths.PrivateEnrollment, []byte("private\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if p.ValidateLayout() == nil || p.Status().State != "degraded" {
+		t.Fatal("partial enrollment layout accepted")
+	}
+	for path, mode := range map[string]os.FileMode{p.paths.PublicTrust: 0o644, p.paths.EnrollmentLock: 0o600} {
+		if err := os.WriteFile(path, []byte("fixture\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if p.Status().State != "provider-required" {
+		t.Fatalf("unexpected enrolled state %q", p.Status().State)
+	}
+	if err := os.Chmod(p.paths.PublicTrust, 0o666); err != nil {
+		t.Fatal(err)
+	}
+	if p.ValidateLayout() == nil {
+		t.Fatal("writable public trust accepted")
 	}
 }
 
@@ -316,11 +357,19 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 	if strings.Contains(string(socket), "DirectoryMode=") {
 		t.Error("socket unit may not create a caller-substituted parent")
 	}
-	wantTmpfiles := "d " + filepath.Dir(SocketPath) + " 0750 root workflow-authority -"
-	if !strings.Contains(string(tmpfiles), wantTmpfiles) || !strings.Contains(string(tmpfiles), "Install as "+TmpfilesPath) {
-		t.Fatalf("tmpfiles declaration does not freeze installed target and ownership: %s", tmpfiles)
+	for _, want := range []string{
+		"d " + filepath.Dir(SocketPath) + " 0750 root workflow-authority -",
+		"d " + filepath.Dir(PolicyPath) + " 0755 root root -",
+		"d " + filepath.Dir(CredentialPath) + " 0700 root root -",
+		"d " + TrustDirPath + " 0755 root root -",
+		"d " + StatePath + " 0700 root root -",
+		"Install as " + TmpfilesPath,
+	} {
+		if !strings.Contains(string(tmpfiles), want) {
+			t.Fatalf("tmpfiles declaration missing fixed path/mode %q: %s", want, tmpfiles)
+		}
 	}
-	for _, want := range []string{"Type=oneshot", "ExecStartPre=/usr/bin/systemd-tmpfiles --create " + TmpfilesPath, "ExecStart=/usr/bin/test -d " + filepath.Dir(SocketPath), "ExecStart=/usr/bin/test ! -L " + filepath.Dir(SocketPath), "NoNewPrivileges=yes", "ProtectSystem=full"} {
+	for _, want := range []string{"Type=oneshot", "ExecStartPre=/usr/bin/systemd-tmpfiles --create " + TmpfilesPath, "ExecStart=/usr/bin/test -d " + filepath.Dir(SocketPath), "ExecStart=/usr/bin/test ! -L " + filepath.Dir(SocketPath), "NoNewPrivileges=yes", "ProtectSystem=full", "ReadWritePaths=-" + filepath.Dir(PolicyPath), "ReadWritePaths=-" + StatePath} {
 		if !strings.Contains(string(runtimeService), want) {
 			t.Errorf("runtime preparation service missing %s", want)
 		}
