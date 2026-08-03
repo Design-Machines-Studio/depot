@@ -135,6 +135,10 @@ validate_provider_result() {
       .scope.candidate == $candidate and .scope.workload == $workload and
       .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
       .provider == "openrouter" and .part_count == 2 and
+      (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+      (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+      (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.fallback == (.selected_model != .models[0])) and
       .request_body_sha256 == $body_digest and
       .response_sha256 == $response_digest and .response_length == $response_length and
       (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and

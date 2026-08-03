@@ -135,23 +135,93 @@ func TestExactRequestLifecycleAndFsyncLinearization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if signature, err := manager.SignTerminal(right, []byte("terminal-input")); err != nil || len(signature) == 0 {
-		t.Fatalf("terminal signature unavailable: %v", err)
-	}
 	if got := wal.events[len(wal.events)-1].State; got != SendStarted {
 		t.Fatalf("send right escaped before durable marker: %s", got)
 	}
-	if err := manager.Complete(context.Background(), challenge.TransactionID, 64, "verified"); err != nil {
+	terminal := []byte("terminal-input")
+	if err := manager.Finalize(context.Background(), right, 64, "verified", protocol.Digest(terminal)); err != nil {
 		t.Fatal(err)
 	}
-	if err := manager.Cleanup(context.Background(), challenge.TransactionID); err != nil {
-		t.Fatal(err)
+	if signature, err := manager.SignFinalized(right, terminal); err != nil || len(signature) == 0 {
+		t.Fatalf("terminal signature unavailable: %v", err)
 	}
-	want := []State{Reserved, Authorized, SendStarted, Terminal, Cleanup}
+	want := []State{Reserved, Authorized, SendStarted, Cleanup}
 	for i, state := range want {
 		if wal.events[i].State != state {
 			t.Fatalf("transition %d = %s", i, wal.events[i].State)
 		}
+	}
+}
+
+func TestAtomicFinalizeConsumesAndSignsOnce(t *testing.T) {
+	wal := &memoryWAL{}
+	manager, challenge, peer, _ := reserve(t, &fakeFIDO{}, wal)
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	if _, err := manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical)); err != nil {
+		t.Fatal(err)
+	}
+	right, err := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	terminal := []byte("terminal")
+	if err := manager.Finalize(context.Background(), right, 64, "verified", protocol.Digest(terminal)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer); err == nil {
+		t.Fatal("finalized send reused")
+	}
+	if signature, err := manager.SignFinalized(right, terminal); err != nil || len(signature) == 0 {
+		t.Fatalf("sign: %v", err)
+	}
+	if _, err := manager.SignFinalized(right, []byte("terminal")); err == nil {
+		t.Fatal("finalized signer reused")
+	}
+	if got := manager.records[challenge.TransactionID].event.State; got != Cleanup {
+		t.Fatalf("state=%s", got)
+	}
+}
+
+func TestFinalizedSignerMismatchConsumesKey(t *testing.T) {
+	manager, challenge, peer, _ := reserve(t, &fakeFIDO{}, &memoryWAL{})
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	_, _ = manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical))
+	right, _ := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer)
+	terminal := []byte("terminal")
+	if err := manager.Finalize(context.Background(), right, 1, "verified", protocol.Digest(terminal)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.SignFinalized(right, []byte("different-terminal")); err == nil {
+		t.Fatal("finalized signer accepted unbound terminal")
+	}
+	if record := manager.records[challenge.TransactionID]; record.private != nil || !record.signed {
+		t.Fatal("mismatched sign attempt retained authority")
+	}
+	if _, err := manager.SignFinalized(right, terminal); err == nil {
+		t.Fatal("mismatched sign attempt was retryable")
+	}
+}
+
+func TestAtomicFinalizeDurabilityFailureRecoversUnknown(t *testing.T) {
+	wal := &memoryWAL{failAt: 4}
+	manager, challenge, peer, clock := reserve(t, &fakeFIDO{}, wal)
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	_, _ = manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical))
+	right, _ := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer)
+	terminal := []byte("terminal")
+	if err := manager.Finalize(context.Background(), right, 64, "verified", protocol.Digest(terminal)); err == nil {
+		t.Fatal("finalize survived durability failure")
+	}
+	if _, err := manager.SignFinalized(right, []byte("terminal")); err == nil {
+		t.Fatal("unfinalized signer accepted")
+	}
+	_, _, config, _ := fixture(t)
+	recovered, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovered.records[challenge.TransactionID].event.Outcome != "outcome_unknown" {
+		t.Fatal("failed finalize became retryable")
 	}
 }
 
@@ -183,22 +253,19 @@ func TestWALFailureNeverPublishesTransition(t *testing.T) {
 	}
 	beforeBytes := manager.bytes
 	wal.failAt = 6
-	if err := manager.Complete(context.Background(), challenge.TransactionID, 10, "verified"); err == nil {
-		t.Fatal("terminal fsync failure accepted")
+	terminal := []byte("terminal")
+	if err := manager.Finalize(context.Background(), SendRight{TransactionID: challenge.TransactionID}, 10, "verified", protocol.Digest(terminal)); err == nil {
+		t.Fatal("finalize fsync failure accepted")
 	}
 	if manager.records[challenge.TransactionID].event.State != SendStarted || manager.bytes != beforeBytes {
-		t.Fatal("failed terminal published")
+		t.Fatal("failed finalize published")
 	}
 	wal.failAt = 0
-	if err := manager.Complete(context.Background(), challenge.TransactionID, 10, "verified"); err != nil {
+	if err := manager.Finalize(context.Background(), SendRight{TransactionID: challenge.TransactionID}, 10, "provider_failure", ""); err != nil {
 		t.Fatal(err)
 	}
-	wal.failAt = 8
-	if err := manager.Cleanup(context.Background(), challenge.TransactionID); err == nil {
-		t.Fatal("cleanup fsync failure accepted")
-	}
-	if manager.records[challenge.TransactionID].event.State != Terminal || manager.records[challenge.TransactionID].private == nil {
-		t.Fatal("failed cleanup published")
+	if record := manager.records[challenge.TransactionID]; record.event.State != Cleanup || record.private != nil {
+		t.Fatal("failure finalization retained signing authority")
 	}
 
 	cancelWAL := &memoryWAL{}

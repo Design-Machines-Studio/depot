@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -212,6 +213,7 @@ type Event struct {
 	ChallengeSHA256   string         `json:"challenge_sha256,omitempty"`
 	AssertionSHA256   string         `json:"assertion_sha256,omitempty"`
 	SignerPublicKey   string         `json:"signer_public_key,omitempty"`
+	TerminalSHA256    string         `json:"terminal_sha256,omitempty"`
 	Outcome           string         `json:"outcome,omitempty"`
 	RequestBytes      int64          `json:"request_bytes"`
 	ResponseBytes     int64          `json:"response_bytes"`
@@ -338,13 +340,16 @@ type Config struct {
 }
 
 type reservation struct {
-	event        Event
-	request      protocol.Request
-	challenge    protocol.Challenge
-	connectionID string
-	peer         Peer
-	private      *ecdsa.PrivateKey
-	cancelled    bool
+	event          Event
+	request        protocol.Request
+	challenge      protocol.Challenge
+	connectionID   string
+	peer           Peer
+	private        *ecdsa.PrivateKey
+	cancelled      bool
+	finalized      bool
+	signed         bool
+	terminalSHA256 string
 }
 
 type Manager struct {
@@ -560,43 +565,61 @@ func (m *Manager) BeginSend(ctx context.Context, transactionID, connectionID str
 	return SendRight{TransactionID: transactionID}, nil
 }
 
-// SignTerminal keeps the ephemeral private key inside the authority core.
-func (m *Manager) SignTerminal(right SendRight, terminalInput []byte) ([]byte, error) {
+// Finalize consumes send authority with one durable cleanup record. The
+// ephemeral signer survives only when a verified outcome binds the exact
+// terminal input digest that the subsequent one-shot signature must match.
+// Failure outcomes destroy the signer as soon as cleanup is durable.
+func (m *Manager) Finalize(ctx context.Context, right SendRight, responseBytes int64, outcome, terminalSHA256 string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	record, ok := m.records[right.TransactionID]
-	if !ok || record.event.State != SendStarted || record.private == nil || len(terminalInput) == 0 {
-		return nil, ErrConflict
-	}
-	digest := sha256.Sum256(terminalInput)
-	signature, err := ecdsa.SignASN1(rand.Reader, record.private, digest[:])
-	if err != nil {
-		return nil, ErrUnavailable
-	}
-	return signature, nil
-}
-
-func (m *Manager) Complete(ctx context.Context, transactionID string, responseBytes int64, outcome string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	record, ok := m.records[transactionID]
-	if !ok || record.event.State != SendStarted {
-		return ErrConflict
-	}
-	if responseBytes < 0 || m.bytes+responseBytes > m.config.MaxBytes || (outcome != "verified" && outcome != "provider_failure" && outcome != "outcome_unknown") {
+	validDigest := validSHA256(terminalSHA256)
+	if !ok || record.event.State != SendStarted || record.finalized || responseBytes < 0 || m.bytes+responseBytes > m.config.MaxBytes || (outcome != "verified" && outcome != "provider_failure" && outcome != "outcome_unknown") || (outcome == "verified") != validDigest {
 		return ErrConflict
 	}
 	next := record.event
-	next.State = Terminal
+	next.State = Cleanup
 	next.ResponseBytes = responseBytes
 	next.Outcome = outcome
+	next.TerminalSHA256 = terminalSHA256
 	next.At = m.clock.Now().Format(time.RFC3339)
 	if err := m.wal.Append(ctx, next); err != nil {
 		return err
 	}
 	record.event = next
+	record.finalized = true
+	record.terminalSHA256 = terminalSHA256
+	if outcome != "verified" {
+		zeroKey(record.private)
+		record.private = nil
+	}
 	m.bytes += responseBytes
 	return nil
+}
+
+// SignFinalized signs once after durable consumption and destroys the key.
+// Terminal write/close failure therefore cannot mint a retry receipt.
+func (m *Manager) SignFinalized(right SendRight, terminalInput []byte) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	record, ok := m.records[right.TransactionID]
+	if !ok || record.event.State != Cleanup || record.event.Outcome != "verified" || !record.finalized || record.signed || record.private == nil || len(terminalInput) == 0 {
+		return nil, ErrConflict
+	}
+	record.signed = true
+	if protocol.Digest(terminalInput) != record.terminalSHA256 {
+		zeroKey(record.private)
+		record.private = nil
+		return nil, ErrConflict
+	}
+	digest := sha256.Sum256(terminalInput)
+	signature, err := ecdsa.SignASN1(rand.Reader, record.private, digest[:])
+	zeroKey(record.private)
+	record.private = nil
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	return signature, nil
 }
 
 func (m *Manager) Cancel(ctx context.Context, transactionID string) error {
@@ -618,25 +641,6 @@ func (m *Manager) Cancel(ctx context.Context, transactionID string) error {
 	}
 	record.event = next
 	record.cancelled = true
-	zeroKey(record.private)
-	record.private = nil
-	return nil
-}
-
-func (m *Manager) Cleanup(ctx context.Context, transactionID string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	record, ok := m.records[transactionID]
-	if !ok || record.event.State != Terminal {
-		return ErrConflict
-	}
-	next := record.event
-	next.State = Cleanup
-	next.At = m.clock.Now().Format(time.RFC3339)
-	if err := m.wal.Append(ctx, next); err != nil {
-		return err
-	}
-	record.event = next
 	zeroKey(record.private)
 	record.private = nil
 	return nil
@@ -688,6 +692,13 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+func validSHA256(value string) bool {
+	if len(value) != 71 || value[:7] != "sha256:" {
+		return false
+	}
+	_, err := hex.DecodeString(value[7:])
+	return err == nil
 }
 func redactFIDO(err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, ErrConflict) {

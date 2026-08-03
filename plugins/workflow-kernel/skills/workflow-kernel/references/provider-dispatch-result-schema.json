@@ -4,7 +4,7 @@
   "title": "Content-free signed provider dispatch result v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "protocol", "operation_family", "substrate_authority", "outcome", "exit_code", "request_body_sha256", "response_sha256", "response_length", "part_count", "models", "selected_model", "provider", "scope", "sequence", "issued_at", "completed_at", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest", "cleanup", "signature"],
+  "required": ["schema_version", "protocol", "operation_family", "substrate_authority", "outcome", "exit_code", "request_body_sha256", "response_sha256", "response_length", "part_count", "models", "selected_model", "provider", "generation_id", "serving_provider", "usage_sha256", "fallback", "scope", "sequence", "issued_at", "completed_at", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest", "cleanup", "signature"],
   "properties": {
     "schema_version": {"const": 1}, "protocol": {"const": "workflow-authority-provider-dispatch-v1"},
     "operation_family": {"const": "external_provider_dispatch"}, "substrate_authority": {"const": "not_asserted"},
@@ -12,6 +12,7 @@
     "request_body_sha256": {"$ref": "#/$defs/digest"}, "response_sha256": {"$ref": "#/$defs/digest"},
     "response_length": {"type": "integer", "minimum": 0, "maximum": 8388608}, "part_count": {"type": "integer", "minimum": 1, "maximum": 256},
     "models": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/id"}}, "selected_model": {"$ref": "#/$defs/id"}, "provider": {"const": "openrouter"},
+    "generation_id": {"$ref": "#/$defs/id"}, "serving_provider": {"$ref": "#/$defs/id"}, "usage_sha256": {"$ref": "#/$defs/digest"}, "fallback": {"type": "boolean"},
     "scope": {"$ref": "#/$defs/scope"}, "sequence": {"type": "integer", "minimum": 1}, "issued_at": {"$ref": "#/$defs/time"}, "completed_at": {"$ref": "#/$defs/time"},
     "challenge_sha256": {"$ref": "#/$defs/digest"}, "authority_assertion_sha256": {"$ref": "#/$defs/digest"}, "result_signer_sha256": {"$ref": "#/$defs/digest"}, "prior_chain_digest": {"$ref": "#/$defs/digest"},
     "cleanup": {"type": "object", "additionalProperties": false, "required": ["reservation", "connection", "content_buffer"], "properties": {"reservation": {"const": "consumed"}, "connection": {"const": "closed"}, "content_buffer": {"const": "discarded"}}},

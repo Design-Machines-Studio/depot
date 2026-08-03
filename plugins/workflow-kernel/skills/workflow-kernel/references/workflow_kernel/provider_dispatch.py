@@ -95,6 +95,7 @@ _RESULT_FIELDS = frozenset({
     "schema_version", "protocol", "operation_family", "substrate_authority",
     "outcome", "exit_code", "request_body_sha256", "response_sha256",
     "response_length", "part_count", "models", "selected_model", "provider",
+    "generation_id", "serving_provider", "usage_sha256", "fallback",
     "scope", "sequence", "issued_at", "completed_at", "challenge_sha256",
     "authority_assertion_sha256", "result_signer_sha256",
     "cleanup", "signature", "prior_chain_digest",
@@ -519,14 +520,16 @@ def validate_result(document: Any) -> dict[str, Any]:
         "unknown": EXIT_UNKNOWN,
     }[result["outcome"]]:
         _fail("terminal_binding_invalid")
-    for field in ("request_body_sha256", "response_sha256", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest"):
+    for field in ("request_body_sha256", "response_sha256", "usage_sha256", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest"):
         _digest(result[field])
     _integer(result["response_length"], 0, MAX_RESPONSE_BYTES)
     _integer(result["part_count"], 1, MAX_PARTS)
     _strings(result["models"])
-    for field in ("selected_model", "provider"):
+    for field in ("selected_model", "provider", "generation_id", "serving_provider"):
         _string(result[field])
     if result["provider"] != "openrouter":
+        _fail("terminal_binding_invalid")
+    if type(result["fallback"]) is not bool or result["fallback"] != (result["selected_model"] != result["models"][0]):
         _fail("terminal_binding_invalid")
     _terminal_signature(result["signature"])
     _scope(result["scope"])
@@ -632,6 +635,7 @@ def validate_exchange(document: Any) -> dict[str, Any]:
             result["authority_assertion_sha256"] == sha256(canonical_json(proof["authority_assertion"])),
             result["result_signer_sha256"] == sha256(canonical_json(challenge["result_signer"])),
             result["selected_model"] in request["models"], result["provider"] == "openrouter",
+            result["fallback"] == (result["selected_model"] != request["models"][0]),
         )):
             _fail("terminal_binding_invalid")
     return exchange
@@ -862,6 +866,7 @@ def verify_terminal_result(
         result["prior_chain_digest"] == request["authority"]["prior_chain_digest"],
         result["selected_model"] in request["models"],
         result["provider"] == "openrouter",
+        result["fallback"] == (result["selected_model"] != request["models"][0]),
     )
     if not all(checks):
         _fail("terminal_binding_invalid")

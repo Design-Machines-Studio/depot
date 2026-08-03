@@ -125,6 +125,10 @@ def dispatch(argv: list[str]) -> None:
             {"role": "user", "content_length": len(user), "content_sha256": digest(user)},
         ],
     }
+    selected_model = str(args["--model"])
+    if case == "signed-fallback" and len(models) > 1:
+        selected_model = models[1]
+    usage = {"completion_tokens": 2, "prompt_tokens": 3, "total_tokens": 5}
     terminal = {
         "schema_version": 1, "protocol": PROTOCOL,
         "operation_family": "external_provider_dispatch",
@@ -135,8 +139,10 @@ def dispatch(argv: list[str]) -> None:
             "models": models, "temperature": None,
         })),
         "response_sha256": digest(response), "response_length": len(response),
-        "part_count": 2, "models": models, "selected_model": args["--model"],
+        "part_count": 2, "models": models, "selected_model": selected_model,
         "provider": "openrouter",
+        "generation_id": "generation-fixture", "serving_provider": "fixture-provider",
+        "usage_sha256": digest(canonical(usage)), "fallback": selected_model != models[0],
         "scope": {
             "repository": args["--repository"], "run_id": args["--run-id"],
             "lane": args["--lane"], "candidate": args["--candidate"],
@@ -166,6 +172,14 @@ def dispatch(argv: list[str]) -> None:
         terminal["models"] = list(reversed(models))
     elif case == "wrong-selected-model":
         terminal["selected_model"] = "fixture/not-requested"
+    elif case == "wrong-generation":
+        terminal["generation_id"] = "bad generation"
+    elif case == "wrong-serving-provider":
+        terminal["serving_provider"] = "bad provider"
+    elif case == "wrong-usage-digest":
+        terminal["usage_sha256"] = digest(b"wrong-usage")
+    elif case == "wrong-fallback":
+        terminal["fallback"] = not terminal["fallback"]
     elif case == "forged-signature":
         terminal["signature"]["value"] = "fixture-rsa-sha256-v1:" + "0" * 256
     os.write(3, response)
