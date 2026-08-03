@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
 	"strings"
 	"syscall"
 	"testing"
+
+	"designmachines.dev/workflow-authority/internal/client"
 )
 
 type fakePlatform struct {
@@ -42,6 +45,16 @@ func (f *fakeTerminal) Close() error { return nil }
 type errorWriter struct{}
 
 func (errorWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+type fakeProviderClient struct {
+	status    []byte
+	statusErr error
+}
+
+func (f fakeProviderClient) Status(context.Context) ([]byte, error) { return f.status, f.statusErr }
+func (fakeProviderClient) Dispatch(context.Context, client.DispatchOptions, io.Reader, io.Reader) (client.Result, error) {
+	return client.Result{}, client.ErrUnavailable
+}
 
 func withFakes(t *testing.T, p localPlatform, terminal adminTerminal) {
 	t.Helper()
@@ -133,5 +146,47 @@ func TestResponseChannelRequiresAnonymousPipe(t *testing.T) {
 	defer named.Close()
 	if validateResponsePipe(named) == nil {
 		t.Fatal("filesystem-backed named FIFO accepted")
+	}
+}
+
+func TestExactProviderCLIAndStatus(t *testing.T) {
+	args := []string{"--repository", "owner/repo", "--run-id", "run-1", "--lane", "lane-1", "--candidate", "candidate-1", "--workload", "workload-1", "--nonce", "nonce-1", "--model", "openai/gpt-5", "--fallback-model", "", "--system-fd", "4", "--user-fd", "5", "--response-fd", "3"}
+	options, err := parseDispatch(args)
+	if err != nil || options.Repository != "owner/repo" || options.Model != "openai/gpt-5" {
+		t.Fatalf("valid CLI rejected: %+v %v", options, err)
+	}
+	withoutFallback := append(append([]string(nil), args[:14]...), args[16:]...)
+	if options, err := parseDispatch(withoutFallback); err != nil || options.FallbackModel != "" {
+		t.Fatalf("optional fallback rejected: %+v %v", options, err)
+	}
+	for name, mutate := range map[string]func([]string) []string{
+		"missing":      func(v []string) []string { return append(v[:2], v[4:]...) },
+		"unknown":      func(v []string) []string { v[0] = "--socket"; return v },
+		"duplicate":    func(v []string) []string { v[2] = "--repository"; return v },
+		"alternate-fd": func(v []string) []string { v[len(v)-1] = "9"; return v },
+	} {
+		t.Run(name, func(t *testing.T) {
+			copyArgs := append([]string(nil), args...)
+			if _, err := parseDispatch(mutate(copyArgs)); err == nil {
+				t.Fatal("invalid closed CLI accepted")
+			}
+		})
+	}
+	var stdout, stderr bytes.Buffer
+	status := []byte(`{"m1_acceptance":true,"production_ready":true,"protocol":"workflow-authority-provider-dispatch-v1","schema_version":1}`)
+	if code := runProvider(fakeProviderClient{status: status}, "provider-transport-status", nil, &stdout, &stderr); code != 0 || stdout.String() != string(status)+"\n" || stderr.Len() != 0 {
+		t.Fatalf("status code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestProviderEnvironmentIsScrubbed(t *testing.T) {
+	for _, name := range []string{"HOST_AUTHORITY_BROKER", "DM_VERIFICATION_SUBSTRATE", "OPENROUTER_API_KEY", "HTTPS_PROXY"} {
+		t.Setenv(name, "attacker-controlled")
+	}
+	scrubProviderEnvironment()
+	for _, name := range []string{"HOST_AUTHORITY_BROKER", "DM_VERIFICATION_SUBSTRATE", "OPENROUTER_API_KEY", "HTTPS_PROXY"} {
+		if _, exists := os.LookupEnv(name); exists {
+			t.Fatalf("sensitive environment survived: %s", name)
+		}
 	}
 }
