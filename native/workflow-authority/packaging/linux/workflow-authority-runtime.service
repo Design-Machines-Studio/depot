@@ -11,3 +11,6 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full
 ProtectHome=yes
+ReadWritePaths=-/etc/design-machines/workflow-authority
+ReadWritePaths=-/var/lib/design-machines/workflow-authority
+ReadWritePaths=-/run/design-machines/workflow-authority

@@ -8,8 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
+	"designmachines.dev/workflow-authority/internal/authority"
 	"designmachines.dev/workflow-authority/internal/client"
+	"designmachines.dev/workflow-authority/internal/enrollment"
 	"designmachines.dev/workflow-authority/internal/platform"
 )
 
@@ -44,6 +47,19 @@ type adminTerminal interface {
 
 var openLinuxPlatform = func() (localPlatform, error) { return platform.NewLinux() }
 var openAdminTerminal = func() (adminTerminal, error) { return platform.OpenTerminal() }
+var openEnrollmentStore = func() enrollmentLifecycle { return enrollment.NewStore() }
+var openFIDOEnroller = func() enrollment.Enroller { return authority.NewFIDOEnroller() }
+var enrollmentNow = func() time.Time { return time.Now().UTC() }
+
+type enrollmentLifecycle interface {
+	Enroll(context.Context, enrollment.Credential) error
+	Rotate(context.Context, enrollment.Credential) error
+	Revoke(context.Context, uint64, time.Time) error
+	Recover(context.Context, enrollment.Credential) error
+	RecoverPartial(context.Context) error
+	LoadActive(context.Context) (*enrollment.Credential, error)
+	LoadTrust(context.Context) (enrollment.PublicTrust, error)
+}
 
 type providerClient interface {
 	Dispatch(context.Context, client.DispatchOptions, io.Reader, io.Reader) (client.Result, error)
@@ -64,7 +80,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if (command == "status" || command == "provider-transport-status") && len(args) != 2 {
 		return fail(stderr, "status accepts no options", exitUsage)
 	}
-	administrative := command == "enroll-fido" || command == "provision-openrouter" || command == "revoke-openrouter" || command == "disable" || command == "uninstall-plan"
+	administrative := command == "enroll-fido" || command == "rotate-fido" || command == "revoke-fido" || command == "recover-fido" || command == "recover-fido-public" || command == "provision-openrouter" || command == "revoke-openrouter" || command == "disable" || command == "uninstall-plan"
 	if administrative && !admin {
 		return fail(stderr, "administrative command requires workflow-authority-admin", exitDeclined)
 	}
@@ -94,7 +110,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 0
 	case "dispatch-provider-request":
 		return fail(stderr, "provider dispatch routing error", exitUsage)
-	case "enroll-fido", "provision-openrouter", "revoke-openrouter", "disable", "uninstall-plan":
+	case "enroll-fido", "rotate-fido", "revoke-fido", "recover-fido", "recover-fido-public", "provision-openrouter", "revoke-openrouter", "disable", "uninstall-plan":
 		return runAdmin(p, command, stdin, stdout, stderr)
 	default:
 		return fail(stderr, "unknown command", exitUsage)
@@ -223,9 +239,9 @@ func runAdmin(p localPlatform, command string, stdin io.Reader, stdout, stderr i
 	}
 	switch command {
 	case "enroll-fido":
-		// Enrollment creation is intentionally unavailable until the daemon exposes
-		// a root-only ceremony endpoint backed by the production libfido2 adapter.
-		return fail(stderr, "FIDO enrollment endpoint unavailable; recovery: leave service disabled and install the composed daemon", exitUnavailable)
+		return runFIDOLifecycle(command, terminal, openEnrollmentStore(), openFIDOEnroller(), stdout, stderr)
+	case "rotate-fido", "revoke-fido", "recover-fido", "recover-fido-public":
+		return runFIDOLifecycle(command, terminal, openEnrollmentStore(), openFIDOEnroller(), stdout, stderr)
 	case "provision-openrouter":
 		secret, err := terminal.ReadSecret("OpenRouter credential: ")
 		if err != nil {
@@ -277,6 +293,101 @@ func runAdmin(p localPlatform, command string, stdin io.Reader, stdout, stderr i
 		return 0
 	}
 	return exitUsage
+}
+
+func runFIDOLifecycle(command string, terminal adminTerminal, store enrollmentLifecycle, enroller enrollment.Enroller, stdout, stderr io.Writer) int {
+	ctx := context.Background()
+	switch command {
+	case "enroll-fido":
+		if _, err := store.LoadTrust(ctx); err == nil {
+			return fail(stderr, "FIDO enrollment already exists; recovery: use rotate-fido or revoke-fido", exitDeclined)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fail(stderr, "FIDO enrollment preflight failed; recovery: preserve enrollment files and run status", exitUnavailable)
+		}
+		return createFIDOCredential(ctx, terminal, store, enroller, enrollment.Request{Generation: 1}, store.Enroll, "enrolled", stdout, stderr)
+	case "rotate-fido":
+		active, err := store.LoadActive(ctx)
+		if err != nil || active == nil || active.Generation == ^uint64(0) {
+			if active != nil {
+				active.Destroy()
+			}
+			return fail(stderr, "FIDO rotation unavailable; recovery: run status and repair or enroll the authority", exitUnavailable)
+		}
+		defer active.Destroy()
+		request := enrollment.Request{Generation: active.Generation + 1, ExcludeCredentialID: append([]byte(nil), active.ID...), DeviceSelector: active.DeviceSelector}
+		defer zero(request.ExcludeCredentialID)
+		return createFIDOCredential(ctx, terminal, store, enroller, request, store.Rotate, "rotated", stdout, stderr)
+	case "revoke-fido":
+		active, err := store.LoadActive(ctx)
+		if err != nil || active == nil {
+			if active != nil {
+				active.Destroy()
+			}
+			return fail(stderr, "FIDO revocation unavailable; recovery: run status and inspect enrollment state", exitUnavailable)
+		}
+		defer active.Destroy()
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; enrollment was not revoked", exitDeclined)
+		}
+		if err := store.Revoke(ctx, active.Generation, enrollmentNow()); err != nil {
+			return fail(stderr, "FIDO revocation failed; recovery: leave the service disabled and retry revoke-fido", exitUnavailable)
+		}
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; revocation may have completed, run status before recovery", exitUnavailable)
+		}
+		return contentFree(stdout, stderr, "fido-revoked")
+	case "recover-fido":
+		trust, err := store.LoadTrust(ctx)
+		generation, ok := nextGeneration(trust)
+		if err != nil || !ok {
+			return fail(stderr, "FIDO recovery unavailable; recovery: preserve enrollment files and inspect status", exitUnavailable)
+		}
+		return createFIDOCredential(ctx, terminal, store, enroller, enrollment.Request{Generation: generation}, store.Recover, "fido-recovered", stdout, stderr)
+	case "recover-fido-public":
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; public trust was not repaired", exitDeclined)
+		}
+		if err := store.RecoverPartial(ctx); err != nil {
+			return fail(stderr, "public trust recovery failed; recovery: preserve enrollment files and leave the service disabled", exitUnavailable)
+		}
+		if terminal.Stable() != nil {
+			return fail(stderr, "controlling terminal changed; recovery may have completed, run status before continuing", exitUnavailable)
+		}
+		return contentFree(stdout, stderr, "public-trust-recovered")
+	default:
+		return exitUsage
+	}
+}
+
+func createFIDOCredential(ctx context.Context, terminal adminTerminal, store enrollmentLifecycle, enroller enrollment.Enroller, request enrollment.Request, commit func(context.Context, enrollment.Credential) error, state string, stdout, stderr io.Writer) int {
+	credential, err := enroller.Enroll(ctx, request)
+	if err != nil {
+		return fail(stderr, "FIDO ceremony failed; recovery: verify exactly one eligible authenticator is attached and retry", exitUnavailable)
+	}
+	defer credential.Destroy()
+	if terminal.Stable() != nil {
+		return fail(stderr, "controlling terminal changed; new FIDO credential was not stored", exitDeclined)
+	}
+	if err := commit(ctx, credential); err != nil {
+		return fail(stderr, "FIDO enrollment commit failed; recovery: leave the service disabled, preserve enrollment files, and run status", exitUnavailable)
+	}
+	if terminal.Stable() != nil {
+		return fail(stderr, "controlling terminal changed; enrollment may have completed, run status before recovery", exitUnavailable)
+	}
+	return contentFree(stdout, stderr, state)
+}
+
+func nextGeneration(trust enrollment.PublicTrust) (uint64, bool) {
+	var maximum uint64
+	for _, credential := range trust.Credentials {
+		if credential.Generation > maximum {
+			maximum = credential.Generation
+		}
+	}
+	if maximum == 0 || maximum == ^uint64(0) || trust.ActiveGeneration != nil {
+		return 0, false
+	}
+	return maximum + 1, true
 }
 
 func contentFree(w, stderr io.Writer, state string) int {

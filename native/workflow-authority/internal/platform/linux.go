@@ -19,20 +19,25 @@ import (
 )
 
 const (
-	ClientPath     = "/usr/local/bin/workflow-authority"
-	AdminPath      = "/usr/local/sbin/workflow-authority-admin"
-	DaemonPath     = "/usr/local/libexec/design-machines/workflow-authorityd"
-	SocketPath     = "/run/design-machines/workflow-authority/authority.sock"
-	TmpfilesPath   = "/usr/lib/tmpfiles.d/workflow-authority.conf"
-	PolicyPath     = "/etc/design-machines/workflow-authority/provider-policy.json"
-	CredentialPath = "/etc/design-machines/workflow-authority/credentials/openrouter"
-	StatePath      = "/var/lib/design-machines/workflow-authority"
+	ClientPath            = "/usr/local/bin/workflow-authority"
+	AdminPath             = "/usr/local/sbin/workflow-authority-admin"
+	DaemonPath            = "/usr/local/libexec/design-machines/workflow-authorityd"
+	SocketPath            = "/run/design-machines/workflow-authority/authority.sock"
+	TmpfilesPath          = "/usr/lib/tmpfiles.d/workflow-authority.conf"
+	PolicyPath            = "/etc/design-machines/workflow-authority/provider-policy.json"
+	CredentialPath        = "/etc/design-machines/workflow-authority/credentials/openrouter"
+	StatePath             = "/var/lib/design-machines/workflow-authority"
+	TrustDirPath          = "/etc/design-machines/workflow-authority/trust"
+	PublicTrustPath       = "/etc/design-machines/workflow-authority/trust/authority-public.json"
+	PrivateEnrollmentPath = "/var/lib/design-machines/workflow-authority/enrollment-private.json"
+	EnrollmentLockPath    = "/var/lib/design-machines/workflow-authority/enrollment.lock"
 )
 
 var ErrUnavailable = errors.New("authority_unavailable")
 
 type Paths struct {
 	Client, Admin, Daemon, Socket, Policy, Credential, State string
+	TrustDir, PublicTrust, PrivateEnrollment, EnrollmentLock string
 }
 
 type ServiceController interface {
@@ -110,7 +115,11 @@ func frozenPaths(root string) Paths {
 		}
 		return filepath.Join(root, strings.TrimPrefix(path, "/"))
 	}
-	return Paths{join(ClientPath), join(AdminPath), join(DaemonPath), join(SocketPath), join(PolicyPath), join(CredentialPath), join(StatePath)}
+	return Paths{
+		Client: join(ClientPath), Admin: join(AdminPath), Daemon: join(DaemonPath), Socket: join(SocketPath),
+		Policy: join(PolicyPath), Credential: join(CredentialPath), State: join(StatePath), TrustDir: join(TrustDirPath),
+		PublicTrust: join(PublicTrustPath), PrivateEnrollment: join(PrivateEnrollmentPath), EnrollmentLock: join(EnrollmentLockPath),
+	}
 }
 func (p *Linux) Paths() Paths { return p.paths }
 func (p *Linux) RequireRoot() error {
@@ -130,10 +139,12 @@ func (p *Linux) Status() Status {
 	state := "unavailable"
 	if p != nil {
 		if p.ValidateLayout() == nil {
-			if p.check(p.paths.Credential, 0o600, false) == nil {
+			if !p.enrollmentPresent() {
+				state = "enrollment-required"
+			} else if p.check(p.paths.Credential, 0o600, false) == nil {
 				state = "ready"
 			} else if _, err := os.Lstat(p.paths.Credential); errors.Is(err, os.ErrNotExist) {
-				state = "not-enrolled"
+				state = "provider-required"
 			}
 		} else if p.check(p.paths.State, 0o700, true) == nil {
 			state = "degraded"
@@ -155,7 +166,7 @@ func (p *Linux) ValidateLayout() error {
 	}{
 		{p.paths.Client, 0o755, false}, {p.paths.Admin, 0o750, false}, {p.paths.Daemon, 0o755, false},
 		{filepath.Dir(p.paths.Socket), 0o750, true}, {filepath.Dir(p.paths.Credential), 0o700, true},
-		{p.paths.Policy, 0o600, false}, {p.paths.State, 0o700, true},
+		{p.paths.Policy, 0o600, false}, {p.paths.State, 0o700, true}, {p.paths.TrustDir, 0o755, true},
 	}
 	for _, c := range checks {
 		if err := p.check(c.path, c.mode, c.dir); err != nil {
@@ -169,7 +180,29 @@ func (p *Linux) ValidateLayout() error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return ErrUnavailable
 	}
+	enrollment := []struct {
+		path string
+		mode os.FileMode
+	}{{p.paths.PublicTrust, 0o644}, {p.paths.PrivateEnrollment, 0o600}, {p.paths.EnrollmentLock, 0o600}}
+	present := 0
+	for _, record := range enrollment {
+		if _, err := os.Lstat(record.path); err == nil {
+			present++
+			if err := p.check(record.path, record.mode, false); err != nil {
+				return err
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return ErrUnavailable
+		}
+	}
+	if present != 0 && present != len(enrollment) {
+		return ErrUnavailable
+	}
 	return nil
+}
+
+func (p *Linux) enrollmentPresent() bool {
+	return p != nil && p.check(p.paths.PublicTrust, 0o644, false) == nil && p.check(p.paths.PrivateEnrollment, 0o600, false) == nil && p.check(p.paths.EnrollmentLock, 0o600, false) == nil
 }
 
 func (p *Linux) check(path string, mode os.FileMode, dir bool) error {
@@ -446,6 +479,7 @@ func (p *Linux) UninstallPlan() ([]string, error) {
 		"systemctl daemon-reload",
 		"after verifying no members or files depend on it: groupdel workflow-authority",
 		"preserve forensic state by default: " + p.paths.State,
+		"preserve enrollment history for reversible recovery by default: " + p.paths.PublicTrust,
 	}, nil
 }
 
