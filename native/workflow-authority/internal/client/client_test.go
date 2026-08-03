@@ -207,9 +207,14 @@ func serveOnce(listener *net.UnixListener, now time.Time, signer *ecdsa.PrivateK
 	response := []byte("verified-response-secret")
 	selected := request.Models[0]
 	proofRaw, _ := protocol.CanonicalJSON(proof)
-	result := protocol.TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: challenge.RequestBodySHA256, ResponseSHA256: protocol.Digest(response), ResponseLength: int64(len(response)), PartCount: len(parts), Models: request.Models, SelectedModel: &selected, Provider: "openrouter", GenerationID: "generation-1", ServingProvider: "provider-1", UsageSHA256: protocol.Digest([]byte("usage")), Fallback: false, Scope: request.Scope, Sequence: request.Authority.Sequence, IssuedAt: request.Authority.IssuedAt, CompletedAt: now.Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeRaw), AuthorityAssertionSHA256: protocol.Digest(mustCanonical(proof.AuthorityAssertion)), ResultSignerSHA256: protocol.Digest(mustCanonical(challenge.ResultSigner)), PriorChainDigest: request.Authority.PriorChainDigest, Cleanup: protocol.TerminalCleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: protocol.TerminalSignature{Kind: "es256"}}
+	generation, serving, usage, fallback := "generation-1", "provider-1", protocol.Digest([]byte("usage")), false
+	result := protocol.TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: challenge.RequestBodySHA256, ResponseSHA256: protocol.Digest(response), ResponseLength: int64(len(response)), PartCount: len(parts), Models: request.Models, SelectedModel: &selected, Provider: "openrouter", GenerationID: &generation, ServingProvider: &serving, UsageSHA256: &usage, Fallback: &fallback, Scope: request.Scope, Sequence: request.Authority.Sequence, IssuedAt: request.Authority.IssuedAt, CompletedAt: now.Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeRaw), AuthorityAssertionSHA256: protocol.Digest(mustCanonical(proof.AuthorityAssertion)), ResultSignerSHA256: protocol.Digest(mustCanonical(challenge.ResultSigner)), PriorChainDigest: request.Authority.PriorChainDigest, Cleanup: protocol.TerminalCleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: protocol.TerminalSignature{Kind: "es256"}}
 	if mutate != nil {
 		mutate(nil, nil, &proof, response, &result)
+	}
+	if result.Outcome != "verified" {
+		response = nil
+		result.ResponseSHA256, result.ResponseLength = protocol.Digest(nil), 0
 	}
 	proofRaw, _ = protocol.CanonicalJSON(proof)
 	if err := protocol.WriteFrame(conn, proofRaw); err != nil {
@@ -495,6 +500,7 @@ func TestSignedProviderFailureAndUnknownReturnReceiptWithoutResponse(t *testing.
 			fx := newFixture(t, func(_ *protocol.AuthorityHello, _ *protocol.Challenge, _ *provider.AuthorizationProof, _ []byte, result *protocol.TerminalResult) {
 				if result != nil {
 					result.Outcome, result.ExitCode = outcome, exit
+					result.SelectedModel, result.GenerationID, result.ServingProvider, result.UsageSHA256, result.Fallback = nil, nil, nil, nil, nil
 				}
 			})
 			result, err := fx.runner.Dispatch(context.Background(), validOptions(), bytes.NewReader(nil), bytes.NewReader(nil))

@@ -11,17 +11,17 @@
     "outcome": {"enum": ["verified", "provider_failure", "unknown"]}, "exit_code": {"enum": [0, 2, 70, 71, 72, 73, 74, 75]},
     "request_body_sha256": {"$ref": "#/$defs/digest"}, "response_sha256": {"$ref": "#/$defs/digest"},
     "response_length": {"type": "integer", "minimum": 0, "maximum": 8388608}, "part_count": {"type": "integer", "minimum": 1, "maximum": 256},
-    "models": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "selected_model": {"$ref": "#/$defs/id"}, "provider": {"const": "openrouter"},
-    "generation_id": {"$ref": "#/$defs/id"}, "serving_provider": {"$ref": "#/$defs/id"}, "usage_sha256": {"$ref": "#/$defs/digest"}, "fallback": {"type": "boolean"},
+    "models": {"type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "selected_model": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "provider": {"const": "openrouter"},
+    "generation_id": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "serving_provider": {"oneOf": [{"$ref": "#/$defs/id"}, {"type": "null"}]}, "usage_sha256": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}, "fallback": {"type": ["boolean", "null"]},
     "scope": {"$ref": "#/$defs/scope"}, "sequence": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807}, "issued_at": {"$ref": "#/$defs/time"}, "completed_at": {"$ref": "#/$defs/time"},
     "challenge_sha256": {"$ref": "#/$defs/digest"}, "authority_assertion_sha256": {"$ref": "#/$defs/digest"}, "result_signer_sha256": {"$ref": "#/$defs/digest"}, "prior_chain_digest": {"$ref": "#/$defs/digest"},
     "cleanup": {"type": "object", "additionalProperties": false, "required": ["reservation", "connection", "content_buffer"], "properties": {"reservation": {"const": "consumed"}, "connection": {"const": "closed"}, "content_buffer": {"const": "discarded"}}},
     "signature": {"oneOf": [{"$ref": "#/$defs/es256_signature"}, {"$ref": "#/$defs/fixture_signature"}]}
   },
   "oneOf": [
-    {"properties": {"outcome": {"const": "verified"}, "exit_code": {"const": 0}}},
-    {"properties": {"outcome": {"const": "provider_failure"}, "exit_code": {"const": 73}}},
-    {"properties": {"outcome": {"const": "unknown"}, "exit_code": {"const": 74}}}
+    {"properties": {"outcome": {"const": "verified"}, "exit_code": {"const": 0}, "selected_model": {"$ref": "#/$defs/id"}, "generation_id": {"$ref": "#/$defs/id"}, "serving_provider": {"$ref": "#/$defs/id"}, "usage_sha256": {"$ref": "#/$defs/digest"}, "fallback": {"type": "boolean"}}},
+    {"properties": {"outcome": {"const": "provider_failure"}, "exit_code": {"const": 73}, "selected_model": {"type": "null"}, "generation_id": {"type": "null"}, "serving_provider": {"type": "null"}, "usage_sha256": {"type": "null"}, "fallback": {"type": "null"}}},
+    {"properties": {"outcome": {"const": "unknown"}, "exit_code": {"const": 74}, "selected_model": {"type": "null"}, "generation_id": {"type": "null"}, "serving_provider": {"type": "null"}, "usage_sha256": {"type": "null"}, "fallback": {"type": "null"}}}
   ],
   "$defs": {
     "id": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]*$"}, "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "time": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},

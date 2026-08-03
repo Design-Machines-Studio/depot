@@ -582,15 +582,15 @@ func (m *Manager) BeginSend(ctx context.Context, transactionID, connectionID str
 }
 
 // Finalize consumes send authority with one durable cleanup record. The
-// ephemeral signer survives only when a verified outcome binds the exact
-// terminal input digest that the subsequent one-shot signature must match.
-// Failure outcomes destroy the signer as soon as cleanup is durable.
+// ephemeral signer survives only when any closed post-send outcome binds the
+// exact terminal input digest that the subsequent one-shot signature must
+// match. A restart never reconstructs this process-local key.
 func (m *Manager) Finalize(ctx context.Context, right SendRight, responseBytes int64, outcome, terminalSHA256 string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	record, ok := m.records[right.TransactionID]
 	validDigest := validSHA256(terminalSHA256)
-	if !ok || record.event.State != SendStarted || record.finalized || responseBytes < 0 || m.bytes+responseBytes > m.config.MaxBytes || (outcome != "verified" && outcome != "provider_failure" && outcome != "outcome_unknown") || (outcome == "verified") != validDigest {
+	if !ok || record.event.State != SendStarted || record.finalized || responseBytes < 0 || m.bytes+responseBytes > m.config.MaxBytes || (outcome != "verified" && outcome != "provider_failure" && outcome != "outcome_unknown") || !validDigest {
 		return ErrConflict
 	}
 	next := record.event
@@ -605,10 +605,6 @@ func (m *Manager) Finalize(ctx context.Context, right SendRight, responseBytes i
 	record.event = next
 	record.finalized = true
 	record.terminalSHA256 = terminalSHA256
-	if outcome != "verified" {
-		zeroKey(record.private)
-		record.private = nil
-	}
 	m.bytes += responseBytes
 	return nil
 }
@@ -619,7 +615,7 @@ func (m *Manager) SignFinalized(right SendRight, terminalInput []byte) ([]byte, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	record, ok := m.records[right.TransactionID]
-	if !ok || record.event.State != Cleanup || record.event.Outcome != "verified" || !record.finalized || record.signed || record.private == nil || len(terminalInput) == 0 {
+	if !ok || record.event.State != Cleanup || !record.finalized || record.signed || record.private == nil || len(terminalInput) == 0 {
 		return nil, ErrConflict
 	}
 	record.signed = true

@@ -831,13 +831,30 @@ class ProviderDispatchContractTests(unittest.TestCase):
 
     def test_chk_m0_15_result_schema_python_parity(self):
         schema = json.loads(RESULT_SCHEMA.read_text())
-        corpus = [self.result]
+        failure = copy.deepcopy(self.result)
+        failure.update({
+            "outcome": "provider_failure", "exit_code": 73,
+            "response_sha256": sha256(b""), "response_length": 0,
+            "selected_model": None, "generation_id": None,
+            "serving_provider": None, "usage_sha256": None,
+            "fallback": None,
+        })
+        unknown = copy.deepcopy(failure)
+        unknown.update({"outcome": "unknown", "exit_code": 74})
+        corpus = [self.result, failure, unknown]
         for field, value in (
             ("exit_code", 73), ("outcome", "unknown"), ("provider", "attacker"),
             ("generation_id", ""), ("serving_provider", "bad provider"),
             ("usage_sha256", D),
         ):
             item = copy.deepcopy(self.result); item[field] = value; corpus.append(item)
+        for field, value in (
+            ("selected_model", self.result["selected_model"]),
+            ("generation_id", "invented-generation"),
+            ("serving_provider", "invented-provider"),
+            ("usage_sha256", D), ("fallback", False),
+        ):
+            item = copy.deepcopy(unknown); item[field] = value; corpus.append(item)
         for index, item in enumerate(corpus):
             try:
                 validate_result(item)

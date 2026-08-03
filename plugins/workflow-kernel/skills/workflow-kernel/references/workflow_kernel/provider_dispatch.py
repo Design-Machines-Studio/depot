@@ -687,18 +687,24 @@ def validate_result(document: Any) -> dict[str, Any]:
         "unknown": EXIT_UNKNOWN,
     }[result["outcome"]]:
         _fail("terminal_binding_invalid")
-    for field in ("request_body_sha256", "response_sha256", "usage_sha256", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest"):
+    for field in ("request_body_sha256", "response_sha256", "challenge_sha256", "authority_assertion_sha256", "result_signer_sha256", "prior_chain_digest"):
         _digest(result[field])
     _integer(result["response_length"], 0, MAX_RESPONSE_BYTES)
     _integer(result["part_count"], 1, MAX_PARTS)
     _strings(result["models"])
     if len(set(result["models"])) != len(result["models"]):
         _fail("content_order_invalid")
-    for field in ("selected_model", "provider", "generation_id", "serving_provider"):
-        _string(result[field])
+    _string(result["provider"])
     if result["provider"] != "openrouter":
         _fail("terminal_binding_invalid")
-    if type(result["fallback"]) is not bool or result["fallback"] != (result["selected_model"] != result["models"][0]):
+    provenance = (result["selected_model"], result["generation_id"], result["serving_provider"], result["usage_sha256"], result["fallback"])
+    if result["outcome"] == "verified":
+        for value in provenance[:3]:
+            _string(value)
+        _digest(result["usage_sha256"])
+        if type(result["fallback"]) is not bool or result["selected_model"] not in result["models"] or result["fallback"] != (result["selected_model"] != result["models"][0]):
+            _fail("terminal_binding_invalid")
+    elif provenance != (None, None, None, None, None):
         _fail("terminal_binding_invalid")
     _terminal_signature(result["signature"])
     _scope(result["scope"])
@@ -806,8 +812,7 @@ def validate_exchange(document: Any) -> dict[str, Any]:
             proof["challenge_sha256"] == sha256(canonical_json(challenge)),
             result["authority_assertion_sha256"] == sha256(canonical_json(proof["authority_assertion"])),
             result["result_signer_sha256"] == sha256(canonical_json(challenge["result_signer"])),
-            result["selected_model"] in request["models"], result["provider"] == "openrouter",
-            result["fallback"] == (result["selected_model"] != request["models"][0]),
+            result["provider"] == "openrouter",
         )):
             _fail("terminal_binding_invalid")
     return exchange
@@ -1045,9 +1050,7 @@ def verify_terminal_result(
         proof["challenge_sha256"] == sha256(canonical_json(challenge)),
         result["authority_assertion_sha256"] == sha256(canonical_json(proof["authority_assertion"])),
         result["prior_chain_digest"] == request["authority"]["prior_chain_digest"],
-        result["selected_model"] in request["models"],
         result["provider"] == "openrouter",
-        result["fallback"] == (result["selected_model"] != request["models"][0]),
     )
     if not all(checks):
         _fail("terminal_binding_invalid")

@@ -1,9 +1,11 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
@@ -183,7 +185,9 @@ type captureSink struct {
 	id                 string
 	proof              bool
 	response, terminal []byte
+	responseWritten    bool
 	closed             bool
+	failTerminal       bool
 }
 
 func (s *captureSink) ConnectionID() string { return s.id }
@@ -195,19 +199,106 @@ func (s *captureSink) WriteAuthorizationProof(_ context.Context, _ Authorization
 	return nil
 }
 func (s *captureSink) WriteResponse(_ context.Context, b []byte) error {
-	if !s.proof || s.response != nil {
+	if !s.proof || s.responseWritten {
 		return ErrSink
 	}
+	s.responseWritten = true
 	s.response = append([]byte(nil), b...)
 	return nil
 }
 func (s *captureSink) WriteTerminalAndClose(_ context.Context, b []byte) error {
-	if s.response == nil || s.closed {
+	if !s.responseWritten || s.closed {
+		return ErrSink
+	}
+	if s.failTerminal {
 		return ErrSink
 	}
 	s.terminal = append([]byte(nil), b...)
 	s.closed = true
 	return nil
+}
+
+func dispatchFixture(t *testing.T, transport *Transport, transaction string) (Dispatcher, DispatchInput, protocol.Challenge, *captureSink) {
+	t.Helper()
+	now := time.Date(2026, 8, 3, 0, 1, 0, 0, time.UTC)
+	parts := [][]byte{[]byte("system"), []byte("ordinary review text")}
+	req := fixtureRequest(parts)
+	req.Authority.Nonce, req.Authority.IssuedAt, req.Authority.ExpiresAt = transaction, now.Add(-time.Minute).Format(time.RFC3339), now.Add(time.Minute).Format(time.RFC3339)
+	req.Authority.PolicySHA256 = protocol.Digest(policyFixture())
+	body, _ := BuildBody(req, parts)
+	peer := authority.Peer{UID: 501, PID: 4321}
+	c := protocol.Challenge{SchemaVersion: req.SchemaVersion, Protocol: req.Protocol, Mapping: req.Mapping, OperationFamily: req.OperationFamily, SubstrateAuthority: req.SubstrateAuthority, TransactionID: transaction, ConnectionNonceSHA256: req.Authority.ConnectionNonceSHA256, PeerUID: peer.UID, PeerPID: peer.PID, RequestBodySHA256: protocol.Digest(body), Destination: req.Destination, Method: req.Method, Path: req.Path, Models: append([]string(nil), req.Models...), Scope: req.Scope, DaemonBuildSHA256: req.Authority.DaemonBuildSHA256, ScannerBuildSHA256: req.Authority.ScannerBuildSHA256, PolicySHA256: req.Authority.PolicySHA256, Nonce: req.Authority.Nonce, Sequence: req.Authority.Sequence, BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, IssuedAt: req.Authority.IssuedAt, ExpiresAt: req.Authority.ExpiresAt, Limits: req.Limits, PriorChainDigest: req.Authority.PriorChainDigest, AllocationHelloSHA256: req.Authority.AllocationHelloSHA256, DispatchProposalSHA256: req.Authority.DispatchProposalSHA256}
+	manager, err := authority.NewManager(authority.Config{BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, AllowedUIDs: map[uint32]struct{}{peer.UID: {}}, MaxOperations: 8, MaxBytes: 32 << 20, MaxConcurrent: 4, Credential: authority.Credential{Reference: "credential-1", PublicKey: []byte("public"), Algorithm: -7, Generation: 1, RPID: "workflow-authority.designmachines.local", Status: "active", InternalUV: true}}, &providerFIDO{}, &providerMemoryWAL{}, providerClock{now})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := manager.Reserve(context.Background(), req, c, body, peer, "connection-"+transaction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ := protocol.CanonicalJSON(bound)
+	input := DispatchInput{Request: req, Challenge: bound, Parts: parts, TransactionID: transaction, ConnectionID: "connection-" + transaction, ConsentChallengeDigest: protocol.Digest(canonical), Peer: peer}
+	d := Dispatcher{Scanner: BuiltinScanner{}, Policy: policyFixture(), Credentials: staticReader{[]byte("fixture-token-value")}, Transport: transport, Authority: manager, Clock: func() time.Time { return now }}
+	return d, input, bound, &captureSink{id: input.ConnectionID}
+}
+
+func TestSignedPostSendFailureOutcomesAreContentFree(t *testing.T) {
+	var providerRequests atomic.Int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		providerRequests.Add(1)
+		_, _ = w.Write([]byte(`{"malformed":true}`))
+	}))
+	defer server.Close()
+	providerFailureDispatcher, providerFailureInput, providerFailureChallenge, providerFailureSink := dispatchFixture(t, fixtureTransport(server), "provider-failure")
+	providerFailure, err := providerFailureDispatcher.Dispatch(context.Background(), providerFailureInput, providerFailureSink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSignedContentFreeTerminal(t, providerFailure, providerFailureChallenge, providerFailureSink, "provider_failure", 73)
+
+	var attempts atomic.Int32
+	unknownTransport := &Transport{Origin: "https://fixture.invalid" + protocol.Path, Fixture: true, Timeout: time.Second, DialTLS: func(context.Context, string, string, *tls.Config) (net.Conn, error) {
+		attempts.Add(1)
+		return nil, errors.New("fixture transport ambiguity")
+	}}
+	unknownDispatcher, unknownInput, unknownChallenge, unknownSink := dispatchFixture(t, unknownTransport, "provider-unknown")
+	unknown, err := unknownDispatcher.Dispatch(context.Background(), unknownInput, unknownSink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts.Load() != 1 {
+		t.Fatalf("network attempts=%d", attempts.Load())
+	}
+	assertSignedContentFreeTerminal(t, unknown, unknownChallenge, unknownSink, "unknown", 74)
+
+	sinkFailureDispatcher, sinkFailureInput, _, sinkFailureSink := dispatchFixture(t, fixtureTransport(server), "terminal-sink-failure")
+	sinkFailureSink.failTerminal = true
+	if _, err := sinkFailureDispatcher.Dispatch(context.Background(), sinkFailureInput, sinkFailureSink); err != ErrSink {
+		t.Fatalf("terminal sink failure=%v", err)
+	}
+	if providerRequests.Load() != 2 {
+		t.Fatalf("provider requests=%d", providerRequests.Load())
+	}
+	if _, err := sinkFailureDispatcher.Dispatch(context.Background(), sinkFailureInput, &captureSink{id: sinkFailureInput.ConnectionID}); err == nil {
+		t.Fatal("terminal sink failure became retryable")
+	}
+	if providerRequests.Load() != 2 {
+		t.Fatal("terminal sink failure replay contacted provider")
+	}
+}
+
+func assertSignedContentFreeTerminal(t *testing.T, result TerminalResult, challenge protocol.Challenge, sink *captureSink, outcome string, exit int) {
+	t.Helper()
+	if result.Outcome != outcome || result.ExitCode != exit || !sink.responseWritten || len(sink.response) != 0 || !sink.closed || result.ResponseLength != 0 || result.ResponseSHA256 != protocol.Digest(nil) {
+		t.Fatalf("content-free outcome mismatch: %+v sink=%+v", result, sink)
+	}
+	if result.SelectedModel != nil || result.GenerationID != nil || result.ServingProvider != nil || result.UsageSHA256 != nil || result.Fallback != nil {
+		t.Fatal("unverified provenance was inferred")
+	}
+	input, err := protocol.TerminalSignatureInput(result)
+	if err != nil || protocol.VerifyTerminalES256(challenge.ResultSigner.PublicKeySEC1, result.Signature.SignatureDER, input) != nil {
+		t.Fatalf("signed terminal invalid: %v", err)
+	}
 }
 func (s *captureSink) Abort() error {
 	s.closed = true
@@ -303,7 +394,7 @@ func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
 	if string(sink.response) != "exact assistant bytes" || result.ResponseSHA256 != protocol.Digest(sink.response) || result.ResponseLength != int64(len(sink.response)) {
 		t.Fatalf("delivered response binding mismatch: %q %+v", sink.response, result)
 	}
-	if result.GenerationID != "generation-fixture" || result.ServingProvider != "fixture-provider" || result.UsageSHA256 != protocol.Digest([]byte(`{"total_tokens":2}`)) || result.Fallback {
+	if result.GenerationID == nil || *result.GenerationID != "generation-fixture" || result.ServingProvider == nil || *result.ServingProvider != "fixture-provider" || result.UsageSHA256 == nil || *result.UsageSHA256 != protocol.Digest([]byte(`{"total_tokens":2}`)) || result.Fallback == nil || *result.Fallback {
 		t.Fatalf("provider provenance mismatch: %+v", result)
 	}
 	terminalInput, err := protocol.TerminalSignatureInput(result)
@@ -497,6 +588,34 @@ func TestOriginalSinkTerminalRequiresEOFAndCannotBeRetrievedAgain(t *testing.T) 
 	}
 	if err := sink.WriteTerminalAndClose(context.Background(), []byte("again")); err == nil {
 		t.Fatal("terminal retrieved twice")
+	}
+}
+
+func TestOriginalSinkContentFreeOutcomeWritesExactlyZeroLengthResponseFrame(t *testing.T) {
+	server, client := net.Pipe()
+	sink := &OriginalConnectionSink{ID: "connection", Conn: server}
+	received := make(chan []byte, 1)
+	go func() { b, _ := io.ReadAll(client); received <- b }()
+	proof := AuthorizationProof{SchemaVersion: 1, Protocol: protocol.Name, Type: "authorization_proof", ChallengeSHA256: protocol.Digest([]byte("challenge")), AuthorityAssertion: FIDOAssertion{Kind: "fido2-es256", CredentialID: "Y3JlZA", AuthenticatorData: "YXV0aA", ClientDataJSON: "Y2xpZW50", SignatureDER: "c2ln", UserPresence: true, UserVerification: true}}
+	proofRaw, _ := protocol.CanonicalJSON(proof)
+	if err := sink.WriteAuthorizationProof(context.Background(), proof); err != nil {
+		t.Fatal(err)
+	}
+	if err := sink.WriteResponse(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	terminal := []byte(`{"outcome":"unknown"}`)
+	if err := sink.WriteTerminalAndClose(context.Background(), terminal); err != nil {
+		t.Fatal(err)
+	}
+	wire := <-received
+	offset := 4 + len(proofRaw)
+	if len(wire) < offset+8 || !bytes.Equal(wire[offset:offset+8], make([]byte, 8)) {
+		t.Fatalf("missing exact zero-length response frame: %x", wire[offset:])
+	}
+	terminalLength := int(binary.BigEndian.Uint32(wire[offset+8 : offset+12]))
+	if terminalLength != len(terminal) || !bytes.Equal(wire[offset+12:], terminal) {
+		t.Fatal("terminal did not immediately follow zero-length response frame")
 	}
 }
 

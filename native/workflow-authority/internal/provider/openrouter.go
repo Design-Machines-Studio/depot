@@ -362,63 +362,89 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	response, sendErr := d.Transport.Send(ctx, credential, body)
 	defer zero(response)
 	if sendErr != nil {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "outcome_unknown", "")
-		return TerminalResult{}, sendErr
+		return d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "unknown", nil, int64(len(response)), false, sink)
 	}
 	var projected providerResponse
 	if json.Unmarshal(response, &projected) != nil {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
-		return TerminalResult{}, ErrProvenance
+		return d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "provider_failure", nil, int64(len(response)), false, sink)
 	}
 	defer zeroProviderResponse(&projected)
 	if !providerMetadata.MatchString(projected.ID) || !providerMetadata.MatchString(projected.Provider) || !exactModel(projected.Model, in.Request.Models) || len(projected.Choices) != 1 || !validDeliveredChoice(projected.Choices[0]) {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
-		return TerminalResult{}, ErrProvenance
+		return d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "provider_failure", nil, int64(len(response)), false, sink)
 	}
 	usageCanonical, usageErr := canonicalUsage(projected.Usage)
 	if usageErr != nil {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
-		return TerminalResult{}, ErrProvenance
+		return d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "provider_failure", nil, int64(len(response)), false, sink)
 	}
 	usageDigest := protocol.Digest(usageCanonical)
 	zero(usageCanonical)
 	content, contentErr := decodeJSONString(projected.Choices[0].Message.Content)
 	defer zero(content)
 	if contentErr != nil || len(content) == 0 || int64(len(content)) > maxProviderResponse {
-		_ = d.Authority.Finalize(context.Background(), right, int64(len(response)), "provider_failure", "")
-		return TerminalResult{}, ErrProvenance
+		return d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "provider_failure", nil, int64(len(response)), false, sink)
 	}
-	responseDigest, responseLength := protocol.Digest(content), int64(len(content))
 	if err := sink.WriteResponse(ctx, content); err != nil {
-		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown", "")
-		return TerminalResult{}, ErrSink
+		return d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "unknown", nil, int64(len(content)), true, sink)
 	}
-	zero(content)
-	zero(response)
-	signerBytes, _ := protocol.CanonicalJSON(in.Challenge.ResultSigner)
 	selected := projected.Model
-	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: responseDigest, ResponseLength: responseLength, PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: &selected, Provider: "openrouter", GenerationID: projected.ID, ServingProvider: projected.Provider, UsageSHA256: usageDigest, Fallback: selected != in.Request.Models[0], Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
-	terminalInput, terminalInputErr := protocol.TerminalSignatureInput(result)
-	if terminalInputErr != nil {
-		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown", "")
+	fallback := selected != in.Request.Models[0]
+	result, err := d.finalizePostSend(ctx, in, right, body, challengeBytes, assertionBytes, "verified", content, int64(len(content)), true, sink, &selected, &projected.ID, &projected.Provider, &usageDigest, &fallback)
+	if err == nil {
+		closed = true
+	}
+	return result, err
+}
+
+// finalizePostSend is the sole post-network exit. It durably consumes the send
+// right, signs the exact terminal projection once, then emits the frozen empty
+// response frame for content-free outcomes before closing with the terminal.
+func (d *Dispatcher) finalizePostSend(ctx context.Context, in DispatchInput, right authority.SendRight, body, challengeBytes, assertionBytes []byte, outcome string, delivered []byte, accountedBytes int64, responseFrameStarted bool, sink ResponseSink, provenance ...any) (TerminalResult, error) {
+	exitCode, walOutcome := 74, "outcome_unknown"
+	var selected, generation, serving, usage *string
+	var fallback *bool
+	if outcome == "provider_failure" {
+		exitCode, walOutcome = 73, "provider_failure"
+	}
+	if outcome == "verified" {
+		exitCode, walOutcome = 0, "verified"
+		if len(provenance) != 5 {
+			return TerminalResult{}, ErrBinding
+		}
+		selected, _ = provenance[0].(*string)
+		generation, _ = provenance[1].(*string)
+		serving, _ = provenance[2].(*string)
+		usage, _ = provenance[3].(*string)
+		fallback, _ = provenance[4].(*bool)
+		if selected == nil || generation == nil || serving == nil || usage == nil || fallback == nil {
+			return TerminalResult{}, ErrBinding
+		}
+	}
+	signerBytes, _ := protocol.CanonicalJSON(in.Challenge.ResultSigner)
+	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: outcome, ExitCode: exitCode, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: protocol.Digest(delivered), ResponseLength: int64(len(delivered)), PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: selected, Provider: "openrouter", GenerationID: generation, ServingProvider: serving, UsageSHA256: usage, Fallback: fallback, Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
+	terminalInput, err := protocol.TerminalSignatureInput(result)
+	if err != nil {
 		return TerminalResult{}, ErrBinding
 	}
-	if err := d.Authority.Finalize(ctx, right, responseLength, "verified", protocol.Digest(terminalInput)); err != nil {
+	if err := d.Authority.Finalize(context.Background(), right, accountedBytes, walOutcome, protocol.Digest(terminalInput)); err != nil {
 		return TerminalResult{}, err
 	}
-	sig, signErr := d.Authority.SignFinalized(right, terminalInput)
-	if signErr != nil {
-		return TerminalResult{}, signErr
+	sig, err := d.Authority.SignFinalized(right, terminalInput)
+	if err != nil {
+		return TerminalResult{}, err
 	}
 	result.Signature.SignatureDER = base64.RawURLEncoding.EncodeToString(sig)
 	terminal, err := protocol.CanonicalJSON(result)
 	if err != nil {
 		return TerminalResult{}, ErrBinding
 	}
+	if !responseFrameStarted {
+		if err := sink.WriteResponse(ctx, nil); err != nil {
+			return TerminalResult{}, ErrSink
+		}
+	}
 	if err := sink.WriteTerminalAndClose(ctx, terminal); err != nil {
 		return TerminalResult{}, ErrSink
 	}
-	closed = true
 	return result, nil
 }
 

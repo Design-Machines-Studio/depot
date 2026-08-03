@@ -202,6 +202,29 @@ func TestFinalizedSignerMismatchConsumesKey(t *testing.T) {
 	}
 }
 
+func TestRestartCannotSignDurablyFinalizedOutcome(t *testing.T) {
+	wal := &memoryWAL{}
+	manager, challenge, peer, clock := reserve(t, &fakeFIDO{}, wal)
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	_, _ = manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical))
+	right, _ := manager.BeginSend(context.Background(), challenge.TransactionID, "connection-01", peer)
+	terminal := []byte("signed-unknown-terminal")
+	if err := manager.Finalize(context.Background(), right, 0, "outcome_unknown", protocol.Digest(terminal)); err != nil {
+		t.Fatal(err)
+	}
+	_, _, config, _ := fixture(t)
+	restarted, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := restarted.SignFinalized(right, terminal); err == nil {
+		t.Fatal("restart reconstructed ephemeral signer")
+	}
+	if record := restarted.records[challenge.TransactionID]; record.private != nil || record.event.State != Cleanup {
+		t.Fatal("restart retained finalized signing material")
+	}
+}
+
 func TestAtomicFinalizeDurabilityFailureRecoversUnknown(t *testing.T) {
 	wal := &memoryWAL{failAt: 4}
 	manager, challenge, peer, clock := reserve(t, &fakeFIDO{}, wal)
@@ -261,11 +284,15 @@ func TestWALFailureNeverPublishesTransition(t *testing.T) {
 		t.Fatal("failed finalize published")
 	}
 	wal.failAt = 0
-	if err := manager.Finalize(context.Background(), SendRight{TransactionID: challenge.TransactionID}, 10, "provider_failure", ""); err != nil {
+	failureTerminal := []byte("signed-provider-failure-terminal")
+	if err := manager.Finalize(context.Background(), SendRight{TransactionID: challenge.TransactionID}, 10, "provider_failure", protocol.Digest(failureTerminal)); err != nil {
 		t.Fatal(err)
 	}
-	if record := manager.records[challenge.TransactionID]; record.event.State != Cleanup || record.private != nil {
-		t.Fatal("failure finalization retained signing authority")
+	if record := manager.records[challenge.TransactionID]; record.event.State != Cleanup || record.private == nil {
+		t.Fatal("failure finalization did not retain one-shot signing authority")
+	}
+	if signature, err := manager.SignFinalized(SendRight{TransactionID: challenge.TransactionID}, failureTerminal); err != nil || len(signature) == 0 {
+		t.Fatal("signed provider failure unavailable")
 	}
 
 	cancelWAL := &memoryWAL{}
