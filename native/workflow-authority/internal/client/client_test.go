@@ -27,6 +27,7 @@ import (
 type testFIDO struct {
 	err   error
 	ready bool
+	hook  func()
 	mu    sync.Mutex
 	calls int
 }
@@ -41,6 +42,9 @@ func (f *testFIDO) Verify(_ context.Context, challenge []byte, credential author
 	f.mu.Lock()
 	f.calls++
 	f.mu.Unlock()
+	if f.hook != nil {
+		f.hook()
+	}
 	digest := sha256.Sum256(challenge)
 	if f.err != nil || assertion.ChallengeDigest != digest || credential.Reference != "credential-generation-7" || assertion.Generation != 7 || assertion.CredentialReference != credential.Reference || !assertion.UserPresence || !assertion.UserVerification {
 		return authority.ErrDenied
@@ -68,6 +72,10 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T, mutate serverMutation) *fixture {
+	return newFixtureCase(t, mutate, "", nil)
+}
+
+func newFixtureCase(t *testing.T, mutate serverMutation, safeStage string, safe *protocol.SafeError) *fixture {
 	t.Helper()
 	root, err := os.MkdirTemp("/tmp", "wa-client-")
 	if err != nil {
@@ -107,12 +115,12 @@ func newFixture(t *testing.T, mutate serverMutation) *fixture {
 	runner.dial = func(ctx context.Context, path string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", path)
 	}
-	runner.openTerminal = func() (authority.ConsentTerminal, io.Closer, error) {
+	runner.confirm = func(_ context.Context, challenge protocol.Challenge) error {
 		terminal := &testTerminal{}
-		return terminal, terminal, nil
+		return authority.ConfirmExactScope(terminal, challenge)
 	}
 	fx := &fixture{runner: runner, listener: listener, fido: fido, now: now, done: make(chan error, 1)}
-	go func() { fx.done <- serveOnce(listener, now, private, mutate) }()
+	go func() { fx.done <- serveOnce(listener, now, private, mutate, safeStage, safe) }()
 	t.Cleanup(func() { _ = listener.Close() })
 	return fx
 }
@@ -129,7 +137,7 @@ func (f *fixture) wait(t *testing.T) {
 	}
 }
 
-func serveOnce(listener *net.UnixListener, now time.Time, signer *ecdsa.PrivateKey, mutate serverMutation) error {
+func serveOnce(listener *net.UnixListener, now time.Time, signer *ecdsa.PrivateKey, mutate serverMutation, safeStage string, safe *protocol.SafeError) error {
 	conn, err := listener.AcceptUnix()
 	if err != nil {
 		return err
@@ -170,6 +178,10 @@ func serveOnce(listener *net.UnixListener, now time.Time, signer *ecdsa.PrivateK
 	if err != nil {
 		return err
 	}
+	if safeStage == "challenge" && safe != nil {
+		raw, _ := protocol.CanonicalJSON(*safe)
+		return protocol.WriteFrame(conn, raw)
+	}
 	public := elliptic.Marshal(elliptic.P256(), signer.PublicKey.X, signer.PublicKey.Y)
 	challenge := protocol.Challenge{SchemaVersion: 1, Protocol: protocol.Name, Mapping: request.Mapping, OperationFamily: request.OperationFamily, SubstrateAuthority: request.SubstrateAuthority, TransactionID: "transaction-1", ConnectionNonceSHA256: request.Authority.ConnectionNonceSHA256, PeerUID: uint32(os.Geteuid()), PeerPID: int32(os.Getpid()), RequestBodySHA256: protocol.Digest(body), Destination: request.Destination, Method: request.Method, Path: request.Path, Models: request.Models, Scope: request.Scope, DaemonBuildSHA256: request.Authority.DaemonBuildSHA256, ScannerBuildSHA256: request.Authority.ScannerBuildSHA256, PolicySHA256: request.Authority.PolicySHA256, Nonce: request.Authority.Nonce, Sequence: request.Authority.Sequence, BootID: request.Authority.BootID, SessionID: request.Authority.SessionID, IssuedAt: request.Authority.IssuedAt, ExpiresAt: request.Authority.ExpiresAt, Limits: request.Limits, ResultSigner: protocol.ResultSigner{Kind: "ephemeral-es256", PublicKeySEC1: base64.RawURLEncoding.EncodeToString(public)}, PriorChainDigest: request.Authority.PriorChainDigest, AllocationHelloSHA256: request.Authority.AllocationHelloSHA256, DispatchProposalSHA256: request.Authority.DispatchProposalSHA256}
 	if mutate != nil {
@@ -181,6 +193,10 @@ func serveOnce(listener *net.UnixListener, now time.Time, signer *ecdsa.PrivateK
 	}
 	if _, err := protocol.ReadFrame(conn); err != nil {
 		return nil
+	}
+	if safeStage == "proof" && safe != nil {
+		raw, _ := protocol.CanonicalJSON(*safe)
+		return protocol.WriteFrame(conn, raw)
 	}
 	authData := make([]byte, 37)
 	binary.BigEndian.PutUint32(authData[33:], 5)
@@ -268,6 +284,21 @@ func TestEveryBindingMutationFailsWithoutResponse(t *testing.T) {
 				p.AuthorityAssertion.CredentialID = base64.RawURLEncoding.EncodeToString([]byte("other"))
 			}
 		},
+		"proof-missing-up": func(_ *protocol.AuthorityHello, _ *protocol.Challenge, p *provider.AuthorizationProof, _ []byte, _ *protocol.TerminalResult) {
+			if p != nil {
+				p.AuthorityAssertion.UserPresence = false
+			}
+		},
+		"proof-missing-uv": func(_ *protocol.AuthorityHello, _ *protocol.Challenge, p *provider.AuthorizationProof, _ []byte, _ *protocol.TerminalResult) {
+			if p != nil {
+				p.AuthorityAssertion.UserVerification = false
+			}
+		},
+		"proof-authdata": func(_ *protocol.AuthorityHello, _ *protocol.Challenge, p *provider.AuthorizationProof, _ []byte, _ *protocol.TerminalResult) {
+			if p != nil {
+				p.AuthorityAssertion.AuthenticatorData = base64.RawURLEncoding.EncodeToString([]byte("short"))
+			}
+		},
 		"response-digest": func(_ *protocol.AuthorityHello, _ *protocol.Challenge, _ *provider.AuthorizationProof, _ []byte, r *protocol.TerminalResult) {
 			if r != nil {
 				r.ResponseSHA256 = protocol.Digest([]byte("wrong"))
@@ -287,6 +318,16 @@ func TestEveryBindingMutationFailsWithoutResponse(t *testing.T) {
 			if c != nil {
 				x, y := elliptic.P256().ScalarBaseMult([]byte{2})
 				c.ResultSigner.PublicKeySEC1 = base64.RawURLEncoding.EncodeToString(elliptic.Marshal(elliptic.P256(), x, y))
+			}
+		},
+		"terminal-before-issued": func(_ *protocol.AuthorityHello, _ *protocol.Challenge, _ *provider.AuthorizationProof, _ []byte, result *protocol.TerminalResult) {
+			if result != nil {
+				result.CompletedAt = "2026-08-03T23:59:00Z"
+			}
+		},
+		"terminal-in-future": func(_ *protocol.AuthorityHello, _ *protocol.Challenge, _ *provider.AuthorizationProof, _ []byte, result *protocol.TerminalResult) {
+			if result != nil {
+				result.CompletedAt = "2026-08-04T00:00:31Z"
 			}
 		},
 	}
@@ -394,4 +435,118 @@ func TestCancellationAndConcurrentIndependentRequestsFailOrVerifyAtomically(t *t
 	for _, current := range fixtures {
 		current.wait(t)
 	}
+}
+
+func TestSignedProviderFailureAndUnknownReturnReceiptWithoutResponse(t *testing.T) {
+	for outcome, exit := range map[string]int{"provider_failure": 73, "unknown": 74} {
+		t.Run(outcome, func(t *testing.T) {
+			fx := newFixture(t, func(_ *protocol.AuthorityHello, _ *protocol.Challenge, _ *provider.AuthorizationProof, _ []byte, result *protocol.TerminalResult) {
+				if result != nil {
+					result.Outcome, result.ExitCode = outcome, exit
+				}
+			})
+			result, err := fx.runner.Dispatch(context.Background(), validOptions(), bytes.NewReader(nil), bytes.NewReader(nil))
+			if err != nil || result.ExitCode != exit || len(result.Response) != 0 || !bytes.Contains(result.Receipt, []byte(`"outcome":"`+outcome+`"`)) {
+				t.Fatalf("signed outcome rejected or released response: %+v err=%v", result, err)
+			}
+			fx.wait(t)
+		})
+	}
+}
+
+func TestSafeErrorOnlyAcceptedAtPreNetworkChallengeStage(t *testing.T) {
+	for code, expected := range map[string]error{"authority_unavailable": ErrUnavailable, "authorization_declined": ErrDeclined, "disclosure_declined": ErrDisclosure} {
+		safe := &protocol.SafeError{SchemaVersion: 1, Protocol: protocol.Name, Type: protocol.SafeErrorType, Code: code, Consumed: true}
+		switch code {
+		case "authority_unavailable":
+			safe.ExitCode = 70
+		case "authorization_declined":
+			safe.ExitCode = 71
+		case "disclosure_declined":
+			safe.ExitCode = 72
+		}
+		fx := newFixtureCase(t, nil, "challenge", safe)
+		result, err := fx.runner.Dispatch(context.Background(), validOptions(), bytes.NewReader(nil), bytes.NewReader(nil))
+		if !errors.Is(err, expected) || len(result.Response) != 0 || len(result.Receipt) != 0 {
+			t.Fatalf("safe error %s: %+v err=%v", code, result, err)
+		}
+		fx.wait(t)
+	}
+	safe := &protocol.SafeError{SchemaVersion: 1, Protocol: protocol.Name, Type: protocol.SafeErrorType, Code: "authority_unavailable", ExitCode: 70, Consumed: true}
+	fx := newFixtureCase(t, nil, "proof", safe)
+	if result, err := fx.runner.Dispatch(context.Background(), validOptions(), bytes.NewReader(nil), bytes.NewReader(nil)); !errors.Is(err, ErrUncertain) || len(result.Response) != 0 || len(result.Receipt) != 0 {
+		t.Fatalf("post-consent safe error was retryable: %+v err=%v", result, err)
+	}
+	fx.wait(t)
+}
+
+func TestFreshnessRecheckedAfterConsentAndBeforeTerminal(t *testing.T) {
+	fx := newFixture(t, nil)
+	current := fx.now
+	fx.runner.now = func() time.Time { return current }
+	fx.runner.confirm = func(context.Context, protocol.Challenge) error {
+		current = fx.now.Add(2 * time.Minute)
+		return nil
+	}
+	if result, err := fx.runner.Dispatch(context.Background(), validOptions(), bytes.NewReader(nil), bytes.NewReader(nil)); !errors.Is(err, ErrUncertain) || len(result.Response) != 0 || len(result.Receipt) != 0 {
+		t.Fatalf("expired post-consent request accepted: %+v err=%v", result, err)
+	}
+	fx.wait(t)
+
+	fx = newFixture(t, nil)
+	current = fx.now
+	fx.runner.now = func() time.Time { return current }
+	fx.fido.hook = func() { current = fx.now.Add(2 * time.Minute) }
+	if result, err := fx.runner.Dispatch(context.Background(), validOptions(), bytes.NewReader(nil), bytes.NewReader(nil)); !errors.Is(err, ErrUncertain) || len(result.Response) != 0 || len(result.Receipt) != 0 {
+		t.Fatalf("expired pre-terminal request accepted: %+v err=%v", result, err)
+	}
+	fx.wait(t)
+}
+
+func TestInFlightSocketAndConsentCancellationReleaseNothing(t *testing.T) {
+	reachedProof := make(chan struct{})
+	releaseServer := make(chan struct{})
+	fx := newFixture(t, func(_ *protocol.AuthorityHello, _ *protocol.Challenge, proof *provider.AuthorizationProof, _ []byte, _ *protocol.TerminalResult) {
+		if proof != nil {
+			close(reachedProof)
+			<-releaseServer
+		}
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	results := make(chan Result, 1)
+	errorsOut := make(chan error, 1)
+	go func() {
+		result, err := fx.runner.Dispatch(ctx, validOptions(), bytes.NewReader(nil), bytes.NewReader(nil))
+		results <- result
+		errorsOut <- err
+	}()
+	<-reachedProof
+	cancel()
+	result, err := <-results, <-errorsOut
+	if !errors.Is(err, ErrUncertain) || len(result.Response) != 0 || len(result.Receipt) != 0 {
+		t.Fatalf("socket cancellation released data: %+v err=%v", result, err)
+	}
+	close(releaseServer)
+	fx.wait(t)
+
+	fx = newFixture(t, nil)
+	enteredConsent := make(chan struct{})
+	fx.runner.confirm = func(ctx context.Context, _ protocol.Challenge) error {
+		close(enteredConsent)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	ctx, cancel = context.WithCancel(context.Background())
+	go func() {
+		result, err := fx.runner.Dispatch(ctx, validOptions(), bytes.NewReader(nil), bytes.NewReader(nil))
+		results <- result
+		errorsOut <- err
+	}()
+	<-enteredConsent
+	cancel()
+	result, err = <-results, <-errorsOut
+	if !errors.Is(err, ErrUncertain) || len(result.Response) != 0 || len(result.Receipt) != 0 {
+		t.Fatalf("consent cancellation released data: %+v err=%v", result, err)
+	}
+	fx.wait(t)
 }
