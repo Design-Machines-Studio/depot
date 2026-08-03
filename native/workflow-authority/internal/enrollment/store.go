@@ -21,25 +21,45 @@ import (
 
 const (
 	privatePath = "/var/lib/design-machines/workflow-authority/enrollment-private.json"
+	lockPath    = "/var/lib/design-machines/workflow-authority/enrollment.lock"
 	publicPath  = "/etc/design-machines/workflow-authority/trust/authority-public.json"
-	maxRecord   = 32 << 10
+	maxRecord   = 1 << 20
 )
 
+type PublicCredential struct {
+	Generation        uint64    `json:"generation"`
+	Reference         string    `json:"reference"`
+	PublicKey         string    `json:"public_key"`
+	Algorithm         int       `json:"algorithm"`
+	RPID              string    `json:"rp_id"`
+	EnrolledAt        time.Time `json:"enrolled_at"`
+	InternalUV        bool      `json:"internal_uv"`
+	AAGUID            string    `json:"aaguid"`
+	AttestationFormat string    `json:"attestation_format"`
+	DeviceSelector    string    `json:"device_selector"`
+}
+
+type LifecycleEvent struct {
+	Sequence   uint64    `json:"sequence"`
+	Generation uint64    `json:"generation"`
+	Action     string    `json:"action"`
+	At         time.Time `json:"at"`
+}
+
+type PublicTrust struct {
+	Protocol         string             `json:"protocol"`
+	ActiveGeneration *uint64            `json:"active_generation"`
+	Credentials      []PublicCredential `json:"credentials"`
+	Events           []LifecycleEvent   `json:"events"`
+}
+
 type privateRecord struct {
-	Protocol          string      `json:"protocol"`
-	Generation        uint64      `json:"generation"`
-	Reference         string      `json:"reference"`
-	CredentialID      secretBytes `json:"credential_id"`
-	PublicKey         string      `json:"public_key"`
-	PublicSHA256      string      `json:"public_sha256"`
-	Algorithm         int         `json:"algorithm"`
-	RPID              string      `json:"rp_id"`
-	EnrolledAt        time.Time   `json:"enrolled_at"`
-	Status            string      `json:"status"`
-	RevokedAt         *time.Time  `json:"revoked_at,omitempty"`
-	InternalUV        bool        `json:"internal_uv"`
-	AAGUID            string      `json:"aaguid,omitempty"`
-	AttestationFormat string      `json:"attestation_format"`
+	Protocol     string      `json:"protocol"`
+	Generation   uint64      `json:"generation"`
+	Status       string      `json:"status"`
+	CredentialID secretBytes `json:"credential_id,omitempty"`
+	Trust        PublicTrust `json:"trust"`
+	PublicSHA256 string      `json:"public_sha256"`
 }
 
 type secretBytes []byte
@@ -47,7 +67,6 @@ type secretBytes []byte
 func (s secretBytes) MarshalJSON() ([]byte, error) {
 	return json.Marshal(base64.RawURLEncoding.EncodeToString(s))
 }
-
 func (s *secretBytes) UnmarshalJSON(data []byte) error {
 	var encoded string
 	if json.Unmarshal(data, &encoded) != nil || encoded == "" {
@@ -61,26 +80,7 @@ func (s *secretBytes) UnmarshalJSON(data []byte) error {
 	*s = decoded
 	return nil
 }
-
-func (r *privateRecord) destroy() {
-	zero(r.CredentialID)
-	r.CredentialID = nil
-}
-
-type PublicRecord struct {
-	Protocol          string     `json:"protocol"`
-	Generation        uint64     `json:"generation"`
-	Reference         string     `json:"reference"`
-	PublicKey         string     `json:"public_key"`
-	Algorithm         int        `json:"algorithm"`
-	RPID              string     `json:"rp_id"`
-	EnrolledAt        time.Time  `json:"enrolled_at"`
-	Status            string     `json:"status"`
-	RevokedAt         *time.Time `json:"revoked_at,omitempty"`
-	InternalUV        bool       `json:"internal_uv"`
-	AAGUID            string     `json:"aaguid,omitempty"`
-	AttestationFormat string     `json:"attestation_format"`
-}
+func (r *privateRecord) destroy() { zero(r.CredentialID); r.CredentialID = nil }
 
 type Store struct {
 	mu      sync.Mutex
@@ -90,9 +90,6 @@ type Store struct {
 }
 
 func NewStore() *Store { return &Store{root: "/", owner: 0} }
-
-// NewTestStore is the only path-injecting constructor. It must never be used by
-// production wiring.
 func NewTestStore(root string, owner uint32) (*Store, error) {
 	if !filepath.IsAbs(root) || filepath.Clean(root) == "/" {
 		return nil, ErrDenied
@@ -105,196 +102,244 @@ func NewTestStore(root string, owner uint32) (*Store, error) {
 }
 
 func (s *Store) Enroll(ctx context.Context, credential Credential) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if ctx.Err() != nil || ValidateCredential(credential) != nil {
-		return ErrDenied
-	}
-	current, err := s.readPrivate(true)
-	defer current.destroy()
-	if err == nil {
-		return ErrConflict
-	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return s.commit(credential)
+	return s.withLock(ctx, func() error {
+		if ValidateCredential(credential) != nil {
+			return ErrDenied
+		}
+		current, err := s.readPrivate(true)
+		current.destroy()
+		if err == nil {
+			return ErrConflict
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		g := credential.Generation
+		trust := PublicTrust{Protocol: Protocol, ActiveGeneration: &g, Credentials: []PublicCredential{publicCredential(credential)}, Events: []LifecycleEvent{{Sequence: 1, Generation: g, Action: "activated", At: credential.EnrolledAt.UTC()}}}
+		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), Trust: trust})
+	})
 }
 
 func (s *Store) Rotate(ctx context.Context, credential Credential) error {
-	return s.replace(ctx, credential, "active")
+	return s.withLock(ctx, func() error {
+		if ValidateCredential(credential) != nil {
+			return ErrDenied
+		}
+		current, err := s.readState()
+		if err != nil {
+			return err
+		}
+		defer current.destroy()
+		if current.Status != "active" || credential.Generation <= current.Generation {
+			return ErrConflict
+		}
+		trust := cloneTrust(current.Trust)
+		trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: current.Generation, Action: "rotated", At: credential.EnrolledAt.UTC()})
+		trust.Credentials = append(trust.Credentials, publicCredential(credential))
+		g := credential.Generation
+		trust.ActiveGeneration = &g
+		trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: g, Action: "activated", At: credential.EnrolledAt.UTC()})
+		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), Trust: trust})
+	})
+}
+
+func (s *Store) Revoke(ctx context.Context, generation uint64, at time.Time) error {
+	return s.withLock(ctx, func() error {
+		if generation == 0 || at.IsZero() {
+			return ErrDenied
+		}
+		current, err := s.readState()
+		if err != nil {
+			return err
+		}
+		defer current.destroy()
+		if current.Status != "active" || current.Generation != generation || at.Before(activeEnrolledAt(current.Trust)) {
+			return ErrConflict
+		}
+		trust := cloneTrust(current.Trust)
+		trust.ActiveGeneration = nil
+		trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: generation, Action: "revoked", At: at.UTC()})
+		return s.commit(privateRecord{Protocol: Protocol, Generation: generation, Status: "revoked", Trust: trust})
+	})
 }
 
 func (s *Store) Recover(ctx context.Context, credential Credential) error {
-	return s.replace(ctx, credential, "revoked")
-}
-
-func (s *Store) replace(ctx context.Context, credential Credential, requiredStatus string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if ctx.Err() != nil || ValidateCredential(credential) != nil {
-		return ErrDenied
-	}
-	current, err := s.readPrivate(false)
-	if err != nil {
-		return err
-	}
-	defer current.destroy()
-	if current.Status != requiredStatus || credential.Generation <= current.Generation {
-		return ErrConflict
-	}
-	return s.commit(credential)
+	return s.withLock(ctx, func() error {
+		if ValidateCredential(credential) != nil {
+			return ErrDenied
+		}
+		current, err := s.readState()
+		if err != nil {
+			return err
+		}
+		defer current.destroy()
+		if current.Status != "revoked" || credential.Generation <= maxGeneration(current.Trust) {
+			return ErrConflict
+		}
+		trust := cloneTrust(current.Trust)
+		trust.Credentials = append(trust.Credentials, publicCredential(credential))
+		g := credential.Generation
+		trust.ActiveGeneration = &g
+		trust.Events = append(trust.Events, LifecycleEvent{Sequence: uint64(len(trust.Events) + 1), Generation: g, Action: "recovered", At: credential.EnrolledAt.UTC()})
+		return s.commit(privateRecord{Protocol: Protocol, Generation: g, Status: "active", CredentialID: append(secretBytes(nil), credential.ID...), Trust: trust})
+	})
 }
 
 func (s *Store) RecoverPartial(ctx context.Context) error {
+	return s.withLock(ctx, func() error {
+		private, err := s.readPrivate(false)
+		if err != nil {
+			return err
+		}
+		defer private.destroy()
+		publicBytes, err := marshalClosed(private.Trust)
+		if err != nil || digest(publicBytes) != private.PublicSHA256 || validateTrust(private.Trust) != nil {
+			return ErrCorrupt
+		}
+		return s.writeRecord(publicPath, 0o644, publicBytes)
+	})
+}
+
+func (s *Store) LoadActive(ctx context.Context) (*Credential, error) {
+	var result *Credential
+	err := s.withLock(ctx, func() error {
+		private, err := s.readState()
+		if err != nil {
+			return err
+		}
+		defer private.destroy()
+		if private.Status != "active" || private.Trust.ActiveGeneration == nil {
+			return ErrUnavailable
+		}
+		credential, err := private.activeCredential()
+		if err != nil {
+			return err
+		}
+		result = &credential
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (s *Store) LoadTrust(ctx context.Context) (PublicTrust, error) {
+	var result PublicTrust
+	err := s.withLock(ctx, func() error {
+		private, err := s.readState()
+		if err != nil {
+			return err
+		}
+		defer private.destroy()
+		result = cloneTrust(private.Trust)
+		return nil
+	})
+	return result, err
+}
+
+func (s *Store) withLock(ctx context.Context, fn func() error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if ctx.Err() != nil {
 		return ErrUnavailable
 	}
-	private, err := s.readPrivate(false)
+	lock, err := s.acquireProcessLock(ctx)
 	if err != nil {
 		return err
 	}
-	defer private.destroy()
-	public, publicBytes, err := private.publicProjection()
-	if err != nil || digest(publicBytes) != private.PublicSHA256 {
-		return ErrCorrupt
-	}
-	if err := validatePublic(public); err != nil {
-		return err
-	}
-	return s.writeRecord(publicPath, 0o644, publicBytes)
+	defer func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); _ = lock.Close() }()
+	return fn()
 }
 
-func (s *Store) Revoke(ctx context.Context, generation uint64, at time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if ctx.Err() != nil || generation == 0 || at.IsZero() {
-		return ErrDenied
-	}
-	private, err := s.readPrivate(false)
-	if err != nil {
-		return err
-	}
-	defer private.destroy()
-	if private.Generation != generation || private.Status != "active" || at.Before(private.EnrolledAt) {
-		return ErrConflict
-	}
-	credential, err := private.credential()
-	if err != nil {
-		return err
-	}
-	defer credential.Destroy()
-	credential.Status = "revoked"
-	when := at.UTC()
-	credential.RevokedAt = &when
-	return s.commit(credential)
-}
-
-func (s *Store) LoadActive(ctx context.Context) (*Credential, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if ctx.Err() != nil {
-		return nil, ErrUnavailable
-	}
-	private, err := s.readPrivate(false)
+func (s *Store) acquireProcessLock(ctx context.Context) (*os.File, error) {
+	resolved := s.resolve(lockPath)
+	dir, base, err := s.openSecureParent(resolved, filepath.Dir(lockPath))
 	if err != nil {
 		return nil, err
 	}
-	defer private.destroy()
-	public, publicBytes, err := private.publicProjection()
-	if err != nil || digest(publicBytes) != private.PublicSHA256 || validatePublic(public) != nil {
-		return nil, ErrCorrupt
+	defer dir.Close()
+	f, err := dir.OpenFile(base, os.O_RDWR|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
+	created := err == nil
+	if errors.Is(err, os.ErrExist) {
+		f, err = dir.OpenFile(base, os.O_RDWR|syscall.O_NOFOLLOW, 0)
 	}
-	actualPublic, err := s.readPublic()
-	if err != nil || !bytes.Equal(actualPublic, publicBytes) {
-		return nil, ErrCorrupt
-	}
-	credential, err := private.credential()
-	if err != nil || credential.Status != "active" || credential.RevokedAt != nil {
-		if err == nil {
-			credential.Destroy()
-		}
+	if err != nil {
 		return nil, ErrUnavailable
 	}
-	return &credential, nil
+	if created {
+		if err := f.Chmod(0o600); err != nil {
+			f.Close()
+			return nil, ErrUnavailable
+		}
+	}
+	if info, err := f.Stat(); err != nil || !validFile(info, s.owner, 0o600) {
+		f.Close()
+		return nil, ErrCorrupt
+	}
+	for {
+		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return f, nil
+		}
+		if err != syscall.EWOULDBLOCK && err != syscall.EAGAIN {
+			f.Close()
+			return nil, ErrUnavailable
+		}
+		select {
+		case <-ctx.Done():
+			f.Close()
+			return nil, ErrUnavailable
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
 }
 
-func (s *Store) commit(credential Credential) error {
-	public := projection(credential)
-	publicBytes, err := marshalClosed(public)
+func (s *Store) commit(private privateRecord) error {
+	defer private.destroy()
+	if validateTrust(private.Trust) != nil {
+		return ErrCorrupt
+	}
+	publicBytes, err := marshalClosed(private.Trust)
 	if err != nil {
 		return ErrCorrupt
 	}
-	private := privateRecord{
-		Protocol: Protocol, Generation: credential.Generation, Reference: credential.Reference,
-		CredentialID: append(secretBytes(nil), credential.ID...), PublicKey: base64.RawURLEncoding.EncodeToString(credential.PublicKey),
-		PublicSHA256: digest(publicBytes), Algorithm: credential.Algorithm, RPID: credential.RPID,
-		EnrolledAt: credential.EnrolledAt.UTC(), Status: credential.Status, RevokedAt: credential.RevokedAt,
-		InternalUV: credential.InternalUV, AAGUID: base64.RawURLEncoding.EncodeToString(credential.AAGUID), AttestationFormat: credential.Format,
-	}
+	private.PublicSHA256 = digest(publicBytes)
 	privateBytes, err := marshalClosed(private)
 	if err != nil {
 		return ErrCorrupt
 	}
 	defer zero(privateBytes)
-	if bytes.Contains(publicBytes, []byte(base64.RawURLEncoding.EncodeToString(private.CredentialID))) {
+	if len(private.CredentialID) > 0 && bytes.Contains(publicBytes, []byte(base64.RawURLEncoding.EncodeToString(private.CredentialID))) {
 		return ErrCorrupt
 	}
 	if err := s.writeRecord(privatePath, 0o600, privateBytes); err != nil {
 		return err
 	}
-	if err := s.writeRecord(publicPath, 0o644, publicBytes); err != nil {
-		return err
-	}
-	return nil
+	return s.writeRecord(publicPath, 0o644, publicBytes)
 }
 
-func projection(c Credential) PublicRecord {
-	return PublicRecord{Protocol: Protocol, Generation: c.Generation, Reference: c.Reference, PublicKey: base64.RawURLEncoding.EncodeToString(c.PublicKey), Algorithm: c.Algorithm, RPID: c.RPID, EnrolledAt: c.EnrolledAt.UTC(), Status: c.Status, RevokedAt: c.RevokedAt, InternalUV: c.InternalUV, AAGUID: base64.RawURLEncoding.EncodeToString(c.AAGUID), AttestationFormat: c.Format}
-}
-
-func (r privateRecord) publicProjection() (PublicRecord, []byte, error) {
-	public := PublicRecord{Protocol: r.Protocol, Generation: r.Generation, Reference: r.Reference, PublicKey: r.PublicKey, Algorithm: r.Algorithm, RPID: r.RPID, EnrolledAt: r.EnrolledAt, Status: r.Status, RevokedAt: r.RevokedAt, InternalUV: r.InternalUV, AAGUID: r.AAGUID, AttestationFormat: r.AttestationFormat}
-	data, err := marshalClosed(public)
-	return public, data, err
-}
-
-func (r privateRecord) credential() (Credential, error) {
-	id := append([]byte(nil), r.CredentialID...)
-	publicKey, err := base64.RawURLEncoding.Strict().DecodeString(r.PublicKey)
+func (s *Store) readState() (privateRecord, error) {
+	private, err := s.readPrivate(false)
 	if err != nil {
-		zero(id)
-		return Credential{}, ErrCorrupt
+		return privateRecord{}, err
 	}
-	aaguid, err := base64.RawURLEncoding.Strict().DecodeString(r.AAGUID)
+	publicBytes, err := s.readRecord(publicPath, 0o644)
 	if err != nil {
-		zero(id)
-		return Credential{}, ErrCorrupt
+		private.destroy()
+		return privateRecord{}, err
 	}
-	c := Credential{Reference: r.Reference, ID: id, PublicKey: publicKey, Algorithm: r.Algorithm, Generation: r.Generation, RPID: r.RPID, EnrolledAt: r.EnrolledAt, Status: r.Status, RevokedAt: r.RevokedAt, InternalUV: r.InternalUV, AAGUID: aaguid, Format: r.AttestationFormat}
-	if c.Status == "active" {
-		if ValidateCredential(c) != nil {
-			c.Destroy()
-			return Credential{}, ErrCorrupt
-		}
-	} else if c.Status != "revoked" || c.RevokedAt == nil || c.RevokedAt.Before(c.EnrolledAt) || c.Generation == 0 || c.Reference != ReferenceForID(c.ID) || c.Algorithm != ES256 || c.RPID != RPID || c.EnrolledAt.IsZero() || !c.InternalUV || c.Format != "packed" || validatePublicKey(c.PublicKey) != nil {
-		c.Destroy()
-		return Credential{}, ErrCorrupt
+	var public PublicTrust
+	if decodeClosed(publicBytes, &public) != nil || validateTrust(public) != nil {
+		private.destroy()
+		return privateRecord{}, ErrCorrupt
 	}
-	return c, nil
-}
-
-func validatePublic(r PublicRecord) error {
-	if r.Protocol != Protocol || r.Generation == 0 || r.Reference == "" || r.Algorithm != ES256 || r.RPID != RPID || r.EnrolledAt.IsZero() || !r.InternalUV || r.AttestationFormat != "packed" || (r.Status != "active" && r.Status != "revoked") || (r.Status == "active" && r.RevokedAt != nil) || (r.Status == "revoked" && r.RevokedAt == nil) {
-		return ErrCorrupt
+	canonical, _ := marshalClosed(public)
+	if !bytes.Equal(publicBytes, canonical) || digest(canonical) != private.PublicSHA256 || !bytes.Equal(canonical, mustMarshal(private.Trust)) {
+		private.destroy()
+		return privateRecord{}, ErrCorrupt
 	}
-	key, err := base64.RawURLEncoding.Strict().DecodeString(r.PublicKey)
-	if err != nil || len(key) == 0 || len(key) > 4096 || validatePublicKey(key) != nil {
-		return ErrCorrupt
-	}
-	return nil
+	return private, nil
 }
 
 func (s *Store) readPrivate(missingOK bool) (privateRecord, error) {
@@ -307,7 +352,7 @@ func (s *Store) readPrivate(missingOK bool) (privateRecord, error) {
 	}
 	defer zero(data)
 	var record privateRecord
-	if decodeClosed(data, &record) != nil || record.Protocol != Protocol || record.PublicSHA256 == "" || len(record.CredentialID) == 0 {
+	if decodeClosed(data, &record) != nil || record.Protocol != Protocol || record.PublicSHA256 == "" || validateTrust(record.Trust) != nil {
 		record.destroy()
 		return privateRecord{}, ErrCorrupt
 	}
@@ -318,30 +363,145 @@ func (s *Store) readPrivate(missingOK bool) (privateRecord, error) {
 		return privateRecord{}, ErrCorrupt
 	}
 	zero(canonical)
-	credential, err := record.credential()
-	if err != nil {
-		record.destroy()
-		return privateRecord{}, ErrCorrupt
+	if record.Trust.ActiveGeneration == nil {
+		if record.Status != "revoked" || len(record.CredentialID) != 0 || record.Generation == 0 {
+			record.destroy()
+			return privateRecord{}, ErrCorrupt
+		}
+	} else {
+		if record.Status != "active" || record.Generation != *record.Trust.ActiveGeneration || len(record.CredentialID) == 0 {
+			record.destroy()
+			return privateRecord{}, ErrCorrupt
+		}
+		credential, err := record.activeCredential()
+		if err != nil {
+			record.destroy()
+			return privateRecord{}, err
+		}
+		credential.Destroy()
 	}
-	credential.Destroy()
 	return record, nil
 }
 
-func (s *Store) readPublic() ([]byte, error) {
-	data, err := s.readRecord(publicPath, 0o644)
-	if err != nil {
-		return nil, err
+func (r privateRecord) activeCredential() (Credential, error) {
+	if r.Trust.ActiveGeneration == nil {
+		return Credential{}, ErrUnavailable
 	}
-	var record PublicRecord
-	if decodeClosed(data, &record) != nil || validatePublic(record) != nil {
-		return nil, ErrCorrupt
+	for _, public := range r.Trust.Credentials {
+		if public.Generation == *r.Trust.ActiveGeneration {
+			key, e1 := base64.RawURLEncoding.Strict().DecodeString(public.PublicKey)
+			aaguid, e2 := base64.RawURLEncoding.Strict().DecodeString(public.AAGUID)
+			if e1 != nil || e2 != nil {
+				return Credential{}, ErrCorrupt
+			}
+			c := Credential{Reference: public.Reference, ID: append([]byte(nil), r.CredentialID...), PublicKey: key, Algorithm: public.Algorithm, Generation: public.Generation, RPID: public.RPID, EnrolledAt: public.EnrolledAt, Status: "active", InternalUV: public.InternalUV, AAGUID: aaguid, Format: public.AttestationFormat, DeviceSelector: public.DeviceSelector}
+			if ValidateCredential(c) != nil {
+				c.Destroy()
+				return Credential{}, ErrCorrupt
+			}
+			return c, nil
+		}
 	}
-	canonical, err := marshalClosed(record)
-	if err != nil || !bytes.Equal(data, canonical) {
-		return nil, ErrCorrupt
-	}
-	return data, nil
+	return Credential{}, ErrCorrupt
 }
+
+func publicCredential(c Credential) PublicCredential {
+	return PublicCredential{Generation: c.Generation, Reference: c.Reference, PublicKey: base64.RawURLEncoding.EncodeToString(c.PublicKey), Algorithm: c.Algorithm, RPID: c.RPID, EnrolledAt: c.EnrolledAt.UTC(), InternalUV: c.InternalUV, AAGUID: base64.RawURLEncoding.EncodeToString(c.AAGUID), AttestationFormat: c.Format, DeviceSelector: c.DeviceSelector}
+}
+
+func validateTrust(t PublicTrust) error {
+	if t.Protocol != Protocol || len(t.Credentials) == 0 || len(t.Events) == 0 || len(t.Credentials) > 1024 || len(t.Events) > 4096 {
+		return ErrCorrupt
+	}
+	credentials := make(map[uint64]PublicCredential, len(t.Credentials))
+	var previous uint64
+	for _, c := range t.Credentials {
+		key, e1 := base64.RawURLEncoding.Strict().DecodeString(c.PublicKey)
+		aaguid, e2 := base64.RawURLEncoding.Strict().DecodeString(c.AAGUID)
+		if c.Generation <= previous || c.Reference == "" || c.Algorithm != ES256 || c.RPID != RPID || c.EnrolledAt.IsZero() || !c.InternalUV || c.AttestationFormat != "packed" || !validSelector(c.DeviceSelector) || e1 != nil || e2 != nil || len(aaguid) != 16 || validatePublicKey(key) != nil {
+			return ErrCorrupt
+		}
+		credentials[c.Generation] = c
+		previous = c.Generation
+	}
+	var active uint64
+	var lastAction string
+	activated := make(map[uint64]bool)
+	for i, e := range t.Events {
+		c, ok := credentials[e.Generation]
+		if e.Sequence != uint64(i+1) || !ok || e.At.IsZero() || e.At.Before(c.EnrolledAt) {
+			return ErrCorrupt
+		}
+		switch e.Action {
+		case "activated":
+			if active != 0 || activated[e.Generation] {
+				return ErrCorrupt
+			}
+			active = e.Generation
+			activated[e.Generation] = true
+		case "rotated":
+			if active != e.Generation {
+				return ErrCorrupt
+			}
+			active = 0
+		case "revoked":
+			if active != e.Generation {
+				return ErrCorrupt
+			}
+			active = 0
+		case "recovered":
+			if active != 0 || lastAction != "revoked" || activated[e.Generation] {
+				return ErrCorrupt
+			}
+			active = e.Generation
+			activated[e.Generation] = true
+		default:
+			return ErrCorrupt
+		}
+		lastAction = e.Action
+	}
+	for g := range credentials {
+		if !activated[g] {
+			return ErrCorrupt
+		}
+	}
+	if (active == 0) != (t.ActiveGeneration == nil) || active != 0 && *t.ActiveGeneration != active {
+		return ErrCorrupt
+	}
+	return nil
+}
+
+func validSelector(s string) bool {
+	if len(s) != 71 || !strings.HasPrefix(s, "sha256:") {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(s, "sha256:"))
+	return err == nil
+}
+func activeEnrolledAt(t PublicTrust) time.Time {
+	if t.ActiveGeneration == nil {
+		return time.Time{}
+	}
+	for _, c := range t.Credentials {
+		if c.Generation == *t.ActiveGeneration {
+			return c.EnrolledAt
+		}
+	}
+	return time.Time{}
+}
+func maxGeneration(t PublicTrust) uint64 {
+	if len(t.Credentials) == 0 {
+		return 0
+	}
+	return t.Credentials[len(t.Credentials)-1].Generation
+}
+func cloneTrust(t PublicTrust) PublicTrust {
+	data := mustMarshal(t)
+	var out PublicTrust
+	_ = decodeClosed(data, &out)
+	return out
+}
+func mustMarshal(v any) []byte { data, _ := marshalClosed(v); return data }
 
 func (s *Store) resolve(path string) string {
 	if !s.fixture {
@@ -349,7 +509,6 @@ func (s *Store) resolve(path string) string {
 	}
 	return filepath.Join(s.root, strings.TrimPrefix(path, "/"))
 }
-
 func (s *Store) readRecord(path string, mode os.FileMode) ([]byte, error) {
 	resolved := s.resolve(path)
 	dir, base, err := s.openSecureParent(resolved, filepath.Dir(path))
@@ -373,7 +532,6 @@ func (s *Store) readRecord(path string, mode os.FileMode) ([]byte, error) {
 	}
 	return data, nil
 }
-
 func (s *Store) writeRecord(path string, mode os.FileMode, data []byte) error {
 	resolved := s.resolve(path)
 	dir, base, err := s.openSecureParent(resolved, filepath.Dir(path))
@@ -435,14 +593,13 @@ func (s *Store) writeRecord(path string, mode os.FileMode, data []byte) error {
 	}
 	return nil
 }
-
 func (s *Store) openSecureParent(resolved, productionDir string) (*os.Root, string, error) {
 	dirPath := filepath.Dir(resolved)
-	expectedMode := os.FileMode(0o755)
+	mode := os.FileMode(0o755)
 	if productionDir == filepath.Dir(privatePath) {
-		expectedMode = 0o700
+		mode = 0o700
 	}
-	if err := s.validateAncestors(dirPath, expectedMode); err != nil {
+	if err := s.validateAncestors(dirPath, mode); err != nil {
 		return nil, "", err
 	}
 	root, err := os.OpenRoot(dirPath)
@@ -456,13 +613,12 @@ func (s *Store) openSecureParent(resolved, productionDir string) (*os.Root, stri
 	}
 	info, statErr := f.Stat()
 	_ = f.Close()
-	if statErr != nil || !info.IsDir() || info.Mode().Perm() != expectedMode || !ownedBy(info, s.owner) {
+	if statErr != nil || !info.IsDir() || info.Mode().Perm() != mode || !ownedBy(info, s.owner) {
 		root.Close()
 		return nil, "", ErrCorrupt
 	}
 	return root, filepath.Base(resolved), nil
 }
-
 func (s *Store) validateAncestors(dir string, finalMode os.FileMode) error {
 	start := "/"
 	if s.fixture {
@@ -489,37 +645,32 @@ func (s *Store) validateAncestors(dir string, finalMode os.FileMode) error {
 	}
 	return nil
 }
-
 func validFile(info os.FileInfo, owner uint32, mode os.FileMode) bool {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	return ok && info.Mode().IsRegular() && info.Mode().Perm() == mode && stat.Uid == owner && stat.Nlink == 1
 }
-
 func ownedBy(info os.FileInfo, owner uint32) bool {
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	return ok && stat.Uid == owner
 }
-
-func marshalClosed(value any) ([]byte, error) {
-	data, err := json.Marshal(value)
+func marshalClosed(v any) ([]byte, error) {
+	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
 	return append(data, '\n'), nil
 }
-
-func decodeClosed(data []byte, value any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(value); err != nil {
+func decodeClosed(data []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(v); err != nil {
 		return err
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+	if err := d.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return fmt.Errorf("trailing data")
 	}
 	return nil
 }
-
 func digest(data []byte) string {
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
