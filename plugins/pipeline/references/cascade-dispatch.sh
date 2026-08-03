@@ -180,10 +180,16 @@ dispatch_wrapper() {
     case "$rc" in 71|72) return 77;; 70) return 1;; 73|74) return 1;; *) return 2;; esac
   fi
   response="${response%$marker}"
-  metrics="$(printf '%s' "$response" | response_metrics)" || return 2
+  metrics="$(printf '%s' "$response" | response_metrics)" || {
+    rm -f "$system_file" "$prompt_file" "$receipt_file"
+    return 2
+  }
   response_length="$(printf '%s\n' "$metrics" | sed -n '1p')"
   response_digest="$(printf '%s\n' "$metrics" | sed -n '2p')"
-  body_digest="$(request_body_digest "$model" "" "$system_file" "$prompt_file")" || return 2
+  body_digest="$(request_body_digest "$model" "" "$system_file" "$prompt_file")" || {
+    rm -f "$system_file" "$prompt_file" "$receipt_file"
+    return 2
+  }
   if ! validate_provider_result "$receipt_file" "$model" "" "$response_length" "$response_digest" "$body_digest"; then
     rm -f "$system_file" "$prompt_file" "$receipt_file"
     return 2
