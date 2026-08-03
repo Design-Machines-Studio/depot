@@ -101,6 +101,14 @@ func fixture(t *testing.T) (protocol.Request, protocol.Challenge, Config, *fakeC
 	return r, c, config, &fakeClock{now: now}
 }
 
+func retarget(request *protocol.Request, challenge *protocol.Challenge, transactionID, nonce string, sequence uint64) {
+	request.Authority.Nonce = nonce
+	request.Authority.Sequence = sequence
+	challenge.Nonce = nonce
+	challenge.Sequence = sequence
+	challenge.TransactionID = transactionID
+}
+
 func reserve(t *testing.T, fido *fakeFIDO, wal *memoryWAL) (*Manager, protocol.Challenge, Peer, *fakeClock) {
 	t.Helper()
 	request, challenge, config, clock := fixture(t)
@@ -425,6 +433,74 @@ func TestRestartReconstructsBudgetsOncePerTransaction(t *testing.T) {
 	challenge.TransactionID = "transaction-02"
 	if _, err := manager.Reserve(context.Background(), request, challenge, []byte("body"), Peer{UID: 501, PID: 4321}, "connection-02"); err == nil {
 		t.Fatal("restart reset operation budget")
+	}
+}
+
+func TestCancelledReservationsDoNotExhaustSendBudgetAcrossRestart(t *testing.T) {
+	request, challenge, config, clock := fixture(t)
+	config.MaxOperations = 1
+	wal := &memoryWAL{}
+	manager, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer := Peer{UID: 501, PID: 4321}
+	reserved, err := manager.Reserve(context.Background(), request, challenge, []byte("body"), peer, "connection-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.Cancel(context.Background(), reserved.TransactionID); err != nil {
+		t.Fatal(err)
+	}
+
+	retarget(&request, &challenge, "transaction-02", "caller-nonce-02", 8)
+	if _, err := manager.Reserve(context.Background(), request, challenge, []byte("body"), peer, "connection-02"); err != nil {
+		t.Fatalf("cancelled reservation consumed send budget: %v", err)
+	}
+
+	restarted, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retarget(&request, &challenge, "transaction-03", "caller-nonce-03", 9)
+	if _, err := restarted.Reserve(context.Background(), request, challenge, []byte("body"), peer, "connection-03"); err != nil {
+		t.Fatalf("cancelled reservation consumed reconstructed send budget: %v", err)
+	}
+}
+
+func TestFIDOAssertionCounterRollbackRejectedAcrossRestart(t *testing.T) {
+	request, challenge, config, clock := fixture(t)
+	wal := &memoryWAL{}
+	manager, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer := Peer{UID: 501, PID: 4321}
+	reserved, err := manager.Reserve(context.Background(), request, challenge, []byte("body"), peer, "connection-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ := protocol.CanonicalJSON(reserved)
+	if _, err := manager.Authorize(context.Background(), reserved.TransactionID, "connection-01", peer, protocol.Digest(canonical)); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted, err := NewManager(config, &fakeFIDO{}, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retarget(&request, &challenge, "transaction-02", "caller-nonce-02", 8)
+	reserved, err = restarted.Reserve(context.Background(), request, challenge, []byte("body"), peer, "connection-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ = protocol.CanonicalJSON(reserved)
+	if _, err := restarted.Authorize(context.Background(), reserved.TransactionID, "connection-02", peer, protocol.Digest(canonical)); !errors.Is(err, ErrDenied) {
+		t.Fatalf("non-increasing signature counter accepted after restart: %v", err)
+	}
+	restarted.fido = &fakeFIDO{mutate: func(assertion *Assertion) { assertion.Counter = 0 }}
+	if _, err := restarted.Authorize(context.Background(), reserved.TransactionID, "connection-02", peer, protocol.Digest(canonical)); !errors.Is(err, ErrDenied) {
+		t.Fatalf("zero signature counter accepted after nonzero persisted counter: %v", err)
 	}
 }
 

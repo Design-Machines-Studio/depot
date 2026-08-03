@@ -86,6 +86,17 @@ func TestAuthorityHelloAndProposalFrozenBytes(t *testing.T) {
 	}
 }
 
+func TestCanonicalJSONUnicodeSeparatorProfile(t *testing.T) {
+	got, err := CanonicalJSON(map[string]string{"control": "\u0001", "text": "café\u2028x\u2029"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte(`{"control":"\u0001","text":"café\u2028x\u2029"}`)
+	if string(got) != string(want) {
+		t.Fatalf("canonical unicode profile mismatch:\n got %q\nwant %q", got, want)
+	}
+}
+
 func TestAllocationRejectsCallerHostFieldsAndAlteredParts(t *testing.T) {
 	helloBytes, _ := AuthorityHelloBytes(allocationHello(), allocationNow)
 	parts := [][]byte{[]byte("system\n"), []byte("user \xf0\x9f\x8c\x8d\n")}

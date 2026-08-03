@@ -112,7 +112,8 @@ models = [sys.argv[1]] + ([sys.argv[2]] if sys.argv[2] else [])
 body = {"messages": [{"content": os.read(4, 8388609).decode("utf-8"), "role": "system"},
                      {"content": os.read(5, 8388609).decode("utf-8"), "role": "user"}],
         "models": models, "temperature": None}
-raw = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+text = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+raw = text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029").encode()
 print("sha256:" + hashlib.sha256(raw).hexdigest())
 PY
 }

@@ -261,10 +261,11 @@ def _depth_and_items(value: Any, depth: int = 0) -> int:
 def canonical_json(value: Any) -> bytes:
     """Return the cross-language canonical compact JSON representation."""
     try:
-        encoded = json.dumps(
+        text = json.dumps(
             value, ensure_ascii=False, allow_nan=False, sort_keys=True,
             separators=(",", ":"),
-        ).encode("utf-8")
+        )
+        encoded = text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029").encode("utf-8")
     except (TypeError, ValueError, UnicodeError):
         _fail()
     return encoded

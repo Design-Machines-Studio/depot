@@ -488,6 +488,10 @@ class ProviderDispatchContractTests(unittest.TestCase):
 
     def test_chk_m0_02_canonical_json_boundaries(self):
         self.assertEqual(parse_canonical_json(canonical_json(self.request)), self.request)
+        self.assertEqual(
+            canonical_json({"control": "\u0001", "text": "café\u2028x\u2029"}),
+            b'{"control":"\\u0001","text":"caf\xc3\xa9\\u2028x\\u2029"}',
+        )
         cases = (
             b'{"a":1,"a":2}', b'{"n":1.0}', b'{"n":NaN}', b'{"n":01}',
             b'{"a": 1}', b'\xff', b'[' * 17 + b'0' + b']' * 17,

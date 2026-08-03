@@ -13,25 +13,11 @@ caller digest, plugin helper, or caller-selected socket as authority. If the
 fixed client or production-ready status is unavailable, the lane fails closed
 before provider contact.
 
-Direct interactive `/openrouter` remains a distinct compatibility path. It
-supports two explicit disclosure authorization modes:
-
-- `exact-digest` (default): the user approves each distinct ordered payload.
-- `trusted-boundary`: the user opts into automatic authorization for the run;
-  immediately before every send, the canonical disclosure scanner must accept
-  the exact bytes and the authorization helper must verify they are unchanged.
-
-Enable the low-friction interactive mode for a trusted local run with:
-
-```bash
-export OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary
-```
-
-This setting never authorizes automated broker dispatch. For direct
-interactive use, it authorizes policy-accepted payloads, not arbitrary
-disclosure. It
-does not bypass credential detection, exact-byte verification, owned-path
-restrictions, native-vendor rejection, or provider provenance checks.
+Direct interactive `/openrouter` remains a distinct compatibility path. It uses
+only `exact-digest` authorization: the user approves each distinct ordered
+payload. `trusted-boundary` remains low-level compatibility and offline-fixture
+vocabulary, but it is not production disclosure authority and callers must not
+select it for either direct or automated transmission.
 
 ## Direct interactive coherent bundle
 
@@ -61,18 +47,13 @@ For each direct interactive request:
    outbound file. A disclosure decline returns the lane to its trusted local
    fallback without network contact.
 3. Run `payload-authorization.sh snapshot` with the exact files in send order.
-4. Read `OPENROUTER_PAYLOAD_AUTHORIZATION`:
-   - `exact-digest` or unset: if the user has not supplied that lane's combined
-     digest, return `PAYLOAD APPROVAL REQUIRED`. On approval, rebuild the files
-     and run `payload-authorization.sh verify --approved-sha256
-     <user-approved-digest>`.
-   - `trusted-boundary`: run `payload-authorization.sh
-     verify-trusted-boundary --policy <canonical-policy>` with the manifest and
-     exact files. This command reruns the canonical scanner immediately before
-     transmission and verifies the ordered bytes still match the snapshot.
+4. If the user has not supplied that lane's combined digest, return `PAYLOAD
+   APPROVAL REQUIRED`. On approval, rebuild the files and run
+   `payload-authorization.sh verify --approved-sha256
+   <user-approved-digest>`.
 5. Send only successfully verified files through the wrapper and set
-   `OPENROUTER_AUTHORIZATION_MODE` so the content-free provider receipt records
-   `exact-digest` or `trusted-boundary`.
+   `OPENROUTER_AUTHORIZATION_MODE=exact-digest` so the content-free provider
+   receipt records the actual authorization boundary.
 
 The digest authorizes disclosure of those exact ordered content bytes to the
 OpenRouter service. It does not bind model, fallback, endpoint order, sorting,
@@ -87,10 +68,11 @@ authority. A boundary decline is recorded as `host_disclosure_declined` and is
 never retried or routed around. Missing or mismatched exact approval is a
 preparation state, not provider failure and not a clean review result.
 
-`trusted-boundary` is interactive run-scoped authority supplied by the user or
-trusted host environment. Do not persist it into repository files, infer it
-from an API key, enable it merely because OpenRouter was selected as an
-executor, or pass it into the automated broker client.
+Do not persist `trusted-boundary` into repository files, infer authority from an
+API key or successful scanner result, enable it because OpenRouter was selected
+as an executor, or pass it into the automated broker client. Scanner eligibility
+and byte identity are necessary controls, but neither independently authorizes
+disclosure.
 
 ## Broker terminal outcomes
 

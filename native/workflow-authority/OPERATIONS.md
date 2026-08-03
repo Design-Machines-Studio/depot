@@ -22,6 +22,26 @@ macOS will use the same provider-dispatch protocol and receipt verification, but
 this Linux systemd/libfido2 installation workflow does not claim macOS runtime
 support.
 
+## Packaging build gate
+
+Build release artifacts only on a trusted Linux packaging host with Go 1.26.5,
+cgo, `pkg-config`, and exactly libfido2 1.17.0. The production adapter is behind
+the `libfido2` build tag; an untagged build deliberately contains the
+fail-closed fixture adapter and must not be installed as production authority.
+
+```sh
+WORKFLOW_AUTHORITY_REQUIRE_PRODUCTION_BUILD=1 ./tools/validate-workflow-authority.sh
+cd native/workflow-authority
+GOTOOLCHAIN=auto /usr/local/go/bin/go build -tags libfido2 -o workflow-authority ./cmd/workflow-authority
+cp workflow-authority workflow-authority-admin
+GOTOOLCHAIN=auto /usr/local/go/bin/go build -tags libfido2 -o workflow-authorityd ./cmd/workflow-authorityd
+```
+
+The two client filenames intentionally contain the same binary: administrative
+commands are enabled only when its basename is `workflow-authority-admin`.
+Portable/macOS fixture validation is useful protocol evidence, but it is an
+explicit production-build coverage gap rather than Linux/libfido2 proof.
+
 ## Package installation
 
 Run these steps from a trusted, verified package staging directory as root. Do

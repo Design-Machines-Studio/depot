@@ -135,7 +135,8 @@ authority boundaries, cleanup safety, promotion gates, and troubleshooting.
 ## validate-workflow-authority.sh
 
 Runs the native Workflow Authority broker's local release-candidate suite with
-exact Go 1.26.5: normal tests, the race detector, and `go vet`. The suite
+exact Go 1.26.5: normal tests, the race detector, `go vet`, and untagged fixture
+binary builds. The suite
 includes a real Unix-socket exchange across the durable allocator, IPC server,
 authority manager, disclosure scanner, fixture credential reader, loopback TLS
 provider, fixed client verifier, and signed terminal receipt. It also proves
@@ -145,10 +146,19 @@ that replay does not cause a second provider request.
 ./tools/validate-workflow-authority.sh
 ```
 
-This is fixture evidence only. It uses test-only FIDO and TLS adapters, performs
-no root installation or external provider request, and cannot satisfy the live
-Linux systemd, libfido2 hardware, worker-principal, or credential-custody gates.
-Those remain separate operator acceptance evidence.
+On Linux with exactly libfido2 1.17.0, the validator additionally tests, race
+tests, vets, and builds with `-tags libfido2`. A pinned packaging/CI lane must
+require that evidence rather than accepting a local coverage gap:
+
+```bash
+WORKFLOW_AUTHORITY_REQUIRE_PRODUCTION_BUILD=1 ./tools/validate-workflow-authority.sh
+```
+
+Without the pinned Linux dependency, the command reports an explicit
+`COVERAGE-GAP`; it does not claim production build proof. All local modes still
+perform no root installation, hardware gesture, external provider request, or
+worker-principal/credential-custody acceptance. Those remain separate operator
+evidence.
 
 ## validate-quality-pulse.sh
 

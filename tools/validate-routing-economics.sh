@@ -356,6 +356,8 @@ require_text "$wrapper" 'TIMEOUT="${3:-${OPENROUTER_OVERALL_TIMEOUT:-3600}}"' "O
 require_text "$wrapper" 'FIRST_BYTE_TIMEOUT="${OPENROUTER_FIRST_BYTE_TIMEOUT:-600}"' "OpenRouter wrapper allows ten minutes for first response bytes"
 require_text "$wrapper" 'IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"' "OpenRouter wrapper allows ten minutes between stream progress"
 require_text "$runner" 'TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"' "Pipeline OpenRouter execution inherits the one-hour completion budget"
+require_text "$cascade" 'text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")' "pipeline cascade freezes JSON line-separator escaping"
+require_text "$runner" 'text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")' "OpenRouter exec freezes JSON line-separator escaping"
 require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
 require_text "$dm_review" '7200s at or above 10K diff lines' "dm-review bulk analysis scales to a two-hour completion budget"
 require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"

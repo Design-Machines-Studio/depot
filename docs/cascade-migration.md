@@ -66,11 +66,17 @@ export OPENROUTER_API_KEY="sk-or-..."   # direct /openrouter only
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-OPENROUTER_API_KEY set        -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
-neither                       -> Codex-native review
+current automated dm-review  -> Codex-native review (`host_authority_unavailable`)
+future broker-ready host     -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
 ```
 
-Mechanical-agent routing (pattern-recognition, code-simplicity, doc-sync, test-coverage) uses `openrouter-agent-runner`; policy selects each lane's primary and fallback. Security uses separate `security-auditor-openrouter` eligible-content analysis and mandatory `security-auditor-codex-signoff` full-diff completion.
+`OPENROUTER_API_KEY` enables only direct interactive `/openrouter`; it does not
+authorize automated review. The current automated dm-review path stays on Codex
+until the fixed broker reports production-ready. The future broker-enabled and
+dry-run topology sends mechanical review criteria through
+`openrouter-agent-runner`; policy selects each lane's primary and fallback.
+Security retains separate `security-auditor-openrouter` eligible-content
+analysis and mandatory `security-auditor-codex-signoff` full-diff completion.
 
 ## Dry-run / verify (no API key needed)
 

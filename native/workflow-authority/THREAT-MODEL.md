@@ -72,10 +72,12 @@ external approval station is required to close that residual risk.
 - Wrong scope, stale time, replayed nonce/sequence, mutated payload, destination
   change, model downgrade, disclosure-policy match, mixed failure provenance,
   cancellation, or terminal-delivery failure cannot yield a successful result.
-- Linux is the first production runtime. macOS shares the canonical protocol,
-  receipt verification, public trust format, FIDO adapter, and client peer
-  verification, but the daemon intentionally fails closed until launchd socket
-  activation and macOS service packaging are implemented and tested.
+- Linux is the first production runtime. macOS shares protocol schemas,
+  canonical receipt validation, the public trust format, the client-side peer
+  verification interface, and the fixed response-pipe contract. It does not yet
+  have the production FIDO adapter, root platform/admin composition,
+  peer-authenticated daemon runtime, launchd socket activation, or service
+  packaging; production use therefore fails closed.
 - Broader Pipeline, dm-review, research, assessment, adversarial-review, Airlift,
   and direct interactive migration can follow without changing the shared
   protocol. Until each caller is migrated, it retains its existing fail-closed

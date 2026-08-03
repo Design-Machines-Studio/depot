@@ -804,8 +804,8 @@ documented_openrouter_exec="$(printf '%s\n' "$fallback_block" | awk -F'|' '
     value=$4
     sub(/^[[:space:]]*/, "", value)
     sub(/[[:space:]]*$/, "", value)
-    print value
-    exit
+    if (!found) print value
+    found=1
   }
 ')"
 expected_openrouter_exec='GLM-5.2 -> DeepSeek V4 Flash -> Kimi K3 -> Grok 4.5 -> MiniMax-M3'

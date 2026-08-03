@@ -217,23 +217,25 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now().UTC() }
 
 type Event struct {
-	Version           int            `json:"version"`
-	TransactionID     string         `json:"transaction_id"`
-	Nonce             string         `json:"nonce"`
-	Sequence          uint64         `json:"sequence"`
-	BootID            string         `json:"boot_id"`
-	SessionID         string         `json:"session_id"`
-	State             State          `json:"state"`
-	RequestBodySHA256 string         `json:"request_body_sha256"`
-	Scope             protocol.Scope `json:"scope"`
-	ChallengeSHA256   string         `json:"challenge_sha256,omitempty"`
-	AssertionSHA256   string         `json:"assertion_sha256,omitempty"`
-	SignerPublicKey   string         `json:"signer_public_key,omitempty"`
-	TerminalSHA256    string         `json:"terminal_sha256,omitempty"`
-	Outcome           string         `json:"outcome,omitempty"`
-	RequestBytes      int64          `json:"request_bytes"`
-	ResponseBytes     int64          `json:"response_bytes"`
-	At                string         `json:"at"`
+	Version              int            `json:"version"`
+	TransactionID        string         `json:"transaction_id"`
+	Nonce                string         `json:"nonce"`
+	Sequence             uint64         `json:"sequence"`
+	BootID               string         `json:"boot_id"`
+	SessionID            string         `json:"session_id"`
+	State                State          `json:"state"`
+	RequestBodySHA256    string         `json:"request_body_sha256"`
+	Scope                protocol.Scope `json:"scope"`
+	ChallengeSHA256      string         `json:"challenge_sha256,omitempty"`
+	AssertionSHA256      string         `json:"assertion_sha256,omitempty"`
+	SignerPublicKey      string         `json:"signer_public_key,omitempty"`
+	TerminalSHA256       string         `json:"terminal_sha256,omitempty"`
+	Outcome              string         `json:"outcome,omitempty"`
+	RequestBytes         int64          `json:"request_bytes"`
+	ResponseBytes        int64          `json:"response_bytes"`
+	CredentialGeneration uint64         `json:"credential_generation,omitempty"`
+	SignCount            uint32         `json:"sign_count,omitempty"`
+	At                   string         `json:"at"`
 }
 
 type WAL interface {
@@ -401,11 +403,16 @@ func NewManager(config Config, fido FIDO, wal WAL, clock Clock) (*Manager, error
 	for _, event := range events {
 		m.nonces[event.Nonce] = struct{}{}
 		m.sequences[event.Sequence] = struct{}{}
+		if event.CredentialGeneration == m.config.Credential.Generation && event.SignCount > m.config.Credential.SignCount {
+			m.config.Credential.SignCount = event.SignCount
+		}
 		latest[event.TransactionID] = event
 	}
 	for _, event := range latest {
-		m.operations++
-		m.bytes += event.RequestBytes + event.ResponseBytes
+		if consumesSendBudget(event) {
+			m.operations++
+			m.bytes += event.RequestBytes + event.ResponseBytes
+		}
 		if event.State == SendStarted {
 			event.State = Terminal
 			event.Outcome = "outcome_unknown"
@@ -470,8 +477,6 @@ func (m *Manager) Reserve(ctx context.Context, request protocol.Request, challen
 	}
 	m.nonces[event.Nonce] = struct{}{}
 	m.sequences[event.Sequence] = struct{}{}
-	m.operations++
-	m.bytes += requestBytes
 	m.records[event.TransactionID] = &reservation{event: event, request: request, challenge: challenge, connectionID: connectionID, peer: peer, private: private}
 	return challenge, nil
 }
@@ -533,7 +538,8 @@ func (m *Manager) Authorize(ctx context.Context, transactionID, connectionID str
 	if err != nil {
 		return Assertion{}, redactFIDO(err)
 	}
-	if assertion.HostPINRequested || !assertion.UserPresence || !assertion.UserVerification || assertion.Generation != credential.Generation || assertion.CredentialReference != credential.Reference {
+	counterRollback := (assertion.Counter != 0 || credential.SignCount != 0) && assertion.Counter <= credential.SignCount
+	if assertion.HostPINRequested || !assertion.UserPresence || !assertion.UserVerification || assertion.Generation != credential.Generation || assertion.CredentialReference != credential.Reference || counterRollback {
 		return Assertion{}, ErrDenied
 	}
 	if err := m.fido.Verify(ctx, input, credential, assertion); err != nil {
@@ -549,11 +555,16 @@ func (m *Manager) Authorize(ctx context.Context, transactionID, connectionID str
 	next := record.event
 	next.State = Authorized
 	next.AssertionSHA256 = fmt.Sprintf("sha256:%x", digest)
+	next.CredentialGeneration = credential.Generation
+	next.SignCount = assertion.Counter
 	next.At = m.clock.Now().Format(time.RFC3339)
 	if err := m.wal.Append(ctx, next); err != nil {
 		return Assertion{}, err
 	}
 	record.event = next
+	if assertion.Counter != 0 {
+		m.config.Credential.SignCount = assertion.Counter
+	}
 	return assertion, nil
 }
 
@@ -571,6 +582,9 @@ func (m *Manager) BeginSend(ctx context.Context, transactionID, connectionID str
 	if record.cancelled {
 		return SendRight{}, ErrConflict
 	}
+	if m.operations >= m.config.MaxOperations || m.bytes+record.event.RequestBytes > m.config.MaxBytes {
+		return SendRight{}, ErrConflict
+	}
 	next := record.event
 	next.State = SendStarted
 	next.At = m.clock.Now().Format(time.RFC3339)
@@ -578,7 +592,19 @@ func (m *Manager) BeginSend(ctx context.Context, transactionID, connectionID str
 		return SendRight{}, err
 	}
 	record.event = next
+	m.operations++
+	m.bytes += record.event.RequestBytes
 	return SendRight{TransactionID: transactionID}, nil
+}
+
+func consumesSendBudget(event Event) bool {
+	if event.State == SendStarted || event.State == Terminal {
+		return true
+	}
+	if event.State != Cleanup {
+		return false
+	}
+	return event.Outcome == "verified" || event.Outcome == "provider_failure" || event.Outcome == "outcome_unknown"
 }
 
 // Finalize consumes send authority with one durable cleanup record. The
