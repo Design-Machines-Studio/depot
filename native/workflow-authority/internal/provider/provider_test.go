@@ -31,7 +31,7 @@ func fixtureRequest(parts [][]byte) protocol.Request {
 	for i, p := range parts {
 		declared[i] = protocol.Part{Role: roles[i%2], ContentLength: int64(len(p)), ContentSHA256: protocol.Digest(p)}
 	}
-	return protocol.Request{SchemaVersion: 1, Protocol: protocol.Name, Mapping: protocol.Mapping, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Destination: protocol.Destination, Method: protocol.Method, Path: protocol.Path, Models: []string{"openai/gpt-5.6", "z-ai/glm-5.2"}, Parts: declared, Scope: protocol.Scope{Repository: "repo", RunID: "run", Lane: "lane", Candidate: "candidate", Workload: "workload"}, Authority: protocol.Authority{DaemonBuildSHA256: d, ScannerBuildSHA256: ScannerBuildDigest, PolicySHA256: d, Nonce: "nonce", Sequence: 1, BootID: "boot", SessionID: "session", ConnectionNonceSHA256: d, IssuedAt: "2026-08-03T00:00:00Z", ExpiresAt: "2026-08-03T00:02:00Z", PriorChainDigest: d}, Limits: protocol.Limits{MaxRequestBytes: 8388608, MaxResponseBytes: 8388608, MaxParts: 256, MaxPendingPerPeer: 4, MaxPendingRepository: 16, MaxPendingDaemon: 64}}
+	return protocol.Request{SchemaVersion: 1, Protocol: protocol.Name, Mapping: protocol.Mapping, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Destination: protocol.Destination, Method: protocol.Method, Path: protocol.Path, Models: []string{"openai/gpt-5.6", "z-ai/glm-5.2"}, Parts: declared, Scope: protocol.Scope{Repository: "repo", RunID: "run", Lane: "lane", Candidate: "candidate", Workload: "workload"}, Authority: protocol.Authority{DaemonBuildSHA256: d, ScannerBuildSHA256: ScannerBuildDigest, PolicySHA256: d, Nonce: "caller-nonce", Sequence: 1, BootID: "boot", SessionID: "session", ConnectionNonceSHA256: d, IssuedAt: "2026-08-03T00:00:00Z", ExpiresAt: "2026-08-03T00:02:00Z", PriorChainDigest: d, AllocationHelloSHA256: d, DispatchProposalSHA256: d}, Limits: protocol.Limits{MaxRequestBytes: 8388608, MaxResponseBytes: 8388608, MaxParts: 256, MaxPendingPerPeer: 4, MaxPendingRepository: 16, MaxPendingDaemon: 64}}
 }
 func repeat(s string, n int) string {
 	out := ""
@@ -226,7 +226,7 @@ func TestDispatcherRejectsSubstitutionBeforeRealManagerAuthorization(t *testing.
 		t.Fatal(err)
 	}
 	peer := authority.Peer{UID: 501, PID: 4321}
-	c := protocol.Challenge{SchemaVersion: req.SchemaVersion, Protocol: req.Protocol, Mapping: req.Mapping, OperationFamily: req.OperationFamily, SubstrateAuthority: req.SubstrateAuthority, TransactionID: "transaction-01", ConnectionNonceSHA256: req.Authority.ConnectionNonceSHA256, PeerUID: peer.UID, PeerPID: peer.PID, RequestBodySHA256: protocol.Digest(body), Destination: req.Destination, Method: req.Method, Path: req.Path, Models: append([]string(nil), req.Models...), Scope: req.Scope, DaemonBuildSHA256: req.Authority.DaemonBuildSHA256, ScannerBuildSHA256: req.Authority.ScannerBuildSHA256, PolicySHA256: req.Authority.PolicySHA256, Nonce: req.Authority.Nonce, Sequence: req.Authority.Sequence, BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, IssuedAt: req.Authority.IssuedAt, ExpiresAt: req.Authority.ExpiresAt, Limits: req.Limits, PriorChainDigest: req.Authority.PriorChainDigest}
+	c := protocol.Challenge{SchemaVersion: req.SchemaVersion, Protocol: req.Protocol, Mapping: req.Mapping, OperationFamily: req.OperationFamily, SubstrateAuthority: req.SubstrateAuthority, TransactionID: "transaction-01", ConnectionNonceSHA256: req.Authority.ConnectionNonceSHA256, PeerUID: peer.UID, PeerPID: peer.PID, RequestBodySHA256: protocol.Digest(body), Destination: req.Destination, Method: req.Method, Path: req.Path, Models: append([]string(nil), req.Models...), Scope: req.Scope, DaemonBuildSHA256: req.Authority.DaemonBuildSHA256, ScannerBuildSHA256: req.Authority.ScannerBuildSHA256, PolicySHA256: req.Authority.PolicySHA256, Nonce: req.Authority.Nonce, Sequence: req.Authority.Sequence, BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, IssuedAt: req.Authority.IssuedAt, ExpiresAt: req.Authority.ExpiresAt, Limits: req.Limits, PriorChainDigest: req.Authority.PriorChainDigest, AllocationHelloSHA256: req.Authority.AllocationHelloSHA256, DispatchProposalSHA256: req.Authority.DispatchProposalSHA256}
 	fido := &providerFIDO{}
 	wal := &providerMemoryWAL{}
 	manager, err := authority.NewManager(authority.Config{BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, AllowedUIDs: map[uint32]struct{}{peer.UID: {}}, MaxOperations: 8, MaxBytes: 32 << 20, MaxConcurrent: 4, Credential: authority.Credential{Reference: "credential-1", PublicKey: []byte("public"), Algorithm: -7, Generation: 1, RPID: "workflow-authority.designmachines.local", Status: "active", InternalUV: true}}, fido, wal, providerClock{now})
@@ -240,7 +240,16 @@ func TestDispatcherRejectsSubstitutionBeforeRealManagerAuthorization(t *testing.
 	canonical, _ := protocol.CanonicalJSON(bound)
 	d := Dispatcher{Scanner: BuiltinScanner{}, Policy: policyFixture(), Credentials: rejectingReader{}, Transport: &Transport{}, Authority: manager, Clock: func() time.Time { return now }}
 	base := DispatchInput{Request: req, Challenge: bound, Parts: parts, TransactionID: bound.TransactionID, ConnectionID: "connection-1", ConsentChallengeDigest: protocol.Digest(canonical), Peer: peer}
-	mutations := []func(*DispatchInput){func(v *DispatchInput) { v.Challenge.Scope.RunID = "other" }, func(v *DispatchInput) { v.Challenge.Models[0] = "other/model" }, func(v *DispatchInput) { v.Challenge.DaemonBuildSHA256 = protocol.Digest([]byte("other")) }, func(v *DispatchInput) { v.ConsentChallengeDigest = protocol.Digest([]byte("other")) }, func(v *DispatchInput) { v.Request.SubstrateAuthority = "asserted" }}
+	mutations := []func(*DispatchInput){
+		func(v *DispatchInput) { v.Challenge.Scope.RunID = "other" },
+		func(v *DispatchInput) { v.Challenge.Models[0] = "other/model" },
+		func(v *DispatchInput) { v.Challenge.DaemonBuildSHA256 = protocol.Digest([]byte("other")) },
+		func(v *DispatchInput) { v.Challenge.Nonce = "other-caller-nonce" },
+		func(v *DispatchInput) { v.Challenge.AllocationHelloSHA256 = protocol.Digest([]byte("other-hello")) },
+		func(v *DispatchInput) { v.Challenge.DispatchProposalSHA256 = protocol.Digest([]byte("other-proposal")) },
+		func(v *DispatchInput) { v.ConsentChallengeDigest = protocol.Digest([]byte("other")) },
+		func(v *DispatchInput) { v.Request.SubstrateAuthority = "asserted" },
+	}
 	for i, mutate := range mutations {
 		v := base
 		v.Challenge = bound
@@ -270,7 +279,7 @@ func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
 	req.Authority.PolicySHA256 = protocol.Digest(policyFixture())
 	body, _ := BuildBody(req, parts)
 	peer := authority.Peer{UID: 501, PID: 4321}
-	c := protocol.Challenge{SchemaVersion: req.SchemaVersion, Protocol: req.Protocol, Mapping: req.Mapping, OperationFamily: req.OperationFamily, SubstrateAuthority: req.SubstrateAuthority, TransactionID: "transaction-positive", ConnectionNonceSHA256: req.Authority.ConnectionNonceSHA256, PeerUID: peer.UID, PeerPID: peer.PID, RequestBodySHA256: protocol.Digest(body), Destination: req.Destination, Method: req.Method, Path: req.Path, Models: append([]string(nil), req.Models...), Scope: req.Scope, DaemonBuildSHA256: req.Authority.DaemonBuildSHA256, ScannerBuildSHA256: req.Authority.ScannerBuildSHA256, PolicySHA256: req.Authority.PolicySHA256, Nonce: req.Authority.Nonce, Sequence: req.Authority.Sequence, BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, IssuedAt: req.Authority.IssuedAt, ExpiresAt: req.Authority.ExpiresAt, Limits: req.Limits, PriorChainDigest: req.Authority.PriorChainDigest}
+	c := protocol.Challenge{SchemaVersion: req.SchemaVersion, Protocol: req.Protocol, Mapping: req.Mapping, OperationFamily: req.OperationFamily, SubstrateAuthority: req.SubstrateAuthority, TransactionID: "transaction-positive", ConnectionNonceSHA256: req.Authority.ConnectionNonceSHA256, PeerUID: peer.UID, PeerPID: peer.PID, RequestBodySHA256: protocol.Digest(body), Destination: req.Destination, Method: req.Method, Path: req.Path, Models: append([]string(nil), req.Models...), Scope: req.Scope, DaemonBuildSHA256: req.Authority.DaemonBuildSHA256, ScannerBuildSHA256: req.Authority.ScannerBuildSHA256, PolicySHA256: req.Authority.PolicySHA256, Nonce: req.Authority.Nonce, Sequence: req.Authority.Sequence, BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, IssuedAt: req.Authority.IssuedAt, ExpiresAt: req.Authority.ExpiresAt, Limits: req.Limits, PriorChainDigest: req.Authority.PriorChainDigest, AllocationHelloSHA256: req.Authority.AllocationHelloSHA256, DispatchProposalSHA256: req.Authority.DispatchProposalSHA256}
 	fido := &providerFIDO{}
 	manager, err := authority.NewManager(authority.Config{BootID: req.Authority.BootID, SessionID: req.Authority.SessionID, AllowedUIDs: map[uint32]struct{}{peer.UID: {}}, MaxOperations: 8, MaxBytes: 32 << 20, MaxConcurrent: 4, Credential: authority.Credential{Reference: "credential-1", PublicKey: []byte("public"), Algorithm: -7, Generation: 1, RPID: "workflow-authority.designmachines.local", Status: "active", InternalUV: true}}, fido, &providerMemoryWAL{}, providerClock{now})
 	if err != nil {
@@ -296,6 +305,14 @@ func TestDispatcherFixtureFinalizesOnceAndClosesTerminal(t *testing.T) {
 	}
 	if result.GenerationID != "generation-fixture" || result.ServingProvider != "fixture-provider" || result.UsageSHA256 != protocol.Digest([]byte(`{"total_tokens":2}`)) || result.Fallback {
 		t.Fatalf("provider provenance mismatch: %+v", result)
+	}
+	terminalInput, err := protocol.TerminalSignatureInput(result)
+	if err != nil || protocol.VerifyTerminalES256(bound.ResultSigner.PublicKeySEC1, result.Signature.SignatureDER, terminalInput) != nil {
+		t.Fatalf("provider terminal signer projection mismatch: %v", err)
+	}
+	canonicalResult, _ := protocol.CanonicalJSON(result)
+	if string(canonicalResult) != string(sink.terminal) {
+		t.Fatal("provider terminal bytes differ from signed typed result")
 	}
 	if _, err := d.Dispatch(context.Background(), input, &captureSink{id: "connection-positive"}); err == nil {
 		t.Fatal("replay accepted")

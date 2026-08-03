@@ -74,6 +74,7 @@ _AUTHORITY_FIELDS = frozenset({
     "daemon_build_sha256", "scanner_build_sha256", "policy_sha256",
     "nonce", "sequence", "boot_id", "session_id", "connection_nonce_sha256",
     "issued_at", "expires_at", "prior_chain_digest",
+    "allocation_hello_sha256", "dispatch_proposal_sha256",
 })
 _LIMIT_FIELDS = frozenset({
     "max_request_bytes", "max_response_bytes", "max_parts",
@@ -86,7 +87,8 @@ _CHALLENGE_FIELDS = frozenset({
     "path", "models", "scope", "daemon_build_sha256", "scanner_build_sha256",
     "policy_sha256", "nonce", "sequence", "boot_id", "session_id", "issued_at",
     "expires_at", "limits", "result_signer", "authority_assertion",
-    "prior_chain_digest",
+    "prior_chain_digest", "allocation_hello_sha256",
+    "dispatch_proposal_sha256",
 })
 _ACK_FIELDS = frozenset({"schema_version", "protocol", "type", "challenge_sha256"})
 _AUTHORITY_HELLO_FIELDS = frozenset({
@@ -176,9 +178,9 @@ FROZEN_ALLOCATION_EXCHANGE = MappingProxyType({
     "first_frame": "daemon-u32be-canonical-authority_hello",
     "next_frame": "caller-u32be-canonical-dispatch_proposal",
     "request_parts": "caller-ordered-u64be-exact-utf8",
-    "allocation_ordering": "global-serialized-sequence",
-    "endpoint_discovery": "fixed-trusted-endpoint-only",
-    "ancillary_descriptors": "reject",
+    "allocation_ordering": "required-global-serialized-sequence",
+    "endpoint_discovery": "required-fixed-trusted-endpoint-only",
+    "ancillary_descriptors": "required-reject",
 })
 
 SAFE_ERROR_EXITS = {
@@ -188,9 +190,6 @@ SAFE_ERROR_EXITS = {
     "authorization_replayed": EXIT_AUTHORIZATION_DECLINED,
     "consent_connection_invalid": EXIT_AUTHORIZATION_DECLINED,
     "authority_unavailable": EXIT_AUTHORITY_UNAVAILABLE,
-    "provider_failure": EXIT_PROVIDER_FAILURE,
-    "provider_result_unknown": EXIT_UNKNOWN,
-    "result_verification_failed": EXIT_RESULT_VERIFICATION,
 }
 SAFE_ERROR_NETWORK_ATTEMPTED = {
     "disclosure_declined": False,
@@ -199,9 +198,6 @@ SAFE_ERROR_NETWORK_ATTEMPTED = {
     "authorization_replayed": False,
     "consent_connection_invalid": False,
     "authority_unavailable": False,
-    "provider_failure": True,
-    "provider_result_unknown": True,
-    "result_verification_failed": True,
 }
 
 FROZEN_TRUST_CHAIN = {
@@ -397,7 +393,7 @@ def validate_request(document: Any, part_bytes: Sequence[bytes] | None = None) -
         _fail("part_frame_mismatch")
     _scope(request["scope"])
     authority = _object(request["authority"], _AUTHORITY_FIELDS)
-    for field in ("daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "connection_nonce_sha256", "prior_chain_digest"):
+    for field in ("daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "connection_nonce_sha256", "prior_chain_digest", "allocation_hello_sha256", "dispatch_proposal_sha256"):
         _digest(authority[field])
     for field in ("nonce", "boot_id", "session_id"):
         _string(authority[field])
@@ -490,7 +486,7 @@ def validate_challenge(document: Any) -> dict[str, Any]:
         _fail("terminal_binding_invalid")
     for field in ("destination", "method", "path"):
         _plain_string(challenge[field])
-    for field in ("connection_nonce_sha256", "request_body_sha256", "daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "prior_chain_digest"):
+    for field in ("connection_nonce_sha256", "request_body_sha256", "daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "prior_chain_digest", "allocation_hello_sha256", "dispatch_proposal_sha256"):
         _digest(challenge[field])
     _integer(challenge["peer_uid"])
     _integer(challenge["peer_pid"], 1)
@@ -515,7 +511,7 @@ def validate_consent_ack(document: Any) -> dict[str, Any]:
 
 
 def validate_authority_hello(
-    document: Any, *, now: datetime | None = None,
+    document: Any, *, now: datetime,
 ) -> dict[str, Any]:
     """Validate the daemon-first, content-free allocation frame."""
     hello = _object(document, _AUTHORITY_HELLO_FIELDS)
@@ -542,14 +538,13 @@ def validate_authority_hello(
         _fail()
     if expires <= issued or int((expires - issued).total_seconds()) != limits["allocation_ttl_seconds"]:
         _fail("authorization_expired")
-    if now is not None:
-        if now.tzinfo is None or now.utcoffset() is None:
-            _fail()
-        current = now.astimezone(timezone.utc)
-        if issued > current:
-            _fail()
-        if current >= expires:
-            _fail("authorization_expired")
+    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+        _fail()
+    current = now.astimezone(timezone.utc)
+    if issued > current:
+        _fail()
+    if current >= expires:
+        _fail("authorization_expired")
     return hello
 
 
@@ -601,12 +596,53 @@ def validate_dispatch_proposal(
     return proposal
 
 
-def authority_hello_bytes(document: Mapping[str, Any], *, now: datetime | None = None) -> bytes:
+def authority_hello_bytes(document: Mapping[str, Any], *, now: datetime) -> bytes:
     return canonical_json(validate_authority_hello(document, now=now))
 
 
 def dispatch_proposal_bytes(document: Mapping[str, Any], part_bytes: Sequence[bytes]) -> bytes:
     return canonical_json(validate_dispatch_proposal(document, part_bytes))
+
+
+def bind_allocation_request(
+    hello: Mapping[str, Any], proposal: Mapping[str, Any],
+    part_bytes: Sequence[bytes], *, now: datetime,
+) -> dict[str, Any]:
+    """Synthesize closed request v1 without performing transport or allocation."""
+    hello_bytes = authority_hello_bytes(hello, now=now)
+    if sha256(hello_bytes) != proposal.get("authority_hello_sha256"):
+        _fail("terminal_binding_invalid")
+    proposal_bytes = dispatch_proposal_bytes(proposal, part_bytes)
+    request = {
+        "schema_version": SCHEMA_VERSION, "protocol": PROTOCOL,
+        "mapping": proposal["mapping"],
+        "operation_family": proposal["operation_family"],
+        "substrate_authority": proposal["substrate_authority"],
+        "destination": proposal["destination"], "method": proposal["method"],
+        "path": proposal["path"], "models": list(proposal["models"]),
+        "parts": [dict(part) for part in proposal["parts"]],
+        "scope": dict(proposal["scope"]),
+        "authority": {
+            "daemon_build_sha256": hello["daemon_build_sha256"],
+            "scanner_build_sha256": hello["scanner_build_sha256"],
+            "policy_sha256": hello["policy_sha256"],
+            "nonce": proposal["caller_nonce"], "sequence": hello["sequence"],
+            "boot_id": hello["boot_id"], "session_id": hello["session_id"],
+            "connection_nonce_sha256": hello["connection_nonce_sha256"],
+            "issued_at": hello["issued_at"], "expires_at": hello["expires_at"],
+            "prior_chain_digest": hello["prior_chain_digest"],
+            "allocation_hello_sha256": sha256(hello_bytes),
+            "dispatch_proposal_sha256": sha256(proposal_bytes),
+        },
+        "limits": {
+            "max_request_bytes": MAX_REQUEST_BYTES,
+            "max_response_bytes": MAX_RESPONSE_BYTES, "max_parts": MAX_PARTS,
+            "max_pending_per_peer": MAX_PENDING_PER_PEER,
+            "max_pending_per_repository": MAX_PENDING_PER_REPOSITORY,
+            "max_pending_per_daemon": MAX_PENDING_PER_DAEMON,
+        },
+    }
+    return validate_request(request, part_bytes)
 
 
 def validate_authorization_proof(document: Any) -> dict[str, Any]:
@@ -702,7 +738,7 @@ def validate_exchange(document: Any) -> dict[str, Any]:
         validate_authorization_proof(exchange["authorization_proof"])
     if exchange["result"] is not None:
         validate_result(exchange["result"])
-    if exchange["safe_error"] is not None and exchange["safe_error"] not in ERROR_CODES:
+    if exchange["safe_error"] is not None and exchange["safe_error"] not in SAFE_ERROR_EXITS:
         _fail()
     for field in ("consumed", "network_attempted", "response_retrievable"):
         if type(exchange[field]) is not bool:
@@ -716,7 +752,7 @@ def validate_exchange(document: Any) -> dict[str, Any]:
         "authorized": (True, True, True, False, False, False, False),
         "sent": (True, True, True, False, False, False, True),
         "terminal": (True, True, True, True, False, True, True),
-        "tombstone": (exchange["challenge"] is not None, exchange["consent_ack"] is not None, exchange["authorization_proof"] is not None, False, True, True, exchange["network_attempted"]),
+        "tombstone": (exchange["challenge"] is not None, exchange["consent_ack"] is not None, exchange["authorization_proof"] is not None, False, not exchange["network_attempted"], True, exchange["network_attempted"]),
     }
     actual = (
         exchange["challenge"] is not None, exchange["consent_ack"] is not None,
@@ -739,7 +775,10 @@ def validate_exchange(document: Any) -> dict[str, Any]:
             request["method"] == challenge["method"], request["path"] == challenge["path"],
             request["models"] == challenge["models"], request["scope"] == challenge["scope"],
             authority["sequence"] == challenge["sequence"],
+            authority["nonce"] == challenge["nonce"],
             authority["prior_chain_digest"] == challenge["prior_chain_digest"],
+            authority["allocation_hello_sha256"] == challenge["allocation_hello_sha256"],
+            authority["dispatch_proposal_sha256"] == challenge["dispatch_proposal_sha256"],
             authority["issued_at"] == challenge["issued_at"],
             authority["expires_at"] == challenge["expires_at"],
         )
@@ -962,6 +1001,8 @@ def validate_authority_binding(
         "session_id": authority["session_id"], "issued_at": authority["issued_at"],
         "expires_at": authority["expires_at"], "limits": request["limits"],
         "prior_chain_digest": authority["prior_chain_digest"],
+        "allocation_hello_sha256": authority["allocation_hello_sha256"],
+        "dispatch_proposal_sha256": authority["dispatch_proposal_sha256"],
     }
     if any(challenge[field] != value for field, value in expected.items()):
         _fail("terminal_binding_invalid")
@@ -1101,7 +1142,7 @@ class FakeBroker:
             _fail("consent_connection_invalid")
         return reservation
 
-    def _tombstone(self, reservation: _Reservation, code: str) -> None:
+    def _tombstone(self, reservation: _Reservation, code: str | None) -> None:
         reservation.state = "tombstone"
         reservation.consumed = True
         reservation.safe_error = code
@@ -1221,7 +1262,7 @@ class FakeBroker:
     def disconnect(self, transaction_id: str, connection_id: str) -> None:
         reservation = self._owned(transaction_id, connection_id)
         code = (
-            "provider_result_unknown" if reservation.state == "sent"
+            None if reservation.state == "sent"
             else "consent_connection_invalid" if reservation.state == "challenged"
             else "authorization_declined"
         )

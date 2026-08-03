@@ -43,7 +43,7 @@ func allocationProposal(helloDigest string, parts [][]byte) DispatchProposal {
 }
 
 func TestAuthorityHelloAndProposalFrozenBytes(t *testing.T) {
-	if AllocationFirstFrame != "daemon-u32be-canonical-authority_hello" || AllocationNextFrame != "caller-u32be-canonical-dispatch_proposal" || AllocationOrdering != "global-serialized-sequence" || AllocationDiscovery != "fixed-trusted-endpoint-only" {
+	if AllocationFirstFrame != "daemon-u32be-canonical-authority_hello" || AllocationNextFrame != "caller-u32be-canonical-dispatch_proposal" || AllocationOrdering != "required-global-serialized-sequence" || AllocationDiscovery != "required-fixed-trusted-endpoint-only" || AllocationAncillary != "required-reject" {
 		t.Fatal("allocation exchange ordering drifted")
 	}
 	hello := allocationHello()
@@ -62,6 +62,27 @@ func TestAuthorityHelloAndProposalFrozenBytes(t *testing.T) {
 	}
 	if got := Digest(proposalBytes); got != "sha256:6e2f9d1a114effc6f5b2812af231f2f794b6002a8b96c807e4e47e72d6321fd6" {
 		t.Fatalf("proposal bytes drifted: %s\n%s", got, proposalBytes)
+	}
+	request, err := BindAllocationRequest(hello, proposal, parts, allocationNow)
+	if err != nil || request.Authority.Nonce != proposal.CallerNonce || request.Authority.AllocationHelloSHA256 != Digest(helloBytes) || request.Authority.DispatchProposalSHA256 != Digest(proposalBytes) {
+		t.Fatalf("allocation request binding mismatch: %+v %v", request.Authority, err)
+	}
+	wrongHelloDigest := proposal
+	wrongHelloDigest.AuthorityHelloSHA256 = "sha256:" + strings.Repeat("0", 64)
+	if _, err := BindAllocationRequest(hello, wrongHelloDigest, parts, allocationNow); err == nil {
+		t.Fatal("proposal from another hello accepted")
+	}
+	otherHello := hello
+	otherHello.ConnectionNonceSHA256 = "sha256:" + strings.Repeat("6", 64)
+	if _, err := BindAllocationRequest(otherHello, proposal, parts, allocationNow); err == nil {
+		t.Fatal("same-connection hello substitution accepted")
+	}
+	otherNonce := proposal
+	otherNonce.CallerNonce = "caller-nonce-02"
+	boundOtherNonce, err := BindAllocationRequest(hello, otherNonce, parts, allocationNow)
+	otherProposalBytes, _ := DispatchProposalBytes(otherNonce, parts)
+	if err != nil || boundOtherNonce.Authority.Nonce != otherNonce.CallerNonce || boundOtherNonce.Authority.DispatchProposalSHA256 != Digest(otherProposalBytes) || boundOtherNonce.Authority.DispatchProposalSHA256 == request.Authority.DispatchProposalSHA256 {
+		t.Fatal("caller nonce was not bound through the proposal digest")
 	}
 }
 
@@ -95,6 +116,11 @@ func TestAllocationTimeAndLifecycleLimitsFailClosed(t *testing.T) {
 		t.Fatalf("parallel allocation downgrade accepted: %v", err)
 	}
 	hello = allocationHello()
+	hello.Sequence = uint64(^uint64(0)>>1) + 1
+	if err := ValidateAuthorityHello(hello, allocationNow); err != ErrInvalidDocument {
+		t.Fatalf("cross-language sequence overflow accepted: %v", err)
+	}
+	hello = allocationHello()
 	hello.ExpiresAt = "2026-08-03T00:03:00Z"
 	if err := ValidateAuthorityHello(hello, allocationNow); err != ErrInvalidDocument {
 		t.Fatalf("non-frozen TTL accepted: %v", err)
@@ -106,11 +132,11 @@ func TestTypedConsentSafeErrorAndTerminalES256Projection(t *testing.T) {
 	if err := ValidateConsentAck(ConsentAck{SchemaVersion: 1, Protocol: Name, Type: ConsentAckType, ChallengeSHA256: digest}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateSafeError(SafeError{SchemaVersion: 1, Protocol: Name, Type: SafeErrorType, Code: "provider_failure", ExitCode: 73, Consumed: true, NetworkAttempted: true}); err != nil {
+	if err := ValidateSafeError(SafeError{SchemaVersion: 1, Protocol: Name, Type: SafeErrorType, Code: "authorization_declined", ExitCode: 71, Consumed: true, NetworkAttempted: false}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateSafeError(SafeError{SchemaVersion: 1, Protocol: Name, Type: SafeErrorType, Code: "provider_failure", ExitCode: 73, Consumed: true, NetworkAttempted: false}); err == nil {
-		t.Fatal("provider failure network state downgrade accepted")
+	if err := ValidateSafeError(SafeError{SchemaVersion: 1, Protocol: Name, Type: SafeErrorType, Code: "provider_failure", ExitCode: 73, Consumed: true, NetworkAttempted: true}); err == nil {
+		t.Fatal("post-send outcome accepted as unsigned safe error")
 	}
 	document := map[string]any{"schema_version": 1, "protocol": Name, "outcome": "verified", "signature": map[string]any{"kind": "es256", "signature_der": "placeholder"}}
 	input, err := TerminalSignatureInput(document)

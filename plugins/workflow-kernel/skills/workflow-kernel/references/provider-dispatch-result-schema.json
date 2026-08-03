@@ -13,7 +13,7 @@
     "response_length": {"type": "integer", "minimum": 0, "maximum": 8388608}, "part_count": {"type": "integer", "minimum": 1, "maximum": 256},
     "models": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/id"}}, "selected_model": {"$ref": "#/$defs/id"}, "provider": {"const": "openrouter"},
     "generation_id": {"$ref": "#/$defs/id"}, "serving_provider": {"$ref": "#/$defs/id"}, "usage_sha256": {"$ref": "#/$defs/digest"}, "fallback": {"type": "boolean"},
-    "scope": {"$ref": "#/$defs/scope"}, "sequence": {"type": "integer", "minimum": 1}, "issued_at": {"$ref": "#/$defs/time"}, "completed_at": {"$ref": "#/$defs/time"},
+    "scope": {"$ref": "#/$defs/scope"}, "sequence": {"type": "integer", "minimum": 1, "maximum": 9223372036854775807}, "issued_at": {"$ref": "#/$defs/time"}, "completed_at": {"$ref": "#/$defs/time"},
     "challenge_sha256": {"$ref": "#/$defs/digest"}, "authority_assertion_sha256": {"$ref": "#/$defs/digest"}, "result_signer_sha256": {"$ref": "#/$defs/digest"}, "prior_chain_digest": {"$ref": "#/$defs/digest"},
     "cleanup": {"type": "object", "additionalProperties": false, "required": ["reservation", "connection", "content_buffer"], "properties": {"reservation": {"const": "consumed"}, "connection": {"const": "closed"}, "content_buffer": {"const": "discarded"}}},
     "signature": {"oneOf": [{"$ref": "#/$defs/es256_signature"}, {"$ref": "#/$defs/fixture_signature"}]}

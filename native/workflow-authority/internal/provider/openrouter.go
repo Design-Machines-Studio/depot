@@ -434,12 +434,11 @@ func (d *Dispatcher) Dispatch(ctx context.Context, in DispatchInput, sink Respon
 	signerBytes, _ := protocol.CanonicalJSON(in.Challenge.ResultSigner)
 	selected := projected.Model
 	result := TerminalResult{SchemaVersion: 1, Protocol: protocol.Name, OperationFamily: "external_provider_dispatch", SubstrateAuthority: "not_asserted", Outcome: "verified", ExitCode: 0, RequestBodySHA256: protocol.Digest(body), ResponseSHA256: responseDigest, ResponseLength: responseLength, PartCount: len(in.Parts), Models: append([]string(nil), in.Request.Models...), SelectedModel: &selected, Provider: "openrouter", GenerationID: projected.ID, ServingProvider: projected.Provider, UsageSHA256: usageDigest, Fallback: selected != in.Request.Models[0], Scope: in.Request.Scope, Sequence: in.Request.Authority.Sequence, IssuedAt: in.Request.Authority.IssuedAt, CompletedAt: d.now().Format(time.RFC3339), ChallengeSHA256: protocol.Digest(challengeBytes), AuthorityAssertionSHA256: protocol.Digest(assertionBytes), ResultSignerSHA256: protocol.Digest(signerBytes), PriorChainDigest: in.Request.Authority.PriorChainDigest, Cleanup: Cleanup{Reservation: "consumed", Connection: "closed", ContentBuffer: "discarded"}, Signature: Signature{Kind: "es256"}}
-	unsignedBytes, _ := protocol.CanonicalJSON(result)
-	var unsigned map[string]any
-	_ = json.Unmarshal(unsignedBytes, &unsigned)
-	delete(unsigned, "signature")
-	canonical, _ := protocol.CanonicalJSON(unsigned)
-	terminalInput := append([]byte("workflow-authority\x00provider-dispatch-v1\x00terminal\x00"), canonical...)
+	terminalInput, terminalInputErr := protocol.TerminalSignatureInput(result)
+	if terminalInputErr != nil {
+		_ = d.Authority.Finalize(context.Background(), right, responseLength, "outcome_unknown", "")
+		return TerminalResult{}, ErrBinding
+	}
 	if err := d.Authority.Finalize(ctx, right, responseLength, "verified", protocol.Digest(terminalInput)); err != nil {
 		return TerminalResult{}, err
 	}
@@ -468,7 +467,7 @@ func validateBoundSnapshot(in DispatchInput, now time.Time) error {
 		return ErrBinding
 	}
 	r, c, a := in.Request, in.Challenge, in.Request.Authority
-	if in.TransactionID != c.TransactionID || c.SchemaVersion != r.SchemaVersion || c.Protocol != r.Protocol || c.Mapping != r.Mapping || c.OperationFamily != r.OperationFamily || c.SubstrateAuthority != r.SubstrateAuthority || c.ConnectionNonceSHA256 != a.ConnectionNonceSHA256 || c.Destination != r.Destination || c.Method != r.Method || c.Path != r.Path || !sameStrings(c.Models, r.Models) || c.Scope != r.Scope || c.DaemonBuildSHA256 != a.DaemonBuildSHA256 || c.ScannerBuildSHA256 != a.ScannerBuildSHA256 || c.PolicySHA256 != a.PolicySHA256 || c.Nonce != a.Nonce || c.Sequence != a.Sequence || c.BootID != a.BootID || c.SessionID != a.SessionID || c.IssuedAt != a.IssuedAt || c.ExpiresAt != a.ExpiresAt || c.PriorChainDigest != a.PriorChainDigest || c.AuthorityAssertion != nil || c.PeerUID != in.Peer.UID || c.PeerPID != in.Peer.PID {
+	if in.TransactionID != c.TransactionID || c.SchemaVersion != r.SchemaVersion || c.Protocol != r.Protocol || c.Mapping != r.Mapping || c.OperationFamily != r.OperationFamily || c.SubstrateAuthority != r.SubstrateAuthority || c.ConnectionNonceSHA256 != a.ConnectionNonceSHA256 || c.Destination != r.Destination || c.Method != r.Method || c.Path != r.Path || !sameStrings(c.Models, r.Models) || c.Scope != r.Scope || c.DaemonBuildSHA256 != a.DaemonBuildSHA256 || c.ScannerBuildSHA256 != a.ScannerBuildSHA256 || c.PolicySHA256 != a.PolicySHA256 || c.Nonce != a.Nonce || c.Sequence != a.Sequence || c.BootID != a.BootID || c.SessionID != a.SessionID || c.IssuedAt != a.IssuedAt || c.ExpiresAt != a.ExpiresAt || c.PriorChainDigest != a.PriorChainDigest || c.AllocationHelloSHA256 != a.AllocationHelloSHA256 || c.DispatchProposalSHA256 != a.DispatchProposalSHA256 || c.AuthorityAssertion != nil || c.PeerUID != in.Peer.UID || c.PeerPID != in.Peer.PID {
 		return ErrBinding
 	}
 	if r.Destination != protocol.Destination || r.Method != protocol.Method || r.Path != protocol.Path || r.Mapping != protocol.Mapping || r.OperationFamily != "external_provider_dispatch" || r.SubstrateAuthority != "not_asserted" || strings.TrimSpace(a.DaemonBuildSHA256) == "" {

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"time"
 )
@@ -56,17 +57,19 @@ type Limits struct {
 }
 
 type Authority struct {
-	DaemonBuildSHA256     string `json:"daemon_build_sha256"`
-	ScannerBuildSHA256    string `json:"scanner_build_sha256"`
-	PolicySHA256          string `json:"policy_sha256"`
-	Nonce                 string `json:"nonce"`
-	Sequence              uint64 `json:"sequence"`
-	BootID                string `json:"boot_id"`
-	SessionID             string `json:"session_id"`
-	ConnectionNonceSHA256 string `json:"connection_nonce_sha256"`
-	IssuedAt              string `json:"issued_at"`
-	ExpiresAt             string `json:"expires_at"`
-	PriorChainDigest      string `json:"prior_chain_digest"`
+	DaemonBuildSHA256      string `json:"daemon_build_sha256"`
+	ScannerBuildSHA256     string `json:"scanner_build_sha256"`
+	PolicySHA256           string `json:"policy_sha256"`
+	Nonce                  string `json:"nonce"`
+	Sequence               uint64 `json:"sequence"`
+	BootID                 string `json:"boot_id"`
+	SessionID              string `json:"session_id"`
+	ConnectionNonceSHA256  string `json:"connection_nonce_sha256"`
+	IssuedAt               string `json:"issued_at"`
+	ExpiresAt              string `json:"expires_at"`
+	PriorChainDigest       string `json:"prior_chain_digest"`
+	AllocationHelloSHA256  string `json:"allocation_hello_sha256"`
+	DispatchProposalSHA256 string `json:"dispatch_proposal_sha256"`
 }
 
 type Part struct {
@@ -97,34 +100,36 @@ type ResultSigner struct {
 }
 
 type Challenge struct {
-	SchemaVersion         int          `json:"schema_version"`
-	Protocol              string       `json:"protocol"`
-	Mapping               string       `json:"mapping"`
-	OperationFamily       string       `json:"operation_family"`
-	SubstrateAuthority    string       `json:"substrate_authority"`
-	TransactionID         string       `json:"transaction_id"`
-	ConnectionNonceSHA256 string       `json:"connection_nonce_sha256"`
-	PeerUID               uint32       `json:"peer_uid"`
-	PeerPID               int32        `json:"peer_pid"`
-	RequestBodySHA256     string       `json:"request_body_sha256"`
-	Destination           string       `json:"destination"`
-	Method                string       `json:"method"`
-	Path                  string       `json:"path"`
-	Models                []string     `json:"models"`
-	Scope                 Scope        `json:"scope"`
-	DaemonBuildSHA256     string       `json:"daemon_build_sha256"`
-	ScannerBuildSHA256    string       `json:"scanner_build_sha256"`
-	PolicySHA256          string       `json:"policy_sha256"`
-	Nonce                 string       `json:"nonce"`
-	Sequence              uint64       `json:"sequence"`
-	BootID                string       `json:"boot_id"`
-	SessionID             string       `json:"session_id"`
-	IssuedAt              string       `json:"issued_at"`
-	ExpiresAt             string       `json:"expires_at"`
-	Limits                Limits       `json:"limits"`
-	ResultSigner          ResultSigner `json:"result_signer"`
-	AuthorityAssertion    any          `json:"authority_assertion"`
-	PriorChainDigest      string       `json:"prior_chain_digest"`
+	SchemaVersion          int          `json:"schema_version"`
+	Protocol               string       `json:"protocol"`
+	Mapping                string       `json:"mapping"`
+	OperationFamily        string       `json:"operation_family"`
+	SubstrateAuthority     string       `json:"substrate_authority"`
+	TransactionID          string       `json:"transaction_id"`
+	ConnectionNonceSHA256  string       `json:"connection_nonce_sha256"`
+	PeerUID                uint32       `json:"peer_uid"`
+	PeerPID                int32        `json:"peer_pid"`
+	RequestBodySHA256      string       `json:"request_body_sha256"`
+	Destination            string       `json:"destination"`
+	Method                 string       `json:"method"`
+	Path                   string       `json:"path"`
+	Models                 []string     `json:"models"`
+	Scope                  Scope        `json:"scope"`
+	DaemonBuildSHA256      string       `json:"daemon_build_sha256"`
+	ScannerBuildSHA256     string       `json:"scanner_build_sha256"`
+	PolicySHA256           string       `json:"policy_sha256"`
+	Nonce                  string       `json:"nonce"`
+	Sequence               uint64       `json:"sequence"`
+	BootID                 string       `json:"boot_id"`
+	SessionID              string       `json:"session_id"`
+	IssuedAt               string       `json:"issued_at"`
+	ExpiresAt              string       `json:"expires_at"`
+	Limits                 Limits       `json:"limits"`
+	ResultSigner           ResultSigner `json:"result_signer"`
+	AuthorityAssertion     any          `json:"authority_assertion"`
+	PriorChainDigest       string       `json:"prior_chain_digest"`
+	AllocationHelloSHA256  string       `json:"allocation_hello_sha256"`
+	DispatchProposalSHA256 string       `json:"dispatch_proposal_sha256"`
 }
 
 func Digest(payload []byte) string {
@@ -275,7 +280,7 @@ func ValidateRequest(r Request, now time.Time) error {
 			return ErrInvalidDocument
 		}
 	}
-	for _, digest := range []string{r.Authority.DaemonBuildSHA256, r.Authority.ScannerBuildSHA256, r.Authority.PolicySHA256, r.Authority.ConnectionNonceSHA256, r.Authority.PriorChainDigest} {
+	for _, digest := range []string{r.Authority.DaemonBuildSHA256, r.Authority.ScannerBuildSHA256, r.Authority.PolicySHA256, r.Authority.ConnectionNonceSHA256, r.Authority.PriorChainDigest, r.Authority.AllocationHelloSHA256, r.Authority.DispatchProposalSHA256} {
 		if !digestPattern.MatchString(digest) {
 			return ErrInvalidDocument
 		}
@@ -288,7 +293,7 @@ func ValidateRequest(r Request, now time.Time) error {
 		return errors.New("authorization_expired")
 	}
 	issued, err := time.Parse(time.RFC3339, r.Authority.IssuedAt)
-	if err != nil || issued.After(now) || !issued.Before(expires) || r.Authority.Sequence == 0 {
+	if err != nil || issued.After(now) || !issued.Before(expires) || r.Authority.Sequence == 0 || r.Authority.Sequence > math.MaxInt64 {
 		return ErrInvalidDocument
 	}
 	return nil

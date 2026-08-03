@@ -462,7 +462,7 @@ func (m *Manager) Reserve(ctx context.Context, request protocol.Request, challen
 
 func exactBinding(r protocol.Request, c protocol.Challenge) error {
 	a := r.Authority
-	if c.SchemaVersion != r.SchemaVersion || c.Protocol != r.Protocol || c.Mapping != r.Mapping || c.OperationFamily != r.OperationFamily || c.SubstrateAuthority != r.SubstrateAuthority || c.ConnectionNonceSHA256 != a.ConnectionNonceSHA256 || c.Destination != r.Destination || c.Method != r.Method || c.Path != r.Path || !equalStrings(c.Models, r.Models) || c.Scope != r.Scope || c.DaemonBuildSHA256 != a.DaemonBuildSHA256 || c.ScannerBuildSHA256 != a.ScannerBuildSHA256 || c.PolicySHA256 != a.PolicySHA256 || c.Nonce != a.Nonce || c.Sequence != a.Sequence || c.BootID != a.BootID || c.SessionID != a.SessionID || c.IssuedAt != a.IssuedAt || c.ExpiresAt != a.ExpiresAt || c.PriorChainDigest != a.PriorChainDigest {
+	if c.SchemaVersion != r.SchemaVersion || c.Protocol != r.Protocol || c.Mapping != r.Mapping || c.OperationFamily != r.OperationFamily || c.SubstrateAuthority != r.SubstrateAuthority || c.ConnectionNonceSHA256 != a.ConnectionNonceSHA256 || c.Destination != r.Destination || c.Method != r.Method || c.Path != r.Path || !equalStrings(c.Models, r.Models) || c.Scope != r.Scope || c.DaemonBuildSHA256 != a.DaemonBuildSHA256 || c.ScannerBuildSHA256 != a.ScannerBuildSHA256 || c.PolicySHA256 != a.PolicySHA256 || c.Nonce != a.Nonce || c.Sequence != a.Sequence || c.BootID != a.BootID || c.SessionID != a.SessionID || c.IssuedAt != a.IssuedAt || c.ExpiresAt != a.ExpiresAt || c.PriorChainDigest != a.PriorChainDigest || c.AllocationHelloSHA256 != a.AllocationHelloSHA256 || c.DispatchProposalSHA256 != a.DispatchProposalSHA256 {
 		return ErrDenied
 	}
 	return nil

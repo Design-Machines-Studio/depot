@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math"
 	"time"
 	"unicode/utf8"
 )
@@ -20,9 +21,9 @@ const (
 	AllocationFirstFrame = "daemon-u32be-canonical-authority_hello"
 	AllocationNextFrame  = "caller-u32be-canonical-dispatch_proposal"
 	AllocationPartFrames = "caller-ordered-u64be-exact-utf8"
-	AllocationOrdering   = "global-serialized-sequence"
-	AllocationDiscovery  = "fixed-trusted-endpoint-only"
-	AllocationAncillary  = "reject"
+	AllocationOrdering   = "required-global-serialized-sequence"
+	AllocationDiscovery  = "required-fixed-trusted-endpoint-only"
+	AllocationAncillary  = "required-reject"
 )
 
 type AllocationLimits struct {
@@ -101,7 +102,7 @@ type SafeError struct {
 }
 
 func ValidateAuthorityHello(hello AuthorityHello, now time.Time) error {
-	if hello.SchemaVersion != Version || hello.Protocol != Name || hello.Type != AuthorityHelloType || hello.Limits != FrozenAllocationLimits() || hello.Sequence == 0 {
+	if hello.SchemaVersion != Version || hello.Protocol != Name || hello.Type != AuthorityHelloType || hello.Limits != FrozenAllocationLimits() || hello.Sequence == 0 || hello.Sequence > math.MaxInt64 {
 		return ErrInvalidDocument
 	}
 	for _, digest := range []string{hello.DaemonBuildSHA256, hello.ScannerBuildSHA256, hello.PolicySHA256, hello.PriorChainDigest, hello.ConnectionNonceSHA256} {
@@ -181,6 +182,33 @@ func DispatchProposalBytes(proposal DispatchProposal, partBytes [][]byte) ([]byt
 	return CanonicalJSON(proposal)
 }
 
+// BindAllocationRequest synthesizes the existing closed v1 request from the
+// two allocation frames. It is transport-neutral and performs no allocation.
+func BindAllocationRequest(hello AuthorityHello, proposal DispatchProposal, partBytes [][]byte, now time.Time) (Request, error) {
+	helloBytes, err := AuthorityHelloBytes(hello, now)
+	if err != nil || Digest(helloBytes) != proposal.AuthorityHelloSHA256 {
+		return Request{}, ErrInvalidDocument
+	}
+	proposalBytes, err := DispatchProposalBytes(proposal, partBytes)
+	if err != nil {
+		return Request{}, err
+	}
+	return Request{
+		SchemaVersion: Version, Protocol: Name, Mapping: proposal.Mapping,
+		OperationFamily: proposal.OperationFamily, SubstrateAuthority: proposal.SubstrateAuthority,
+		Destination: proposal.Destination, Method: proposal.Method, Path: proposal.Path,
+		Models: append([]string(nil), proposal.Models...), Parts: append([]Part(nil), proposal.Parts...), Scope: proposal.Scope,
+		Authority: Authority{
+			DaemonBuildSHA256: hello.DaemonBuildSHA256, ScannerBuildSHA256: hello.ScannerBuildSHA256,
+			PolicySHA256: hello.PolicySHA256, Nonce: proposal.CallerNonce, Sequence: hello.Sequence,
+			BootID: hello.BootID, SessionID: hello.SessionID, ConnectionNonceSHA256: hello.ConnectionNonceSHA256,
+			IssuedAt: hello.IssuedAt, ExpiresAt: hello.ExpiresAt, PriorChainDigest: hello.PriorChainDigest,
+			AllocationHelloSHA256: Digest(helloBytes), DispatchProposalSHA256: Digest(proposalBytes),
+		},
+		Limits: Limits{MaxRequestBytes: 8_388_608, MaxResponseBytes: 8_388_608, MaxParts: 256, MaxPendingPerPeer: 4, MaxPendingRepository: 16, MaxPendingDaemon: 64},
+	}, nil
+}
+
 func ValidateConsentAck(ack ConsentAck) error {
 	if ack.SchemaVersion != Version || ack.Protocol != Name || ack.Type != ConsentAckType || !digestPattern.MatchString(ack.ChallengeSHA256) {
 		return ErrInvalidDocument
@@ -190,14 +218,12 @@ func ValidateConsentAck(ack ConsentAck) error {
 
 var safeErrorExit = map[string]int{
 	"authorization_declined": 71, "authorization_expired": 71, "authorization_replayed": 71,
-	"consent_connection_invalid": 71, "disclosure_declined": 72, "provider_failure": 73,
-	"provider_result_unknown": 74, "result_verification_failed": 75, "authority_unavailable": 70,
+	"consent_connection_invalid": 71, "disclosure_declined": 72, "authority_unavailable": 70,
 }
 
 var safeErrorNetworkAttempted = map[string]bool{
 	"authorization_declined": false, "authorization_expired": false, "authorization_replayed": false,
 	"consent_connection_invalid": false, "disclosure_declined": false, "authority_unavailable": false,
-	"provider_failure": true, "provider_result_unknown": true, "result_verification_failed": true,
 }
 
 func ValidateSafeError(value SafeError) error {
