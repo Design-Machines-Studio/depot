@@ -14,7 +14,9 @@ import os
 import re
 import stat
 import struct
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 
@@ -87,6 +89,21 @@ _CHALLENGE_FIELDS = frozenset({
     "prior_chain_digest",
 })
 _ACK_FIELDS = frozenset({"schema_version", "protocol", "type", "challenge_sha256"})
+_AUTHORITY_HELLO_FIELDS = frozenset({
+    "schema_version", "protocol", "type", "daemon_build_sha256",
+    "scanner_build_sha256", "policy_sha256", "boot_id", "session_id",
+    "sequence", "issued_at", "expires_at", "prior_chain_digest",
+    "connection_nonce_sha256", "limits",
+})
+_ALLOCATION_LIMIT_FIELDS = frozenset({
+    "max_request_bytes", "max_response_bytes", "max_parts",
+    "max_active_allocations", "allocation_ttl_seconds", "cancellation",
+})
+_DISPATCH_PROPOSAL_FIELDS = frozenset({
+    "schema_version", "protocol", "type", "mapping", "operation_family",
+    "substrate_authority", "destination", "method", "path", "models",
+    "parts", "scope", "caller_nonce", "authority_hello_sha256",
+})
 _AUTHORIZATION_PROOF_FIELDS = frozenset({
     "schema_version", "protocol", "type", "challenge_sha256",
     "authority_assertion",
@@ -144,6 +161,25 @@ FROZEN_EXCHANGE = {
     "stdout": "one-content-free-terminal-json",
     "client_response_buffer_bytes": MAX_RESPONSE_BYTES,
 }
+
+FROZEN_ALLOCATION_LIMITS = MappingProxyType({
+    "max_request_bytes": MAX_REQUEST_BYTES,
+    "max_response_bytes": MAX_RESPONSE_BYTES,
+    "max_parts": MAX_PARTS,
+    "max_active_allocations": 1,
+    "allocation_ttl_seconds": 120,
+    "cancellation": "consume_tombstone",
+})
+
+FROZEN_ALLOCATION_EXCHANGE = MappingProxyType({
+    "transport": "unix-sock-stream-single-connection",
+    "first_frame": "daemon-u32be-canonical-authority_hello",
+    "next_frame": "caller-u32be-canonical-dispatch_proposal",
+    "request_parts": "caller-ordered-u64be-exact-utf8",
+    "allocation_ordering": "global-serialized-sequence",
+    "endpoint_discovery": "fixed-trusted-endpoint-only",
+    "ancillary_descriptors": "reject",
+})
 
 SAFE_ERROR_EXITS = {
     "disclosure_declined": EXIT_DISCLOSURE_DECLINED,
@@ -476,6 +512,101 @@ def validate_consent_ack(document: Any) -> dict[str, Any]:
         _fail("consent_connection_invalid")
     _digest(ack["challenge_sha256"])
     return ack
+
+
+def validate_authority_hello(
+    document: Any, *, now: datetime | None = None,
+) -> dict[str, Any]:
+    """Validate the daemon-first, content-free allocation frame."""
+    hello = _object(document, _AUTHORITY_HELLO_FIELDS)
+    _fixed(hello)
+    if hello["type"] != "authority_hello":
+        _fail("exchange_state_invalid")
+    for field in (
+        "daemon_build_sha256", "scanner_build_sha256", "policy_sha256",
+        "prior_chain_digest", "connection_nonce_sha256",
+    ):
+        _digest(hello[field])
+    for field in ("boot_id", "session_id"):
+        _string(hello[field])
+    _integer(hello["sequence"], 1)
+    _string(hello["issued_at"], pattern=_TIME)
+    _string(hello["expires_at"], pattern=_TIME)
+    limits = _object(hello["limits"], _ALLOCATION_LIMIT_FIELDS)
+    if limits != FROZEN_ALLOCATION_LIMITS:
+        _fail("bounds_exceeded")
+    try:
+        issued = datetime.strptime(hello["issued_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        expires = datetime.strptime(hello["expires_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        _fail()
+    if expires <= issued or int((expires - issued).total_seconds()) != limits["allocation_ttl_seconds"]:
+        _fail("authorization_expired")
+    if now is not None:
+        if now.tzinfo is None or now.utcoffset() is None:
+            _fail()
+        current = now.astimezone(timezone.utc)
+        if issued > current:
+            _fail()
+        if current >= expires:
+            _fail("authorization_expired")
+    return hello
+
+
+def validate_dispatch_proposal(
+    document: Any, part_bytes: Sequence[bytes] | None = None,
+) -> dict[str, Any]:
+    """Validate only caller-owned proposal fields and their ordered bytes."""
+    proposal = _object(document, _DISPATCH_PROPOSAL_FIELDS)
+    _fixed(proposal)
+    if (
+        proposal["type"] != "dispatch_proposal"
+        or proposal["mapping"] != MAPPING
+        or proposal["operation_family"] != OPERATION_FAMILY
+        or proposal["substrate_authority"] != SUBSTRATE_AUTHORITY
+        or proposal["destination"] != "https://openrouter.ai"
+        or proposal["method"] != "POST"
+        or proposal["path"] != "/api/v1/chat/completions"
+    ):
+        _fail()
+    _string(proposal["caller_nonce"])
+    _digest(proposal["authority_hello_sha256"])
+    _strings(proposal["models"])
+    if len(set(proposal["models"])) != len(proposal["models"]):
+        _fail("content_order_invalid")
+    _scope(proposal["scope"])
+    parts = proposal["parts"]
+    if type(parts) is not list or not parts or len(parts) > MAX_PARTS:
+        _fail("bounds_exceeded")
+    if part_bytes is not None and len(part_bytes) != len(parts):
+        _fail("part_frame_mismatch")
+    total = 0
+    for index, raw_part in enumerate(parts):
+        part = _object(raw_part, _PART_FIELDS)
+        if part["role"] not in _ROLE:
+            _fail()
+        length = _integer(part["content_length"], 0, MAX_FRAME_BYTES)
+        _digest(part["content_sha256"])
+        total += length
+        if part_bytes is not None:
+            raw = part_bytes[index]
+            if type(raw) is not bytes or len(raw) != length or sha256(raw) != part["content_sha256"]:
+                _fail("part_frame_mismatch")
+            try:
+                raw.decode("utf-8", errors="strict")
+            except UnicodeError:
+                _fail("part_frame_mismatch")
+    if total > MAX_REQUEST_BYTES:
+        _fail("bounds_exceeded")
+    return proposal
+
+
+def authority_hello_bytes(document: Mapping[str, Any], *, now: datetime | None = None) -> bytes:
+    return canonical_json(validate_authority_hello(document, now=now))
+
+
+def dispatch_proposal_bytes(document: Mapping[str, Any], part_bytes: Sequence[bytes]) -> bytes:
+    return canonical_json(validate_dispatch_proposal(document, part_bytes))
 
 
 def validate_authorization_proof(document: Any) -> dict[str, Any]:

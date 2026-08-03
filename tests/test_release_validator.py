@@ -45,6 +45,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "browser-recovery-schema.json",
             "cleanup-plan-schema.json",
             "cleanup-receipt-schema.json",
+            "provider-dispatch-allocation-schema.json",
             "provider-dispatch-exchange-schema.json",
             "provider-dispatch-request-schema.json",
             "provider-dispatch-result-schema.json",
