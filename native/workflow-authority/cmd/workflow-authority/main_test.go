@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 	"syscall"
 	"testing"
@@ -47,13 +48,20 @@ type errorWriter struct{}
 func (errorWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
 
 type fakeProviderClient struct {
-	status    []byte
-	statusErr error
+	status       []byte
+	statusErr    error
+	result       client.Result
+	dispatchErr  error
+	options      client.DispatchOptions
+	system, user []byte
 }
 
-func (f fakeProviderClient) Status(context.Context) ([]byte, error) { return f.status, f.statusErr }
-func (fakeProviderClient) Dispatch(context.Context, client.DispatchOptions, io.Reader, io.Reader) (client.Result, error) {
-	return client.Result{}, client.ErrUnavailable
+func (f *fakeProviderClient) Status(context.Context) ([]byte, error) { return f.status, f.statusErr }
+func (f *fakeProviderClient) Dispatch(_ context.Context, options client.DispatchOptions, system, user io.Reader) (client.Result, error) {
+	f.options = options
+	f.system, _ = io.ReadAll(system)
+	f.user, _ = io.ReadAll(user)
+	return f.result, f.dispatchErr
 }
 
 func withFakes(t *testing.T, p localPlatform, terminal adminTerminal) {
@@ -174,9 +182,86 @@ func TestExactProviderCLIAndStatus(t *testing.T) {
 	}
 	var stdout, stderr bytes.Buffer
 	status := []byte(`{"m1_acceptance":true,"production_ready":true,"protocol":"workflow-authority-provider-dispatch-v1","schema_version":1}`)
-	if code := runProvider(fakeProviderClient{status: status}, "provider-transport-status", nil, &stdout, &stderr); code != 0 || stdout.String() != string(status)+"\n" || stderr.Len() != 0 {
+	if code := runProvider(&fakeProviderClient{status: status}, "provider-transport-status", nil, &stdout, &stderr); code != 0 || stdout.String() != string(status)+"\n" || stderr.Len() != 0 {
 		t.Fatalf("status code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
+}
+
+func TestFullDispatchCLIUsesExactDescriptorsAndSeparatesReceipt(t *testing.T) {
+	stdout, response := runDispatchHelper(t, "verified")
+	if string(response) != "verified-response" || string(stdout) != "{\"outcome\":\"verified\"}\n" {
+		t.Fatalf("descriptor separation failed response=%q stdout=%q", response, stdout)
+	}
+}
+
+func TestUnsignedPostDialAmbiguityUsesExit75WithoutOutput(t *testing.T) {
+	stdout, response := runDispatchHelper(t, "uncertain")
+	if len(response) != 0 || len(stdout) != 0 {
+		t.Fatalf("unsigned ambiguity emitted output response=%q stdout=%q", response, stdout)
+	}
+}
+
+func runDispatchHelper(t *testing.T, helperCase string) ([]byte, []byte) {
+	t.Helper()
+	system, err := os.CreateTemp(t.TempDir(), "system")
+	if err != nil {
+		t.Fatal(err)
+	}
+	user, err := os.CreateTemp(t.TempDir(), "user")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := system.WriteString("system-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := user.WriteString("user-secret"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := system.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := user.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	responseRead, responseWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer responseRead.Close()
+	command := exec.Command(os.Args[0], "-test.run=^TestDispatchCLIHelper$")
+	command.Env = append(os.Environ(), "DM_CLIENT_FD_HELPER=1", "DM_CLIENT_FD_CASE="+helperCase)
+	command.ExtraFiles = []*os.File{responseWrite, system, user}
+	stdout, err := command.Output()
+	_ = responseWrite.Close()
+	_ = system.Close()
+	_ = user.Close()
+	if err != nil {
+		t.Fatalf("dispatch helper: %v", err)
+	}
+	response, err := io.ReadAll(responseRead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return stdout, response
+}
+
+func TestDispatchCLIHelper(t *testing.T) {
+	if os.Getenv("DM_CLIENT_FD_HELPER") != "1" {
+		return
+	}
+	providerClient := &fakeProviderClient{result: client.Result{Receipt: []byte(`{"outcome":"verified"}`), Response: []byte("verified-response"), ExitCode: 0}}
+	expectedCode := 0
+	if os.Getenv("DM_CLIENT_FD_CASE") == "uncertain" {
+		providerClient.result = client.Result{}
+		providerClient.dispatchErr = client.ErrUncertain
+		expectedCode = exitVerification
+	}
+	args := []string{"--repository", "owner/repo", "--run-id", "run-1", "--lane", "lane-1", "--candidate", "candidate-1", "--workload", "workload-1", "--nonce", "nonce-1", "--model", "openai/gpt-5", "--fallback-model", "", "--system-fd", "4", "--user-fd", "5", "--response-fd", "3"}
+	code := runProvider(providerClient, "dispatch-provider-request", args, os.Stdout, os.Stderr)
+	if code != expectedCode || string(providerClient.system) != "system-secret" || string(providerClient.user) != "user-secret" || providerClient.options.Repository != "owner/repo" {
+		os.Exit(99)
+	}
+	os.Exit(0)
 }
 
 func TestProviderEnvironmentIsScrubbed(t *testing.T) {

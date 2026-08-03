@@ -44,7 +44,7 @@ type Result struct {
 	ExitCode int
 }
 
-type terminalOpener func() (authority.ConsentTerminal, io.Closer, error)
+type consentConfirmer func(context.Context, protocol.Challenge) error
 
 type Runner struct {
 	socketPath, trustPath     string
@@ -52,7 +52,7 @@ type Runner struct {
 	expectedOwner             uint32
 	now                       func() time.Time
 	dial                      func(context.Context, string) (net.Conn, error)
-	openTerminal              terminalOpener
+	confirm                   consentConfirmer
 	fido                      authority.FIDO
 }
 
@@ -61,10 +61,7 @@ func NewProduction() *Runner {
 	r.dial = func(ctx context.Context, path string) (net.Conn, error) {
 		return (&net.Dialer{Timeout: 5 * time.Second}).DialContext(ctx, "unix", path)
 	}
-	r.openTerminal = func() (authority.ConsentTerminal, io.Closer, error) {
-		terminal, err := authority.OpenControllingTerminal()
-		return terminal, terminal, err
-	}
+	r.confirm = confirmProductionConsent
 	return r
 }
 
@@ -86,6 +83,15 @@ func (r *Runner) Dispatch(ctx context.Context, options DispatchOptions, system, 
 		return Result{}, ErrUnavailable
 	}
 	defer conn.Close()
+	stopCancellation := make(chan struct{})
+	defer close(stopCancellation)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-stopCancellation:
+		}
+	}()
 	_ = conn.SetDeadline(time.Now().Add(2 * time.Minute))
 
 	helloRaw, err := protocol.ReadFrame(conn)
@@ -120,13 +126,17 @@ func (r *Runner) Dispatch(ctx context.Context, options DispatchOptions, system, 
 	if protocol.DecodeClosed(challengeRaw, &challenge) != nil || validateChallenge(request, challenge, parts, r.now()) != nil {
 		return Result{}, ErrUncertain
 	}
-	terminal, closer, err := r.openTerminal()
-	if err != nil {
+	if validateFresh(request, r.now()) != nil {
+		return Result{}, ErrUncertain
+	}
+	if err := r.confirm(ctx, challenge); err != nil {
+		if ctx.Err() != nil {
+			return Result{}, ErrUncertain
+		}
 		return Result{}, ErrDeclined
 	}
-	defer closer.Close()
-	if authority.ConfirmExactScope(terminal, challenge) != nil {
-		return Result{}, ErrDeclined
+	if validateFresh(request, r.now()) != nil {
+		return Result{}, ErrUncertain
 	}
 	ack := protocol.ConsentAck{SchemaVersion: protocol.Version, Protocol: protocol.Name, Type: protocol.ConsentAckType, ChallengeSHA256: protocol.Digest(challengeRaw)}
 	ackRaw, _ := protocol.CanonicalJSON(ack)
@@ -136,6 +146,9 @@ func (r *Runner) Dispatch(ctx context.Context, options DispatchOptions, system, 
 
 	proofRaw, err := protocol.ReadFrame(conn)
 	if err != nil {
+		return Result{}, ErrUncertain
+	}
+	if validateFresh(request, r.now()) != nil {
 		return Result{}, ErrUncertain
 	}
 	proof, assertion, err := decodeAndVerifyProof(ctx, proofRaw, challengeRaw, credential, r.fido)
@@ -151,14 +164,21 @@ func (r *Runner) Dispatch(ctx context.Context, options DispatchOptions, system, 
 	if err != nil {
 		return Result{}, ErrUncertain
 	}
+	if validateFresh(request, r.now()) != nil {
+		return Result{}, ErrUncertain
+	}
 	var result protocol.TerminalResult
-	if protocol.DecodeClosed(terminalRaw, &result) != nil || verifyTerminal(request, challenge, challengeRaw, proof, assertion, response, result) != nil {
+	if protocol.DecodeClosed(terminalRaw, &result) != nil || verifyTerminal(request, challenge, challengeRaw, proof, assertion, response, result, r.now()) != nil {
 		return Result{}, ErrUncertain
 	}
-	if trailing(conn) != nil {
+	if trailing(conn) != nil || ctx.Err() != nil {
 		return Result{}, ErrUncertain
 	}
-	return Result{Receipt: append([]byte(nil), terminalRaw...), Response: append([]byte(nil), response...), ExitCode: result.ExitCode}, nil
+	verifiedResponse := []byte(nil)
+	if result.Outcome == "verified" {
+		verifiedResponse = append([]byte(nil), response...)
+	}
+	return Result{Receipt: append([]byte(nil), terminalRaw...), Response: verifiedResponse, ExitCode: result.ExitCode}, nil
 }
 
 func (r *Runner) Status(ctx context.Context) ([]byte, error) {
@@ -185,7 +205,7 @@ func (r *Runner) Status(ctx context.Context) ([]byte, error) {
 }
 
 func (r *Runner) connect(ctx context.Context) (net.Conn, error) {
-	if r == nil || r.socketPath == "" || r.trustPath == "" || r.dial == nil || r.openTerminal == nil || r.fido == nil || r.now == nil {
+	if r == nil || r.socketPath == "" || r.trustPath == "" || r.dial == nil || r.confirm == nil || r.fido == nil || r.now == nil {
 		return nil, ErrUnavailable
 	}
 	if err := validateSocketPath(r.socketPath, r.socketAnchor, r.expectedOwner); err != nil {
@@ -275,6 +295,31 @@ func validateChallenge(request protocol.Request, challenge protocol.Challenge, p
 	return nil
 }
 
+func validateFresh(request protocol.Request, now time.Time) error {
+	return protocol.ValidateRequest(request, now)
+}
+
+func confirmProductionConsent(ctx context.Context, challenge protocol.Challenge) error {
+	terminal, err := authority.OpenControllingTerminal()
+	if err != nil {
+		return err
+	}
+	results := make(chan error, 1)
+	go func() { results <- authority.ConfirmExactScope(terminal, challenge) }()
+	select {
+	case err := <-results:
+		_ = terminal.Close()
+		return err
+	case <-ctx.Done():
+		_ = terminal.Close()
+		select {
+		case <-results:
+		case <-time.After(time.Second):
+		}
+		return ctx.Err()
+	}
+}
+
 func decodeSafeError(raw []byte) (protocol.SafeError, bool) {
 	var value protocol.SafeError
 	if protocol.DecodeClosed(raw, &value) == nil && protocol.ValidateSafeError(value) == nil {
@@ -325,8 +370,13 @@ func mustChallengeInput(challengeRaw []byte) []byte {
 	return input
 }
 
-func verifyTerminal(request protocol.Request, challenge protocol.Challenge, challengeRaw []byte, proof provider.AuthorizationProof, assertion authority.Assertion, response []byte, result protocol.TerminalResult) error {
-	if protocol.ValidateTerminalResult(result) != nil || result.Outcome != "verified" || result.ExitCode != 0 || result.RequestBodySHA256 != challenge.RequestBodySHA256 || result.ResponseSHA256 != protocol.Digest(response) || result.ResponseLength != int64(len(response)) || result.PartCount != len(request.Parts) || !same(result.Models, request.Models) || result.Scope != request.Scope || result.Sequence != request.Authority.Sequence || result.IssuedAt != request.Authority.IssuedAt || result.ChallengeSHA256 != protocol.Digest(challengeRaw) || proof.ChallengeSHA256 != protocol.Digest(challengeRaw) || result.PriorChainDigest != request.Authority.PriorChainDigest || result.Signature.Kind != "es256" || result.SelectedModel == nil {
+func verifyTerminal(request protocol.Request, challenge protocol.Challenge, challengeRaw []byte, proof provider.AuthorizationProof, assertion authority.Assertion, response []byte, result protocol.TerminalResult, now time.Time) error {
+	if protocol.ValidateTerminalResult(result) != nil || result.RequestBodySHA256 != challenge.RequestBodySHA256 || result.ResponseSHA256 != protocol.Digest(response) || result.ResponseLength != int64(len(response)) || result.PartCount != len(request.Parts) || !same(result.Models, request.Models) || result.Scope != request.Scope || result.Sequence != request.Authority.Sequence || result.IssuedAt != request.Authority.IssuedAt || result.ChallengeSHA256 != protocol.Digest(challengeRaw) || proof.ChallengeSHA256 != protocol.Digest(challengeRaw) || result.PriorChainDigest != request.Authority.PriorChainDigest || result.Signature.Kind != "es256" || result.SelectedModel == nil {
+		return ErrUncertain
+	}
+	issued, issuedErr := time.Parse(time.RFC3339, result.IssuedAt)
+	completed, completedErr := time.Parse(time.RFC3339, result.CompletedAt)
+	if issuedErr != nil || completedErr != nil || completed.Before(issued) || completed.After(now) {
 		return ErrUncertain
 	}
 	assertionRaw, _ := protocol.CanonicalJSON(proof.AuthorityAssertion)

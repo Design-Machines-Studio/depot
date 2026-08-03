@@ -14,13 +14,14 @@ import (
 )
 
 const (
-	exitUsage       = 2
-	exitAuthority   = 70
-	exitDeclined    = 71
-	exitDisclosure  = 72
-	exitProvider    = 73
-	exitUnknown     = 74
-	exitUnavailable = 76
+	exitUsage        = 2
+	exitAuthority    = 70
+	exitDeclined     = 71
+	exitDisclosure   = 72
+	exitProvider     = 73
+	exitUnknown      = 74
+	exitVerification = 75
+	exitUnavailable  = 76
 )
 
 func main() { os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr)) }
@@ -137,19 +138,19 @@ func runProvider(providerClient providerClient, command string, args []string, s
 		case errors.Is(dispatchErr, client.ErrUnavailable):
 			return fail(stderr, "host authority unavailable", exitAuthority)
 		default:
-			return fail(stderr, "provider result verification failed", exitUnknown)
+			return fail(stderr, "provider result verification failed", exitVerification)
 		}
 	}
 	defer zero(result.Response)
 	if result.ExitCode != 0 && result.ExitCode != exitProvider && result.ExitCode != exitUnknown {
-		return fail(stderr, "invalid signed provider outcome", exitUnknown)
+		return fail(stderr, "invalid signed provider outcome", exitVerification)
 	}
 	if _, err := stdout.Write(append(result.Receipt, '\n')); err != nil {
-		return fail(stderr, "receipt output failed", exitUnknown)
+		return fail(stderr, "receipt output failed", exitVerification)
 	}
 	if result.ExitCode == 0 {
 		if err := writeAll(fd3, result.Response); err != nil {
-			return fail(stderr, "response delivery failed", exitUnknown)
+			return fail(stderr, "response delivery failed", exitVerification)
 		}
 	}
 	return result.ExitCode
