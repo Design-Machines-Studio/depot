@@ -1,0 +1,18 @@
+[Unit]
+Description=Design Machines Workflow Authority socket
+Before=workflow-authority.service
+Requires=workflow-authority-runtime.service
+After=workflow-authority-runtime.service
+ConditionPathIsDirectory=/run/design-machines/workflow-authority
+ConditionPathIsSymbolicLink=!/run/design-machines/workflow-authority
+
+[Socket]
+ListenStream=/run/design-machines/workflow-authority/authority.sock
+SocketUser=root
+SocketGroup=workflow-authority
+SocketMode=0660
+RemoveOnStop=yes
+Service=workflow-authority.service
+
+[Install]
+WantedBy=sockets.target

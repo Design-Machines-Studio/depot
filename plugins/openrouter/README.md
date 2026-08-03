@@ -2,6 +2,13 @@
 
 OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked OpenRouter model slugs over one endpoint. The matrix includes GPT-5.6 Terra and Luna, GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4, and Kimi K3. OpenAI models may run through OpenRouter as an economical API rail; Anthropic remains native Claude-only.
 
+> **Current release mode:** direct interactive `/openrouter` remains available
+> behind exact-digest human approval. Automated Pipeline, dm-review,
+> assessment, research, and adversarial-review dispatch records
+> `host_authority_unavailable` and completes on Codex until the external
+> Workflow Authority Broker owns authorization, credential custody, and
+> transport. API-key presence does not enable automated dispatch.
+
 The direct API runner is the execution data plane. The optional official
 OpenRouter MCP is a read-only-first control plane for live model/provider
 discovery, benchmarks, credits, documentation, and generation inspection. See
@@ -21,16 +28,16 @@ run.
 
 ## What it routes
 
-Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. When `OPENROUTER_API_KEY` is set, OpenRouter is:
+Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. The following matrix is the intended broker-enabled topology and remains observable through dry-run routing. It is not live automated dispatch in the current release:
 
 - **Primary external provider** for `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and `test-coverage-reviewer`; each lane uses the model and fallback model selected by policy.
 - **Primary Kimi K3 security-analysis lens**, paired with mandatory independent Codex full-diff sign-off.
 - **Primary Kimi K3 bulk lane** for large-context / large-diff first-pass triage.
-- The cascade rail for `config` / `docs` / `mechanical-logic` chunk execution via `openrouter-exec`.
+- The GLM-5.2-headed cascade rail for `config` / `docs` / `mechanical-logic` chunk execution via `openrouter-exec`.
 
 ## Security boundary (non-negotiable)
 
-**Provider selection and disclosure classification are separate controls.**
+**Provider selection, disclosure classification, and authorization are separate controls.** Passing the scanner establishes only that the exact outbound bytes are eligible for disclosure; it never grants permission to transmit them. The caller must independently satisfy the byte-bound authorization contract before provider contact.
 
 The canonical policy is `skills/openrouter-delegate/references/delegation-security-policy.json`; Pipeline carries a validated mirror for planning. Every delegation path enforces it before invoking the wrapper:
 
@@ -44,12 +51,13 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
 
 ## Requirements
 
-- `OPENROUTER_API_KEY` set in the environment. When unset, external coding-review lanes fall back to Codex.
+- `OPENROUTER_API_KEY` is required only for direct interactive calls. Its
+  presence never activates automated coding or review lanes.
 - `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).
 - `OPENROUTER_WORKLOAD=quality|security|direct|bulk|mechanical` selects the
   default provider-routing strategy; explicit provider sort/order overrides it.
-- Automatic canonical scanning plus unchanged-byte verification is the default
-  for Pipeline, direct `/openrouter`, and dm-review. Set
-  `OPENROUTER_PAYLOAD_AUTHORIZATION=exact-digest` for a run that requires
-  per-payload human approval.
+- Canonical disclosure scanning rejects ineligible bytes before direct
+  interactive authorization. `/openrouter` requires approval of the unchanged
+  exact digest; automated child modes remain disabled regardless of
+  `OPENROUTER_PAYLOAD_AUTHORIZATION`.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.

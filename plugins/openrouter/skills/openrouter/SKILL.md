@@ -119,29 +119,49 @@ PAYLOAD_SHA256=$("$AUTHORIZATION_PATH" snapshot \
   --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE")
 ```
 
-Read `OPENROUTER_PAYLOAD_AUTHORIZATION`, defaulting to `trusted-boundary`.
-Immediately before calling the wrapper, authorize the unchanged payload. The
-default reruns the canonical scanner without a prompt; `exact-digest` restores
-payload-specific human approval:
+Direct interactive `/openrouter` supports only `exact-digest` until the
+external Workflow Authority Broker is installed and integrated. Immediately
+before calling the wrapper, authorize the unchanged payload through the
+payload-specific human gate. Caller-selected `trusted-boundary` is unavailable
+and must not be treated as authority.
+
+In `exact-digest` mode this is a two-pass workflow:
+
+1. **Preparation pass:** Materialize, disclosure-screen, and snapshot the exact
+   ordered bytes. If no recorded human decision exists for that digest, emit
+   `approval_required` with status/exit `78`, stop before the wrapper, and ask
+   the human with `AskUserQuestion` (or a normal chat question when that tool is
+   unavailable) to approve or decline that exact digest. End the current turn;
+   approval pending is neither success nor provider failure.
+2. **Resume/re-dispatch pass:** Continue only after a recorded human response.
+   A decline records `host_disclosure_declined`, returns status/exit `77`, and
+   sends nothing. On approval, copy only the digest from that human response
+   into `approved_payload_sha256`, then rerun Step 4 from payload
+   materialization. Rebuild, rescan, and snapshot the same ordered bytes and
+   verify them against the recorded approved digest immediately before contact.
+
+Never self-populate `approved_payload_sha256` from `PAYLOAD_SHA256`, infer
+approval from general OpenRouter permission, or continue to the wrapper during
+the preparation pass. The recorded human response, not the command or child
+runner, is the authority.
 
 ```bash
-AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}"
+AUTHORIZATION_MODE=exact-digest
 case "$AUTHORIZATION_MODE" in
-  trusted-boundary)
-    "$AUTHORIZATION_PATH" verify-trusted-boundary \
-      --manifest "$AUTHORIZATION_FILE" --policy "$SECURITY_POLICY_PATH" \
-      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
-    ;;
   exact-digest)
-    # Ask the user to approve PAYLOAD_SHA256, then set approved_payload_sha256.
+    [ -n "${approved_payload_sha256:-}" ] || {
+      printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' \
+        "$PAYLOAD_SHA256"
+      exit 78
+    }
     "$AUTHORIZATION_PATH" verify --manifest "$AUTHORIZATION_FILE" \
       --approved-sha256 "$approved_payload_sha256" \
       --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
     ;;
-  *) echo "Invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2; exit 2 ;;
+  *) echo "OpenRouter host authority unavailable" >&2; exit 77 ;;
 esac
 
-RESULT=$(OPENROUTER_SYSTEM="$(cat "$SYSTEM_FILE")" \
+RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
   OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
   OPENROUTER_WORKLOAD=direct \
   OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
@@ -158,8 +178,12 @@ Claude-only. Boundary authorization is mandatory; see
 
 ### Step 5: Handle Errors
 
-Exit codes: `0` success, `28` timeout, `1` exhausted/error, `2` bad args. On
-error, report the type and the content-free failure receipt to the user.
+Command statuses: `0` success, `77` human disclosure decline (no send), `78`
+human approval required or approved bytes changed (pause; no send), `28`
+timeout, `1` exhausted/error, and `2` bad args. An approval-required result is
+a preparation state: ask the human and stop the current turn rather than
+presenting it as success or silently falling back. On provider error, report
+the type and the content-free failure receipt to the user.
 
 ### Step 6: Present Response and Receipt
 

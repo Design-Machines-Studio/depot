@@ -142,7 +142,7 @@ Immediately before network contact:
 "$AUTHORIZATION" verify --manifest "$AUTHORIZATION_RECEIPT" \
   --approved-sha256 "$approved_payload_sha256" \
   --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"
-OPENROUTER_SYSTEM="$(cat "$RESUME_SNAPSHOT")" \
+env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_SNAPSHOT" \
   bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
 ```
 

@@ -89,8 +89,14 @@ Payload-Specific Host Authorization before invoking it.
 ## Environment Variables
 
 - `OPENROUTER_API_KEY` (required): your OpenRouter API key. Never commit it.
-- `OPENROUTER_SYSTEM` (default: terse coding assistant): system prompt.
-- `OPENROUTER_BASE` (default `https://openrouter.ai/api/v1`): API base URL.
+- `OPENROUTER_SYSTEM` (default: terse coding assistant): inline system prompt.
+- `OPENROUTER_SYSTEM_FILE`: readable regular file containing the exact system
+  prompt bytes. It is mutually exclusive with `OPENROUTER_SYSTEM`; authorized
+  file-based callers must unset the inherited inline variable.
+- `OPENROUTER_BASE`: production is pinned to
+  `https://openrouter.ai/api/v1`. Overrides are test-only: the API key must be
+  exactly `test` and the URL must be controlled loopback HTTP on `127.0.0.1`
+  or `localhost` with an explicit port.
 - `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Opt-in only -- privacy is demoted (Quality > Price > Speed > Provider privacy); set for genuinely sensitive material (client code under NDA, credentials-adjacent diffs).
 - `OPENROUTER_WORKLOAD` (`quality|security|direct|bulk|mechanical`, default
   `quality`): selects the default routing strategy. Direct, bulk, and mechanical
@@ -112,7 +118,9 @@ Payload-Specific Host Authorization before invoking it.
   progress. Any streamed bytes reset this watchdog; only a completed, validated
   stream becomes review evidence.
 - `OPENROUTER_AUTHORIZATION_MODE` (`exact-digest|trusted-boundary|unspecified`):
-  content-free receipt provenance supplied by the authorized caller.
+  low-level receipt vocabulary. Current production automation never accepts
+  caller-selected `trusted-boundary`; direct interactive use records
+  `exact-digest`. The other values remain for compatibility and offline tests.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or
   failure receipt. Failure receipts record timeout/error classification without
   prompt, partial completion, inferred provider, or usage content.
@@ -131,9 +139,9 @@ the direct API key's workspace.
 
 ## Host Authorization
 
-Direct `/openrouter` and dm-review workflows require user disclosure approval
-for the exact outbound payload. Treat it as byte-bound authority, separate from
-network permission:
+Direct interactive `/openrouter` requires user disclosure approval for the
+exact outbound payload. Treat it as byte-bound authority, separate from network
+permission:
 
 1. Run `delegation-boundary.sh` first and materialize the exact eligible system
    and user prompt bytes in private temporary files.
@@ -145,12 +153,11 @@ network permission:
 4. Never retry around a denial or broaden a file-specific authorization. Record
    `host_disclosure_declined` and fall back to Codex.
 
-Pipeline additionally supports an explicit run-scoped
-`OPENROUTER_PAYLOAD_AUTHORIZATION=trusted-boundary` mode. In that mode,
-`payload-authorization.sh verify-trusted-boundary` reruns the canonical scanner
-and checks the unchanged ordered bytes immediately before every send. It
-removes repetitive digest prompts without weakening content classification.
-See Pipeline's `references/openrouter-authorization-contract.md`.
+Automated Pipeline and dm-review lanes are temporarily unavailable and return
+to Codex with `host_authority_unavailable`. Neither an API key nor
+caller-selected authorization variables enable them. Re-enable only through an
+external broker that owns authorization, credential custody, and transport and
+binds the exact payload, destination, run, lane, candidate, and substrate.
 
 ### Codex network allowlist
 

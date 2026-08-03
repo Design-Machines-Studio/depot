@@ -1,6 +1,6 @@
 {
   "name": "openrouter",
-  "description": "OpenRouter provider plugin with Kimi K3-led security and bulk analysis, Terra/Luna economy fallback, automatic byte-bound disclosure filtering, bounded direct-API execution, and an optional official MCP control plane.",
+  "description": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
   "version": "1.8.0",
   "author": {
     "name": "Design Machines",
@@ -24,7 +24,7 @@
       {
         "id": "openrouter-delegate",
         "name": "OpenRouter Delegation",
-        "description": "Delegate Kimi K3-led security and big-diff analysis, Terra/Luna economy work, second-opinion review, and bounded generation through the direct API while using the official MCP for live discovery and receipts.",
+        "description": "Use exact-digest direct interactive OpenRouter delegation for Kimi K3-led security and big-diff analysis, Terra quality fallback, Luna economical mechanical work, and second opinions; automated routing remains unavailable until broker integration.",
         "triggers": [
           "use openrouter",
           "ask openrouter",
@@ -68,7 +68,7 @@
         "id": "openrouter-agent-runner",
         "name": "OpenRouter Agent Runner",
         "category": "workflow",
-        "description": "Loads a trusted review-agent definition and runs its criteria through a policy-selected OpenRouter model slug with security filtering, refusal detection, and Codex fallback receipts.",
+        "description": "Broker-integration seam for policy-selected review criteria; current automated runs return host_authority_unavailable and complete on Codex.",
         "tags": [
           "workflow",
           "review",

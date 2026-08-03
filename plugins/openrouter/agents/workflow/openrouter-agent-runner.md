@@ -7,6 +7,15 @@ tools: Bash, Read, Grep
 
 # OpenRouter Agent Runner
 
+> **Automated dispatch temporarily unavailable.** Until the external Workflow
+> Authority Broker owns a run-bound authorization and provider transport, this
+> runner must return `host_authority_unavailable` to its root orchestrator and
+> complete the logical lane on Codex. It must not treat an API key,
+> `OPENROUTER_PAYLOAD_AUTHORIZATION`, or an approved digest supplied by a child
+> environment as authority, and must not invoke the wrapper. The protocol below
+> remains the future broker-integration contract and direct interactive
+> `/openrouter` remains separate.
+
 You are a translation layer -- you do not perform review yourself; all judgment work happens inside the selected OpenRouter model. You read files, build prompts, invoke a shell command, validate text output, and format findings.
 
 ## When You Run
@@ -322,7 +331,7 @@ PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot \
   --content-file "$SYS_FILE" \
   --content-file "$USER_FILE")
 
-AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-trusted-boundary}"
+AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"
 if [ "$AUTHORIZATION_MODE" = "exact-digest" ] && [ -z "${approved_payload_sha256:-}" ]; then
   cat <<EOF
 ### PAYLOAD APPROVAL REQUIRED
@@ -356,6 +365,11 @@ payload approval, or orchestrator judgment is not authority for these bytes.
 If the user declines, the orchestrator records `host_disclosure_declined` and
 returns the lane to Codex.
 
+`trusted-boundary` is accepted only when the trusted host or root run
+configuration explicitly selected it before child dispatch. A child runner
+must not set, infer, or promote that mode. It still snapshots, rescans, and
+verifies the same ordered bytes immediately before network contact.
+
 Immediately before the network call, authorize the unchanged payload according
 to the selected mode:
 
@@ -388,7 +402,7 @@ case "$target_agent_name" in
 esac
 
 RESULT=$( \
-  OPENROUTER_SYSTEM="$(cat "$SYS_FILE")" \
+  env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \
   OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
   OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
   OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \

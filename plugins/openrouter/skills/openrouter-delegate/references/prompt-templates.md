@@ -7,7 +7,9 @@ Structured prompt patterns for each OpenRouter delegation type. Every prompt mus
 1. **Self-contained.** Include all context the task requires. OpenRouter starts fresh every invocation.
 2. **Output format specified.** Tell the model exactly what structure to return.
 3. **Constraints explicit.** If findings should be P1/P2/P3, define what each severity means.
-4. **System via env, task via prompt.** The wrapper takes the system prompt from `OPENROUTER_SYSTEM`; the task content is the prompt argument (or stdin).
+4. **System file, task file bytes.** Authorized callers pass screened system
+   bytes through `OPENROUTER_SYSTEM_FILE` with inherited `OPENROUTER_SYSTEM`
+   unset; stdin task bytes are materialized without command substitution.
 5. **Provider origin.** Templates may name OpenAI or third-party OpenRouter slugs. `anthropic/*` is invalid as either primary or fallback and remains native Claude-only.
 6. **Coherent assets.** The caller resolves one installed OpenRouter root with workflow-kernel `resolve-plugin-bundle` and loads the wrapper, policy, boundary, and this template only from that root.
 
@@ -49,7 +51,7 @@ If no issues found, state "No issues found" explicitly.
 Focus on changed code only. Do not flag pre-existing issues in context lines.
 ```
 
-**Model:** `moonshotai/kimi-k3` (independent quality-first default), `openai/gpt-5.6-terra` native OpenRouter fallback. **Timeout:** 3600s (<10K lines) / 7200s (>=10K lines).
+**Model:** `moonshotai/kimi-k3` (independent quality-first default), with `openai/gpt-5.6-terra` as the OpenAI-model-via-OpenRouter quality fallback. Both attempts retain `implementedBy: openrouter` provider provenance; neither is a native Codex execution. **Timeout:** 3600s (<10K lines) / 7200s (>=10K lines).
 
 ---
 

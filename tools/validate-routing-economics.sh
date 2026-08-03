@@ -140,6 +140,8 @@ cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 model_cascade="$REPO_ROOT/plugins/pipeline/references/model-cascade.json"
 harness="$REPO_ROOT/plugins/pipeline/references/harness-profile.json"
 runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
+authorization_contract="$REPO_ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
+runner_policy_test="$REPO_ROOT/tools/test-openrouter-runner-policy.sh"
 agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 bulk_runner="$REPO_ROOT/plugins/openrouter/agents/review/openrouter-bulk-analyst.md"
 delegation_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
@@ -175,7 +177,28 @@ if [ -f "$routing" ]; then
       and .agentType["architecture-reviewer"].provider == "codex"
   ' "$routing" >/dev/null || { printf "  FAIL  external security analysis and independent Codex sign-off have separate lane identities\n"; failures=1; }
   jq -e '.agentType["doc-sync-reviewer"].provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps doc-sync-reviewer to OpenRouter\n"; failures=1; }
-  jq -e '[.agentType["pattern-recognition-specialist"], .agentType["code-simplicity-reviewer"], .agentType["doc-sync-reviewer"], .agentType["test-coverage-reviewer"]] | all(.provider == "openrouter")' "$routing" >/dev/null || { printf "  FAIL  all mechanical reviewers route through OpenRouter\n"; failures=1; }
+  jq -e '
+    [
+      .agentType["pattern-recognition-specialist"],
+      .agentType["code-simplicity-reviewer"],
+      .agentType["doc-sync-reviewer"],
+      .agentType["test-coverage-reviewer"]
+    ]
+    | all(. == {
+        "provider":"openrouter",
+        "model":"openai/gpt-5.6-luna",
+        "fallbackModel":"z-ai/glm-5.2",
+        "fallbackProvider":"codex",
+        "rationale": .rationale
+      })
+  ' "$routing" >/dev/null || { printf "  FAIL  mechanical reviewers use exact Luna -> GLM-5.2 -> Codex routing\n"; failures=1; }
+  jq -e '
+    .agentType["openrouter-bulk-analyst"]
+    | .provider == "openrouter"
+      and .model == "moonshotai/kimi-k3"
+      and .fallbackModel == "openai/gpt-5.6-terra"
+      and .fallbackProvider == "codex"
+  ' "$routing" >/dev/null || { printf "  FAIL  bulk analysis uses exact Kimi K3 -> Terra -> Codex routing\n"; failures=1; }
   jq -e '
     .targets as $targets
     | ($targets.subscriptionProfiles[$targets.activeSubscriptionProfile]) as $active
@@ -316,14 +339,16 @@ if [ -f "$routing" ] && [ -f "$model_cascade" ]; then
   fi
 fi
 
-require_text "$runner" "implementedBy: openrouter" "OpenRouter exec runner emits implementedBy receipt"
+require_text "$runner" 'implementedBy:"openrouter"' "OpenRouter exec runner emits implementedBy receipt"
 require_text "$runner" "usage" "OpenRouter exec runner preserves usage information"
 require_text "$runner" "generationId" "OpenRouter exec runner preserves the provider generation ID"
 require_text "$runner" 'FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"' "OpenRouter exec leaves cascade fallback ownership to its caller"
 require_absent "$runner" 'grep -Fq "falling back to' "OpenRouter exec reads fallback provenance from the wrapper receipt"
-require_text "$cascade" 'out="$(dispatch_wrapper "$model")"' "pipeline cascade owns wrapper-model descent"
+require_text "$cascade" 'dispatch_wrapper "$model"; rc=$?' "pipeline cascade invokes wrapper without swallowing terminal evidence"
+require_absent "$cascade" 'out="$(dispatch_wrapper "$model")"' "pipeline cascade does not hide wrapper terminal receipts in command substitution"
 require_absent "$cascade" 'dispatch_wrapper "$model" "$fb"' "pipeline cascade does not retry the same model through two fallback owners"
-require_text "$cascade" 'payload-authorization.sh' "pipeline wrapper rungs require byte-bound authorization"
+require_text "$cascade" 'dispatch-provider-request' "pipeline wrapper rungs use broker-owned byte-bound dispatch"
+require_text "$authorization_contract" 'exact request-body digest' "pipeline wrapper terminal receipts retain exact byte binding"
 require_text "$wrapper" "OPENROUTER_WORKLOAD" "OpenRouter wrapper accepts workload-aware provider routing"
 require_text "$wrapper" "direct|bulk|mechanical)" "direct, bulk, and mechanical work share throughput routing"
 require_text "$wrapper" "quality|security)" "quality and security work retain quality-first routing"
@@ -333,7 +358,14 @@ require_text "$wrapper" 'IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"' "OpenRo
 require_text "$runner" 'TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"' "Pipeline OpenRouter execution inherits the one-hour completion budget"
 require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
 require_text "$dm_review" '7200s at or above 10K diff lines' "dm-review bulk analysis scales to a two-hour completion budget"
-require_text "$cascade" "trusted-boundary" "pipeline supports trusted-boundary authorization without bypassing screening"
+require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"
+require_text "$authorization_contract" '`70`, `71`, and `72` are unsigned pre-network outcomes' "pipeline preserves only proven pre-contact fallback"
+require_text "$cascade" 'exit 76' "pipeline distinguishes ladder exhaustion from provider-terminal exit 75"
+require_text "$orchestrator" 'Provider Terminal Persistence (RC 75)' "orchestrator consumes provider-terminal outcomes without retry"
+require_text "$orchestrator" 'append the exact unmodified' "orchestrator preserves the signed terminal receipt as evidence"
+require_text "$orchestrator" 'Record `result_verification_failed`' "orchestrator records unsigned post-dial failure without a receipt"
+require_text "$runner_policy_test" '"$(cat "$AUTH_ROOT/request-count")" -eq 1' "terminal fixtures assert at most one provider invocation"
+require_text "$runner_policy_test" '.outcome == "provider_failure" and .response_length == 0' "terminal fixtures assert signed receipt preservation"
 require_text "$wrapper" "OPENROUTER_RECEIPT_FILE" "OpenRouter wrapper emits content-free provider receipts"
 require_text "$wrapper" "servingProviderProvenance" "OpenRouter wrapper distinguishes absent provider identity from verified provenance"
 require_text "$wrapper" "response omitted required generation provenance" "OpenRouter wrapper fails closed when model provenance is absent"
@@ -342,7 +374,9 @@ require_text "$mcp_control" "does not expose an authenticated workspace" "MCP wo
 require_text "$mcp_control" "observedAt" "MCP catalog freshness has a bounded observation contract"
 require_text "$dm_review" "routing-policy.json" "dm-review reads shared routing policy"
 require_absent "$dm_review" "Diff >5000 lines AND openrouter" "dm-review no longer gates OpenRouter on >5000 diff lines"
-require_text "$dm_review" "OPENROUTER_API_KEY" "dm-review default-routes external reviewers when keys are set"
+require_text "$dm_review" "OPENROUTER_API_KEY" "dm-review observes API-key presence without treating it as authority"
+require_text "$dm_review" "OPENROUTER_AVAILABLE=false" "dm-review currently routes automated external criteria to Codex"
+require_text "$dm_review" "OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable" "dm-review records the host-authority gap"
 require_text "$dm_review" "OPENROUTER_SECURITY_POLICY_PATH" "dm-review resolves the installed OpenRouter security policy"
 require_absent "$dm_review" "DEEPSEEK_API_KEY" "dm-review has no standalone DeepSeek credential path"
 require_absent "$dm_review" '**A0. If the agent is `openrouter-bulk-analyst`:**' "dm-review does not duplicate bulk wrapper orchestration"
@@ -360,12 +394,13 @@ require_absent "$bulk_runner" 'openrouter-wrapper.sh' "bulk analyst does not inv
 require_text "$bulk_runner" 'generic `openrouter-agent-runner` is the only execution path' "bulk analyst delegates all execution controls to the generic runner"
 require_text "$agent_runner" "Codex" "OpenRouter runner returns sensitive work to Codex"
 require_text "$agent_runner" "payload-authorization.sh" "OpenRouter runner binds user approval to exact payload bytes"
-require_text "$pipeline_cmd" "Codex + OpenRouter" "Phase 5 defaults to Codex plus OpenRouter lenses"
+require_text "$pipeline_cmd" "Codex is the required adversarial reviewer" "Phase 5 requires the Codex adversarial lens"
+require_text "$pipeline_cmd" "openrouter-perspective: host_authority_unavailable" "Phase 5 records unavailable automated OpenRouter coverage"
 require_text "$pipeline_cmd" "PIPELINE_CLAUDE_ADVERSARY=1" "Claude adversary is optional third lens"
-require_text "$pipeline_cmd" '--mode artifact-delegation' "Phase 5 screens exact adversarial-review payload bytes"
-require_text "$pipeline_cmd" 'openrouter-authorization-contract.md' "Phase 5 requires byte-bound user approval"
-require_text "$assess" "ASSESS_EXECUTOR" "assess supports non-Claude executor knob"
-require_text "$research" "RESEARCH_EXECUTOR" "research supports non-Claude executor knob"
+require_absent "$pipeline_cmd" '--mode artifact-delegation' "Phase 5 does not prepare automated provider payloads"
+require_text "$pipeline_cmd" 'openrouter-authorization-contract.md' "Phase 5 reads the shared fail-closed authorization contract"
+require_text "$assess" 'Ignore an `openrouter`' "assess rejects caller-selected OpenRouter execution"
+require_text "$research" 'Ignore an `openrouter`' "research rejects caller-selected OpenRouter execution"
 require_text "$postmortem_schema" "providerSplit" "run postmortem schema documents providerSplit"
 require_text "$postmortem_schema" "eligibleProviderSplit" "run postmortem schema separates eligible provider usage"
 require_text "$postmortem_schema" "routingExclusions" "run postmortem schema records security and tool exclusions"
