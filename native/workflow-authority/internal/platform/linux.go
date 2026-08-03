@@ -440,7 +440,7 @@ func (p *Linux) UninstallPlan() ([]string, error) {
 		"systemctl is-active --quiet workflow-authority.socket workflow-authority.service must report inactive before removal",
 		"systemctl disable workflow-authority.socket workflow-authority.service",
 		"remove exactly: " + strings.Join(paths, ", "),
-		"remove exactly: /etc/systemd/system/workflow-authority.socket, /etc/systemd/system/workflow-authority.service",
+		"remove exactly: /etc/systemd/system/workflow-authority.socket, /etc/systemd/system/workflow-authority.service, /etc/systemd/system/workflow-authority-runtime.service",
 		"remove exactly: " + TmpfilesPath,
 		"rmdir exactly if empty: /run/design-machines/workflow-authority",
 		"systemctl daemon-reload",

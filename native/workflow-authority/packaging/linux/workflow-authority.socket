@@ -1,8 +1,8 @@
 [Unit]
 Description=Design Machines Workflow Authority socket
 Before=workflow-authority.service
-Requires=systemd-tmpfiles-setup.service
-After=systemd-tmpfiles-setup.service
+Requires=workflow-authority-runtime.service
+After=workflow-authority-runtime.service
 ConditionPathIsDirectory=/run/design-machines/workflow-authority
 ConditionPathIsSymbolicLink=!/run/design-machines/workflow-authority
 

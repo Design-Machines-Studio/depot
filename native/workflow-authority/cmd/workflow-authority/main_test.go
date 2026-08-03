@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -115,7 +116,22 @@ func TestResponseChannelRequiresAnonymousPipe(t *testing.T) {
 	}
 	defer r.Close()
 	defer w.Close()
+	if validateResponsePipe(r) == nil {
+		t.Fatal("read-only anonymous pipe accepted as response sink")
+	}
 	if err := validateResponsePipe(w); err != nil {
 		t.Fatalf("anonymous response pipe rejected: %v", err)
+	}
+	namedPath := t.TempDir() + "/named-fifo"
+	if err := syscall.Mkfifo(namedPath, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	named, err := os.OpenFile(namedPath, os.O_RDWR|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer named.Close()
+	if validateResponsePipe(named) == nil {
+		t.Fatal("filesystem-backed named FIFO accepted")
 	}
 }

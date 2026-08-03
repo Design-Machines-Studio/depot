@@ -11,7 +11,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"designmachines.dev/workflow-authority/internal/authority"
@@ -247,18 +246,6 @@ func dispatch(stdin io.Reader, stdout io.Writer) error {
 	// Trust-chain verification and terminal projection are intentionally not
 	// guessed here. No byte is written to fd 3 or stdout without that verifier.
 	return errors.New("production trust-chain verifier unavailable")
-}
-
-func validateResponsePipe(fd3 *os.File) error {
-	info, err := fd3.Stat()
-	if err != nil || info.Mode()&os.ModeNamedPipe == 0 || info.Mode().IsRegular() {
-		return errors.New("fd3 must be anonymous pipe")
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || st.Nlink != 0 {
-		return errors.New("fd3 must be anonymous pipe")
-	}
-	return nil
 }
 
 func validateChallenge(r protocol.Request, c protocol.Challenge) error {

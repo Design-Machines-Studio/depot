@@ -1,0 +1,13 @@
+[Unit]
+Description=Prepare the Design Machines Workflow Authority runtime directory
+Before=workflow-authority.socket
+
+[Service]
+Type=oneshot
+ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/workflow-authority.conf
+ExecStart=/usr/bin/test -d /run/design-machines/workflow-authority
+ExecStart=/usr/bin/test ! -L /run/design-machines/workflow-authority
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
