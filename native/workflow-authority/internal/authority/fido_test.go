@@ -228,7 +228,7 @@ func TestPinnedNativeSourceAndNoHostPINFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(raw)
-	for _, marker := range []string{"FIDO_VERSION_MAJOR != 1", "FIDO_VERSION_MINOR != 17", "FIDO_VERSION_PATCH != 0", "dm_ready", "fido_dev_has_uv", "fido_dev_set_timeout(dev, 30000)", "fido_assert_authdata_raw_ptr", "FIDO_OPT_TRUE", "fido_dev_get_assert(dev, assert, NULL)"} {
+	for _, marker := range []string{"FIDO_VERSION_MAJOR != 1", "FIDO_VERSION_MINOR != 17", "FIDO_VERSION_PATCH != 0", "dm_ready", "fido_dev_has_uv", "fido_dev_set_timeout(op->dev, 30000)", "fido_assert_authdata_raw_ptr", "dm_operation_cancel", "fido_dev_cancel(op->dev)", "FIDO_OPT_TRUE", "fido_dev_get_assert(op->dev, op->assert, NULL)"} {
 		if !strings.Contains(source, marker) {
 			t.Fatalf("native invariant missing: %s", marker)
 		}

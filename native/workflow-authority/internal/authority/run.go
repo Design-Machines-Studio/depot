@@ -168,6 +168,32 @@ type Readiness struct {
 	InternalUV       bool
 }
 
+type assertionResult struct {
+	assertion Assertion
+	err       error
+}
+
+func waitCancelableAssertion(ctx context.Context, cancelNative func() error, results <-chan assertionResult, grace time.Duration) (Assertion, error) {
+	select {
+	case result := <-results:
+		return result.assertion, result.err
+	case <-ctx.Done():
+		if err := cancelNative(); err != nil {
+			return Assertion{}, ErrUnavailable
+		}
+		timer := time.NewTimer(grace)
+		defer timer.Stop()
+		select {
+		case <-results:
+			return Assertion{}, ErrConflict
+		case <-timer.C:
+			// The worker retains sole cleanup ownership and the device timeout is
+			// the final backstop; the cancelled caller is never held for it.
+			return Assertion{}, ErrConflict
+		}
+	}
+}
+
 type Clock interface{ Now() time.Time }
 type realClock struct{}
 
@@ -332,6 +358,7 @@ type Manager struct {
 	nonces     map[string]struct{}
 	operations int
 	bytes      int64
+	active     map[string]context.CancelFunc
 }
 
 func NewManager(config Config, fido FIDO, wal WAL, clock Clock) (*Manager, error) {
@@ -344,7 +371,7 @@ func NewManager(config Config, fido FIDO, wal WAL, clock Clock) (*Manager, error
 	if clock == nil {
 		clock = realClock{}
 	}
-	m := &Manager{config: config, fido: fido, clock: clock, wal: wal, records: map[string]*reservation{}, sequences: map[uint64]struct{}{}, nonces: map[string]struct{}{}}
+	m := &Manager{config: config, fido: fido, clock: clock, wal: wal, records: map[string]*reservation{}, sequences: map[uint64]struct{}{}, nonces: map[string]struct{}{}, active: map[string]context.CancelFunc{}}
 	events, err := wal.Events(context.Background())
 	if err != nil {
 		return nil, err
@@ -465,7 +492,23 @@ func (m *Manager) Authorize(ctx context.Context, transactionID, connectionID str
 	if err != nil {
 		return Assertion{}, ErrMalformed
 	}
-	assertion, err := m.fido.Assert(ctx, input, credential)
+	m.mu.Lock()
+	if _, err := m.ownedLocked(transactionID, connectionID, peer, Reserved); err != nil {
+		m.mu.Unlock()
+		return Assertion{}, err
+	}
+	if _, exists := m.active[transactionID]; exists {
+		m.mu.Unlock()
+		return Assertion{}, ErrConflict
+	}
+	fidoContext, cancelFIDO := context.WithCancel(ctx)
+	m.active[transactionID] = cancelFIDO
+	m.mu.Unlock()
+	assertion, err := m.fido.Assert(fidoContext, input, credential)
+	cancelFIDO()
+	m.mu.Lock()
+	delete(m.active, transactionID)
+	m.mu.Unlock()
 	if err != nil {
 		return Assertion{}, redactFIDO(err)
 	}
@@ -647,7 +690,7 @@ func min(a, b int) int {
 	return b
 }
 func redactFIDO(err error) error {
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, ErrConflict) {
 		return ErrConflict
 	}
 	return ErrUnavailable
@@ -661,6 +704,9 @@ func zeroKey(key *ecdsa.PrivateKey) {
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	for _, cancel := range m.active {
+		cancel()
+	}
 	for _, record := range m.records {
 		if record.event.State == Reserved || record.event.State == Authorized {
 			next := record.event

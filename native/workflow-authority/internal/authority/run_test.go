@@ -53,6 +53,18 @@ type fakeFIDO struct {
 	err    error
 }
 
+type blockingFIDO struct{ started chan struct{} }
+
+func (*blockingFIDO) Readiness(context.Context) Readiness {
+	return Readiness{Adapter: "blocking-test", InternalUV: true}
+}
+func (f *blockingFIDO) Assert(ctx context.Context, _ []byte, _ Credential) (Assertion, error) {
+	close(f.started)
+	<-ctx.Done()
+	return Assertion{}, ctx.Err()
+}
+func (*blockingFIDO) Verify(context.Context, []byte, Credential, Assertion) error { return ErrDenied }
+
 func (*fakeFIDO) Readiness(context.Context) Readiness {
 	return Readiness{Production: false, Adapter: "fake", Version: "test", InternalUV: true}
 }
@@ -197,6 +209,68 @@ func TestWALFailureNeverPublishesTransition(t *testing.T) {
 	}
 	if record := cancelManager.records[cancelChallenge.TransactionID]; record.event.State != Reserved || record.cancelled {
 		t.Fatal("failed cancel published")
+	}
+}
+
+func TestCancelableAssertionSeamInterruptsAndBoundsWait(t *testing.T) {
+	ctx, cancelContext := context.WithCancel(context.Background())
+	results := make(chan assertionResult, 1)
+	interrupted := make(chan struct{})
+	go func() { <-interrupted; results <- assertionResult{err: context.Canceled} }()
+	cancelContext()
+	started := time.Now()
+	_, err := waitCancelableAssertion(ctx, func() error { close(interrupted); return nil }, results, time.Second)
+	if !errors.Is(err, ErrConflict) || time.Since(started) > 250*time.Millisecond {
+		t.Fatalf("cancellation did not interrupt: %v", err)
+	}
+
+	stuckCtx, stuckCancel := context.WithCancel(context.Background())
+	stuckCancel()
+	started = time.Now()
+	_, err = waitCancelableAssertion(stuckCtx, func() error { return nil }, make(chan assertionResult), 10*time.Millisecond)
+	if !errors.Is(err, ErrConflict) || time.Since(started) > 250*time.Millisecond {
+		t.Fatalf("bounded cancellation grace failed: %v", err)
+	}
+}
+
+func TestShutdownCancelsInProgressFIDO(t *testing.T) {
+	request, challenge, config, clock := fixture(t)
+	fido := &blockingFIDO{started: make(chan struct{})}
+	wal := &memoryWAL{}
+	manager, err := NewManager(config, fido, wal, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer := Peer{UID: 501, PID: 4321}
+	challenge, err = manager.Reserve(context.Background(), request, challenge, []byte("body"), peer, "connection-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _ := protocol.CanonicalJSON(challenge)
+	finished := make(chan error, 1)
+	go func() {
+		_, err := manager.Authorize(context.Background(), challenge.TransactionID, "connection-01", peer, protocol.Digest(canonical))
+		finished <- err
+	}()
+	select {
+	case <-fido.started:
+	case <-time.After(time.Second):
+		t.Fatal("FIDO did not start")
+	}
+	started := time.Now()
+	if err := manager.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if time.Since(started) > 250*time.Millisecond {
+		t.Fatal("shutdown waited for device timeout")
+	}
+	select {
+	case err := <-finished:
+		if !errors.Is(err, ErrConflict) {
+			t.Fatalf("authorize after shutdown: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("shutdown did not cancel FIDO")
 	}
 }
 
