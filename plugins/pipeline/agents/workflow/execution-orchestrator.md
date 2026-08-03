@@ -926,10 +926,54 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 |---|---|---|
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
-| `75` | Ladder exhausted -- no rung above the quality floor had headroom. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
+| `75` | Provider-terminal boundary. Nonempty stdout is the exact client-verified signed `provider_failure`/`unknown` receipt; empty stdout is an unsigned or unverifiable post-dial outcome. | Apply **Provider Terminal Persistence** below. Flag the lane failed and stop all model/provider traversal. Never retry, downgrade, or use Codex as completion. |
+| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
 | `77` | Disclosure boundary, exact authorization, or trusted-boundary authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
 | `78` | Exact-digest mode only: payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
+
+**Provider Terminal Persistence (RC 75).** RC 75 is absorbing for the entire
+external rail. Do not call `run_cascade` again, walk another model, mark an
+external rail merely exhausted, or invoke Codex as a successful completion.
+
+If `CASCADE_OUT` is nonempty, validate it as one JSON document without
+projecting, rewriting, or logging it:
+
+```bash
+if [ "$CASCADE_RC" -eq 75 ] && [ -n "$CASCADE_OUT" ]; then
+  printf '%s' "$CASCADE_OUT" | jq -e '
+    .schema_version == 1 and
+    .protocol == "workflow-authority-provider-dispatch-v1" and
+    .operation_family == "external_provider_dispatch" and
+    .provider == "openrouter" and
+    ((.outcome == "provider_failure" and .exit_code == 73) or
+     (.outcome == "unknown" and .exit_code == 74)) and
+    .selected_model == null and .generation_id == null and
+    .serving_provider == null and .usage_sha256 == null and .fallback == null and
+    .response_length == 0 and
+    .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"}
+  ' >/dev/null || {
+    CASCADE_OUT=""
+  }
+fi
+```
+
+The fixed client has already authenticated the signature and challenge binding,
+and the Pipeline adapter has already matched repository, run, lane, candidate,
+workload, ordered models, request-body digest, chain, cleanup, and signature
+shape. When the check above succeeds, append the exact unmodified
+`CASCADE_OUT` JSON object through the existing ordered authoritative receipt
+writer as provider evidence. Record the terminal lane status as
+`provider_failure` or `provider_result_unknown` from the receipt, flag the chunk
+failed, skip dependent chunks, and continue only independent chunks. The
+receipt is evidence of failure, never implementation output or permission to
+retry.
+
+When `CASCADE_OUT` is empty initially or becomes empty because this final parse
+fails, append no provider receipt. Record `result_verification_failed`, flag the
+lane and chunk failed, skip dependent chunks, and continue only independent
+chunks. Do not synthesize a receipt. RC 76 alone records
+`cascade_exhausted: true`; neither RC 75 branch may use that classification.
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
 
@@ -939,7 +983,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
    - Codex, account-tier: `not supported when using Codex with a ChatGPT account` -> next model.
 3. **If the whole native list is exhausted by unavailability**, do NOT retry in place -- re-invoke `cascade-dispatch.sh` once with `--exhausted-rail <probe_rail>` (the `probe_rail` from the directive), as Step 3d.3 does. That is the only mechanism that makes `rail_has_headroom()` skip the role; without the flag the script re-walks the same ladder and returns the identical RC-64 directive, looping forever.
    - **Carry forward prior exclusions.** Pass every Codex/OpenRouter rail already excluded earlier in the chunk. Dropping an exclusion can re-try a rail that already failed.
-   - **Loop guard:** re-invoke with `--exhausted-rail` at most once per rail per chunk. If a second RC 64 names a model you have already tried and failed, stop and treat the chunk as `75` (ladder exhausted) rather than dispatching again.
+   - **Loop guard:** re-invoke with `--exhausted-rail` at most once per rail per chunk. If a second RC 64 names a model you have already tried and failed, stop and treat the chunk as `76` (ladder exhausted) rather than dispatching again.
 4. Record the model in `modelUsed:`. `implementedBy:` remains the coding-provider enum `{codex|openrouter}`; Claude may appear only in separate non-coding metrics.
 
 **One-shot validity rule (RC 0).** A wrapper rung returns single-turn text, not an agentic commit. It is acceptable ONLY for chunks whose deliverable IS pure text the orchestrator then writes to files:
