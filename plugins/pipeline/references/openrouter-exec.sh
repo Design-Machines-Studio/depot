@@ -95,6 +95,43 @@ response_metrics() {
   /usr/bin/python3 -c 'import hashlib,sys; b=sys.stdin.buffer.read(); print(len(b)); print("sha256:"+hashlib.sha256(b).hexdigest())'
 }
 
+validate_terminal_failure() {
+  local receipt="$1" outcome="$2" exit_code="$3" body_digest="$4" models
+  models="$(jq -nc --arg model "$MODEL" --arg fallback "$FALLBACK_MODEL" \
+    'if $fallback == "" then [$model] else [$model,$fallback] end')"
+  jq -e --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_ID" \
+    --arg lane "$DM_PROVIDER_LANE" --arg candidate "$DM_PROVIDER_CANDIDATE" \
+    --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" \
+    --arg body_digest "$body_digest" --arg outcome "$outcome" --argjson exit_code "$exit_code" \
+    --argjson models "$models" '
+      .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
+      .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
+      .outcome == $outcome and .exit_code == $exit_code and
+      .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
+      .scope.candidate == $candidate and .scope.workload == $workload and
+      .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
+      .provider == "openrouter" and .part_count == 2 and
+      (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+      (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
+      (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.fallback == (.selected_model != .models[0])) and
+      .request_body_sha256 == $body_digest and
+      .response_sha256 == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and
+      .response_length == 0 and
+      (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
+      (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
+      (.sequence | type == "number" and . >= 1 and . <= 9223372036854775807) and
+      (.issued_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+      (.completed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+      .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
+      .signature.kind == "es256" and
+      (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
+      ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
+    ' "$receipt" >/dev/null 2>&1
+}
+
 CLIENT="$(authority_client)" || {
   echo "openrouter-exec: host_authority_unavailable" >&2
   exit 70
@@ -121,6 +158,9 @@ cat > "$PROMPT_FILE"
 printf '%s' "$SYSTEM" > "$SYSTEM_FILE"
 [ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
+BODY_DIGEST="$(request_body_digest "$MODEL" "$FALLBACK_MODEL" "$SYSTEM_FILE" "$PROMPT_FILE")" || {
+  echo "openrouter-exec: request body digest failed" >&2; exit 2;
+}
 
 marker="$(printf '\001')"
 set +e
@@ -143,20 +183,27 @@ if [ "$rc" -ne 0 ]; then
     71) echo "openrouter-exec: host authorization declined" >&2; exit 77;;
     72) echo "openrouter-exec: host_disclosure_declined" >&2; exit 77;;
     70) echo "openrouter-exec: host_authority_unavailable" >&2; exit 70;;
-    73) echo "openrouter-exec: provider failure" >&2; exit 1;;
-    74) echo "openrouter-exec: provider outcome unknown" >&2; exit 1;;
+    73|74)
+      outcome="provider_failure"
+      [ "$rc" -eq 74 ] && outcome="unknown"
+      if [ -z "$RAW_OUT" ] && validate_terminal_failure "$RESULT_FILE" "$outcome" "$rc" "$BODY_DIGEST"; then
+        echo "openrouter-exec: terminal provider outcome ($outcome); external dispatch rail stopped" >&2
+        cat "$RESULT_FILE"
+      else
+        echo "openrouter-exec: terminal provider result verification failed; external dispatch rail stopped" >&2
+      fi
+      exit 75
+      ;;
+    75) echo "openrouter-exec: provider outcome unverifiable; external dispatch rail stopped" >&2; exit 75;;
     *) echo "openrouter-exec: broker result verification failed" >&2; exit 2;;
   esac
 fi
-RAW_OUT="${RAW_OUT%$marker}"
+RAW_OUT="${RAW_OUT%"$marker"}"
 METRICS="$(printf '%s' "$RAW_OUT" | response_metrics)" || {
   echo "openrouter-exec: response digest failed" >&2; exit 2;
 }
 RESPONSE_LENGTH="$(printf '%s\n' "$METRICS" | sed -n '1p')"
 RESPONSE_DIGEST="$(printf '%s\n' "$METRICS" | sed -n '2p')"
-BODY_DIGEST="$(request_body_digest "$MODEL" "$FALLBACK_MODEL" "$SYSTEM_FILE" "$PROMPT_FILE")" || {
-  echo "openrouter-exec: request body digest failed" >&2; exit 2;
-}
 MODELS_JSON="$(jq -nc --arg model "$MODEL" --arg fallback "$FALLBACK_MODEL" \
   'if $fallback == "" then [$model] else [$model,$fallback] end')"
 jq -e --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_ID" \

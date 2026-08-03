@@ -77,3 +77,32 @@ preparation state, not provider failure and not a clean review result.
 `trusted-boundary` is run-scoped authority supplied by the user or trusted host
 environment. Do not persist it into repository files, infer it from an API key,
 or enable it merely because OpenRouter was selected as an executor.
+
+## Broker terminal outcomes
+
+Automated Pipeline dispatch uses the fixed host-authority client. Its exit
+classes are part of the fail-closed boundary:
+
+- `70`, `71`, and `72` are unsigned pre-network outcomes. The cascade may use
+  the existing trusted Codex fallback because the broker proves that no
+  provider contact occurred.
+- `73` (`provider_failure`) and `74` (`unknown`) are signed terminal outcomes
+  after a provider attempt. They are not model-capacity signals. Before
+  preserving the content-free receipt, the adapter must require zero response
+  bytes and match its repository, run, lane, candidate, workload, ordered
+  models, exact request-body digest, outcome/exit pair, chain/cleanup fields,
+  and production signature shape. The client has already verified the
+  signature and its challenge binding, including the caller nonce.
+- `75` means the post-dial outcome is unsigned or unverifiable. It carries no
+  receipt and is never converted into one by Pipeline.
+
+Pipeline normalizes all three post-dial classes to cascade exit `75`, with one
+explicit terminal lane failure. That exit stops the complete external rail:
+it must not try another model, contact OpenRouter again, downgrade to another
+external provider, or treat an automatic Codex fallback as completion. A
+validated `73`/`74` receipt may pass unchanged through the existing receipt
+channel as evidence; its content is never written to stderr or mixed with a
+provider response. Invalid receipts and native `75` outcomes expose no receipt.
+
+Dry-run routing, direct interactive exact-digest approval, and the routing
+matrix are unchanged by this terminal normalization.

@@ -437,6 +437,73 @@ expect_rc 2 'payload changed after authorization snapshot' 'payload membership c
 AUTH_ROOT="$FIXTURE_ROOT/workflow-authority-fixture"
 mkdir -p "$AUTH_ROOT" "$FIXTURE_ROOT/exec-repo/auth"
 cp "$REPO_ROOT/tools/fixtures/fake-workflow-authority-client.py" "$AUTH_ROOT/fake-client.py"
+/usr/bin/python3 - "$AUTH_ROOT/fake-client.py" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+text = text.replace(
+    '    case = os.environ.get("DM_WORKFLOW_AUTHORITY_FIXTURE_CASE", "signed-success")\n',
+    '''    case = os.environ.get("DM_WORKFLOW_AUTHORITY_FIXTURE_CASE", "signed-success")
+    counter = root / "request-count"
+    try:
+        count = int(counter.read_text())
+    except (OSError, ValueError):
+        count = 0
+    counter.write_text(str(count + 1))
+    terminal_case = case.startswith("terminal-")
+    if case == "terminal-unsigned-ambiguity":
+        fail(75, "post-dial result unverifiable")
+''',
+)
+text = text.replace(
+    '    models = [str(args["--model"])]\n',
+    '''    if terminal_case:
+        response = b""
+    models = [str(args["--model"])]
+''',
+)
+text = text.replace(
+    '    if case == "wrong-scope":\n',
+    '''    if terminal_case:
+        terminal["outcome"] = "unknown" if case == "terminal-unknown" else "provider_failure"
+        terminal["exit_code"] = 74 if case == "terminal-unknown" else 73
+    if case == "terminal-wrong-scope":
+        terminal["scope"]["candidate"] = "wrong-candidate"
+    elif case == "terminal-wrong-workload":
+        terminal["scope"]["workload"] = "wrong-workload"
+    elif case == "terminal-wrong-body":
+        terminal["request_body_sha256"] = digest(b"wrong-body")
+    elif case == "terminal-wrong-model":
+        terminal["models"] = ["fixture/wrong-model"]
+        terminal["selected_model"] = "fixture/wrong-model"
+    elif case == "terminal-wrong-exit":
+        terminal["exit_code"] = 74
+    elif case == "terminal-wrong-cleanup":
+        terminal["cleanup"]["reservation"] = "released"
+    elif case == "terminal-wrong-chain":
+        terminal["prior_chain_digest"] = "invalid"
+    elif case == "terminal-forged-signature":
+        terminal["signature"]["value"] = "fixture-rsa-sha256-v1:" + "0" * 256
+    if case == "wrong-scope":
+''',
+)
+text = text.replace(
+    '    os.write(3, response)\n',
+    '''    os.write(3, b"unexpected-response" if case == "terminal-response-bytes" else response)
+''',
+)
+text = text.replace(
+    '    sys.stdout.buffer.write(canonical(terminal) + b"\\n")\n',
+    '''    sys.stdout.buffer.write(canonical(terminal) + b"\\n")
+    if terminal_case:
+        sys.stdout.buffer.flush()
+        raise SystemExit(74 if case == "terminal-unknown" else 73)
+''',
+)
+path.write_text(text)
+PY
 cat > "$AUTH_ROOT/workflow-authority" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -552,13 +619,49 @@ expect_rc 77 'host_disclosure_declined' 'disclosure decline class' \
   DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-decline \
   OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 printf '%s\n' provider-failure > "$AUTH_ROOT/case"
-expect_rc 1 'provider failure' 'provider failure class' \
+expect_rc 75 'terminal provider result verification failed' 'unsigned provider failure is terminal' \
   env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
   DM_WORKFLOW_AUTHORITY_FIXTURE_CASE=provider-failure \
   DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
   DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
   DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-provider \
   OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+[ ! -s "$FIXTURE_ROOT/cmd.out" ]
+
+for terminal_case in terminal-provider-failure terminal-unknown; do
+  printf '%s\n' 0 > "$AUTH_ROOT/request-count"
+  printf '%s\n' "$terminal_case" > "$AUTH_ROOT/case"
+  expect_rc 75 'external dispatch rail stopped' "$terminal_case is preserved and terminal" \
+    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$terminal_case" \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
+    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+  [ "$(cat "$AUTH_ROOT/request-count")" -eq 1 ]
+  expected_outcome=provider_failure
+  [ "$terminal_case" = terminal-unknown ] && expected_outcome=unknown
+  jq -e --arg outcome "$expected_outcome" \
+    '.outcome == $outcome and .response_length == 0' "$FIXTURE_ROOT/cmd.out" >/dev/null
+done
+
+for terminal_case in terminal-wrong-scope terminal-wrong-workload terminal-wrong-body \
+    terminal-wrong-model terminal-wrong-exit terminal-wrong-cleanup terminal-wrong-chain \
+    terminal-forged-signature terminal-response-bytes terminal-unsigned-ambiguity; do
+  printf '%s\n' 0 > "$AUTH_ROOT/request-count"
+  printf '%s\n' "$terminal_case" > "$AUTH_ROOT/case"
+  expect_rc 75 'external dispatch rail stopped' "$terminal_case is terminal without evidence" \
+    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-$terminal_case" \
+    OPENROUTER_EXEC_FALLBACK_MODEL=z-ai/glm-5.2 \
+    OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
+    "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
+  [ "$(cat "$AUTH_ROOT/request-count")" -eq 1 ]
+  [ ! -s "$FIXTURE_ROOT/cmd.out" ]
+done
 
 printf '%s\n' signed-success > "$AUTH_ROOT/case"
 rm -f "$AUTH_ROOT/observed-user"
@@ -591,6 +694,42 @@ DIFF
 jq -e '.implementedBy == "openrouter" and .status == "committed"
   and .servingProviderProvenance == "broker-verified"' "$FIXTURE_ROOT/cascade-receipt.json" >/dev/null
 [ -e "$AUTH_ROOT/observed-user" ]
+
+for terminal_case in terminal-provider-failure terminal-unknown terminal-unsigned-ambiguity; do
+  printf '%s\n' 0 > "$AUTH_ROOT/request-count"
+  printf '%s\n' "$terminal_case" > "$AUTH_ROOT/case"
+  expect_rc 75 'terminal provider outcome' "cascade stops after $terminal_case" \
+    env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+    DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+    DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+    DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE="nonce-cascade-$terminal_case" \
+    OPENROUTER_EXEC_ALLOWED_PATHS=docs/assessment.md \
+    "$CASCADE" --class openrouter --prompt 'terminal test' --host codex
+  [ "$(cat "$AUTH_ROOT/request-count")" -eq 1 ]
+  if [ "$terminal_case" = terminal-unsigned-ambiguity ]; then
+    [ ! -s "$FIXTURE_ROOT/cmd.out" ]
+  else
+    jq -e '.response_length == 0 and (.outcome == "provider_failure" or .outcome == "unknown")' \
+      "$FIXTURE_ROOT/cmd.out" >/dev/null
+  fi
+done
+
+# Exercise the single-turn wrapper branch independently of the agentic
+# openrouter_exec rung. A terminal outcome must stop before the second wrapper
+# model and before the following native Codex role.
+jq '.cascades.openrouter.ladder = ["frontier_api", "premium_sub"]' \
+  "$REPO_ROOT/plugins/pipeline/references/model-cascade.json" > "$AUTH_ROOT/wrapper-first-cascade.json"
+printf '%s\n' 0 > "$AUTH_ROOT/request-count"
+printf '%s\n' terminal-provider-failure > "$AUTH_ROOT/case"
+expect_rc 75 'terminal provider outcome' 'wrapper rail stops after signed provider failure' \
+  env DM_AUTOMATION_TEST=1 DM_AUTOMATION_TEST_ROOT="$AUTH_ROOT" \
+  CASCADE_FILE="$AUTH_ROOT/wrapper-first-cascade.json" \
+  DM_PROVIDER_REPOSITORY=design-machines/depot DM_PROVIDER_RUN_ID=run-01 \
+  DM_PROVIDER_LANE=pipeline-assessment-artifact-delegation-v1 \
+  DM_PROVIDER_CANDIDATE=candidate-01 DM_PROVIDER_NONCE=nonce-wrapper-terminal \
+  "$CASCADE" --class openrouter --prompt 'terminal wrapper test' --host codex
+[ "$(cat "$AUTH_ROOT/request-count")" -eq 1 ]
+jq -e '.outcome == "provider_failure" and .response_length == 0' "$FIXTURE_ROOT/cmd.out" >/dev/null
 
 rm -f "$AUTH_ROOT/observed-user"
 for lane in research adversarial-review execution dm-review airlift unknown ''; do
