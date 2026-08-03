@@ -9,8 +9,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -21,6 +23,7 @@ const (
 	AdminPath      = "/usr/local/sbin/workflow-authority-admin"
 	DaemonPath     = "/usr/local/libexec/design-machines/workflow-authorityd"
 	SocketPath     = "/run/design-machines/workflow-authority/authority.sock"
+	TmpfilesPath   = "/usr/lib/tmpfiles.d/workflow-authority.conf"
 	PolicyPath     = "/etc/design-machines/workflow-authority/provider-policy.json"
 	CredentialPath = "/etc/design-machines/workflow-authority/credentials/openrouter"
 	StatePath      = "/var/lib/design-machines/workflow-authority"
@@ -61,10 +64,13 @@ func (s systemdService) DisableUnits() error {
 }
 
 type Linux struct {
-	paths   Paths
-	euid    int
-	service ServiceController
-	test    bool
+	paths    Paths
+	euid     int
+	rootGID  uint32
+	authGID  uint32
+	testRoot string
+	service  ServiceController
+	test     bool
 }
 
 // NewLinux has no caller-controlled paths. Production rejects non-Linux hosts.
@@ -72,7 +78,15 @@ func NewLinux() (*Linux, error) {
 	if runtime.GOOS != "linux" {
 		return nil, ErrUnavailable
 	}
-	return &Linux{paths: frozenPaths(""), euid: os.Geteuid(), service: systemdService{}}, nil
+	group, err := user.LookupGroup("workflow-authority")
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	gid, err := strconv.ParseUint(group.Gid, 10, 32)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	return &Linux{paths: frozenPaths(""), euid: os.Geteuid(), rootGID: 0, authGID: uint32(gid), service: systemdService{}}, nil
 }
 
 // NewTestLinux is the only injected-root seam. It is constructor-only and is
@@ -84,7 +98,9 @@ func NewTestLinux(root string, euid int, service ServiceController) (*Linux, err
 	if service == nil {
 		service = noopService{}
 	}
-	return &Linux{paths: frozenPaths(filepath.Clean(root)), euid: euid, service: service, test: true}, nil
+	gid := uint32(os.Getegid())
+	cleanRoot := filepath.Clean(root)
+	return &Linux{paths: frozenPaths(cleanRoot), euid: euid, rootGID: gid, authGID: gid, testRoot: cleanRoot, service: service, test: true}, nil
 }
 
 func frozenPaths(root string) Paths {
@@ -113,13 +129,13 @@ type Status struct {
 func (p *Linux) Status() Status {
 	state := "unavailable"
 	if p != nil {
-		layout := p.ValidateLayout()
-		switch {
-		case layout == nil && validRegular(p.paths.Credential, 0o600):
-			state = "ready"
-		case validDir(p.paths.State, 0o700) && validRegular(p.paths.Policy, 0o600):
-			state = "not-enrolled"
-		case validDir(p.paths.State, 0o700):
+		if p.ValidateLayout() == nil {
+			if p.check(p.paths.Credential, 0o600, false) == nil {
+				state = "ready"
+			} else if _, err := os.Lstat(p.paths.Credential); errors.Is(err, os.ErrNotExist) {
+				state = "not-enrolled"
+			}
+		} else if p.check(p.paths.State, 0o700, true) == nil {
 			state = "degraded"
 		}
 	}
@@ -157,24 +173,51 @@ func (p *Linux) ValidateLayout() error {
 }
 
 func (p *Linux) check(path string, mode os.FileMode, dir bool) error {
+	if err := p.checkAncestors(path); err != nil {
+		return err
+	}
 	info, err := os.Lstat(path)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != mode || info.IsDir() != dir || (!dir && !info.Mode().IsRegular()) {
 		return ErrUnavailable
 	}
 	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || (!p.test && st.Uid != 0) || (!dir && st.Nlink != 1) {
+	wantUID := uint32(0)
+	if p.test {
+		wantUID = uint32(os.Geteuid())
+	}
+	wantGID := p.rootGID
+	if filepath.Clean(path) == filepath.Clean(filepath.Dir(p.paths.Socket)) {
+		wantGID = p.authGID
+	}
+	if !ok || st.Uid != wantUID || st.Gid != wantGID || (!dir && st.Nlink != 1) {
 		return ErrUnavailable
 	}
 	return nil
 }
 
-func validDir(path string, mode os.FileMode) bool {
-	i, e := os.Lstat(path)
-	return e == nil && i.IsDir() && i.Mode().Perm() == mode && i.Mode()&os.ModeSymlink == 0
-}
-func validRegular(path string, mode os.FileMode) bool {
-	i, e := os.Lstat(path)
-	return e == nil && i.Mode().IsRegular() && i.Mode().Perm() == mode && i.Mode()&os.ModeSymlink == 0
+func (p *Linux) checkAncestors(path string) error {
+	stop := string(filepath.Separator)
+	if p.test {
+		// The injected root is the trust anchor in tests; host temp-directory
+		// ancestry is outside the emulated installation boundary.
+		stop = p.testRoot
+	}
+	wantUID := uint32(0)
+	wantGID := p.rootGID
+	if p.test {
+		wantUID = uint32(os.Geteuid())
+	}
+	for parent := filepath.Dir(filepath.Clean(path)); parent != stop && parent != string(filepath.Separator); parent = filepath.Dir(parent) {
+		info, err := os.Lstat(parent)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0o022 != 0 {
+			return ErrUnavailable
+		}
+		st, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || st.Uid != wantUID || st.Gid != wantGID {
+			return ErrUnavailable
+		}
+	}
+	return nil
 }
 
 func (p *Linux) ProvisionOpenRouter(secret []byte) error {
@@ -212,7 +255,7 @@ func (p *Linux) ProvisionOpenRouter(secret []byte) error {
 		err = f.Sync()
 	}
 	if err == nil {
-		err = validateCredentialFile(f, p.expectedOwner())
+		err = validateCredentialFile(f, p.expectedOwner(), p.rootGID)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -236,13 +279,13 @@ func (p *Linux) expectedOwner() uint32 {
 	}
 	return 0
 }
-func validateCredentialFile(f *os.File, owner uint32) error {
+func validateCredentialFile(f *os.File, owner, group uint32) error {
 	i, e := f.Stat()
 	if e != nil || !i.Mode().IsRegular() || i.Mode().Perm() != 0o600 {
 		return ErrUnavailable
 	}
 	s, ok := i.Sys().(*syscall.Stat_t)
-	if !ok || s.Uid != owner || s.Nlink != 1 {
+	if !ok || s.Uid != owner || s.Gid != group || s.Nlink != 1 {
 		return ErrUnavailable
 	}
 	return nil
@@ -332,13 +375,19 @@ func (p *Linux) writeTombstone(name string) error {
 	path := filepath.Join(p.paths.State, name+".tombstone")
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
 	if errors.Is(err, os.ErrExist) {
-		return validateTombstone(path, p.expectedOwner())
+		return validateTombstone(path, p.expectedOwner(), p.rootGID)
 	}
 	if err != nil {
 		return recovery(name, "preserve state and retry the command", err)
 	}
-	if _, err = f.Write([]byte("workflow-authority lifecycle tombstone\n")); err == nil {
+	if err = f.Chmod(0o600); err == nil {
+		_, err = f.Write([]byte("workflow-authority lifecycle tombstone\n"))
+	}
+	if err == nil {
 		err = f.Sync()
+	}
+	if err == nil {
+		err = validateTombstoneFile(f, p.expectedOwner(), p.rootGID)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -348,17 +397,29 @@ func (p *Linux) writeTombstone(name string) error {
 	}
 	return err
 }
-func validateTombstone(path string, owner uint32) error {
+func validateTombstone(path string, owner, group uint32) error {
 	i, e := os.Lstat(path)
 	if e != nil || !i.Mode().IsRegular() || i.Mode().Perm() != 0o600 {
 		return ErrUnavailable
 	}
 	s, ok := i.Sys().(*syscall.Stat_t)
-	if !ok || s.Uid != owner || s.Nlink != 1 {
+	if !ok || s.Uid != owner || s.Gid != group || s.Nlink != 1 {
 		return ErrUnavailable
 	}
 	b, e := os.ReadFile(path)
 	if e != nil || !bytes.Equal(b, []byte("workflow-authority lifecycle tombstone\n")) {
+		return ErrUnavailable
+	}
+	return nil
+}
+
+func validateTombstoneFile(f *os.File, owner, group uint32) error {
+	i, err := f.Stat()
+	if err != nil || !i.Mode().IsRegular() || i.Mode().Perm() != 0o600 {
+		return ErrUnavailable
+	}
+	st, ok := i.Sys().(*syscall.Stat_t)
+	if !ok || st.Uid != owner || st.Gid != group || st.Nlink != 1 {
 		return ErrUnavailable
 	}
 	return nil
@@ -380,6 +441,7 @@ func (p *Linux) UninstallPlan() ([]string, error) {
 		"systemctl disable workflow-authority.socket workflow-authority.service",
 		"remove exactly: " + strings.Join(paths, ", "),
 		"remove exactly: /etc/systemd/system/workflow-authority.socket, /etc/systemd/system/workflow-authority.service",
+		"remove exactly: " + TmpfilesPath,
 		"rmdir exactly if empty: /run/design-machines/workflow-authority",
 		"systemctl daemon-reload",
 		"after verifying no members or files depend on it: groupdel workflow-authority",
@@ -412,6 +474,7 @@ type Terminal struct {
 	file        *os.File
 	identity    TerminalIdentity
 	openCurrent func() (*os.File, error)
+	identify    func(*os.File) (TerminalIdentity, error)
 }
 
 func OpenTerminal() (*Terminal, error) {
@@ -424,11 +487,15 @@ func OpenTerminal() (*Terminal, error) {
 		_ = f.Close()
 		return nil, err
 	}
-	return &Terminal{file: f, identity: id, openCurrent: func() (*os.File, error) { return os.OpenFile("/dev/tty", os.O_RDWR, 0) }}, nil
+	return &Terminal{file: f, identity: id, openCurrent: func() (*os.File, error) { return os.OpenFile("/dev/tty", os.O_RDWR, 0) }, identify: terminalIdentity}, nil
 }
 func terminalIdentity(f *os.File) (TerminalIdentity, error) {
 	i, e := f.Stat()
-	if e != nil || i.Mode()&os.ModeCharDevice == 0 {
+	if e != nil || i.Mode()&os.ModeCharDevice == 0 || runtime.GOOS != "linux" {
+		return TerminalIdentity{}, ErrUnavailable
+	}
+	var term syscall.Termios
+	if _, _, errno := syscall.Syscall6(syscall.SYS_IOCTL, f.Fd(), 0x5401, uintptr(unsafePointer(&term)), 0, 0, 0); errno != 0 {
 		return TerminalIdentity{}, ErrUnavailable
 	}
 	s, ok := i.Sys().(*syscall.Stat_t)
@@ -438,7 +505,10 @@ func terminalIdentity(f *os.File) (TerminalIdentity, error) {
 	return TerminalIdentity{uint64(s.Dev), uint64(s.Ino)}, nil
 }
 func (t *Terminal) Stable() error {
-	id, e := terminalIdentity(t.file)
+	if t.identify == nil {
+		return ErrUnavailable
+	}
+	id, e := t.identify(t.file)
 	if e != nil || id != t.identity {
 		return ErrUnavailable
 	}
@@ -450,11 +520,25 @@ func (t *Terminal) Stable() error {
 		return ErrUnavailable
 	}
 	defer current.Close()
-	fresh, e := terminalIdentity(current)
+	fresh, e := t.identify(current)
 	if e != nil || fresh != t.identity {
 		return ErrUnavailable
 	}
 	return nil
+}
+func (t *Terminal) MatchesInput(input io.Reader) error {
+	f, ok := input.(*os.File)
+	if !ok {
+		return ErrUnavailable
+	}
+	if t.identify == nil {
+		return ErrUnavailable
+	}
+	id, err := t.identify(f)
+	if err != nil || id != t.identity {
+		return ErrUnavailable
+	}
+	return t.Stable()
 }
 func (t *Terminal) Write(p []byte) (int, error) {
 	if t.Stable() != nil {

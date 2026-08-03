@@ -244,21 +244,28 @@ func TestMissingTTYAndRegularFileRejected(t *testing.T) {
 }
 
 func TestChangedTerminalIdentityRejected(t *testing.T) {
-	first, err := os.OpenFile("/dev/null", os.O_RDWR, 0)
+	first, err := os.CreateTemp(t.TempDir(), "original-terminal")
 	if err != nil {
-		t.Skip(err)
+		t.Fatal(err)
 	}
 	defer first.Close()
-	second, err := os.OpenFile("/dev/zero", os.O_RDWR, 0)
+	second, err := os.CreateTemp(t.TempDir(), "replacement-terminal")
 	if err != nil {
-		t.Skip(err)
+		t.Fatal(err)
 	}
 	defer second.Close()
-	changed, err := terminalIdentity(second)
-	if err != nil {
-		t.Skip(err)
+	original := TerminalIdentity{Device: 1, Inode: 1}
+	replacement := TerminalIdentity{Device: 1, Inode: 2}
+	identify := func(f *os.File) (TerminalIdentity, error) {
+		if f == first {
+			return original, nil
+		}
+		if f == second {
+			return replacement, nil
+		}
+		return TerminalIdentity{}, ErrUnavailable
 	}
-	terminal := &Terminal{file: first, identity: changed, openCurrent: func() (*os.File, error) { return os.OpenFile("/dev/null", os.O_RDWR, 0) }}
+	terminal := &Terminal{file: first, identity: original, openCurrent: func() (*os.File, error) { return second, nil }, identify: identify}
 	if !errors.Is(terminal.Stable(), ErrUnavailable) {
 		t.Fatal("changed terminal identity accepted")
 	}
@@ -293,10 +300,21 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"ListenStream=" + SocketPath, "SocketUser=root", "SocketGroup=workflow-authority", "SocketMode=0660", "DirectoryMode=0750", "RemoveOnStop=yes", "Service=workflow-authority.service"} {
+	tmpfiles, err := os.ReadFile(filepath.Join(root, "workflow-authority-tmpfiles.conf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"ListenStream=" + SocketPath, "SocketUser=root", "SocketGroup=workflow-authority", "SocketMode=0660", "RemoveOnStop=yes", "Service=workflow-authority.service", "Requires=systemd-tmpfiles-setup.service", "After=systemd-tmpfiles-setup.service", "ConditionPathIsDirectory=" + filepath.Dir(SocketPath), "ConditionPathIsSymbolicLink=!" + filepath.Dir(SocketPath)} {
 		if !strings.Contains(string(socket), want) {
 			t.Errorf("socket missing %s", want)
 		}
+	}
+	if strings.Contains(string(socket), "DirectoryMode=") {
+		t.Error("socket unit may not create a caller-substituted parent")
+	}
+	wantTmpfiles := "d " + filepath.Dir(SocketPath) + " 0750 root workflow-authority -"
+	if !strings.Contains(string(tmpfiles), wantTmpfiles) || !strings.Contains(string(tmpfiles), "Install as "+TmpfilesPath) {
+		t.Fatalf("tmpfiles declaration does not freeze installed target and ownership: %s", tmpfiles)
 	}
 	for _, want := range []string{"ExecStart=" + DaemonPath, "User=root", "Group=root", "UMask=0077", "PrivateTmp=yes", "NoNewPrivileges=yes", "CapabilityBoundingSet=", "AmbientCapabilities=", "ProtectSystem=strict", "UnsetEnvironment=HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY https_proxy http_proxy all_proxy no_proxy OPENROUTER_API_KEY", "DevicePolicy=closed", "DeviceAllow=/dev/hidraw0 rw", "SystemCallFilter=@system-service @network-io", "SystemCallErrorNumber=EPERM", "LimitNOFILE=256", "TasksMax=32", "MemoryMax=256M", "LimitCORE=0", "TimeoutStopSec=15s"} {
 		if !strings.Contains(string(service), want) {
@@ -307,6 +325,26 @@ func TestSystemdUnitsFreezeExecutableEnvironmentAndBounds(t *testing.T) {
 		if strings.Contains(string(service), forbidden) {
 			t.Errorf("service contains override surface %s", forbidden)
 		}
+	}
+}
+
+func TestLayoutRejectsWrongGroupAndSymlinkedAncestor(t *testing.T) {
+	p, _ := testPlatform(t, true)
+	p.authGID++
+	if p.ValidateLayout() == nil {
+		t.Fatal("wrong workflow-authority group accepted")
+	}
+	p.authGID--
+	ancestor := filepath.Join(p.testRoot, "usr", "local")
+	moved := ancestor + ".real"
+	if err := os.Rename(ancestor, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(moved, ancestor); err != nil {
+		t.Fatal(err)
+	}
+	if p.ValidateLayout() == nil {
+		t.Fatal("symlinked installation ancestor accepted")
 	}
 }
 

@@ -28,20 +28,53 @@ const (
 
 func main() { os.Exit(run(os.Args, os.Stdin, os.Stdout, os.Stderr)) }
 
+type localPlatform interface {
+	StatusJSON() ([]byte, error)
+	RequireRoot() error
+	ProvisionOpenRouter([]byte) error
+	RevokeOpenRouter() error
+	Disable() error
+	UninstallPlan() ([]string, error)
+}
+
+type adminTerminal interface {
+	Stable() error
+	MatchesInput(io.Reader) error
+	ReadSecret(string) ([]byte, error)
+	Close() error
+}
+
+var openLinuxPlatform = func() (localPlatform, error) { return platform.NewLinux() }
+var openAdminTerminal = func() (adminTerminal, error) { return platform.OpenTerminal() }
+
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) < 2 {
 		return fail(stderr, "usage: workflow-authority <dispatch-provider-request|status>", exitUsage)
 	}
-	p, err := platform.NewLinux()
+	admin := filepath.Base(args[0]) == "workflow-authority-admin"
+	command := args[1]
+	if command == "dispatch-provider-request" && (admin || len(args) != 2) {
+		return fail(stderr, "dispatch-provider-request accepts no options", exitUsage)
+	}
+	if command == "status" && len(args) != 2 {
+		return fail(stderr, "status accepts no options", exitUsage)
+	}
+	administrative := command == "enroll-fido" || command == "provision-openrouter" || command == "revoke-openrouter" || command == "disable" || command == "uninstall-plan"
+	if administrative && !admin {
+		return fail(stderr, "administrative command requires workflow-authority-admin", exitDeclined)
+	}
+	if administrative && len(args) != 2 {
+		return fail(stderr, "administrative commands accept no options", exitUsage)
+	}
+	if command != "status" && command != "dispatch-provider-request" && !administrative {
+		return fail(stderr, "unknown command", exitUsage)
+	}
+	p, err := openLinuxPlatform()
 	if err != nil {
 		return fail(stderr, "workflow authority is unavailable on this host", exitUnavailable)
 	}
-	admin := filepath.Base(args[0]) == "workflow-authority-admin"
-	switch args[1] {
+	switch command {
 	case "status":
-		if len(args) != 2 {
-			return fail(stderr, "status accepts no options", exitUsage)
-		}
 		raw, err := p.StatusJSON()
 		if err != nil {
 			return fail(stderr, "status unavailable", exitUnavailable)
@@ -51,35 +84,29 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case "dispatch-provider-request":
-		if admin || len(args) != 2 {
-			return fail(stderr, "dispatch-provider-request accepts no options", exitUsage)
-		}
 		if err := dispatch(stdin, stdout); err != nil {
 			return fail(stderr, "provider dispatch failed closed", exitUnavailable)
 		}
 		return 0
 	case "enroll-fido", "provision-openrouter", "revoke-openrouter", "disable", "uninstall-plan":
-		if !admin {
-			return fail(stderr, "administrative command requires workflow-authority-admin", exitDeclined)
-		}
-		if len(args) != 2 {
-			return fail(stderr, "administrative commands accept no options", exitUsage)
-		}
-		return runAdmin(p, args[1], stdout, stderr)
+		return runAdmin(p, command, stdin, stdout, stderr)
 	default:
 		return fail(stderr, "unknown command", exitUsage)
 	}
 }
 
-func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
+func runAdmin(p localPlatform, command string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if err := p.RequireRoot(); err != nil {
 		return fail(stderr, "administrative command requires effective uid 0", exitDeclined)
 	}
-	terminal, err := platform.OpenTerminal()
+	terminal, err := openAdminTerminal()
 	if err != nil {
 		return fail(stderr, "administrative command requires a stable controlling /dev/tty", exitDeclined)
 	}
 	defer terminal.Close()
+	if err := terminal.MatchesInput(stdin); err != nil {
+		return fail(stderr, "administrative command requires stdin from the controlling terminal", exitDeclined)
+	}
 	if err := terminal.Stable(); err != nil {
 		return fail(stderr, "controlling terminal changed", exitDeclined)
 	}
@@ -106,7 +133,7 @@ func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
 		if terminal.Stable() != nil {
 			return fail(stderr, "controlling terminal changed; provisioning may have completed, run status before recovery", exitUnavailable)
 		}
-		return contentFree(stdout, "provisioned")
+		return contentFree(stdout, stderr, "provisioned")
 	case "revoke-openrouter":
 		if err := p.RevokeOpenRouter(); err != nil {
 			return fail(stderr, err.Error(), exitUnavailable)
@@ -114,7 +141,7 @@ func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
 		if terminal.Stable() != nil {
 			return fail(stderr, "controlling terminal changed; revocation may have completed, run status before recovery", exitUnavailable)
 		}
-		return contentFree(stdout, "revoked")
+		return contentFree(stdout, stderr, "revoked")
 	case "disable":
 		if err := p.Disable(); err != nil {
 			return fail(stderr, err.Error(), exitUnavailable)
@@ -122,7 +149,7 @@ func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
 		if terminal.Stable() != nil {
 			return fail(stderr, "controlling terminal changed; disable may have completed, inspect service state before recovery", exitUnavailable)
 		}
-		return contentFree(stdout, "disabled")
+		return contentFree(stdout, stderr, "disabled")
 	case "uninstall-plan":
 		plan, err := p.UninstallPlan()
 		if err != nil {
@@ -132,16 +159,23 @@ func runAdmin(p *platform.Linux, command string, stdout, stderr io.Writer) int {
 			if terminal.Stable() != nil {
 				return fail(stderr, "controlling terminal changed; uninstall plan aborted", exitDeclined)
 			}
-			_, _ = fmt.Fprintln(stdout, step)
+			if _, err := fmt.Fprintln(stdout, step); err != nil {
+				return fail(stderr, "uninstall plan output failed", exitUnavailable)
+			}
 		}
 		return 0
 	}
 	return exitUsage
 }
 
-func contentFree(w io.Writer, state string) int {
-	raw, _ := json.Marshal(map[string]any{"schema_version": 1, "protocol": "workflow-authority-admin-result-v1", "state": state})
-	_, _ = w.Write(append(raw, '\n'))
+func contentFree(w, stderr io.Writer, state string) int {
+	raw, err := json.Marshal(map[string]any{"schema_version": 1, "protocol": "workflow-authority-admin-result-v1", "state": state})
+	if err != nil {
+		return fail(stderr, "administrative result unavailable", exitUnavailable)
+	}
+	if _, err := w.Write(append(raw, '\n')); err != nil {
+		return fail(stderr, "administrative result output failed", exitUnavailable)
+	}
 	return 0
 }
 func fail(w io.Writer, message string, code int) int { _, _ = fmt.Fprintln(w, message); return code }
@@ -155,13 +189,8 @@ func dispatch(stdin io.Reader, stdout io.Writer) error {
 		return errors.New("fd3 unavailable")
 	}
 	defer fd3.Close()
-	info, err := fd3.Stat()
-	if err != nil || info.Mode()&os.ModeNamedPipe == 0 || info.Mode().IsRegular() {
-		return errors.New("fd3 must be anonymous pipe")
-	}
-	st, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || st.Nlink != 0 {
-		return errors.New("fd3 must be anonymous pipe")
+	if err := validateResponsePipe(fd3); err != nil {
+		return err
 	}
 	wire, err := io.ReadAll(io.LimitReader(stdin, 8_388_609))
 	if err != nil || len(wire) > 8_388_608 {
@@ -218,6 +247,18 @@ func dispatch(stdin io.Reader, stdout io.Writer) error {
 	// Trust-chain verification and terminal projection are intentionally not
 	// guessed here. No byte is written to fd 3 or stdout without that verifier.
 	return errors.New("production trust-chain verifier unavailable")
+}
+
+func validateResponsePipe(fd3 *os.File) error {
+	info, err := fd3.Stat()
+	if err != nil || info.Mode()&os.ModeNamedPipe == 0 || info.Mode().IsRegular() {
+		return errors.New("fd3 must be anonymous pipe")
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || st.Nlink != 0 {
+		return errors.New("fd3 must be anonymous pipe")
+	}
+	return nil
 }
 
 func validateChallenge(r protocol.Request, c protocol.Challenge) error {
