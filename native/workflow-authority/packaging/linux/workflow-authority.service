@@ -1,0 +1,46 @@
+[Unit]
+Description=Design Machines Workflow Authority broker
+Requires=workflow-authority.socket
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/libexec/design-machines/workflow-authorityd
+Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+Environment=HOME=/var/empty
+Environment=LANG=C.UTF-8
+UnsetEnvironment=HTTPS_PROXY HTTP_PROXY ALL_PROXY NO_PROXY https_proxy http_proxy all_proxy no_proxy OPENROUTER_API_KEY
+UMask=0077
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=no
+DevicePolicy=closed
+DeviceAllow=/dev/hidraw0 rw
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictNamespaces=yes
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/design-machines/workflow-authority
+ReadOnlyPaths=/etc/design-machines/workflow-authority
+LimitNOFILE=256
+TasksMax=32
+MemoryMax=256M
+LimitCORE=0
+TimeoutStopSec=15s
+KillMode=mixed
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
