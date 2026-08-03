@@ -66,6 +66,9 @@ func NewProduction() *Runner {
 }
 
 func (r *Runner) Dispatch(ctx context.Context, options DispatchOptions, system, user io.Reader) (Result, error) {
+	if r == nil || r.fido == nil || r.confirm == nil {
+		return Result{}, ErrUnavailable
+	}
 	if err := validateOptions(options); err != nil {
 		return Result{}, err
 	}
@@ -183,8 +186,7 @@ func (r *Runner) Dispatch(ctx context.Context, options DispatchOptions, system, 
 
 func (r *Runner) Status(ctx context.Context) ([]byte, error) {
 	credential, err := r.loadTrust()
-	readiness := r.fido.Readiness(ctx)
-	if err != nil || credential.Status != "active" || !readiness.Production || !readiness.InternalUV || readiness.Adapter != "libfido2" || readiness.Version != authority.FIDO2Version {
+	if err != nil || credential.Status != "active" {
 		return nil, ErrUnavailable
 	}
 	conn, err := r.connect(ctx)
@@ -205,7 +207,7 @@ func (r *Runner) Status(ctx context.Context) ([]byte, error) {
 }
 
 func (r *Runner) connect(ctx context.Context) (net.Conn, error) {
-	if r == nil || r.socketPath == "" || r.trustPath == "" || r.dial == nil || r.confirm == nil || r.fido == nil || r.now == nil {
+	if r == nil || r.socketPath == "" || r.trustPath == "" || r.dial == nil || r.now == nil {
 		return nil, ErrUnavailable
 	}
 	if err := validateSocketPath(r.socketPath, r.socketAnchor, r.expectedOwner); err != nil {

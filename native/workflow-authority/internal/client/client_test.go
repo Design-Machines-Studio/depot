@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"designmachines.dev/workflow-authority/internal/authority"
+	"designmachines.dev/workflow-authority/internal/enrollment"
 	"designmachines.dev/workflow-authority/internal/protocol"
 	"designmachines.dev/workflow-authority/internal/provider"
 )
@@ -104,8 +105,10 @@ func newFixtureCase(t *testing.T, mutate serverMutation, safeStage string, safe 
 	}
 	publicDER, _ := x509.MarshalPKIXPublicKey(&private.PublicKey)
 	now := time.Date(2026, 8, 4, 0, 0, 30, 0, time.UTC)
-	record := publicTrustRecord{SchemaVersion: 1, Protocol: "workflow-authority-fido-enrollment-v1", Reference: "credential-generation-7", PublicKeyPKIX: base64.RawURLEncoding.EncodeToString(publicDER), Algorithm: -7, Generation: 7, RPID: "workflow-authority.designmachines.local", EnrolledAt: now.Add(-time.Hour).Format(time.RFC3339), Status: "active", InternalUV: true, SignCount: 4}
-	recordRaw, _ := protocol.CanonicalJSON(record)
+	generation := uint64(7)
+	record := enrollment.PublicCredential{Generation: generation, Reference: "credential-generation-7", PublicKey: base64.RawURLEncoding.EncodeToString(publicDER), Algorithm: enrollment.ES256, RPID: enrollment.RPID, EnrolledAt: now.Add(-time.Hour), InternalUV: true, AAGUID: base64.RawURLEncoding.EncodeToString(make([]byte, 16)), AttestationFormat: "packed"}
+	trust := enrollment.PublicTrust{Protocol: enrollment.Protocol, ActiveGeneration: &generation, Credentials: []enrollment.PublicCredential{record}, Events: []enrollment.LifecycleEvent{{Sequence: 1, Generation: generation, Action: "activated", At: record.EnrolledAt}}}
+	recordRaw, _ := protocol.CanonicalJSON(trust)
 	trustPath := filepath.Join(trustDir, "authority-public.json")
 	if err := os.WriteFile(trustPath, recordRaw, 0o644); err != nil {
 		t.Fatal(err)
@@ -343,20 +346,69 @@ func TestEveryBindingMutationFailsWithoutResponse(t *testing.T) {
 	}
 }
 
-func TestStatusRequiresTrustFIDOAndFreshRootPeerHello(t *testing.T) {
+func TestStatusRequiresTrustAndFreshRootPeerHelloWithoutOpeningFIDO(t *testing.T) {
 	fx := newFixture(t, nil)
+	fx.runner.fido = nil
 	raw, err := fx.runner.Status(context.Background())
 	if err != nil || !bytes.Contains(raw, []byte(`"production_ready":true`)) || !bytes.Contains(raw, []byte(`"m1_acceptance":true`)) {
 		t.Fatalf("status=%s err=%v", raw, err)
 	}
 	fx.wait(t)
 
-	fx = newFixture(t, nil)
-	fx.fido.ready = false
-	if raw, err := fx.runner.Status(context.Background()); err == nil || len(raw) != 0 {
-		t.Fatal("non-production FIDO reported ready")
+}
+
+func TestPublicTrustRejectsStaleMultipleAndMalformedHistories(t *testing.T) {
+	tests := map[string]func(*enrollment.PublicTrust){
+		"stale-active-generation": func(trust *enrollment.PublicTrust) {
+			stale := uint64(6)
+			trust.ActiveGeneration = &stale
+		},
+		"multiple-active-events": func(trust *enrollment.PublicTrust) {
+			trust.Events = append(trust.Events, enrollment.LifecycleEvent{Sequence: 2, Generation: 7, Action: "activated", At: trust.Credentials[0].EnrolledAt})
+		},
+		"future-enrollment": func(trust *enrollment.PublicTrust) {
+			trust.Credentials[0].EnrolledAt = time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+			trust.Events[0].At = trust.Credentials[0].EnrolledAt
+		},
 	}
-	_ = fx.listener.Close()
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			fx := newFixture(t, nil)
+			raw, err := os.ReadFile(fx.runner.trustPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var trust enrollment.PublicTrust
+			if protocol.DecodeClosed(raw, &trust) != nil {
+				t.Fatal("fixture trust invalid")
+			}
+			mutate(&trust)
+			raw, _ = protocol.CanonicalJSON(trust)
+			if err := os.WriteFile(fx.runner.trustPath, raw, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fx.runner.loadTrust(); err == nil {
+				t.Fatal("invalid history accepted")
+			}
+			_ = fx.listener.Close()
+		})
+	}
+	t.Run("unknown-field", func(t *testing.T) {
+		fx := newFixture(t, nil)
+		raw, err := os.ReadFile(fx.runner.trustPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw[len(raw)-1] = ','
+		raw = append(raw, []byte(`"unexpected":true}`)...)
+		if err := os.WriteFile(fx.runner.trustPath, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fx.runner.loadTrust(); err == nil {
+			t.Fatal("open JSON accepted")
+		}
+		_ = fx.listener.Close()
+	})
 }
 
 func TestFixedPathTrustRejectsSymlinksModesAndAlternateEnvironment(t *testing.T) {

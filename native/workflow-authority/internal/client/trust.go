@@ -5,34 +5,19 @@ import (
 	"crypto/elliptic"
 	"crypto/x509"
 	"encoding/base64"
-	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"syscall"
-	"time"
 
 	"designmachines.dev/workflow-authority/internal/authority"
+	"designmachines.dev/workflow-authority/internal/enrollment"
 	"designmachines.dev/workflow-authority/internal/protocol"
 )
 
-type publicTrustRecord struct {
-	SchemaVersion int    `json:"schema_version"`
-	Protocol      string `json:"protocol"`
-	Reference     string `json:"reference"`
-	PublicKeyPKIX string `json:"public_key_pkix"`
-	Algorithm     int    `json:"algorithm"`
-	Generation    uint64 `json:"generation"`
-	RPID          string `json:"rp_id"`
-	EnrolledAt    string `json:"enrolled_at"`
-	Status        string `json:"status"`
-	InternalUV    bool   `json:"internal_uv"`
-	SignCount     uint32 `json:"sign_count"`
-}
-
-var trustReferencePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$`)
-
 func (r *Runner) loadTrust() (authority.Credential, error) {
+	if r == nil || r.now == nil || r.trustPath == "" {
+		return authority.Credential{}, ErrUnavailable
+	}
 	if err := validateRegularPath(r.trustPath, r.trustAnchor, 0o644, r.expectedOwner); err != nil {
 		return authority.Credential{}, err
 	}
@@ -50,18 +35,21 @@ func (r *Runner) loadTrust() (authority.Credential, error) {
 	if err != nil || closeErr != nil {
 		return authority.Credential{}, ErrUnavailable
 	}
-	var record publicTrustRecord
-	if protocol.DecodeClosed(raw, &record) != nil || record.SchemaVersion != 1 || record.Protocol != "workflow-authority-fido-enrollment-v1" || !trustReferencePattern.MatchString(record.Reference) || record.Algorithm != -7 || record.Generation == 0 || record.Generation > math.MaxInt64 || record.RPID != "workflow-authority.designmachines.local" || record.Status != "active" || !record.InternalUV {
+	var trust enrollment.PublicTrust
+	if protocol.DecodeClosed(raw, &trust) != nil {
 		return authority.Credential{}, ErrUnavailable
 	}
-	publicKey, err := base64.RawURLEncoding.DecodeString(record.PublicKeyPKIX)
-	enrolled, timeErr := time.Parse(time.RFC3339, record.EnrolledAt)
+	record, err := trust.ActiveRecord()
+	if err != nil || record.EnrolledAt.After(r.now()) {
+		return authority.Credential{}, ErrUnavailable
+	}
+	publicKey, err := base64.RawURLEncoding.Strict().DecodeString(record.PublicKey)
 	parsed, keyErr := x509.ParsePKIXPublicKey(publicKey)
 	key, keyOK := parsed.(*ecdsa.PublicKey)
-	if err != nil || timeErr != nil || enrolled.After(r.now()) || keyErr != nil || !keyOK || key.Curve != elliptic.P256() {
+	if err != nil || keyErr != nil || !keyOK || key.Curve != elliptic.P256() {
 		return authority.Credential{}, ErrUnavailable
 	}
-	return authority.Credential{Reference: record.Reference, PublicKey: publicKey, Algorithm: -7, Generation: record.Generation, RPID: record.RPID, EnrolledAt: enrolled, Status: record.Status, InternalUV: true, SignCount: record.SignCount}, nil
+	return authority.Credential{Reference: record.Reference, PublicKey: publicKey, Algorithm: record.Algorithm, Generation: record.Generation, RPID: record.RPID, EnrolledAt: record.EnrolledAt, Status: "active", InternalUV: record.InternalUV}, nil
 }
 
 func validateSocketPath(path, anchor string, owner uint32) error {

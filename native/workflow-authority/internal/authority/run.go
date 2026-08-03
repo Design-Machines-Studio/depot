@@ -731,6 +731,10 @@ func zeroKey(key *ecdsa.PrivateKey) {
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	defer func() {
+		zeroBytes(m.config.Credential.ID)
+		m.config.Credential.ID = nil
+	}()
 	for _, cancel := range m.active {
 		cancel()
 	}
@@ -757,6 +761,12 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 		record.private = nil
 	}
 	return m.wal.Close()
+}
+
+func zeroBytes(value []byte) {
+	for i := range value {
+		value[i] = 0
+	}
 }
 
 func verifyES256Assertion(challenge []byte, credential Credential, assertion Assertion) error {
