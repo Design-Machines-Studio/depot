@@ -57,7 +57,7 @@ type allocatorState struct {
 }
 
 type stateStore interface {
-	Load() (allocatorState, error)
+	Load() (allocatorState, bool, error)
 	Save(allocatorState) error
 	Close() error
 }
@@ -78,14 +78,11 @@ func NewDurableAllocator(config AllocatorConfig, store stateStore) (*DurableAllo
 	if config.Random == nil {
 		config.Random = rand.Reader
 	}
-	state, err := store.Load()
+	state, found, err := store.Load()
 	if err != nil {
 		return nil, ErrDurability
 	}
-	if state.Version == 0 {
-		if state.Sequence != 0 || state.PriorChainDigest != "" || state.Active != nil {
-			return nil, ErrDurability
-		}
+	if !found {
 		state = allocatorState{Version: 1, PriorChainDigest: protocol.Digest(nil)}
 	} else if state.Version != 1 || state.Sequence > math.MaxInt64 || !validDigest(state.PriorChainDigest) || !validActiveState(state) {
 		return nil, ErrDurability
@@ -239,27 +236,27 @@ func OpenDirStateStore(path string, owner uint32) (*DirStateStore, error) {
 	return &DirStateStore{root: root, owner: owner}, nil
 }
 
-func (s *DirStateStore) Load() (allocatorState, error) {
+func (s *DirStateStore) Load() (allocatorState, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, err := s.root.Lstat("allocator-state.json"); errors.Is(err, os.ErrNotExist) {
-		return allocatorState{}, nil
+		return allocatorState{}, false, nil
 	} else if err != nil || s.validate("allocator-state.json") != nil {
-		return allocatorState{}, ErrDurability
+		return allocatorState{}, false, ErrDurability
 	}
 	data, err := s.root.ReadFile("allocator-state.json")
 	if err != nil {
-		return allocatorState{}, ErrDurability
+		return allocatorState{}, false, ErrDurability
 	}
 	var state allocatorState
 	if protocol.DecodeClosed(data, &state) != nil {
-		return allocatorState{}, ErrDurability
+		return allocatorState{}, false, ErrDurability
 	}
 	canonical, err := protocol.CanonicalJSON(state)
 	if err != nil || string(canonical) != string(data) {
-		return allocatorState{}, ErrDurability
+		return allocatorState{}, false, ErrDurability
 	}
-	return state, nil
+	return state, true, nil
 }
 
 func (s *DirStateStore) Save(state allocatorState) error {

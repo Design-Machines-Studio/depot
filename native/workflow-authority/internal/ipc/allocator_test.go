@@ -13,13 +13,15 @@ import (
 
 type memoryStateStore struct {
 	state  allocatorState
+	found  bool
 	fail   bool
 	closed bool
 }
 
-func (s *memoryStateStore) Load() (allocatorState, error) { return s.state, nil }
+func (s *memoryStateStore) Load() (allocatorState, bool, error) { return s.state, s.found, nil }
 func (s *memoryStateStore) Save(state allocatorState) error {
 	s.state = state
+	s.found = true
 	if s.fail {
 		return ErrDurability
 	}
@@ -171,8 +173,8 @@ func TestDirStateStorePersistsCanonicalStateAndRejectsSymlink(t *testing.T) {
 	if err := store.Save(state); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := store.Load()
-	if err != nil || loaded.Sequence != 4 {
+	loaded, found, err := store.Load()
+	if err != nil || !found || loaded.Sequence != 4 {
 		t.Fatalf("load = %#v, %v", loaded, err)
 	}
 	if err := store.Close(); err != nil {
@@ -188,7 +190,30 @@ func TestDirStateStorePersistsCanonicalStateAndRejectsSymlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Load(); !errors.Is(err, ErrDurability) {
+	if _, _, err := store.Load(); !errors.Is(err, ErrDurability) {
 		t.Fatalf("symlink load = %v", err)
+	}
+}
+
+func TestDirStateStorePresentCanonicalZeroStateIsNotBootstrap(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	payload, err := protocol.CanonicalJSON(allocatorState{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "allocator-state.json")
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := OpenDirStateStore(dir, uint32(os.Getuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if _, err := NewDurableAllocator(allocatorConfig(time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)), store); !errors.Is(err, ErrDurability) {
+		t.Fatalf("present zero state accepted as bootstrap: %v", err)
 	}
 }
